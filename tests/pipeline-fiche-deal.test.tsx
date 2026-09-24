@@ -20,7 +20,7 @@ const listColumnsMock = vi.fn(async () => [] as any[]);
 const getValuesMock = vi.fn(async () => ({}) as Record<string, any>);
 const rdvMock = vi.fn(async () => [] as any[]);
 const dossierMock = vi.fn(async () => ({
-  jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0,
+  jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
 }) as any);
 
 vi.mock('../src/lib/pipelineVentesApi', () => ({
@@ -57,9 +57,9 @@ vi.mock('../src/i18n', () => ({ useTranslation: () => ({ language: 'fr', t: {} }
 import DealDrawer from '../src/components/pipeline/DealDrawer';
 
 const ETAPES = [
-  { id: 'e1', pipeline_id: 'p1', name_fr: 'Nouveau lead', name_en: 'New lead', guidance_fr: '', guidance_en: '', position: 1, kind: 'open' as const, archived_at: null },
-  { id: 'e2', pipeline_id: 'p1', name_fr: 'Gagné', name_en: 'Won', guidance_fr: '', guidance_en: '', position: 2, kind: 'won' as const, archived_at: null },
-  { id: 'e3', pipeline_id: 'p1', name_fr: 'Perdu', name_en: 'Lost', guidance_fr: '', guidance_en: '', position: 3, kind: 'lost' as const, archived_at: null },
+  { id: 'e1', pipeline_id: 'p1', name_fr: 'Nouveau lead', name_en: 'New lead', guidance_fr: '', guidance_en: '', position: 1, kind: 'open' as const, probability: null, show_in_reports: true, archived_at: null },
+  { id: 'e2', pipeline_id: 'p1', name_fr: 'Gagné', name_en: 'Won', guidance_fr: '', guidance_en: '', position: 2, kind: 'won' as const, probability: null, show_in_reports: true, archived_at: null },
+  { id: 'e3', pipeline_id: 'p1', name_fr: 'Perdu', name_en: 'Lost', guidance_fr: '', guidance_en: '', position: 3, kind: 'lost' as const, probability: null, show_in_reports: true, archived_at: null },
 ];
 
 function faireDeal(over: Record<string, unknown> = {}) {
@@ -70,7 +70,7 @@ function faireDeal(over: Record<string, unknown> = {}) {
     utm_source: null, utm_medium: null, utm_campaign: null, utm_content: null, fbclid: null,
     job_id: null, quote_id: null, first_contacted_at: null,
     last_activity_at: t, stage_entered_at: t, won_at: null, lost_at: null,
-    lost_reason: null, lost_from_stage_id: null, pin_id: null, field_rep_id: null,
+    lost_reason: null, lost_from_stage_id: null, expected_close_date: null, pin_id: null, field_rep_id: null,
     created_at: t,
     client: { first_name: 'Jean', last_name: 'Tremblay', company: null, email: null, phone: null, address: null },
     ...over,
@@ -156,7 +156,7 @@ beforeEach(() => {
   getValuesMock.mockClear().mockResolvedValue({});
   rdvMock.mockClear().mockResolvedValue([]);
   dossierMock.mockClear().mockResolvedValue({
-    jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0,
+    jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
   });
   conteneur = document.createElement('div');
   document.body.appendChild(conteneur);
@@ -377,5 +377,51 @@ describe('fiche du deal — valeur', () => {
     await ouvrirSection('Deal');
     expect(conteneur.textContent).not.toContain('Rien de chiffré');
     expect(conteneur.textContent).toContain('Montant du devis');
+  });
+});
+
+describe('fiche du deal — paiements', () => {
+  const DOSSIER = {
+    jobs: [],
+    devis: [{ id: 'q1', numero: 'DEV-12', titre: 'Gouttières', statut: 'sent', cents: 90000, date: '2026-09-01T00:00:00Z' }],
+    factures: [{ id: 'f1', numero: 'FAC-55', titre: '', statut: 'sent', cents: 45000, solde_cents: 12000, date: '2026-05-02T00:00:00Z' }],
+    transactions: [{ id: 't1', numero: 'card', titre: '', statut: 'succeeded', cents: 33000, date: '2026-05-10T00:00:00Z' }],
+    messages: [], paye_cents: 33000, du_cents: 12000,
+  };
+
+  it('offre de créer un devis et une facture', async () => {
+    await rendre();
+    await ouvrirSection('Paiements');
+    // GHL a un menu « Actions » ; ici les deux gestes sont visibles d'emblée.
+    expect(conteneur.textContent).toContain('Créer un devis');
+    expect(conteneur.textContent).toContain('Créer une facture');
+  });
+
+  it('montre devis, factures et transactions ensemble par défaut', async () => {
+    dossierMock.mockResolvedValue(DOSSIER);
+    await rendre();
+    await ouvrirSection('Paiements');
+
+    expect(conteneur.textContent).toContain('DEV-12');
+    expect(conteneur.textContent).toContain('FAC-55');
+    // Le solde restant, sur la facture à moitié payée.
+    expect(conteneur.textContent).toContain('dû');
+  });
+
+  it('le filtre ne garde que le type demandé', async () => {
+    dossierMock.mockResolvedValue(DOSSIER);
+    await rendre();
+    await ouvrirSection('Paiements');
+
+    const sel = [...conteneur.querySelectorAll('select')]
+      .find((x) => [...x.options].some((o) => o.value === 'devis')) as HTMLSelectElement;
+    expect(sel, 'filtre de type introuvable').toBeTruthy();
+    await act(async () => {
+      sel.value = 'devis';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(conteneur.textContent).toContain('DEV-12');
+    expect(conteneur.textContent).not.toContain('FAC-55');
   });
 });

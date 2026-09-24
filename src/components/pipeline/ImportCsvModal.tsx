@@ -14,7 +14,7 @@ import { useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import Modal from '../ui/Modal';
 import { useTranslation } from '../../i18n';
-import { creerDealManuel } from '../../lib/pipelineVentesApi';
+import { creerDealManuel, journaliserLot } from '../../lib/pipelineVentesApi';
 import { analyserCsv, type AnalyseCsv, type LigneImport } from '../../lib/pipeline/importCsv';
 
 /** Au-delà, on refuse : un import de cette taille mérite le vrai outil de migration. */
@@ -99,6 +99,20 @@ export default function ImportCsvModal({ ouvert, onFermer, onImporte }: {
         console.error('[ImportCsv] ligne', l.ligne, e);
       }
     }
+
+    // Le journal : un import de 40 lignes dont 12 échouent doit laisser une
+    // trace consultable, pas seulement un toast qui disparaît.
+    void journaliserLot({
+      libelle: fr ? `Import — ${nomFichier}` : `Import — ${nomFichier}`,
+      operation: 'import',
+      statut: echecs === 0 ? 'termine' : echecs === bonnes.length ? 'echoue' : 'partiel',
+      total: bonnes.length,
+      reussis: crees + fusionnes,
+      echoues: echecs,
+      erreurs: mauvaises.slice(0, 30).map((l) =>
+        fr ? `Ligne ${l.ligne} — ${messageProbleme(l.probleme, true)}`
+           : `Row ${l.ligne} — ${messageProbleme(l.probleme, false)}`),
+    });
 
     setEnCours(false);
     onImporte();

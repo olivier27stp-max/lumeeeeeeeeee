@@ -25,6 +25,10 @@ export interface PipelineStage {
   guidance_en: string;
   position: number;
   kind: StageKind;
+  /** Chance de conclure depuis cette étape, 0-100. `null` = non renseignée. */
+  probability: number | null;
+  /** `false` = l'étape est exclue des entonnoirs et des prévisions. */
+  show_in_reports: boolean;
   archived_at: string | null;
 }
 
@@ -49,6 +53,8 @@ export interface Deal {
   lost_at: string | null;
   lost_reason: string | null;
   lost_from_stage_id: string | null;
+  /** Date de fermeture visée — le mois de la chronologie. `null` = sans date. */
+  expected_close_date: string | null;
   /** Porte-à-porte : la porte d'où vient ce deal, et le rep qui l'a ouverte. */
   pin_id: string | null;
   field_rep_id: string | null;
@@ -211,7 +217,7 @@ export async function fetchPipelines(): Promise<PipelineResume[]> {
 export async function fetchStages(pipelineId: string): Promise<PipelineStage[]> {
   const { data, error } = await supabase
     .from('pipeline_stages')
-    .select('id,pipeline_id,name_fr,name_en,guidance_fr,guidance_en,position,kind,archived_at')
+    .select('id,pipeline_id,name_fr,name_en,guidance_fr,guidance_en,position,kind,probability,show_in_reports,archived_at')
     .eq('pipeline_id', pipelineId)
     .order('position');
   if (error) throw error;
@@ -225,7 +231,7 @@ export async function fetchDeals(pipelineId: string): Promise<Deal[]> {
       'id,pipeline_id,stage_id,client_id,assigned_user_id,source,' +
       'utm_source,utm_medium,utm_campaign,utm_content,fbclid,job_id,quote_id,' +
       'first_contacted_at,last_activity_at,stage_entered_at,won_at,lost_at,' +
-      'lost_reason,lost_from_stage_id,pin_id,field_rep_id,created_at,' +
+      'lost_reason,lost_from_stage_id,expected_close_date,pin_id,field_rep_id,created_at,' +
       'client:clients!deals_client_same_org(first_name,last_name,company,email,phone,address)',
     )
     .eq('pipeline_id', pipelineId)
@@ -479,6 +485,20 @@ export async function abandonnerDeal(dealId: string, raison: string): Promise<vo
   if (error) throw error;
 }
 
+/**
+ * La date de fermeture visée.
+ *
+ * Reporter la date incrémente le glissement (trigger en base) ; l'avancer ne
+ * compte pas — c'est une bonne nouvelle, pas un signal de risque.
+ */
+export async function majDateFermeture(dealId: string, date: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('deals')
+    .update({ expected_close_date: date || null })
+    .eq('id', dealId);
+  if (error) throw error;
+}
+
 export async function assignerDeal(dealId: string, membreId: string | null): Promise<void> {
   const { error } = await supabase
     .from('deals')
@@ -574,7 +594,7 @@ export async function creerDealManuel(champs: {
 
 export async function renommerEtape(
   stageId: string,
-  champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en'>>,
+  champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en' | 'probability' | 'show_in_reports'>>,
 ): Promise<void> {
   const { error } = await supabase.from('pipeline_stages').update(champs).eq('id', stageId);
   if (error) throw error;
@@ -992,6 +1012,8 @@ export interface DossierClient {
   jobs: LigneHistorique[];
   devis: LigneHistorique[];
   factures: LigneHistorique[];
+  /** Les encaissements réels — ce qui est entré au compte. */
+  transactions: LigneHistorique[];
   messages: MessageClient[];
   /** Somme encaissée depuis toujours — ce que le client a réellement payé. */
   paye_cents: number;
@@ -1000,7 +1022,7 @@ export interface DossierClient {
 }
 
 const DOSSIER_VIDE: DossierClient = {
-  jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0,
+  jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
 };
 
 /**
@@ -1017,7 +1039,7 @@ const DOSSIER_VIDE: DossierClient = {
 export async function fetchDossierClient(clientId: string | null): Promise<DossierClient> {
   if (!clientId) return DOSSIER_VIDE;
 
-  const [jobsR, devisR, facturesR, messagesR] = await Promise.all([
+  const [jobsR, devisR, facturesR, messagesR, paiementsR] = await Promise.all([
     supabase.from('jobs')
       .select('id,job_number,title,status,total_cents,created_at')
       .eq('client_id', clientId).is('deleted_at', null)
@@ -1034,6 +1056,11 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
       .select('id,direction,message_text,created_at')
       .eq('client_id', clientId)
       .order('created_at', { ascending: false }).limit(10),
+    // Les encaissements réels : « Transactions » dans le filtre des paiements.
+    supabase.from('payments')
+      .select('id,amount_cents,paid_at,method,status')
+      .eq('client_id', clientId).is('deleted_at', null)
+      .order('paid_at', { ascending: false }).limit(50),
   ]);
 
   const jobs = (jobsR.data ?? []).map((j: Record<string, unknown>) => ({
@@ -1071,8 +1098,17 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
     date: m.created_at as string,
   }));
 
+  const transactions = (paiementsR.data ?? []).map((t: Record<string, unknown>) => ({
+    id: t.id as string,
+    numero: (t.method as string) || '—',
+    titre: '',
+    statut: (t.status as string) ?? '',
+    cents: (t.amount_cents as number) ?? 0,
+    date: (t.paid_at as string) ?? '',
+  }));
+
   return {
-    jobs, devis, factures, messages,
+    jobs, devis, factures, transactions, messages,
     // `paid_cents` et `balance_cents` sont tenus par la base : on les somme,
     // on ne les recalcule pas. Une facture annulée porte un solde à zéro.
     paye_cents: (facturesR.data ?? []).reduce(
@@ -1263,4 +1299,237 @@ export async function fetchRendezVousClient(clientId: string | null): Promise<Re
       statut: (r.status as string) ?? '',
     };
   });
+}
+
+// ── Prévisions ──────────────────────────────────────────────
+//
+// Les chiffres sont une PROJECTION, jamais une prévision : ils dépendent de
+// probabilités saisies à la main, étape par étape. Une étape sans
+// probabilité est ABSENTE du revenu attendu — pas comptée à zéro. La
+// différence compte : un pipeline non configuré afficherait sinon « 0 $
+// attendu » tout en ayant des deals bien vivants.
+
+export interface PrevisionsPipeline {
+  max_potentiel_cents: number;
+  attendu_cents: number;
+  gagne_cents: number;
+  ouverts: number;
+  /** Deals ouverts sans date visée — absents de la chronologie. */
+  sans_date: number;
+  /** Deals ouverts sans montant connu — ils tirent le potentiel vers le bas. */
+  sans_montant: number;
+  /** Deals dont la date visée est déjà passée. */
+  en_retard: number;
+}
+
+export interface RisqueRow {
+  niveau: 'haut' | 'moyen' | 'faible';
+  deals: number;
+  montant_cents: number;
+}
+
+export interface MoisChronologie {
+  mois: string;
+  deals: number;
+  potentiel_cents: number;
+  gagne_cents: number;
+}
+
+export async function fetchPrevisions(pipelineId?: string | null): Promise<PrevisionsPipeline | null> {
+  const { data, error } = await supabase.rpc('pipeline_previsions', {
+    p_pipeline_id: pipelineId ?? null,
+  });
+  if (error) throw error;
+  const r = (data?.[0] ?? null) as Record<string, unknown> | null;
+  if (!r) return null;
+  return {
+    max_potentiel_cents: Number(r.max_potentiel_cents ?? 0),
+    attendu_cents: Number(r.attendu_cents ?? 0),
+    gagne_cents: Number(r.gagne_cents ?? 0),
+    ouverts: Number(r.ouverts ?? 0),
+    sans_date: Number(r.sans_date ?? 0),
+    sans_montant: Number(r.sans_montant ?? 0),
+    en_retard: Number(r.en_retard ?? 0),
+  };
+}
+
+export async function fetchARisque(pipelineId?: string | null, seuils?: {
+  hautFois?: number; hautJours?: number; moyenFois?: number; moyenJours?: number;
+}): Promise<RisqueRow[]> {
+  const { data, error } = await supabase.rpc('pipeline_a_risque', {
+    p_pipeline_id: pipelineId ?? null,
+    p_haut_fois: seuils?.hautFois ?? 2,
+    p_haut_jours: seuils?.hautJours ?? 14,
+    p_moyen_fois: seuils?.moyenFois ?? 1,
+    p_moyen_jours: seuils?.moyenJours ?? 7,
+  });
+  if (error) throw error;
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    niveau: r.niveau as RisqueRow['niveau'],
+    deals: Number(r.deals ?? 0),
+    montant_cents: Number(r.montant_cents ?? 0),
+  }));
+}
+
+export async function fetchChronologie(pipelineId?: string | null, mois = 6): Promise<MoisChronologie[]> {
+  const { data, error } = await supabase.rpc('pipeline_chronologie', {
+    p_pipeline_id: pipelineId ?? null,
+    p_mois: mois,
+  });
+  if (error) throw error;
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    mois: r.mois as string,
+    deals: Number(r.deals ?? 0),
+    potentiel_cents: Number(r.potentiel_cents ?? 0),
+    gagne_cents: Number(r.gagne_cents ?? 0),
+  }));
+}
+
+/**
+ * Crée un pipeline avec ses propres étapes.
+ *
+ * `creerPipeline` part d'un modèle figé — c'est le bon défaut pour démarrer.
+ * Celle-ci laisse écrire le parcours : un pipeline de contrats saisonniers
+ * n'a pas les mêmes étapes qu'un pipeline de soumissions résidentielles.
+ *
+ * Les étapes « gagné » et « perdu » sont ajoutées par la base si elles
+ * manquent : un pipeline qu'on ne peut pas terminer casse le taux de
+ * closing, le badge « Job à créer » et la raison de perte.
+ */
+export interface EtapeSurMesure {
+  nom_fr: string;
+  nom_en?: string;
+  kind: StageKind;
+  /** 0-100, ou `null` = non renseignée (absente du revenu attendu). */
+  probability?: number | null;
+  show_in_reports?: boolean;
+}
+
+export async function creerPipelineSurMesure(nom: string, etapes: EtapeSurMesure[]): Promise<string> {
+  const { data, error } = await supabase.rpc('creer_pipeline_sur_mesure', {
+    p_nom: nom.trim(),
+    p_etapes: etapes.map((e) => ({
+      nom_fr: e.nom_fr.trim(),
+      nom_en: (e.nom_en ?? e.nom_fr).trim(),
+      kind: e.kind,
+      probability: e.probability ?? null,
+      show_in_reports: e.show_in_reports ?? true,
+    })),
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Renommer se fait déjà ; supprimer un pipeline n'est PAS exposé :
+ *  ses deals partiraient avec lui (cascade). On archive ses étapes. */
+export async function supprimerPipeline(pipelineId: string): Promise<void> {
+  const { error } = await supabase.from('pipelines_ventes').delete().eq('id', pipelineId);
+  if (error) throw error;
+}
+
+// ── Journal des opérations en lot et des imports ────────────
+//
+// Une action en lot touche des dizaines de deals d'un coup. Sans trace,
+// personne ne peut répondre à « qui a supprimé ces 40 deals mardi ? » ni
+// annuler une erreur de masse. C'est ce journal qui rend le geste réversible,
+// donc utilisable sans peur.
+
+export type OperationLot = 'suppression' | 'modification' | 'import';
+export type StatutLot = 'en_cours' | 'termine' | 'partiel' | 'echoue';
+
+export interface LigneJournalLot {
+  id: string;
+  libelle: string;
+  operation: OperationLot;
+  statut: StatutLot;
+  user_nom: string | null;
+  total: number;
+  reussis: number;
+  echoues: number;
+  erreurs: string[];
+  restaure_le: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface FiltresJournal {
+  /** Bornes de dates, en AAAA-MM-JJ. */
+  du?: string;
+  au?: string;
+  statut?: StatutLot | '';
+  operation?: OperationLot | '';
+}
+
+export async function fetchJournalLots(f: FiltresJournal = {}): Promise<LigneJournalLot[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  let q = supabase
+    .from('pipeline_operations_lot')
+    .select('id,libelle,operation,statut,user_nom,total,reussis,echoues,erreurs,restaure_le,created_at,completed_at')
+    .eq('org_id', orgId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (f.du) q = q.gte('created_at', `${f.du}T00:00:00Z`);
+  // Borne HAUTE inclusive : filtrer « au 25 » doit inclure le 25 entier, pas
+  // s'arrêter à minuit — sinon l'opération du jour même disparaît.
+  if (f.au) q = q.lt('created_at', `${f.au}T23:59:59.999Z`);
+  if (f.statut) q = q.eq('statut', f.statut);
+  if (f.operation) q = q.eq('operation', f.operation);
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []).map((r) => {
+    const x = r as Record<string, unknown>;
+    return {
+      ...(x as unknown as LigneJournalLot),
+      erreurs: Array.isArray(x.erreurs) ? (x.erreurs as string[]) : [],
+    };
+  });
+}
+
+/** Journalise une opération. Ne lève jamais : perdre la trace ne doit pas
+ *  faire échouer l'action elle-même, mais l'échec est dit dans la console. */
+export async function journaliserLot(entree: {
+  libelle: string;
+  operation: OperationLot;
+  statut: StatutLot;
+  total: number;
+  reussis: number;
+  echoues: number;
+  cibles?: string[];
+  erreurs?: string[];
+}): Promise<void> {
+  try {
+    const orgId = await getCurrentOrgIdOrThrow();
+    const { data: session } = await supabase.auth.getUser();
+    const { error } = await supabase.from('pipeline_operations_lot').insert({
+      org_id: orgId,
+      libelle: entree.libelle,
+      operation: entree.operation,
+      statut: entree.statut,
+      user_id: session.user?.id ?? null,
+      // Le nom au moment de l'action : un membre parti reste nommé.
+      user_nom: session.user?.user_metadata?.full_name
+        ?? session.user?.email
+        ?? null,
+      total: entree.total,
+      reussis: entree.reussis,
+      echoues: entree.echoues,
+      cibles: entree.cibles ?? [],
+      erreurs: entree.erreurs ?? [],
+      completed_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+  } catch (e) {
+    console.error('[pipeline] journalisation du lot impossible', e);
+  }
+}
+
+/** Annule une suppression en lot. Rend le nombre de deals réellement rendus. */
+export async function restaurerLot(operationId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('pipeline_restaurer_lot', {
+    p_operation_id: operationId,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
 }
