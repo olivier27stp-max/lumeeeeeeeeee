@@ -202,3 +202,49 @@ describe('réglages du pipeline (mêmes contrôles que GoHighLevel)', () => {
     expect(reglages).toMatchObject({ color_mode: 'dot', use_deal_probability: true });
   });
 });
+
+describe('réordonner les étapes', () => {
+  /** Les noms d'étapes dans l'ordre affiché. */
+  function ordre(): string[] {
+    return [...conteneur.querySelectorAll('input')]
+      .filter((i) => /Nom de l/.test(i.getAttribute('aria-label') ?? ''))
+      .map((i) => (i as HTMLInputElement).value);
+  }
+  function fleche(libelle: RegExp): HTMLButtonElement[] {
+    return [...conteneur.querySelectorAll('button')]
+      .filter((b) => libelle.test(b.getAttribute('aria-label') ?? '')) as HTMLButtonElement[];
+  }
+
+  it('offre une flèche vers le haut ET vers le bas', async () => {
+    // Il n'y avait que « Monter » : une étape descendue par erreur ne
+    // pouvait plus remonter sans déplacer toutes les autres.
+    await rendre();
+    expect(fleche(/Monter/).length).toBeGreaterThan(0);
+    expect(fleche(/Descendre/).length).toBeGreaterThan(0);
+  });
+
+  it('descendre une étape la fait vraiment descendre', async () => {
+    await rendre();
+    const avant = ordre();
+    await act(async () => { fleche(/Descendre/)[0].click(); });
+    const apres = ordre();
+    expect(apres[0]).toBe(avant[1]);
+    expect(apres[1]).toBe(avant[0]);
+  });
+
+  it('remonter annule le déplacement', async () => {
+    await rendre();
+    const depart = ordre();
+    await act(async () => { fleche(/Descendre/)[0].click(); });
+    await act(async () => { fleche(/Monter/)[1].click(); });
+    expect(ordre()).toEqual(depart);
+  });
+
+  it('la première ne monte pas, la dernière ne descend pas', async () => {
+    await rendre();
+    const hauts = fleche(/Monter/);
+    const bas = fleche(/Descendre/);
+    expect(hauts[0].disabled).toBe(true);
+    expect(bas[bas.length - 1].disabled).toBe(true);
+  });
+});
