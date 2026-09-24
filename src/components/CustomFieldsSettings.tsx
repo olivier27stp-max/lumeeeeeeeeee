@@ -42,6 +42,9 @@ const ENTITY_TABS: { key: EntityType; label: string; labelFr: string }[] = [
   { key: 'clients',  label: 'Clients',  labelFr: 'Clients' },
   { key: 'jobs',     label: 'Jobs',     labelFr: 'Travaux' },
   { key: 'invoices', label: 'Invoices', labelFr: 'Factures' },
+  // Les deals du pipeline de ventes : superficie, type de surface, nombre de
+  // fenêtres — ce qui décide d'un prix et qu'une note en texte libre perd.
+  { key: 'deals',    label: 'Deals',    labelFr: 'Deals' },
 ];
 
 const STATUS_COLORS = [
