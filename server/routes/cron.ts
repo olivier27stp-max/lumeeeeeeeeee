@@ -104,4 +104,32 @@ router.post('/cron/release-sms-numbers', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/cron/lumi-bienvenue { org_id }
+ *
+ * Envoie le mot de bienvenue de Lumi aux propriétaires et administrateurs
+ * d'une org. Normalement déclenché par l'activation de l'abonnement ; cette
+ * route sert aux orgs qui existaient AVANT que le canal texto n'existe, et à
+ * rattraper un envoi manqué.
+ *
+ * Idempotente : quelqu'un qui a déjà reçu le message ne le reçoit pas deux
+ * fois, et un numéro qui a refusé les textos n'est jamais recontacté.
+ */
+router.post('/cron/lumi-bienvenue', async (req, res) => {
+  if (!checkCronAuth(req, res)) return;
+  const orgId = String((req.body || {}).org_id || '').trim();
+  if (!orgId) return res.status(400).json({ error: 'org_id is required.' });
+  try {
+    const [{ envoyerBienvenue }, { logger }] = await Promise.all([
+      import('../lib/sms/bienvenue'),
+      import('../lib/logger'),
+    ]);
+    const r = await envoyerBienvenue(getServiceClient(), orgId);
+    logger.info('[cron] lumi-bienvenue', { orgId, envoyes: r.envoyes, ignores: r.ignores.length });
+    return res.status(200).json({ ok: true, ...r });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Cron job failed.', '[cron/lumi-bienvenue]');
+  }
+});
+
 export default router;

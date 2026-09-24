@@ -2156,6 +2156,17 @@ async function handleCheckoutSessionCompleted(
     try {
       const { provisionSmsForNewSubscription } = await import('../lib/twilioProvisioning');
       await provisionSmsForNewSubscription({ orgId, subscriptionId: subscription.id });
+      // Le numéro vient d'exister : on le fait savoir. Sans ce message,
+      // personne ne sait que Lumi est joignable par texto — et une
+      // fonctionnalité qu'on ignore n'existe pas. Envoyé une seule fois,
+      // jamais à quelqu'un qui a refusé les textos.
+      try {
+        const { envoyerBienvenue } = await import('../lib/sms/bienvenue');
+        const r = await envoyerBienvenue(getServiceClient(), orgId);
+        if (r.envoyes) logger.info('[webhook/checkout] mot de bienvenue Lumi envoyé', { orgId, envoyes: r.envoyes });
+      } catch (e: any) {
+        console.error('[webhook/checkout] mot de bienvenue non envoyé (non bloquant):', e?.message);
+      }
     } catch (provErr: any) {
       // Ne jamais faire échouer l'abonnement sur une erreur de provisionnement :
       // le paiement est déjà encaissé, et un throw ici ferait rejouer Stripe.
