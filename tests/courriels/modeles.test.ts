@@ -235,7 +235,8 @@ describe('la charpente survit à un modèle importé', () => {
     expect(html).toContain('TVQ No : 1098765432 TQ0001');
     expect(html).toContain('Vision Lavage');
     expect(html).toContain('info@visionlavage.ca');
-    expect(html).toContain('Envoyé avec');
+    // Le pied garde les mentions légales, jamais celles de la plateforme.
+    expect(html).not.toContain('Envoyé avec');
   });
 
   it('le texte de l’entreprise apparaît bien, mais désarmé', () => {

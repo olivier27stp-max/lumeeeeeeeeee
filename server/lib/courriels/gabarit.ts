@@ -10,7 +10,8 @@
  *     (facture, soumission, demande de paiement, rappel, contrat, formulaire).
  *     Aux couleurs de l'entreprise (logo, couleur de marque), dans la langue
  *     de l'entreprise (company_settings.default_language), signé par elle ;
- *     Lume n'apparaît qu'en une ligne discrète au pied.
+ *     Lume n'y est écrit NULLE PART — seule la mascotte figure au pied,
+ *     sans texte ni lien (2026-09-24).
  *   - `rendreCourrielLume` : ce que LUME envoie à ses abonnés (compte,
  *     abonnement, support, paiement reçu). Marque Lume, noir sur blanc.
  *
@@ -18,7 +19,7 @@
  * bande de couleur, logo ou nom, titre, salutation, phrase, carte du montant
  * (ce qu'on cherche du regard en premier), lignes de détail, UN bouton,
  * lien texte de secours, note, signature, pied (coordonnées, réseaux, numéros
- * de taxes, « Envoyé avec Lume »).
+ * de taxes).
  *
  * Règles d'un courriel qui s'affiche partout : tableaux, CSS en ligne, 600 px,
  * pas d'image pour le bouton, pas de police web, texte alternatif sur le logo,
@@ -178,11 +179,17 @@ const CADENAS = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" str
    sur la ligne de base et flotte sous la pastille. */
 // Cadrée sur le visage : le logo v2 entier devient illisible sous 40px.
 const MASCOTTE_LUME_URL = 'https://lumecrm.net/lume-mascotte-pastille.png';
-const SIGNATURE_LUME = (envoyeAvec: string) => `
-<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:14px auto 0;">
+/**
+ * Le pied d'un courriel CLIENT ne porte que la pastille : ni « Envoyé avec »,
+ * ni le mot « Lume », ni lien vers la plateforme. Le courriel vient de
+ * l'entreprise, la plateforme n'a pas à s'y écrire. La pastille reste,
+ * discrète, sans texte ni lien — `alt` vide pour qu'aucun mot n'apparaisse
+ * si le client bloque les images.
+ */
+const SIGNATURE_LUME = () => `
+<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:16px auto 0;">
 <tr>
-<td style="padding-right:8px;vertical-align:middle;line-height:0;"><img src="${MASCOTTE_LUME_URL}" alt="" width="32" height="32" style="width:32px;height:32px;display:block;border:0;outline:none;border-radius:50%;"/></td>
-<td style="vertical-align:middle;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;font-weight:600;">Lume</a></td>
+<td style="line-height:0;"><img src="${MASCOTTE_LUME_URL}" alt="" width="28" height="28" style="width:28px;height:28px;display:block;border:0;outline:none;border-radius:50%;opacity:0.55;"/></td>
 </tr>
 </table>`;
 
@@ -491,13 +498,12 @@ export function rendreCourrielClient(c: CourrielClient): string {
   ].filter(Boolean).join(' &nbsp;&middot;&nbsp; ');
   const postal = [c.marque.adresse, c.marque.siteWeb].filter(Boolean).map((x) => echapper(x)).join(' &nbsp;&middot;&nbsp; ');
   const taxes = (c.marque.lignesTaxes || []).filter(Boolean);
-  const envoyeAvec = c.langue === 'fr' ? 'Envoyé avec' : 'Sent with';
   const pied = `
 ${joindre ? `<p style="margin:0;font-size:13px;line-height:1.6;">${joindre}</p>` : ''}
 <p style="margin:${joindre ? '4px' : '0'} 0 0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${echapper(nom)}${postal ? ` &nbsp;&middot;&nbsp; ${postal}` : ''}</p>
 ${liensSociauxHtml(c.marque.liensSociaux)}
 ${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">${taxes.map(echapper).join(' &nbsp;&middot;&nbsp; ')}</p>` : ''}
-${SIGNATURE_LUME(envoyeAvec)}`;
+${SIGNATURE_LUME()}`;
   return coquille({
     langue: c.langue, titreDocument: c.titre || nom, preheader: c.preheader, enTeteHtml: enTete,
     corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? `— ${nom}` : `— ${nom}`) : c.signature }, couleur),
