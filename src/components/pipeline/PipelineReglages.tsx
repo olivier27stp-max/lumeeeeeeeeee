@@ -502,10 +502,12 @@ function AjoutPipeline({ fr, occupe, onCreer, onAnnuler }: {
 
 // ── Une ligne de la liste des pipelines ────────────────────
 
-function LignePipeline({ pipeline, fr, actif, membres, onRenommer, onDefaut }: {
+function LignePipeline({ pipeline, fr, actif, membres, nbEtapes, onRenommer, onDefaut }: {
   pipeline: PipelineResume;
   fr: boolean;
   actif: boolean;
+  /** Étapes actives — `undefined` quand on ne les a pas chargées. */
+  nbEtapes?: number;
   /** Pour proposer qui peut voir ce pipeline. */
   membres: { id: string; name: string }[];
   onRenommer: (id: string, nom: string) => void;
@@ -541,6 +543,11 @@ function LignePipeline({ pipeline, fr, actif, membres, onRenommer, onDefaut }: {
           className="input-field w-full text-[13px] font-medium"
         />
       </div>
+      {nbEtapes !== undefined && (
+        <span className="shrink-0 px-2 py-2 text-[11.5px] tabular-nums text-text-tertiary">
+          {nbEtapes} {fr ? 'étapes' : 'stages'}
+        </span>
+      )}
       {pipeline.is_default ? (
         <span className="inline-flex items-center gap-1.5 shrink-0 px-2.5 py-2 text-[11.5px] text-text-muted">
           <Check size={13} aria-hidden="true" />
@@ -726,6 +733,22 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
   const [pipelines, setPipelines] = useState<PipelineResume[] | null>(null);
   const [creation, setCreation] = useState(false);
   const [surMesure, setSurMesure] = useState(false);
+  const idRecherchePipeline = useId();
+  const [recherchePipeline, setRecherchePipeline] = useState('');
+
+  const pipelinesFiltres = useMemo(() => {
+    const q = recherchePipeline.trim().toLowerCase();
+    const liste = pipelines ?? [];
+    return q ? liste.filter((p) => p.name.toLowerCase().includes(q)) : liste;
+  }, [pipelines, recherchePipeline]);
+
+  // Le nombre d'étapes par pipeline : la colonne « Total stages » de GHL.
+  // Seul le pipeline courant a ses étapes chargées ; pour les autres, on ne
+  // prétend pas savoir — mieux vaut ne rien afficher qu'un zéro qui ment.
+  const nbEtapesPar = useMemo<Record<string, number | undefined>>(
+    () => ({ [pipelineId]: etapes.filter((e) => !e.archived_at).length }),
+    [pipelineId, etapes],
+  );
 
   // Les membres de l'organisation, pour proposer qui peut voir un pipeline.
   const { data: membresOrg = [] } = useQuery({
@@ -1066,19 +1089,46 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
             </p>
           </div>
         ) : (
-          <div className="space-y-2.5">
-            {pipelines.map((p) => (
-              <LignePipeline
-                key={p.id}
-                pipeline={p}
-                fr={fr}
-                membres={membresOrg}
-                actif={p.id === pipelineId}
-                onRenommer={(id, nom) => { void renommerLePipeline(id, nom); }}
-                onDefaut={(id) => { void basculerDefaut(id); }}
-              />
-            ))}
-          </div>
+          <>
+            {/* La recherche n'apparaît qu'à partir de quatre pipelines : en
+                dessous, on les voit tous d'un coup d'œil et un champ vide
+                de plus n'aiderait personne. */}
+            {pipelines.length > 3 && (
+              <div className="mb-2.5">
+                <label htmlFor={idRecherchePipeline} className="sr-only">
+                  {fr ? 'Rechercher un pipeline' : 'Search a pipeline'}
+                </label>
+                <input
+                  id={idRecherchePipeline}
+                  type="search"
+                  value={recherchePipeline}
+                  onChange={(e) => setRecherchePipeline(e.target.value)}
+                  placeholder={fr ? 'Rechercher…' : 'Search…'}
+                  className="input-field w-full max-w-[260px] text-[12.5px]"
+                />
+              </div>
+            )}
+
+            <div className="space-y-2.5">
+              {pipelinesFiltres.map((p) => (
+                <LignePipeline
+                  key={p.id}
+                  pipeline={p}
+                  fr={fr}
+                  membres={membresOrg}
+                  nbEtapes={nbEtapesPar[p.id]}
+                  actif={p.id === pipelineId}
+                  onRenommer={(id, nom) => { void renommerLePipeline(id, nom); }}
+                  onDefaut={(id) => { void basculerDefaut(id); }}
+                />
+              ))}
+              {pipelinesFiltres.length === 0 && (
+                <p className="text-[12px] text-text-muted">
+                  {fr ? 'Aucun pipeline ne correspond.' : 'No pipeline matches.'}
+                </p>
+              )}
+            </div>
+          </>
         )}
       </Section>
 

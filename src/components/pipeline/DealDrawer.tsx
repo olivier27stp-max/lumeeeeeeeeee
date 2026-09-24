@@ -369,7 +369,7 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
   if (!clientId) return null;
   if (isLoading) return <Vide texte={fr ? 'Chargement du dossier…' : 'Loading history…'} />;
 
-  const d = data ?? { jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0 };
+  const d = data ?? { jobs: [], devis: [], factures: [], transactions: [], proprietes: [], messages: [], paye_cents: 0, du_cents: 0 };
   const rien = d.jobs.length + d.devis.length + d.factures.length === 0;
 
   return (
@@ -458,6 +458,30 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
             {d.devis.map((q) => (
               <LigneDossier key={q.id} vers={`/quotes/${q.id}`} numero={q.numero} titre={q.titre}
                 statut={q.statut} cents={q.cents} fr={fr} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/*
+        Les propriétés du client : ses immeubles, ses adresses de service.
+        C'est l'équivalent terrain des « objets associés » de GoHighLevel —
+        chez un gestionnaire d'immeubles, savoir qu'on parle du 3e duplex et
+        non du premier change la visite.
+      */}
+      {(d.proprietes ?? []).length > 0 && (
+        <Section titre={fr ? `Propriétés (${d.proprietes.length})` : `Properties (${d.proprietes.length})`}>
+          <div className="space-y-1.5">
+            {d.proprietes.map((pr) => (
+              <div
+                key={pr.id}
+                className="rounded-lg border border-outline bg-surface-card px-3 py-2"
+              >
+                <span className="block text-[12.5px] text-text-primary">{pr.nom}</span>
+                {pr.adresse && (
+                  <span className="block text-[11.5px] text-text-tertiary">{pr.adresse}</span>
+                )}
+              </div>
             ))}
           </div>
         </Section>

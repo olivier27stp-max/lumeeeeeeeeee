@@ -20,7 +20,7 @@ const listColumnsMock = vi.fn(async () => [] as any[]);
 const getValuesMock = vi.fn(async () => ({}) as Record<string, any>);
 const rdvMock = vi.fn(async () => [] as any[]);
 const dossierMock = vi.fn(async () => ({
-  jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
+  jobs: [], devis: [], factures: [], transactions: [], proprietes: [], messages: [], paye_cents: 0, du_cents: 0,
 }) as any);
 
 vi.mock('../src/lib/pipelineVentesApi', () => ({
@@ -156,7 +156,7 @@ beforeEach(() => {
   getValuesMock.mockClear().mockResolvedValue({});
   rdvMock.mockClear().mockResolvedValue([]);
   dossierMock.mockClear().mockResolvedValue({
-    jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
+    jobs: [], devis: [], factures: [], transactions: [], proprietes: [], messages: [], paye_cents: 0, du_cents: 0,
   });
   conteneur = document.createElement('div');
   document.body.appendChild(conteneur);
@@ -423,5 +423,33 @@ describe('fiche du deal — paiements', () => {
 
     expect(conteneur.textContent).toContain('DEV-12');
     expect(conteneur.textContent).not.toContain('FAC-55');
+  });
+});
+
+describe('fiche du deal — propriétés du client', () => {
+  it('liste les immeubles et adresses de service', async () => {
+    dossierMock.mockResolvedValue({
+      jobs: [], devis: [], factures: [], transactions: [], messages: [],
+      proprietes: [
+        { id: 'pr1', nom: 'Duplex Rachel', adresse: '120 rue Rachel, Montréal' },
+        { id: 'pr2', nom: 'Triplex Papineau', adresse: null },
+      ],
+      paye_cents: 0, du_cents: 0,
+    });
+    await rendre();
+
+    const t = conteneur.textContent ?? '';
+    // Chez un gestionnaire d'immeubles, savoir de quel bâtiment on parle
+    // change la visite.
+    expect(t).toContain('Duplex Rachel');
+    expect(t).toContain('120 rue Rachel');
+    // Une propriété sans adresse reste listée : la masquer ferait croire
+    // qu'elle n'existe pas.
+    expect(t).toContain('Triplex Papineau');
+  });
+
+  it("n'affiche aucune section quand le client n'a pas de propriété", async () => {
+    await rendre();
+    expect(conteneur.textContent).not.toContain('Propriétés');
   });
 });
