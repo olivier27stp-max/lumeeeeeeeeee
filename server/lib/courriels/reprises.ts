@@ -31,6 +31,12 @@ export const CADENCE_REPRISES_MS = 5 * 60_000;
 export const DELAIS_REPRISE_MS = [5 * 60_000, 30 * 60_000, 3 * 3_600_000] as const;
 export const MAX_TENTATIVES = 3;
 const LOT = 50;
+/**
+ * Le temps qu'une ligne est retirée de la file pendant son envoi : assez long
+ * pour couvrir un SMTP lent, assez court pour qu'un plantage du processus ne
+ * retarde pas le courriel de plus de deux passages du cron.
+ */
+const RESERVE_MIN = 10;
 
 export type StatutReprise = 'pending' | 'sent' | 'dead';
 
@@ -122,6 +128,34 @@ export async function reprendreCourriels(admin: SupabaseClient, maintenant = new
   const [{ sendEmail }, { emailFrom, supportEmail }] = await Promise.all([import('../mailer'), import('../config')]);
 
   for (const ligne of lignes) {
+    // RÉSERVER AVANT D'ENVOYER. L'envoi précédait le marquage : si l'update
+    // échouait (il n'est que journalisé, la boucle continue), la ligne restait
+    // `pending` avec son échéance dépassée et le MÊME courriel repartait au
+    // passage suivant, toutes les 5 minutes, indéfiniment.
+    //
+    // On repousse l'échéance plutôt que d'inventer un statut : la colonne
+    // `status` n'accepte que pending/sent/dead (CHECK en base), et une ligne
+    // coincée dans un état intermédiaire ne serait jamais rejouée. Ici, le pire
+    // cas est un courriel retardé de RESERVE_MIN minutes, jamais un doublon.
+    //
+    // Le `.lte('next_attempt_at', …)` rend l'écriture conditionnelle : deux
+    // exécutions concurrentes ne peuvent pas réserver la même ligne.
+    const echeanceReservee = new Date(maintenant.getTime() + RESERVE_MIN * 60_000).toISOString();
+    const { data: reservee, error: resErr } = await admin
+      .from(TABLE_REPRISES)
+      .update({ next_attempt_at: echeanceReservee, updated_at: new Date().toISOString() })
+      .eq('id', ligne.id)
+      .eq('status', 'pending')
+      .lte('next_attempt_at', maintenant.toISOString())
+      .select('id')
+      .maybeSingle();
+    if (resErr || !reservee) {
+      logger.warn('[courriels/reprises] ligne non réservée, on la laisse au prochain passage', {
+        id: ligne.id, error: resErr?.message ?? 'déjà prise',
+      });
+      continue;
+    }
+
     bilan.repris++;
     const r = await sendEmail({
       from: ligne.from_addr || undefined,

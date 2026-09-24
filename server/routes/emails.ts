@@ -36,12 +36,18 @@ function ensureMailer() {
   if (!isMailerConfigured()) throw Object.assign(new Error('SMTP is not configured.'), { status: 503 });
 }
 
-function formatCurrency(cents: number, currency = 'CAD') {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency }).format(cents / 100);
+/* Ces deux helpers alimentent les VARIABLES des modèles ({invoice_amount},
+   {due_date}) : le texte que l'entreprise écrit elle-même. Ils étaient figés
+   sur `en-CA`, alors que le corps structuré du même courriel passe par
+   `montantLisible`/`dateLisible`, qui suivent la langue. Un courriel français
+   affichait donc « $1,220.17 » dans la phrase de l'entreprise et
+   « 1 220,17 $ » dans la carte, à trois centimètres d'écart. */
+function formatCurrency(cents: number, currency = 'CAD', langue: Langue = 'fr') {
+  return montantLisible(cents, currency, langue);
 }
 
-function formatDate(dateStr: string | null | undefined) {
-  if (!dateStr) return 'N/A';
+function formatDate(dateStr: string | null | undefined, langue: Langue = 'fr') {
+  if (!dateStr) return '';
   // Une date seule (« 2026-09-04 ») est affichée telle quelle, dans le fuseau
   // de l'entreprise — pas convertie via minuit UTC, qui la ferait reculer
   // d'un jour si le serveur tournait un jour ailleurs qu'en UTC.
@@ -49,7 +55,7 @@ function formatDate(dateStr: string | null | undefined) {
   const d = seule
     ? new Date(Date.UTC(Number(seule[1]), Number(seule[2]) - 1, Number(seule[3]), 12))
     : new Date(dateStr);
-  return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric', ...(seule ? { timeZone: 'UTC' } : {}) });
+  return d.toLocaleDateString(langue === 'fr' ? 'fr-CA' : 'en-CA', { year: 'numeric', month: 'long', day: 'numeric', ...(seule ? { timeZone: 'UTC' } : {}) });
 }
 
 export interface CompanyInfo {
@@ -115,7 +121,7 @@ export async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
 /** La marque d'une entreprise telle que le gabarit la porte (logo, couleur, coordonnées, réseaux, taxes). */
 export function marqueDepuis(company: CompanyInfo): Marque {
   return {
-    nom: company.company_name || 'Lume',
+    nom: company.company_name || '',
     logoUrl: company.company_logo_url || null,
     couleur: company.brand_color || null,
     email: company.company_email || null,
@@ -196,7 +202,9 @@ export function prefixeDepuisNom(nom: string | null | undefined): string | null 
 
 export function senderFor(company: CompanyInfo): { from: string; replyTo?: string } {
   const baseAddr = emailFrom.match(/<([^>]+)>/)?.[1] || process.env.SMTP_USER || 'noreply@lume.crm';
-  const name = company.company_name || 'Lume';
+  // Sans nom d'entreprise, l'expéditeur reste anonyme plutôt que de
+  // s'annoncer « Lume » au client d'une autre entreprise.
+  const name = company.company_name || '';
   const domaine = baseAddr.split('@')[1];
   const prefixe = prefixeDepuisNom(company.company_name);
   const adresse = prefixe && domaine ? `${prefixe}@${domaine}` : baseAddr;
@@ -294,7 +302,13 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
 
     const clientName = `${clientData.first_name || ''} ${clientData.last_name || ''}`.trim() || 'Client';
     const company = await getCompanySettings(orgId);
-    const amountStr = formatCurrency(invoice.total_cents || invoice.balance_cents || 0, invoice.currency || 'CAD');
+    const langue = langueEntreprise(company);
+    /* UN SEUL montant. `amountStr` prenait le TOTAL et partait dans l'objet et
+       dans {invoice_amount} ; `montantTexte`, plus bas, prenait le SOLDE et
+       partait dans la carte. Sur une facture partiellement payée, le client
+       lisait deux montants différents dans le même courriel. C'est le solde
+       qui compte : c'est ce qu'il doit payer. */
+    const amountStr = formatCurrency(invoice.balance_cents || invoice.total_cents || 0, invoice.currency || 'CAD', langue);
     const baseUrl = resolvePublicBaseUrl(req);
     // Page publique de facture (audit QA 2026-09-09 n°1) — /q/ redirige encore.
     const viewUrl = invoice.view_token ? `${baseUrl}/invoice/${invoice.view_token}` : null;
@@ -309,7 +323,7 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
       company_name: company.company_name || '',
       invoice_number: invoice.invoice_number || '',
       invoice_amount: amountStr,
-      due_date: formatDate(invoice.due_date),
+      due_date: formatDate(invoice.due_date, langue),
       payment_link: viewUrl || '',
     };
 
@@ -344,7 +358,6 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
       : null;
 
     // If no custom body and no template, use default layout
-    const langue = langueEntreprise(company);
     const m = MOTS[langue];
     const numero = invoice.invoice_number || invoiceId.slice(0, 8);
     const montantTexte = montantLisible(invoice.balance_cents || invoice.total_cents || 0, invoice.currency || 'CAD', langue);
@@ -550,7 +563,8 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
 
     const clientName = `${clientData.first_name || ''} ${clientData.last_name || ''}`.trim() || 'Client';
     const company = await getCompanySettings(orgId);
-    const amountStr = formatCurrency(quote.total_cents || quote.balance_cents || 0, quote.currency || 'CAD');
+    const langue = langueEntreprise(company);
+    const amountStr = formatCurrency(quote.total_cents || quote.balance_cents || 0, quote.currency || 'CAD', langue);
     const baseUrl = resolvePublicBaseUrl(req);
     /* `/quote/`, pas `/q/`.
 
@@ -564,7 +578,6 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
        déjà le bon chemin ; c'est ce qui a masqué le défaut. */
     const viewUrl = quote.view_token ? `${baseUrl}/quote/${quote.view_token}` : null;
 
-        const langue = langueEntreprise(company);
     const m = MOTS[langue];
     const numero = quote.invoice_number || invoiceId.slice(0, 8);
     const montantTexte = montantLisible(quote.total_cents || quote.balance_cents || 0, quote.currency || 'CAD', langue);
@@ -599,7 +612,7 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
     const emailResult = await sendEmail({
       ...(await senderForOrg(orgId, company)),
       to: clientData.email,
-      subject: modeleOrg?.sujet || `${m.soumission} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`,
+      subject: modeleOrg?.sujet || `${m.soumission} ${numero} — ${montantTexte}${company.company_name ? ` — ${company.company_name}` : ''}`,
       html,
       suivi: { orgId, entityType: 'invoice', entityId: quote.id },
     });
@@ -667,22 +680,35 @@ router.post('/emails/send-mobile-quote', async (req, res) => {
 
     const clientName = `${clientData.first_name || ''} ${clientData.last_name || ''}`.trim() || 'Client';
     const company = await getCompanySettings(orgId);
-    const amountStr = formatCurrency(quote.total_cents || 0, quote.currency || 'CAD');
+    const langue = langueEntreprise(company);
+    const amountStr = formatCurrency(quote.total_cents || 0, quote.currency || 'CAD', langue);
     const baseUrl = resolvePublicBaseUrl(req);
     const viewUrl = quote.view_token ? `${baseUrl}/quote/${quote.view_token}` : null;
 
-        const langue = langueEntreprise(company);
     const m = MOTS[langue];
     const numero = quote.quote_number || '';
     const montantTexte = montantLisible(quote.total_cents || 0, quote.currency || 'CAD', langue);
     const validite = dateLisible(quote.valid_until, langue);
+    /* Cette route n'appelait PAS les modèles : une entreprise qui réécrivait
+       son courriel de soumission voyait son texte partir depuis le bureau, et
+       le texte générique partir depuis le mobile. Deux clients, deux courriels
+       pour le même geste, sans explication possible. */
+    const modeleOrg = await texteDuCourriel(orgId, 'quote_sent', {
+      client_name: clientName,
+      company_name: company.company_name || '',
+      quote_number: numero,
+      quote_amount: montantTexte,
+      valid_until: validite,
+      quote_link: viewUrl || '',
+    });
     const html = rendreCourrielClient({
       langue,
       marque: marqueDepuis(company),
       preheader: `${m.soumission} ${numero} — ${montantTexte}`,
       titre: langue === 'fr' ? `Votre soumission ${numero}` : `Your quote ${numero}`,
-      salutation: m.bonjour(clientName),
-      intro: langue === 'fr' ? 'Voici notre proposition pour vos travaux. Le détail est ci-dessous ; approuvez-la quand vous êtes prêt.' : 'Here is our proposal for your work. The details are below — approve it when you are ready.',
+      salutation: modeleOrg ? null : m.bonjour(clientName),
+      intro: modeleOrg ? null : (langue === 'fr' ? 'Voici notre proposition pour vos travaux. Le détail est ci-dessous ; approuvez-la quand vous êtes prêt.' : 'Here is our proposal for your work. The details are below — approve it when you are ready.'),
+      corpsHtml: modeleOrg?.corpsHtml ?? null,
       montant: { libelle: m.montantTotal, valeur: montantTexte, sous: validite ? `${m.valideJusquau} ${validite}` : null },
       lignes: [{ libelle: m.numero, valeur: numero }, ...(validite ? [{ libelle: m.valideJusquau, valeur: validite }] : [])],
       bouton: viewUrl ? { texte: m.voirSoumission, url: viewUrl } : null,
@@ -693,7 +719,7 @@ router.post('/emails/send-mobile-quote', async (req, res) => {
     const emailResult = await sendEmail({
       ...(await senderForOrg(orgId, company)),
       to: clientData.email,
-      subject: `${m.soumission} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`,
+      subject: modeleOrg?.sujet || `${m.soumission} ${numero} — ${montantTexte}${company.company_name ? ` — ${company.company_name}` : ''}`,
       html,
       suivi: { orgId, entityType: 'quote', entityId: quoteId },
     });

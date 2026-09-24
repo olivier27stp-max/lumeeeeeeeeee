@@ -106,9 +106,12 @@ const DEFAUTS = {
   },
 } as const;
 
-function formatMoney(cents: number, currency = 'CAD') {
+/* Figé sur `en-CA`, il rendait « $1,220.17 » dans un rappel par ailleurs
+   entièrement français — la francisation du fichier avait oublié l'argent.
+   Le même montant repart ensuite dans la carte du gabarit et dans le SMS. */
+function formatMoney(cents: number, currency = 'CAD', langue: 'fr' | 'en' = 'fr') {
   try {
-    return new Intl.NumberFormat('en-CA', { style: 'currency', currency }).format((cents || 0) / 100);
+    return new Intl.NumberFormat(langue === 'fr' ? 'fr-CA' : 'en-CA', { style: 'currency', currency }).format((cents || 0) / 100);
   } catch {
     return `$${((cents || 0) / 100).toFixed(2)}`;
   }
@@ -260,12 +263,17 @@ router.post('/cron/payment-reminders', async (req, res) => {
               console.warn('[cron/reminders] payment request create failed:', e?.message);
             }
 
+            const societe = await getCompanySettings(orgId);
+            const langueRappel = langueEntreprise(societe);
             const vars = {
               client_name: clientName,
               company_name: companyName,
               invoice_number: inv.invoice_number || inv.id.slice(0, 8),
-              amount_due: formatMoney(Number(inv.balance_cents || 0), String(inv.currency || 'CAD')),
-              due_date: String(inv.due_date || ''),
+              amount_due: formatMoney(Number(inv.balance_cents || 0), String(inv.currency || 'CAD'), langueRappel),
+              /* Passait la date ISO BRUTE : le client lisait « était due le
+                 2026-04-24 » dans le texte ET dans le SMS, alors que la carte
+                 du même courriel affichait « 24 avril 2026 ». */
+              due_date: dateLisible(inv.due_date, langueRappel),
               pay_url: payUrl,
             };
 
@@ -282,8 +290,6 @@ router.post('/cron/payment-reminders', async (req, res) => {
                désormais les textes par défaut — ils étaient anglais en dur, donc
                une entreprise québécoise sans texte à elle relançait ses clients
                en anglais. */
-            const societe = await getCompanySettings(orgId);
-            const langueRappel = langueEntreprise(societe);
             const defauts = DEFAUTS[langueRappel];
 
             if ((channel === 'email' || channel === 'both') && toEmail && !adresseMorte && isMailerConfigured()) {
@@ -310,7 +316,9 @@ router.post('/cron/payment-reminders', async (req, res) => {
                 preheader: `${vars.amount_due} — ${langueRappel === 'fr' ? 'facture' : 'invoice'} ${vars.invoice_number}`,
                 titre: langueRappel === 'fr' ? 'Rappel de paiement' : 'Payment reminder',
                 corpsHtml: modeleOrg?.corpsHtml || bodyToHtml(body),
-                montant: { libelle: MOTS[langueRappel].montantDu, valeur: vars.amount_due, sous: vars.due_date ? `${MOTS[langueRappel].echeance} : ${dateLisible(vars.due_date, langueRappel)}` : null },
+                // `vars.due_date` est DÉJÀ lisible : la repasser à dateLisible
+                // la ferait traverser un Date() qui ne sait pas la relire.
+                montant: { libelle: MOTS[langueRappel].montantDu, valeur: vars.amount_due, sous: vars.due_date ? `${MOTS[langueRappel].echeance} : ${vars.due_date}` : null },
                 bouton: payUrl.includes('/pay/') ? { texte: MOTS[langueRappel].payer(vars.amount_due), url: payUrl } : null,
                 note: MOTS[langueRappel].question,
                 // Le texte du rappel porte déjà sa signature (« Merci, {company_name} ») : pas de deuxième.

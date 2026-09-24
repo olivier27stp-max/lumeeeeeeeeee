@@ -126,3 +126,37 @@ describe('gardes statiques — opt-in, envois de fond seulement', () => {
     expect(sql).not.toMatch(/grant\s+\w+\s+on\s+public\.email_retry_queue\s+to\s+(anon|authenticated)/);
   });
 });
+
+describe('réservation : la file ne peut pas boucler sur le même courriel', () => {
+  const src = read('server/lib/courriels/reprises.ts');
+  const boucle = src.slice(src.indexOf('for (const ligne of lignes)'));
+
+  it('la ligne est réservée AVANT l’appel à sendEmail', () => {
+    // L'ordre inverse était le défaut : si l'update final échouait (il n'est
+    // que journalisé), la ligne restait pending avec son échéance dépassée et
+    // le même courriel repartait toutes les 5 minutes, indéfiniment.
+    const iReserve = boucle.indexOf('.update({ next_attempt_at: echeanceReservee');
+    const iEnvoi = boucle.indexOf('await sendEmail(');
+    expect(iReserve).toBeGreaterThan(-1);
+    expect(iEnvoi).toBeGreaterThan(-1);
+    expect(iReserve).toBeLessThan(iEnvoi);
+  });
+
+  it('la réservation est conditionnelle : deux exécutions ne prennent pas la même ligne', () => {
+    const reserve = boucle.slice(boucle.indexOf('.update({ next_attempt_at: echeanceReservee'), boucle.indexOf('await sendEmail('));
+    expect(reserve).toContain(".eq('status', 'pending')");
+    expect(reserve).toContain(".lte('next_attempt_at'");
+  });
+
+  it('une réservation refusée saute la ligne au lieu d’envoyer quand même', () => {
+    const apres = boucle.slice(boucle.indexOf('if (resErr || !reservee)'));
+    // le `continue` doit venir avant le premier sendEmail qui suit
+    expect(apres.indexOf('continue;')).toBeLessThan(apres.indexOf('await sendEmail('));
+  });
+
+  it('le marquage final écrase la réservation, sinon la ligne resterait repoussée', () => {
+    // apresSucces pose status:'sent' ; apresEchec réécrit next_attempt_at.
+    expect(apresSucces(0).status).toBe('sent');
+    expect(apresEchec(0, new Date('2026-09-24T12:00:00Z'), 'x').next_attempt_at).toBeTruthy();
+  });
+});

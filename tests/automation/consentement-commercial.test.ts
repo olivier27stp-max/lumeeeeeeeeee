@@ -28,6 +28,9 @@ vi.mock('../../server/routes/emails', () => ({
   // `bouton` est le 3e argument depuis que les automatisations en portent un.
   buildEmailLayout: (_c: unknown, b: string) => b,
   senderFor: () => ({ from: 'test@lume.test' }),
+  // `senderForOrg` depuis que les relances honorent le domaine vérifié de
+  // l'entreprise. Il lit la base, d'où la version simulée ici.
+  senderForOrg: async () => ({ from: 'test@lume.test' }),
   // Sans cette entrée, l'import du module réel échoue et AUCUN courriel ne
   // part — le test accusait le consentement alors que la cause était ici.
   langueEntreprise: () => 'fr',

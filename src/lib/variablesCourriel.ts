@@ -116,6 +116,8 @@ export function remplacerParExemples(texte: string, type: string | undefined, fr
      donc « Soumission [quote_number] — [quote_amount] », et le propriétaire
      validait un objet plein de crochets en croyant que c'est ce que son
      client recevrait. */
+  /* Une clé commence par une LETTRE, comme côté serveur : sans cette règle,
+     `[50]` dans « Rabais [50] % » était traité comme une variable. */
   const remplacer = (tout: string, cle: string) => table.get(cle) ?? tout;
-  return texte.replace(/\{(\w+)\}/g, remplacer).replace(/\[(\w+)\]/g, remplacer);
+  return texte.replace(/\{([A-Za-z]\w*)\}/g, remplacer).replace(/\[([A-Za-z]\w*)\]/g, remplacer);
 }

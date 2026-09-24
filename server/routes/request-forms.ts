@@ -735,7 +735,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     step = 'visitor-ack';
     if (body.email) {
       try {
-        const { getCompanySettings, buildEmailLayout, senderFor } = await import('./emails');
+        const { getCompanySettings, buildEmailLayout, senderForOrg } = await import('./emails');
         const company = await getCompanySettings(orgId);
         const companyName = company.company_name || 'notre équipe';
 
@@ -769,7 +769,9 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
                on your side.</p>`;
 
         const ack = await sendEmail({
-          ...senderFor(company),
+          // `senderForOrg` : sans lui, une entreprise ayant fait vérifier SON
+      // domaine voyait quand même ses relances partir de @lumecrm.net.
+      ...(await senderForOrg(orgId, company)),
           to: body.email,
           subject,
           html: buildEmailLayout(company, bodyHtml),

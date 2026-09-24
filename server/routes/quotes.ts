@@ -16,7 +16,9 @@ import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
 import { resolveQuoteRecipients, insertTargetedNotifications } from '../lib/notificationHelpers';
 import { getCompanyBranding } from '../lib/companyBranding';
-import { senderForOrg } from './emails';
+import { senderForOrg, marqueDepuis, langueEntreprise } from './emails';
+import { rendreCourrielClient, MOTS, montant as montantLisible, dateLisible, echapper } from '../lib/courriels/gabarit';
+import { texteDuCourriel } from '../lib/courriels/modeles';
 import { lireLiensSociaux } from '../lib/socialLinks';
 import { estEchue } from '../lib/date-seule';
 
@@ -317,51 +319,85 @@ router.post('/quotes/send-email', async (req, res) => {
       .eq('org_id', quote.org_id)
       .maybeSingle();
 
-    const companyName = company?.company_name || 'Our Company';
-    const companyLogo = company?.logo_url || null;
+    const langue = langueEntreprise(company as never);
+    const m = MOTS[langue];
+    const companyName = company?.company_name || '';
     const companyPhone = company?.phone || null;
     const companyEmail = company?.email || null;
     const baseUrl = resolvePublicBaseUrl(req);
-    const quoteUrl = `${baseUrl}/quote/${quote.view_token}`;
-    const totalFormatted = new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' }).format(quote.total_cents / 100);
+    // Comme partout ailleurs : pas de jeton, pas de bouton. Un lien
+    // `/quote/undefined` est pire que pas de lien du tout.
+    const quoteUrl = quote.view_token ? `${baseUrl}/quote/${quote.view_token}` : null;
+    const totalFormatted = montantLisible(quote.total_cents || 0, quote.currency || 'CAD', langue);
+    const validite = dateLisible(quote.valid_until, langue);
 
-    // Use custom email body/subject or default template
-    const finalSubject = emailSubject
-      ? emailSubject.replace(/\{\{quote_number\}\}/g, quote.quote_number).replace(/\{\{total\}\}/g, totalFormatted).replace(/\{\{company\}\}/g, companyName)
-      : `Quote #${quote.quote_number} from ${companyName} — ${totalFormatted}`;
+    /* Cette route composait son propre HTML : anglais en dur, montants
+       « $1,220.17 », date « April 24, 2026 », bouton noir #111, sans logo,
+       sans pied, sans numéros de taxes et sans la couleur de l'entreprise.
+       C'était le seul courriel du produit à ne pas passer par le gabarit
+       commun — un client québécois recevait sa soumission en anglais au
+       format américain. Elle suit maintenant `/emails/send-quote`. */
+    const modeleOrg = await texteDuCourriel(auth.orgId, 'quote_sent', {
+      client_name: recipientName,
+      company_name: companyName,
+      quote_number: quote.quote_number,
+      quote_amount: totalFormatted,
+      valid_until: validite,
+      quote_link: quoteUrl || '',
+    });
 
-    const customBody = emailBody
-      ? emailBody.replace(/\{\{client_name\}\}/g, recipientName).replace(/\{\{quote_number\}\}/g, quote.quote_number).replace(/\{\{total\}\}/g, totalFormatted).replace(/\{\{company\}\}/g, companyName).replace(/\{\{valid_until\}\}/g, quote.valid_until || 'N/A').replace(/\n/g, '<br/>')
+    // Le texte saisi à l'envoi (modale « Envoyer ») prime sur le modèle
+    // enregistré : c'est un choix explicite de l'utilisateur, ici et maintenant.
+    const corpsSaisi = emailBody
+      ? echapper(emailBody)
+          .replace(/\{\{client_name\}\}/g, echapper(recipientName))
+          .replace(/\{\{quote_number\}\}/g, echapper(quote.quote_number))
+          .replace(/\{\{total\}\}/g, echapper(totalFormatted))
+          .replace(/\{\{company\}\}/g, echapper(companyName))
+          .replace(/\{\{valid_until\}\}/g, echapper(validite || ''))
+          .replace(/\n/g, '<br/>')
       : null;
+    const corpsHtml = corpsSaisi ?? modeleOrg?.corpsHtml ?? null;
 
-    const logoBlock = companyLogo
-      ? `<div style="margin-bottom:24px;"><img src="${companyLogo}" alt="${companyName}" style="max-height:48px;max-width:180px;object-fit:contain;" /></div>`
-      : `<div style="margin-bottom:24px;font-size:18px;font-weight:700;color:#111;">${companyName}</div>`;
+    const finalSubject = emailSubject
+      ? emailSubject
+          .replace(/\{\{quote_number\}\}/g, quote.quote_number)
+          .replace(/\{\{total\}\}/g, totalFormatted)
+          .replace(/\{\{company\}\}/g, companyName)
+      : (modeleOrg?.sujet
+        || `${m.soumission} ${quote.quote_number} — ${totalFormatted}${companyName ? ` — ${companyName}` : ''}`);
 
-    const depositBlock = quote.deposit_required && quote.deposit_value > 0
-      ? `<tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Deposit Required</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#111;text-align:right;font-weight:600;font-size:13px;">${quote.deposit_type === 'percentage' ? `${quote.deposit_value}%` : new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' }).format(quote.deposit_value)}</td></tr>`
-      : '';
+    const depot = quote.deposit_required && quote.deposit_value > 0
+      ? (langue === 'fr' ? 'Dépôt demandé' : 'Deposit required')
+      : null;
+    const depotValeur = quote.deposit_type === 'percentage'
+      ? `${quote.deposit_value} %`
+      : montantLisible(Math.round(Number(quote.deposit_value) * 100), quote.currency || 'CAD', langue);
 
-    const emailHtml = `
-      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:32px 20px;">
-        ${logoBlock}
-        ${customBody ? `<div style="color:#333;font-size:14px;line-height:1.6;">${customBody}</div>` : `
-        <h2 style="color:#111;font-size:18px;font-weight:600;margin:0 0 8px;">Hello ${recipientName},</h2>
-        <p style="color:#666;font-size:14px;margin:0 0 24px;">${companyName} has prepared a quote for you.</p>
-        <table style="width:100%;border-collapse:collapse;margin:0 0 24px;">
-          <tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Quote #</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#111;text-align:right;font-weight:600;font-size:13px;">${quote.quote_number}</td></tr>
-          <tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Amount</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#111;text-align:right;font-weight:700;font-size:15px;">${totalFormatted}</td></tr>
-          ${quote.valid_until ? `<tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Valid Until</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#333;text-align:right;font-size:13px;">${new Date(quote.valid_until).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td></tr>` : ''}
-          ${depositBlock}
-        </table>
-        `}
-        <p style="text-align:center;margin:28px 0;">
-          <a href="${quoteUrl}" style="display:inline-block;background:#111;color:#fff;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;letter-spacing:0.01em;">View Quote</a>
-        </p>
-        <p style="color:#888;font-size:13px;margin:24px 0 4px;">Thank you,<br/><strong style="color:#333;">${companyName}</strong></p>
-        ${companyPhone || companyEmail ? `<p style="color:#aaa;font-size:12px;margin:0;">${[companyPhone, companyEmail].filter(Boolean).join(' | ')}</p>` : ''}
-      </div>
-    `;
+    const emailHtml = rendreCourrielClient({
+      langue,
+      marque: marqueDepuis({
+        company_name: companyName,
+        company_email: companyEmail,
+        company_phone: companyPhone,
+        company_logo_url: company?.logo_url ?? null,
+      } as never),
+      preheader: `${m.soumission} ${quote.quote_number} — ${totalFormatted}`,
+      titre: langue === 'fr' ? `Votre soumission ${quote.quote_number}` : `Your quote ${quote.quote_number}`,
+      salutation: corpsHtml ? null : m.bonjour(recipientName),
+      intro: corpsHtml ? null : (langue === 'fr'
+        ? 'Voici notre proposition pour vos travaux. Le détail est ci-dessous ; approuvez-la quand vous êtes prêt.'
+        : 'Here is our proposal for your work. The details are below — approve it when you are ready.'),
+      corpsHtml,
+      montant: { libelle: m.montantTotal, valeur: totalFormatted, sous: validite ? `${m.valideJusquau} ${validite}` : null },
+      lignes: [
+        { libelle: m.numero, valeur: quote.quote_number },
+        ...(validite ? [{ libelle: m.valideJusquau, valeur: validite }] : []),
+        ...(depot ? [{ libelle: depot, valeur: depotValeur }] : []),
+      ],
+      bouton: quoteUrl ? { texte: m.voirSoumission, url: quoteUrl } : null,
+      note: m.question,
+    });
 
     // Le résultat DOIT être lu : `sendEmail` ne lève jamais, donc un appel nu
     // laissait passer tous les effets de bord ci-dessous alors qu'aucun
