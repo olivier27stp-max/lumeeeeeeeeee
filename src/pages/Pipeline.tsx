@@ -394,10 +394,21 @@ export default function Pipeline() {
       <GagneJobModal
         deal={dealAGagner}
         onFermer={() => {
-          // Le deal RESTE gagné : le badge « Job à créer » est dérivé de
-          // l'étape et de l'absence de job, jamais d'un indicateur stocké.
+          // Cette fenêtre s'ouvre par DEUX chemins : en déplaçant un deal
+          // vers « Gagné », et par le bouton « Créer une job » d'un deal
+          // encore ouvert. Annoncer « Deal gagné » dans les deux cas était
+          // faux dans le second — on annulait une job sur un deal en cours et
+          // l'app répondait qu'il était gagné.
+          //
+          // Le deal gagné, lui, RESTE gagné : le badge « Job à créer » est
+          // dérivé de l'étape et de l'absence de job, jamais stocké.
+          const etaitGagne = dealAGagner
+            ? etapeParId.get(dealAGagner.stage_id)?.kind === 'won'
+            : false;
           setDealAGagner(null);
-          toast.info(fr ? 'Deal gagné — job à créer.' : 'Deal won — job to create.');
+          if (etaitGagne) {
+            toast.info(fr ? 'Deal gagné — job à créer.' : 'Deal won — job to create.');
+          }
         }}
         onCreer={async (dealId, jobId) => {
           try {
