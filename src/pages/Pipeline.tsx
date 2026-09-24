@@ -279,6 +279,7 @@ export default function Pipeline() {
             onDeplacer={deplacer}
             pipelines={pipelines}
           pipelineActif={pipelineId}
+          modeCouleur={pipelines.find((p) => p.id === pipelineId)?.color_mode ?? 'dot'}
           onChangerPipeline={choisirPipeline}
           onAssigner={assigner}
             onChangement={rafraichir}
@@ -303,6 +304,7 @@ export default function Pipeline() {
             pipelineId={pipelineId}
             etapes={etapes}
             deals={deals}
+            onOuvrirPipeline={(id) => { setPipelineChoisi(id); choisirOnglet('board'); }}
             onChangement={() => {
               qc.invalidateQueries({ queryKey: ['pipeline-stages', pipelineId] });
               rafraichir();

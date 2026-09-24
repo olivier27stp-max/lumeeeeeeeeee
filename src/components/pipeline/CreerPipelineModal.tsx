@@ -17,7 +17,7 @@ import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Modal from '../ui/Modal';
 import { useTranslation } from '../../i18n';
-import { creerPipelineSurMesure, type EtapeSurMesure } from '../../lib/pipelineVentesApi';
+import { creerPipelineSurMesure, type EtapeSurMesure, type ModeCouleur } from '../../lib/pipelineVentesApi';
 
 /** Une ligne en cours de saisie — la probabilité reste du texte tant qu'on tape. */
 interface LigneEtape {
@@ -54,8 +54,13 @@ export default function CreerPipelineModal({ ouvert, onFermer, onCree }: {
   const idNom = useId();
   const idEtapes = useId();
 
+  const idCouleur = useId();
+  const idProbaDeal = useId();
+
   const [nom, setNom] = useState('');
   const [etapes, setEtapes] = useState<LigneEtape[]>(() => etapesParDefaut(fr));
+  const [couleur, setCouleur] = useState<ModeCouleur>('none');
+  const [probaParDeal, setProbaParDeal] = useState(false);
   const [enCours, setEnCours] = useState(false);
 
   if (!ouvert) return null;
@@ -107,11 +112,16 @@ export default function CreerPipelineModal({ ouvert, onFermer, onCree }: {
           show_in_reports: x.rapports,
         };
       });
-      const id = await creerPipelineSurMesure(nom, charge);
+      const id = await creerPipelineSurMesure(nom, charge, {
+        color_mode: couleur,
+        use_deal_probability: probaParDeal,
+      });
       toast.success(fr ? `Pipeline « ${nom.trim()} » créé.` : `Pipeline “${nom.trim()}” created.`);
       onCree(id);
       setNom('');
       setEtapes(etapesParDefaut(fr));
+      setCouleur('none');
+      setProbaParDeal(false);
       onFermer();
     } catch (err) {
       console.error('[CreerPipeline] création', err);
@@ -250,6 +260,51 @@ export default function CreerPipelineModal({ ouvert, onFermer, onCree }: {
               ? "Sans étape « Gagné » ou « Perdu », elles sont ajoutées : un pipeline qu'on ne peut pas terminer casse le taux de closing et la raison de perte."
               : 'Without a Won or Lost stage, they are added: a pipeline you cannot close breaks the close rate and the loss reason.'}
           </p>
+        </div>
+
+        {/* ── Affichage et calcul ──
+            Deux réglages qui ne changent pas le parcours mais la façon de
+            le lire. Ils se règlent aussi après coup ; les poser ici évite
+            d'avoir à y retourner. */}
+        <div className="space-y-3 rounded-xl border border-outline bg-surface-secondary px-3.5 py-3">
+          <div>
+            <label htmlFor={idCouleur} className="mb-1 block text-[12px] text-text-secondary">
+              {fr ? 'Couleur des étapes' : 'Stage colors'}
+            </label>
+            <select
+              id={idCouleur}
+              value={couleur}
+              onChange={(e) => setCouleur(e.target.value as ModeCouleur)}
+              className="input-field w-full max-w-[280px] text-[12.5px]"
+            >
+              <option value="none">{fr ? 'Aucune couleur' : 'No color'}</option>
+              <option value="dot">{fr ? 'Pastille colorée' : 'Colored dot'}</option>
+              <option value="tint">{fr ? 'Fond de colonne teinté' : 'Background tint'}</option>
+            </select>
+            <p className="mt-1 text-[11px] text-text-muted">
+              {fr
+                ? "La teinte suit la position de l'étape : réordonner le pipeline ne laisse jamais deux étapes de la même couleur."
+                : 'The tint follows the stage position: reordering the pipeline never leaves two stages the same color.'}
+            </p>
+          </div>
+
+          <div className="flex items-start gap-2.5">
+            <input
+              id={idProbaDeal}
+              type="checkbox"
+              checked={probaParDeal}
+              onChange={(e) => setProbaParDeal(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <label htmlFor={idProbaDeal} className="text-[12.5px] text-text-primary">
+              {fr ? 'Probabilité propre à chaque deal' : 'Use opportunity-level probability'}
+              <span className="mt-0.5 block text-[11px] text-text-muted">
+                {fr
+                  ? "La prévision utilise le pourcentage écrit sur le deal, et celui de l'étape quand le deal n'en a pas. Sans ça, un contrat à 90 % et un autre à 10 % dans la même étape pèsent pareil."
+                  : "The forecast uses the percentage set on the deal, falling back to the stage when the deal has none. Without it, a 90% and a 10% deal in the same stage weigh the same."}
+              </span>
+            </label>
+          </div>
         </div>
 
         <div className="flex justify-end gap-2">
