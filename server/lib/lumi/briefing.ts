@@ -18,6 +18,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { TOOLS_BY_NAME } from '../agent/tools';
 import { logger } from '../logger';
+import { lireArgentQuiDort } from '../recu/lecture';
+
+/**
+ * L'interrupteur de la section « Le Reçu » dans le briefing (`org_features`).
+ * Coupé, le briefing est identique à ce qu'il était avant, au mot près.
+ */
+export const DRAPEAU_RECU = 'recu_lumi';
 
 /** Heure locale (de l'org) à laquelle le briefing part. */
 export const HEURE_BRIEFING = 6;
@@ -30,6 +37,18 @@ export interface DonneesBriefing {
   tasks_due: { total_matching: number; tasks: Array<{ title: string; priorite?: string; echeance?: string | null }> };
   new_requests_48h: { total_matching: number; requests: Array<{ nom: string; ville: string | null; quand: string }> };
   unread_sms: { total_matching: number; conversations: Array<{ client: string; dernier_message?: string | null; non_lus: number }> };
+  /**
+   * « Le Reçu » — l'argent qui dort (devis sans suivi récent, factures échues).
+   * Optionnel : absent quand la section est coupée, et le briefing est alors
+   * identique à ce qu'il était avant, au mot près.
+   */
+  argent_qui_dort?: {
+    total_cents: number;
+    devis_total_cents: number;
+    factures_total_cents: number;
+    devis: Array<{ client: string | null; montant_cents: number; jours_sans_contact: number }>;
+    factures: Array<{ client: string | null; solde_cents: number; jours_de_retard: number }>;
+  };
 }
 
 // Espaces insécables d'Intl (U+202F, U+00A0) ramenées à une espace ordinaire : « 1 971,82 $ », comme partout dans Lume.
@@ -87,6 +106,26 @@ export function composerBriefing(d: DonneesBriefing, opts: { prenom: string | nu
       ? `${o.total_matching} ${o.total_matching > 1 ? 'factures' : 'facture'} en retard pour ${fmtDollars(o.total_cents, fr)}${pire ? `, la plus vieille chez ${pire.client}${jours != null ? ` (${jours} jours)` : ''}` : ''}.`
       : `${o.total_matching} overdue ${o.total_matching > 1 ? 'invoices' : 'invoice'} for ${fmtDollars(o.total_cents, fr)}${pire ? `, the oldest at ${pire.client}${jours != null ? ` (${jours} days)` : ''}` : ''}.`);
   }
+  // « Le Reçu » — l'argent qui dort. Placé après les retards : on passe du
+  // constat (« 3 factures en retard ») au montant total qu'on peut aller
+  // chercher, devis dormants compris. Le total porte sur TOUT ce qui dort,
+  // pas seulement sur les exemples nommés.
+  const a = d.argent_qui_dort;
+  if (a && a.total_cents > 0) {
+    const plusGros = [
+      ...a.factures.map((f) => ({ qui: f.client, cents: f.solde_cents, detail: fr ? `${f.jours_de_retard} j de retard` : `${f.jours_de_retard} days late` })),
+      ...a.devis.map((x) => ({ qui: x.client, cents: x.montant_cents, detail: fr ? `sans suivi depuis ${x.jours_sans_contact} j` : `no follow-up for ${x.jours_sans_contact} days` })),
+    ].sort((x, y) => y.cents - x.cents)[0];
+    const exemple = plusGros
+      ? (fr
+        ? `, le plus gros ${plusGros.qui ? `chez ${plusGros.qui} ` : ''}à ${fmtDollars(plusGros.cents, fr)} (${plusGros.detail})`
+        : `, the largest ${plusGros.qui ? `at ${plusGros.qui} ` : ''}for ${fmtDollars(plusGros.cents, fr)} (${plusGros.detail})`)
+      : '';
+    parts.push(fr
+      ? `${fmtDollars(a.total_cents, fr)} qui dorment${exemple}.`
+      : `${fmtDollars(a.total_cents, fr)} sitting idle${exemple}.`);
+  }
+
   const t = d.tasks_due;
   if (t.total_matching > 0) {
     const liste = t.tasks.slice(0, 3).map((x) => x.title).filter(Boolean);
@@ -108,12 +147,14 @@ export function composerBriefing(d: DonneesBriefing, opts: { prenom: string | nu
       ? `${s.total_matching} ${s.total_matching > 1 ? 'textos non lus' : 'texto non lu'}${liste.length ? ` (${liste.join(', ')})` : ''}.`
       : `${s.total_matching} unread ${s.total_matching > 1 ? 'texts' : 'text'}${liste.length ? ` (${liste.join(', ')})` : ''}.`);
   }
-  const rienASignaler = v.total_matching === 0 && o.total_matching === 0 && t.total_matching === 0 && r.total_matching === 0 && s.total_matching === 0;
+  const rienASignaler = v.total_matching === 0 && o.total_matching === 0 && t.total_matching === 0 && r.total_matching === 0 && s.total_matching === 0
+    && !(a && a.total_cents > 0);
   if (rienASignaler) return null;
 
   const salut = fr ? `Bonjour${opts.prenom ? ` ${opts.prenom}` : ''}.` : `Good morning${opts.prenom ? ` ${opts.prenom}` : ''}.`;
   const suites: string[] = [];
   if (o.total_matching > 0) suites.push(fr ? '« relance les retards »' : '“chase the overdue ones”');
+  else if (a && a.devis_total_cents > 0) suites.push(fr ? '« relance les devis qui dorment »' : '“follow up the idle quotes”');
   if (v.total_matching > 1) suites.push(fr ? '« prépare la tournée »' : '“plan the route”');
   if (r.total_matching > 0) suites.push(fr ? '« montre-moi les demandes »' : '“show me the requests”');
   const cloture = suites.length
@@ -186,6 +227,32 @@ async function briefingPourOrg(admin: SupabaseClient, orgId: string, maintenant:
   if (!outil?.handler) return 0;
   const donnees = await outil.handler({}, { client: admin, orgId, userId: String(restants[0].user_id) }) as DonneesBriefing | { error: string };
   if (!donnees || 'error' in donnees) { logger.error('[lumi/briefing] données indisponibles', { orgId, error: (donnees as any)?.error }); return 0; }
+
+  // « Le Reçu » — ajouté seulement si l'org a activé l'interrupteur. Une
+  // section en panne ne doit jamais empêcher le briefing de partir : on
+  // journalise et on continue sans elle.
+  try {
+    const { data: drapeau } = await admin
+      .from('org_features')
+      .select('enabled')
+      .eq('org_id', orgId)
+      .eq('feature', DRAPEAU_RECU)
+      .maybeSingle();
+    if ((drapeau as any)?.enabled) {
+      const dort = await lireArgentQuiDort(admin, orgId, { maintenant });
+      if (dort.totalCents > 0) {
+        (donnees as DonneesBriefing).argent_qui_dort = {
+          total_cents: dort.totalCents,
+          devis_total_cents: dort.devisTotalCents,
+          factures_total_cents: dort.facturesTotalCents,
+          devis: dort.devis.map((x) => ({ client: x.client, montant_cents: x.montantCents, jours_sans_contact: x.joursSansContact })),
+          factures: dort.factures.map((x) => ({ client: x.client, solde_cents: x.soldeCents, jours_de_retard: x.joursDeRetard })),
+        };
+      }
+    }
+  } catch (e: any) {
+    logger.error('[lumi/briefing] reçu indisponible, briefing envoyé sans', { orgId, error: e?.message || String(e) });
+  }
 
   let crees = 0;
   for (const m of restants) {

@@ -33,6 +33,11 @@ export const PLATFORM_FEATURES: readonly PlatformFeature[] = [
   { key: 'includes_request_forms', kind: 'plan', label: 'Formulaires de demande', description: 'Formulaires publics de demande de service.' },
   { key: 'includes_advanced_roles', kind: 'plan', label: 'Rôles avancés', description: 'Permissions personnalisées par membre.' },
   { key: 'module_vente', kind: 'module', label: 'Module Vente (activation)', description: 'Activation du module Vente par le workspace (exige aussi le forfait D2D).' },
+  // « Le Reçu » — section « l'argent qui dort » dans le briefing du matin.
+  // Module et non forfait : le briefing lui-même est déjà réservé aux plans
+  // avec Lumi (includes_ai), cet interrupteur ne fait qu'ajouter ou retirer
+  // la section. Coupé, le briefing est identique au mot près.
+  { key: 'recu_lumi', kind: 'module', label: 'Le Reçu (briefing)', description: 'Ajoute « l’argent qui dort » au briefing du matin : devis sans suivi récent et factures échues.' },
 ];
 
 const KEYS = new Set(PLATFORM_FEATURES.map((f) => f.key));
