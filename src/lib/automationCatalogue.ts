@@ -733,6 +733,10 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   'lead.created': 'lead',
   'lead.status_changed': 'lead',
   'agreement.signed': 'job',
+  // L'objet du champ modifié : client, deal, job, quote ou invoice
+  // (`server/lib/champs/service.ts`). Variable par nature — voir
+  // `actionCompatible`.
+  'custom_field.changed': '*',
   'client.replied': 'client',
   'client.tagged': 'client',
   'task.completed': 'client',
@@ -757,6 +761,16 @@ export function actionCompatible(action: ActionCatalogue, cleDeclencheur: string
   const entite = ENTITE_PAR_DECLENCHEUR[cleDeclencheur];
   // Déclencheur inconnu : on n'invente pas de refus, le serveur tranchera.
   if (!entite) return true;
+  /*
+   * `'*'` = l'entité dépend de la donnée, pas du déclencheur.
+   *
+   * « Champ personnalisé modifié » émet l'objet du champ : un client, un
+   * deal, un job, un devis ou une facture. On ne peut donc rien exclure
+   * d'avance — c'est le serveur qui tranchera à l'exécution, avec un
+   * message clair. Interdire au catalogue priverait l'utilisateur d'actions
+   * parfaitement valides selon le champ qu'il a choisi.
+   */
+  if (entite === '*') return true;
   return action.entites.includes(entite);
 }
 

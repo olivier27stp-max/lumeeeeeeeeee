@@ -42,6 +42,7 @@ const ENTITE_DU_DECLENCHEUR: Record<string, string> = {
   'lead.status_changed': 'lead',
   // `agreement.signed` émet entityType 'job' (le contrat appartient au job).
   'agreement.signed': 'job',
+  'custom_field.changed': '*',
   'client.replied': 'client',
   'client.tagged': 'client',
   'task.completed': 'client',
@@ -68,6 +69,8 @@ describe('le catalogue ne promet pas ce que le moteur refusera', () => {
      */
     const memeChose = (a: string, b: string) => {
       if (a === b) return true;
+      // `'*'` : entité variable, aucune promesse à tenir sur son type.
+      if (b === '*') return true;
       const paires = [
         ['appointment', 'schedule_event'],
         ['agreement', 'job'],
@@ -117,7 +120,9 @@ describe('le catalogue ne promet pas ce que le moteur refusera', () => {
       for (const a of ACTIONS) {
         const entite = ENTITE_DU_DECLENCHEUR[d.cle];
         // Ce que le serveur ferait : refuser si l'action est restreinte.
-        const refuseParLeMoteur = Boolean(a.entites) && !a.entites!.includes(entite);
+        // `'*'` : l'entité dépend de la donnée, pas du déclencheur — le
+        // moteur tranche à l'exécution, le catalogue ne peut rien exclure.
+        const refuseParLeMoteur = entite !== '*' && Boolean(a.entites) && !a.entites!.includes(entite);
         // Ce que le catalogue annonce.
         const annonceCompatible = actionCompatible(a, d.cle);
         if (refuseParLeMoteur && annonceCompatible) {
