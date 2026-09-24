@@ -21,6 +21,7 @@ import { getServiceClient } from '../lib/supabase';
 import { documentTaxLines } from '../lib/taxResolve';
 import { getCompanyBranding } from '../lib/companyBranding';
 import { getPaymentSettings } from '../lib/payment-settings';
+import { getConnectedAccount } from '../lib/stripe-connect';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
 const router = Router();
@@ -148,8 +149,24 @@ router.get('/invoices/public/:token', async (req, res) => {
     // Bouton « Payer » seulement si le lien est actif ET que l'entreprise
     // accepte encore le paiement des factures en ligne (réglages Lume Payments).
     const reglagesPaiement = payReq ? await getPaymentSettings(invoice.org_id) : null;
+    /* Le compte Stripe doit pouvoir ENCAISSER, pas seulement exister. La garde
+       vérifiait le réglage et l'expiration, jamais `charges_enabled` : une
+       entreprise qui n'avait pas fini sa configuration Stripe affichait quand
+       même « Payer 229,95 $ », et le clic aboutissait sur « Paiement
+       indisponible — échec du chargement ». Le client croyait le site brisé.
+       Sans ce jeton, la page propose d'écrire à l'entreprise. */
+    let peutEncaisser = false;
+    if (payReq && reglagesPaiement?.invoice_payments_enabled) {
+      try {
+        const compte = await getConnectedAccount(invoice.org_id);
+        peutEncaisser = Boolean(compte?.charges_enabled);
+      } catch (err: any) {
+        // Stripe injoignable : on ne promet pas un paiement qu'on ne peut pas tenir.
+        console.error('[invoices/public] compte Stripe illisible', err?.message || err);
+      }
+    }
     const payTokenActif = payReq
-      && reglagesPaiement?.invoice_payments_enabled
+      && peutEncaisser
       && (!payReq.expires_at || new Date(payReq.expires_at) > new Date())
       ? payReq.public_token
       : null;
