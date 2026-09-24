@@ -11,7 +11,8 @@ import {
   Trash2, Eye, FileText, Clock, AlertCircle,
   X,
 } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import InfiniteScrollSentinel from '../components/InfiniteScrollSentinel';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
@@ -66,10 +67,6 @@ function parseSort(raw: string | null): InvoiceSortKey {
   ];
   if (raw && allowed.includes(raw as InvoiceSortKey)) return raw as InvoiceSortKey;
   return 'due_date_desc';
-}
-function parsePage(raw: string | null) {
-  const v = Number(raw || '1');
-  return Number.isFinite(v) ? Math.max(1, Math.trunc(v)) : 1;
 }
 // ─── Period options for the status total boxes ─────────────────
 
@@ -131,7 +128,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
 
   const status = parseStatus(searchParams.get('status'));
   const sort = parseSort(searchParams.get('sort'));
-  const page = parsePage(searchParams.get('page'));
   const q = (searchParams.get('q') || '').trim();
   const salesperson = (searchParams.get('sp') || 'All').trim() || 'All';
 
@@ -196,14 +192,17 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     cleChampsVue.current = champsListe.cle;
     updateParams((next) => { next.delete('page'); });
   }, [champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
-  const invoicesQuery = useQuery({
-    queryKey: ['invoicesTable', status, sort, page, q, salesperson, champsListe.cle, idsChamps.ids?.length ?? -1],
-    queryFn: () => listInvoices({
-      status, range: 'all', sort, page, q,
+  // Liste infinie : chaque page s'ajoute sous les précédentes dans le même tableau.
+  const invoicesQuery = useInfiniteQuery({
+    queryKey: ['invoicesTable', status, sort, q, salesperson, champsListe.cle, idsChamps.ids?.length ?? -1],
+    queryFn: ({ pageParam }) => listInvoices({
+      status, range: 'all', sort, page: pageParam, q,
       pageSize: PAGE_SIZE,
       salespersonId: salesperson,
       ids: idsChamps.ids,
     }),
+    initialPageParam: 1,
+    getNextPageParam: (last, all) => (all.length * PAGE_SIZE < (last?.total || 0) ? all.length + 1 : undefined),
     // Tant que les ids du filtre de champs ne sont pas connus, on n'affiche pas une liste non filtrée.
     enabled: idsChamps.pret,
   });
@@ -214,10 +213,17 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     staleTime: 300_000,
   });
 
-  const rows = invoicesQuery.data?.rows || [];
+  const rows = useMemo(() => {
+    const seen = new Set<string>();
+    const out: InvoiceRow[] = [];
+    for (const p of invoicesQuery.data?.pages || []) {
+      for (const r of p.rows || []) { if (!seen.has(r.id)) { seen.add(r.id); out.push(r); } }
+    }
+    return out;
+  }, [invoicesQuery.data]);
   const valeursChamps = useValeursPage('invoice', rows.map((r) => r.id), champsListe.colonnes.length > 0);
-  const total = invoicesQuery.data?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const loadedPages = invoicesQuery.data?.pages || [];
+  const total = loadedPages.length ? (loadedPages[loadedPages.length - 1]?.total || 0) : 0;
 
   // When embedded, our own title is hidden — report the total to the parent
   // shell (Finances) so it can show the count next to its page title.
@@ -322,12 +328,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
       const trimmed = searchInput.trim();
       if (!trimmed) next.delete('q'); else next.set('q', trimmed);
       next.delete('page');
-    });
-  }
-
-  function goToPage(p: number) {
-    updateParams((next) => {
-      if (p <= 1) next.delete('page'); else next.set('page', String(p));
     });
   }
 
@@ -794,6 +794,17 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                 );
               })}
             </div>
+            {/* Liste infinie — charge la page suivante dans le même tableau */}
+            {!invoicesQuery.isLoading && rows.length > 0 && (
+              <InfiniteScrollSentinel
+                hasMore={Boolean(invoicesQuery.hasNextPage)}
+                loading={invoicesQuery.isFetchingNextPage}
+                onLoadMore={() => { if (!invoicesQuery.isFetchingNextPage) void invoicesQuery.fetchNextPage(); }}
+                loaded={rows.length}
+                total={total}
+                className="border-t border-outline/30"
+              />
+            )}
           </div>
 
           {/* ── FOOTER (Jobs/Clients pattern) ── */}
@@ -801,19 +812,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
             <span className="text-[14px] text-text-secondary">
               {t.common.rowsSelected.replace('{selected}', String(selectedIds.size)).replace('{total}', String(total))}
             </span>
-            <div className="flex items-center gap-2">
-              <button disabled={page <= 1} onClick={() => goToPage(page - 1)}
-                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
-                {t.common.previous}
-              </button>
-              {totalPages > 1 && (
-                <span className="text-[13px] text-text-muted tabular-nums px-2">{page} / {totalPages}</span>
-              )}
-              <button disabled={page >= totalPages} onClick={() => goToPage(page + 1)}
-                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
-                {t.common.next}
-              </button>
-            </div>
           </div>
         </>
       )}

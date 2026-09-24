@@ -4,7 +4,7 @@
    sorting, bulk actions, row actions, and full CRUD.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpDown,
   Calendar,
@@ -21,7 +21,8 @@ import {
   ArrowDown,
   Minus,
 } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import InfiniteScrollSentinel from '../components/InfiniteScrollSentinel';
 import { AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -310,7 +311,6 @@ export default function Tasks() {
   const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<TaskPriorityFilter>('all');
   const [sort, setSort] = useState<TaskSortKey>('created_at_desc');
-  const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -322,30 +322,36 @@ export default function Tasks() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQ(searchInput.trim());
-      setPage(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Reset page on filter change
-  useEffect(() => { setPage(1); }, [statusFilter, priorityFilter]);
-
   // ── Query ──
-  const tasksQuery = useQuery({
-    queryKey: ['tasks', statusFilter, priorityFilter, sort, page, debouncedQ],
-    queryFn: () => listTasks({
+  // Liste infinie : chaque page s'ajoute sous les précédentes dans le même tableau.
+  const tasksQuery = useInfiniteQuery({
+    queryKey: ['tasks', statusFilter, priorityFilter, sort, debouncedQ],
+    queryFn: ({ pageParam }) => listTasks({
       status: statusFilter,
       priority: priorityFilter,
       sort,
-      page,
+      page: pageParam,
       q: debouncedQ,
       pageSize: PAGE_SIZE,
     }),
+    initialPageParam: 1,
+    getNextPageParam: (last, all) => (all.length * PAGE_SIZE < (last?.total || 0) ? all.length + 1 : undefined),
   });
 
-  const rows = tasksQuery.data?.rows || [];
-  const total = tasksQuery.data?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rows = useMemo(() => {
+    const seen = new Set<string>();
+    const out: TaskRow[] = [];
+    for (const p of tasksQuery.data?.pages || []) {
+      for (const r of p.rows || []) { if (!seen.has(r.id)) { seen.add(r.id); out.push(r); } }
+    }
+    return out;
+  }, [tasksQuery.data]);
+  const loadedPages = tasksQuery.data?.pages || [];
+  const total = loadedPages.length ? (loadedPages[loadedPages.length - 1]?.total || 0) : 0;
   const loading = tasksQuery.isLoading;
 
   // Vider la sélection quand les données changent.
@@ -695,6 +701,17 @@ export default function Tasks() {
             );
           })}
         </div>
+        {/* Liste infinie — charge la page suivante dans le même tableau */}
+        {!loading && rows.length > 0 && (
+          <InfiniteScrollSentinel
+            hasMore={Boolean(tasksQuery.hasNextPage)}
+            loading={tasksQuery.isFetchingNextPage}
+            onLoadMore={() => { if (!tasksQuery.isFetchingNextPage) void tasksQuery.fetchNextPage(); }}
+            loaded={rows.length}
+            total={total}
+            className="border-t border-outline/30"
+          />
+        )}
       </div>
 
       {/* ── FOOTER ── */}
@@ -702,22 +719,6 @@ export default function Tasks() {
         <span className="text-[14px] text-[#64748b]">
           {t.common.rowsSelected.replace('{selected}', String(selected.size)).replace('{total}', String(total))}
         </span>
-        <div className="flex items-center gap-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer"
-          >
-            {t.common.previous}
-          </button>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer"
-          >
-            {t.common.next}
-          </button>
-        </div>
       </div>
 
       {/* ── BULK ACTIONS ── */}

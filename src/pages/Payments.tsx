@@ -9,7 +9,8 @@ import {
   Calendar, CreditCard, Download,
   Filter, X, DollarSign,
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import InfiniteScrollSentinel from '../components/InfiniteScrollSentinel';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
@@ -24,6 +25,7 @@ import {
   formatMoneyFromCents,
   listPayments,
   PaymentDateFilter,
+  PaymentListRow,
   PaymentMethodFilter,
   PaymentStatusFilter,
   PayoutListItem,
@@ -218,7 +220,6 @@ export default function Payments({
   const status = parseStatus(params.get('status'));
   const method = parseMethod(params.get('method'));
   const date = parseDate(params.get('date'));
-  const page = Math.max(1, Number(params.get('page') || '1'));
   const fromDate = params.get('from') || '';
   const toDate = params.get('to') || '';
   const payoutMethod = String(params.get('payout_method') || 'all');
@@ -237,9 +238,12 @@ export default function Payments({
   const isConnected = connectQuery.data?.connected && connectQuery.data?.account?.charges_enabled;
 
   const overviewQuery = useQuery({ queryKey: ['paymentsOverview'], queryFn: fetchPaymentsOverview, enabled: Boolean(orgId) });
-  const paymentsQuery = useQuery({
-    queryKey: ['paymentsRows', status, method, date, page, fromDate, toDate],
-    queryFn: () => listPayments({ status, method, date, q: '', page, pageSize: PAGE_SIZE, fromDate, toDate }),
+  // Liste infinie : chaque page s'ajoute sous les précédentes dans le même tableau.
+  const paymentsQuery = useInfiniteQuery({
+    queryKey: ['paymentsRows', status, method, date, fromDate, toDate],
+    queryFn: ({ pageParam }) => listPayments({ status, method, date, q: '', page: pageParam, pageSize: PAGE_SIZE, fromDate, toDate }),
+    initialPageParam: 1,
+    getNextPageParam: (last, all) => (all.length * PAGE_SIZE < (last?.total || 0) ? all.length + 1 : undefined),
     enabled: tab === 'overview' && Boolean(orgId),
   });
 
@@ -270,11 +274,18 @@ export default function Payments({
     enabled: Boolean(selectedPayout && orgId),
   });
 
-  const rows = useMemo(() => paymentsQuery.data?.rows || [], [paymentsQuery.data]);
+  const rows = useMemo(() => {
+    const seen = new Set<string>();
+    const out: PaymentListRow[] = [];
+    for (const p of paymentsQuery.data?.pages || []) {
+      for (const r of p.rows || []) { if (!seen.has(r.id)) { seen.add(r.id); out.push(r); } }
+    }
+    return out;
+  }, [paymentsQuery.data]);
   const payoutRows = useMemo(() => payoutList.data?.items || [], [payoutList.data]);
   const payoutError = payoutList.error as Error | null;
-  const total = paymentsQuery.data?.total || 0;
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
+  const loadedPages = paymentsQuery.data?.pages || [];
+  const total = loadedPages.length ? (loadedPages[loadedPages.length - 1]?.total || 0) : 0;
 
   const overview = overviewQuery.data;
 
@@ -297,12 +308,6 @@ export default function Payments({
     updateParams((next) => {
       if (m === 'all') next.delete('method'); else next.set('method', m);
       next.delete('page');
-    });
-  }
-
-  function goToPage(p: number) {
-    updateParams((next) => {
-      if (p <= 1) next.delete('page'); else next.set('page', String(p));
     });
   }
 
@@ -551,26 +556,24 @@ export default function Payments({
                 );
               })}
             </div>
+            {/* Liste infinie — charge la page suivante dans le même tableau */}
+            {!paymentsQuery.isLoading && rows.length > 0 && (
+              <InfiniteScrollSentinel
+                hasMore={Boolean(paymentsQuery.hasNextPage)}
+                loading={paymentsQuery.isFetchingNextPage}
+                onLoadMore={() => { if (!paymentsQuery.isFetchingNextPage) void paymentsQuery.fetchNextPage(); }}
+                loaded={rows.length}
+                total={total}
+                className="border-t border-outline/30"
+              />
+            )}
           </div>
 
-          {/* ── FOOTER / PAGINATION (Invoices pattern) ── */}
+          {/* ── FOOTER ── */}
           <div className="flex items-center justify-between mt-3">
             <span className="text-[14px] text-text-secondary">
               {total} {fr ? 'paiement(s)' : 'payment(s)'}
             </span>
-            <div className="flex items-center gap-2">
-              <button disabled={page <= 1} onClick={() => goToPage(page - 1)}
-                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
-                {fr ? 'Précédent' : 'Previous'}
-              </button>
-              {totalPages > 1 && (
-                <span className="text-[13px] text-text-muted tabular-nums px-2">{page} / {totalPages}</span>
-              )}
-              <button disabled={page >= totalPages} onClick={() => goToPage(page + 1)}
-                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
-                {fr ? 'Suivant' : 'Next'}
-              </button>
-            </div>
           </div>
         </>
       ) : (

@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, X } from 'lucide-react';
+import InfiniteScrollSentinel from '../components/InfiniteScrollSentinel';
 import StatusBadge from '../components/ui/status-badge';
 import { statusDotColor } from '../components/ui/StatusBadge';
 import FilterPill from '../components/ui/FilterPill';
@@ -95,7 +96,10 @@ export default function Clients() {
   const [items, setItems] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
+  const pageSize = 20;
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Total côté serveur (sans le filtre de statut client-side) → pilote « il reste des pages ».
+  const [serverTotal, setServerTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState('All');
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<ClientSort>('recent');
@@ -172,8 +176,8 @@ export default function Clients() {
   useEffect(() => { setPage(1); }, [champsListe.cle]);
 
   useEffect(() => {
-    void loadClients();
-  }, [page, pageSize, statusFilter, sortBy, debouncedSearch, champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
+    void loadClients(page > 1 ? 'append' : 'refresh');
+  }, [page, statusFilter, sortBy, debouncedSearch, champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for command palette create event
   useEffect(() => {
@@ -295,16 +299,17 @@ export default function Clients() {
     }
   }
 
-  async function loadClients() {
-    setLoading(true);
+  // Liste infinie : 'append' ajoute la page courante sous les lignes déjà
+  // affichées ; 'refresh' recharge d'un coup toutes les pages déjà chargées.
+  async function loadClients(mode: 'append' | 'refresh' = 'refresh') {
+    const append = mode === 'append' && page > 1;
+    if (append) setLoadingMore(true); else setLoading(true);
     setError(null);
     void loadStatusCounts();
     try {
-      // Fetch without status filter first if we need to compute statuses
-      const fetchStatus = statusFilter !== 'All' ? undefined : undefined;
       const res = await listClients({
-        page,
-        pageSize,
+        page: append ? page : 1,
+        pageSize: append ? pageSize : pageSize * Math.max(1, page),
         status: 'All',
         q: debouncedSearch,
         sort: sortBy,
@@ -392,12 +397,18 @@ export default function Clients() {
         ? enriched
         : enriched.filter(c => c.status === statusFilter);
 
-      setItems(filtered);
-      setTotal(statusFilter === 'All' ? res.total : filtered.length);
+      setItems(prev => {
+        if (!append) return filtered;
+        const seen = new Set(prev.map(c => c.id));
+        return [...prev, ...filtered.filter(c => !seen.has(c.id))];
+      });
+      setServerTotal(res.total);
+      if (statusFilter === 'All') setTotal(res.total);
+      else setTotal(prev => (append ? prev + filtered.length : filtered.length));
     } catch (err: any) {
       setError(err?.message || t.clients.failedCreate);
     } finally {
-      setLoading(false);
+      if (append) setLoadingMore(false); else setLoading(false);
     }
   }
 
@@ -410,7 +421,7 @@ export default function Clients() {
     }
   }
 
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const hasMore = !loading && page * pageSize < serverTotal;
 
   const onSaveSelected = async () => {
     if (!selected) return;
@@ -711,23 +722,24 @@ export default function Clients() {
             );
           })}
         </div>
+        {/* Liste infinie — charge la page suivante dans le même tableau */}
+        {!loading && (displayItems.length > 0 || hasMore) && (
+          <InfiniteScrollSentinel
+            hasMore={hasMore}
+            loading={loadingMore}
+            onLoadMore={() => setPage(p => p + 1)}
+            loaded={statusFilter === 'All' ? items.length : undefined}
+            total={statusFilter === 'All' ? total : undefined}
+            className="border-t border-[var(--color-outline)]/30"
+          />
+        )}
       </div>
 
-      {/* ── FOOTER: selection count + pagination ── */}
+      {/* ── FOOTER: selection count ── */}
       <div className="flex items-center justify-between mt-3">
         <span className="text-[14px] text-[var(--color-text-secondary)]">
           {total} {fr ? (total === 1 ? 'client' : 'clients') : (total === 1 ? 'client' : 'clients')}
         </span>
-        <div className="flex items-center gap-2">
-          <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
-            className="h-9 px-4 bg-surface-card border border-[var(--color-outline)] rounded-md text-[14px] text-[var(--color-text-primary)] font-normal disabled:opacity-40 disabled:cursor-default hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer">
-            {fr ? 'Précédent' : 'Previous'}
-          </button>
-          <button disabled={page >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))}
-            className="h-9 px-4 bg-surface-card border border-[var(--color-outline)] rounded-md text-[14px] text-[var(--color-text-primary)] font-normal disabled:opacity-40 disabled:cursor-default hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer">
-            {fr ? 'Suivant' : 'Next'}
-          </button>
-        </div>
       </div>
 
       {/* Detail drawer */}

@@ -3,7 +3,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import InfiniteScrollSentinel from '../components/InfiniteScrollSentinel';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { StatusBadge, FilterPill, statusDotColor } from '../components/ui';
@@ -15,6 +16,7 @@ import {
   updateQuoteStatus,
   unarchiveQuote,
   QUOTE_STATUS_LABELS,
+  type Quote,
   type QuoteStatus,
 } from '../lib/quotesApi';
 import { listSalespeople } from '../lib/jobsApi';
@@ -126,7 +128,6 @@ export default function Quotes() {
   const [salespersonFilter, setSalespersonFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
-  const [page, setPage] = useState(1);
   const [sort, setSort] = useState<QuoteSort>('recent');
   const [presetSelectOpen, setPresetSelectOpen] = useState(false);
   const location = useLocation();
@@ -158,17 +159,20 @@ export default function Quotes() {
   };
 
   React.useEffect(() => {
-    const id = setTimeout(() => { setDebounced(search.trim()); setPage(1); }, 300);
+    const id = setTimeout(() => { setDebounced(search.trim()); }, 300);
     return () => clearTimeout(id);
   }, [search]);
 
   // Champs personnalisés : filtre côté base + colonne (drapeau custom_fields_v2).
   const champsListe = useChampsListe('quote', fr);
-  React.useEffect(() => { setPage(1); }, [champsListe.cle]);
-  const { data: res, isLoading } = useQuery({
-    queryKey: ['quotes-list', tab, salespersonFilter, debounced, page, champsListe.cle],
-    queryFn: () => listAllQuotes({ status: tab, salespersonId: salespersonFilter, search: debounced, page, pageSize: PAGE_SIZE, champs: champsListe.filtre }),
+  // Liste infinie : chaque page s'ajoute sous les précédentes dans le même tableau.
+  const quotesQuery = useInfiniteQuery({
+    queryKey: ['quotes-list', tab, salespersonFilter, debounced, champsListe.cle],
+    queryFn: ({ pageParam }) => listAllQuotes({ status: tab, salespersonId: salespersonFilter, search: debounced, page: pageParam, pageSize: PAGE_SIZE, champs: champsListe.filtre }),
+    initialPageParam: 1,
+    getNextPageParam: (last, all) => (all.length * PAGE_SIZE < (last?.total || 0) ? all.length + 1 : undefined),
   });
+  const isLoading = quotesQuery.isLoading;
 
   // Org-wide per-status counts + salespeople for the filter pills.
   const { data: statusCounts } = useQuery({
@@ -182,10 +186,17 @@ export default function Quotes() {
     staleTime: 300_000,
   });
 
-  const rows = res?.data || [];
+  const rows = React.useMemo(() => {
+    const seen = new Set<string>();
+    const out: Quote[] = [];
+    for (const p of quotesQuery.data?.pages || []) {
+      for (const q of p.data || []) { if (!seen.has(q.id)) { seen.add(q.id); out.push(q); } }
+    }
+    return out;
+  }, [quotesQuery.data]);
   const valeursChamps = useValeursPage('quote', rows.map((q) => q.id), champsListe.colonnes.length > 0);
-  const total = res?.total || 0;
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pagesLoaded = quotesQuery.data?.pages || [];
+  const total = pagesLoaded.length ? (pagesLoaded[pagesLoaded.length - 1]?.total || 0) : 0;
 
   const sorted = React.useMemo(() => {
     const l = [...rows];
@@ -302,7 +313,7 @@ export default function Quotes() {
         <FilterPill
           label={fr ? 'Statut' : 'Status'}
           value={tab}
-          onChange={(v) => { setTab(v as StatusTab); setPage(1); }}
+          onChange={(v) => setTab(v as StatusTab)}
           options={STATUS_TABS.map(s => ({
             value: s,
             label: sLabel(s, fr),
@@ -313,7 +324,7 @@ export default function Quotes() {
         <FilterPill
           label={fr ? 'Vendeur' : 'Salesperson'}
           value={salespersonFilter}
-          onChange={(v) => { setSalespersonFilter(v); setPage(1); }}
+          onChange={(v) => setSalespersonFilter(v)}
           options={[
             { value: 'All', label: fr ? 'Tous' : 'All' },
             ...(salespeople || []).map((p) => ({ value: p.id, label: p.label })),
@@ -460,17 +471,22 @@ export default function Quotes() {
             );
           })}
         </div>
+        {/* Liste infinie — charge la page suivante dans le même tableau */}
+        {!isLoading && sorted.length > 0 && (
+          <InfiniteScrollSentinel
+            hasMore={Boolean(quotesQuery.hasNextPage)}
+            loading={quotesQuery.isFetchingNextPage}
+            onLoadMore={() => { if (!quotesQuery.isFetchingNextPage) void quotesQuery.fetchNextPage(); }}
+            loaded={rows.length}
+            total={total}
+            className="border-t border-outline/30"
+          />
+        )}
       </div>
 
       {/* ── FOOTER ── */}
       <div className="flex items-center justify-between mt-3">
         <span className="text-[14px] text-text-secondary">{t.common.rowsSelected.replace('{selected}', String(sel.size)).replace('{total}', String(total))}</span>
-        <div className="flex items-center gap-2">
-          <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
-            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
-          <button disabled={page >= pages} onClick={() => setPage(p => Math.min(pages, p + 1))}
-            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
-        </div>
       </div>
 
       <PresetSelectModal

@@ -441,7 +441,8 @@ export async function getJobs(query: JobsQuery): Promise<JobsResult> {
   let request = supabase.from('jobs_active').select(`*${query.champs?.select ?? ''}`, { count: 'estimated' }).range(rangeFrom, rangeTo);
   request = applyTableFilters(request, query);
   if (query.champs) request = query.champs.appliquer(request);
-  request = request.order(SORT_MAP[sort], { ascending: sortDirection === 'asc', nullsFirst: true });
+  // Non planifiés (NULL) en tête en ordre croissant (comportement historique), en queue en décroissant → inversion réelle.
+  request = request.order(SORT_MAP[sort], { ascending: sortDirection === 'asc', nullsFirst: sortDirection === 'asc' });
   request = request.order('created_at', { ascending: false });
 
   const { data, error, count } = await request;
