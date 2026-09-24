@@ -93,6 +93,31 @@ const MARQUES_DONNEES = [
   // Conversation en cours : une correction, une confirmation, un renvoi à ce
   // qui précède ne sont jamais des questions produit autonomes.
   /\b(non|pas ca|pas le|plutot|au lieu|celui la|celle la|c est lui|c lui|att|attend|oups)\b/i,
+  // « J'AI COMBIEN DE clients » : le quantificateur s'intercale entre le verbe
+  // et l'entité, donc la fenêtre de 20 caractères plus haut ne le voit pas.
+  // Mesuré le 2026-09-23 (qa:lumi) : la question partait à l'article « combien
+  // de clients je peux avoir » — une limite de forfait pour quelqu'un qui
+  // voulait le compte de SES clients.
+  /\bj ?ai\b\s*(combien|cb)\b/i,
+  /\b(combien|cb)\b[^.?]{0,15}\b(j ?ai|on a|nous avons)\b/i,
+  // « combien de X impayées / en retard / ce mois-ci » : l'état ou la période
+  // ramène la question au contenu, même sans possessif.
+  /\b(combien|cb)\b[^.?]{0,30}\b(impay[ée]\w*|en retard|en cours|ouvert\w*|actif\w*|ce mois|cette semaine|aujourd ?hui)\b/i,
+  // Possessif + entité, SANS exiger un verbe d'état : « le courriel de mon
+  // entreprise », « l'adresse de ma compagnie » portent sur le compte même
+  // sans « est » ni « sont ». La règle plus haut ne couvrait que les formes
+  // avec verbe ; celle-ci attrape la question nominale.
+  /\b(de|du|dans)\s+(mon|ma|mes|notre|nos)\s+(entreprise|compagnie|business|crm|compte|organisation|boite)\b/i,
+  // Une coordonnée demandée POUR QUELQU'UN : « le numéro de téléphone de
+  // Ginette Desrosiers », « le courriel de M. Tremblay ». Un nom propre (deux
+  // majuscules, ou un prénom suivi d'un nom) après « de » ne peut désigner
+  // qu'une fiche du compte — jamais le produit. Même mesure, même passe :
+  // la question partait à l'article d'activation des SMS.
+  // Les accents comptent : le message arrive tel que tapé (« numéro »), il
+  // n'est pas normalisé avant d'arriver ici. Et « Comment ajouter un numéro
+  // de téléphone à une fiche ? » doit rester une question PRODUIT : la règle
+  // ne s'applique donc pas quand la phrase commence par « comment ».
+  /^(?!\s*comment\b)(?=.*\b(num[ée]ro|t[ée]l|t[ée]l[ée]phone|courriel|email|adresse|solde|montant)\b[^.?]{0,25}\bde\s+(M\.|Mme|Mlle)?\s*[A-ZÀ-Þ][\wÀ-ÿ'-]+)/,
 ];
 
 /**
