@@ -443,7 +443,7 @@ export async function fetchTachesDuDeal(dealId: string): Promise<TacheDeal[]> {
 /** Crée une tâche rattachée au deal. `created_by` est NOT NULL sans défaut. */
 export async function creerTacheDeal(
   dealId: string,
-  champs: { title: string; due_date: string | null },
+  champs: { title: string; due_date: string | null; assignee_user_id?: string | null },
 ): Promise<TacheDeal> {
   const orgId = await getCurrentOrgIdOrThrow();
   const { data: { user } } = await supabase.auth.getUser();
@@ -453,6 +453,11 @@ export async function creerTacheDeal(
     .insert({
       org_id: orgId,
       created_by: user.id,
+      // Une tâche SANS responsable n'apparaît dans la liste de personne :
+      // « Planifier un rappel » créait donc une tâche que son auteur ne
+      // revoyait jamais. À défaut de destinataire explicite, elle revient à
+      // celui qui la pose — c'est lui qui a demandé à être rappelé.
+      assignee_user_id: champs.assignee_user_id ?? user.id,
       title: champs.title,
       due_date: champs.due_date,
       status: 'open',

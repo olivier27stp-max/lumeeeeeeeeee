@@ -138,6 +138,20 @@ export default function Pipeline() {
   const etapeParId = useMemo(() => new Map(etapes.map((e) => [e.id, e])), [etapes]);
 
   const [dealOuvert, setDealOuvert] = useState<Deal | null>(null);
+
+  /**
+   * La fiche suit les données rechargées.
+   *
+   * `dealOuvert` est une copie prise au clic. Après une écriture, la liste
+   * `deals` porte la version à jour — mais la fiche continuait d'afficher
+   * l'ancienne : on changeait l'étape, le toast confirmait, et le champ
+   * revenait à sa valeur précédente. On relit donc toujours la version
+   * fraîche, en retombant sur la copie tant que la requête n'a pas répondu.
+   */
+  const dealAffiche = useMemo<Deal | null>(() => {
+    if (!dealOuvert) return null;
+    return deals.find((d) => d.id === dealOuvert.id) ?? dealOuvert;
+  }, [dealOuvert, deals]);
   const [dealAGagner, setDealAGagner] = useState<Deal | null>(null);
   const [dealAPerdre, setDealAPerdre] = useState<{ deal: Deal; versEtapeId: string } | null>(null);
 
@@ -319,17 +333,24 @@ export default function Pipeline() {
       </div>
 
       <DealDrawer
-        deal={dealOuvert}
+        deal={dealAffiche}
         etapes={etapes}
         membres={membresQ.data ?? []}
         // La provenance vient de la BASE, elle n'est plus devinée depuis
         // `job_id`/`quote_id` : `pipeline_montants` connaît le cas « dernier
         // devis du client », que la page ne pouvait pas distinguer.
-        montantCents={dealOuvert ? (detailsQ.data?.[dealOuvert.id]?.cents ?? null) : null}
+        montantCents={dealAffiche ? (detailsQ.data?.[dealAffiche.id]?.cents ?? null) : null}
         montantProvenance={
-          (dealOuvert ? detailsQ.data?.[dealOuvert.id]?.provenance : undefined) ?? 'aucun'
+          (dealAffiche ? detailsQ.data?.[dealAffiche.id]?.provenance : undefined) ?? 'aucun'
         }
         onClose={() => setDealOuvert(null)}
+        onChangement={() => {
+          // Le montant vient d'une AUTRE requête que les deals : changer le
+          // devis lié sans la rafraîchir laisserait le board afficher
+          // l'ancien montant.
+          qc.invalidateQueries({ queryKey: ['pipeline-montants-details', pipelineId] });
+          rafraichir();
+        }}
         onAssigner={async (dealId, membreId) => {
           try {
             await assignerDeal(dealId, membreId);
