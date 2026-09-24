@@ -64,6 +64,18 @@ describe('gabarit Lume', () => {
   it('marque Lume, adresse de support, signature de l’équipe', () => {
     const h = rendreCourrielLume({ langue: 'fr', titre: 'Paiement reçu', intro: 'Un client vient de payer.', montant: { libelle: 'Reçu', valeur: '125,00 $' }, bouton: { texte: 'Voir la facture', url: 'https://lumecrm.net/invoices/1' } });
     expect(h).toContain('alt="Lume"');
+    /* Le logo HORIZONTAL, avec ses deux dimensions déclarées.
+
+       Les courriels servaient le logo vertical (1536 × 1024) écrasé à 36 px :
+       mesuré sur le fichier, « LUME » y faisait 8 px de haut et « CRM » en
+       faisait 2. Un timbre de 54 px de large, pour 140 Ko téléchargés.
+
+       `width` ET `height` en attributs : Outlook ignore `height` seul et rend
+       l'image à sa taille native — 1051 px, trois fois la largeur du
+       courriel. */
+    expect(h).toContain('lume-logo-v2.png');
+    expect(h).not.toContain('lume-logo.png"');
+    expect(h).toMatch(/width="169"\s+height="44"/);
     expect(h).toContain('support@lumecrm.net');
     expect(h).toContain('— L’équipe Lume');
     expect(h).toContain(`background:${COULEUR_LUME};border-radius:9px;`);
@@ -183,5 +195,29 @@ describe('le ciel et les règles des maquettes', () => {
     const h = rendreCourrielClient({ ...base, montant: { libelle: 'Solde à payer', valeur: '1 220,17 $' } });
     expect(h).toContain('font-size:38px');
     expect(h).toContain('1 220,17 $');
+  });
+});
+
+describe('pastille Lume au pied des courriels clients', () => {
+  const courriel = () =>
+    rendreCourrielClient({
+      langue: 'fr',
+      marque: { nom: 'Test', logoUrl: null, couleur: '#de7a1b' },
+      titre: 'T', salutation: 'Bonjour,', intro: 'Texte.',
+    });
+
+  it('affiche la mascotte cadrée sur le visage, pas le logo entier', () => {
+    const html = courriel();
+    expect(html).toContain('lume-mascotte-pastille.png');
+    // le logo complet est illisible en pastille : il reste aux courriels de Lume
+    expect(html).not.toContain('favicon-mascot-v2.png');
+  });
+
+  it('la rend ronde et à une taille lisible, dimensions déclarées pour Outlook', () => {
+    const html = courriel();
+    const img = html.match(/<img[^>]*lume-mascotte-pastille[^>]*>/)?.[0] ?? '';
+    expect(img).toContain('width="32"');
+    expect(img).toContain('height="32"');
+    expect(img).toContain('border-radius:50%');
   });
 });

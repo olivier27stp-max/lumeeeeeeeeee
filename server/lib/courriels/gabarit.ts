@@ -87,7 +87,20 @@ export interface CourrielLume {
 }
 
 export const COULEUR_LUME = '#111827';
-export const LOGO_LUME_URL = 'https://lumecrm.net/lume-logo.png';
+/* Le logo HORIZONTAL, celui du site (2026-09-24).
+
+   Les courriels servaient `lume-logo.png` : 1536 × 1024, un logo VERTICAL
+   (le panda au-dessus, « LUME » dessous, « CRM » encore dessous) écrasé à
+   36 px de haut. Mesuré sur le fichier : le mot « LUME » y faisait 8 px et
+   « CRM » en faisait 2 — invisibles. L'image entière occupait 54 px de large,
+   un timbre au milieu du courriel, pour 140 Ko téléchargés.
+
+   `lume-logo-v2.png` est celui que l'app et le site utilisent déjà à neuf
+   endroits (barre latérale, pied de page). Horizontal, ratio 3,85 : 139 px de
+   large à 36 px de haut, et 65 Ko au lieu de 140.
+
+   Les courriels étaient les derniers restés sur le vertical. */
+export const LOGO_LUME_URL = 'https://lumecrm.net/lume-logo-v2.png';
 const GRIS_TEXTE = '#374151';
 const GRIS_DOUX = '#6b7280';
 const GRIS_PALE = '#9ca3af';
@@ -145,6 +158,33 @@ const FILET_CLIENT = '#e4e7ec';
    qu'une absence de cadenas. `currentColor` est évité — un SVG hérite mal
    selon les clients, on fixe la couleur. */
 const CADENAS = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+
+/* La mascotte au pied d'un courriel d'entreprise.
+
+   Le pied disait « Envoyé avec Lume », en texte seul. Une pastille ronde avec
+   le bonhomme se reconnaît d'un coup d'œil là où trois mots gris se lisent
+   à peine — et elle reste DISCRÈTE : 18 px, à côté de notre nom, sous les
+   coordonnées de l'entreprise. Jamais en tête : le courriel appartient à
+   l'entreprise, pas à nous.
+
+   `favicon-mascot-v2.png` est le bonhomme SEUL, sans le mot « LUME » : 512 px
+   carrés, fond transparent, 32 Ko. Le logo complet (v2) porte le mot, donc il
+   ferait doublon avec le texte à côté.
+
+   Dimensions en attributs ET en style : Outlook ignore le style seul et
+   afficherait l'image à sa taille native — 512 px au milieu du pied.
+
+   `vertical-align:middle` sur les deux cellules : sans lui, le texte se pose
+   sur la ligne de base et flotte sous la pastille. */
+// Cadrée sur le visage : le logo v2 entier devient illisible sous 40px.
+const MASCOTTE_LUME_URL = 'https://lumecrm.net/lume-mascotte-pastille.png';
+const SIGNATURE_LUME = (envoyeAvec: string) => `
+<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:14px auto 0;">
+<tr>
+<td style="padding-right:8px;vertical-align:middle;line-height:0;"><img src="${MASCOTTE_LUME_URL}" alt="" width="32" height="32" style="width:32px;height:32px;display:block;border:0;outline:none;border-radius:50%;"/></td>
+<td style="vertical-align:middle;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;font-weight:600;">Lume</a></td>
+</tr>
+</table>`;
 
 const POLICE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
@@ -457,7 +497,7 @@ ${joindre ? `<p style="margin:0;font-size:13px;line-height:1.6;">${joindre}</p>`
 <p style="margin:${joindre ? '4px' : '0'} 0 0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${echapper(nom)}${postal ? ` &nbsp;&middot;&nbsp; ${postal}` : ''}</p>
 ${liensSociauxHtml(c.marque.liensSociaux)}
 ${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">${taxes.map(echapper).join(' &nbsp;&middot;&nbsp; ')}</p>` : ''}
-<p style="margin:12px 0 0;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;font-weight:600;">Lume</a></p>`;
+${SIGNATURE_LUME(envoyeAvec)}`;
   return coquille({
     langue: c.langue, titreDocument: c.titre || nom, preheader: c.preheader, enTeteHtml: enTete,
     corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? `— ${nom}` : `— ${nom}`) : c.signature }, couleur),
@@ -472,7 +512,15 @@ ${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">$
 /** Ce que Lume envoie à ses abonnés : marque Lume, noir sur blanc, TUTOIEMENT (c'est la voix de Lume envers ses abonnés ; les entreprises vouvoient leurs clients). */
 export function rendreCourrielLume(c: CourrielLume): string {
   const support = c.supportEmail || 'support@lumecrm.net';
-  const enTete = `<img src="${LOGO_LUME_URL}" alt="Lume" style="height:36px;display:inline-block;"/>`;
+  /* 44 px de haut, et une LARGEUR déclarée.
+
+     Outlook (moteur Word) ignore `height` seul sur une image et la rend à sa
+     taille native — 1051 px de large, soit trois fois la largeur du courriel.
+     Déclarer les deux dimensions est la seule façon qu'il les respecte.
+
+     Le fichier fait 273 px de haut pour 44 affichés : six fois la densité, donc
+     net sur un écran fin sans peser davantage. */
+  const enTete = `<img src="${LOGO_LUME_URL}" alt="Lume" width="169" height="44" style="width:169px;height:44px;display:inline-block;border:0;outline:none;text-decoration:none;"/>`;
   const pied = `
 <p style="margin:0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${c.langue === 'fr' ? 'Une question ? Réponds à ce courriel ou écris-nous à' : 'Questions? Reply to this email or write to'} <a href="mailto:${echapper(support)}" style="color:${GRIS_DOUX};">${echapper(support)}</a>.</p>
 <p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">Lume CRM &nbsp;&middot;&nbsp; <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;">lumecrm.net</a></p>`;
