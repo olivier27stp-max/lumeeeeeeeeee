@@ -224,6 +224,27 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
 
     if (invoiceError || !invoice) return res.status(404).json({ error: 'Invoice not found.' });
 
+    /* Ce qu'on facture, ligne par ligne.
+
+       Le courriel ne montrait que le TOTAL. Un client qui reçoit 1 220,17 $
+       veut savoir pour quoi — lavage de vitres, gouttières, combien d'heures.
+       Sans ce détail, le courriel ressemble à une notification de paiement
+       plutôt qu'à une facture, et il faut cliquer pour comprendre ce qu'on
+       doit. C'est le genre de manque qui pousse une entreprise à réécrire le
+       modèle, alors qu'il devrait suffire tel quel.
+
+       Best-effort : un échec de lecture donne un courriel sans détail, comme
+       avant, plutôt qu'une facture qui ne part pas. */
+    const { data: lignesFacture, error: erreurLignes } = await client
+      .from('invoice_items')
+      .select('description, title, qty, line_total_cents, sort_order')
+      .eq('invoice_id', invoiceId)
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .order('sort_order', { ascending: true })
+      .limit(20);
+    if (erreurLignes) logger.warn('[emails/send-invoice] détail des lignes illisible', { error: erreurLignes.message, invoiceId });
+
     // Anti double-clic : si la facture vient d'être envoyée (< 10 s), on refuse
     // le renvoi immédiat — c'est un double-clic ou un retry réseau, pas un vrai
     // renvoi. Un renvoi volontaire plus tard passe normalement.
@@ -299,7 +320,14 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
     const montantTexte = montantLisible(invoice.balance_cents || invoice.total_cents || 0, invoice.currency || 'CAD', langue);
     const echeance = dateLisible(invoice.due_date, langue);
     const dejaPayee = (invoice.status || '') === 'paid' || Number(invoice.balance_cents ?? 1) === 0;
-    if (!customSubject) emailSubject = modeleOrg?.sujet || `${m.facture} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`;
+    /* L'objet ne porte PAS le nom de l'entreprise.
+
+       Je l'y avais mis en tête, croyant qu'il disparaissait à la coupure de
+       Gmail. Un test l'a rattrapé, et la capture d'un vrai courriel le
+       confirme : Gmail affiche déjà « Coquin lavage » en gras comme
+       EXPÉDITEUR, juste au-dessus de l'objet. Le répéter le dit deux fois sur
+       la même ligne, et vole la place du montant. */
+    if (!customSubject) emailSubject = modeleOrg?.sujet || `${m.facture} ${numero} — ${montantTexte}`;
     // Sans modèle ni texte personnalisé : le courriel structuré (montant en carte, échéance, un bouton).
     const htmlStructure = !bodyHtml ? rendreCourrielClient({
       langue,
@@ -311,10 +339,27 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
       salutation: modeleOrg ? null : m.bonjour(clientName),
       intro: modeleOrg ? null : (dejaPayee
         ? (langue === 'fr' ? 'Voici votre facture, réglée. Merci !' : 'Here is your invoice, paid in full. Thank you!')
-        : (langue === 'fr' ? 'Voici votre facture. Vous pouvez la consulter et la payer en ligne en un clic.' : 'Here is your invoice. You can view it and pay online in one click.')),
+        : (langue === 'fr' ? 'Les travaux sont terminés — merci de votre confiance. Voici votre facture, détail ci-dessous.' : 'The work is done — thank you for your trust. Here is your invoice, details below.')),
       corpsHtml: modeleOrg?.corpsHtml ?? null,
       montant: { libelle: dejaPayee ? m.montantTotal : m.montantDu, valeur: montantTexte, sous: !dejaPayee && echeance ? `${m.echeance} : ${echeance}` : null },
+      /* Ce qu'on facture d'abord, les métadonnées ensuite.
+
+         L'ordre compte : le client cherche « pour quoi », pas « quel
+         numéro ». Le numéro et l'échéance restent, en dessous, parce qu'un
+         document comptable les porte — mais ils ne sont plus tout ce qu'il y
+         a à lire.
+
+         La quantité n'apparaît que si elle n'est pas 1 : « Lavage de vitres
+         × 1 » n'apprend rien et alourdit la ligne. */
       lignes: [
+        ...(lignesFacture ?? []).map((l) => {
+          const nom = String(l.title || l.description || '').trim();
+          const q = Number(l.qty ?? 1);
+          return {
+            libelle: q > 1 ? `${nom} × ${q}` : nom,
+            valeur: montantLisible(Number(l.line_total_cents ?? 0), invoice.currency || 'CAD', langue),
+          };
+        }).filter((l) => l.libelle),
         { libelle: m.numero, valeur: numero },
         ...(echeance ? [{ libelle: m.echeance, valeur: echeance }] : []),
         ...(dejaPayee ? [{ libelle: m.statut, valeur: m.payee, fort: true }] : []),
@@ -477,7 +522,17 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
     const company = await getCompanySettings(orgId);
     const amountStr = formatCurrency(quote.total_cents || quote.balance_cents || 0, quote.currency || 'CAD');
     const baseUrl = resolvePublicBaseUrl(req);
-    const viewUrl = quote.view_token ? `${baseUrl}/q/${quote.view_token}` : null;
+    /* `/quote/`, pas `/q/`.
+
+       `/q/:token` a été reconverti en redirection de FACTURES lors de l'audit
+       du 2026-09-09 : il cherche le jeton dans `invoices`. Un jeton de
+       soumission n'y est pas — la route répondait donc « Invoice not found »,
+       un 404 pur, sur le bouton de CHAQUE soumission envoyée.
+
+       Vérifié en prod avant correction : /q/<jeton de devis> → 404,
+       /quote/<le même> → 200. La route mobile (`send-mobile-quote`) utilisait
+       déjà le bon chemin ; c'est ce qui a masqué le défaut. */
+    const viewUrl = quote.view_token ? `${baseUrl}/quote/${quote.view_token}` : null;
 
         const langue = langueEntreprise(company);
     const m = MOTS[langue];
@@ -502,7 +557,7 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
       preheader: `${m.soumission} ${numero} — ${montantTexte}`,
       titre: langue === 'fr' ? `Votre soumission ${numero}` : `Your quote ${numero}`,
       salutation: modeleOrg ? null : m.bonjour(clientName),
-      intro: modeleOrg ? null : (langue === 'fr' ? 'Voici votre soumission. Vous pouvez la consulter et l’approuver en ligne.' : 'Here is your quote. You can view and approve it online.'),
+      intro: modeleOrg ? null : (langue === 'fr' ? 'Voici notre proposition pour vos travaux. Le détail est ci-dessous ; approuvez-la quand vous êtes prêt.' : 'Here is our proposal for your work. The details are below — approve it when you are ready.'),
       corpsHtml: modeleOrg?.corpsHtml ?? null,
       montant: { libelle: m.montantTotal, valeur: montantTexte, sous: validite ? `${m.valideJusquau} ${validite}` : null },
       lignes: [{ libelle: m.numero, valeur: numero }, ...(validite ? [{ libelle: m.valideJusquau, valeur: validite }] : [])],
@@ -597,7 +652,7 @@ router.post('/emails/send-mobile-quote', async (req, res) => {
       preheader: `${m.soumission} ${numero} — ${montantTexte}`,
       titre: langue === 'fr' ? `Votre soumission ${numero}` : `Your quote ${numero}`,
       salutation: m.bonjour(clientName),
-      intro: langue === 'fr' ? 'Voici votre soumission. Vous pouvez la consulter et l’approuver en ligne.' : 'Here is your quote. You can view and approve it online.',
+      intro: langue === 'fr' ? 'Voici notre proposition pour vos travaux. Le détail est ci-dessous ; approuvez-la quand vous êtes prêt.' : 'Here is our proposal for your work. The details are below — approve it when you are ready.',
       montant: { libelle: m.montantTotal, valeur: montantTexte, sous: validite ? `${m.valideJusquau} ${validite}` : null },
       lignes: [{ libelle: m.numero, valeur: numero }, ...(validite ? [{ libelle: m.valideJusquau, valeur: validite }] : [])],
       bouton: viewUrl ? { texte: m.voirSoumission, url: viewUrl } : null,

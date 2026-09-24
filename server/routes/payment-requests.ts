@@ -101,7 +101,7 @@ function buildPaymentEmailHtml(params: {
     preheader: fr ? `${params.amountFormatted} à payer — facture ${params.invoiceNumber}` : `${params.amountFormatted} due — invoice ${params.invoiceNumber}`,
     titre: fr ? 'Paiement demandé' : 'Payment requested',
     salutation: modeleOrg ? null : m.bonjour(params.clientName),
-    intro: modeleOrg ? null : (fr ? `Un paiement de ${params.amountFormatted} est demandé pour la facture ${params.invoiceNumber}. Vous pouvez payer en ligne, par carte, en moins d’une minute.` : `A payment of ${params.amountFormatted} is requested for invoice ${params.invoiceNumber}. You can pay online by card in under a minute.`),
+    intro: modeleOrg ? null : (fr ? 'Ce dépôt réserve votre date à l’horaire. Dès qu’il est reçu, la date est à vous.' : 'This deposit holds your spot in the schedule. As soon as it is received, the date is yours.'),
     corpsHtml: modeleOrg?.corpsHtml ?? null,
     montant: { libelle: m.montantDu, valeur: params.amountFormatted, sous: `${m.facture} ${params.invoiceNumber}` },
     bouton: { texte: m.payer(params.amountFormatted), url: params.paymentUrl },

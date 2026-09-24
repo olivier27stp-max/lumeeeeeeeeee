@@ -89,8 +89,8 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
           en: 'Quote [quote_number] — [quote_amount]',
         },
         texteOrigine: {
-          fr: 'Voici votre soumission. Vous pouvez la consulter et l’approuver en ligne.',
-          en: 'Here is your quote. You can view and approve it online.',
+          fr: 'Voici notre proposition pour vos travaux. Le détail est ci-dessous ; approuvez-la quand vous êtes prêt.',
+          en: 'Here is our proposal for your work. The details are below — approve it when you are ready.',
         },
       },
       {
@@ -168,12 +168,12 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
         titre: { fr: 'Demande de dépôt', en: 'Deposit request' },
         quand: { fr: 'Pour réserver une date à l’horaire', en: 'To hold a date on the schedule' },
         objetOrigine: {
-          fr: '[amount_due] à payer — facture [invoice_number]',
+          fr: 'Dépôt de [amount_due] — facture [invoice_number]',
           en: '[amount_due] due — invoice [invoice_number]',
         },
         texteOrigine: {
-          fr: 'Vous pouvez payer en ligne, par carte, en moins d’une minute.',
-          en: 'You can pay online by card in under a minute.',
+          fr: 'Ce dépôt réserve votre date à l’horaire. Dès qu’il est reçu, la date est à vous.',
+          en: 'This deposit holds your spot in the schedule. As soon as it is received, the date is yours.',
         },
       },
       {
@@ -186,8 +186,8 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
           en: 'Invoice [invoice_number] — [invoice_amount]',
         },
         texteOrigine: {
-          fr: 'Voici votre facture. Vous pouvez la consulter et la payer en ligne en un clic.',
-          en: 'Here is your invoice. You can view it and pay online in one click.',
+          fr: 'Les travaux sont terminés — merci de votre confiance. Voici votre facture, détail ci-dessous.',
+          en: 'The work is done — thank you for your trust. Here is your invoice, details below.',
         },
       },
       {
@@ -200,8 +200,8 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
           en: 'Invoice [invoice_number] — [amount_due] outstanding',
         },
         texteOrigine: {
-          fr: 'Si c’est déjà fait, ce message se croise avec votre paiement.',
-          en: 'If you have already paid, this message crossed with your payment.',
+          fr: 'Un petit rappel, sans plus : la facture {invoice_number} de {amount_due} était due le {due_date}. Si le paiement est déjà parti, ce message le croise — merci !',
+          en: 'A gentle reminder: invoice {invoice_number} for {amount_due} was due on {due_date}. If your payment is already on its way, this message crossed it — thank you!',
         },
       },
       {

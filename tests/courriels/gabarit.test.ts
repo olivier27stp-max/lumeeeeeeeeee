@@ -21,7 +21,7 @@ describe('gabarit client', () => {
     expect(html).toContain('Votre facture 40');
     expect(html).toContain('1,00 $');
     expect(html).toContain('Échéance');
-    expect(html).toContain('background:#0f766e;border-radius:10px;');
+    expect(html).toContain('background:#0f766e;border-radius:9px;');
     expect(html).toContain('href="https://lumecrm.net/invoice/abc?x=1&amp;y=2"');
     expect(html).toContain('Le bouton ne fonctionne pas ?');
     expect(html).toContain('— Vision Lavage');
@@ -33,7 +33,10 @@ describe('gabarit client', () => {
     expect(html).not.toContain('on behalf of');
   });
   it('un logo remplace le nom en tête ; sans logo, le nom', () => {
-    expect(html).toContain('<span style="font-size:20px;font-weight:700;color:#101828;">Vision Lavage</span>');
+    /* Sans logo, le nom tient l'en-tête — dans une cellule alignée à GAUCHE
+       depuis le 2026-09-23 (en-tête « papier à lettres »), plus dans un span
+       centré. On vérifie la règle, pas le balisage : le nom est là, à gauche. */
+    expect(html).toMatch(/align="left"[^>]*font-weight:700[^>]*>Vision Lavage</);
     const avecLogo = rendreCourrielClient({ langue: 'fr', marque: { ...marque, logoUrl: 'https://x/logo.png' }, titre: 'T' });
     expect(avecLogo).toContain('<img src="https://x/logo.png" alt="Vision Lavage"');
   });
@@ -63,7 +66,7 @@ describe('gabarit Lume', () => {
     expect(h).toContain('alt="Lume"');
     expect(h).toContain('support@lumecrm.net');
     expect(h).toContain('— L’équipe Lume');
-    expect(h).toContain(`background:${COULEUR_LUME};border-radius:10px;`);
+    expect(h).toContain(`background:${COULEUR_LUME};border-radius:9px;`);
   });
 });
 
@@ -115,16 +118,19 @@ describe('le ciel et les règles des maquettes', () => {
     expect(h).toContain('background:#ffffff');
     expect(h).not.toContain('#f4f5f7');
     expect(h).not.toContain('#e6f0ff');
-    // Sa couleur porte le filet de tête, tout en haut du courriel.
-    expect(h).toContain('background:#0f766e;height:4px');
+    /* Sa couleur porte le filet, SOUS le logo — il était en pleine largeur
+       tout en haut jusqu'au 2026-09-23, collé au bandeau de Gmail, où il se
+       confondait avec l'interface au lieu de signer le courriel. */
+    expect(h).toContain('background:#0f766e;height:2px');
+    expect(h).not.toContain('height:4px');
   });
 
-  it('une couleur trop pâle ne devient pas un filet invisible sur le gris', () => {
+  it('une couleur trop pâle ne devient pas un filet invisible sur le blanc', () => {
     // Le jaune ne passe pas `couleurBouton` : il retombe sur le noir Lume,
     // et le filet reste visible. Sans ça, un filet #ffee58 sur du blanc
     // disparaîtrait — l'entreprise n'aurait plus aucune couleur du tout.
     const h = rendreCourrielClient({ ...base, marque: { ...marque, couleur: '#ffee58' } });
-    expect(h).toContain(`background:${COULEUR_LUME};height:4px`);
+    expect(h).toContain(`background:${COULEUR_LUME};height:2px`);
   });
 
   it('un courriel de LUME garde le ciel : là, la marque est à sa place', () => {
