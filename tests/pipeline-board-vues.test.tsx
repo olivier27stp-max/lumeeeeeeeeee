@@ -43,6 +43,8 @@ vi.mock('../src/lib/pipelineVentesApi', () => ({
     return s && s.kind === 'open' ? { niveau: 'frais', jours: 0 } : null;
   },
   fetchRaisonsProposees: vi.fn(async () => []),
+  // Le journal des lots : sans lui dans le mock, une action en lot lève.
+  journaliserLot: vi.fn(async () => undefined),
 }));
 
 vi.mock('../src/hooks/usePermissions', () => ({

@@ -30,7 +30,7 @@ import Modal from '../ui/Modal';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
-  creerDealManuel, creerVue, estJobACreer, fetchVues, nomClient, pastilles, priorite, supprimerVue,
+  creerDealManuel, creerVue, estJobACreer, fetchVues, journaliserLot, nomClient, pastilles, priorite, supprimerVue,
   type Deal, type PipelineStage, type VueSauvegardee,
 } from '../../lib/pipelineVentesApi';
 import {
@@ -1103,6 +1103,24 @@ export default function PipelineBoard({
     const membreId = valeur === '__non' ? null : valeur;
     const resultats = await Promise.allSettled(ids.map((id) => onAssigner(id, membreId)));
     const echecs = resultats.filter((r) => r.status === 'rejected').length;
+
+    // Le journal garde la trace : sans elle, personne ne peut répondre à
+    // « qui a réassigné ces 40 deals mardi ? ».
+    void journaliserLot({
+      libelle: fr
+        ? `Assignation — ${new Date().toLocaleDateString('fr-CA')}`
+        : `Assignment — ${new Date().toLocaleDateString('en-CA')}`,
+      operation: 'modification',
+      statut: echecs === 0 ? 'termine' : echecs === ids.length ? 'echoue' : 'partiel',
+      total: ids.length,
+      reussis: ids.length - echecs,
+      echoues: echecs,
+      erreurs: resultats
+        .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+        .slice(0, 20)
+        .map((r) => String(r.reason?.message ?? r.reason)),
+    });
+
     setSelection(new Set());
     onChangement?.();
     if (echecs === 0) {
@@ -1128,6 +1146,22 @@ export default function PipelineBoard({
     const ids = [...selection];
     const resultats = await Promise.allSettled(ids.map((id) => onDeplacer(id, etapeId)));
     const echecs = resultats.filter((r) => r.status === 'rejected').length;
+
+    void journaliserLot({
+      libelle: fr
+        ? `Déplacement — ${new Date().toLocaleDateString('fr-CA')}`
+        : `Move — ${new Date().toLocaleDateString('en-CA')}`,
+      operation: 'modification',
+      statut: echecs === 0 ? 'termine' : echecs === ids.length ? 'echoue' : 'partiel',
+      total: ids.length,
+      reussis: ids.length - echecs,
+      echoues: echecs,
+      erreurs: resultats
+        .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+        .slice(0, 20)
+        .map((r) => String(r.reason?.message ?? r.reason)),
+    });
+
     setSelection(new Set());
     onChangement?.();
     if (echecs === 0) {

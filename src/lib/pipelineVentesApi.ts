@@ -1426,3 +1426,110 @@ export async function supprimerPipeline(pipelineId: string): Promise<void> {
   const { error } = await supabase.from('pipelines_ventes').delete().eq('id', pipelineId);
   if (error) throw error;
 }
+
+// ── Journal des opérations en lot et des imports ────────────
+//
+// Une action en lot touche des dizaines de deals d'un coup. Sans trace,
+// personne ne peut répondre à « qui a supprimé ces 40 deals mardi ? » ni
+// annuler une erreur de masse. C'est ce journal qui rend le geste réversible,
+// donc utilisable sans peur.
+
+export type OperationLot = 'suppression' | 'modification' | 'import';
+export type StatutLot = 'en_cours' | 'termine' | 'partiel' | 'echoue';
+
+export interface LigneJournalLot {
+  id: string;
+  libelle: string;
+  operation: OperationLot;
+  statut: StatutLot;
+  user_nom: string | null;
+  total: number;
+  reussis: number;
+  echoues: number;
+  erreurs: string[];
+  restaure_le: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface FiltresJournal {
+  /** Bornes de dates, en AAAA-MM-JJ. */
+  du?: string;
+  au?: string;
+  statut?: StatutLot | '';
+  operation?: OperationLot | '';
+}
+
+export async function fetchJournalLots(f: FiltresJournal = {}): Promise<LigneJournalLot[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  let q = supabase
+    .from('pipeline_operations_lot')
+    .select('id,libelle,operation,statut,user_nom,total,reussis,echoues,erreurs,restaure_le,created_at,completed_at')
+    .eq('org_id', orgId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (f.du) q = q.gte('created_at', `${f.du}T00:00:00Z`);
+  // Borne HAUTE inclusive : filtrer « au 25 » doit inclure le 25 entier, pas
+  // s'arrêter à minuit — sinon l'opération du jour même disparaît.
+  if (f.au) q = q.lt('created_at', `${f.au}T23:59:59.999Z`);
+  if (f.statut) q = q.eq('statut', f.statut);
+  if (f.operation) q = q.eq('operation', f.operation);
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []).map((r) => {
+    const x = r as Record<string, unknown>;
+    return {
+      ...(x as unknown as LigneJournalLot),
+      erreurs: Array.isArray(x.erreurs) ? (x.erreurs as string[]) : [],
+    };
+  });
+}
+
+/** Journalise une opération. Ne lève jamais : perdre la trace ne doit pas
+ *  faire échouer l'action elle-même, mais l'échec est dit dans la console. */
+export async function journaliserLot(entree: {
+  libelle: string;
+  operation: OperationLot;
+  statut: StatutLot;
+  total: number;
+  reussis: number;
+  echoues: number;
+  cibles?: string[];
+  erreurs?: string[];
+}): Promise<void> {
+  try {
+    const orgId = await getCurrentOrgIdOrThrow();
+    const { data: session } = await supabase.auth.getUser();
+    const { error } = await supabase.from('pipeline_operations_lot').insert({
+      org_id: orgId,
+      libelle: entree.libelle,
+      operation: entree.operation,
+      statut: entree.statut,
+      user_id: session.user?.id ?? null,
+      // Le nom au moment de l'action : un membre parti reste nommé.
+      user_nom: session.user?.user_metadata?.full_name
+        ?? session.user?.email
+        ?? null,
+      total: entree.total,
+      reussis: entree.reussis,
+      echoues: entree.echoues,
+      cibles: entree.cibles ?? [],
+      erreurs: entree.erreurs ?? [],
+      completed_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+  } catch (e) {
+    console.error('[pipeline] journalisation du lot impossible', e);
+  }
+}
+
+/** Annule une suppression en lot. Rend le nombre de deals réellement rendus. */
+export async function restaurerLot(operationId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('pipeline_restaurer_lot', {
+    p_operation_id: operationId,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
+}

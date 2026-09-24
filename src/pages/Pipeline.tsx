@@ -24,6 +24,7 @@ import GagneJobModal from '../components/pipeline/GagneJobModal';
 import PerduModal from '../components/pipeline/PerduModal';
 import PipelineReglages from '../components/pipeline/PipelineReglages';
 import PipelinePrevisions from '../components/pipeline/PipelinePrevisions';
+import PipelineJournalLots from '../components/pipeline/PipelineJournalLots';
 import PipelineStats from '../components/pipeline/PipelineStats';
 import { useTranslation } from '../i18n';
 import { hasPermission } from '../lib/permissions';
@@ -34,7 +35,7 @@ import {
   type Deal, type PipelineStage,
 } from '../lib/pipelineVentesApi';
 
-type Onglet = 'board' | 'previsions' | 'stats' | 'reglages';
+type Onglet = 'board' | 'previsions' | 'stats' | 'lots' | 'reglages';
 
 /**
  * Le dernier pipeline consulté, par navigateur. Pas en base : c'est une
@@ -204,6 +205,8 @@ export default function Pipeline() {
     // Les prévisions suivent le board : c'est la même question, projetée.
     { cle: 'previsions', libelle: fr ? 'Prévisions' : 'Forecast', visible: voitLesStats },
     { cle: 'stats', libelle: fr ? 'Statistiques' : 'Statistics', visible: voitLesStats },
+    // Le journal des lots : réservé aux patrons, comme les actions elles-mêmes.
+    { cle: 'lots', libelle: fr ? 'Actions en lot' : 'Bulk actions', visible: estPatron },
     { cle: 'reglages', libelle: fr ? 'Réglages' : 'Settings', visible: peutConfigurer },
   ];
   const ongletActif = tabs.find((t) => t.cle === onglet)?.visible ? onglet : 'board';
@@ -285,6 +288,8 @@ export default function Pipeline() {
         {ongletActif === 'previsions' && voitLesStats && (
           <PipelinePrevisions pipelines={pipelines} pipelineActif={pipelineId} />
         )}
+
+        {ongletActif === 'lots' && estPatron && <PipelineJournalLots />}
 
         {ongletActif === 'stats' && voitLesStats && (
           <PipelineStats onOuvrirDeal={(id) => {
