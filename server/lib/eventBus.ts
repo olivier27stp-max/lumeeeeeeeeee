@@ -14,6 +14,12 @@ export type CRMEventType =
   | 'lead.status_changed'
   | 'lead.converted'
   | 'pipeline_deal.stage_changed'
+  // Pipeline de ventes (table `deals`). À ne pas confondre avec
+  // `pipeline_deal.stage_changed` ci-dessus, qui appartient à l'ANCIEN
+  // pipeline de porte-à-porte (table `pipeline_deals`).
+  | 'deal.stage_entered'
+  | 'deal.stage_exited'
+  | 'deal.stage_idle'
   | 'client.archived'
   | 'client.deleted'
   | 'estimate.sent'
@@ -55,6 +61,9 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'lead.status_changed': 'status_changed',
   'lead.converted': 'lead_converted',
   'pipeline_deal.stage_changed': 'deal_stage_changed',
+  'deal.stage_entered': 'deal_stage_entered',
+  'deal.stage_exited': 'deal_stage_exited',
+  'deal.stage_idle': 'deal_stage_idle',
   'client.archived': 'client_archived',
   'client.deleted': 'client_deleted',
   'estimate.sent': 'estimate_sent',

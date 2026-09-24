@@ -24,6 +24,31 @@ interface AutomationRule {
   delay_seconds: number;
   actions: Array<{ type: ActionType; config: Record<string, any> }>;
   is_active: boolean;
+  /** Portée pipeline (déclencheurs `deal.*`). `null` = toutes les étapes. */
+  pipeline_id?: string | null;
+  stage_id?: string | null;
+}
+
+/**
+ * Une règle du pipeline s'applique-t-elle à CET événement ?
+ *
+ * `automation_rules` porte `pipeline_id` et `stage_id` depuis la migration
+ * 20260923100100, mais le moteur ne les regardait pas : il ne filtrait que
+ * sur l'organisation et le type d'événement. Une règle attachée à l'étape
+ * « Contacté » se déclenchait donc à l'entrée dans N'IMPORTE quelle étape —
+ * le choix d'étape dans l'interface n'aurait servi à rien.
+ *
+ * Une règle sans étape reste volontairement large : c'est la façon d'écrire
+ * « à chaque changement d'étape, quelle qu'elle soit ». Et un événement qui
+ * ne porte pas l'étape dans ses métadonnées passe : mieux vaut exécuter la
+ * règle que de perdre l'action sans trace.
+ */
+export function regleViseCetEvenement(rule: AutomationRule, event: CRMEvent): boolean {
+  if (!event.type.startsWith('deal.')) return true;
+  const m = event.metadata ?? {};
+  if (rule.pipeline_id && m.pipeline_id && rule.pipeline_id !== m.pipeline_id) return false;
+  if (rule.stage_id && m.stage_id && rule.stage_id !== m.stage_id) return false;
+  return true;
 }
 
 interface EngineConfig {
@@ -485,6 +510,7 @@ async function handleEvent(event: CRMEvent) {
          * rendez-vous, et rien ne disait laquelle.
          */
         try {
+        if (!regleViseCetEvenement(rule, event)) continue;
         if (!evaluateConditions(rule.conditions, event)) continue;
         if (rule.delay_seconds !== 0) {
           await scheduleDelayedActions(rule, event, engineConfig);
