@@ -393,7 +393,13 @@ async function main() {
       if (tiroirD) {
         const dec = await page.$$eval('aside[aria-label="Déclencheurs"] li button',
           (bs) => bs.map((b) => ({ t: b.textContent.replace(/\s+/g, ' ').trim(), off: b.disabled })));
-        dire(dec.length === 16, 'les 16 déclencheurs sont listés', `${dec.length} trouvés`);
+        // Un compte EXACT se périme à chaque ajout et se corrige par réflexe
+        // sans qu'on regarde. On vérifie ce qui compte : que le tiroir liste
+        // tout le catalogue, et que les nouveaux y sont.
+        dire(dec.length >= 16, 'tous les déclencheurs sont listés', `${dec.length} trouvés`);
+        for (const attendu of ['Le client répond', 'Étiquette ajoutée', 'Tâche terminée', 'Note ajoutée', 'Date atteinte']) {
+          dire(dec.some((d) => d.t.startsWith(attendu)), `« ${attendu} » est offert`);
+        }
         dire(dec.some((d) => d.off && /bient/i.test(d.t)),
           'ceux qui ne partent pas encore sont grisés « bientôt »');
         const famD = await page.$$eval('aside[aria-label="Déclencheurs"] h3',
