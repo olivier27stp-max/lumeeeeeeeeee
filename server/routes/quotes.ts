@@ -344,7 +344,9 @@ router.post('/quotes/send-email', async (req, res) => {
       quote_amount: totalFormatted,
       valid_until: validite,
       quote_link: quoteUrl || '',
-    });
+    }, undefined,
+    // Champs personnalisés citables : {quote_cf_…} et {client_cf_…}.
+    { quote: quote.id, client: quote.client_id ?? quote.lead_id ?? null });
 
     // Le texte saisi à l'envoi (modale « Envoyer ») prime sur le modèle
     // enregistré : c'est un choix explicite de l'utilisateur, ici et maintenant.

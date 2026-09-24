@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { colonnesChampsCsv } from './champsPersoApi';
 import { commissionEnArrierePlan, projectCommissionForJob, voidCommissionForJob } from './commissionsApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { Job } from '../types';
@@ -1304,7 +1305,9 @@ export async function exportJobsCsv(query: Omit<JobsQuery, 'page' | 'pageSize'>)
   if (error) throw error;
 
   const rows = (data || []).map((row: any) => mapJob(row));
-  const headers = ['Client', 'Job number', 'Title', 'Property', 'Schedule', 'Status', 'Total'];
+  // Champs personnalisés des jobs, en fin de ligne (vide si la fonction est coupée).
+  const champs = await colonnesChampsCsv('job', rows.map((j) => j.id), true);
+  const headers = ['Client', 'Job number', 'Title', 'Property', 'Schedule', 'Status', 'Total', ...champs.entetes];
   const lines = rows.map((job) => {
     const total = (job.total_cents / 100).toFixed(2);
     const values = [
@@ -1315,6 +1318,7 @@ export async function exportJobsCsv(query: Omit<JobsQuery, 'page' | 'pageSize'>)
       job.scheduled_at || '',
       job.status,
       `${total} ${job.currency || 'CAD'}`,
+      ...champs.valeurs(job.id),
     ];
     return values.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',');
   });

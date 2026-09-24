@@ -249,8 +249,8 @@ begin
   select count(*) into n from public.cf_filtrer(t.org, 'client', jsonb_build_array(jsonb_build_object('field_id', f_txt, 'op', 'is', 'value', $x$'; drop table public.clients; --$x$))) x;
 
   -- ── Deal gagné → job : les valeurs suivent (même clé, même type) ──
-  insert into public.custom_fields (org_id, object_type, label, field_type, key) values (t.org, 'deal', 'Superficie', 'number', '') returning id into f_ts;
-  insert into public.custom_fields (org_id, object_type, label, field_type, key) values (t.org, 'job', 'Superficie', 'number', '') returning id into f_job;
+  insert into public.custom_fields (org_id, object_type, label, field_type, key) values (t.org, 'deal', 'Superficie invariants QA', 'number', '') returning id into f_ts;
+  insert into public.custom_fields (org_id, object_type, label, field_type, key) values (t.org, 'job', 'Superficie invariants QA', 'number', '') returning id into f_job;
   insert into public.custom_field_values (org_id, field_id, object_type, deal_id, value_number) values (t.org, f_ts, 'deal', t.deal, 250);
   n := public.cf_copier_valeurs_deal_vers_job(t.deal, t.job);
   if (select value_number from public.custom_field_values where field_id = f_job and job_id = t.job) is distinct from 250 then

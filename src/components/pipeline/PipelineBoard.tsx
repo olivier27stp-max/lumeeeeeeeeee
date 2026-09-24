@@ -1377,7 +1377,13 @@ export default function PipelineBoard({
   async function enregistrerVue(nom: string, pourEquipe: boolean) {
     if (!pipelineActif) return;
     try {
-      const id = await creerVue(pipelineActif, nom, { ...filtres }, { tri, affichage, pourEquipe });
+      // Les conditions et le tri sur les champs personnalisés voyagent dans le
+      // même jsonb, sérialisés (la colonne est un objet de chaînes).
+      const id = await creerVue(pipelineActif, nom, {
+        ...filtres,
+        ...(conditionsChamps.length ? { champs_perso: JSON.stringify(conditionsChamps) } : {}),
+        ...(triChamp ? { tri_champ: JSON.stringify(triChamp) } : {}),
+      }, { tri, affichage, pourEquipe });
       await vuesQ.refetch();
       setVue(id);
       setEnregistrementVue(false);
@@ -1500,6 +1506,8 @@ export default function PipelineBoard({
   function appliquerVue(v: VueEnregistree) {
     setVue(v);
     setFiltres(VUES[v].filtres);
+    setConditionsChamps([]);
+    setTriChamp(null);
   }
 
   /**
@@ -1520,7 +1528,25 @@ export default function PipelineBoard({
     // (vieille vue, saisie manuelle) est ignorée plutôt que de fausser le filtre.
     const prio = v.filtres?.priorite;
     if (prio === 'urgent' || prio === 'moyen' || prio === 'frais') f.priorite = prio;
+    // Enregistrées depuis toujours, jamais relues : une vue « étape X, plus de
+    // 2 000 $ » se rouvrait sans ses filtres.
+    if (typeof v.filtres?.etape === 'string') f.etape = v.filtres.etape;
+    if (typeof v.filtres?.montantMin === 'string') f.montantMin = v.filtres.montantMin;
+    if (typeof v.filtres?.creesDepuis === 'string') f.creesDepuis = v.filtres.creesDepuis;
     setFiltres(f);
+    // Champs personnalisés : JSON illisible ou forme inattendue → ignoré.
+    let conds: Condition[] = [];
+    let triC: TriChamp | null = null;
+    try {
+      const brut = v.filtres?.champs_perso ? JSON.parse(v.filtres.champs_perso) : [];
+      if (Array.isArray(brut)) conds = brut.filter((c) => c && typeof c.field_id === 'string' && typeof c.op === 'string');
+      const t = v.filtres?.tri_champ ? JSON.parse(v.filtres.tri_champ) : null;
+      if (t && typeof t.field_id === 'string' && (t.sens === 'asc' || t.sens === 'desc')) triC = t;
+    } catch (err) {
+      console.error('[PipelineBoard] vue enregistrée : champs personnalisés illisibles', err);
+    }
+    setConditionsChamps(conds);
+    setTriChamp(triC);
     if (v.tri && (TRIS as readonly string[]).includes(v.tri)) setTri(v.tri as Tri);
     if (v.affichage === 'kanban' || v.affichage === 'liste') setAffichage(v.affichage);
   }
@@ -1614,7 +1640,11 @@ export default function PipelineBoard({
         onChangerPipeline={onChangerPipeline}
         onCreerPipeline={onCreerPipeline}
         etapesFiltrables={visibles}
-        onFiltres={setFiltres}
+        onFiltres={(f) => {
+          setFiltres(f);
+          // « Effacer les filtres » efface aussi les conditions de champs.
+          if (f === FILTRES_VIDES) { setConditionsChamps([]); setTriChamp(null); }
+        }}
         onBasculerPanneau={() => setPanneauOuvert((o) => !o)}
         onTri={() => setTri(TRIS[(TRIS.indexOf(tri) + 1) % TRIS.length])}
         onAffichage={setAffichage}
@@ -1816,6 +1846,8 @@ export default function PipelineBoard({
               type="button"
               onClick={() => {
                 setFiltres(FILTRES_VIDES);
+                setConditionsChamps([]);
+                setTriChamp(null);
                 setVue('tous');
               }}
               className={cn(CLASSE_BOUTON, 'font-semibold text-white')}

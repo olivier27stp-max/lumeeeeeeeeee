@@ -168,18 +168,4 @@ export function PanneauChamps({ champs, conditions, onConditions, tri, onTri, fr
   );
 }
 
-/**
- * Valeur d'un champ pour un export CSV : exploitable dans un tableur
- * (nombre brut, montant avec la virgule décimale de la locale, libellés de
- * liste séparés par « | », date ISO) — jamais « 1 250,00 $ » qui ne s'additionne pas.
- */
-export function valeurCsv(champ: ChampPerso, v: ValeurEnregistree['value'] | undefined, fr: boolean): string {
-  if (v === null || v === undefined || v === '') return '';
-  switch (champ.field_type) {
-    case 'monetary': { const t = (Number(v) / 100).toFixed(2); return fr ? t.replace('.', ',') : t; }
-    case 'number': return fr ? String(v).replace('.', ',') : String(v);
-    case 'dropdown_single': case 'dropdown_multi':
-      return (Array.isArray(v) ? v : [String(v)]).map((id) => champ.options.find((o) => o.id === id)?.label ?? '').filter(Boolean).join(' | ');
-    default: return String(v);
-  }
-}
+export { valeurCsv } from '../../lib/champs/valeurs';

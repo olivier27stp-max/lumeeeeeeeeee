@@ -109,7 +109,8 @@ export function ConditionsChampsEtape({ conditions, onChange, champs, objet, fr 
 /**
  * Variables de champs proposées dans un éditeur de courriel.
  *   · modèle de facture (invoice_sent, invoice_reminder) : champs du client
- *     et de la facture — ce que le serveur sait remplir pour ce poste ;
+ *     et de la facture ; modèle de soumission (quote_sent) : client et devis —
+ *     ce que le serveur sait remplir pour ce poste ;
  *   · autre modèle d'entreprise : aucun (le serveur ne les remplirait pas) ;
  *   · automatisation (pas de type) : tous les objets.
  */
@@ -118,7 +119,8 @@ export function variablesChampsPourCourriel(
 ): Array<{ cle: string; fr: string; en: string }> {
   const objets: ObjetChamp[] = !typeCourriel
     ? [...OBJETS]
-    : typeCourriel === 'invoice_sent' || typeCourriel === 'invoice_reminder' ? ['client', 'invoice'] : [];
+    : typeCourriel === 'invoice_sent' || typeCourriel === 'invoice_reminder' ? ['client', 'invoice']
+    : typeCourriel === 'quote_sent' ? ['client', 'quote'] : [];
   return champs.filter((c) => objets.includes(c.object_type)).map((c) => ({
     cle: variableModele(c.object_type, c.key),
     fr: `${LIBELLES_OBJET[c.object_type].fr} · ${c.label}`,

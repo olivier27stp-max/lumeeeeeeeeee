@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { colonnesChampsCsv } from './champsPersoApi';
 import { Lead } from '../types';
 import Papa from 'papaparse';
 import { STAGE_LABEL_MAP, STAGE_DB_MAP, ALL_STAGE_SLUGS, type StageSlug } from './pipelineApi';
@@ -439,7 +440,12 @@ export async function exportAllLeadsCsv(): Promise<string> {
     from += pageSize;
   }
 
-  return Papa.unparse(rows, {
-    columns: ['id', 'full_name', 'phone', 'email', 'source', 'status', 'created_at'],
+  // Champs personnalisés « client » (un prospect est un client), en fin de ligne.
+  const champs = await colonnesChampsCsv('client', rows.map((r) => r.id), true);
+  const colonnes = ['id', 'full_name', 'phone', 'email', 'source', 'status', 'created_at'];
+  if (champs.entetes.length === 0) return Papa.unparse(rows, { columns: colonnes });
+  return Papa.unparse({
+    fields: [...colonnes, ...champs.entetes],
+    data: rows.map((r) => [...colonnes.map((c) => r[c]), ...champs.valeurs(r.id)]),
   });
 }
