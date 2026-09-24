@@ -373,7 +373,53 @@ async function main() {
       }
     }
 
-    // ── 13. Aucune erreur rouge dans la console ──
+    // ── 13. La carte du DÉCLENCHEUR s'ouvre d'un clic ──
+    // Le tiroir des déclencheurs n'était atteignable que sur un canevas
+    // VIDE : dès la première étape, plus aucun moyen d'en changer.
+    await page.keyboard.press('Escape').catch(() => {});
+    const carteDecl = await page.evaluateHandle(() => {
+      for (const b of Array.from(document.querySelectorAll('button'))) {
+        if ((b.textContent || '').includes('Quand')) return b;
+      }
+      return null;
+    });
+    const elDecl = carteDecl.asElement();
+    dire(Boolean(elDecl), 'la carte « Quand » (déclencheur) est cliquable');
+    if (elDecl) {
+      await elDecl.click();
+      await attendre(700);
+      const tiroirD = await page.$('aside[aria-label="Déclencheurs"]');
+      dire(Boolean(tiroirD), 'cliquer le déclencheur ouvre son tiroir');
+      if (tiroirD) {
+        const dec = await page.$$eval('aside[aria-label="Déclencheurs"] li button',
+          (bs) => bs.map((b) => ({ t: b.textContent.replace(/\s+/g, ' ').trim(), off: b.disabled })));
+        dire(dec.length === 16, 'les 16 déclencheurs sont listés', `${dec.length} trouvés`);
+        dire(dec.some((d) => d.off && /bient/i.test(d.t)),
+          'ceux qui ne partent pas encore sont grisés « bientôt »');
+        const famD = await page.$$eval('aside[aria-label="Déclencheurs"] h3',
+          (hs) => hs.map((h) => h.textContent.trim()));
+        dire(famD.length >= 5, 'groupés par famille', famD.join(', '));
+        await page.keyboard.press('Escape').catch(() => {});
+        const fermer = await page.$('aside[aria-label="Déclencheurs"] button[aria-label]');
+        if (fermer) await fermer.click();
+        await attendre(500);
+      }
+    }
+
+    // ── 14. Le menu « … » d'une carte ──
+    const menuBtn = await page.$('[aria-label^="Options de"]');
+    dire(Boolean(menuBtn), 'chaque carte porte son menu « … »');
+    if (menuBtn) {
+      await menuBtn.click();
+      await attendre(600);
+      const entrees = await page.$$eval('button', (bs) =>
+        bs.map((b) => b.textContent.trim()).filter((t) =>
+          /^(Dupliquer|Modifier l|Supprimer)/.test(t)));
+      dire(entrees.length >= 4, 'le menu offre dupliquer / modifier / supprimer / à partir d’ici',
+        entrees.join(' · '));
+    }
+
+    // ── 15. Aucune erreur rouge dans la console ──
     const graves = erreursConsole.filter((e) => !/favicon|manifest|sourcemap|Download the React/i.test(e));
     dire(graves.length === 0, 'aucune erreur JavaScript', graves.slice(0, 2).join(' | '));
 

@@ -22,7 +22,7 @@
 
 import React from 'react';
 import {
-  Zap, Clock, GitBranch, Send, Bell, CheckSquare, Star, Square, Plus, MoreHorizontal,
+  Zap, Pencil, Clock, GitBranch, Send, Bell, CheckSquare, Star, Square, Plus, MoreHorizontal,
   Mail, Hash, Tag, TagsIcon, UserCog, UserPlus, StickyNote, CalendarCheck, TrendingUp,
   Target, FileText, Receipt, Webhook, CircleSlash,
 } from 'lucide-react';
@@ -40,6 +40,16 @@ interface Props {
   onSelection: (id: string) => void;
   /** Ajouter une étape après celle-ci (ou sur une branche donnée). */
   onAjouter: (apresId: string | null, branche?: 'alors' | 'sinon') => void;
+  /** Le menu « … » d'une carte — dupliquer, supprimer, supprimer la suite. */
+  onMenu?: (id: string) => void;
+  /**
+   * Cliquer la carte du DÉCLENCHEUR pour en changer.
+   *
+   * Sans ça, le tiroir des déclencheurs n'était atteignable que sur un
+   * canevas VIDE : dès la première étape ajoutée, plus aucun moyen de
+   * changer ce qui met le parcours en route.
+   */
+  onDeclencheur?: () => void;
   /** Lecture seule : aucun bouton d'édition (aperçu d'un préréglage). */
   lectureSeule?: boolean;
 }
@@ -210,7 +220,7 @@ function Carte({
 }
 
 export default function SequenceCanvas({
-  declencheurLabel, steps, fr, selectionId, onSelection, onAjouter, lectureSeule,
+  declencheurLabel, steps, fr, selectionId, onSelection, onAjouter, onMenu, onDeclencheur, lectureSeule,
 }: Props) {
   const parId = new Map(steps.map((e) => [e.id, e]));
 
@@ -239,7 +249,7 @@ export default function SequenceCanvas({
     if (etape.type === 'si') {
       return (
         <div className="flex flex-col items-center">
-          <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} onClick={() => onSelection(etape.id)} lectureSeule={lectureSeule} />
+          <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
           {/* Deux branches, côte à côte : c'est le seul endroit où le
               parcours se divise, et ça doit se voir. */}
           <div className="flex items-start gap-6 pt-1">
@@ -259,7 +269,7 @@ export default function SequenceCanvas({
     const suivant = etape.type === 'arreter' ? null : etape.suivant;
     return (
       <div className="flex flex-col items-center">
-        <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} onClick={() => onSelection(etape.id)} lectureSeule={lectureSeule} />
+        <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
         {etape.type !== 'arreter' && (
           <>
             <Connecteur fr={fr} lectureSeule={lectureSeule} onAjouter={() => onAjouter(etape.id)} />
@@ -275,20 +285,43 @@ export default function SequenceCanvas({
   return (
     <div className="overflow-x-auto">
       <div className="flex min-w-fit flex-col items-center px-4 py-2">
-        {/* Le déclencheur : point de départ, jamais une étape. */}
-        <div className="w-[260px] rounded-xl border-2 border-accent/40 bg-accent/5 p-3">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent">
-              <Zap className="h-4 w-4" aria-hidden="true" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-accent">
-                {fr ? 'Quand' : 'When'}
+        {/* Le déclencheur : point de départ, jamais une étape.
+            Cliquable — c'est le chemin pour en changer une fois le parcours
+            commencé. */}
+        {onDeclencheur && !lectureSeule ? (
+          <button
+            type="button"
+            onClick={onDeclencheur}
+            className="w-[260px] rounded-xl border-2 border-accent/40 bg-accent/5 p-3 text-left transition-colors hover:border-accent hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
+                <Zap className="h-4 w-4" aria-hidden="true" />
               </span>
-              <span className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
-            </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-accent">
+                  {fr ? 'Quand' : 'When'}
+                </span>
+                <span className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
+              </span>
+              <Pencil className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
+            </div>
+          </button>
+        ) : (
+          <div className="w-[260px] rounded-xl border-2 border-accent/40 bg-accent/5 p-3">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent">
+                <Zap className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-accent">
+                  {fr ? 'Quand' : 'When'}
+                </span>
+                <span className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
+              </span>
+            </div>
           </div>
-        </div>
+        )}
 
         {depart ? (
           <>

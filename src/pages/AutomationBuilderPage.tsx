@@ -123,6 +123,8 @@ export default function AutomationBuilderPage() {
   const [ajoutEnCours, setAjoutEnCours] = useState<{ apresId: string | null; branche?: 'alors' | 'sinon' } | null>(null);
   /** Le tiroir « Ajouter un déclencheur » est-il ouvert ? */
   const [tiroirDeclencheur, setTiroirDeclencheur] = useState(false);
+  /** L'étape dont le menu « … » est ouvert. */
+  const [menuEtape, setMenuEtape] = useState<string | null>(null);
 
   /**
    * Des départs tout faits — on ne part jamais d'une page blanche.
@@ -345,6 +347,68 @@ export default function AutomationBuilderPage() {
     memoriser(steps.map((e) => (e.id === modifiee.id ? modifiee : e)));
     setEtapeChoisie(null);
   }, [steps, memoriser]);
+
+  /**
+   * Dupliquer une étape — le « Copier l'action » de leur menu.
+   *
+   * La copie s'insère JUSTE APRÈS l'originale et reprend sa configuration.
+   * C'est le geste qui sert vraiment : trois relances qui ne diffèrent que
+   * par leur texte se font en dupliquant, pas en recommençant.
+   */
+  const dupliquerEtape = useCallback((idEtape: string) => {
+    const source = steps.find((e) => e.id === idEtape);
+    if (!source || source.type !== 'action') return;
+    const copie: Etape = {
+      ...source,
+      id: nouvelIdEtape(steps),
+      // Le nom porte « (copie) » : deux cartes au même nom seraient
+      // impossibles à distinguer sur le canevas.
+      nom: source.nom ? `${source.nom} (copie)` : null,
+      action: { ...source.action, config: { ...source.action.config } },
+      suivant: null,
+    };
+    memoriser(insererEtape(steps, copie, idEtape));
+    setMenuEtape(null);
+    setEtapeChoisie(copie.id);
+  }, [steps, memoriser]);
+
+  /**
+   * Supprimer cette étape ET tout ce qui la suit.
+   *
+   * Le « Supprimer toutes les actions à partir d'ici » de leur menu. On
+   * marche le fil à partir de l'étape, sans jamais repasser deux fois —
+   * un graphe mal formé ne doit pas faire boucler la suppression.
+   */
+  const supprimerDepuis = useCallback(async (idEtape: string) => {
+    const aRetirer = new Set<string>();
+    const file = [idEtape];
+    while (file.length) {
+      const id = file.shift()!;
+      if (aRetirer.has(id)) continue;
+      aRetirer.add(id);
+      const e = steps.find((x) => x.id === id);
+      if (!e) continue;
+      if (e.type === 'si') {
+        if (e.alors) file.push(e.alors);
+        if (e.sinon) file.push(e.sinon);
+      } else if (e.type !== 'arreter' && e.suivant) {
+        file.push(e.suivant);
+      }
+    }
+    const ok = await confirmer({
+      title: fr ? `Supprimer ${aRetirer.size} étape(s) ?` : `Delete ${aRetirer.size} step(s)?`,
+      message: fr
+        ? 'Cette étape et tout ce qui la suit seront retirés du parcours.'
+        : 'This step and everything after it will be removed.',
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
+    });
+    if (!ok) return;
+    let restant = steps;
+    for (const id of aRetirer) restant = retirerEtape(restant, id);
+    memoriser(restant);
+    setMenuEtape(null);
+    setEtapeChoisie(null);
+  }, [steps, memoriser, fr]);
 
   const supprimerEtape = useCallback(async (idEtape: string) => {
     const ok = await confirmer({
@@ -768,11 +832,56 @@ export default function AutomationBuilderPage() {
                       selectionId={etapeChoisie}
                       onSelection={setEtapeChoisie}
                       onAjouter={ouvrirAjout}
+                      onMenu={setMenuEtape}
+                      onDeclencheur={() => setTiroirDeclencheur(true)}
                     />
                   )
                 )}
               </div>
             </div>
+
+            {/* Le menu « … » d'une carte — dupliquer, supprimer, supprimer
+                la suite. Un voile couvre l'écran pour que le premier clic à
+                côté referme le menu, plutôt qu'il reste ouvert derrière. */}
+            {menuEtape && (
+              <>
+                <button
+                  type="button"
+                  aria-label={fr ? 'Fermer le menu' : 'Close menu'}
+                  onClick={() => setMenuEtape(null)}
+                  className="absolute inset-0 z-20 cursor-default focus:outline-none"
+                />
+                <div className="absolute left-1/2 top-24 z-30 w-[260px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-surface-card py-1 shadow-lg">
+                  {([
+                    ['dupliquer', fr ? 'Dupliquer l’action' : 'Duplicate action'],
+                    ['modifier', fr ? 'Modifier l’action' : 'Edit action'],
+                    ['supprimer', fr ? 'Supprimer l’action' : 'Delete action'],
+                    ['depuis', fr ? 'Supprimer à partir d’ici' : 'Delete from here'],
+                  ] as const).map(([cle, libelle]) => (
+                    <button
+                      key={cle}
+                      type="button"
+                      onClick={() => {
+                        const id = menuEtape;
+                        if (!id) return;
+                        if (cle === 'dupliquer') dupliquerEtape(id);
+                        else if (cle === 'modifier') { setMenuEtape(null); setEtapeChoisie(id); }
+                        else if (cle === 'supprimer') { setMenuEtape(null); void supprimerEtape(id); }
+                        else void supprimerDepuis(id);
+                      }}
+                      className={cn(
+                        'block w-full px-3 py-2 text-left text-xs transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                        cle === 'supprimer' || cle === 'depuis'
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-text-primary',
+                      )}
+                    >
+                      {libelle}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             {/* Ce que Lumi a compris — au-dessus du canevas, comme leur
                 bandeau « Explain this workflow ». L'utilisateur doit pouvoir
