@@ -862,3 +862,77 @@ export async function supprimerVue(vueId: string): Promise<void> {
   const { error } = await supabase.from('pipeline_vues').delete().eq('id', vueId);
   if (error) throw error;
 }
+
+// ── Raisons de perte proposées ──────────────────────────────
+//
+// `deals.lost_reason` reste du TEXTE : cette liste harmonise l'écriture sans
+// empêcher un motif imprévu. Sans elle, « trop cher », « prix » et « trop
+// dispendieux » comptent pour trois raisons distinctes dans les statistiques,
+// et le seul retour structuré sur pourquoi on perd devient illisible.
+
+export interface RaisonPerteProposee {
+  id: string;
+  libelle: string;
+  position: number;
+}
+
+export async function fetchRaisonsProposees(): Promise<RaisonPerteProposee[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('pipeline_raisons_perte_liste')
+    .select('id,libelle,position')
+    .eq('org_id', orgId)
+    .is('archived_at', null)
+    .order('position');
+  if (error) throw error;
+  return (data ?? []) as RaisonPerteProposee[];
+}
+
+/**
+ * Ajoute un motif à la liste (réservé aux admins par la RLS).
+ *
+ * Un motif déjà présent n'est pas une erreur à montrer : on renvoie
+ * simplement l'existant, pour que l'écran n'interrompe pas la saisie d'un
+ * vendeur qui retape un libellé connu.
+ */
+export async function ajouterRaisonProposee(libelle: string): Promise<RaisonPerteProposee | null> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const propre = libelle.trim();
+  if (!propre) return null;
+
+  const { data, error } = await supabase
+    .from('pipeline_raisons_perte_liste')
+    .insert({ org_id: orgId, libelle: propre, position: 99 })
+    .select('id,libelle,position')
+    .single();
+
+  if (error) {
+    // 23505 = doublon sur l'index unique : le motif existe déjà.
+    if ((error as { code?: string }).code === '23505') {
+      const { data: existant } = await supabase
+        .from('pipeline_raisons_perte_liste')
+        .select('id,libelle,position')
+        .eq('org_id', orgId)
+        .ilike('libelle', propre)
+        .maybeSingle();
+      return (existant as RaisonPerteProposee) ?? null;
+    }
+    throw error;
+  }
+  return data as RaisonPerteProposee;
+}
+
+/**
+ * Retire un motif de la liste — archivage, jamais suppression.
+ *
+ * Les deals perdus citent encore ce texte : supprimer la ligne ne les
+ * changerait pas, mais un motif qu'on « retire » doit pouvoir revenir, et
+ * l'historique de la liste a sa valeur. Il cesse simplement d'être proposé.
+ */
+export async function archiverRaisonProposee(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('pipeline_raisons_perte_liste')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
