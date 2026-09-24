@@ -159,6 +159,32 @@ const FILET_CLIENT = '#e4e7ec';
    selon les clients, on fixe la couleur. */
 const CADENAS = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 
+/* La mascotte au pied d'un courriel d'entreprise.
+
+   Le pied disait « Envoyé avec Lume », en texte seul. Une pastille ronde avec
+   le bonhomme se reconnaît d'un coup d'œil là où trois mots gris se lisent
+   à peine — et elle reste DISCRÈTE : 18 px, à côté de notre nom, sous les
+   coordonnées de l'entreprise. Jamais en tête : le courriel appartient à
+   l'entreprise, pas à nous.
+
+   `favicon-mascot-v2.png` est le bonhomme SEUL, sans le mot « LUME » : 512 px
+   carrés, fond transparent, 32 Ko. Le logo complet (v2) porte le mot, donc il
+   ferait doublon avec le texte à côté.
+
+   Dimensions en attributs ET en style : Outlook ignore le style seul et
+   afficherait l'image à sa taille native — 512 px au milieu du pied.
+
+   `vertical-align:middle` sur les deux cellules : sans lui, le texte se pose
+   sur la ligne de base et flotte sous la pastille. */
+const MASCOTTE_LUME_URL = 'https://lumecrm.net/favicon-mascot-v2.png';
+const SIGNATURE_LUME = (envoyeAvec: string) => `
+<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:14px auto 0;">
+<tr>
+<td style="padding-right:6px;vertical-align:middle;line-height:0;"><img src="${MASCOTTE_LUME_URL}" alt="" width="18" height="18" style="width:18px;height:18px;display:block;border:0;outline:none;border-radius:50%;"/></td>
+<td style="vertical-align:middle;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;font-weight:600;">Lume</a></td>
+</tr>
+</table>`;
+
 const POLICE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export function echapper(s: unknown): string {
@@ -470,7 +496,7 @@ ${joindre ? `<p style="margin:0;font-size:13px;line-height:1.6;">${joindre}</p>`
 <p style="margin:${joindre ? '4px' : '0'} 0 0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${echapper(nom)}${postal ? ` &nbsp;&middot;&nbsp; ${postal}` : ''}</p>
 ${liensSociauxHtml(c.marque.liensSociaux)}
 ${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">${taxes.map(echapper).join(' &nbsp;&middot;&nbsp; ')}</p>` : ''}
-<p style="margin:12px 0 0;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;font-weight:600;">Lume</a></p>`;
+${SIGNATURE_LUME(envoyeAvec)}`;
   return coquille({
     langue: c.langue, titreDocument: c.titre || nom, preheader: c.preheader, enTeteHtml: enTete,
     corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? `— ${nom}` : `— ${nom}`) : c.signature }, couleur),
