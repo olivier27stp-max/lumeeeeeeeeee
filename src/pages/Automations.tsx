@@ -30,7 +30,12 @@ import {
   creerAutomatisation,
   dupliquerAutomatisation,
   supprimerAutomatisation,
+  chargerDossiers,
+  creerDossier,
+  supprimerDossier,
+  rangerDansDossier,
   type CatalogueAutomatisations,
+  type DossierAutomatisation,
 } from '../lib/automationBuilderApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import {
@@ -424,6 +429,27 @@ export default function Automations() {
   const [menuCreer, setMenuCreer] = useState(false);
   /** Menu « … » ouvert sur quelle ligne ? */
   const [menuLigne, setMenuLigne] = useState<string | null>(null);
+
+  // ── Dossiers ──
+  // Le bouton existait depuis #525 et ne faisait qu'afficher « bientôt ».
+  const [dossiers, setDossiers] = useState<DossierAutomatisation[]>([]);
+  /** Le champ de nom est ouvert ? (pas de `prompt()` natif : test `dialogues-natifs-bannis`) */
+  const [saisieDossier, setSaisieDossier] = useState(false);
+  /** La ligne dont le sous-menu « Déplacer vers » est déplié. */
+  const [sousMenuDossier, setSousMenuDossier] = useState<string | null>(null);
+  const [nomDossier, setNomDossier] = useState('');
+  /** Le dossier affiché — `null` = tout, `'racine'` = celles sans dossier. */
+  const [dossierActif, setDossierActif] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Un échec ici ne doit PAS empêcher la page de s'afficher : sans
+    // dossiers, la liste reste simplement à plat.
+    chargerDossiers()
+      .then(setDossiers)
+      .catch((e: unknown) => console.error('[automations] dossiers', e instanceof Error ? e.message : String(e)));
+  }, []);
+
+
   /** Lignes cochées — GHL les utilise pour les actions en lot. */
   const [cochees, setCochees] = useState<Set<string>>(new Set());
   /** Ligne dont le panneau de statistiques est déroulé (le chevron « › »). */
@@ -481,6 +507,52 @@ export default function Automations() {
       setLoading(false);
     }
   }, [fr]);
+
+  const validerNouveauDossier = async () => {
+    const nom = nomDossier.trim();
+    if (!nom) { setSaisieDossier(false); return; }
+    try {
+      const d = await creerDossier(nom);
+      setDossiers((prev) => [...prev, d].sort((a, b) => a.name.localeCompare(b.name)));
+      setNomDossier('');
+      setSaisieDossier(false);
+      toast.success(fr ? `Dossier « ${d.name} » créé` : `Folder “${d.name}” created`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const retirerDossier = async (id: string, nom: string) => {
+    const ok = await confirmer({
+      title: fr ? `Supprimer le dossier « ${nom} » ?` : `Delete folder “${nom}”?`,
+      message: fr
+        ? 'Les automatisations qu’il contient reviennent à la racine et continuent de tourner. Rien n’est supprimé.'
+        : 'The automations inside move back to the root and keep running. Nothing is deleted.',
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await supprimerDossier(id);
+      setDossiers((prev) => prev.filter((d) => d.id !== id));
+      if (dossierActif === id) setDossierActif(null);
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const deplacerVers = async (ruleId: string, folderId: string | null) => {
+    setMenuLigne(null);
+    try {
+      await rangerDansDossier(ruleId, folderId);
+      await load();
+      toast.success(folderId
+        ? (fr ? 'Rangée dans le dossier' : 'Moved to folder')
+        : (fr ? 'Remise à la racine' : 'Moved back to root'));
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -597,10 +669,17 @@ export default function Automations() {
     if (filterCategory !== 'all' && getCategory(r) !== filterCategory) return false;
     if (filterStatut === 'publiee' && !r.is_active) return false;
     if (filterStatut === 'brouillon' && r.is_active) return false;
+    // Le dossier affiché. `null` = tout, 'racine' = celles qui ne sont
+    // rangées nulle part.
+    if (dossierActif === 'racine' && r.folder_id) return false;
+    if (dossierActif && dossierActif !== 'racine' && r.folder_id !== dossierActif) return false;
     return true;
   });
 
   const pages = Math.max(1, Math.ceil(filtrees.length / parPage));
+
+  /** Combien d'automatisations dans chaque dossier — un dossier vide se voit. */
+  const compteParDossier = (id: string) => rules.filter((r) => r.folder_id === id).length;
   const visibles = filtrees.slice((page - 1) * parPage, page * parPage);
 
   const toutCoche = visibles.length > 0 && visibles.every((r) => cochees.has(r.id));
@@ -706,14 +785,50 @@ export default function Automations() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => toast.info(fr ? 'Les dossiers arrivent bientôt.' : 'Folders are coming soon.')}
-              className="glass-button inline-flex items-center gap-1.5"
-            >
-              <FolderPlus size={14} aria-hidden="true" />
-              {fr ? 'Nouveau dossier' : 'Create folder'}
-            </button>
+            {saisieDossier ? (
+              <span className="inline-flex items-center gap-1.5">
+                <label htmlFor="nouveau-dossier" className="sr-only">
+                  {fr ? 'Nom du dossier' : 'Folder name'}
+                </label>
+                <input
+                  id="nouveau-dossier"
+                  type="text"
+                  autoFocus
+                  maxLength={60}
+                  value={nomDossier}
+                  onChange={(e) => setNomDossier(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void validerNouveauDossier();
+                    if (e.key === 'Escape') { setSaisieDossier(false); setNomDossier(''); }
+                  }}
+                  placeholder={fr ? 'Nom du dossier' : 'Folder name'}
+                  className="w-44 rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-[13px] text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                />
+                <button
+                  type="button"
+                  onClick={() => void validerNouveauDossier()}
+                  className="glass-button-primary text-[13px]"
+                >
+                  {fr ? 'Créer' : 'Create'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setSaisieDossier(false); setNomDossier(''); }}
+                  className="text-[13px] text-text-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  {fr ? 'Annuler' : 'Cancel'}
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSaisieDossier(true)}
+                className="glass-button inline-flex items-center gap-1.5"
+              >
+                <FolderPlus size={14} aria-hidden="true" />
+                {fr ? 'Nouveau dossier' : 'Create folder'}
+              </button>
+            )}
 
             <button
               type="button"
@@ -805,6 +920,61 @@ export default function Automations() {
             {fr ? 'Personnaliser la liste' : 'Customize list'}
           </button>
         </div>
+
+        {/* Les dossiers — n'apparaissent qu'une fois qu'il y en a.
+            Une barre vide occuperait de la place pour rien. */}
+        {dossiers.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5" aria-label={fr ? 'Dossiers' : 'Folders'}>
+            {([
+              [null, fr ? 'Tout' : 'All'],
+              ['racine', fr ? 'Sans dossier' : 'No folder'],
+            ] as const).map(([cle, libelle]) => (
+              <button
+                key={libelle}
+                type="button"
+                onClick={() => setDossierActif(cle)}
+                aria-pressed={dossierActif === cle}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-[12px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                  dossierActif === cle
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-text-secondary hover:text-text-primary',
+                )}
+              >
+                {libelle}
+              </button>
+            ))}
+            {dossiers.map((d) => (
+              <span
+                key={d.id}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full border pl-3 pr-1 text-[12px] transition-colors',
+                  dossierActif === d.id
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-text-secondary',
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => setDossierActif(d.id)}
+                  aria-pressed={dossierActif === d.id}
+                  className="py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  {d.name}
+                  <span className="ml-1 tabular-nums opacity-60">{compteParDossier(d.id)}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void retirerDossier(d.id, d.name)}
+                  aria-label={fr ? `Supprimer le dossier ${d.name}` : `Delete folder ${d.name}`}
+                  className="rounded-full p-1 text-text-tertiary transition-colors hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <Trash2 size={11} aria-hidden="true" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* ══ 4. Barre d'outils ══ */}
         <div className="flex flex-wrap items-center gap-2">
@@ -1080,12 +1250,51 @@ export default function Automations() {
                                     <button
                                       type="button"
                                       role="menuitem"
-                                      onClick={() => { setMenuLigne(null); toast.info(fr ? 'Les dossiers arrivent bientôt.' : 'Folders are coming soon.'); }}
+                                      onClick={() => {
+                                        // Sans dossier, créer d'abord : proposer
+                                        // « déplacer vers rien » n'aurait aucun sens.
+                                        if (dossiers.length === 0) {
+                                          setMenuLigne(null);
+                                          setSaisieDossier(true);
+                                          toast.info(fr ? 'Créez d’abord un dossier.' : 'Create a folder first.');
+                                          return;
+                                        }
+                                        setSousMenuDossier(rule.id);
+                                      }}
                                       className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                     >
                                       <FolderPlus size={13} aria-hidden="true" />
                                       {fr ? 'Déplacer dans un dossier' : 'Move to folder'}
                                     </button>
+                                    {/* Les dossiers, en sous-liste. « Racine »
+                                        n'apparaît que si la règle est rangée
+                                        quelque part — sinon l'option ne ferait
+                                        rien. */}
+                                    {sousMenuDossier === rule.id && (
+                                      <div className="ml-4 border-l border-border pl-2">
+                                        {rule.folder_id && (
+                                          <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => { setSousMenuDossier(null); void deplacerVers(rule.id, null); }}
+                                            className="block w-full rounded-lg px-2.5 py-1.5 text-left text-[12px] text-text-secondary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                          >
+                                            {fr ? '↑ Remettre à la racine' : '↑ Move back to root'}
+                                          </button>
+                                        )}
+                                        {dossiers.filter((d) => d.id !== rule.folder_id).map((d) => (
+                                          <button
+                                            key={d.id}
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => { setSousMenuDossier(null); void deplacerVers(rule.id, d.id); }}
+                                            className="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[12px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                          >
+                                            {d.name}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
                                     {!rule.is_preset && (
                                       <button
                                         type="button"

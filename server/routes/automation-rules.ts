@@ -31,7 +31,10 @@ import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { genererParcours } from '../lib/lumi/generer-parcours';
 import { sequenceEtapes } from '../lib/validation';
-import { validate, automationRuleCreateSchema, automationRuleUpdateSchema } from '../lib/validation';
+import {
+  validate, automationRuleCreateSchema, automationRuleUpdateSchema,
+  dossierCreateSchema, dossierUpdateSchema,
+} from '../lib/validation';
 import { logger } from '../lib/logger';
 import {
   DECLENCHEURS,
@@ -43,7 +46,7 @@ import {
 const router = Router();
 
 /** Colonnes renvoyées au navigateur. `org_id` n'a aucun intérêt côté client. */
-const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, created_at, updated_at';
+const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, folder_id, created_at, updated_at';
 
 /**
  * Les gardes qui ont besoin du catalogue, donc impossibles à exprimer en Zod
@@ -394,6 +397,103 @@ router.delete('/automations/rules/:id', async (req, res) => {
   }
 
   return res.json({ ok: true });
+});
+
+
+// ── Dossiers ────────────────────────────────────────────────
+//
+// Ranger ses automatisations. Le bouton « Nouveau dossier » existait
+// depuis #525 sans rien derrière ; la table est arrivée avec la migration
+// `20260924230000`.
+//
+// Tout passe par la RLS (`automations.read` / `automations.update`), comme
+// les automatisations elles-mêmes : un dossier décide de ce qu'on voit.
+
+router.get('/automations/folders', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const { data, error } = await auth.client
+    .from('automation_folders')
+    .select('id, name, position, created_at')
+    .eq('org_id', auth.orgId)
+    .order('position', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (error) {
+    logger.error('[automation-folders] lecture échouée', { message: error.message });
+    return res.status(500).json({ error: 'Impossible de lire les dossiers.' });
+  }
+  return res.json(data ?? []);
+});
+
+router.post('/automations/folders', validate(dossierCreateSchema), async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const { data, error } = await auth.client
+    .from('automation_folders')
+    .insert({ org_id: auth.orgId, name: req.body.name })
+    .select('id, name, position, created_at')
+    .single();
+
+  if (error) {
+    // 23505 = l'index unique (org_id, nom en minuscules) : deux dossiers du
+    // même nom rendraient le menu « Déplacer vers » illisible. On le dit en
+    // clair plutôt que de renvoyer une erreur Postgres.
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Un dossier porte déjà ce nom.' });
+    }
+    if (error.code === '42501') {
+      return res.status(403).json({ error: 'Votre rôle ne permet pas de créer un dossier.' });
+    }
+    logger.error('[automation-folders] création échouée', { message: error.message, code: error.code });
+    return res.status(500).json({ error: 'Impossible de créer le dossier.' });
+  }
+  return res.status(201).json(data);
+});
+
+router.patch('/automations/folders/:id', validate(dossierUpdateSchema), async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const { data, error } = await auth.client
+    .from('automation_folders')
+    .update({ name: req.body.name })
+    .eq('id', req.params.id)
+    .eq('org_id', auth.orgId)
+    .select('id, name, position, created_at')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'Un dossier porte déjà ce nom.' });
+    if (error.code === '42501') return res.status(403).json({ error: 'Votre rôle ne permet pas de renommer un dossier.' });
+    if (error.code === 'PGRST116') return res.status(404).json({ error: 'Dossier introuvable.' });
+    logger.error('[automation-folders] renommage échoué', { message: error.message, code: error.code });
+    return res.status(500).json({ error: 'Impossible de renommer le dossier.' });
+  }
+  return res.json(data);
+});
+
+router.delete('/automations/folders/:id', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  // La clé étrangère est en `on delete set null` : les automatisations du
+  // dossier reviennent à la racine et CONTINUENT de tourner. Un rangement
+  // ne doit jamais faire disparaître un envoi.
+  const { error } = await auth.client
+    .from('automation_folders')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('org_id', auth.orgId);
+
+  if (error) {
+    if (error.code === '42501') return res.status(403).json({ error: 'Votre rôle ne permet pas de supprimer un dossier.' });
+    logger.error('[automation-folders] suppression échouée', { message: error.message, code: error.code });
+    return res.status(500).json({ error: 'Impossible de supprimer le dossier.' });
+  }
+  return res.status(204).end();
 });
 
 export default router;

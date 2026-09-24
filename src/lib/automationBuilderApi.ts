@@ -42,6 +42,8 @@ export interface BrouillonAutomatisation {
   steps?: unknown[] | null;
   /** Réglages propres à la règle. */
   settings?: Record<string, unknown> | null;
+  /** Dossier de rangement — `null` = à la racine. */
+  folder_id?: string | null;
   is_active?: boolean;
 }
 
@@ -239,4 +241,55 @@ export async function chargerEtiquettes(): Promise<string[]> {
     .limit(500);
   if (error || !data) return [];
   return Array.from(new Set(data.map((t) => String(t.tag)).filter(Boolean))).sort();
+}
+
+// ── Dossiers ────────────────────────────────────────────────
+
+export interface DossierAutomatisation {
+  id: string;
+  name: string;
+  position: number;
+  created_at: string;
+}
+
+/**
+ * Les dossiers de l'organisation.
+ *
+ * Par le serveur et pas en PostgREST direct : la création doit renvoyer un
+ * message clair sur le doublon de nom (l'index unique répond « 23505 »,
+ * que personne ne sait lire).
+ */
+export async function chargerDossiers(): Promise<DossierAutomatisation[]> {
+  const r = await fetch('/api/automations/folders', { headers: await entetes() });
+  if (!r.ok) throw await erreurDe(r, 'Impossible de lire les dossiers.');
+  return r.json();
+}
+
+export async function creerDossier(name: string): Promise<DossierAutomatisation> {
+  const r = await fetch('/api/automations/folders', {
+    method: 'POST', headers: await entetes(), body: JSON.stringify({ name }),
+  });
+  if (!r.ok) throw await erreurDe(r, 'Impossible de créer le dossier.');
+  return r.json();
+}
+
+export async function renommerDossier(id: string, name: string): Promise<DossierAutomatisation> {
+  const r = await fetch(`/api/automations/folders/${id}`, {
+    method: 'PATCH', headers: await entetes(), body: JSON.stringify({ name }),
+  });
+  if (!r.ok) throw await erreurDe(r, 'Impossible de renommer le dossier.');
+  return r.json();
+}
+
+/** Supprime le dossier — ses automatisations reviennent à la racine. */
+export async function supprimerDossier(id: string): Promise<void> {
+  const r = await fetch(`/api/automations/folders/${id}`, {
+    method: 'DELETE', headers: await entetes(),
+  });
+  if (!r.ok) throw await erreurDe(r, 'Impossible de supprimer le dossier.');
+}
+
+/** Range une automatisation dans un dossier — `null` la remet à la racine. */
+export async function rangerDansDossier(ruleId: string, folderId: string | null): Promise<void> {
+  await modifierAutomatisation(ruleId, { folder_id: folderId });
 }

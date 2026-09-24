@@ -30,7 +30,8 @@ export interface AutomationRule {
   is_preset: boolean;
   preset_key: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at: string;  /** Dossier de rangement — `null` = à la racine. */
+  folder_id?: string | null;
 }
 
 export async function getAutomationRules(): Promise<AutomationRule[]> {

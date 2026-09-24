@@ -1138,6 +1138,14 @@ const corpsAutomatisation = z.object({
    * builder à chaque frappe, et le travail se perdait en silence.
    */
   settings: automationSettingsSchema.nullable().optional(),
+  /*
+   * Le dossier de rangement. `null` = à la racine.
+   *
+   * Sans cette clé, Zod la RETIRERAIT en silence : « Déplacer dans un
+   * dossier » répondrait 200 et rien ne bougerait — exactement le piège
+   * déjà payé avec le nom d'étape.
+   */
+  folder_id: z.string().uuid('Dossier invalide.').nullable().optional(),
   steps: z
     .union([sequenceEtapes, z.array(z.never()).max(0)])
     .nullable()
@@ -1286,3 +1294,15 @@ export const champsFiltrerSchema = z.object({
 export const cartesPipelineSchema = z.object({
   field_ids: z.array(z.string().uuid()).max(6, 'Six champs au plus sur une carte.'),
 }).strict();
+
+/**
+ * Un dossier d'automatisations.
+ *
+ * Le nom est borné à 60 caractères comme la contrainte CHECK en base
+ * (`automation_folders_name_court`) : refuser ici donne un message lisible
+ * plutôt qu'une erreur Postgres brute.
+ */
+const nomDossier = z.string().trim().min(1, 'Donnez un nom au dossier.').max(60, 'Le nom fait plus de 60 caractères.');
+
+export const dossierCreateSchema = z.object({ name: nomDossier });
+export const dossierUpdateSchema = z.object({ name: nomDossier });
