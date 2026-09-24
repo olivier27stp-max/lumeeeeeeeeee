@@ -330,9 +330,14 @@ function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir
       <div className="px-0.5 pb-2.5">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: v.teinte }} aria-hidden="true" />
-          <span className="truncate text-[12.5px] font-semibold tracking-tight text-text-primary">
+          {/*
+            Un vrai titre, pas un `span` : à la lecture d'écran, le board
+            était une suite de textes sans structure — rien ne disait où
+            commençait une colonne.
+          */}
+          <h3 className="truncate text-[12.5px] font-semibold tracking-tight text-text-primary">
             {fr ? etape.name_fr : etape.name_en}
-          </span>
+          </h3>
         </div>
         <p className="mt-1 flex gap-2 pl-4 text-[11.5px] text-text-secondary">
           <span className="tabular-nums">
@@ -565,9 +570,18 @@ interface EtatFiltres {
   /** `'__non'` = les deals que personne n'a pris en charge. */
   assigne: string;
   priorite: '' | NiveauPriorite;
+  /** Une étape précise. En kanban, les autres colonnes disparaissent. */
+  etape: string;
+  /** Montant minimum en DOLLARS (saisi par l'utilisateur, comparé en cents). */
+  montantMin: string;
+  /** Entrés dans le pipeline depuis N jours au plus. '' = sans limite. */
+  creesDepuis: string;
 }
 
-const FILTRES_VIDES: EtatFiltres = { texte: '', source: '', assigne: '', priorite: '' };
+const FILTRES_VIDES: EtatFiltres = {
+  texte: '', source: '', assigne: '', priorite: '',
+  etape: '', montantMin: '', creesDepuis: '',
+};
 
 /**
  * Vues INTÉGRÉES, toujours là et non supprimables.
@@ -588,9 +602,11 @@ const VUES: Record<VueEnregistree, { fr: string; en: string; filtres: EtatFiltre
 
 function BarreOutils({
   fr, total, filtres, sources, membres, panneauOuvert, tri, affichage,
-  pipelines, pipelineActif, onChangerPipeline,
+  pipelines, pipelineActif, onChangerPipeline, etapesFiltrables,
   onFiltres, onBasculerPanneau, onTri, onAffichage, onExporter, onNouveauDeal,
 }: {
+  /** Étapes proposées au filtre — les actives, dans l'ordre du board. */
+  etapesFiltrables: PipelineStage[];
   pipelines: { id: string; name: string; is_default: boolean }[];
   pipelineActif: string | null;
   onChangerPipeline: (pipelineId: string) => void;
@@ -616,8 +632,11 @@ function BarreOutils({
   const idSource = useId();
   const idAssigne = useId();
   const idPriorite = useId();
+  const idEtape = useId();
+  const idMontant = useId();
+  const idDepuis = useId();
 
-  const nbFiltres = [filtres.source, filtres.assigne, filtres.priorite, filtres.texte].filter(Boolean).length;
+  const nbFiltres = Object.values(filtres).filter((v) => v !== '').length;
 
   return (
     <>
@@ -798,6 +817,60 @@ function BarreOutils({
               <option value="urgent">{fr ? LIBELLE_PRIORITE.urgent.fr : LIBELLE_PRIORITE.urgent.en}</option>
               <option value="moyen">{fr ? LIBELLE_PRIORITE.moyen.fr : LIBELLE_PRIORITE.moyen.en}</option>
               <option value="frais">{fr ? LIBELLE_PRIORITE.frais.fr : LIBELLE_PRIORITE.frais.en}</option>
+            </select>
+          </div>
+
+          <div className="min-w-[150px]">
+            <label htmlFor={idEtape} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Étape' : 'Stage'}
+            </label>
+            <select
+              id={idEtape}
+              value={filtres.etape}
+              onChange={(e) => onFiltres({ ...filtres, etape: e.target.value })}
+              className={CLASSE_CHAMP}
+            >
+              <option value="">{fr ? 'Toutes' : 'All'}</option>
+              {etapesFiltrables.map((e) => (
+                <option key={e.id} value={e.id}>{fr ? e.name_fr : e.name_en}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="min-w-[130px]">
+            <label htmlFor={idMontant} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Montant minimum' : 'Minimum amount'}
+            </label>
+            <input
+              id={idMontant}
+              type="number"
+              min={0}
+              step={100}
+              inputMode="decimal"
+              value={filtres.montantMin}
+              onChange={(e) => onFiltres({ ...filtres, montantMin: e.target.value })}
+              placeholder={fr ? '2000' : '2000'}
+              className={CLASSE_CHAMP}
+            />
+            <p className="mt-1 text-[10px] text-text-muted">
+              {fr ? 'Cache les deals sans montant connu.' : 'Hides deals with no known amount.'}
+            </p>
+          </div>
+
+          <div className="min-w-[150px]">
+            <label htmlFor={idDepuis} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Entrés depuis' : 'Created within'}
+            </label>
+            <select
+              id={idDepuis}
+              value={filtres.creesDepuis}
+              onChange={(e) => onFiltres({ ...filtres, creesDepuis: e.target.value })}
+              className={CLASSE_CHAMP}
+            >
+              <option value="">{fr ? "N'importe quand" : 'Any time'}</option>
+              <option value="7">{fr ? '7 derniers jours' : 'Last 7 days'}</option>
+              <option value="30">{fr ? '30 derniers jours' : 'Last 30 days'}</option>
+              <option value="90">{fr ? '90 derniers jours' : 'Last 90 days'}</option>
             </select>
           </div>
 
@@ -1013,6 +1086,17 @@ export default function PipelineBoard({
     () => [...etapes].filter((e) => e.archived_at === null).sort((a, b) => a.position - b.position),
     [etapes],
   );
+  /**
+   * Les colonnes réellement dessinées.
+   *
+   * Filtrer par étape sans réduire les colonnes laisserait cinq colonnes
+   * vides à côté de la bonne : l'écran dirait « aucun deal » cinq fois pour
+   * une information qu'on vient de demander à masquer.
+   */
+  const colonnes = useMemo(
+    () => (filtres.etape ? visibles.filter((e) => e.id === filtres.etape) : visibles),
+    [visibles, filtres.etape],
+  );
   const rangs = useMemo(() => rangsOuverts(etapes.map(pourVisuel)), [etapes]);
   const sources = useMemo(
     () => [...new Set(deals.map((d) => d.source))].filter(Boolean).sort(),
@@ -1024,6 +1108,16 @@ export default function PipelineBoard({
   /** Les mêmes deals nourrissent le kanban et la liste — jamais deux écrans séparés. */
   const filtres_ = useMemo(() => {
     const q = filtres.texte.trim().toLowerCase();
+    // Saisi en dollars, comparé en cents : les cents sont la source de vérité
+    // dans tout Lume, on ne convertit jamais dans l'autre sens.
+    const brut = Number(filtres.montantMin.replace(',', '.'));
+    const montantPlancher = filtres.montantMin.trim() !== '' && Number.isFinite(brut)
+      ? Math.round(brut * 100)
+      : null;
+    const jours = Number(filtres.creesDepuis);
+    const depuisBorne = filtres.creesDepuis !== '' && Number.isFinite(jours)
+      ? Date.now() - jours * 86_400_000
+      : null;
     const retenus = deals.filter((d) => {
       if (filtres.source && d.source !== filtres.source) return false;
       if (filtres.assigne === '__non' && d.assigned_user_id) return false;
@@ -1032,10 +1126,23 @@ export default function PipelineBoard({
         const p = priorite(d, etapes);
         if (!p || p.niveau !== filtres.priorite) return false;
       }
+      if (filtres.etape && d.stage_id !== filtres.etape) return false;
+      if (montantPlancher !== null) {
+        // Un deal sans montant connu n'est PAS « 0 $ » : c'est un montant
+        // qu'on ignore. Le sortir d'un filtre « au moins 2 000 $ » serait
+        // affirmer qu'il vaut moins, ce qu'on ne sait pas.
+        const cents = montants[d.id];
+        if (cents === undefined || cents < montantPlancher) return false;
+      }
+      if (depuisBorne !== null && new Date(d.created_at).getTime() < depuisBorne) return false;
       if (q) {
         const c = d.client;
-        const foin = `${nomClient(d)} ${c?.email ?? ''} ${c?.address ?? ''}`.toLowerCase();
-        if (!foin.includes(q)) return false;
+        // Le téléphone est cherché sans sa ponctuation : personne ne tape
+        // « (514) 555-0199 » dans une barre de recherche.
+        const tel = (c?.phone ?? '').replace(/\D/g, '');
+        const foin = `${nomClient(d)} ${c?.email ?? ''} ${c?.address ?? ''} ${c?.company ?? ''} ${tel}`.toLowerCase();
+        const qNum = q.replace(/\D/g, '');
+        if (!foin.includes(q) && !(qNum.length >= 3 && tel.includes(qNum))) return false;
       }
       return true;
     });
@@ -1156,6 +1263,7 @@ export default function PipelineBoard({
         pipelines={pipelines}
         pipelineActif={pipelineActif}
         onChangerPipeline={onChangerPipeline}
+        etapesFiltrables={visibles}
         onFiltres={setFiltres}
         onBasculerPanneau={() => setPanneauOuvert((o) => !o)}
         onTri={() => setTri(TRIS[(TRIS.indexOf(tri) + 1) % TRIS.length])}
@@ -1365,7 +1473,7 @@ export default function PipelineBoard({
           onDragCancel={() => setActif(null)}
         >
           <div className="mt-4 flex gap-3 overflow-x-auto pb-4">
-            {visibles.map((etape) => (
+            {colonnes.map((etape) => (
               <Colonne
                 key={etape.id}
                 etape={etape}
