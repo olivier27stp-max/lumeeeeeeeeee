@@ -18,10 +18,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const fetchRaisonsMock = vi.fn(async () => [] as any[]);
 const listColumnsMock = vi.fn(async () => [] as any[]);
 const getValuesMock = vi.fn(async () => ({}) as Record<string, any>);
+const dossierMock = vi.fn(async () => ({
+  jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0,
+}) as any);
 
 vi.mock('../src/lib/pipelineVentesApi', () => ({
   fetchRaisonsProposees: () => fetchRaisonsMock(),
   fetchElementsLies: vi.fn(async () => ({ job: null, devis: null, paiements: [], porte: null })),
+  fetchDossierClient: (...a: any[]) => dossierMock(...(a as [])),
   fetchHistorique: vi.fn(async () => []),
   fetchTachesDuDeal: vi.fn(async () => []),
   creerTacheDeal: vi.fn(async () => undefined),
@@ -108,6 +112,9 @@ beforeEach(() => {
   fetchRaisonsMock.mockClear().mockResolvedValue([]);
   listColumnsMock.mockClear().mockResolvedValue([]);
   getValuesMock.mockClear().mockResolvedValue({});
+  dossierMock.mockClear().mockResolvedValue({
+    jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0,
+  });
   conteneur = document.createElement('div');
   document.body.appendChild(conteneur);
   racine = createRoot(conteneur);
@@ -184,5 +191,62 @@ describe('fiche du deal — motifs de perte', () => {
 
     expect(conteneur.textContent).toContain('Prix trop élevé');
     expect(conteneur.textContent).toContain('A choisi un concurrent');
+  });
+});
+
+describe('fiche du deal — dossier du client', () => {
+  /** Ouvre l'onglet « Client », où vit le dossier. */
+  async function ouvrirOngletClient() {
+    const b = [...conteneur.querySelectorAll('button')]
+      .find((x) => (x.textContent ?? '').trim() === 'Client') as HTMLButtonElement;
+    expect(b, "onglet « Client » introuvable").toBeTruthy();
+    await act(async () => { b.click(); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  }
+
+  it("montre tout l'historique du client, pas juste ce deal", async () => {
+    dossierMock.mockResolvedValue({
+      jobs: [
+        { id: 'j1', numero: 'JOB-101', titre: 'Lavage printemps', statut: 'completed', cents: 45000, date: '2026-05-01T00:00:00Z' },
+        { id: 'j2', numero: 'JOB-088', titre: 'Lavage automne', statut: 'completed', cents: 40000, date: '2025-10-01T00:00:00Z' },
+      ],
+      devis: [{ id: 'q1', numero: 'DEV-12', titre: 'Gouttières', statut: 'sent', cents: 90000, date: '2026-09-01T00:00:00Z' }],
+      factures: [{ id: 'f1', numero: 'FAC-55', titre: '', statut: 'sent', cents: 45000, solde_cents: 12000, date: '2026-05-02T00:00:00Z' }],
+      messages: [{ id: 'm1', direction: 'inbound', texte: 'Ok pour mardi', date: '2026-09-20T00:00:00Z' }],
+      paye_cents: 73000, du_cents: 12000,
+    });
+    await rendre();
+    await ouvrirOngletClient();
+
+    const texte = conteneur.textContent ?? '';
+    // L'historique complet : deux jobs que ce deal n'a pas produits.
+    expect(texte).toContain('JOB-101');
+    expect(texte).toContain('JOB-088');
+    expect(texte).toContain('DEV-12');
+    expect(texte).toContain('FAC-55');
+    // Le dernier échange, pour savoir où on en est.
+    expect(texte).toContain('Ok pour mardi');
+  });
+
+  it('met en évidence ce que le client doit encore', async () => {
+    dossierMock.mockResolvedValue({
+      jobs: [], devis: [],
+      factures: [{ id: 'f1', numero: 'FAC-55', titre: '', statut: 'sent', cents: 45000, solde_cents: 12000, date: '2026-05-02T00:00:00Z' }],
+      messages: [], paye_cents: 33000, du_cents: 12000,
+    });
+    await rendre();
+    await ouvrirOngletClient();
+
+    // La première question avant de rappeler quelqu'un pour lui vendre
+    // autre chose : est-ce qu'il me doit déjà de l'argent ?
+    expect(conteneur.textContent).toContain('Doit encore');
+    expect(conteneur.textContent).toContain('Payé à ce jour');
+  });
+
+  it("dit « premier contact » quand le client n'a aucun historique", async () => {
+    await rendre();
+    await ouvrirOngletClient();
+    // Mieux qu'une section vide, qui ferait croire à un écran cassé.
+    expect(conteneur.textContent).toContain('Premier contact');
   });
 });

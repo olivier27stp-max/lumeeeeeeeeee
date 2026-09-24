@@ -30,7 +30,7 @@ import { useTranslation } from '../../i18n';
 import { versDate } from '../../lib/dateSeule';
 import {
   basculerTacheDeal, creerTacheDeal, deplacerDeal, estJobACreer, fetchElementsLies,
-  fetchHistorique, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
+  fetchDossierClient, fetchHistorique, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
   abandonnerDeal, fetchRaisonsProposees, marquerPerdu, nomClient,
   type ContactClient, type Deal, type PipelineStage, type TacheDeal,
 } from '../../lib/pipelineVentesApi';
@@ -274,6 +274,161 @@ function OngletTaches({ dealId, fr }: { dealId: string; fr: boolean }) {
 
 // ── Onglet Lié ──────────────────────────────────────────────
 
+/** Somme en cents → « 1 250 $ ». Les cents sont la source de vérité. */
+function argent(cents: number, fr: boolean): string {
+  return new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', {
+    style: 'currency', currency: 'CAD',
+    minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+/** Une ligne d'historique cliquable : job, devis ou facture. */
+function LigneDossier({ vers, numero, titre, statut, cents, alerte, fr }: {
+  vers: string; numero: string; titre: string; statut: string;
+  cents: number; alerte?: string; fr: boolean;
+}) {
+  return (
+    <Link
+      to={vers}
+      className="flex items-baseline justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-surface-hover"
+    >
+      <span className="min-w-0 flex-1 truncate text-[12px] text-text-primary">
+        <span className="font-semibold">{numero}</span>
+        {titre && <span className="text-text-secondary"> · {titre}</span>}
+      </span>
+      {alerte && (
+        <span className="shrink-0 text-[11px] font-semibold" style={{ color: 'var(--color-danger)' }}>
+          {alerte}
+        </span>
+      )}
+      <span className="shrink-0 text-[11px] text-text-tertiary">{statut}</span>
+      <span className="shrink-0 text-[12px] tabular-nums text-text-primary">{argent(cents, fr)}</span>
+    </Link>
+  );
+}
+
+/**
+ * Le dossier du client : tout ce qu'il a fait avec l'entreprise.
+ *
+ * La fiche ne lisait que la job et le devis DE CE DEAL. Un client qui a fait
+ * affaire six fois apparaissait donc comme s'il arrivait de nulle part —
+ * alors qu'un vendeur qui le rappelle a besoin de savoir qu'il doit encore
+ * 1 200 $, ou qu'on lui a déjà posé trois devis sans suite.
+ */
+function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolean }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['deal-dossier-client', clientId],
+    queryFn: () => fetchDossierClient(clientId),
+    enabled: !!clientId,
+    staleTime: 60_000,
+  });
+
+  if (!clientId) return null;
+  if (isLoading) return <Vide texte={fr ? 'Chargement du dossier…' : 'Loading history…'} />;
+
+  const d = data ?? { jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0 };
+  const rien = d.jobs.length + d.devis.length + d.factures.length === 0;
+
+  return (
+    <>
+      {/* Ce qu'il a payé, ce qu'il doit. La première question avant de
+          rappeler quelqu'un pour lui vendre autre chose. */}
+      {(d.paye_cents > 0 || d.du_cents > 0) && (
+        <div className="mt-4 flex gap-2">
+          <div className="flex-1 rounded-xl border border-outline bg-surface-card px-3.5 py-2.5">
+            <div className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
+              {fr ? 'Payé à ce jour' : 'Paid to date'}
+            </div>
+            <div className="mt-0.5 text-[15px] font-bold tabular-nums text-text-primary">
+              {argent(d.paye_cents, fr)}
+            </div>
+          </div>
+          <div
+            className="flex-1 rounded-xl border px-3.5 py-2.5"
+            style={
+              d.du_cents > 0
+                ? { borderColor: 'var(--color-danger)', background: 'color-mix(in srgb, var(--color-danger) 7%, transparent)' }
+                : { borderColor: 'var(--color-outline)' }
+            }
+          >
+            <div className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
+              {fr ? 'Doit encore' : 'Still owes'}
+            </div>
+            <div
+              className="mt-0.5 text-[15px] font-bold tabular-nums"
+              style={{ color: d.du_cents > 0 ? 'var(--color-danger)' : 'var(--color-text-primary)' }}
+            >
+              {argent(d.du_cents, fr)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rien && (
+        <Section titre={fr ? 'Historique' : 'History'}>
+          <Vide texte={fr ? 'Premier contact avec ce client.' : 'First contact with this client.'} />
+        </Section>
+      )}
+
+      {d.factures.length > 0 && (
+        <Section titre={fr ? `Factures (${d.factures.length})` : `Invoices (${d.factures.length})`}>
+          <div className="-mx-2">
+            {d.factures.map((f) => (
+              <LigneDossier
+                key={f.id} vers={`/invoices/${f.id}`} numero={f.numero} titre={f.titre}
+                statut={f.statut} cents={f.cents} fr={fr}
+                alerte={(f.solde_cents ?? 0) > 0 ? `${argent(f.solde_cents ?? 0, fr)} ${fr ? 'dû' : 'due'}` : undefined}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {d.jobs.length > 0 && (
+        <Section titre={fr ? `Jobs (${d.jobs.length})` : `Jobs (${d.jobs.length})`}>
+          <div className="-mx-2">
+            {d.jobs.map((j) => (
+              <LigneDossier key={j.id} vers={`/jobs/${j.id}`} numero={j.numero} titre={j.titre}
+                statut={j.statut} cents={j.cents} fr={fr} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {d.devis.length > 0 && (
+        <Section titre={fr ? `Devis (${d.devis.length})` : `Quotes (${d.devis.length})`}>
+          <div className="-mx-2">
+            {d.devis.map((q) => (
+              <LigneDossier key={q.id} vers={`/quotes/${q.id}`} numero={q.numero} titre={q.titre}
+                statut={q.statut} cents={q.cents} fr={fr} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {d.messages.length > 0 && (
+        <Section titre={fr ? 'Derniers échanges' : 'Recent messages'}>
+          <div className="space-y-1.5">
+            {d.messages.map((m) => (
+              <div key={m.id} className="rounded-lg border border-outline bg-surface-card px-3 py-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-text-tertiary">
+                    {m.direction === 'inbound' ? (fr ? 'Reçu' : 'Received') : (fr ? 'Envoyé' : 'Sent')}
+                  </span>
+                  <span className="text-[10.5px] text-text-muted">
+                    {new Date(m.date).toLocaleDateString(fr ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short' })}
+                  </span>
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-[12px] text-text-secondary">{m.texte}</p>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+    </>
+  );
+}
+
 function OngletLie({ deal, fr }: { deal: Deal; fr: boolean }) {
   const { data, isLoading } = useQuery({
     queryKey: ['deal-lies', deal.id, deal.job_id, deal.quote_id],
@@ -323,6 +478,10 @@ function OngletLie({ deal, fr }: { deal: Deal; fr: boolean }) {
           <Vide texte={fr ? 'Aucun client rattaché.' : 'No client linked.'} />
         )}
       </Section>
+
+      {/* Tout ce que ce client a fait avec l'entreprise — pas seulement ce
+          que CE deal a produit. */}
+      <DossierDuClient clientId={deal.client_id} fr={fr} />
 
       <Section titre={fr ? 'Job' : 'Job'}>
         {isLoading && <Vide texte={fr ? 'Chargement…' : 'Loading…'} />}
@@ -553,7 +712,9 @@ export default function DealDrawer({
     { cle: 'notes', libelle: fr ? 'Notes' : 'Notes' },
     { cle: 'taches', libelle: fr ? 'Tâches' : 'Tasks' },
     { cle: 'activite', libelle: fr ? 'Activité' : 'Activity' },
-    { cle: 'lie', libelle: fr ? 'Lié' : 'Linked' },
+    // « Client » et non « Lié » : l'onglet montre tout l'historique du
+    // client, pas seulement ce que CE deal a produit.
+    { cle: 'lie', libelle: fr ? 'Client' : 'Client' },
   ];
 
   /** Écriture générique : toast de succès, rafraîchissement, message de la base sinon. */
