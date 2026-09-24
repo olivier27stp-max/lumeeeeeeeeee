@@ -33,6 +33,8 @@ import { SYSTEM_PROMPT as CONNAISSANCE_PUBLIQUE } from '../agent/promptVente';
 import { indexCarteApp } from './carte-app';
 import { coutEnCents } from '../lumi/tarifs';
 import { verifierPlafond, ajouterDepense, compterRefus } from '../lumi/plafond-journalier';
+import { journaliserUsage } from '../lumi/budget';
+import { getServiceClient } from '../supabase';
 import { logger } from '../logger';
 
 /** Sonnet 5 par défaut ; LUMI_SUPPORT_MODELE permet de mesurer un autre modèle (Haiku) avec scripts/qa/evaluer-support-qualite.mts. */
@@ -60,6 +62,14 @@ export interface ContexteSupport {
   page?: string | null;
   /** Captures d'écran jointes au message courant (base64), regardées par le modèle. */
   images?: Array<{ media_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'; data: string }>;
+  /**
+   * L'entreprise à qui imputer la dépense. Absent sur la surface PUBLIQUE :
+   * un visiteur du site n'appartient à aucune org, et il n'y a personne à
+   * facturer — la dépense reste alors hors journal, comme avant.
+   */
+  orgId?: string | null;
+  /** Qui pose la question, quand on le sait. Sert au découpage, jamais à l'identification. */
+  userId?: string | null;
 }
 
 /** Ce que l'assistant peut FAIRE, fourni par la surface (le module ne touche pas à la base lui-même). */
@@ -227,6 +237,29 @@ export async function repondreSupportIA(
     const coutAppel = coutEnCents(MODELE_SUPPORT, reponse.usage);
     coutCents += coutAppel;
     ajouterDepense('support', coutAppel);
+    // UNE ligne par appel à l'API, pas une par conversation : une boucle
+    // d'outils en fait plusieurs, et c'est justement ce qui coûte.
+    //
+    // `ajouterDepense` ci-dessus n'est qu'un compteur en mémoire, perdu au
+    // redémarrage : sans cette écriture, personne ne savait ce que le support
+    // coûte, ni par client ni au total.
+    //
+    // Fire-and-forget : une panne du journal ne doit JAMAIS empêcher une
+    // réponse au client qui attend.
+    if (contexte.orgId) {
+      void journaliserUsage(getServiceClient(), {
+        orgId: contexte.orgId,
+        userId: contexte.userId ?? null,
+        conversationId: null,
+        model: MODELE_SUPPORT,
+        input_tokens: reponse.usage.input_tokens ?? 0,
+        output_tokens: reponse.usage.output_tokens ?? 0,
+        cache_creation_input_tokens: (reponse.usage as any).cache_creation_input_tokens ?? 0,
+        cache_read_input_tokens: (reponse.usage as any).cache_read_input_tokens ?? 0,
+        cost_cents: coutAppel,
+        source: 'support',
+      }).catch((e: any) => console.error('[support/ia] usage non journalisé :', e?.message || e));
+    }
 
     const blocsTexte = reponse.content.filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text');
     texte = [texte, ...blocsTexte.map((b) => b.text)].filter(Boolean).join('\n').trim();
