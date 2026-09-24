@@ -55,6 +55,67 @@ describe('composerBriefing', () => {
   });
 });
 
+describe('« Le Reçu » — l’argent qui dort dans le briefing', () => {
+  const dort = {
+    total_cents: 1_231_000,
+    devis_total_cents: 1_068_310,
+    factures_total_cents: 162_690,
+    devis: [{ client: 'Sophie Bouchard', montant_cents: 1_068_310, jours_sans_contact: 12 }],
+    factures: [{ client: 'Michel Lavoie', solde_cents: 162_690, jours_de_retard: 35 }],
+  };
+
+  it('coupé (données absentes) : le briefing est identique au mot près', () => {
+    // La garantie du drapeau : sans la section, rien ne change nulle part.
+    const avec = { ...vide, todays_visits: { total_matching: 1, visits: [{ start_at: '2026-09-11T13:00:00Z', client: 'Marie' }] } };
+    expect(composerBriefing({ ...avec, argent_qui_dort: undefined }, opts))
+      .toBe(composerBriefing(avec, opts));
+  });
+
+  it('annonce le total et nomme le plus gros gisement', () => {
+    const t = composerBriefing({ ...vide, argent_qui_dort: dort }, opts)!;
+    expect(t).toContain('12 310,00 $ qui dorment');
+    expect(t).toContain('chez Sophie Bouchard');
+    expect(t).toContain('10 683,10 $');
+    expect(t).toContain('sans suivi depuis 12 j');
+  });
+
+  it('le plus gros peut être une facture', () => {
+    const t = composerBriefing({
+      ...vide,
+      argent_qui_dort: { ...dort, devis: [{ client: 'Petit', montant_cents: 10_000, jours_sans_contact: 9 }], devis_total_cents: 10_000, total_cents: 172_690 },
+    }, opts)!;
+    expect(t).toContain('chez Michel Lavoie');
+    expect(t).toContain('35 j de retard');
+  });
+
+  it('un total à zéro ne produit aucune phrase', () => {
+    const t = composerBriefing({
+      ...vide,
+      todays_visits: { total_matching: 1, visits: [{ start_at: '2026-09-11T13:00:00Z', client: 'Marie' }] },
+      argent_qui_dort: { total_cents: 0, devis_total_cents: 0, factures_total_cents: 0, devis: [], factures: [] },
+    }, opts)!;
+    expect(t).not.toContain('dorment');
+  });
+
+  it('de l’argent qui dort suffit à déclencher un briefing un jour vide', () => {
+    // Sans cette garde, un jour calme avec 12 000 $ dormants ne dirait rien.
+    const t = composerBriefing({ ...vide, argent_qui_dort: dort }, opts);
+    expect(t).not.toBeNull();
+    expect(t).toContain('qui dorment');
+  });
+
+  it('propose de relancer les devis quand il n’y a pas de facture en retard', () => {
+    const t = composerBriefing({ ...vide, argent_qui_dort: { ...dort, factures: [], factures_total_cents: 0 } }, opts)!;
+    expect(t).toContain('« relance les devis qui dorment »');
+  });
+
+  it('en anglais', () => {
+    const t = composerBriefing({ ...vide, argent_qui_dort: dort }, { ...opts, fr: false })!;
+    expect(t).toContain('sitting idle');
+    expect(t).toContain('no follow-up for 12 days');
+  });
+});
+
 describe('heureDansFuseau', () => {
   it('donne l heure locale et le jour de l org, et retombe sur Toronto si le fuseau est inconnu', () => {
     expect(heureDansFuseau('America/Toronto', new Date('2026-09-11T10:15:00Z'))).toEqual({ heure: 6, jour: '2026-09-11' });
