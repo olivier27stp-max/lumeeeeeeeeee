@@ -370,6 +370,20 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
         </Section>
       )}
 
+      {/*
+        Facturer depuis ici. L'audit relevait que l'onglet Payments de GHL
+        permet de créer devis et factures sans quitter l'opportunité — chez
+        nous on ne pouvait que les LIRE.
+      */}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link to={`/quotes/new?clientId=${clientId}`} className="btn-secondary text-[12px]">
+          {fr ? 'Faire un devis' : 'New quote'}
+        </Link>
+        <Link to={`/invoices/new?clientId=${clientId}`} className="btn-secondary text-[12px]">
+          {fr ? 'Facturer' : 'New invoice'}
+        </Link>
+      </div>
+
       {d.factures.length > 0 && (
         <Section titre={fr ? `Factures (${d.factures.length})` : `Invoices (${d.factures.length})`}>
           <div className="-mx-2">
@@ -878,13 +892,29 @@ export default function DealDrawer({
                 ? 'Aucune job rattachée à ce deal.'
                 : 'No job linked to this deal yet.'}
             </p>
-            <button
-              type="button"
-              onClick={() => onCreerJob(deal)}
-              className="btn-secondary text-[12px]"
-            >
-              {fr ? 'Créer une job' : 'Create a job'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/*
+                Le devis AVANT la job : en service terrain, on chiffre d'abord
+                et on planifie une fois que c'est accepté. Le client arrive
+                pré-rempli — sans ça le vendeur devrait rechercher à la main
+                quelqu'un qu'il vient de désigner.
+              */}
+              {deal.client_id && (
+                <Link
+                  to={`/quotes/new?clientId=${deal.client_id}`}
+                  className="btn-secondary text-[12px]"
+                >
+                  {fr ? 'Faire un devis' : 'Create a quote'}
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={() => onCreerJob(deal)}
+                className="btn-secondary text-[12px]"
+              >
+                {fr ? 'Créer une job' : 'Create a job'}
+              </button>
+            </div>
           </div>
         )}
 

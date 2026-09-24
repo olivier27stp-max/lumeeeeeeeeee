@@ -34,6 +34,10 @@ vi.mock('../src/lib/pipelineVentesApi', () => ({
   nomClient: (d: any) => `${d.client?.first_name ?? ''} ${d.client?.last_name ?? ''}`.trim() || 'Client',
   // Forme RÉELLE de `priorite` : un objet, pas une chaîne. Un mock trop
   // simple faisait planter le rendu sur `LIBELLE_PRIORITE[prio.niveau]`.
+  // Les pastilles sont dérivées : on garde la forme réelle (tableau
+  // d'objets), sinon le rendu planterait sur `p.ton`. Leur logique a son
+  // propre test — ici on veut seulement que la carte se dessine.
+  pastilles: () => [],
   priorite: (d: any, stages: any[]) => {
     const s = stages.find((x: any) => x.id === d.stage_id);
     return s && s.kind === 'open' ? { niveau: 'frais', jours: 0 } : null;

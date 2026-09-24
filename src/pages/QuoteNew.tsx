@@ -145,7 +145,19 @@ export default function QuoteNew() {
   // ── Contact ──
   const [contactMode, setContactMode] = useState<'new' | 'existing'>('existing');
   const [clients, setClients] = useState<Array<{ id: string; label: string }>>([]);
-  const [clientId, setClientId] = useState('');
+  /**
+   * Le client peut venir de l'URL : « Créer un devis » depuis la fiche d'un
+   * deal, la page Client ou le board arrive ici avec `?clientId=…`.
+   *
+   * Sans cette lecture, le bouton envoyait bien vers cet écran mais le
+   * paramètre était IGNORÉ : le vendeur devait rechercher à la main un client
+   * qu'il venait pourtant de désigner. `client` est accepté aussi, parce que
+   * c'est la forme qu'utilisaient les actions rapides du board.
+   */
+  const [clientId, setClientId] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    return p.get('clientId') ?? p.get('client') ?? '';
+  });
   const [clientSearch, setClientSearch] = useState('');
   const [clientListOpen, setClientListOpen] = useState(false);
   const [clientHighlight, setClientHighlight] = useState(-1);

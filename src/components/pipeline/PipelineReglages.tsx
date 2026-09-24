@@ -22,6 +22,7 @@ import { confirmer } from '../ui/ConfirmDialog';
 import { useTranslation } from '../../i18n';
 import {
   ajouterEtape, ajouterRaisonProposee, archiverEtape, archiverRaisonProposee,
+  donnerAccesPipeline, fetchAccesPipeline, fetchMembres, retirerAccesPipeline, rouvrirPipeline,
   creerPipeline, definirParDefaut, fetchPipelines, fetchRaisonsProposees,
   renommerEtape, renommerPipeline, reordonnerEtapes,
   type Deal, type ModelePipeline, type PipelineResume, type PipelineStage,
@@ -448,10 +449,12 @@ function AjoutPipeline({ fr, occupe, onCreer, onAnnuler }: {
 
 // ── Une ligne de la liste des pipelines ────────────────────
 
-function LignePipeline({ pipeline, fr, actif, onRenommer, onDefaut }: {
+function LignePipeline({ pipeline, fr, actif, membres, onRenommer, onDefaut }: {
   pipeline: PipelineResume;
   fr: boolean;
   actif: boolean;
+  /** Pour proposer qui peut voir ce pipeline. */
+  membres: { id: string; name: string }[];
   onRenommer: (id: string, nom: string) => void;
   onDefaut: (id: string) => void;
 }) {
@@ -460,7 +463,8 @@ function LignePipeline({ pipeline, fr, actif, onRenommer, onDefaut }: {
   useEffect(() => { setNom(pipeline.name); }, [pipeline.name]);
 
   return (
-    <div className="flex items-end gap-3 rounded-xl border border-outline bg-surface-card px-4 py-3">
+    <div className="rounded-xl border border-outline bg-surface-card px-4 py-3">
+      <div className="flex items-end gap-3">
       <div className="min-w-0 flex-1">
         <label htmlFor={idNom} className="flex items-center gap-2 text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
           {fr ? 'Nom du pipeline' : 'Pipeline name'}
@@ -498,6 +502,159 @@ function LignePipeline({ pipeline, fr, actif, onRenommer, onDefaut }: {
           {fr ? 'Définir par défaut' : 'Set as default'}
         </button>
       )}
+      </div>
+
+      {/* Qui voit ce pipeline. Replié : la plupart des équipes n'y touchent
+          jamais, et un pipeline ouvert à tous est le bon défaut. */}
+      <PartagePipeline pipelineId={pipeline.id} membres={membres} fr={fr} />
+    </div>
+  );
+}
+
+/**
+ * Le partage d'un pipeline.
+ *
+ * AUCUN membre nommé = visible de toute l'équipe, ce qui est l'état de
+ * départ. Dés qu'on nomme quelqu'un, le pipeline se FERME aux autres —
+ * l'écran le dit avant le premier ajout, pas aprés.
+ *
+ * Les administrateurs ne figurent pas dans la liste : ils voient tout de
+ * toute façon, et les proposer laisserait croire qu'on peut les exclure.
+ */
+function PartagePipeline({ pipelineId, membres, fr }: {
+  pipelineId: string;
+  membres: { id: string; name: string }[];
+  fr: boolean;
+}) {
+  const idAjout = useId();
+  const [ouvert, setOuvert] = useState(false);
+
+  const { data: acces = [], refetch } = useQuery({
+    queryKey: ['pipeline-acces', pipelineId],
+    queryFn: () => fetchAccesPipeline(pipelineId),
+    enabled: ouvert,
+    staleTime: 60_000,
+  });
+
+  const nommes = acces.map((a) => a.user_id);
+  const restants = membres.filter((m) => !nommes.includes(m.id));
+
+  async function ajouter(userId: string) {
+    try {
+      await donnerAccesPipeline(pipelineId, userId);
+      await refetch();
+      toast.success(fr ? 'Accés accordé.' : 'Access granted.');
+    } catch (e) {
+      console.error('[PipelineReglages] partage', e);
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function retirer(accesId: string) {
+    try {
+      await retirerAccesPipeline(accesId);
+      await refetch();
+    } catch (e) {
+      console.error('[PipelineReglages] retrait de partage', e);
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function rouvrir() {
+    const ok = await confirmer({
+      title: fr ? 'Rouvrir à toute l’équipe ?' : 'Reopen to the whole team?',
+      message: fr
+        ? 'Tous les membres pourront voir ce pipeline et ses deals.'
+        : 'Every member will be able to see this pipeline and its deals.',
+      confirmLabel: fr ? 'Rouvrir' : 'Reopen',
+    });
+    if (!ok) return;
+    try {
+      await rouvrirPipeline(pipelineId);
+      await refetch();
+      toast.success(fr ? 'Pipeline rouvert.' : 'Pipeline reopened.');
+    } catch (e) {
+      console.error('[PipelineReglages] réouverture', e);
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <div className="mt-2.5 border-t border-border-subtle pt-2.5">
+      <button
+        type="button"
+        onClick={() => setOuvert((o) => !o)}
+        aria-expanded={ouvert}
+        className="text-[11.5px] text-text-tertiary underline-offset-2 hover:text-text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary rounded"
+      >
+        {fr ? 'Qui voit ce pipeline' : 'Who can see this pipeline'}
+      </button>
+
+      {ouvert && (
+        <div className="mt-2 space-y-2">
+          {acces.length === 0 ? (
+            <p className="text-[11.5px] text-text-muted">
+              {fr
+                ? 'Visible de toute l’équipe. Nommer quelqu’un le réservera à cette personne et aux administrateurs.'
+                : 'Visible to the whole team. Naming someone will restrict it to them and to admins.'}
+            </p>
+          ) : (
+            <>
+              <p className="text-[11.5px]" style={{ color: 'var(--color-warning)' }}>
+                {fr
+                  ? 'Réservé aux personnes ci-dessous. Les administrateurs le voient toujours.'
+                  : 'Restricted to the people below. Admins can always see it.'}
+              </p>
+              <ul className="flex flex-wrap gap-1.5">
+                {acces.map((a) => (
+                  <li
+                    key={a.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-outline bg-surface-secondary py-1 pl-2.5 pr-1.5 text-[11.5px] text-text-primary"
+                  >
+                    {membres.find((m) => m.id === a.user_id)?.name ?? (fr ? 'Membre' : 'Member')}
+                    <button
+                      type="button"
+                      onClick={() => { void retirer(a.id); }}
+                      aria-label={fr ? 'Retirer l’accés' : 'Remove access'}
+                      className="rounded-full p-0.5 text-text-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+                    >
+                      <X size={11} aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor={idAjout} className="sr-only">
+              {fr ? 'Donner accés à' : 'Grant access to'}
+            </label>
+            <select
+              id={idAjout}
+              value=""
+              onChange={(e) => { if (e.target.value) void ajouter(e.target.value); }}
+              disabled={restants.length === 0}
+              className="input-field max-w-[220px] text-[12px] disabled:opacity-50"
+            >
+              <option value="">{fr ? 'Donner accés à…' : 'Grant access to…'}</option>
+              {restants.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+
+            {acces.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { void rouvrir(); }}
+                className="text-[11.5px] text-text-tertiary underline-offset-2 hover:text-text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary rounded"
+              >
+                {fr ? 'Rouvrir à toute l’équipe' : 'Reopen to the whole team'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -515,6 +672,13 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
 
   const [pipelines, setPipelines] = useState<PipelineResume[] | null>(null);
   const [creation, setCreation] = useState(false);
+
+  // Les membres de l'organisation, pour proposer qui peut voir un pipeline.
+  const { data: membresOrg = [] } = useQuery({
+    queryKey: ['pipeline-membres'],
+    queryFn: fetchMembres,
+    staleTime: 300_000,
+  });
   const [enCreation, setEnCreation] = useState(false);
   const [ajoutEtape, setAjoutEtape] = useState(false);
 
@@ -770,6 +934,7 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
           <LignePipeline
             pipeline={courant}
             fr={fr}
+            membres={membresOrg}
             actif
             onRenommer={(id, nom) => { void renommerLePipeline(id, nom); }}
             onDefaut={(id) => { void basculerDefaut(id); }}
@@ -838,6 +1003,7 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
                 key={p.id}
                 pipeline={p}
                 fr={fr}
+                membres={membresOrg}
                 actif={p.id === pipelineId}
                 onRenommer={(id, nom) => { void renommerLePipeline(id, nom); }}
                 onDefaut={(id) => { void basculerDefaut(id); }}

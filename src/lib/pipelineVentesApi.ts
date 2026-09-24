@@ -1058,3 +1058,131 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
       (s: number, f: Record<string, unknown>) => s + ((f.balance_cents as number) ?? 0), 0),
   };
 }
+
+// ── Pastilles automatiques ──────────────────────────────────
+//
+// GoHighLevel appelle ça des « smart tags » et les fait configurer par un
+// constructeur de règles en deux écrans. Pour une PME de service, ça revient
+// à faire remplir un formulaire pour obtenir ce que le logiciel sait déjà.
+//
+// Ici elles sont DÉRIVÉES, comme le montant et la priorité : rien n'est
+// stocké, rien n'est à configurer, et une pastille ne peut pas devenir fausse
+// parce qu'un travail de fond a cessé de tourner.
+
+export type ClePastille = 'gros' | 'dort' | 'non_assigne' | 'jamais_contacte' | 'a_relancer';
+
+export interface Pastille {
+  cle: ClePastille;
+  fr: string;
+  en: string;
+  /** Teinte CSS — `danger` attire l'œil, `info` informe seulement. */
+  ton: 'danger' | 'warning' | 'info';
+}
+
+/** Au-dessus de ce montant, un deal mérite qu'on le traite en premier. */
+const SEUIL_GROS_CENTS = 500_000; // 5 000 $
+
+/**
+ * Les pastilles d'un deal, au plus deux.
+ *
+ * Deux, pas plus : une carte couverte de pastilles ne hiérarchise plus rien,
+ * et l'œil cesse de les lire. Elles sortent dans l'ordre d'urgence, donc les
+ * deux premières sont les deux qui comptent.
+ *
+ * Aucune pastille sur un deal fermé : « dort depuis 20 jours » sur une vente
+ * conclue est un faux signal.
+ */
+export function pastilles(
+  deal: Deal,
+  stages: PipelineStage[],
+  montantCents: number | undefined,
+  maintenant = new Date(),
+): Pastille[] {
+  const s = stages.find((x) => x.id === deal.stage_id);
+  if (!s || s.kind !== 'open') return [];
+
+  const out: Pastille[] = [];
+  const jours = Math.floor(
+    (maintenant.getTime() - new Date(deal.last_activity_at).getTime()) / 86_400_000,
+  );
+
+  // 1. Jamais contacté : le pire cas, parce que le client attend une réponse
+  //    qu'il n'a jamais eue. Passe avant « dort », qui en est la conséquence.
+  if (!deal.first_contacted_at && jours >= 1) {
+    out.push({ cle: 'jamais_contacte', fr: 'Jamais contacté', en: 'Never contacted', ton: 'danger' });
+  }
+
+  // 2. Personne ne l'a pris. Un lead sans propriétaire n'est relancé par
+  //    personne — c'est une fuite silencieuse.
+  if (!deal.assigned_user_id) {
+    out.push({ cle: 'non_assigne', fr: 'Non assigné', en: 'Unassigned', ton: 'warning' });
+  }
+
+  // 3. Dort depuis deux semaines.
+  if (jours >= 14) {
+    out.push({ cle: 'dort', fr: `Dort ${jours} j`, en: `Stale ${jours}d`, ton: 'danger' });
+  } else if (jours >= 5) {
+    out.push({ cle: 'a_relancer', fr: 'À relancer', en: 'Follow up', ton: 'warning' });
+  }
+
+  // 4. Gros montant — informatif, jamais alarmant : un gros deal récent et
+  //    bien suivi n'a aucun problème.
+  if ((montantCents ?? 0) >= SEUIL_GROS_CENTS) {
+    out.push({ cle: 'gros', fr: 'Gros job', en: 'High value', ton: 'info' });
+  }
+
+  return out.slice(0, 2);
+}
+
+// ── Partage d'un pipeline ───────────────────────────────────
+//
+// AUCUNE ligne = le pipeline est visible de toute l'organisation, ce qui est
+// l'état par défaut et celui de toutes les organisations existantes. Dès
+// qu'une ligne apparaît, il devient réservé aux membres nommés — plus les
+// administrateurs, qui voient toujours tout.
+
+export interface AccesPipeline {
+  id: string;
+  user_id: string;
+}
+
+export async function fetchAccesPipeline(pipelineId: string): Promise<AccesPipeline[]> {
+  const { data, error } = await supabase
+    .from('pipeline_acces')
+    .select('id,user_id')
+    .eq('pipeline_id', pipelineId);
+  if (error) throw error;
+  return (data ?? []) as AccesPipeline[];
+}
+
+/**
+ * Donne accès à un membre.
+ *
+ * Le premier appel sur un pipeline le FERME : il passe de « visible de tous »
+ * à « réservé aux nommés ». L'écran doit le dire avant, pas après.
+ */
+export async function donnerAccesPipeline(pipelineId: string, userId: string): Promise<void> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { error } = await supabase
+    .from('pipeline_acces')
+    .insert({ org_id: orgId, pipeline_id: pipelineId, user_id: userId });
+  // 23505 = ce membre a déjà accès : ce n'est pas une erreur à montrer.
+  if (error && (error as { code?: string }).code !== '23505') throw error;
+}
+
+export async function retirerAccesPipeline(accesId: string): Promise<void> {
+  const { error } = await supabase.from('pipeline_acces').delete().eq('id', accesId);
+  if (error) throw error;
+}
+
+/**
+ * Rouvre le pipeline à toute l'organisation, en supprimant tout partage.
+ *
+ * Retirer les accès un par un aboutirait au même résultat, mais laisserait
+ * croire qu'on restreint de plus en plus alors qu'on rouvre d'un coup à la
+ * dernière suppression. Un geste explicite vaut mieux qu'un effet de bord.
+ */
+export async function rouvrirPipeline(pipelineId: string): Promise<void> {
+  const { error } = await supabase.from('pipeline_acces').delete().eq('pipeline_id', pipelineId);
+  if (error) throw error;
+}
