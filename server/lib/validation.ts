@@ -11,6 +11,7 @@ import {
   DELAI_NEGATIF_MAX_SECONDES,
   ACTIONS_MAX,
 } from '../../src/lib/automationCatalogue';
+import { problemesDuGraphe, type Etape } from './automationSequences';
 
 // ─── Middleware factory ───────────────────────────────────────────────────────
 
@@ -833,6 +834,67 @@ const conditionsAutomatisation = z
   )
   .refine((c) => Object.keys(c).length <= 10, 'Too many conditions (10 max).');
 
+/**
+ * Une ÉTAPE de séquence.
+ *
+ * Quatre formes, distinguées par `type`. Un `discriminatedUnion` plutôt qu'un
+ * `union` : le message d'erreur nomme alors la forme attendue (« une étape
+ * “attendre” a besoin d'un délai ») au lieu d'énumérer les quatre.
+ */
+const ID_ETAPE = z.string().trim().min(1).max(40).regex(/^[a-zA-Z0-9_-]+$/, 'Invalid step id.');
+
+const etapeSequence = z.discriminatedUnion('type', [
+  z.object({
+    id: ID_ETAPE,
+    type: z.literal('action'),
+    action: actionAutomatisation,
+    suivant: ID_ETAPE.nullable().optional(),
+  }),
+  z.object({
+    id: ID_ETAPE,
+    type: z.literal('attendre'),
+    delai_secondes: z
+      .number()
+      .int()
+      .min(0, 'A wait cannot be negative.')
+      .max(DELAI_MAX_SECONDES, 'Cannot wait more than a year.'),
+    suivant: ID_ETAPE.nullable().optional(),
+  }),
+  z.object({
+    id: ID_ETAPE,
+    type: z.literal('si'),
+    conditions: conditionsAutomatisation,
+    alors: ID_ETAPE.nullable().optional(),
+    sinon: ID_ETAPE.nullable().optional(),
+  }),
+  z.object({
+    id: ID_ETAPE,
+    type: z.literal('arreter'),
+  }),
+]);
+
+/**
+ * La séquence entière.
+ *
+ * `problemesDuGraphe` fait le travail que Zod ne peut pas faire : vérifier
+ * que les renvois pointent vers des étapes qui existent et surtout qu'il
+ * n'y a PAS DE BOUCLE. Un graphe accepte ce qu'un tableau interdit —
+ * `e1 → e2 → e1` enverrait des messages jusqu'à la fin des temps. Le refuser
+ * ici est la première des trois protections (les deux autres bornent le
+ * parcours à l'exécution).
+ */
+const ETAPES_MAX = 20;
+
+export const sequenceEtapes = z
+  .array(etapeSequence)
+  .min(1, 'A sequence needs at least one step.')
+  .max(ETAPES_MAX, `A sequence carries at most ${ETAPES_MAX} steps.`)
+  .superRefine((steps, ctx) => {
+    for (const probleme of problemesDuGraphe(steps as unknown as Etape[])) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: probleme });
+    }
+  });
+
 const corpsAutomatisation = z.object({
   name: z.string().trim().min(1, 'Name is required.').max(120),
   description: z.string().trim().max(500).optional().nullable(),
@@ -846,14 +908,47 @@ const corpsAutomatisation = z.object({
     .int('The delay must be a whole number of seconds.')
     .min(-DELAI_NEGATIF_MAX_SECONDES, 'Cannot send more than 30 days before.')
     .max(DELAI_MAX_SECONDES, 'Cannot wait more than a year.'),
+  // Le plafond de 5 vaut pour une règle SIMPLE, où les actions partent
+  // ensemble : au-delà, le client reçoit une rafale. Dans une séquence elles
+  // sont réparties dans le temps, et `actions` n'y est qu'un reflet des
+  // étapes (le moteur lit `steps`). Le vrai plafond y est celui des étapes,
+  // vérifié par `sequenceEtapes`. La borne haute reste, pour qu'un corps
+  // forgé ne puisse pas envoyer une liste sans fin.
   actions: z
     .array(actionAutomatisation)
     .min(1, 'Add at least one action.')
-    .max(ACTIONS_MAX, `An automation carries at most ${ACTIONS_MAX} actions.`),
+    .max(20, 'Too many actions.'),
   is_active: z.boolean().optional().default(false),
+  /**
+   * Séquence. Absente = règle simple, pilotée par `delay_seconds` + `actions`
+   * comme avant. Les deux formes coexistent : les 35 préréglages restent
+   * simples et ne sont pas convertis.
+   */
+  steps: sequenceEtapes.nullable().optional(),
 });
 
-export const automationRuleCreateSchema = corpsAutomatisation;
+/**
+ * Le plafond d'actions dépend de la forme.
+ *
+ * Sans séquence, 5 au plus : elles partent TOUTES en même temps, et davantage
+ * ferait une rafale chez le client. Dans une séquence elles sont réparties
+ * dans le temps et `actions` n'est qu'un reflet des étapes — le vrai plafond
+ * y est celui des étapes.
+ *
+ * Écrit comme un raffinement SÉPARÉ : `.partial()` (utilisé juste en dessous
+ * pour la modification) refuse un objet qui porte déjà un raffinement.
+ */
+const plafondActions = (corps: { steps?: unknown; actions?: unknown[] }, ctx: z.RefinementCtx) => {
+  if (!corps.steps && Array.isArray(corps.actions) && corps.actions.length > ACTIONS_MAX) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['actions'],
+      message: `An automation carries at most ${ACTIONS_MAX} actions.`,
+    });
+  }
+};
+
+export const automationRuleCreateSchema = corpsAutomatisation.superRefine(plafondActions);
 
 /**
  * La modification accepte un sous-ensemble, mais jamais un objet vide.
@@ -867,4 +962,4 @@ export const automationRuleCreateSchema = corpsAutomatisation;
 export const automationRuleUpdateSchema = z
   .record(z.string(), z.unknown())
   .refine((o) => Object.keys(o).length > 0, 'Nothing to update.')
-  .pipe(corpsAutomatisation.partial());
+  .pipe(corpsAutomatisation.partial().superRefine(plafondActions));

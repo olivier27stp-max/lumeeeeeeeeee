@@ -19,6 +19,11 @@ export interface AutomationRule {
   conditions: Record<string, any>;
   delay_seconds: number;
   actions: Array<{ type: string; config: Record<string, any> }>;
+  /**
+   * Étapes d'une SÉQUENCE (null = règle simple, pilotée par `delay_seconds`
+   * + `actions`). Forme décrite dans src/lib/sequenceTypes.ts.
+   */
+  steps?: unknown[] | null;
   is_active: boolean;
   is_preset: boolean;
   preset_key: string | null;

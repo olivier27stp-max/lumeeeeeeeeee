@@ -22,7 +22,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useEffect, useId, useMemo, useState } from 'react';
-import { Loader2, Plus, Trash2, Zap, Clock, Send, AlertTriangle } from 'lucide-react';
+import { Loader2, Plus, Trash2, Zap, Clock, Send, AlertTriangle, GitBranch, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import type { AutomationRule } from '../../lib/automationRulesApi';
@@ -36,6 +36,15 @@ import {
   type UniteDelai,
 } from '../../lib/automationBuilderApi';
 import { VARIABLES_PROPOSEES, variablesInconnues } from '../../lib/emailBodyText';
+import SequenceCanvas from './SequenceCanvas';
+import {
+  type Etape,
+  type TypeEtape,
+  nouvelIdEtape,
+  etapeVierge,
+  insererEtape,
+  retirerEtape,
+} from '../../lib/sequenceTypes';
 
 interface Props {
   /** Règle à modifier ; absente pour une création. */
@@ -87,6 +96,17 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
 
   const [enregistre, setEnregistre] = useState(false);
 
+  // ── Mode séquence ──
+  // Une règle existante avec des étapes s'ouvre en séquence ; une règle
+  // simple s'ouvre en simple. Le choix reste celui de l'utilisateur ensuite.
+  const [mode, setMode] = useState<'simple' | 'sequence'>(
+    Array.isArray(regle?.steps) && regle!.steps!.length > 0 ? 'sequence' : 'simple',
+  );
+  const [steps, setSteps] = useState<Etape[]>((regle?.steps as Etape[] | undefined) ?? []);
+  const [etapeChoisie, setEtapeChoisie] = useState<string | null>(null);
+  /** Où insérer la prochaine étape, tant que son type n'est pas choisi. */
+  const [typeAAjouter, setTypeAAjouter] = useState<{ apresId: string | null; branche?: 'alors' | 'sinon' } | null>(null);
+
   const declencheurChoisi = useMemo(
     () => catalogue.declencheurs.find((d) => d.cle === declencheur),
     [catalogue.declencheurs, declencheur],
@@ -115,6 +135,26 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
     majAction(index, { type, config: texte ? { body: texte } : {} });
   };
 
+  /**
+   * Ajoute une étape au parcours.
+   *
+   * On demande d'abord QUOI ajouter — un message, une attente, une
+   * condition — parce qu'insérer une carte vide puis choisir son type fait
+   * un aller-retour de plus pour rien.
+   */
+  const ajouterEtape = (apresId: string | null, branche?: 'alors' | 'sinon') => {
+    setTypeAAjouter({ apresId, branche });
+  };
+
+  /** Type demandé, une fois choisi dans le petit menu. */
+  const confirmerAjout = (type: TypeEtape) => {
+    if (!typeAAjouter) return;
+    const nouvelle = etapeVierge(type, nouvelIdEtape(steps));
+    setSteps((prev) => insererEtape(prev, nouvelle, typeAAjouter.apresId, typeAAjouter.branche));
+    setEtapeChoisie(nouvelle.id);
+    setTypeAAjouter(null);
+  };
+
   const secondes = (() => {
     const n = Number(delaiValeur);
     if (!Number.isFinite(n) || n < 0) return 0;
@@ -126,6 +166,16 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
     const out: string[] = [];
     if (!nom.trim()) out.push(fr ? 'Donnez un nom à votre automatisation.' : 'Name your automation.');
     if (!declencheur) out.push(fr ? 'Choisissez ce qui la déclenche.' : 'Pick what triggers it.');
+    if (mode === 'sequence') {
+      if (!steps.length) out.push(fr ? 'Ajoutez au moins une étape.' : 'Add at least one step.');
+      const vides = steps.filter(
+        (e) => e.type === 'action' && !String(e.action?.config?.body ?? e.action?.config?.title ?? '').trim(),
+      );
+      if (vides.length) {
+        out.push(fr ? `${vides.length} étape(s) sans texte.` : `${vides.length} step(s) with no text.`);
+      }
+      return out;
+    }
     if (!actions.length) out.push(fr ? 'Ajoutez au moins une action.' : 'Add at least one action.');
 
     actions.forEach((action, i) => {
@@ -143,7 +193,7 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
       }
     });
     return out;
-  }, [nom, declencheur, actions, catalogue.actions, fr]);
+  }, [nom, declencheur, actions, catalogue.actions, fr, mode, steps]);
 
   /**
    * Les variables écrites à la main qui n'existent pas.
@@ -173,8 +223,25 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
         name: nom.trim(),
         description: description.trim() || null,
         trigger_event: declencheur,
-        delay_seconds: secondes,
-        actions: actions.map((a) => ({
+        // En mode séquence, le délai de tête n'a plus de sens : ce sont les
+        // étapes « attendre » qui portent le temps. On l'envoie à 0 pour que
+        // le moteur ne double pas l'attente.
+        delay_seconds: mode === 'sequence' ? 0 : secondes,
+        steps: mode === 'sequence' ? steps : null,
+        // En SÉQUENCE, `actions` est DÉRIVÉ des étapes — ce ne sont pas deux
+        // listes concurrentes. Deux raisons :
+        //   · le serveur exige au moins une action valide, et celle du mode
+        //     simple resterait vide (l'enregistrement échouait ici) ;
+        //   · la liste des automatisations lit `actions` pour afficher les
+        //     canaux (Texto, Courriel…) : sans ça, une séquence s'afficherait
+        //     sans aucun canal.
+        // Le moteur, lui, ne lit QUE `steps` dès qu'elles existent.
+        actions: (mode === 'sequence'
+          ? steps
+              .filter((e): e is Extract<Etape, { type: 'action' }> => e.type === 'action')
+              .map((e) => e.action)
+          : actions
+        ).map((a) => ({
           type: a.type,
           // Les champs vides sont retirés : le serveur refuse une clé qui
           // n'appartient pas à l'action, et un champ facultatif laissé vide
@@ -236,6 +303,34 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
         />
       </div>
 
+      {/* ── Simple ou séquence ──
+          Deux formes du même objet : une suite d'actions après un délai, ou
+          un parcours avec des attentes et des branches. On ne force personne
+          au canevas pour une relance à trois jours. */}
+      <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label={fr ? 'Type d’automatisation' : 'Automation type'}>
+        {(['simple', 'sequence'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            aria-pressed={mode === m}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              mode === m ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary',
+            )}
+          >
+            {m === 'simple'
+              ? (fr ? 'Simple' : 'Simple')
+              : (fr ? 'Séquence' : 'Sequence')}
+          </button>
+        ))}
+      </div>
+      <p className="-mt-3 text-xs text-text-secondary">
+        {mode === 'simple'
+          ? (fr ? 'Un délai, puis une ou plusieurs actions.' : 'One delay, then one or more actions.')
+          : (fr ? 'Un parcours : des attentes, des messages, et des branches « si ».' : 'A path: waits, messages, and “if” branches.')}
+      </p>
+
       {/* ── Quand ── */}
       <section className="rounded-xl border border-border bg-surface-secondary p-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary mb-3">
@@ -275,7 +370,9 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
         )}
       </section>
 
-      {/* ── Attendre ── */}
+      {/* ── Attendre (mode simple seulement : en séquence, ce sont les
+          étapes « attendre » qui portent le temps) ── */}
+      {mode === 'simple' && (
       <section className="rounded-xl border border-border bg-surface-secondary p-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary mb-3">
           <Clock className="w-4 h-4 text-accent" aria-hidden="true" />
@@ -329,8 +426,75 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
             : 'A text is never sent between 8 p.m. and 8 a.m.: it waits for morning.'}
         </p>
       </section>
+      )}
 
-      {/* ── Faire ── */}
+      {/* ── Le parcours, en canevas ── */}
+      {mode === 'sequence' && (
+        <section className="rounded-xl border border-border bg-surface-secondary p-4">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+            <GitBranch className="h-4 w-4 text-accent" aria-hidden="true" />
+            {fr ? 'Le parcours' : 'The path'}
+          </h3>
+          <SequenceCanvas
+            declencheurLabel={declencheurChoisi ? (fr ? declencheurChoisi.fr : declencheurChoisi.en) : (fr ? '— à choisir —' : '— to pick —')}
+            steps={steps}
+            fr={fr}
+            selectionId={etapeChoisie}
+            onSelection={setEtapeChoisie}
+            onAjouter={ajouterEtape}
+          />
+          {/* Quoi ajouter ? Demandé AVANT d'insérer, pour ne pas poser une
+              carte vide qu'il faudrait ensuite typer. */}
+          {typeAAjouter && (
+            <div className="mt-3 rounded-lg border border-border bg-surface-primary p-3">
+              <p className="mb-2 text-xs font-medium text-text-primary">
+                {fr ? 'Ajouter…' : 'Add…'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ['action', fr ? 'Un message' : 'A message'],
+                  ['attendre', fr ? 'Une attente' : 'A wait'],
+                  ['si', fr ? 'Une condition' : 'A condition'],
+                  ['arreter', fr ? 'Arrêter ici' : 'Stop here'],
+                ] as Array<[TypeEtape, string]>).map(([t, libelle]) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => confirmerAjout(t)}
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs text-text-primary transition-colors hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    {libelle}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setTypeAAjouter(null)}
+                  className="rounded-lg px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  {fr ? 'Annuler' : 'Cancel'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {etapeChoisie && steps.some((e) => e.id === etapeChoisie) && (
+            <EditeurEtape
+              etape={steps.find((e) => e.id === etapeChoisie) as Etape}
+              catalogue={catalogue}
+              fr={fr}
+              onChange={(maj: Etape) => setSteps((prev) => prev.map((e) => (e.id === maj.id ? maj : e)))}
+              onRetirer={() => {
+                setSteps((prev) => retirerEtape(prev, etapeChoisie));
+                setEtapeChoisie(null);
+              }}
+              onFermer={() => setEtapeChoisie(null)}
+            />
+          )}
+        </section>
+      )}
+
+      {/* ── Faire (mode simple) ── */}
+      {mode === 'simple' && (
       <section className="rounded-xl border border-border bg-surface-secondary p-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary mb-3">
           <Send className="w-4 h-4 text-accent" aria-hidden="true" />
@@ -439,6 +603,7 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
           {fr ? 'Ajouter une action' : 'Add an action'}
         </button>
       </section>
+      )}
 
       {/* ── Ce qui cloche ── */}
       {variablesDouteuses.length > 0 && (
@@ -482,6 +647,182 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
             : (fr ? 'Créer l\'automatisation' : 'Create automation')}
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   L'éditeur de l'étape sélectionnée
+
+   S'ouvre sous le canevas plutôt qu'en modale : on garde le parcours sous
+   les yeux pendant qu'on écrit le message, et on voit tout de suite où
+   l'étape se situe.
+   ═══════════════════════════════════════════════════════════════ */
+
+function EditeurEtape({
+  etape, catalogue, fr, onChange, onRetirer, onFermer,
+}: {
+  etape: Etape;
+  catalogue: CatalogueAutomatisations;
+  fr: boolean;
+  onChange: (maj: Etape) => void;
+  onRetirer: () => void;
+  onFermer: () => void;
+}) {
+  const ids = useId();
+
+  return (
+    <div className="mt-4 rounded-lg border border-accent/40 bg-surface-primary p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold text-text-primary">
+          {fr ? 'Cette étape' : 'This step'}
+        </h4>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onRetirer}
+            aria-label={fr ? 'Retirer cette étape' : 'Remove this step'}
+            className="rounded-md p-1.5 text-text-tertiary transition-colors hover:text-red-500 hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={onFermer}
+            aria-label={fr ? 'Fermer' : 'Close'}
+            className="rounded-md p-1.5 text-text-tertiary transition-colors hover:text-text-primary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Une attente ── */}
+      {etape.type === 'attendre' && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor={`${ids}-attente`} className="text-xs text-text-secondary">
+            {fr ? 'Attendre' : 'Wait'}
+          </label>
+          <input
+            id={`${ids}-attente`}
+            type="number"
+            min={0}
+            value={Math.round((etape.delai_secondes || 0) / 86400) || ''}
+            onChange={(e) => onChange({ ...etape, delai_secondes: Math.max(0, Number(e.target.value) || 0) * 86400 })}
+            className="w-20 rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          />
+          <span className="text-xs text-text-secondary">{fr ? 'jour(s)' : 'day(s)'}</span>
+        </div>
+      )}
+
+      {/* ── Une condition ──
+          Une liste de cas courants, pas un éditeur d'expressions : « la
+          soumission est toujours sans réponse » est ce qu'un entrepreneur
+          veut dire, et ça se traduit en `{status: {eq: 'sent'}}` pour le
+          moteur. Un champ libre laisserait écrire des conditions que le
+          moteur refuse en silence. */}
+      {etape.type === 'si' && (
+        <div>
+          <label htmlFor={`${ids}-cond`} className="mb-1 block text-xs font-medium text-text-primary">
+            {fr ? 'Continuer seulement si…' : 'Continue only if…'}
+          </label>
+          <select
+            id={`${ids}-cond`}
+            value={String(((etape.conditions as Record<string, { eq?: unknown }>)?.status?.eq) ?? '')}
+            onChange={(e) =>
+              onChange({
+                ...etape,
+                conditions: e.target.value ? { status: { eq: e.target.value } } : {},
+              })
+            }
+            className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <option value="">{fr ? '— toujours continuer —' : '— always continue —'}</option>
+            <option value="sent">{fr ? 'la soumission est toujours sans réponse' : 'the quote is still unanswered'}</option>
+            <option value="approved">{fr ? 'la soumission est acceptée' : 'the quote is approved'}</option>
+            <option value="unpaid">{fr ? 'la facture est toujours impayée' : 'the invoice is still unpaid'}</option>
+            <option value="paid">{fr ? 'la facture est payée' : 'the invoice is paid'}</option>
+          </select>
+          <p className="mt-2 text-xs text-text-secondary">
+            {fr
+              ? 'Vérifié au moment où on arrive à cette étape, pas au déclenchement.'
+              : 'Checked when this step is reached, not at trigger time.'}
+          </p>
+        </div>
+      )}
+
+      {/* ── Un message ── */}
+      {etape.type === 'action' && (
+        <div className="space-y-3">
+          <div>
+            <label htmlFor={`${ids}-type`} className="sr-only">{fr ? 'Type de message' : 'Message type'}</label>
+            <select
+              id={`${ids}-type`}
+              value={etape.action.type}
+              onChange={(e) => {
+                const texte = etape.action.config.body ?? '';
+                onChange({ ...etape, action: { type: e.target.value, config: texte ? { body: texte } : {} } });
+              }}
+              className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {catalogue.actions.map((a) => (
+                <option key={a.cle} value={a.cle}>{fr ? a.fr : a.en}</option>
+              ))}
+            </select>
+          </div>
+
+          {catalogue.actions.find((a) => a.cle === etape.action.type)?.champs.map((champ) => (
+            <div key={champ.cle}>
+              <label htmlFor={`${ids}-${champ.cle}`} className="mb-1 block text-xs font-medium text-text-primary">
+                {fr ? champ.fr : champ.en}
+              </label>
+              {champ.multiligne ? (
+                <textarea
+                  id={`${ids}-${champ.cle}`}
+                  rows={3}
+                  maxLength={champ.max}
+                  value={etape.action.config[champ.cle] ?? ''}
+                  onChange={(e) => onChange({ ...etape, action: { ...etape.action, config: { ...etape.action.config, [champ.cle]: e.target.value } } })}
+                  className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                />
+              ) : (
+                <input
+                  id={`${ids}-${champ.cle}`}
+                  type="text"
+                  maxLength={champ.max}
+                  value={etape.action.config[champ.cle] ?? ''}
+                  onChange={(e) => onChange({ ...etape, action: { ...etape.action, config: { ...etape.action.config, [champ.cle]: e.target.value } } })}
+                  className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                />
+              )}
+            </div>
+          ))}
+
+          <div className="flex flex-wrap gap-1.5">
+            {VARIABLES_PROPOSEES.map((v) => (
+              <button
+                key={v.cle}
+                type="button"
+                onClick={() =>
+                  onChange({
+                    ...etape,
+                    action: { ...etape.action, config: { ...etape.action.config, body: `${etape.action.config.body ?? ''}[${v.cle}]` } },
+                  })
+                }
+                className="rounded-md bg-surface-tertiary px-2 py-1 text-[11px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                {fr ? v.fr : v.en}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {etape.type === 'arreter' && (
+        <p className="text-xs text-text-secondary">
+          {fr ? 'La séquence s’arrête ici. Rien de plus n’est envoyé.' : 'The sequence stops here. Nothing more is sent.'}
+        </p>
+      )}
     </div>
   );
 }

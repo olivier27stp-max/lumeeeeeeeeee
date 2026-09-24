@@ -29,6 +29,8 @@ export interface BrouillonAutomatisation {
   conditions?: Record<string, unknown>;
   delay_seconds: number;
   actions: ActionAutomatisation[];
+  /** Séquence. Absente = règle simple. */
+  steps?: unknown[] | null;
   is_active?: boolean;
 }
 

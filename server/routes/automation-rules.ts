@@ -41,7 +41,7 @@ import {
 const router = Router();
 
 /** Colonnes renvoyées au navigateur. `org_id` n'a aucun intérêt côté client. */
-const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, is_active, is_preset, preset_key, created_at, updated_at';
+const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, is_active, is_preset, preset_key, created_at, updated_at';
 
 /**
  * Les gardes qui ont besoin du catalogue, donc impossibles à exprimer en Zod
@@ -133,6 +133,9 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
       conditions: req.body.conditions ?? {},
       delay_seconds: req.body.delay_seconds,
       actions: req.body.actions,
+      // `steps` non fourni = règle simple : la colonne reste NULL et le moteur
+      // garde exactement le comportement d'avant.
+      steps: req.body.steps ?? null,
       // Une automatisation naît en pause : elle écrit aux clients, personne ne
       // doit en démarrer une par accident en fermant le formulaire.
       is_active: req.body.is_active ?? false,
@@ -219,7 +222,7 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
 
   const { data: source, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('name, description, trigger_event, conditions, delay_seconds, actions')
+    .select('name, description, trigger_event, conditions, delay_seconds, actions, steps')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .maybeSingle();
@@ -240,6 +243,7 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
       conditions: source.conditions ?? {},
       delay_seconds: source.delay_seconds,
       actions: source.actions,
+      steps: source.steps ?? null,
       // La copie d'un préréglage devient une automatisation À SOI : plus de
       // `preset_key`, donc le seeder ne la réécrira jamais, et tout y est
       // modifiable — y compris le déclencheur.
