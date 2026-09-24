@@ -38,7 +38,7 @@ import {
   type Deal, type ModeCouleur, type PipelineStage, type VueSauvegardee,
 } from '../../lib/pipelineVentesApi';
 import {
-  LIBELLE_SOURCE, initiales, rangsOuverts, visuelEtape,
+  initiales, rangsOuverts, visuelEtape, libelleSource,
 } from '../../lib/pipeline/presentation';
 import type { DealSource, MockStage } from '../../lib/pipeline/mockData';
 import { useChampsCreation } from '../champs/creation';
@@ -62,13 +62,6 @@ function pourVisuel(e: PipelineStage): MockStage {
     kind: e.kind,
     archivedAt: e.archived_at,
   };
-}
-
-/** `deals.source` est du texte libre en base : un canal inconnu s'affiche tel quel. */
-function libelleSource(source: string, fr: boolean): string {
-  const connu = LIBELLE_SOURCE[source as DealSource];
-  if (!connu) return source;
-  return fr ? connu.fr : connu.en;
 }
 
 // Couleurs sémantiques de Lume (src/index.css) : rouge pour ce qui presse,
@@ -402,7 +395,13 @@ function Colonne({
         </div>
         <p className={`mt-1 flex gap-2 text-[11.5px] text-text-secondary ${modeCouleur === 'none' ? '' : 'pl-4'}`}>
           <span className="tabular-nums">
-            {deals.length} {fr ? (deals.length > 1 ? 'deals' : 'deal') : (deals.length > 1 ? 'deals' : 'deal')}
+            {/*
+              `{n} {mot}` : l'espace entre les accolades est du JSX
+              significatif, qu'un formateur peut manger. On assemble donc la
+              chaîne — « 3deals » restait lisible pour un développeur, pas
+              pour un client (QA 2026-09-24, P1-7).
+            */}
+            {`${deals.length} ${deals.length > 1 ? 'deals' : 'deal'}`}
           </span>
           <b
             className="font-semibold tabular-nums text-text-primary"

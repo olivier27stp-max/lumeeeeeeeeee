@@ -988,6 +988,17 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      // Jobber « Visit completed date » : une visite complétée n'est plus « planifiée » dans le calendrier.
+      field: 'completed_date',
+      labelFr: 'Date de complétion',
+      labelEn: 'Completed date',
+      types: ['date', 'datetime', 'text'],
+      synonyms: [
+        'visit completed date', 'completed date', 'completed on', 'done on', 'date completed', 'completion date',
+        'date de completion', 'date de complétion', 'complete le', 'complétée le', 'terminee le', 'terminée le',
+      ],
+    },
+    {
       field: 'assigned_to',
       labelFr: 'Assigné à',
       labelEn: 'Assigned to',

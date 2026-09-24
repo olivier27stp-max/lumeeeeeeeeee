@@ -301,7 +301,7 @@ export interface NormalizedRecord {
 }
 
 const MONEY_FIELDS = new Set(['total', 'subtotal', 'tax', 'discount', 'price', 'cost', 'amount', 'paid_amount', 'balance', 'unit_price', 'line_total']);
-const DATE_FIELDS = new Set(['created_date', 'sale_date', 'start_date', 'end_date', 'issued_date', 'due_date', 'paid_date', 'valid_until', 'date']);
+const DATE_FIELDS = new Set(['created_date', 'sale_date', 'start_date', 'end_date', 'issued_date', 'due_date', 'paid_date', 'valid_until', 'date', 'completed_date']);
 const DATETIME_FIELDS = new Set(['start_at', 'end_at']);
 const RELATION_FIELDS = new Set(['client_ref', 'client_email_ref', 'client_name_ref', 'client_phone_ref', 'property_ref', 'job_ref', 'invoice_ref']);
 const PERCENT_FIELDS = new Set(['rate']);

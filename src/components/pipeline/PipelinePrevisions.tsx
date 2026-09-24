@@ -18,6 +18,7 @@
 import { useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import PipelineStats from './PipelineStats';
+import { libelleSource } from '../../lib/pipeline/presentation';
 import { useTranslation } from '../../i18n';
 import {
   fetchARisque, fetchChronologie, fetchPrevisions, fetchPrevisionsGroupees,
@@ -86,7 +87,7 @@ const TEINTE_RISQUE: Record<RisqueRow['niveau'], string> = {
  * une barre par ligne mise à son propre maximum donnerait six barres pleines
  * et ne comparerait plus rien.
  */
-function BarresGroupes({ lignes, fr }: { lignes: LigneGroupe[]; fr: boolean }) {
+function BarresGroupes({ lignes, fr, axe }: { lignes: LigneGroupe[]; fr: boolean; axe: AxeGroupe }) {
   const max = Math.max(...lignes.map((l) => l.total_cents), 1);
 
   return (
@@ -96,8 +97,8 @@ function BarresGroupes({ lignes, fr }: { lignes: LigneGroupe[]; fr: boolean }) {
         const partOuvert = (l.potentiel_cents / max) * 100;
         return (
           <div key={l.cle} className="flex items-center gap-3">
-            <span className="w-[120px] shrink-0 truncate text-[11.5px] text-text-secondary" title={l.libelle}>
-              {l.libelle}
+            <span className="w-[120px] shrink-0 truncate text-[11.5px] text-text-secondary" title={axe === 'source' ? libelleSource(l.libelle, fr) : l.libelle}>
+              {axe === 'source' ? libelleSource(l.libelle, fr) : l.libelle}
             </span>
             {/*
               La barre est décorative : le tableau juste en dessous porte les
@@ -191,6 +192,15 @@ export default function PipelinePrevisions({ pipelines, pipelineActif, onOuvrirD
   const risques = risqueQ.data ?? [];
   const chrono = useMemo(() => chronoQ.data ?? [], [chronoQ.data]);
   const groupes = useMemo(() => groupesQ.data ?? [], [groupesQ.data]);
+
+  /**
+   * Le libellé d'une ligne. Groupé par source, la base rend la CLÉ
+   * (`form_web`) : c'est ici qu'on la traduit. Par étape ou par vendeur,
+   * elle rend déjà un nom lisible qu'il ne faut surtout pas retoucher.
+   */
+  const libelleLigne = (l: LigneGroupe): string =>
+    (axe === 'source' ? libelleSource(l.libelle, fr) : l.libelle);
+
 
   const LIBELLE_RISQUE: Record<RisqueRow['niveau'], { titre: string; detail: string }> = {
     haut: {
@@ -359,7 +369,7 @@ export default function PipelinePrevisions({ pipelines, pipelineActif, onOuvrirD
 
             {groupes.length > 0 && (
               <>
-                <BarresGroupes lignes={groupes} fr={fr} />
+                <BarresGroupes lignes={groupes} fr={fr} axe={axe} />
 
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-[12.5px]">
@@ -380,7 +390,7 @@ export default function PipelinePrevisions({ pipelines, pipelineActif, onOuvrirD
                     <tbody className="divide-y divide-border-subtle">
                       {groupes.map((g) => (
                         <tr key={g.cle}>
-                          <td className="py-2 pr-3 text-text-primary">{g.libelle}</td>
+                          <td className="py-2 pr-3 text-text-primary">{libelleLigne(g)}</td>
                           <td className="py-2 px-3 text-right tabular-nums text-text-secondary">{g.nb}</td>
                           <td className="py-2 px-3 text-right tabular-nums text-text-secondary">{argent(g.potentiel_cents, fr)}</td>
                           <td className="py-2 px-3 text-right tabular-nums text-text-primary">{argent(g.attendu_cents, fr)}</td>

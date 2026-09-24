@@ -767,7 +767,13 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         // Plan de service récurrent (fichier déposé sous « Plans récurrents ») : job_type = recurring,
         // la cadence exportée reste lisible dans les notes.
         job_type: str(n.job_type) === 'recurring' ? 'recurring' : 'one_off',
-        status: mapJobStatus(str(n.status)),
+        // Sans colonne de statut (export « One-off jobs » Jobber), une date de fermeture fait foi :
+        // 858 jobs terminés arrivaient « planifiés » chez Vision Lavage (2026-09-24).
+        status: str(n.status) ? mapJobStatus(str(n.status)) : (str(n.end_date) ? 'completed' : 'scheduled'),
+        // contrainte jobs_dates_coherentes : end_at jamais avant le début planifié (Jobber ferme
+        // parfois un job avant sa date prévue) — completed_at, lui, est toujours posé
+        ...(str(n.end_date) ? { completed_at: `${str(n.end_date)}T17:00:00` } : {}),
+        ...(str(n.end_date) && (!startAt || `${str(n.end_date)}T17:00:00` >= startAt) ? { end_at: `${str(n.end_date)}T17:00:00` } : {}),
         total_cents: totalCents,
         subtotal_cents: num(n.subtotal_cents) ?? totalCents,
         sale_date: str(n.sale_date) || str(n.created_date) || null,
@@ -846,7 +852,8 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         end_at: endUtc,
         start_time: startUtc,
         end_time: endUtc,
-        status: mapVisitStatus(str(n.status)),
+        // « Visit completed date » renseignée = visite complétée, même sans colonne de statut.
+        status: str(n.status) ? mapVisitStatus(str(n.status)) : (str(n.completed_date) ? 'completed' : 'scheduled'),
         notes: safeStr(n.notes) || null,
         timezone: 'America/Toronto', // aligné sur DEFAULT_TIMEZONE de scheduleApi
         assigned_user: ctx.staffIdBySource?.get(refKey(str(n.assigned_to))) ?? null,

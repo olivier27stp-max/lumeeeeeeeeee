@@ -156,3 +156,33 @@ describe('détection — export de jobs qui liste ses factures', () => {
     expect(detectCategory('export.csv', ['Invoice #', 'Job #', 'Client name'])).toBe('jobs');
   });
 });
+
+describe('statuts déduits des dates (exports Jobber sans colonne de statut)', () => {
+  const ctx = (): BuildContext => ({ migration: { org_id: 'o' } as any, createdBy: 'u', clientIdByRef: new Map([['a@b.ca', 'c1']]), propertyIdByRef: new Map(), jobIdByRef: new Map([['501', 'job-1']]) });
+  it('job avec « Closed date » → terminé, avec completed_at ; sans → planifié', () => {
+    const rec = (normalized: Record<string, unknown>) => ({ id: 'j', row_number: 1, entity_type: 'job', external_id: null, normalized, relations: { client_email_ref: 'a@b.ca' }, status: 'ready' }) as StagingRow;
+    const fini = buildEntityRow('job', rec({ job_number: '7', end_date: '2026-08-30' }), ctx());
+    expect((fini as any).row.status).toBe('completed');
+    expect((fini as any).row.completed_at).toBe('2026-08-30T17:00:00');
+    const prevu = buildEntityRow('job', rec({ job_number: '8', start_date: '2026-10-15' }), ctx());
+    expect((prevu as any).row.status).toBe('scheduled');
+    const explicite = buildEntityRow('job', rec({ job_number: '9', end_date: '2026-08-30', status: 'Cancelled' }), ctx());
+    expect((explicite as any).row.status).toBe('cancelled');
+  });
+  it('visite avec « Visit completed date » → complétée', () => {
+    const rec = (normalized: Record<string, unknown>) => ({ id: 'v', row_number: 1, entity_type: 'visit', external_id: null, normalized, relations: { job_ref: '501' }, status: 'ready' }) as StagingRow;
+    expect((buildEntityRow('visit', rec({ start_at: '2026-08-30T08:30:00', completed_date: '2026-08-30' }), ctx()) as any).row.status).toBe('completed');
+    expect((buildEntityRow('visit', rec({ start_at: '2026-10-30T08:30:00' }), ctx()) as any).row.status).toBe('scheduled');
+  });
+});
+
+describe('job fermé avant sa date planifiée (contrainte jobs_dates_coherentes)', () => {
+  it('garde completed_at mais n\'écrit pas end_at avant start_at', () => {
+    const ctx: BuildContext = { migration: { org_id: 'o' } as any, createdBy: 'u', clientIdByRef: new Map([['a@b.ca', 'c1']]), propertyIdByRef: new Map(), jobIdByRef: new Map() };
+    const rec = { id: 'j', row_number: 1, entity_type: 'job', external_id: null, normalized: { job_number: '7', start_date: '2026-08-10', end_date: '2026-07-25' }, relations: { client_email_ref: 'a@b.ca' }, status: 'ready' } as StagingRow;
+    const r = buildEntityRow('job', rec, ctx) as any;
+    expect(r.row.status).toBe('completed');
+    expect(r.row.completed_at).toBe('2026-07-25T17:00:00');
+    expect(r.row.end_at).toBeUndefined();
+  });
+});

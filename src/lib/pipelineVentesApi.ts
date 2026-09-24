@@ -597,8 +597,28 @@ export async function assignerDeal(dealId: string, membreId: string | null): Pro
   if (error) throw error;
 }
 
-export async function lierJob(dealId: string, jobId: string): Promise<void> {
-  const { error } = await supabase.from('deals').update({ job_id: jobId }).eq('id', dealId);
+/**
+ * Rattache une job au deal, et le fait passer en « Gagné ».
+ *
+ * LE BUG (QA 2026-09-24, P0-1) : cette fonction n'écrivait que `job_id`. On
+ * choisissait « Gagné » dans la fiche, la job se créait, le message disait
+ * « Job créée et liée au deal » — et le deal restait dans son étape
+ * d'origine. Le commentaire d'appel affirmait pourtant que le modal écrivait
+ * « l'étape ET la job d'un seul geste » ; c'est ce commentaire faux qui a
+ * masqué le défaut.
+ *
+ * `versEtapeId` est optionnel : créer une job depuis un deal encore ouvert
+ * (chemin « Créer une job » de la fiche) ne doit pas le déclarer gagné.
+ */
+export async function lierJob(
+  dealId: string,
+  jobId: string,
+  versEtapeId?: string | null,
+): Promise<void> {
+  const champs: { job_id: string; stage_id?: string } = { job_id: jobId };
+  if (versEtapeId) champs.stage_id = versEtapeId;
+
+  const { error } = await supabase.from('deals').update(champs).eq('id', dealId);
   if (error) throw error;
 }
 
@@ -717,6 +737,44 @@ export async function reordonnerEtapes(ordre: { id: string; position: number }[]
 }
 
 /** Archive une étape. La base refuse si des deals y sont, ou si c'était la dernière de son type. */
+/**
+ * Remet une étape archivée sur le board.
+ *
+ * Elle repart EN DERNIÈRE position parmi les étapes ouvertes : sa place
+ * d'origine a pu être reprise depuis, et réinsérer de force au milieu
+ * décalerait tout le reste sans que personne l'ait demandé. Le client la
+ * remonte ensuite avec les flèches s'il le souhaite.
+ *
+ * Sans cette fonction, archiver était irréversible (QA 2026-09-24, P0-2).
+ */
+export async function desarchiverEtape(stageId: string): Promise<void> {
+  const { data: etape, error: eLecture } = await supabase
+    .from('pipeline_stages')
+    .select('pipeline_id,kind')
+    .eq('id', stageId)
+    .maybeSingle();
+  if (eLecture) throw eLecture;
+  if (!etape) throw new Error('Étape introuvable.');
+
+  // La dernière position occupée du pipeline, archivées comprises : viser
+  // au-delà garantit qu'on n'entre en conflit avec personne.
+  const { data: derniere } = await supabase
+    .from('pipeline_stages')
+    .select('position')
+    .eq('pipeline_id', (etape as { pipeline_id: string }).pipeline_id)
+    .order('position', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const position = ((derniere as { position?: number } | null)?.position ?? 0) + 1;
+
+  const { error } = await supabase
+    .from('pipeline_stages')
+    .update({ archived_at: null, position })
+    .eq('id', stageId);
+  if (error) throw error;
+}
+
 export async function archiverEtape(stageId: string): Promise<void> {
   const { error } = await supabase
     .from('pipeline_stages')
@@ -1052,12 +1110,15 @@ export async function ajouterRaisonProposee(libelle: string): Promise<RaisonPert
     .single();
 
   if (error) {
-    // 23505 = doublon sur l'index unique : le motif existe déjà.
+    // 23505 = doublon : un motif ACTIF porte déjà ce libellé (l'index ignore
+    // désormais les archivés). On rend l'existant, la saisie n'est pas une
+    // erreur à montrer.
     if ((error as { code?: string }).code === '23505') {
       const { data: existant } = await supabase
         .from('pipeline_raisons_perte_liste')
         .select('id,libelle,position')
         .eq('org_id', orgId)
+        .is('archived_at', null)
         .ilike('libelle', propre)
         .maybeSingle();
       return (existant as RaisonPerteProposee) ?? null;
