@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { PageHeader } from '../../components/ui';
 import { confirmer } from '../../components/ui/ConfirmDialog';
 import EmailPreviewEditor from '../../components/automations/EmailPreviewEditor';
+import VisiteGuidee from '../../components/ui/VisiteGuidee';
 import { CATALOGUE_COURRIELS, type EntreeCourriel } from '../../lib/catalogueCourriels';
 import { cn } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
@@ -294,7 +295,7 @@ export default function EmailTemplatesSettings() {
               logo vit dans Paramètres → Entreprise, mais obliger à changer de
               page pour corriger un logo qu'on regarde est une friction
               gratuite. */}
-          <section className="flex items-center gap-4 rounded-xl border border-outline/60 bg-surface p-4">
+          <section data-visite="identite" className="flex items-center gap-4 rounded-xl border border-outline/60 bg-surface p-4">
             <span
               className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-outline/40"
               style={{ background: '#f4f5f7' }}
@@ -360,7 +361,7 @@ export default function EmailTemplatesSettings() {
               Vos courriels
             </h2>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div data-visite="courriels" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {editables.map((entree) => {
                 const modele = parType.get(entree.type as string) ?? null;
                 const titre = entree.titre.fr;
@@ -410,6 +411,7 @@ export default function EmailTemplatesSettings() {
 
             <Link
               to="/automations"
+              data-visite="relances"
               className="flex items-center gap-3 rounded-xl border border-outline/60 bg-surface px-4 py-3.5 hover:bg-surface-secondary"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600" aria-hidden="true">
@@ -431,6 +433,32 @@ export default function EmailTemplatesSettings() {
           </section>
         </div>
       )}
+
+      {/* La visite, une seule fois. Elle ne démarre qu'une fois les données
+          chargées : encadrer des cartes qui n'existent pas encore poserait
+          les bulles sur du vide. */}
+      <VisiteGuidee
+        cle="modeles-courriel"
+        actif={!chargement}
+        etapes={[
+          {
+            cible: '[data-visite="identite"]',
+            titre: 'Votre identité',
+            texte: 'Le logo et la couleur d’ici partent sur vos cinq courriels d’un coup. Sans couleur, le bouton « Payer » sort en noir.',
+            position: 'bas',
+          },
+          {
+            cible: '[data-visite="courriels"]',
+            titre: 'Les cinq que vous modifiez',
+            texte: 'Chaque carte montre son courriel en miniature. « Modifier » ouvre le texte ; le bouton, le montant et vos taxes restent ajoutés par nous.',
+          },
+          {
+            cible: '[data-visite="relances"]',
+            titre: 'Les relances automatiques',
+            texte: 'Elles vivent dans Automatisations, avec leur déclencheur et leur délai. La flèche indique qu’on change de page.',
+          },
+        ]}
+      />
 
       {ouvert ? (
         <EmailPreviewEditor
