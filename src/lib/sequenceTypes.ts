@@ -19,6 +19,15 @@ export interface EtapeAction {
   type: 'action';
   action: { type: string; config: Record<string, string | undefined> };
   suivant?: string | null;
+  /**
+   * Le nom que l'utilisateur donne a cette etape.
+   *
+   * Sans lui, un parcours qui envoie trois courriels affiche trois cartes
+   * « Envoyer un courriel » impossibles a distinguer. C'est le champ
+   * « Action Name » de GoHighLevel, et il ne sert qu'a l'affichage : le
+   * moteur ne le lit jamais.
+   */
+  nom?: string | null;
 }
 
 export interface EtapeAttendre {

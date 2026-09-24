@@ -316,6 +316,7 @@ async function executeRuleActions(
     twilio: config.twilio,
     baseUrl: config.baseUrl,
     langue: await langueOrg(config.supabase, event.orgId),
+    ruleId: rule.id,
   };
 
   for (let i = 0; i < rule.actions.length; i++) {
@@ -1044,6 +1045,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         // passent pas ici et restent exemptes.
         commercial: true,
         langue: await langueOrg(supabase, task.org_id),
+        ruleId: task.automation_rule_id,
       };
 
       const startTime = Date.now();

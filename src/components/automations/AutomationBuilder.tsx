@@ -37,6 +37,8 @@ import {
 } from '../../lib/automationBuilderApi';
 import { VARIABLES_PROPOSEES, variablesInconnues } from '../../lib/emailBodyText';
 import SequenceCanvas from './SequenceCanvas';
+import ChampActionUI from './ChampAction';
+import { champVisible } from '../../lib/automationCatalogue';
 import {
   useChampsTous, objetDuDeclencheur, variablesDesChamps, SelecteurChamp, BoutonsVariablesChamps, ConditionsChampsEtape,
 } from '../champs/automatisations';
@@ -575,58 +577,30 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
                   <p className="text-xs text-text-secondary mb-3">{fr ? modele.aide_fr : modele.aide_en}</p>
                 )}
 
-                {modele?.champs.map((champ) => (
-                  <div key={champ.cle} className="mb-3 last:mb-0">
-                    <label
-                      htmlFor={`${ids}-a${i}-${champ.cle}`}
-                      className="block text-xs font-medium text-text-primary mb-1"
-                    >
-                      {fr ? champ.fr : champ.en}
-                      {!champ.obligatoire && (
-                        <span className="text-text-secondary font-normal"> {fr ? '(facultatif)' : '(optional)'}</span>
-                      )}
-                    </label>
-                    {champ.cle === 'field_id' ? (
-                      <SelecteurChamp
-                        id={`${ids}-a${i}-${champ.cle}`}
-                        champs={champsPerso}
-                        objet={objetRegle}
-                        fr={fr}
+                <div className="space-y-3">
+                  {modele?.champs
+                    .filter((champ) => champVisible(champ, action.config as Record<string, unknown>))
+                    .map((champ) => (
+                      <ChampActionUI
+                        key={champ.cle}
+                        champ={champ}
                         valeur={(action.config as Record<string, string | undefined>)[champ.cle] ?? ''}
                         onChange={(v) => majAction(i, { config: { ...action.config, [champ.cle]: v } })}
-                        className='w-full px-3 py-2 rounded-lg border border-border bg-surface-primary text-text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+                        fr={fr}
                       />
-                    ) : champ.multiligne ? (
-                      <textarea
-                        id={`${ids}-a${i}-${champ.cle}`}
-                        rows={3}
-                        maxLength={champ.max}
-                        value={(action.config as Record<string, string | undefined>)[champ.cle] ?? ''}
-                        onChange={(e) => majAction(i, { config: { ...action.config, [champ.cle]: e.target.value } })}
-                        className="w-full px-3 py-2 rounded-lg border border-border bg-surface-primary text-text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                      />
-                    ) : (
-                      <input
-                        id={`${ids}-a${i}-${champ.cle}`}
-                        type="text"
-                        maxLength={champ.max}
-                        value={(action.config as Record<string, string | undefined>)[champ.cle] ?? ''}
-                        onChange={(e) => majAction(i, { config: { ...action.config, [champ.cle]: e.target.value } })}
-                        className="w-full px-3 py-2 rounded-lg border border-border bg-surface-primary text-text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                      />
-                    )}
-                  </div>
-                ))}
+                    ))}
+                </div>
 
                 {/* Variables : cliquer pour insérer, plutôt que les retenir. */}
-                {modele?.champs.some((c) => c.multiligne) && (
+                {modele?.champs.some((c) => c.type === 'zone') && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {VARIABLES_PROPOSEES.map((v) => (
                       <button
                         key={v.cle}
                         type="button"
                         onClick={() => {
-                          const champ = modele.champs.find((c) => c.multiligne)!;
+                          const champ = modele.champs.find((c) => c.type === 'zone');
+                          if (!champ) return;
                           const actuel = (action.config as Record<string, string | undefined>)[champ.cle] ?? '';
                           majAction(i, { config: { ...action.config, [champ.cle]: `${actuel}[${v.cle}]` } });
                         }}
@@ -636,7 +610,10 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
                       </button>
                     ))}
                     <BoutonsVariablesChamps champs={champsPerso} fr={fr} onInserer={(variable) => {
-                      const champ = modele.champs.find((c) => c.multiligne)!;
+                      // `type === 'zone'` a remplacé `multiligne` : le type
+                      // d'un champ décide maintenant du contrôle affiché.
+                      const champ = modele.champs.find((c) => c.type === 'zone');
+                      if (!champ) return;
                       const actuel = (action.config as Record<string, string | undefined>)[champ.cle] ?? '';
                       majAction(i, { config: { ...action.config, [champ.cle]: `${actuel}[${variable}]` } });
                     }} />
@@ -839,42 +816,18 @@ function EditeurEtape({
             </select>
           </div>
 
-          {catalogue.actions.find((a) => a.cle === etape.action.type)?.champs.map((champ) => (
-            <div key={champ.cle}>
-              <label htmlFor={`${ids}-${champ.cle}`} className="mb-1 block text-xs font-medium text-text-primary">
-                {fr ? champ.fr : champ.en}
-              </label>
-              {champ.cle === 'field_id' ? (
-                <SelecteurChamp
-                  id={`${ids}-${champ.cle}`}
-                  champs={champsPerso}
-                  objet={objetRegle}
-                  fr={fr}
-                  valeur={etape.action.config[champ.cle] ?? ''}
-                  onChange={(v) => onChange({ ...etape, action: { ...etape.action, config: { ...etape.action.config, [champ.cle]: v } } })}
-                  className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                />
-              ) : champ.multiligne ? (
-                <textarea
-                  id={`${ids}-${champ.cle}`}
-                  rows={3}
-                  maxLength={champ.max}
-                  value={etape.action.config[champ.cle] ?? ''}
-                  onChange={(e) => onChange({ ...etape, action: { ...etape.action, config: { ...etape.action.config, [champ.cle]: e.target.value } } })}
-                  className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                />
-              ) : (
-                <input
-                  id={`${ids}-${champ.cle}`}
-                  type="text"
-                  maxLength={champ.max}
-                  value={etape.action.config[champ.cle] ?? ''}
-                  onChange={(e) => onChange({ ...etape, action: { ...etape.action, config: { ...etape.action.config, [champ.cle]: e.target.value } } })}
-                  className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                />
-              )}
-            </div>
-          ))}
+          {catalogue.actions
+            .find((a) => a.cle === etape.action.type)
+            ?.champs.filter((champ) => champVisible(champ, etape.action.config))
+            .map((champ) => (
+              <ChampActionUI
+                key={champ.cle}
+                champ={champ}
+                valeur={etape.action.config[champ.cle] ?? ''}
+                onChange={(v) => onChange({ ...etape, action: { ...etape.action, config: { ...etape.action.config, [champ.cle]: v } } })}
+                fr={fr}
+              />
+            ))}
 
           <div className="flex flex-wrap gap-1.5">
             {VARIABLES_PROPOSEES.map((v) => (

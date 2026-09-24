@@ -6,10 +6,13 @@ import type { Request, Response, NextFunction } from 'express';
 import {
   CLES_DECLENCHEURS,
   CLES_ACTIONS,
+  CLES_CHAMPS_ACTION,
+  champVisible,
   trouverAction,
   DELAI_MAX_SECONDES,
   DELAI_NEGATIF_MAX_SECONDES,
   ACTIONS_MAX,
+  type ChampAction,
 } from '../../src/lib/automationCatalogue';
 import { problemesDuGraphe, type Etape } from './automationSequences';
 import { INDUSTRIES_MODELES } from '../../src/lib/champs/modeles';
@@ -762,47 +765,182 @@ const cleDeclencheur = z.enum(
  * server/lib/actions/index.ts) est une garde de sécurité, pas une
  * préférence.
  */
+/**
+ * Ce qu'une VALEUR de configuration a le droit d'etre, selon le type du champ.
+ *
+ * Tout est stocke en TEXTE dans `config` (jsonb) : un nombre arrive en
+ * « 250 », une bascule en « true ». C'est ce que le navigateur envoie depuis
+ * un `<input>`, et le moteur le relit pareil. Valider ici la FORME de ce
+ * texte evite qu'une bascule arrive en « peut-etre » et qu'une action ecrive
+ * n'importe quoi en base.
+ */
+function valeurValide(champ: ChampAction, brut: unknown): string | null {
+  if (typeof brut !== 'string') return 'doit etre du texte';
+  const v = brut.trim();
+  if (v === '') return null; // vide = absent, traite plus haut
+
+  switch (champ.type) {
+    case 'bascule':
+      return v === 'true' || v === 'false' ? null : 'doit valoir true ou false';
+
+    case 'nombre': {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return 'doit etre un nombre';
+      if (champ.min_valeur !== undefined && n < champ.min_valeur) {
+        return `doit etre au moins ${champ.min_valeur}`;
+      }
+      if (champ.max_valeur !== undefined && n > champ.max_valeur) {
+        return `doit etre au plus ${champ.max_valeur}`;
+      }
+      return null;
+    }
+
+    case 'choix': {
+      const permis = (champ.options ?? []).map((o) => o.cle);
+      return permis.includes(v) ? null : `doit etre l'un de : ${permis.join(', ')}`;
+    }
+
+    case 'membre':
+      // Un identifiant de membre, pas un nom : la route verifie ensuite qu'il
+      // appartient bien a l'organisation.
+      return /^[0-9a-fA-F-]{36}$/.test(v) ? null : 'doit etre un membre valide';
+
+    case 'url':
+      // https UNIQUEMENT. Un webhook en http laisse passer les donnees du
+      // client en clair, et `file://` ou `http://169.254.169.254` visent des
+      // ressources internes au serveur (SSRF).
+      if (!/^https:\/\//i.test(v)) return 'doit commencer par https://';
+      try {
+        const u = new URL(v);
+        const hote = u.hostname.toLowerCase();
+        const interdit =
+          hote === 'localhost' ||
+          hote === '169.254.169.254' ||
+          /^127\./.test(hote) ||
+          /^10\./.test(hote) ||
+          /^192\.168\./.test(hote) ||
+          /^172\.(1[6-9]|2\d|3[01])\./.test(hote) ||
+          hote.endsWith('.local') ||
+          hote.endsWith('.internal');
+        return interdit ? 'ne peut pas viser une adresse interne' : null;
+      } catch {
+        return 'adresse invalide';
+      }
+
+    default:
+      return null; // texte, zone, etiquette : seule la longueur compte
+  }
+}
+
+/**
+ * Une action, validee CONTRE SON PROPRE type : les champs obligatoires de
+ * `send_email` (objet + message) ne sont pas ceux de `create_task`.
+ *
+ * `config` reste FERME : seules les cles connues du catalogue passent, et
+ * une cle inconnue est refusee plutot qu'ignoree. C'est ce qui empeche de
+ * reintroduire par la bande un `to` — le destinataire impose
+ * (`DESTINATAIRE_IMPOSE` dans server/lib/actions/index.ts) est une garde de
+ * securite, pas une preference.
+ *
+ * La liste des cles vient du catalogue lui-meme (`CLES_CHAMPS_ACTION`) : une
+ * action qui gagne un champ n'oblige donc pas a modifier ce schema, et un
+ * champ retire cesse d'etre accepte le jour meme. C'est le second raffinement
+ * qui verifie ensuite que la cle appartient bien a CETTE action-la.
+ */
+const configAction = z.object(
+  Object.fromEntries(
+    CLES_CHAMPS_ACTION.flatMap((cle) => [
+      [cle, z.string().trim().max(10000).optional()],
+      /* La variante anglaise du meme champ.
+         `champLocalise` (server/lib/actions/index.ts) lit `<champ>_en` quand
+         la langue de l'organisation est l'anglais, et 312 regles reelles en
+         portent deja. Sans ces cles ici, modifier une de ces regles la ferait
+         refuser — ou pire, la sauvegarderait amputee de ses traductions. */
+      [`${cle}_en`, z.string().trim().max(10000).optional()],
+    ]),
+  ) as Record<string, z.ZodOptional<z.ZodString>>,
+);
+
 const actionAutomatisation = z
   .object({
     type: z.enum(CLES_ACTIONS as [string, ...string[]], { message: 'Unknown action.' }),
-    config: z
-      .object({
-        body: z.string().trim().max(10000).optional(),
-        subject: z.string().trim().max(200).optional(),
-        title: z.string().trim().max(200).optional(),
-        // update_custom_field
-        field_id: z.string().uuid().optional(),
-        value: z.string().max(5000).optional(),
-      })
-      // `strict` : une clé inconnue est refusée, pas ignorée.
-      .strict(),
+    // `strict` : une cle inconnue est refusee, pas ignoree.
+    config: configAction.strict(),
   })
   .superRefine((action, ctx) => {
     const modele = trouverAction(action.type);
     if (!modele) return;
+    const config = action.config as Record<string, unknown>;
+
     for (const champ of modele.champs) {
-      const valeur = (action.config as Record<string, unknown>)[champ.cle];
-      if (champ.obligatoire && (typeof valeur !== 'string' || valeur.length === 0)) {
+      const valeur = config[champ.cle];
+      const rempli = typeof valeur === 'string' && valeur.trim().length > 0;
+
+      // Un champ obligatoire CACHE n'est pas exige : le panneau ne l'affiche
+      // pas (« l'etiquette » quand « toutes » est coche), et l'exiger quand
+      // meme donnerait une impasse — un refus d'enregistrer pointant un champ
+      // absent de l'ecran.
+      const visible = champVisible(champ, config);
+
+      if (champ.obligatoire && visible && !rempli) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['config', champ.cle],
           message: `« ${modele.fr} » : le champ « ${champ.fr} » est obligatoire.`,
         });
+        continue;
       }
-      if (typeof valeur === 'string' && valeur.length > champ.max) {
+
+      if (!rempli) continue;
+
+      const texte = valeur as string;
+      const max = champ.max ?? 10000;
+      if (texte.length > max) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['config', champ.cle],
-          message: `« ${champ.fr} » dépasse ${champ.max} caractères.`,
+          message: `« ${champ.fr} » depasse ${max} caracteres.`,
         });
       }
+
+      const faute = valeurValide(champ, texte);
+      if (faute) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['config', champ.cle],
+          message: `« ${champ.fr} » ${faute}.`,
+        });
+      }
+
+      /* La traduction anglaise subit les memes controles que l'originale :
+         sinon un texto anglais de 3000 caracteres passerait la validation et
+         partirait en trois segments factures. */
+      const anglais = config[`${champ.cle}_en`];
+      if (typeof anglais === 'string' && anglais.trim()) {
+        if (anglais.length > max) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['config', `${champ.cle}_en`],
+            message: `« ${champ.en} » (anglais) depasse ${max} caracteres.`,
+          });
+        }
+        const fauteEn = valeurValide(champ, anglais);
+        if (fauteEn) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['config', `${champ.cle}_en`],
+            message: `« ${champ.en} » (anglais) ${fauteEn}.`,
+          });
+        }
+      }
     }
-    // Un champ rempli qui n'appartient pas à cette action : refusé plutôt
-    // qu'ignoré, sinon l'utilisateur croit avoir écrit un objet de courriel
-    // sur un texto et ne comprend pas pourquoi il disparaît.
-    const attendus = new Set(modele.champs.map((c) => c.cle));
-    for (const cle of Object.keys(action.config)) {
-      if (!attendus.has(cle as 'body' | 'subject' | 'title' | 'field_id' | 'value')) {
+
+    // Un champ rempli qui n'appartient pas a cette action : refuse plutot
+    // qu'ignore, sinon l'utilisateur croit avoir ecrit un objet de courriel
+    // sur un texto et ne comprend pas pourquoi il disparait.
+    const attendus = new Set(modele.champs.flatMap((c) => [c.cle, `${c.cle}_en`]));
+    for (const cle of Object.keys(config)) {
+      if (!attendus.has(cle)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['config', cle],
@@ -872,6 +1010,15 @@ const etapeSequence = z.discriminatedUnion('type', [
     type: z.literal('action'),
     action: actionAutomatisation,
     suivant: ID_ETAPE.nullable().optional(),
+    /*
+     * Le nom que l'utilisateur donne a l'etape (le « Action Name » de
+     * GoHighLevel). Purement d'affichage : le moteur ne le lit jamais.
+     *
+     * Sans cette cle, Zod le RETIRAIT en silence — l'utilisateur nommait sa
+     * carte « Courriel de confirmation », l'enregistrement repondait 200, et
+     * le nom avait disparu au rechargement. Vu dans un vrai navigateur.
+     */
+    nom: z.string().trim().max(80).nullable().optional(),
   }),
   z.object({
     id: ID_ETAPE,

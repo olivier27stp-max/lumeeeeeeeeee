@@ -358,7 +358,7 @@ describe('les deux copies des types ne divergent pas', () => {
       expect(serveur).toContain(`'${t}'`);
       expect(client).toContain(`'${t}'`);
     }
-    for (const champ of ['delai_secondes', 'suivant', 'alors', 'sinon']) {
+    for (const champ of ['delai_secondes', 'suivant', 'alors', 'sinon', 'nom?']) {
       expect(serveur, `${champ} manque côté serveur`).toContain(champ);
       expect(client, `${champ} manque côté client`).toContain(champ);
     }

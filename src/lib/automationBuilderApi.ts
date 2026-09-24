@@ -19,7 +19,16 @@ import type { DeclencheurCatalogue, ActionCatalogue } from './automationCatalogu
 
 export interface ActionAutomatisation {
   type: string;
-  config: { body?: string; subject?: string; title?: string; field_id?: string; value?: string };
+  /**
+   * Les champs de l'action, tous en TEXTE.
+   *
+   * Ouvert (`Record`) plutot que ferme sur trois cles : chaque action a les
+   * SIENNES (`url` pour un webhook, `statut` pour un changement de statut),
+   * et le catalogue en est la source de verite. C'est la validation serveur
+   * qui ferme la porte — elle refuse toute cle absente du catalogue, y
+   * compris un `to` qui reintroduirait un destinataire libre.
+   */
+  config: Record<string, string | undefined>;
 }
 
 export interface BrouillonAutomatisation {
@@ -189,4 +198,45 @@ export async function genererParcoursAvecLumi(demande: string, langue: 'fr' | 'e
   });
   if (!reponse.ok) throw await erreurDe(reponse, 'Lumi n’a pas pu construire ce parcours.');
   return reponse.json();
+}
+
+/**
+ * Les membres de l'organisation, pour les champs « assigner a ».
+ *
+ * Lu directement en PostgREST : c'est une lecture, protegee par la RLS de
+ * `memberships` — passer par le serveur n'ajouterait rien.
+ */
+export async function chargerMembres(): Promise<Array<{ user_id: string; nom: string }>> {
+  const orgId = await getCurrentOrgId();
+  if (!orgId) return [];
+  const { data, error } = await supabase
+    .from('memberships')
+    .select('user_id, full_name')
+    .eq('org_id', orgId)
+    .eq('status', 'active');
+  if (error || !data) return [];
+  return data
+    .map((m) => ({
+      user_id: String(m.user_id),
+      // `full_name` peut etre vide sur un membre invite qui n'a pas encore
+      // complete son profil : on ne montre jamais un identifiant technique,
+      // donc un repli lisible plutot qu'un UUID dans un menu.
+      nom: String(m.full_name || '').trim() || 'Membre sans nom',
+    }))
+    .sort((a, b) => a.nom.localeCompare(b.nom));
+}
+
+/**
+ * Les etiquettes deja utilisees, proposees en autocompletion.
+ *
+ * `client_tags` est la table vivante — `clients.tags` existe en base mais
+ * n'est ecrite nulle part dans le produit (verifie le 2026-09-24).
+ */
+export async function chargerEtiquettes(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('client_tags')
+    .select('tag')
+    .limit(500);
+  if (error || !data) return [];
+  return Array.from(new Set(data.map((t) => String(t.tag)).filter(Boolean))).sort();
 }

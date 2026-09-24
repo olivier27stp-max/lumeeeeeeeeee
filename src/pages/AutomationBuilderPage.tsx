@@ -38,6 +38,8 @@ import {
   chargerAutomatisations,
   modifierAutomatisation,
   genererParcoursAvecLumi,
+  chargerMembres,
+  chargerEtiquettes,
   type CatalogueAutomatisations,
 } from '../lib/automationBuilderApi';
 import {
@@ -46,8 +48,11 @@ import {
   nouvelIdEtape,
   etapeVierge,
   insererEtape,
+  retirerEtape,
 } from '../lib/sequenceTypes';
 import SequenceCanvas from '../components/automations/SequenceCanvas';
+import PanneauEtape from '../components/automations/PanneauEtape';
+import { champVisible, trouverAction } from '../lib/automationCatalogue';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
 import OngletReglages, { type ReglagesAutomatisation } from '../components/automations/OngletReglages';
 import { confirmer } from '../components/ui/ConfirmDialog';
@@ -82,6 +87,13 @@ export default function AutomationBuilderPage() {
   // ── Le parcours ──
   const [steps, setSteps] = useState<Etape[]>([]);
   const [etapeChoisie, setEtapeChoisie] = useState<string | null>(null);
+
+  // ── De quoi remplir les menus du panneau ──
+  // Les membres (pour « assigner a ») et les etiquettes deja utilisees.
+  // Charges une fois : un menu qui recharge a chaque ouverture de panneau
+  // clignote, et ces deux listes bougent rarement.
+  const [membres, setMembres] = useState<Array<{ user_id: string; nom: string }>>([]);
+  const [etiquettes, setEtiquettes] = useState<string[]>([]);
 
   // ── Annuler / refaire ──
   // Une pile de versions du parcours. Indispensable dès qu'on manipule un
@@ -197,6 +209,16 @@ export default function AutomationBuilderPage() {
         toast.error(fr ? 'Impossible de charger cette automatisation' : 'Could not load this automation');
       })
       .finally(() => { if (vivant) setChargement(false); });
+
+    // Les listes du panneau. Un echec ici ne doit PAS empecher d'ouvrir
+    // l'editeur : sans membres, le menu « assigner a » sera juste vide.
+    chargerMembres()
+      .then((m) => { if (vivant) setMembres(m); })
+      .catch((e: unknown) => console.error('[builder] membres', e instanceof Error ? e.message : String(e)));
+    chargerEtiquettes()
+      .then((t) => { if (vivant) setEtiquettes(t); })
+      .catch((e: unknown) => console.error('[builder] etiquettes', e instanceof Error ? e.message : String(e)));
+
     return () => { vivant = false; };
   }, [id, fr]);
 
@@ -227,6 +249,33 @@ export default function AutomationBuilderPage() {
     setEtatSauvegarde('modifie');
   };
 
+  // ── Le panneau d'edition ──
+  // Ouvrir une carte, la modifier, l'enregistrer ou la supprimer. C'etait
+  // le trou du builder : cliquer une carte la selectionnait et n'ouvrait
+  // rien — on voyait son parcours sans jamais pouvoir le modifier.
+  const etapeOuverte = useMemo(
+    () => steps.find((e) => e.id === etapeChoisie) ?? null,
+    [steps, etapeChoisie],
+  );
+
+  const enregistrerEtape = useCallback((modifiee: Etape) => {
+    memoriser(steps.map((e) => (e.id === modifiee.id ? modifiee : e)));
+    setEtapeChoisie(null);
+  }, [steps, memoriser]);
+
+  const supprimerEtape = useCallback(async (idEtape: string) => {
+    const ok = await confirmer({
+      title: fr ? 'Supprimer cette etape ?' : 'Delete this step?',
+      message: fr
+        ? 'Ce qui venait apres reste dans le parcours et se rebranche tout seul.'
+        : 'What came after stays in the journey and reconnects on its own.',
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
+    });
+    if (!ok) return;
+    memoriser(retirerEtape(steps, idEtape));
+    setEtapeChoisie(null);
+  }, [steps, memoriser, fr]);
+
   // ── Enregistrement ──
   // Différé d'une seconde après la dernière frappe : enregistrer à chaque
   // caractère saturerait le serveur, et attendre un bouton ferait perdre du
@@ -240,10 +289,22 @@ export default function AutomationBuilderPage() {
    * « Modifié » sans jamais comprendre pourquoi rien ne partait.
    */
   const etapesIncompletes = useMemo(
-    () => steps.filter(
-      (e) => e.type === 'action'
-        && !String(e.action?.config?.body ?? e.action?.config?.title ?? '').trim(),
-    ).length,
+    () => steps.filter((e) => {
+      if (e.type !== 'action') return false;
+      const modele = trouverAction(e.action?.type ?? '');
+      // Une action hors catalogue : le serveur la refusera de toute facon,
+      // on la compte comme incomplete plutot que de tenter l'enregistrement
+      // en boucle.
+      if (!modele) return true;
+      const config = (e.action?.config ?? {}) as Record<string, string | undefined>;
+      // Chaque action a SES champs obligatoires : `webhook` exige une
+      // adresse, pas un corps de message. Lire `body`/`title` en dur laissait
+      // passer une action vide vers un serveur qui la refuse, et
+      // l'enregistrement echouait en boucle sans que rien ne l'explique.
+      return modele.champs.some(
+        (c) => c.obligatoire && champVisible(c, config) && !config[c.cle]?.trim(),
+      );
+    }).length,
     [steps],
   );
 
@@ -487,6 +548,11 @@ export default function AutomationBuilderPage() {
       </div>
 
       {/* ══ Le contenu ══ */}
+      {/* Une RANGEE : le canevas a gauche, le panneau d'edition a droite —
+          la disposition de GoHighLevel. Le canevas se retrecit quand le
+          panneau s'ouvre, plutot que de passer dessous : on doit pouvoir
+          lire la carte qu'on est en train de modifier. */}
+      <div className="flex flex-1 overflow-hidden">
       <div className="relative flex-1 overflow-hidden">
         {onglet === 'parcours' && (
           <>
@@ -722,6 +788,21 @@ export default function AutomationBuilderPage() {
             />
           </div>
         )}
+      </div>
+
+      {/* Le panneau d'edition — la moitie qui manquait. */}
+      {onglet === 'parcours' && etapeOuverte && (
+        <PanneauEtape
+          etape={etapeOuverte}
+          fr={fr}
+          membres={membres}
+          etiquettes={etiquettes}
+          stats={null}
+          onEnregistrer={enregistrerEtape}
+          onSupprimer={supprimerEtape}
+          onFermer={() => setEtapeChoisie(null)}
+        />
+      )}
       </div>
     </div>
   );

@@ -65,14 +65,54 @@ describe('catalogue — il ne peut pas dériver du moteur', () => {
     // DESTINATAIRE_IMPOSE : `config.to` a été retiré du moteur parce qu'il
     // permettait d'envoyer les données d'un client à une adresse arbitraire.
     // Le catalogue ne doit jamais le réintroduire par un champ.
+    //
+    // Une LISTE NOIRE plutôt qu'une liste blanche : le catalogue compte
+    // désormais 18 actions aux champs variés (`url`, `statut`, `membre_id`…)
+    // et figer la liste des clés permises obligeait à modifier ce test à
+    // chaque ajout — un test qu'on modifie par réflexe ne protège plus rien.
+    // Ce qu'on interdit vraiment est court et stable : tout ce qui
+    // désignerait un destinataire libre.
+    const INTERDITS = ['to', 'cc', 'bcc', 'destinataire_email', 'destinataire_telephone', 'email', 'telephone', 'phone'];
     for (const a of ACTIONS) {
       for (const champ of a.champs) {
-        // Un message vers le client : texte seulement. Une action interne
-        // (mettre à jour un champ personnalisé) choisit un CHAMP de la fiche
-        // concernée, jamais une personne ni une adresse.
-        const permis = a.vers_client ? ['body', 'subject', 'title'] : ['body', 'subject', 'title', 'field_id', 'value'];
-        expect(permis).toContain(champ.cle);
-        expect(champ.cle).not.toBe('to');
+        expect(INTERDITS, `« ${a.fr} » expose « ${champ.cle} » : un destinataire libre`)
+          .not.toContain(champ.cle);
+      }
+    }
+  });
+
+  it('un destinataire interne se choisit parmi les membres, jamais en texte libre', () => {
+    // La nuance qui rend la garde ci-dessus praticable : une notification
+    // INTERNE peut viser quelqu'un, mais par son identifiant de membre —
+    // vérifié contre `memberships` à l'exécution. Un champ texte libre
+    // rouvrirait exactement le trou qu'on vient de fermer.
+    for (const a of ACTIONS) {
+      for (const champ of a.champs) {
+        if (!champ.cle.includes('membre')) continue;
+        expect(champ.type, `« ${a.fr} » : « ${champ.cle} » doit être un choix de membre`).toBe('membre');
+      }
+    }
+  });
+
+  it('chaque champ du catalogue est lu par le moteur', () => {
+    // Un champ que le serveur n'exécute pas est une promesse vide : le
+    // panneau l'affiche, l'utilisateur le remplit, et rien n'arrive. C'est
+    // le reproche fait au menu de GoHighLevel, où des options mortes
+    // côtoient les vraies.
+    /*
+     * Le dispatch délègue : `update_custom_field` est exécuté par
+     * `champs/automatisations.ts`, pas par le fichier d'actions. On lit donc
+     * TOUS les exécuteurs — sinon ce test réclamerait de recopier un champ
+     * dans un fichier qui ne s'en sert pas.
+     */
+    const moteur = [
+      'server/lib/actions/index.ts',
+      'server/lib/champs/automatisations.ts',
+    ].map(lire).join('\n');
+    for (const a of ACTIONS) {
+      for (const champ of a.champs) {
+        expect(moteur, `« ${a.fr} » : le champ « ${champ.cle} » n'est lu nulle part dans les actions`)
+          .toContain(champ.cle);
       }
     }
   });
