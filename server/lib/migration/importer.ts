@@ -1011,6 +1011,7 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
     jobIdByRef: new Map(),
   };
   await seedExistingRefs(admin, migration.org_id, ctx);
+  const jobsFactures = await jobsDejaFactures(admin, migration.org_id);
 
   let intraMerged = 0;
   const allAmbiguousKeys: string[] = [];
@@ -1103,6 +1104,7 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
         }
         continue;
       }
+      if (entity === 'invoice') detacherFactureSurJobDejaFacture(built.row, jobsFactures);
       counts.wouldCreate += 1;
       registerRefs(deterministicEntityId(migration.id, rec.id, TABLE_BY_ENTITY[entity]));
       if (entity === 'invoice') {
@@ -1440,6 +1442,7 @@ export async function runFinalImport(
     staffIdBySource,
   };
   await seedExistingRefs(admin, migration.org_id, ctx);
+  const jobsFactures = await jobsDejaFactures(admin, migration.org_id);
   // Clients qui reçoivent une job ou une facture dans cette passe : un client
   // facturé n'est pas un prospect (règle Lume « client sans job = prospect »,
   // mais l'export peut ne pas contenir les jobs).
@@ -1545,6 +1548,7 @@ export async function runFinalImport(
         }
         continue;
       }
+      if (entity === 'invoice') detacherFactureSurJobDejaFacture(built.row, jobsFactures);
       const id = deterministicEntityId(migration.id, rec.id, table);
       targetByStagingId.set(rec.id, id);
       toInsert.push({ rec, row: { id, ...built.row }, id });
@@ -1597,7 +1601,7 @@ export async function runFinalImport(
           errorIds.push(c.rec.id);
           const { error: markErr } = await admin
             .from('migration_staging_records')
-            .update({ status: 'error', error: `import_failed:${rowErr.code ?? 'unknown'}` })
+            .update({ status: 'error', error: `import_failed:${rowErr.code ?? 'unknown'} — ${String(rowErr.message ?? '').slice(0, 140)}` })
             .eq('id', c.rec.id);
           if (markErr) console.error('[migration-importer] staging error mark failed:', markErr.message);
         } else {
@@ -1891,6 +1895,43 @@ export async function purgeOrphanProperties(admin: SupabaseClient, orgId: string
     purged += data?.length ?? 0;
   }
   return purged;
+}
+
+/** Jobs qui ont déjà une facture active dans le bureau (index unique invoices_org_job_unique_active_idx :
+ *  UNE facture active par job). */
+async function jobsDejaFactures(admin: SupabaseClient, orgId: string): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('invoices')
+      .select('job_id')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .not('job_id', 'is', null)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) { console.error('[migration-importer] invoiced jobs fetch failed:', error.message); break; }
+    if (!data || data.length === 0) break;
+    for (const r of data as { job_id: string | null }[]) if (r.job_id) out.add(r.job_id);
+    if (data.length < STAGING_PAGE) break;
+  }
+  return out;
+}
+
+/**
+ * Jobber accepte plusieurs factures par job ; Lume n'en rattache qu'une (index unique). La première
+ * garde le lien, les suivantes restent rattachées au client seulement, avec la raison dans leurs
+ * notes — au lieu d'être refusées par la base (9 factures rejetées « 23505 », Vision Lavage,
+ * 2026-09-24). Mute la rangée ; le jeu suit les jobs déjà liés (existants + cette passe).
+ */
+function detacherFactureSurJobDejaFacture(row: Record<string, unknown>, jobsFactures: Set<string>): void {
+  const jobId = typeof row.job_id === 'string' ? row.job_id : null;
+  if (!jobId) return;
+  if (jobsFactures.has(jobId)) {
+    row.job_id = null;
+    row.notes = joinNotes(String(row.notes ?? ''), 'Job déjà facturé par une autre facture importée : celle-ci est rattachée au client seulement (Lume : une facture par job).');
+    return;
+  }
+  jobsFactures.add(jobId);
 }
 
 /** Tables à suppression douce : une reprise après rollback doit remettre deleted_at à null. */

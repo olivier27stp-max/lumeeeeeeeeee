@@ -136,6 +136,9 @@ describe('portail — chaîne de validation complète', () => {
     expect(final).toContain("ignoreDuplicates: false");
     expect(final).not.toContain("onConflict: 'id', ignoreDuplicates: true");
     expect(src).toContain('{ ...row, deleted_at: null }');
+    // plusieurs factures Jobber par job : la 2e reste rattachée au client, jamais refusée par l'index unique
+    expect(src.split('detacherFactureSurJobDejaFacture(built.row, jobsFactures)').length - 1).toBe(2); // dry-run + final
+    expect(src).toContain('jobsDejaFactures(admin, migration.org_id)');
   });
 
   it("l'approbation exige la phrase exacte et journalise IP + user-agent", () => {
