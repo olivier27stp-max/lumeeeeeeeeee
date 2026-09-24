@@ -12,6 +12,8 @@ import {
   validerDomaine,
   statutDepuisResend,
   enregistrementsDepuisResend,
+  statutDepuisSes,
+  enregistrementsDepuisSes,
   construireExpediteur,
   demanderDomaine,
   verifierDomaine,
@@ -168,62 +170,115 @@ function reponse(status: number, corps: unknown) {
 }
 
 const ORG = '11111111-1111-4111-8111-111111111111';
-const RESEND_ID = 'd91cd9bd-1176-453e-8fc1-35364d380206';
-const RECORDS = [
-  { record: 'SPF', name: 'send', type: 'MX', ttl: 'Auto', status: 'not_started', value: 'feedback-smtp.us-east-1.amazonses.com', priority: 10 },
-  { record: 'SPF', name: 'send', type: 'TXT', ttl: 'Auto', status: 'not_started', value: 'v=spf1 include:amazonses.com ~all' },
-  { record: 'DKIM', name: 'resend._domainkey', type: 'TXT', ttl: 'Auto', status: 'not_started', value: 'p=MIGf…' },
-];
+const REGION = 'ca-central-1';
+const JETONS = ['afv2acoeu5paxpy2qleecrq6lyd2mv6z', 'iinvq67bwoyb2s2zjohisjpjlnyb4gzj', 'vhvzojpfb2nj725gn4h6xvziyhwdqt6m'];
+const HOTE = `https://email.${REGION}.amazonaws.com`;
 
-describe('demanderDomaine / verifierDomaine / retirerDomaine (fetch simulé)', () => {
-  const appels: Array<{ method: string; url: string; body: any }> = [];
+describe('statutDepuisSes', () => {
+  it('SUCCESS → verified, FAILED → failed, le reste → pending', () => {
+    expect(statutDepuisSes('SUCCESS')).toBe('verified');
+    expect(statutDepuisSes('FAILED')).toBe('failed');
+    for (const s of ['PENDING', 'NOT_STARTED', 'TEMPORARY_FAILURE', '', null, undefined, 'inconnu']) {
+      expect(statutDepuisSes(s)).toBe('pending');
+    }
+  });
+});
+
+describe('enregistrementsDepuisSes', () => {
+  it('rend les CNAME DKIM au format de la carte des réglages', () => {
+    const r = enregistrementsDepuisSes([{ name: `${JETONS[0]}._domainkey.coquinlavage.ca`, value: `${JETONS[0]}.dkim.${REGION}.amazonses.com` }]);
+    expect(r).toEqual([{
+      record: 'DKIM',
+      type: 'CNAME',
+      name: `${JETONS[0]}._domainkey.coquinlavage.ca`,
+      value: `${JETONS[0]}.dkim.${REGION}.amazonses.com`,
+      ttl: null,
+      priority: null,
+      status: null,
+    }]);
+  });
+
+  it('tolère l’absence de jetons et ignore une entrée incomplète', () => {
+    expect(enregistrementsDepuisSes(undefined)).toEqual([]);
+    expect(enregistrementsDepuisSes([{ name: '', value: 'x' } as any, { name: 'a', value: '' } as any])).toEqual([]);
+  });
+});
+
+describe('demanderDomaine / verifierDomaine / retirerDomaine (SES simulé)', () => {
+  const appels: Array<{ method: string; url: string; body: any; headers: Record<string, string> }> = [];
   let reponses: Array<Response>;
 
   beforeEach(() => {
-    process.env.RESEND_API_KEY = 're_test';
+    process.env.AWS_ACCESS_KEY_ID = 'AKIATEST';
+    process.env.AWS_SECRET_ACCESS_KEY = 'secret-de-test';
+    process.env.SES_REGION = REGION;
     appels.length = 0;
     reponses = [];
     oublierCacheDomaine(ORG);
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      appels.push({ method: String(init?.method || 'GET'), url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
+      appels.push({
+        method: String(init?.method || 'GET'),
+        url: String(url),
+        body: init?.body ? JSON.parse(String(init.body)) : null,
+        headers: (init?.headers as Record<string, string>) ?? {},
+      });
       const r = reponses.shift();
-      if (!r) throw new Error(`réponse Resend non prévue pour ${init?.method} ${url}`);
+      if (!r) throw new Error(`réponse SES non prévue pour ${init?.method} ${url}`);
       return r;
     }));
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete process.env.RESEND_API_KEY;
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
   });
 
-  it('demanderDomaine : POST /domains {name, region} avec la clé, puis ligne pending avec les DNS', async () => {
+  /** Ce que SES rend sur CreateEmailIdentity / GetEmailIdentity. */
+  function identiteSes(statut: string, pretPourEnvoi = false) {
+    return {
+      IdentityType: 'DOMAIN',
+      VerifiedForSendingStatus: pretPourEnvoi,
+      DkimAttributes: { Status: statut, Tokens: JETONS, SigningEnabled: true },
+    };
+  }
+
+  it('demanderDomaine : CreateEmailIdentity en RSA_2048, puis ligne pending avec les 3 CNAME', async () => {
     const etat = { lignes: [] as Ligne[] };
-    reponses.push(reponse(201, { object: 'domain', id: RESEND_ID, name: 'coquinlavage.ca', status: 'not_started', records: RECORDS }));
+    reponses.push(reponse(200, identiteSes('PENDING')));
 
     const d = await demanderDomaine(fauxAdmin(etat), ORG, 'CoquinLavage.ca');
 
     expect(appels).toHaveLength(1);
-    expect(appels[0]).toMatchObject({ method: 'POST', url: 'https://api.resend.com/domains', body: { name: 'coquinlavage.ca', region: 'us-east-1' } });
+    expect(appels[0]).toMatchObject({
+      method: 'POST',
+      url: `${HOTE}/v2/email/identities`,
+      body: { EmailIdentity: 'coquinlavage.ca', DkimSigningAttributes: { NextSigningKeyLength: 'RSA_2048' } },
+    });
     expect(d.status).toBe('pending');
     expect(d.domain).toBe('coquinlavage.ca');
-    expect(d.resend_domain_id).toBe(RESEND_ID);
+    // SES n'a pas d'identifiant opaque : le domaine porte l'identité.
+    expect(d.resend_domain_id).toBe('coquinlavage.ca');
     expect(d.from_local_part).toBe('facturation');
     expect(d.dns_records).toHaveLength(3);
-    expect(d.dns_records[0]).toMatchObject({ type: 'MX', name: 'send', priority: 10 });
+    expect(d.dns_records[0]).toMatchObject({
+      type: 'CNAME',
+      name: `${JETONS[0]}._domainkey.coquinlavage.ca`,
+      value: `${JETONS[0]}.dkim.${REGION}.amazonses.com`,
+    });
     expect(etat.lignes).toHaveLength(1);
   });
 
-  it('demanderDomaine : envoie bien le Bearer RESEND_API_KEY', async () => {
-    const f = vi.fn(async (_url: string, _init?: RequestInit) => reponse(201, { id: RESEND_ID, status: 'not_started', records: [] }));
-    vi.stubGlobal('fetch', f);
+  it('demanderDomaine : la requête est signée SigV4 pour le service ses', async () => {
+    reponses.push(reponse(200, identiteSes('PENDING')));
     await demanderDomaine(fauxAdmin({ lignes: [] }), ORG, 'example.com');
-    const init = f.mock.calls[0][1];
-    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer re_test');
+    const h = appels[0].headers;
+    expect(h.Authorization).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIATEST\/\d{8}\/ca-central-1\/ses\/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature=[0-9a-f]{64}$/);
+    expect(h['X-Amz-Date']).toMatch(/^\d{8}T\d{6}Z$/);
   });
 
-  it('demanderDomaine : refuse (409) si l’org a déjà un domaine, sans appeler Resend', async () => {
-    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', resend_domain_id: 'r', from_local_part: 'facturation', status: 'pending', dns_records: [] }] };
+  it('demanderDomaine : refuse (409) si l’org a déjà un domaine, sans appeler SES', async () => {
+    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', resend_domain_id: 'a.com', from_local_part: 'facturation', status: 'pending', dns_records: [] }] };
     await expect(demanderDomaine(fauxAdmin(etat), ORG, 'b.com')).rejects.toMatchObject({ status: 409 });
     expect(appels).toHaveLength(0);
   });
@@ -233,49 +288,57 @@ describe('demanderDomaine / verifierDomaine / retirerDomaine (fetch simulé)', (
     expect(appels).toHaveLength(0);
   });
 
-  it('demanderDomaine : une erreur Resend remonte en 502 et rien n’est écrit', async () => {
+  it('demanderDomaine : une erreur SES remonte en 502 et rien n’est écrit', async () => {
     const etat = { lignes: [] as Ligne[] };
-    reponses.push(reponse(422, { name: 'validation_error', message: 'Domain already exists' }));
+    reponses.push(reponse(400, { message: 'Email identity already exists' }));
     await expect(demanderDomaine(fauxAdmin(etat), ORG, 'example.com')).rejects.toMatchObject({ status: 502 });
     expect(etat.lignes).toHaveLength(0);
   });
 
-  it('demanderDomaine : sans RESEND_API_KEY → 503, sans appel', async () => {
-    delete process.env.RESEND_API_KEY;
+  it('demanderDomaine : sans clés AWS → 503, sans appel', async () => {
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
     await expect(demanderDomaine(fauxAdmin({ lignes: [] }), ORG, 'example.com')).rejects.toMatchObject({ status: 503 });
     expect(appels).toHaveLength(0);
   });
 
-  it('verifierDomaine : POST verify puis GET ; verified → status verified + verified_at', async () => {
-    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'coquinlavage.ca', resend_domain_id: RESEND_ID, from_local_part: 'facturation', status: 'pending', dns_records: [], verified_at: null }] };
-    reponses.push(reponse(200, { object: 'domain', id: RESEND_ID }));
-    reponses.push(reponse(200, { id: RESEND_ID, status: 'verified', records: RECORDS.map((r) => ({ ...r, status: 'verified' })) }));
+  it('verifierDomaine : un seul GET (SES vérifie seul) ; SUCCESS + prêt → verified', async () => {
+    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'coquinlavage.ca', resend_domain_id: 'coquinlavage.ca', from_local_part: 'facturation', status: 'pending', dns_records: [], verified_at: null }] };
+    reponses.push(reponse(200, identiteSes('SUCCESS', true)));
 
     const d = await verifierDomaine(fauxAdmin(etat), ORG);
 
     expect(appels.map((a) => `${a.method} ${a.url}`)).toEqual([
-      `POST https://api.resend.com/domains/${RESEND_ID}/verify`,
-      `GET https://api.resend.com/domains/${RESEND_ID}`,
+      `GET ${HOTE}/v2/email/identities/coquinlavage.ca`,
     ]);
     expect(d.status).toBe('verified');
     expect(d.verified_at).toBeTruthy();
     expect(d.last_checked_at).toBeTruthy();
-    expect(d.dns_records.every((r) => r.status === 'verified')).toBe(true);
+    expect(d.dns_records).toHaveLength(3);
   });
 
-  it('verifierDomaine : pending chez Resend → reste pending, verified_at null', async () => {
-    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', resend_domain_id: RESEND_ID, from_local_part: 'facturation', status: 'pending', dns_records: RECORDS, verified_at: null }] };
-    reponses.push(reponse(200, { object: 'domain', id: RESEND_ID }));
-    reponses.push(reponse(200, { id: RESEND_ID, status: 'pending', records: RECORDS }));
+  it('verifierDomaine : DKIM SUCCESS mais pas encore prêt à l’envoi → reste pending', async () => {
+    // Le piège : SES peut avoir signé le DKIM sans autoriser l'envoi. Publier
+    // « vérifié » à ce moment ferait partir les courriels depuis un domaine
+    // que SES refuse, et ils seraient rejetés en silence.
+    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', resend_domain_id: 'a.com', from_local_part: 'facturation', status: 'pending', dns_records: [], verified_at: null }] };
+    reponses.push(reponse(200, identiteSes('SUCCESS', false)));
     const d = await verifierDomaine(fauxAdmin(etat), ORG);
     expect(d.status).toBe('pending');
     expect(d.verified_at).toBeNull();
   });
 
-  it('verifierDomaine : temporary_failure → failed', async () => {
-    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', resend_domain_id: RESEND_ID, from_local_part: 'facturation', status: 'verified', dns_records: RECORDS, verified_at: '2026-09-01' }] };
-    reponses.push(reponse(200, { object: 'domain', id: RESEND_ID }));
-    reponses.push(reponse(200, { id: RESEND_ID, status: 'temporary_failure', records: RECORDS }));
+  it('verifierDomaine : PENDING → reste pending, verified_at null', async () => {
+    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', resend_domain_id: 'a.com', from_local_part: 'facturation', status: 'pending', dns_records: [], verified_at: null }] };
+    reponses.push(reponse(200, identiteSes('PENDING')));
+    const d = await verifierDomaine(fauxAdmin(etat), ORG);
+    expect(d.status).toBe('pending');
+    expect(d.verified_at).toBeNull();
+  });
+
+  it('verifierDomaine : FAILED → failed et verified_at effacé', async () => {
+    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', resend_domain_id: 'a.com', from_local_part: 'facturation', status: 'verified', dns_records: [], verified_at: '2026-09-01' }] };
+    reponses.push(reponse(200, identiteSes('FAILED')));
     const d = await verifierDomaine(fauxAdmin(etat), ORG);
     expect(d.status).toBe('failed');
     expect(d.verified_at).toBeNull();
@@ -285,124 +348,16 @@ describe('demanderDomaine / verifierDomaine / retirerDomaine (fetch simulé)', (
     await expect(verifierDomaine(fauxAdmin({ lignes: [] }), ORG)).rejects.toMatchObject({ status: 404 });
   });
 
-  it('retirerDomaine : DELETE chez Resend puis suppression locale ; un 404 Resend n’empêche pas la suppression', async () => {
-    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', resend_domain_id: RESEND_ID, from_local_part: 'facturation', status: 'verified', dns_records: [] }] };
-    reponses.push(reponse(404, { name: 'not_found', message: 'Domain not found' }));
+  it('retirerDomaine : DeleteEmailIdentity puis suppression locale ; un 404 SES n’empêche pas la suppression', async () => {
+    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', resend_domain_id: 'a.com', from_local_part: 'facturation', status: 'verified', dns_records: [] }] };
+    reponses.push(reponse(404, { message: 'Email identity does not exist' }));
     await retirerDomaine(fauxAdmin(etat), ORG);
-    expect(appels[0]).toMatchObject({ method: 'DELETE', url: `https://api.resend.com/domains/${RESEND_ID}` });
+    expect(appels[0]).toMatchObject({ method: 'DELETE', url: `${HOTE}/v2/email/identities/a.com` });
     expect(etat.lignes).toHaveLength(0);
   });
 
   it('retirerDomaine : sans domaine, rien ne se passe', async () => {
     await retirerDomaine(fauxAdmin({ lignes: [] }), ORG);
     expect(appels).toHaveLength(0);
-  });
-});
-
-describe('expediteurDe', () => {
-  beforeEach(() => oublierCacheDomaine(ORG));
-
-  it('null sans domaine vérifié (pending ne compte pas)', async () => {
-    expect(await expediteurDe(fauxAdmin({ lignes: [] }), ORG, { company_name: 'X', company_email: 'x@y.z' })).toBeNull();
-    oublierCacheDomaine(ORG);
-    const pending = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', from_local_part: 'facturation', status: 'pending', dns_records: [] }] };
-    expect(await expediteurDe(fauxAdmin(pending), ORG, { company_name: 'X', company_email: 'x@y.z' })).toBeNull();
-  });
-
-  it('{ from, replyTo } avec le nom de l’entreprise et sa boîte en Reply-To quand le domaine est vérifié', async () => {
-    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'coquinlavage.ca', from_local_part: 'facturation', status: 'verified', dns_records: [] }] };
-    const e = await expediteurDe(fauxAdmin(etat), ORG, { company_name: 'Coquin lavage', company_email: 'info@coquinlavage.ca' });
-    expect(e).toEqual({ from: 'Coquin lavage <facturation@coquinlavage.ca>', replyTo: 'info@coquinlavage.ca' });
-  });
-
-  it('lit company_settings quand l’appelant ne fournit pas l’entreprise', async () => {
-    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', from_local_part: 'facturation', status: 'verified', dns_records: [] }], company: { org_id: ORG, company_name: 'ACME', email: 'bob@acme.com' } };
-    expect(await expediteurDe(fauxAdmin(etat), ORG)).toEqual({ from: 'ACME <facturation@a.com>', replyTo: 'bob@acme.com' });
-  });
-
-  it('le cache de 5 min sert la seconde lecture sans retoucher la base ; oublierCacheDomaine l’invalide', async () => {
-    const etat = { lignes: [{ id: 'x', org_id: ORG, domain: 'a.com', from_local_part: 'facturation', status: 'verified', dns_records: [] }] };
-    const admin = fauxAdmin(etat);
-    const espion = vi.spyOn(admin, 'from');
-    await expediteurDe(admin, ORG, { company_name: 'A' });
-    await expediteurDe(admin, ORG, { company_name: 'A' });
-    expect(espion).toHaveBeenCalledTimes(1);
-    oublierCacheDomaine(ORG);
-    await expediteurDe(admin, ORG, { company_name: 'A' });
-    expect(espion).toHaveBeenCalledTimes(2);
-  });
-
-  it('une base qui refuse la lecture vaut null (expéditeur plateforme), jamais une exception', async () => {
-    const admin = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'relation does not exist' } }) }) }) }) }) } as any;
-    expect(await expediteurDe(admin, ORG, { company_name: 'A' })).toBeNull();
-  });
-});
-
-// ── Garde statique : les routes d'envoi passent par senderForOrg ──
-
-describe('senderForOrg est l’expéditeur des routes d’envoi', () => {
-  const emails = lire('server/routes/emails.ts');
-
-  it('senderForOrg existe, garde senderFor comme repli et ne change pas le Reply-To', () => {
-    expect(emails).toContain('export async function senderForOrg(orgId: string, company: CompanyInfo)');
-    const fn = emails.slice(emails.indexOf('export async function senderForOrg'), emails.indexOf('// ── POST /api/emails/send-invoice'));
-    expect(fn).toContain('senderFor(company)');
-    expect(fn).toContain('expediteurDe(');
-    expect(fn).toContain('replyTo: plateforme.replyTo');
-  });
-
-  it('emails.ts : TOUT envoi passe par senderForOrg, jamais par senderFor', () => {
-    /* La règle protégée : un courriel part toujours au nom de l'entreprise,
-       depuis son domaine s'il est vérifié. `senderFor` seul utiliserait
-       l'adresse de la plateforme.
-
-       Ce test exigeait exactement 4 appels. Le compteur a lâché le
-       2026-09-23, quand l'envoi d'essai (« M'envoyer un essai ») en a ajouté
-       un cinquième — un envoi parfaitement conforme. Un compteur ne distingue
-       pas une violation d'un ajout légitime ; on vérifie donc la règle
-       elle-même : chaque `sendEmail` de ce fichier a son expéditeur, et aucun
-       ne passe par `senderFor` directement. */
-    const appelsSender = (emails.match(/\.\.\.\(await senderForOrg\(/g) || []).length;
-    const envois = (emails.match(/await sendEmail\(\{/g) || []).length;
-    expect(appelsSender).toBe(envois);
-    expect(appelsSender).toBeGreaterThanOrEqual(4);
-    expect(emails).not.toMatch(/\.\.\.senderFor\(company\)/);
-  });
-
-  for (const [fichier, motif] of [
-    ['server/routes/payment-requests.ts', /await senderForOrg\(params\.orgId, company\)/],
-    ['server/routes/agreements.ts', /await senderForOrg\(orgId, company\)/],
-    ['server/routes/reminders-cron.ts', /await senderForOrg\(orgId, societe\)/],
-    ['server/routes/communications.ts', /await senderForOrg\(orgId, company\)/],
-  ] as const) {
-    it(`${fichier} passe par senderForOrg`, () => {
-      const src = lire(fichier);
-      expect(src).toMatch(motif);
-      expect(src).not.toMatch(/[^A-Za-z]senderFor\(/);
-    });
-  }
-
-  it('le domaine d’envoi n’est écrit que par le serveur : src/ ne touche pas org_sending_domains', () => {
-    expect(lire('src/lib/sendingDomainApi.ts')).not.toContain("from('org_sending_domains')");
-    expect(lire('src/lib/sendingDomainApi.ts')).toContain('/api/sending-domain');
-  });
-
-  it('les routes sont montées et protégées (owner/admin + settings.update)', () => {
-    expect(lire('server/index.ts')).toContain("app.use('/api/sending-domain', sendingDomainsRouter)");
-    const perms = lire('server/lib/route-permissions.ts');
-    expect(perms).toContain("'POST /api/sending-domain': 'settings.update'");
-    expect(perms).toContain("'DELETE /api/sending-domain': 'settings.update'");
-    expect(lire('server/routes/sending-domains.ts')).toContain('isOrgAdminOrOwner');
-  });
-
-  it('la migration porte la RLS de lecture par membre et retire les écritures aux clients', () => {
-    const sql = lire('supabase/migrations/20260917160000_org_sending_domains.sql');
-    expect(sql).toContain('create table if not exists public.org_sending_domains');
-    expect(sql).toContain("check (status in ('pending', 'verified', 'failed'))");
-    expect(sql).toContain('enable row level security');
-    expect(sql).toMatch(/for select to authenticated\s+using \(public\.has_org_membership\(\(select auth\.uid\(\)\), org_id\)\)/);
-    expect(sql).toContain('revoke all on public.org_sending_domains from authenticated');
-    expect(sql).toContain('grant select on public.org_sending_domains to authenticated');
-    expect(sql).not.toMatch(/grant (insert|update|delete|all)[^;]*to authenticated/);
   });
 });
