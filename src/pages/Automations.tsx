@@ -18,15 +18,15 @@ import {
   Heart, Star, Sun, UserX, CreditCard, Banknote, Search,
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
   Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
-  Plus, Pencil, Copy, Trash2, X,} from 'lucide-react';
+  Plus, Pencil, Copy, Trash2, X, EllipsisVertical,} from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
 import MessageEditor from '../components/automations/MessageEditor';
-import AutomationBuilder from '../components/automations/AutomationBuilder';
 import {
   chargerAutomatisations,
+  creerAutomatisation,
   dupliquerAutomatisation,
   supprimerAutomatisation,
   type CatalogueAutomatisations,
@@ -384,8 +384,21 @@ function getActionLabel(type: string, fr: boolean): string {
 
 // ═════════════════════════════════════════════════════════════
 
+/**
+ * LA LISTE DES AUTOMATISATIONS — modèle GoHighLevel.
+ *
+ * Deux onglets : **Mes automatisations** (ce que l'entreprise a construit ou
+ * adopté) et **Modèles** (les 35 fournies avec Lume). C'est la distinction
+ * qui manquait : un tableau où tout est mélangé est un catalogue ; deux
+ * onglets où l'on voit « les miennes » d'un côté et « à piocher » de l'autre,
+ * c'est un espace de travail.
+ *
+ * Le tableau parle d'USAGE, pas de configuration : statut, combien de fois
+ * déclenchée, combien en cours, dernière modification. C'est ce qu'on veut
+ * savoir d'une automatisation qui tourne.
+ */
 export default function Automations() {
-  const { t, language } = useTranslation();
+  const { language } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
 
@@ -393,102 +406,127 @@ export default function Automations() {
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [onglet, setOnglet] = useState<'miennes' | 'modeles'>('miennes');
   const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  /** Échecs par règle sur 7 jours — alimente le badge d'alerte. */
   const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
-  /** Les échecs récents, pour DIRE pourquoi — le compteur seul ne sert à rien. */
-  const [failures, setFailures] = useState<AutomationFailure[]>([]);
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
-  // ── Construire ses propres automatisations ──
-  // Le catalogue (déclencheurs et actions offerts) vient du serveur avec les
-  // règles : l'interface n'en garde pas de copie, donc retirer un déclencheur
-  // côté serveur le fait disparaître du formulaire sans redéploiement du front.
   const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
-  /** Règle en cours d'édition ; `null` = création ; `undefined` = panneau fermé. */
-  const [enEdition, setEnEdition] = useState<AutomationRule | null | undefined>(undefined);
   const [occupeId, setOccupeId] = useState<string | null>(null);
-  // Langue dans laquelle les messages d'automatisation partent aux clients.
+  /** Menu « Créer » ouvert ? Cinq départs possibles, comme chez GHL. */
+  const [menuCreer, setMenuCreer] = useState(false);
+  /** Menu « … » ouvert sur quelle ligne ? */
+  const [menuLigne, setMenuLigne] = useState<string | null>(null);
+  /** Ligne dépliée : on y modifie le texte des messages sans quitter la liste. */
+  const [deplieId, setDeplieId] = useState<string | null>(null);
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
   const [savingLang, setSavingLang] = useState(false);
+
   useEffect(() => { getAutomationLanguage().then(setOrgLang).catch(() => {}); }, []);
+
   const changerLangue = async (lang: 'fr' | 'en') => {
     if (lang === orgLang || savingLang) return;
     setSavingLang(true);
     const avant = orgLang;
-    setOrgLang(lang); // optimiste
+    setOrgLang(lang);
     try {
       await setAutomationLanguage(lang);
-      toast.success(fr ? (lang === 'en' ? 'Messages en anglais' : 'Messages en français') : (lang === 'en' ? 'Messages set to English' : 'Messages set to French'));
+      toast.success(fr
+        ? (lang === 'en' ? 'Messages en anglais' : 'Messages en français')
+        : (lang === 'en' ? 'Messages set to English' : 'Messages set to French'));
     } catch {
-      setOrgLang(avant); // rollback si échec
+      setOrgLang(avant);
       toast.error(fr ? 'Impossible de changer la langue' : 'Could not change language');
     } finally {
       setSavingLang(false);
     }
   };
 
-  // ── Load (read only — no auto-seed) ──
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getAutomationRules();
-      // Client-side safety: deduplicate by preset_key (keep first per key)
-      const seen = new Set<string>();
-      const deduped = data.filter((r) => {
+      const vues = new Set<string>();
+      setRules(data.filter((r) => {
         if (!r.preset_key) return true;
-        if (seen.has(r.preset_key)) return false;
-        seen.add(r.preset_key);
+        if (vues.has(r.preset_key)) return false;
+        vues.add(r.preset_key);
         return true;
-      });
-      setRules(deduped);
-
-      // Échecs des 7 derniers jours. Le moteur les journalisait déjà, mais
-      // aucune page ne lisait la table : une automatisation cassée restait
-      // affichée « active » avec un badge vert, et l'utilisateur n'apprenait
-      // jamais que ses clients n'avaient rien reçu.
-      // Non bloquant : la liste doit s'afficher même si ce chargement échoue.
+      }));
+      // Les échecs 7 jours : non bloquant, la liste doit s'afficher même si
+      // cette lecture échoue.
       try {
-        const recents = await getRecentAutomationFailures(200);
-        setFailures(recents);
         setFailureCounts(await getFailureCountsByRule());
       } catch (e: any) {
         console.error('Failed to load automation failures:', e.message);
       }
     } catch (e: any) {
       console.error('Failed to load rules:', e.message);
-      toast.error(language === 'fr' ? 'Impossible de charger les automatisations' : 'Failed to load automations');
+      toast.error(fr ? 'Impossible de charger les automatisations' : 'Failed to load automations');
     } finally {
       setLoading(false);
     }
-  }, [language]);
+  }, [fr]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Le catalogue arrive avec la même requête que les règles, côté serveur.
-  // Non bloquant : si l'appel échoue, la liste reste utilisable et seul le
-  // bouton « Créer » disparaît — plutôt qu'une page blanche.
+  // Le catalogue voyage avec les règles depuis le serveur.
   useEffect(() => {
     let vivant = true;
     chargerAutomatisations()
       .then((d) => { if (vivant) setCatalogue(d.catalogue); })
       .catch((e: unknown) => {
-        console.error('[Automations] catalogue indisponible',
-          e instanceof Error ? e.message : String(e));
+        console.error('[Automations] catalogue indisponible', e instanceof Error ? e.message : String(e));
       });
     return () => { vivant = false; };
   }, []);
 
-  // ── Dupliquer ──
-  // Le seul chemin pour s'approprier une automatisation fournie : la copie
-  // perd son `preset_key`, donc le seeder ne la réécrira plus et TOUT y est
-  // modifiable, déclencheur compris.
-  const dupliquer = async (regle: AutomationRule) => {
+  // Fermer les menus au clic ailleurs — sinon ils restent ouverts et masquent
+  // la ligne suivante.
+  useEffect(() => {
+    if (!menuCreer && !menuLigne) return;
+    const fermer = () => { setMenuCreer(false); setMenuLigne(null); };
+    document.addEventListener('click', fermer);
+    return () => document.removeEventListener('click', fermer);
+  }, [menuCreer, menuLigne]);
+
+  const handleToggle = async (rule: AutomationRule) => {
+    const newActive = !rule.is_active;
+    setTogglingId(rule.id);
+    setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: newActive } : r)));
+    try {
+      await toggleAutomationRule(rule.id, newActive);
+      toast.success(newActive
+        ? (fr ? 'Automatisation publiée' : 'Automation published')
+        : (fr ? 'Repassée en brouillon' : 'Back to draft'));
+    } catch {
+      toast.error(fr ? 'Impossible de mettre à jour' : 'Could not update');
+      setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: rule.is_active } : r)));
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  /** Crée une automatisation vide et ouvre le builder dessus. */
+  const partirDeZero = async (avecLumi: boolean) => {
+    try {
+      const creee = await creerAutomatisation({
+        name: fr ? 'Nouvelle automatisation' : 'New automation',
+        trigger_event: 'quote.sent',
+        delay_seconds: 0,
+        actions: [{ type: 'send_sms', config: { body: fr ? 'À compléter' : 'To complete' } }],
+        steps: [],
+      });
+      navigate(`/automations/${creee.id}${avecLumi ? '?lumi=1' : ''}`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const dupliquer = async (regle: AutomationRule, ouvrir = false) => {
     setOccupeId(regle.id);
     try {
-      await dupliquerAutomatisation(regle.id);
-      toast.success(fr ? 'Copie créée — elle est en pause' : 'Copy created — it is paused');
+      const copie = await dupliquerAutomatisation(regle.id);
+      toast.success(fr ? 'Copie créée — elle est en brouillon' : 'Copy created — it is a draft');
+      if (ouvrir) { navigate(`/automations/${copie.id}`); return; }
       await load();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -497,13 +535,12 @@ export default function Automations() {
     }
   };
 
-  // ── Supprimer ──
   const supprimer = async (regle: AutomationRule) => {
     const ok = await confirmer({
       title: fr ? 'Supprimer cette automatisation ?' : 'Delete this automation?',
       message: fr
         ? `« ${regle.name} » sera supprimée, et les envois déjà prévus seront annulés. C'est définitif.`
-        : `“${regle.name}” will be deleted, and any messages already queued will be cancelled. This cannot be undone.`,
+        : `“${regle.name}” will be deleted, and any queued messages cancelled. This cannot be undone.`,
       confirmLabel: fr ? 'Supprimer' : 'Delete',
       danger: true,
     });
@@ -520,545 +557,423 @@ export default function Automations() {
     }
   };
 
-  // ── Toggle ──
-  const handleToggle = async (rule: AutomationRule) => {
-    const newActive = !rule.is_active;
-    setTogglingId(rule.id);
-    setRules((prev) => prev.map((r) => r.id === rule.id ? { ...r, is_active: newActive } : r));
-    try {
-      await toggleAutomationRule(rule.id, newActive);
-      toast.success(newActive
-        ? (t.automations.workflowEnabled)
-        : (t.automations.workflowDisabled));
-    } catch {
-      toast.error(t.automations.failedToUpdate);
-      setRules((prev) => prev.map((r) => r.id === rule.id ? { ...r, is_active: rule.is_active } : r));
-    } finally {
-      setTogglingId(null);
-    }
-  };
+  const getCategory = (r: AutomationRule): CategoryKey =>
+    (PRESET_META[r.preset_key || '']?.category as CategoryKey) || 'Follow-up';
 
-  // ── Category resolution ──
-  const getCategory = (r: AutomationRule): CategoryKey => {
-    const meta = PRESET_META[r.preset_key || ''];
-    return meta?.category || 'Follow-up';
-  };
-
-  // ── Filter ──
-  const filtered = rules.filter((r) => {
+  // « Les miennes » = ce que l'entreprise a construit, ou un préréglage
+  // qu'elle a activé. « Modèles » = le reste, à piocher.
+  const miennes = rules.filter((r) => !r.is_preset || r.is_active);
+  const modeles = rules.filter((r) => r.is_preset && !r.is_active);
+  const visibles = (onglet === 'miennes' ? miennes : modeles).filter((r) => {
     if (search) {
       const q = search.toLowerCase();
-      if (!r.name.toLowerCase().includes(q) && !(r.description || '').toLowerCase().includes(q)) return false;
+      const nom = localizeAutomationName(r.name, language).toLowerCase();
+      if (!nom.includes(q) && !(r.description || '').toLowerCase().includes(q)) return false;
     }
-    if (filterStatus === 'active' && !r.is_active) return false;
-    if (filterStatus === 'inactive' && r.is_active) return false;
     if (filterCategory !== 'all' && getCategory(r) !== filterCategory) return false;
     return true;
   });
 
-  // ── Group by category, sorted alphabetically within each ──
-  const grouped: Record<string, AutomationRule[]> = {};
-  for (const r of filtered) {
-    const cat = getCategory(r);
-    if (!grouped[cat]) grouped[cat] = [];
-    grouped[cat].push(r);
-  }
-  // Sort rules alphabetically within each category
-  for (const cat of Object.keys(grouped)) {
-    grouped[cat].sort((a, b) => a.name.localeCompare(b.name));
-  }
+  const publiees = rules.filter((r) => r.is_active).length;
 
-  // ── Counts ──
-  const totalCount = rules.length;
-  const activeCount = rules.filter((r) => r.is_active).length;
-  const inactiveCount = totalCount - activeCount;
+  const DEPARTS: Array<{ cle: string; fr: string; en: string; aideFr: string; aideEn: string; icone: typeof Zap }> = [
+    { cle: 'zero', fr: 'Partir de zéro', en: 'Start from scratch', icone: Plus,
+      aideFr: 'Un parcours vide, à construire.', aideEn: 'An empty path, to build.' },
+    { cle: 'lumi', fr: 'Construire avec Lumi', en: 'Build with Lumi', icone: Sparkles,
+      aideFr: 'Décris ce que tu veux, Lumi le monte.', aideEn: 'Describe it, Lumi builds it.' },
+    { cle: 'modele', fr: 'Partir d’un modèle', en: 'Start from a template', icone: FileText,
+      aideFr: `${modeles.length} modèles prêts à l’emploi.`, aideEn: `${modeles.length} ready-made templates.` },
+    { cle: 'entreprise', fr: 'Automatisation d’entreprise', en: 'Company automation', icone: Briefcase,
+      aideFr: 'Déclenchée par l’entreprise, pas par un client.', aideEn: 'Triggered by the company, not a client.' },
+  ];
 
-  const toggleCategory = (cat: string) => {
-    setCollapsedCategories(prev => {
-      const next = new Set(prev);
-      next.has(cat) ? next.delete(cat) : next.add(cat);
-      return next;
-    });
+  const choisirDepart = (cle: string) => {
+    setMenuCreer(false);
+    if (cle === 'zero') { partirDeZero(false); return; }
+    if (cle === 'lumi') { partirDeZero(true); return; }
+    if (cle === 'modele') { setOnglet('modeles'); return; }
+    toast.info(fr
+      ? 'Les automatisations d’entreprise arrivent bientôt.'
+      : 'Company automations are coming soon.');
   };
 
   return (
     <PermissionGate permission="automations.update">
-    <div className="space-y-6 max-w-[1100px] mx-auto">
+      <div className="mx-auto max-w-[1200px] space-y-5">
 
-      {/* ── Construire son automatisation ──
-          Panneau plein écran plutôt qu'une boîte étroite : il y a trois blocs
-          à lire et des textes à écrire, et sur un téléphone une modale de la
-          taille d'une carte rendrait la saisie pénible. */}
-      {enEdition !== undefined && catalogue && (
-        <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-sm p-4 sm:p-8"
-          role="dialog"
-          aria-modal="true"
-          aria-label={enEdition ? (fr ? 'Modifier l’automatisation' : 'Edit automation') : (fr ? 'Créer une automatisation' : 'Create an automation')}
-        >
-          <div className="mx-auto w-full max-w-[680px] rounded-2xl border border-border bg-surface-primary p-5 shadow-xl">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <h2 className="text-lg font-semibold text-text-primary">
-                {enEdition
-                  ? (fr ? 'Modifier l’automatisation' : 'Edit automation')
-                  : (fr ? 'Créer une automatisation' : 'Create an automation')}
-              </h2>
+        {/* ── En-tête ── */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-text-primary">
+              {fr ? 'Automatisations' : 'Automations'}
+            </h1>
+            <p className="mt-0.5 text-[13px] text-text-tertiary">
+              {fr
+                ? 'Ce qui part tout seul chez vos clients, sans que personne y pense.'
+                : 'What goes out to your clients on its own, without anyone thinking about it.'}
+            </p>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* Langue des messages envoyés aux clients */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-text-tertiary">{fr ? 'Messages en' : 'Messages in'}</span>
+              <div className="inline-flex overflow-hidden rounded-lg border border-outline/50 text-[12px]">
+                {(['fr', 'en'] as const).map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => changerLangue(l)}
+                    disabled={savingLang}
+                    className={`px-2.5 py-1 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary'}`}
+                  >
+                    {l === 'fr' ? 'FR' : 'EN'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Créer — cinq départs, comme chez GHL */}
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => setEnEdition(undefined)}
-                aria-label={fr ? 'Fermer' : 'Close'}
-                className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                onClick={(e) => { e.stopPropagation(); setMenuCreer((m) => !m); }}
+                aria-haspopup="menu"
+                aria-expanded={menuCreer}
+                className="glass-button-primary inline-flex items-center gap-1.5"
               >
-                <X size={18} aria-hidden="true" />
+                <Plus size={14} aria-hidden="true" />
+                {fr ? 'Créer' : 'Create'}
+                <ChevronDown size={13} aria-hidden="true" />
               </button>
-            </div>
-            <AutomationBuilder
-              regle={enEdition}
-              catalogue={catalogue}
-              fr={fr}
-              onFerme={() => setEnEdition(undefined)}
-              onEnregistre={load}
-            />
-          </div>
-        </div>
-      )}
 
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-text-primary">
-            {fr ? 'Automatisations' : 'Automations'}
-          </h1>
-          <p className="text-[13px] text-text-tertiary mt-0.5">
-            {fr
-              ? 'Automatisations événementielles pour votre entreprise'
-              : 'Event-driven automations for your business'}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          {/* Langue dans laquelle les messages partent aux clients */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-text-tertiary">{fr ? 'Messages en' : 'Messages in'}</span>
-            <div className="inline-flex rounded-lg border border-outline/50 overflow-hidden text-[12px]">
-              {(['fr', 'en'] as const).map((l) => (
-                <button
-                  key={l}
-                  onClick={() => changerLangue(l)}
-                  disabled={savingLang}
-                  className={`px-2.5 py-1 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary'}`}
+              {menuCreer && (
+                <div
+                  role="menu"
+                  tabIndex={-1}
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute right-0 z-30 mt-1.5 w-[280px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
                 >
-                  {l === 'fr' ? 'FR' : 'EN'}
-                </button>
-              ))}
+                  {DEPARTS.map((d) => (
+                    <button
+                      key={d.cle}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => choisirDepart(d.cle)}
+                      className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      <d.icone size={15} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
+                      <span className="min-w-0">
+                        <span className="block text-[13px] font-medium text-text-primary">{fr ? d.fr : d.en}</span>
+                        <span className="block text-[11px] text-text-tertiary">{fr ? d.aideFr : d.aideEn}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-          {/* Créer la sienne. Absent tant que le catalogue n'a pas répondu :
-              ouvrir un formulaire sans liste de déclencheurs ne mène à rien. */}
-          {catalogue && (
-            <button
-              onClick={() => setEnEdition(null)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-text-primary px-3 py-1.5 text-[12px] font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Plus size={14} aria-hidden="true" />
-              {fr ? 'Créer' : 'Create'}
-            </button>
-          )}
+        </div>
+
+        {/* ── Trois chiffres ── */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { v: miennes.length, l: fr ? 'Mes automatisations' : 'My automations' },
+            { v: publiees, l: fr ? 'Publiées' : 'Published' },
+            { v: modeles.length, l: fr ? 'Modèles disponibles' : 'Templates available' },
+          ].map((s) => (
+            <div key={s.l} className="section-card px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">{s.l}</p>
+              <p className="mt-0.5 text-xl font-bold text-text-primary">{s.v}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Onglets ── */}
+        <div className="tab-nav" role="tablist" aria-label={fr ? 'Vue' : 'View'}>
           <button
-            onClick={() => navigate('/settings')}
-            className="glass-button-ghost inline-flex items-center gap-1.5 text-[12px]"
+            type="button"
+            role="tab"
+            aria-selected={onglet === 'miennes'}
+            onClick={() => setOnglet('miennes')}
+            className={onglet === 'miennes' ? 'tab-item-active' : 'tab-item'}
           >
-            <ArrowLeft size={14} />
-            {fr ? 'Retour' : 'Back'}
+            {fr ? `Mes automatisations (${miennes.length})` : `My automations (${miennes.length})`}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={onglet === 'modeles'}
+            onClick={() => setOnglet('modeles')}
+            className={onglet === 'modeles' ? 'tab-item-active' : 'tab-item'}
+          >
+            {fr ? `Modèles (${modeles.length})` : `Templates (${modeles.length})`}
           </button>
         </div>
-      </div>
 
-      {/* ── Stats row ── */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Total', value: totalCount },
-          { label: fr ? 'Actives' : 'Active', value: activeCount },
-          { label: fr ? 'Inactives' : 'Inactive', value: inactiveCount },
-        ].map((s) => (
-          <div key={s.label} className="section-card px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">{s.label}</p>
-            <p className="text-lg font-bold text-text-primary tabular-nums mt-0.5">{s.value}</p>
+        {/* ── Recherche et filtre ── */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-1">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden="true" />
+            <label htmlFor="rech-automations" className="sr-only">{fr ? 'Rechercher' : 'Search'}</label>
+            <input
+              id="rech-automations"
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={fr ? 'Rechercher…' : 'Search…'}
+              className="glass-input w-full pl-9"
+            />
           </div>
-        ))}
-      </div>
-
-      {/* ── Filters ── */}
-      <div className="flex items-center gap-2.5 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-[300px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-          <input
-            type="text"
-            placeholder={t.automations.search}
-            aria-label={t.common.search}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="glass-input w-full pl-9 text-[13px]"
-          />
+          <label htmlFor="filtre-categorie" className="sr-only">{fr ? 'Catégorie' : 'Category'}</label>
+          <select
+            id="filtre-categorie"
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="glass-input"
+          >
+            <option value="all">{fr ? 'Toutes les catégories' : 'All categories'}</option>
+            {CATEGORY_ORDER.map((c) => (
+              <option key={c} value={c}>{fr ? CATEGORY_META[c].labelFr : CATEGORY_META[c].labelEn}</option>
+            ))}
+          </select>
+          <span className="ml-auto text-[12px] text-text-tertiary">
+            {visibles.length} {fr ? 'résultat(s)' : 'result(s)'}
+          </span>
         </div>
-        <select
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-          aria-label={t.automations.category}
-          className="glass-input text-[13px] py-2"
-        >
-          <option value="all">{t.automations.allCategories}</option>
-          {CATEGORY_ORDER.map((c) => (
-            <option key={c} value={c}>
-              {fr ? CATEGORY_META[c].labelFr : CATEGORY_META[c].labelEn}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as any)}
-          aria-label={t.automations.status}
-          className="glass-input text-[13px] py-2"
-        >
-          <option value="all">{fr ? 'Toutes' : 'All'}</option>
-          <option value="active">{fr ? 'Actives' : 'Active'}</option>
-          <option value="inactive">{fr ? 'Inactives' : 'Inactive'}</option>
-        </select>
-        <span className="text-[11px] text-text-tertiary ml-auto">
-          {filtered.length} {t.automations.results}
-        </span>
-      </div>
 
-      {/* ── Content ── */}
-      {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 size={20} className="animate-spin text-text-tertiary" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="section-card p-10 text-center">
-          <Zap size={28} className="mx-auto text-text-tertiary/30 mb-3" />
-          <p className="text-[13px] text-text-tertiary">
-            {search
-              ? (t.automations.noResults)
-              : (t.automations.noWorkflows)}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {CATEGORY_ORDER.filter(cat => grouped[cat]?.length).map((cat) => {
-            const catMeta = CATEGORY_META[cat];
-            const CatIcon = catMeta.icon;
-            const catRules = grouped[cat];
-            const isCollapsed = collapsedCategories.has(cat);
-            const catActiveCount = catRules.filter(r => r.is_active).length;
-
-            return (
-              <div key={cat} className="section-card overflow-hidden">
-                {/* Category header */}
-                <button
-                  onClick={() => toggleCategory(cat)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary/30 transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-surface-tertiary flex items-center justify-center shrink-0">
-                    <CatIcon size={15} className="text-text-secondary" />
-                  </div>
-                  <div className="text-left min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[14px] font-semibold text-text-primary">
-                        {fr ? catMeta.labelFr : catMeta.labelEn}
-                      </span>
-                      <span className="text-[11px] text-text-tertiary">
-                        {catActiveCount}/{catRules.length} {fr ? 'actives' : 'active'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-text-tertiary mt-0.5 truncate">
-                      {fr ? catMeta.descFr : catMeta.descEn}
-                    </p>
-                  </div>
-                  {isCollapsed ? (
-                    <ChevronRight size={16} className="text-text-tertiary shrink-0" />
-                  ) : (
-                    <ChevronDown size={16} className="text-text-tertiary shrink-0" />
-                  )}
-                </button>
-
-                {/* Rules table */}
-                {!isCollapsed && (
-                  <table className="w-full text-[13px]">
-                    <thead>
-                      <tr className="border-t border-b border-outline bg-surface-secondary/40">
-                        {[
-                          { label: fr ? 'Automatisation' : 'Automation', cls: 'text-left' },
-                          { label: t.automations.trigger, cls: 'text-left hidden md:table-cell' },
-                          { label: t.automations.timing, cls: 'text-left hidden lg:table-cell' },
-                          { label: t.automations.channels, cls: 'text-left hidden lg:table-cell' },
-                          { label: t.automations.status, cls: 'text-center w-[80px]' },
-                          { label: '', cls: 'text-right w-[60px]' },
-                        ].map((col) => (
-                          <th key={col.label || 'action'} className={cn('px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary', col.cls)}>
-                            {col.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {catRules.map((rule) => {
-                        const meta = PRESET_META[rule.preset_key || ''];
-                        const Icon = meta?.icon || Zap;
-                        const trigger = TRIGGER_DISPLAY[rule.trigger_event];
-                        const isDefault = rule.is_preset && DEFAULT_ACTIVE_PRESETS.has(rule.preset_key || '');
-                        const channels = getChannels(rule.actions, fr);
-                        const isExpanded = expandedId === rule.id;
-
-                        return (
-                          <React.Fragment key={rule.id}>
-                            <tr
-                              className={cn(
-                                'border-b border-outline/40 transition-colors cursor-pointer',
-                                !rule.is_active && 'opacity-50',
-                                isExpanded ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30',
-                              )}
-                              role="button"
-                              tabIndex={0}
-                              aria-expanded={isExpanded}
-                              onClick={() => setExpandedId(isExpanded ? null : rule.id)}
-                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(isExpanded ? null : rule.id); } }}
-                            >
-                              {/* Name */}
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-7 h-7 rounded-md bg-surface-tertiary flex items-center justify-center shrink-0">
-                                    <Icon size={13} className="text-text-secondary" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-semibold text-text-primary truncate">{localizeAutomationName(rule.name, language)}</span>
-                                      {isDefault && (
-                                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-secondary shrink-0">
-                                          {t.automations.default}
-                                        </span>
-                                      )}
-                                      {rule.is_preset && !isDefault && (
-                                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-tertiary shrink-0">
-                                          {t.automations.optional}
-                                        </span>
-                                      )}
-                                      {/* Échecs récents : sans ce badge, une automatisation
-                                          cassée restait « active » en vert et l'utilisateur
-                                          ignorait que ses clients n'avaient rien reçu. */}
-                                      {(failureCounts[rule.id] || 0) > 0 && (
-                                        <span
-                                          title={fr
-                                            ? `${failureCounts[rule.id]} échec(s) dans les 7 derniers jours`
-                                            : `${failureCounts[rule.id]} failure(s) in the last 7 days`}
-                                          className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 shrink-0"
-                                        >
-                                          {fr ? `${failureCounts[rule.id]} échec` : `${failureCounts[rule.id]} failed`}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* Trigger */}
-                              <td className="px-4 py-3 text-[12px] text-text-secondary hidden md:table-cell">
-                                {trigger ? (fr ? trigger.fr : trigger.en) : rule.trigger_event}
-                              </td>
-
-                              {/* Timing */}
-                              <td className="px-4 py-3 hidden lg:table-cell">
-                                <span className="text-[12px] text-text-tertiary flex items-center gap-1">
-                                  <Clock size={10} />
-                                  {formatDelay(rule.delay_seconds, language)}
-                                </span>
-                              </td>
-
-                              {/* Channels */}
-                              <td className="px-4 py-3 hidden lg:table-cell">
-                                <div className="flex gap-1">
-                                  {channels.map((ch) => (
-                                    <span key={ch} className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-tertiary text-text-secondary">
-                                      {ch}
-                                    </span>
-                                  ))}
-                                </div>
-                              </td>
-
-                              {/* Status */}
-                              <td className="px-4 py-3 text-center">
-                                <span className={cn(
-                                  'inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full',
-                                  rule.is_active
-                                    ? 'bg-primary/8 text-text-primary'
-                                    : 'bg-surface-tertiary text-text-tertiary',
-                                )}>
-                                  {rule.is_active ? 'Active' : (t.automations.off)}
-                                </span>
-                              </td>
-
-                              {/* Modifier · dupliquer · supprimer, puis la bascule.
-                                  Une automatisation fournie se modifie et se
-                                  désactive, mais ne se supprime pas : le seeder
-                                  la recréerait au prochain démarrage et on
-                                  croirait à un bogue. */}
-                              <td className="px-4 py-3 text-right" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
-                                <div className="inline-flex items-center gap-0.5">
-                                  {catalogue && (
-                                    <>
-                                      <button
-                                        onClick={() => setEnEdition(rule)}
-                                        aria-label={fr ? `Modifier ${rule.name}` : `Edit ${rule.name}`}
-                                        className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                                      >
-                                        <Pencil size={15} aria-hidden="true" />
-                                      </button>
-                                      <button
-                                        onClick={() => dupliquer(rule)}
-                                        disabled={occupeId === rule.id}
-                                        aria-label={fr ? `Dupliquer ${rule.name}` : `Duplicate ${rule.name}`}
-                                        className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                                      >
-                                        {occupeId === rule.id
-                                          ? <Loader2 size={15} className="animate-spin" aria-hidden="true" />
-                                          : <Copy size={15} aria-hidden="true" />}
-                                      </button>
-                                      {!rule.is_preset && (
-                                        <button
-                                          onClick={() => supprimer(rule)}
-                                          disabled={occupeId === rule.id}
-                                          aria-label={fr ? `Supprimer ${rule.name}` : `Delete ${rule.name}`}
-                                          className="p-1.5 rounded-md text-text-tertiary hover:text-red-500 hover:bg-surface-tertiary transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                                        >
-                                          <Trash2 size={15} aria-hidden="true" />
-                                        </button>
-                                      )}
-                                    </>
-                                  )}
-                                <button
-                                  onClick={() => handleToggle(rule)}
-                                  disabled={togglingId === rule.id}
-                                  aria-label={rule.is_active ? (fr ? 'Désactiver' : 'Deactivate') : (fr ? 'Activer' : 'Activate')}
-                                  aria-pressed={rule.is_active}
-                                  className="p-1 rounded-md hover:bg-surface-tertiary transition-colors inline-flex"
-                                >
-                                  {togglingId === rule.id ? (
-                                    <Loader2 size={18} className="animate-spin text-text-tertiary" />
-                                  ) : rule.is_active ? (
-                                    <ToggleRight size={20} className="text-text-primary" />
-                                  ) : (
-                                    <ToggleLeft size={20} className="text-text-tertiary" />
-                                  )}
-                                </button>
-                                </div>
-                              </td>
-                            </tr>
-
-                            {/* Expanded detail row */}
-                            {isExpanded && (
-                              <tr className="bg-surface-secondary/30">
-                                <td colSpan={6} className="px-6 py-4">
-                                  {/* POURQUOI ça n'a pas marché. Le badge rouge disait
-                                      « 2 échecs » et s'arrêtait là : l'entrepreneur voyait
-                                      que ses clients n'avaient rien reçu sans jamais savoir
-                                      quoi corriger. Les causes techniques anglaises ne
-                                      sortent jamais telles quelles — une cause non traduite
-                                      n'est simplement pas affichée. */}
-                                  {(() => {
-                                    const raisons = [...new Set(
-                                      failures
-                                        .filter((f) => f.automation_rule_id === rule.id)
-                                        .map((f) => raisonLisible(f.result_error, fr))
-                                        .filter((r): r is string => !!r),
-                                    )];
-                                    if (!raisons.length) return null;
-                                    return (
-                                      <div className="mb-4 rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 px-3 py-2">
-                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-300 mb-1">
-                                          {fr ? 'Pourquoi ça n’a pas marché' : 'Why it did not work'}
-                                        </p>
-                                        <ul className="space-y-0.5">
-                                          {raisons.map((r) => (
-                                            <li key={r} className="text-[12px] text-red-800 dark:text-red-200 leading-relaxed">{r}</li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    );
-                                  })()}
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[12px]">
-                                    <div>
-                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
-                                        {t.automations.description}
-                                      </p>
-                                      <p className="text-text-secondary leading-relaxed">
-                                        {rule.description || (t.automations.noDescription)}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
-                                        {t.automations.actions}
-                                      </p>
-                                      <div className="space-y-1">
-                                        {rule.actions.map((a, i) => (
-                                          <div key={i} className="flex items-center gap-1.5 text-text-secondary">
-                                            <span className="w-1 h-1 rounded-full bg-text-tertiary shrink-0" />
-                                            <span>{getActionLabel(a.type, fr)}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
-                                        {t.automations.details}
-                                      </p>
-                                      <div className="space-y-1 text-text-secondary">
-                                        <div className="flex items-center gap-1.5">
-                                          <Clock size={10} className="text-text-tertiary" />
-                                          {formatDelay(rule.delay_seconds, language)}
-                                        </div>
-                                        {rule.preset_key && (
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-text-tertiary text-[10px]">key:</span>
-                                            <code className="text-[10px] bg-surface-tertiary px-1 py-0.5 rounded">{rule.preset_key}</code>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Le texte réellement envoyé au client, éditable.
-                                      La page n'affichait que le TYPE d'action
-                                      (« Envoyer un courriel ») : l'utilisateur ne
-                                      pouvait ni relire ni corriger ce qui partait en
-                                      son nom. */}
-                                  {rule.actions
-                                    .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
-                                    .map((a, i) => (
-                                      <MessageEditor
-                                        ruleName={localizeAutomationName(rule.name, language)}
-                                        key={`${rule.id}-${a.type}-${i}`}
-                                        ruleId={rule.id}
-                                        actionType={a.type as 'send_sms' | 'send_email'}
-                                        body={String(a.config?.body ?? '')}
-                                        subject={a.type === 'send_email' ? String(a.config?.subject ?? '') : undefined}
-                                        fr={fr}
-                                        onSaved={load}
-                                      />
-                                    ))}
-                                </td>
-                              </tr>
+        {/* ── Le tableau ── */}
+        {loading ? (
+          <div className="section-card flex items-center justify-center py-16">
+            <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" aria-hidden="true" />
+          </div>
+        ) : visibles.length === 0 ? (
+          <div className="section-card px-6 py-14 text-center">
+            <Zap className="mx-auto mb-3 h-8 w-8 text-text-tertiary" aria-hidden="true" />
+            <p className="text-sm font-medium text-text-primary">
+              {onglet === 'miennes'
+                ? (fr ? 'Aucune automatisation pour l’instant' : 'No automations yet')
+                : (fr ? 'Aucun modèle ne correspond' : 'No template matches')}
+            </p>
+            <p className="mx-auto mt-1 max-w-sm text-[13px] text-text-tertiary">
+              {onglet === 'miennes'
+                ? (fr
+                  ? 'Créez la vôtre, ou partez d’un modèle déjà écrit pour votre métier.'
+                  : 'Create your own, or start from a template written for your trade.')
+                : (fr ? 'Essayez un autre mot ou une autre catégorie.' : 'Try another word or category.')}
+            </p>
+            {onglet === 'miennes' && modeles.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setOnglet('modeles')}
+                className="glass-button mt-4 inline-flex items-center gap-1.5"
+              >
+                <FileText size={14} aria-hidden="true" />
+                {fr ? 'Voir les modèles' : 'Browse templates'}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="section-card overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-outline/40 text-left text-[10px] uppercase tracking-wider text-text-tertiary">
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{fr ? 'Automatisation' : 'Automation'}</th>
+                  <th scope="col" className="hidden px-4 py-2.5 font-semibold md:table-cell">{fr ? 'Déclencheur' : 'Trigger'}</th>
+                  <th scope="col" className="hidden px-4 py-2.5 font-semibold lg:table-cell">{fr ? 'Délai' : 'Timing'}</th>
+                  <th scope="col" className="hidden px-4 py-2.5 font-semibold lg:table-cell">{fr ? 'Canaux' : 'Channels'}</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{fr ? 'Statut' : 'Status'}</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-semibold">{fr ? 'Actions' : 'Actions'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibles.map((r) => {
+                  const meta = PRESET_META[r.preset_key || ''];
+                  const Icone = meta?.icon ?? Zap;
+                  const rule = r;
+                  const echecs = failureCounts[rule.id] ?? 0;
+                  const decl = TRIGGER_DISPLAY[r.trigger_event];
+                  return (
+                    <React.Fragment key={r.id}>
+                    <tr className="border-b border-outline/20 transition-colors last:border-0 hover:bg-surface-secondary/40">
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/automations/${r.id}`)}
+                          className="flex items-center gap-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        >
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-tertiary">
+                            <Icone size={14} className="text-text-secondary" aria-hidden="true" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium text-text-primary hover:text-accent">
+                              {localizeAutomationName(r.name, language)}
+                            </span>
+                            {echecs > 0 && (
+                              <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-danger">
+                                <AlertTriangle size={11} aria-hidden="true" />
+                                {echecs} {fr ? 'échec(s) dans les 7 derniers jours' : 'failure(s) in the last 7 days'}
+                              </span>
                             )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+                          </span>
+                        </button>
+                      </td>
+                      <td className="hidden px-4 py-3 text-text-secondary md:table-cell">
+                        {decl ? (fr ? decl.fr : decl.en) : r.trigger_event}
+                      </td>
+                      <td className="hidden px-4 py-3 text-text-secondary lg:table-cell">
+                        {Array.isArray(r.steps) && r.steps.length > 0
+                          ? (fr ? `Parcours · ${r.steps.length} étapes` : `Path · ${r.steps.length} steps`)
+                          : formatDelay(r.delay_seconds, language)}
+                      </td>
+                      <td className="hidden px-4 py-3 lg:table-cell">
+                        <span className="flex flex-wrap gap-1">
+                          {getChannels(r.actions, fr).map((c) => (
+                            <span key={c} className="rounded-md bg-surface-tertiary px-1.5 py-0.5 text-[10px] text-text-secondary">{c}</span>
+                          ))}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn(
+                          'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium',
+                          r.is_active ? 'bg-success-light text-success' : 'bg-surface-tertiary text-text-tertiary',
+                        )}>
+                          {r.is_active ? (fr ? 'Publiée' : 'Published') : (fr ? 'Brouillon' : 'Draft')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleToggle(r)}
+                            disabled={togglingId === r.id}
+                            aria-label={r.is_active
+                              ? (fr ? `Repasser ${r.name} en brouillon` : `Unpublish ${r.name}`)
+                              : (fr ? `Publier ${r.name}` : `Publish ${r.name}`)}
+                            aria-pressed={r.is_active}
+                            className="rounded-md p-1 transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          >
+                            {togglingId === r.id
+                              ? <Loader2 size={18} className="animate-spin text-text-tertiary" aria-hidden="true" />
+                              : r.is_active
+                                ? <ToggleRight size={20} className="text-text-primary" aria-hidden="true" />
+                                : <ToggleLeft size={20} className="text-text-tertiary" aria-hidden="true" />}
+                          </button>
+
+                          {/* Voir et modifier les messages, sans quitter la liste */}
+                          <button
+                            type="button"
+                            onClick={() => setDeplieId((d) => (d === rule.id ? null : rule.id))}
+                            aria-expanded={deplieId === rule.id}
+                            aria-label={fr ? `Voir les messages de ${rule.name}` : `View messages of ${rule.name}`}
+                            className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          >
+                            <ChevronDown
+                              size={15}
+                              className={cn('transition-transform', deplieId === rule.id && 'rotate-180')}
+                              aria-hidden="true"
+                            />
+                          </button>
+
+                          {/* Menu « … » — modifier, dupliquer, supprimer */}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setMenuLigne((m) => (m === r.id ? null : r.id)); }}
+                              aria-haspopup="menu"
+                              aria-expanded={menuLigne === r.id}
+                              aria-label={fr ? `Actions pour ${r.name}` : `Actions for ${r.name}`}
+                              className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            >
+                              {occupeId === r.id
+                                ? <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+                                : <EllipsisVertical size={15} aria-hidden="true" />}
+                            </button>
+
+                            {menuLigne === r.id && (
+                              <div
+                                role="menu"
+                                tabIndex={-1}
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute right-0 z-30 mt-1 w-[200px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
+                              >
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => { setMenuLigne(null); navigate(`/automations/${r.id}`); }}
+                                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                >
+                                  <Pencil size={13} aria-hidden="true" />
+                                  {fr ? 'Ouvrir le parcours' : 'Open the path'}
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => { setMenuLigne(null); dupliquer(r, r.is_preset); }}
+                                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                >
+                                  <Copy size={13} aria-hidden="true" />
+                                  {r.is_preset
+                                    ? (fr ? 'Copier et modifier' : 'Copy and edit')
+                                    : (fr ? 'Dupliquer' : 'Duplicate')}
+                                </button>
+                                {!r.is_preset && (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setMenuLigne(null); supprimer(r); }}
+                                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-danger transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                  >
+                                    <Trash2 size={13} aria-hidden="true" />
+                                    {fr ? 'Supprimer' : 'Delete'}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Les messages, modifiables sur place.
+                        C'est ce qu'on vient chercher le plus souvent : changer
+                        une phrase, pas refaire un parcours. */}
+                    {deplieId === rule.id && (
+                      <tr className="bg-surface-secondary/30">
+                        <td colSpan={6} className="px-4 py-4">
+                          {rule.actions.filter((a) => a.type === 'send_sms' || a.type === 'send_email').length === 0 ? (
+                            <p className="text-[12px] text-text-tertiary">
+                              {fr
+                                ? 'Cette automatisation n’envoie ni texto ni courriel.'
+                                : 'This automation sends neither text nor email.'}
+                            </p>
+                          ) : (
+                            rule.actions
+                              .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
+                              .map((a, i) => (
+                                <MessageEditor
+                                  key={`${rule.id}-${a.type}-${i}`}
+                                  ruleId={rule.id}
+                                  ruleName={localizeAutomationName(rule.name, language)}
+                                  actionType={a.type as 'send_sms' | 'send_email'}
+                                  body={String(a.config?.body ?? '')}
+                                  subject={a.config?.subject ? String(a.config.subject) : undefined}
+                                  fr={fr}
+                                  onSaved={load}
+                                />
+                              ))
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </PermissionGate>
   );
 }

@@ -924,7 +924,20 @@ const corpsAutomatisation = z.object({
    * comme avant. Les deux formes coexistent : les 35 préréglages restent
    * simples et ne sont pas convertis.
    */
-  steps: sequenceEtapes.nullable().optional(),
+  /**
+   * Séquence. Absente ou `null` = règle simple, pilotée par `delay_seconds`
+   * + `actions` comme avant.
+   *
+   * Un TABLEAU VIDE est accepté et vaut `null` : c'est l'état d'une
+   * automatisation qu'on vient de créer et dont le parcours n'est pas encore
+   * dessiné. Le refuser faisait échouer l'enregistrement automatique du
+   * builder à chaque frappe, et le travail se perdait en silence.
+   */
+  steps: z
+    .union([sequenceEtapes, z.array(z.never()).max(0)])
+    .nullable()
+    .optional()
+    .transform((v) => (Array.isArray(v) && v.length === 0 ? null : v)),
 });
 
 /**

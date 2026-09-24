@@ -292,6 +292,24 @@ describe('validation serveur — ce qui peut être enregistré', () => {
     expect(automationRuleCreateSchema.safeParse(base).success).toBe(true);
     expect(automationRuleCreateSchema.safeParse({ ...base, steps: null }).success).toBe(true);
   });
+
+  it('accepte un parcours VIDE et le ramene a null', () => {
+    // L'etat d'une automatisation qu'on vient de creer : le parcours n'est pas
+    // encore dessine. Le refuser faisait echouer l'enregistrement automatique
+    // du builder a chaque frappe, et le travail se perdait sans un mot
+    // (constate en vrai : PATCH 400 « A sequence needs at least one step »).
+    const r = automationRuleCreateSchema.safeParse({ ...base, steps: [] });
+    expect(r.success, r.success ? '' : JSON.stringify(r.error.issues)).toBe(true);
+    expect(r.success && r.data.steps).toBeNull();
+  });
+
+  it('la normalisation du parcours vide est bien dans la source', () => {
+    // Le test ci-dessus passe par le schema deja importe ; celui-ci lit la
+    // SOURCE, pour attraper le cas ou quelqu'un retirerait la normalisation.
+    const src = lire('server/lib/validation.ts');
+    expect(src).toContain('z.array(z.never()).max(0)');
+    expect(src).toContain('Array.isArray(v) && v.length === 0 ? null : v');
+  });
 });
 
 describe('le moteur lit et avance vraiment', () => {
