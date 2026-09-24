@@ -1014,6 +1014,8 @@ export interface DossierClient {
   factures: LigneHistorique[];
   /** Les encaissements réels — ce qui est entré au compte. */
   transactions: LigneHistorique[];
+  /** Les propriétés du client : ses immeubles, ses adresses de service. */
+  proprietes: { id: string; nom: string; adresse: string | null }[];
   messages: MessageClient[];
   /** Somme encaissée depuis toujours — ce que le client a réellement payé. */
   paye_cents: number;
@@ -1022,7 +1024,7 @@ export interface DossierClient {
 }
 
 const DOSSIER_VIDE: DossierClient = {
-  jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
+  jobs: [], devis: [], factures: [], transactions: [], proprietes: [], messages: [], paye_cents: 0, du_cents: 0,
 };
 
 /**
@@ -1039,7 +1041,7 @@ const DOSSIER_VIDE: DossierClient = {
 export async function fetchDossierClient(clientId: string | null): Promise<DossierClient> {
   if (!clientId) return DOSSIER_VIDE;
 
-  const [jobsR, devisR, facturesR, messagesR, paiementsR] = await Promise.all([
+  const [jobsR, devisR, facturesR, messagesR, paiementsR, proprietesR] = await Promise.all([
     supabase.from('jobs')
       .select('id,job_number,title,status,total_cents,created_at')
       .eq('client_id', clientId).is('deleted_at', null)
@@ -1061,6 +1063,11 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
       .select('id,amount_cents,paid_at,method,status')
       .eq('client_id', clientId).is('deleted_at', null)
       .order('paid_at', { ascending: false }).limit(50),
+    // Les propriétés : l'équivalent terrain des « objets associés » de GHL.
+    supabase.from('properties')
+      .select('id,name,address')
+      .eq('client_id', clientId).is('deleted_at', null)
+      .order('name').limit(20),
   ]);
 
   const jobs = (jobsR.data ?? []).map((j: Record<string, unknown>) => ({
@@ -1107,8 +1114,14 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
     date: (t.paid_at as string) ?? '',
   }));
 
+  const proprietes = (proprietesR.data ?? []).map((x: Record<string, unknown>) => ({
+    id: x.id as string,
+    nom: (x.name as string) ?? '',
+    adresse: (x.address as string) ?? null,
+  }));
+
   return {
-    jobs, devis, factures, transactions, messages,
+    jobs, devis, factures, transactions, proprietes, messages,
     // `paid_cents` et `balance_cents` sont tenus par la base : on les somme,
     // on ne les recalcule pas. Une facture annulée porte un solde à zéro.
     paye_cents: (facturesR.data ?? []).reduce(
