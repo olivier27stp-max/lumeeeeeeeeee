@@ -1382,6 +1382,44 @@ export interface MoisChronologie {
   gagne_cents: number;
 }
 
+/** Comment ventiler la prévision. Les trois axes que l'équipe possède. */
+export type AxeGroupe = 'etape' | 'vendeur' | 'source';
+
+export interface LigneGroupe {
+  cle: string;
+  libelle: string;
+  nb: number;
+  potentiel_cents: number;
+  attendu_cents: number;
+  gagne_cents: number;
+  total_cents: number;
+}
+
+/**
+ * La prévision ventilée. Un total ne dit pas d'où il vient : savoir qu'on
+ * attend 40 000 $ n'aide pas, savoir que 32 000 $ tiennent à trois deals
+ * coincés dans la même étape se répare.
+ */
+export async function fetchPrevisionsGroupees(
+  pipelineId: string | null,
+  axe: AxeGroupe,
+): Promise<LigneGroupe[]> {
+  const { data, error } = await supabase.rpc('pipeline_previsions_groupees', {
+    p_pipeline_id: pipelineId ?? null,
+    p_groupe: axe,
+  });
+  if (error) throw error;
+  return (data ?? []).map((x: Record<string, unknown>) => ({
+    cle: String(x.cle ?? ''),
+    libelle: String(x.libelle ?? ''),
+    nb: Number(x.nb ?? 0),
+    potentiel_cents: Number(x.potentiel_cents ?? 0),
+    attendu_cents: Number(x.attendu_cents ?? 0),
+    gagne_cents: Number(x.gagne_cents ?? 0),
+    total_cents: Number(x.total_cents ?? 0),
+  }));
+}
+
 export async function fetchPrevisions(pipelineId?: string | null): Promise<PrevisionsPipeline | null> {
   const { data, error } = await supabase.rpc('pipeline_previsions', {
     p_pipeline_id: pipelineId ?? null,
