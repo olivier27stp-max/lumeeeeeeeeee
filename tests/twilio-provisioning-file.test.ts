@@ -77,7 +77,7 @@ beforeEach(() => {
   for (const k of Object.keys(db)) delete db[k];
   vi.clearAllMocks();
   process.env.PUBLIC_URL = 'https://lumecrm.net';
-  process.env.TWILIO_AUTO_PROVISION = 'true';
+  delete process.env.TWILIO_AUTO_PROVISION;
   disponibles.mockResolvedValue([{ phoneNumber: '+15145550100' }]);
   achat.mockResolvedValue({ sid: 'PNnouveau', phoneNumber: '+15145550100', friendlyName: 'Lume-11111111' });
   forfaitAvecSms();
@@ -85,7 +85,7 @@ beforeEach(() => {
 
 describe('interrupteur TWILIO_AUTO_PROVISION', () => {
   it('éteint : n’achète rien, met en file et prévient l’équipe', async () => {
-    process.env.TWILIO_AUTO_PROVISION = '';
+    process.env.TWILIO_AUTO_PROVISION = 'false';
     const r = await mod.provisionSmsForNewSubscription({ orgId: ORG, subscriptionId: 's1' });
     expect(r).toMatchObject({ provisioned: false, skipped: 'auto_provision_off' });
     expect(achat).not.toHaveBeenCalled();
@@ -100,9 +100,9 @@ describe('interrupteur TWILIO_AUTO_PROVISION', () => {
   });
 
   it('allumé plus tard : la demande en file est servie par la relance', async () => {
-    process.env.TWILIO_AUTO_PROVISION = '';
+    process.env.TWILIO_AUTO_PROVISION = 'false';
     await mod.provisionSmsForNewSubscription({ orgId: ORG, subscriptionId: 's1' });
-    process.env.TWILIO_AUTO_PROVISION = 'true';
+    delete process.env.TWILIO_AUTO_PROVISION;
     const bilan = await mod.relancerProvisionnementsEnAttente();
     expect(bilan).toMatchObject({ essayes: 1, reussis: 1 });
     expect(achat).toHaveBeenCalledTimes(1);
@@ -208,7 +208,7 @@ describe('classement et délais', () => {
   });
 
   it('état exposé à l’UI : en_attente pendant la file', async () => {
-    process.env.TWILIO_AUTO_PROVISION = '';
+    process.env.TWILIO_AUTO_PROVISION = 'false';
     await mod.provisionSmsForNewSubscription({ orgId: ORG, subscriptionId: 's1' });
     expect(await mod.etatProvisionnementSms(ORG)).toMatchObject({ statut: 'en_attente', nature: 'desactive' });
   });

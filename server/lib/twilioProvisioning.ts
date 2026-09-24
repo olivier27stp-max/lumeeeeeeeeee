@@ -147,9 +147,9 @@ export function classerEchecProvisionnement(err: unknown): NatureEchecProvisionn
  *
  * Un échec ne fait PAS échouer l'abonnement : la demande passe en `retrying`
  * (= org « phone_provisioning_pending ») et `relancerProvisionnementsEnAttente`
- * la reprend avec un délai croissant. Tant que `TWILIO_AUTO_PROVISION` n'est pas
- * `true`, rien n'est acheté : la demande est seulement mise en file, et sera
- * servie dès l'activation — aucun abonné n'est perdu.
+ * la reprend avec un délai croissant. L'achat est OBLIGATOIRE par défaut ; seul
+ * l'arrêt d'urgence `TWILIO_AUTO_PROVISION=false` le suspend : la demande est
+ * alors mise en file et servie dès qu'on le retire — aucun abonné n'est perdu.
  */
 export async function provisionSmsForNewSubscription(params: {
   orgId: string;
@@ -222,7 +222,7 @@ export async function provisionSmsForNewSubscription(params: {
 
   if (!actif) {
     await alerterEquipe(
-      `abonnement avec SMS en attente de numéro (TWILIO_AUTO_PROVISION n'est pas activé) — ${await libelleOrg(orgId)}`,
+      `abonnement avec SMS en attente de numéro (achat coupé : TWILIO_AUTO_PROVISION=false) — ${await libelleOrg(orgId)}`,
       { orgId, subscriptionId },
     );
     return { provisioned: false, skipped: 'auto_provision_off' };
@@ -254,9 +254,13 @@ type EvenementProvisionnement = {
   updated_at: string;
 };
 
-/** Interrupteur de l'achat automatique. Désactivé par défaut : l'activer est une décision (coût, conformité). */
+/**
+ * Achat automatique : ACTIF par défaut (tout forfait avec SMS reçoit son numéro).
+ * `TWILIO_AUTO_PROVISION=false` est un arrêt d'urgence : les demandes sont alors
+ * mises en file et servies dès qu'on le retire.
+ */
 export function autoProvisionActif(env: NodeJS.ProcessEnv = process.env): boolean {
-  return String(env.TWILIO_AUTO_PROVISION || '').trim().toLowerCase() === 'true';
+  return String(env.TWILIO_AUTO_PROVISION || '').trim().toLowerCase() !== 'false';
 }
 
 /** Délai avant l'essai suivant le n-ième : 15 min, 1 h, 4 h, 16 h, puis 24 h. */
@@ -373,7 +377,7 @@ async function tenterProvisionnement(
 /**
  * Reprend les demandes en file (`retrying`, ou `pending` orphelines) dont le
  * délai est échu. Appelée périodiquement sous verrou consultatif (index.ts).
- * Ne fait rien tant que `TWILIO_AUTO_PROVISION` n'est pas `true`.
+ * Ne fait rien si `TWILIO_AUTO_PROVISION=false` (arrêt d'urgence).
  */
 export async function relancerProvisionnementsEnAttente(): Promise<{
   desactive?: boolean;

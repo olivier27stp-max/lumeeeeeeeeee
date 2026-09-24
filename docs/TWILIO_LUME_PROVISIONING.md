@@ -15,7 +15,7 @@ provisionSmsForNewSubscription()                                             ser
   2. canal SMS actif ? → rien                      ┐ idempotence :
   3. demande déjà en file ? → rien                 ┘ 1 org = 1 numéro
   4. ligne provisioning_events
-       TWILIO_AUTO_PROVISION≠true → status=retrying (en file), alerte #support, STOP
+       TWILIO_AUTO_PROVISION=false (arrêt d'urgence) → status=retrying (en file), alerte #support, STOP
        sinon                      → status=pending, achat :
   5. AvailablePhoneNumbers(CA|US).local  (indicatif déduit de company_settings, repli pays)
   6. IncomingPhoneNumbers.create  smsUrl = <PUBLIC_URL>/api/messages/inbound
@@ -58,7 +58,7 @@ SMS entrant → Twilio → POST /api/messages/inbound → org retrouvée par le 
 
 ## 3. Ce que change la PR
 
-- `TWILIO_AUTO_PROVISION` : un interrupteur, **éteint par défaut**. Éteint, la demande est mise en file, l'équipe est prévenue et rien n'est acheté. Dès qu'on l'allume, la file est servie, donc aucun abonné n'est perdu.
+- Achat **obligatoire, actif par défaut** : tout forfait avec SMS reçoit son numéro. `TWILIO_AUTO_PROVISION=false` est un arrêt d'urgence : la demande est mise en file, l'équipe est prévenue et rien n'est acheté. Dès qu'on le retire, la file est servie, donc aucun abonné n'est perdu.
 - Relance automatique avec délai croissant, abandon après 14 jours, classement de l'échec (`conformite`, `permissions`, `inventaire`, `configuration`, `enregistrement`, `autre`). Le message brut de Twilio est conservé.
 - Numéro acheté mais non enregistré : il est gardé sur la ligne, puis réenregistré sans rachat.
 - Alertes dans #support (Slack, s'il est configuré) au 1er échec, à l'abandon, à la réussite après relance et à chaque mise en file.
@@ -85,7 +85,6 @@ SMS entrant → Twilio → POST /api/messages/inbound → org retrouvée par le 
 ```diff
 + TWILIO_PROVISIONING_API_KEY_SID=SK…        # étape B
 + TWILIO_PROVISIONING_API_KEY_SECRET=…       # étape B
-+ TWILIO_AUTO_PROVISION=true                 # APRÈS le test de l'étape D
   PUBLIC_URL=https://lumecrm.net             # à vérifier : présent et exact (webhook des nouveaux numéros)
   TWILIO_ACCOUNT_SID=AC9a30…                 # à vérifier : c'est bien le parent
 ```
@@ -96,7 +95,7 @@ Rotation de la clé : créer la nouvelle clé, remplacer les deux variables, red
 2. **Un** achat, sur une org de test uniquement (jamais un client payant) : `npx tsx server/scripts/test-twilio-provisioning.ts <org de test>`.
 3. Contrôler dans la console Twilio : SMS URL = `https://lumecrm.net/api/messages/inbound` (POST), voix vide. Puis envoyer un SMS depuis un téléphone de l'équipe et vérifier qu'il arrive dans Lume.
 4. Rapport : SID `PN…`, numéro E.164, URL du webhook.
-5. Seulement ensuite : `TWILIO_AUTO_PROVISION=true`.
+5. L'achat automatique est déjà actif : dès l'approbation, la relance sert d'elle-même les demandes en attente.
 
 ## 5. GO Will restants
 
@@ -104,6 +103,5 @@ Rotation de la clé : créer la nouvelle clé, remplacer les deux variables, red
 2. Créer la clé `lume-provisioning` et la poser dans Railway (§ 4B/C).
 3. Confirmer `TWILIO_ACCOUNT_SID` = parent et `PUBLIC_URL` en prod.
 4. Premier achat test sur quelle org (§ 4D) ?
-5. Allumer `TWILIO_AUTO_PROVISION=true`.
-6. « Grok Audit (TEST) » : lui donner un numéro ou non (org de test, pas de rattrapage automatique) ?
-7. Le bouton manuel « Obtenir mon numéro » doit-il aussi obéir à l'interrupteur ?
+5. « Grok Audit (TEST) » : lui donner un numéro ou non (org de test, pas de rattrapage automatique) ?
+6. Le bouton manuel « Obtenir mon numéro » doit-il aussi obéir à l'interrupteur ?

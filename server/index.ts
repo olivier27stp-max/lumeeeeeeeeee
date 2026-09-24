@@ -1408,8 +1408,8 @@ app.listen(port, '0.0.0.0', () => {
         });
 
         // Numéros SMS en attente — reprend les achats échoués ou mis en file
-        // (conformité Twilio non approuvée, stock vide, TWILIO_AUTO_PROVISION
-        // activé après coup). Sans effet tant que l'interrupteur est éteint.
+        // (conformité Twilio non approuvée, stock vide, arrêt d'urgence levé).
+        // Sans effet pendant l'arrêt d'urgence TWILIO_AUTO_PROVISION=false.
         import('./lib/twilioProvisioning').then(({ relancerProvisionnementsEnAttente }) => {
           const runProv = () =>
             withAdvisoryLock('sms-provisioning-retry', () =>
