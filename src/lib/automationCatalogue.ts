@@ -57,6 +57,14 @@ export interface DeclencheurCatalogue {
    * automationEngine.ts ne sait le faire que pour les rendez-vous).
    */
   accepte_delai_negatif?: boolean;
+  /**
+   * Déclaré au bus mais AUCUN code ne l'émet encore.
+   *
+   * Une automatisation posée dessus ne partirait jamais — et c'est le pire
+   * des échecs : silencieux. L'interface le grise et dit pourquoi, au lieu
+   * de laisser quelqu'un bâtir un parcours mort.
+   */
+  bientot?: boolean;
 }
 
 /**
@@ -164,12 +172,16 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     aide_fr: 'Quand une opportunité arrive dans une étape du pipeline.',
     aide_en: 'When a deal moves into a pipeline stage.',
     famille: 'vente', entite: 'deal',
+    // Le pipeline de ventes n'émet pas encore cet événement.
+    bientot: true,
   },
   {
     cle: 'deal.stage_idle', fr: 'Opportunité qui dort', en: 'Deal going stale',
     aide_fr: 'Quand une opportunité stagne trop longtemps dans son étape.',
     aide_en: 'When a deal sits too long in its stage.',
     famille: 'vente', entite: 'deal',
+    // Le pipeline de ventes n'émet pas encore cet événement.
+    bientot: true,
   },
 
   // ── Champs personnalisés ──
@@ -255,6 +267,18 @@ export interface ActionCatalogue {
    * 200 clients ne se rattrape pas.
    */
   ecriture?: boolean;
+  /**
+   * Les entités sur lesquelles cette action SAIT travailler.
+   *
+   * Absent = elle marche partout (les actions « client » remontent toujours
+   * à une fiche client, quelle que soit l'entité de départ).
+   *
+   * Présent = le serveur REFUSE les autres (`ctx.entityType !== 'deal'`…).
+   * Le déclarer ici permet à l'interface de ne pas proposer « changer le
+   * statut du rendez-vous » sur « facture payée » : sinon l'utilisateur
+   * publie, et découvre l'échec dans un journal, trois essais plus tard.
+   */
+  entites?: string[];
   champs: ChampAction[];
 }
 
@@ -479,6 +503,7 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_fr: 'Confirme, annule ou marque la visite comme faite.',
     aide_en: 'Confirms, cancels or marks the visit as done.',
     famille: 'travail', vers_client: false, ecriture: true,
+    entites: ['schedule_event'],
     champs: [
       {
         cle: 'statut', fr: 'Nouveau statut', en: 'New status',
@@ -510,6 +535,7 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_fr: 'Change l’étape de l’opportunité dans son pipeline.',
     aide_en: 'Moves the deal to another stage of its pipeline.',
     famille: 'vente', vers_client: false, ecriture: true,
+    entites: ['deal'],
     champs: [
       { cle: 'stage_id', fr: 'L’étape visée', en: 'Target stage', obligatoire: true, type: 'texte', max: 40 },
     ],
@@ -519,6 +545,7 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_fr: 'Change la source de l’opportunité.',
     aide_en: 'Changes the deal’s source.',
     famille: 'vente', vers_client: false, ecriture: true,
+    entites: ['deal'],
     champs: [
       {
         cle: 'source', fr: 'Source', en: 'Source',
@@ -533,6 +560,7 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_fr: 'Donne l’opportunité à un membre de l’équipe.',
     aide_en: 'Gives the deal to a team member.',
     famille: 'vente', vers_client: false, ecriture: true,
+    entites: ['deal'],
     champs: [
       {
         cle: 'membre_id', fr: 'Le membre', en: 'The member',
@@ -549,6 +577,7 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_fr: 'Envoie au client la facture liée, par courriel.',
     aide_en: 'Emails the linked invoice to the client.',
     famille: 'argent', vers_client: true,
+    entites: ['invoice'],
     champs: [
       {
         cle: 'body', fr: 'Mot d’accompagnement', en: 'Cover note',
@@ -563,6 +592,7 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_fr: 'Envoie au client la soumission liée, par courriel.',
     aide_en: 'Emails the linked quote to the client.',
     famille: 'argent', vers_client: true,
+    entites: ['quote'],
     champs: [
       {
         cle: 'body', fr: 'Mot d’accompagnement', en: 'Cover note',
@@ -626,6 +656,59 @@ export const ACTIONS: ActionCatalogue[] = [
 ];
 
 export const CLES_ACTIONS = ACTIONS.map((a) => a.cle);
+
+/**
+ * L'entité que chaque déclencheur fait arriver au moteur.
+ *
+ * Relevé dans le serveur (les `emit('x.y', { entityType })`), pas deviné —
+ * `tests/automatisations-coherence-declencheur-action.test.ts` compare cette
+ * table au code et échoue si l'un des deux bouge.
+ *
+ * Deux surprises qui méritent d'être écrites : un RENDEZ-VOUS arrive comme
+ * `schedule_event` (pas `appointment`), et un CONTRAT SIGNÉ arrive porté par
+ * son job (`agreement.signed` émet `entityType: 'job'`).
+ */
+export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
+  'quote.sent': 'quote',
+  'quote.approved': 'quote',
+  'quote.declined': 'quote',
+  'quote.changes_requested': 'quote',
+  'invoice.sent': 'invoice',
+  'invoice.paid': 'invoice',
+  'invoice.overdue': 'invoice',
+  'appointment.created': 'schedule_event',
+  'appointment.cancelled': 'schedule_event',
+  'job.completed': 'job',
+  'job.ready_for_invoicing': 'job',
+  'lead.created': 'lead',
+  'lead.status_changed': 'lead',
+  'agreement.signed': 'job',
+  'deal.stage_entered': 'deal',
+  'deal.stage_idle': 'deal',
+};
+
+/**
+ * Cette action peut-elle suivre ce déclencheur ?
+ *
+ * C'est la question qui décide si un parcours marchera. « Envoyer la
+ * facture » n'a aucun sens après « soumission envoyée » : l'entité qui
+ * arrive est un devis, et le serveur refusera.
+ *
+ * Répondre AVANT la publication, dans le menu, plutôt qu'après, dans un
+ * journal d'échec que personne ne lit.
+ */
+export function actionCompatible(action: ActionCatalogue, cleDeclencheur: string): boolean {
+  if (!action.entites) return true;
+  const entite = ENTITE_PAR_DECLENCHEUR[cleDeclencheur];
+  // Déclencheur inconnu : on n'invente pas de refus, le serveur tranchera.
+  if (!entite) return true;
+  return action.entites.includes(entite);
+}
+
+/** Les actions utilisables avec ce déclencheur, dans l'ordre du catalogue. */
+export function actionsPour(cleDeclencheur: string): ActionCatalogue[] {
+  return ACTIONS.filter((a) => actionCompatible(a, cleDeclencheur));
+}
 
 export function trouverAction(cle: string): ActionCatalogue | undefined {
   return ACTIONS.find((a) => a.cle === cle);

@@ -369,7 +369,14 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
           {groupes.map((g) => (
             <optgroup key={g.cle} label={fr ? g.fr : g.en}>
               {g.items.map((d) => (
-                <option key={d.cle} value={d.cle}>{fr ? d.fr : d.en}</option>
+                /* Un déclencheur que RIEN n'émet encore est désactivé, pas
+                   masqué : le masquer donnerait l'impression qu'il n'existe
+                   pas, alors qu'il arrive. Le laisser cliquable laisserait
+                   bâtir un parcours qui ne partirait jamais — l'échec le
+                   plus coûteux, parce qu'il est silencieux. */
+                <option key={d.cle} value={d.cle} disabled={d.bientot}>
+                  {fr ? d.fr : d.en}{d.bientot ? (fr ? ' (bientôt)' : ' (coming soon)') : ''}
+                </option>
               ))}
             </optgroup>
           ))}

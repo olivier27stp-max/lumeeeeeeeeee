@@ -33,6 +33,7 @@ import { cn } from '../../lib/utils';
 import {
   ACTIONS,
   FAMILLES_ACTIONS,
+  actionCompatible,
   champVisible,
   trouverAction,
 } from '../../lib/automationCatalogue';
@@ -52,6 +53,15 @@ const VARIABLES = [
 interface Props {
   etape: Etape;
   fr: boolean;
+  /**
+   * Le déclencheur de la règle.
+   *
+   * Il décide de l'ENTITÉ qui arrivera (un devis, une facture, un
+   * rendez-vous), donc des actions qui ont un sens : « envoyer la facture »
+   * après « soumission envoyée » ne peut pas marcher. On les retire du menu
+   * plutôt que de laisser publier un parcours qui échouera en silence.
+   */
+  declencheur?: string;
   membres: Array<{ user_id: string; nom: string }>;
   etiquettes: string[];
   /** Statistiques de l'étape, pour l'onglet du même nom. */
@@ -76,7 +86,7 @@ function decomposer(secondes: number): { valeur: number; unite: string } {
 }
 
 export default function PanneauEtape({
-  etape, fr, membres, etiquettes, stats, onEnregistrer, onSupprimer, onFermer,
+  etape, fr, declencheur, membres, etiquettes, stats, onEnregistrer, onSupprimer, onFermer,
 }: Props) {
   const ids = useId();
   const [onglet, setOnglet] = useState<'edition' | 'stats'>('edition');
@@ -108,6 +118,22 @@ export default function PanneauEtape({
     if (brouillon.type !== 'action') return out;
     if (!modele) return out;
     const config = brouillon.action.config as Record<string, string | undefined>;
+    /*
+     * L'action peut-elle seulement partir sur ce déclencheur ?
+     *
+     * Le cas arrive quand on change le déclencheur d'une règle déjà bâtie :
+     * « envoyer la facture » reste dans le parcours mais l'entité qui
+     * arrivera est devenue un devis. Le dire ICI, pas dans un journal
+     * d'échec après publication.
+     */
+    if (declencheur && !actionCompatible(modele, declencheur)) {
+      out.push(
+        fr
+          ? `« ${modele.fr} » ne peut pas suivre ce déclencheur : choisissez-en une autre.`
+          : `“${modele.en}” cannot follow this trigger: pick another one.`,
+      );
+    }
+
     for (const champ of modele.champs) {
       if (!champ.obligatoire) continue;
       if (!champVisible(champ, config)) continue;
@@ -116,7 +142,7 @@ export default function PanneauEtape({
       }
     }
     return out;
-  }, [brouillon, modele, fr]);
+  }, [brouillon, modele, fr, declencheur]);
 
   const majConfig = (cle: string, valeur: string) => {
     setBrouillon((b) => {
@@ -272,15 +298,25 @@ export default function PanneauEtape({
                     onChange={(e) => changerType(e.target.value)}
                     className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
-                    {FAMILLES_ACTIONS.map((famille) => (
-                      <optgroup key={famille.cle} label={fr ? famille.fr : famille.en}>
-                        {ACTIONS.filter((a) => a.famille === famille.cle).map((a) => (
-                          <option key={a.cle} value={a.cle}>
-                            {fr ? a.fr : a.en}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
+                    {FAMILLES_ACTIONS.map((famille) => {
+                      // Seules les actions COMPATIBLES avec le déclencheur.
+                      // Une famille qui n'en garde aucune disparaît, plutôt
+                      // que d'afficher un groupe vide.
+                      const offertes = ACTIONS.filter(
+                        (a) => a.famille === famille.cle
+                          && (!declencheur || actionCompatible(a, declencheur)),
+                      );
+                      if (!offertes.length) return null;
+                      return (
+                        <optgroup key={famille.cle} label={fr ? famille.fr : famille.en}>
+                          {offertes.map((a) => (
+                            <option key={a.cle} value={a.cle}>
+                              {fr ? a.fr : a.en}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
                   </select>
                 </div>
 

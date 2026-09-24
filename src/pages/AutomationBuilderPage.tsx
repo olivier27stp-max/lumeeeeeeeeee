@@ -795,6 +795,7 @@ export default function AutomationBuilderPage() {
         <PanneauEtape
           etape={etapeOuverte}
           fr={fr}
+          declencheur={regle.trigger_event}
           membres={membres}
           etiquettes={etiquettes}
           stats={null}

@@ -194,7 +194,22 @@ async function main() {
       Array.from(s.querySelectorAll('optgroup')).map((g) => g.label));
     dire(familles.length >= 5, 'les actions sont groupées par famille', familles.join(', '));
     const nbOptions = await page.$eval('aside[aria-label] select', (s) => s.options.length);
-    dire(nbOptions >= 18, `le menu offre les 18 actions`, `${nbOptions} option(s)`);
+    /*
+     * Le menu est FILTRÉ par le déclencheur : la règle de test part sur
+     * « soumission envoyée », donc l'entité qui arrivera est un devis.
+     * « Envoyer la facture », « changer le statut du rendez-vous » et les
+     * trois actions d'opportunité n'y ont aucun sens — le serveur les
+     * refuserait. On vérifie qu'elles sont bien ABSENTES du menu, et que
+     * « envoyer la soumission » y est, elle.
+     */
+    const offertes = await page.$eval('aside[aria-label] select', (s) =>
+      Array.from(s.options).map((o) => o.value));
+    dire(nbOptions >= 12, 'le menu offre les actions compatibles', `${nbOptions} option(s)`);
+    for (const absente of ['envoyer_facture', 'modifier_statut_rendezvous', 'modifier_deal', 'assigner_deal', 'move_deal_stage']) {
+      dire(!offertes.includes(absente), `« ${absente} » est retirée du menu sur « soumission envoyée »`);
+    }
+    dire(offertes.includes('envoyer_soumission'), '« envoyer la soumission » est offerte, elle');
+    dire(offertes.includes('ajouter_etiquette'), 'les actions « client » restent offertes partout');
 
     // Passer sur « Envoyer un courriel » : le panneau doit gagner objet +
     // expéditeur + aperçu, que le texto n'a pas.
