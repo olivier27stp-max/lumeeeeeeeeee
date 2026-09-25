@@ -19,10 +19,10 @@ export interface BureauBoite { org_id: string; name: string; members?: MembreBoi
 export function bureauxMemeEntreprise(
   orgActif: string,
   groupeActif: string | null,
-  orgs: Array<{ id: string; name: string | null; created_at: string | null; deleted_at: string | null; company_group_id: string | null }>,
+  orgs: Array<{ id: string; name: string | null; created_at: string | null; deleted_at: string | null; archived_at?: string | null; company_group_id: string | null }>,
 ) {
   return orgs
-    .filter((o) => !o.deleted_at && (o.id === orgActif || (groupeActif !== null && o.company_group_id === groupeActif)))
+    .filter((o) => !o.deleted_at && !o.archived_at && (o.id === orgActif || (groupeActif !== null && o.company_group_id === groupeActif)))
     .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
 }
 
@@ -32,7 +32,7 @@ export async function bureauxDeLaBoite(userId: string, orgActif: string): Promis
   if (eActif) throw eActif;
   const { data: adhesions, error: eAdh } = await admin
     .from('memberships')
-    .select('org_id, orgs!inner(id, name, created_at, deleted_at, company_group_id)')
+    .select('org_id, orgs!inner(id, name, created_at, deleted_at, archived_at, company_group_id)')
     .eq('user_id', userId)
     .eq('status', 'active');
   if (eAdh) throw eAdh;
