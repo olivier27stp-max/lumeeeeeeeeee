@@ -22,6 +22,7 @@ import {
   type AutomationRule,
   type AutomationFailure,
 } from '../lib/automationRulesApi';
+import { activiteParSemaine, type ActiviteSemaine } from '../lib/automationJournauxApi';
 
 export default function AutomationsApercu() {
   const { language } = useTranslation();
@@ -31,14 +32,19 @@ export default function AutomationsApercu() {
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [echecs, setEchecs] = useState<AutomationFailure[]>([]);
   const [chargement, setChargement] = useState(true);
+  /** Les vrais déclenchements, lus dans les journaux d'exécution. */
+  const [activite, setActivite] = useState<{ total: number; parSemaine: ActiviteSemaine[] }>(
+    { total: 0, parSemaine: [] },
+  );
 
   useEffect(() => {
     let vivant = true;
-    Promise.allSettled([getAutomationRules(), getRecentAutomationFailures(200)])
-      .then(([r, e]) => {
+    Promise.allSettled([getAutomationRules(), getRecentAutomationFailures(200), activiteParSemaine(7)])
+      .then(([r, e, a]) => {
         if (!vivant) return;
         if (r.status === 'fulfilled') setRules(r.value);
         if (e.status === 'fulfilled') setEchecs(e.value);
+        if (a.status === 'fulfilled') setActivite(a.value);
       })
       .finally(() => { if (vivant) setChargement(false); });
     return () => { vivant = false; };
@@ -49,21 +55,11 @@ export default function AutomationsApercu() {
   /**
    * Les 7 dernières semaines, du lundi au dimanche.
    *
-   * Les barres sont à zéro tant que le comptage des inscriptions n'existe
-   * pas : c'est la structure de l'écran, pas une invention de chiffres.
+   * Comptées dans `automation_execution_logs` — les vraies exécutions du
+   * moteur, dédoublonnées par déclenchement (une règle qui fait trois
+   * actions ne compte qu'une fois).
    */
-  const semaines = useMemo(() => {
-    const out: Array<{ debut: Date; fin: Date; n: number }> = [];
-    const now = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const fin = new Date(now);
-      fin.setDate(now.getDate() - i * 7);
-      const debut = new Date(fin);
-      debut.setDate(fin.getDate() - 6);
-      out.push({ debut, fin, n: 0 });
-    }
-    return out;
-  }, []);
+  const semaines = activite.parSemaine;
 
   const jour = (d: Date) =>
     d.toLocaleDateString(fr ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short' });
@@ -113,7 +109,7 @@ export default function AutomationsApercu() {
               {[
                 { l: fr ? 'Total des automatisations' : 'Total workflows', v: rules.length },
                 { l: fr ? 'Automatisations publiées' : 'Published workflows', v: publiees },
-                { l: fr ? 'Total des déclenchements' : 'Total enrollments', v: '—' },
+                { l: fr ? 'Total des déclenchements' : 'Total enrollments', v: activite.total },
               ].map((t) => (
                 <div key={t.l} className="section-card px-4 py-3.5">
                   <p className="text-[12px] text-text-secondary">{t.l}</p>
@@ -128,25 +124,57 @@ export default function AutomationsApercu() {
                 <TrendingUp size={15} className="text-accent" aria-hidden="true" />
                 {fr ? 'Déclenchements — 7 dernières semaines' : 'Enrollments — last 7 weeks'}
               </h2>
-              <div className="mt-4 flex items-end gap-2" role="img"
-                aria-label={fr ? 'Déclenchements par semaine' : 'Enrollments per week'}>
-                {semaines.map((s) => (
-                  <div key={s.debut.toISOString()} className="flex flex-1 flex-col items-center gap-1.5">
-                    <div
-                      className="w-full rounded-t bg-primary/15"
-                      style={{ height: `${Math.max(4, s.n * 4)}px` }}
-                    />
-                    <span className="text-[10px] text-text-tertiary">{jour(s.debut)}</span>
+              {semaines.length === 0 ? (
+                <p className="mt-4 text-[12px] text-text-tertiary">
+                  {fr ? 'Aucune donnée pour l’instant.' : 'No data yet.'}
+                </p>
+              ) : (
+                <>
+                  <div
+                    className="mt-4 flex h-[140px] items-end gap-2"
+                    role="img"
+                    aria-label={fr
+                      ? `Déclenchements par semaine : ${semaines.map((s) => s.n).join(', ')}`
+                      : `Enrollments per week: ${semaines.map((s) => s.n).join(', ')}`}
+                  >
+                    {semaines.map((s) => {
+                      /* L'échelle suit la plus haute semaine.
+                         Une hauteur fixe en `n * 4px` donnait une barre de
+                         600 px pour 150 déclenchements : le graphique
+                         débordait de sa carte. */
+                      const sommet = Math.max(1, ...semaines.map((x) => x.n));
+                      const hauteur = s.n === 0 ? 3 : Math.max(6, Math.round((s.n / sommet) * 120));
+                      return (
+                        <div key={s.debut.toISOString()} className="flex flex-1 flex-col items-center gap-1.5">
+                          <span className="text-[10px] font-medium tabular-nums text-text-secondary">
+                            {s.n > 0 ? s.n : ''}
+                          </span>
+                          <div
+                            className={s.n > 0 ? 'w-full rounded-t bg-primary/40' : 'w-full rounded-t bg-outline/30'}
+                            style={{ height: `${hauteur}px` }}
+                          />
+                          <span className="text-[10px] text-text-tertiary">{jour(s.debut)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-              <p className="mt-3 border-t border-outline/30 pt-3 text-[12px] text-text-tertiary">
-                {fr
-                  ? 'Du ' + jour(semaines[semaines.length - 1].debut) + ' au ' + jour(semaines[semaines.length - 1].fin)
-                    + ' · Déclenchements : 0 · Croissance : —'
-                  : 'From ' + jour(semaines[semaines.length - 1].debut) + ' to ' + jour(semaines[semaines.length - 1].fin)
-                    + ' · Enrollments: 0 · Growth: —'}
-              </p>
+                  <p className="mt-3 border-t border-outline/30 pt-3 text-[12px] text-text-tertiary">
+                    {(() => {
+                      const derniere = semaines[semaines.length - 1];
+                      const avant = semaines[semaines.length - 2];
+                      /* La croissance n'a de sens que si la semaine
+                         précédente n'était pas à zéro : sinon tout passage
+                         de 0 à 1 afficherait « +∞ ». */
+                      const croissance = avant && avant.n > 0
+                        ? `${derniere.n >= avant.n ? '+' : ''}${Math.round(((derniere.n - avant.n) / avant.n) * 100)} %`
+                        : '—';
+                      return fr
+                        ? `Du ${jour(derniere.debut)} au ${jour(derniere.fin)} · Déclenchements : ${derniere.n} · Croissance : ${croissance}`
+                        : `From ${jour(derniere.debut)} to ${jour(derniere.fin)} · Enrollments: ${derniere.n} · Growth: ${croissance}`;
+                    })()}
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Résumé des erreurs — vrai, lu dans les journaux */}

@@ -22,7 +22,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, isOrgAdminOrOwner, getServiceClient } from '../lib/supabase';
 import { eventBus } from '../lib/eventBus';
-import { resolveEntityVariables } from '../lib/actions';
+import { resolveEntityVariables, resolveTemplate } from '../lib/actions';
 
 const router = Router();
 
@@ -295,6 +295,100 @@ router.get('/automations/test', async (req, res) => {
       error: err.message,
       results,
     });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   POST /api/automations/rules/:id/apercu — « Tester »
+
+   Ce que le bouton « Tester » doit répondre : « qu'est-ce qui partirait,
+   et à qui ? » Pas « est-ce que le moteur marche » — ça, c'est la route
+   ci-dessus.
+
+   On prend un VRAI client de l'organisation, on résout les variables comme
+   le moteur le ferait, et on rend chaque étape telle qu'elle partirait.
+   RIEN N'EST ENVOYÉ : aucune action n'est exécutée, aucune tâche planifiée.
+
+   Pourquoi un vrai client plutôt qu'un faux : « Bonjour [client_name] »
+   sur des données inventées ne montre pas qu'un client sans nom donnera
+   « Bonjour , ». C'est précisément ce qu'on veut voir avant de publier.
+   ═══════════════════════════════════════════════════════════════ */
+router.post('/automations/rules/:id/apercu', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const admin = getServiceClient();
+    const { data: regle } = await admin
+      .from('automation_rules')
+      .select('id, name, trigger_event, actions, steps')
+      .eq('id', req.params.id)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+    if (!regle) return res.status(404).json({ error: 'Automatisation introuvable.' });
+
+    /*
+     * Le client servant d'exemple : le plus récent qui a de quoi être
+     * joint. Un client sans courriel ni téléphone montrerait un aperçu
+     * vide, ce qui n'aide personne à juger de son texte.
+     */
+    const { data: client } = await admin
+      .from('clients')
+      .select('id, first_name, last_name, email, phone')
+      .eq('org_id', auth.orgId)
+      .is('deleted_at', null)
+      .not('email', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!client) {
+      return res.json({
+        ok: true,
+        apercu: [],
+        message: "Ajoutez un client avec une adresse courriel pour voir un aperçu.",
+      });
+    }
+
+    const vars = await resolveEntityVariables(admin, auth.orgId, 'client', client.id);
+
+    /** Les étapes d'action, qu'elles viennent d'un parcours ou d'une règle simple. */
+    const etapes: Array<{ type: string; config: Record<string, unknown>; nom?: string | null }> =
+      Array.isArray(regle.steps) && regle.steps.length > 0
+        ? (regle.steps as Array<Record<string, any>>)
+          .filter((e) => e.type === 'action')
+          .map((e) => ({ type: e.action?.type, config: e.action?.config ?? {}, nom: e.nom ?? null }))
+        : ((regle.actions ?? []) as Array<Record<string, any>>)
+          .map((a) => ({ type: a.type, config: a.config ?? {} }));
+
+    const apercu = etapes.map((e) => {
+      const config = e.config as Record<string, string | undefined>;
+      /*
+       * Chaque champ de texte, rendu comme il partirait. `resolveTemplate`
+       * remplace une variable inconnue par une chaîne VIDE — c'est
+       * justement ce qu'on veut rendre visible : « Bonjour , » saute aux
+       * yeux dans un aperçu, jamais dans un éditeur.
+       */
+      const rendu: Record<string, string> = {};
+      for (const [cle, valeur] of Object.entries(config)) {
+        if (typeof valeur === 'string' && valeur) rendu[cle] = resolveTemplate(valeur, vars);
+      }
+      return { action: e.type, nom: e.nom ?? null, rendu };
+    });
+
+    return res.json({
+      ok: true,
+      client: {
+        // Le nom tel que le moteur le calcule, avec ses replis.
+        nom: vars.client_name || '(sans nom)',
+        email: vars.client_email || null,
+        telephone: vars.client_phone || null,
+      },
+      apercu,
+    });
+  } catch (err: any) {
+    console.error('[automation-test] apercu:', err?.message || err);
+    return res.status(500).json({ error: "Impossible de préparer l'aperçu." });
   }
 });
 

@@ -9,6 +9,7 @@ import { validate, messageSendSchema } from '../lib/validation';
 import { logSecurityEvent, sanitizeText, checkAnomalies, extractIP } from '../lib/security';
 import { withDeadLetter } from '../lib/dead-letter';
 import { logger } from '../lib/logger';
+import { eventBus } from '../lib/eventBus';
 import { estNoteVocale, mediasAudio, transcrireMediaTwilio, messageEchecVocal } from '../lib/sms/note-vocale';
 import { membreParTelephone } from '../lib/sms/identifier-membre';
 import { repondreAuMembre } from '../lib/sms/fil-lumi';
@@ -564,6 +565,40 @@ router.post('/messages/inbound', (req, res) => {
         if (notifError) {
           console.error(`[SMS Inbound] Failed to create notification (org ${effectiveOrgId}, conversation ${conversation.id}):`, notifError.message);
         }
+      }
+
+      /*
+       * « Le client a répondu » — le déclencheur d'automatisation.
+       *
+       * TROIS conditions, chacune pour une bonne raison :
+       *
+       *  · `!repondaLumi` : si l'expéditeur est un MEMBRE de l'équipe qui
+       *    parle à son assistant, ce n'est pas un client qui répond. Sans
+       *    cette garde, un technicien qui écrit à Lumi déclencherait les
+       *    automatisations de « réponse client ».
+       *  · un `client_id` : sans lui, aucune action ne saurait à qui
+       *    s'adresser. Un numéro inconnu n'a pas de fiche.
+       *  · l'événement part APRÈS l'insertion réussie du message, donc une
+       *    seule fois par SMS (l'upsert sur `provider_message_id` a déjà
+       *    écarté les répétitions de Twilio).
+       *
+       * Un échec ici ne casse rien : le message est enregistré, visible dans
+       * la messagerie, et la notification est partie. `emit` journalise
+       * lui-même ses erreurs.
+       */
+      if (!repondaLumi && effectiveOrgId && conversation.client_id) {
+        void eventBus.emit('client.replied', {
+          orgId: effectiveOrgId,
+          entityType: 'client',
+          entityId: conversation.client_id,
+          metadata: {
+            canal: 'sms',
+            conversation_id: conversation.id,
+            // Le texte sert aux conditions (« contient “oui” ») ; borné pour
+            // ne pas gonfler `activity_log` avec un SMS de 1 600 caractères.
+            texte: Body.slice(0, 500),
+          },
+        });
       }
 
       logger.info('[SMS Inbound] Processed OK:', { from: normalizedPhone?.slice(-4) ? `***${normalizedPhone.slice(-4)}` : 'unknown', conversation_id: conversation.id });

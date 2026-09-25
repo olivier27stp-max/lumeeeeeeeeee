@@ -14,6 +14,7 @@ import {
   Target,
   Palette,
   Share2,
+  Languages,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
@@ -52,6 +53,15 @@ interface CompanyDetails {
   logo_url: string;
   /** Accent des documents client. Vide = encre noire, le défaut. */
   brand_color: string;
+  /**
+   * La langue dans laquelle l'entreprise écrit À SES CLIENTS : courriels,
+   * textos, soumissions, factures, pages publiques, automatisations.
+   *
+   * Distincte de la langue de l'interface (Mon profil), qui ne concerne que
+   * l'utilisateur connecté. Un entrepreneur peut travailler en anglais et
+   * écrire à sa clientèle en français.
+   */
+  default_language: 'fr' | 'en';
   revenue_goal_cents: number;
   currency: string;
   /** Réseaux sociaux — icônes au bas des courriels et des pages publiques. */
@@ -74,6 +84,7 @@ const PLACEHOLDER_SOCIAL: Record<(typeof RESEAUX)[number], string> = {
 };
 
 const EMPTY_COMPANY: CompanyDetails = {
+  default_language: 'fr',
   company_name: '',
   phone: '',
   website: '',
@@ -154,6 +165,7 @@ export default function CompanySettings() {
             weather_lng: data.weather_lng ?? null,
             logo_url: data.logo_url || '',
             brand_color: data.brand_color || '',
+            default_language: data.default_language === 'en' ? 'en' : 'fr',
             revenue_goal_cents: Number(data.revenue_goal_cents) || 0,
             currency: data.currency || 'CAD',
             social_links: lireLiensSociaux(data.social_links),
@@ -234,6 +246,7 @@ export default function CompanySettings() {
         logo_url: form.logo_url.trim(),
         // Vide → null : la colonne a un CHECK sur le format hex.
         brand_color: form.brand_color.trim() || null,
+        default_language: form.default_language === 'en' ? 'en' : 'fr',
         revenue_goal_cents: Math.max(0, Math.round(form.revenue_goal_cents || 0)),
         currency: form.currency || 'CAD',
         social_links: socialLinks,
@@ -529,6 +542,40 @@ export default function CompanySettings() {
               className="glass-input w-full mt-1"
               placeholder="info@company.com"
             />
+          </div>
+        </div>
+
+        {/* La langue dans laquelle l'entreprise écrit à SES CLIENTS.
+            Elle vivait dans Automatisations → Réglages globaux, alors
+            qu'elle décide aussi de la langue des soumissions, des factures
+            et des pages publiques : c'est un réglage d'entreprise, et sa
+            place est ici. Les automatisations la lisent. */}
+        <div className="section-card p-6 space-y-4">
+          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+            <Languages size={12} /> {language === 'fr' ? 'Langue de vos clients' : 'Your clients’ language'}
+          </h3>
+          <p className="text-[13px] text-text-secondary">
+            {language === 'fr'
+              ? 'Les courriels, textos, soumissions, factures et pages que reçoivent vos clients. Distincte de la langue de votre interface (Mon profil).'
+              : 'The emails, texts, quotes, invoices and pages your clients receive. Separate from your own interface language (My profile).'}
+          </p>
+          <div className="inline-flex overflow-hidden rounded-lg border border-outline/50 text-[13px]">
+            {(['fr', 'en'] as const).map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => update('default_language', l)}
+                aria-pressed={form.default_language === l}
+                className={cn(
+                  'px-4 py-1.5 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                  form.default_language === l
+                    ? 'bg-text-primary text-white'
+                    : 'text-text-secondary hover:bg-surface-tertiary',
+                )}
+              >
+                {l === 'fr' ? 'Français' : 'English'}
+              </button>
+            ))}
           </div>
         </div>
 

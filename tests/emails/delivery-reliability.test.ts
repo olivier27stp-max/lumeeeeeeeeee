@@ -681,7 +681,11 @@ describe('automatisations — identité de l’org, plus de « Lume CRM »', () 
     // AUCUN bouton et demandaient toutes de « répondre à ce courriel ». Une
     // relance de soumission sans bouton « Accepter » oblige le client à écrire
     // au lieu de cliquer une fois.
-    expect(fn).toContain('buildEmailLayout(company, body + pied, bouton)');
+    // `apercu` s'est intercalé le 2026-09-24 (le « Pre-Header » de
+    // GoHighLevel : la ligne que la boîte de réception affiche après
+    // l'objet, masquée dans le corps). Le layout, le pied de page et le
+    // bouton restent exigés — c'est eux que ce test protège.
+    expect(fn).toMatch(/buildEmailLayout\(company, apercu \+ body \+ pied, bouton\)/);
     expect(fn).toContain('boutonPourEntite');
     expect(fn).not.toMatch(/html:\s*body,/);
   });
