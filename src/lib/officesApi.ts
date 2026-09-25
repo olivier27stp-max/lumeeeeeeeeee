@@ -126,3 +126,46 @@ export async function createOffice(input: CreateOfficeInput): Promise<{ office: 
   if (!res.ok) await throwApiError(res, 'Failed to create office.');
   return res.json();
 }
+
+// ── Accès aux bureaux (Réglages → Bureaux → Accès) ──────────────────
+
+export type OfficeAccessRole = 'admin' | 'sales_rep' | 'technician';
+
+export interface OfficeAccessOffice {
+  id: string;
+  name: string;
+  is_current: boolean;
+}
+
+export interface OfficeAccessPerson {
+  user_id: string;
+  full_name: string;
+  avatar_url: string | null;
+  email: string;
+  /** Propriétaire : a tous les bureaux, non modifiable ici. */
+  is_owner: boolean;
+  /** Par bureau : rôle + statut de l'adhésion (absent = aucun accès). */
+  access: Record<string, { role: string; status: string }>;
+}
+
+export interface OfficeAccessMatrix {
+  offices: OfficeAccessOffice[];
+  people: OfficeAccessPerson[];
+  caller_id: string;
+}
+
+export async function getOfficeAccess(): Promise<OfficeAccessMatrix> {
+  const res = await fetch(`${API_BASE}/orgs/offices/access`, { headers: await authHeaders() });
+  if (!res.ok) await throwApiError(res, 'Failed to load office access.');
+  return res.json();
+}
+
+/** `role: null` retire l'accès de la personne à ce bureau. */
+export async function setOfficeAccess(userId: string, orgId: string, role: OfficeAccessRole | null): Promise<void> {
+  const res = await fetch(`${API_BASE}/orgs/offices/access`, {
+    method: 'PUT',
+    headers: await authHeaders(),
+    body: JSON.stringify({ user_id: userId, org_id: orgId, role }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to update office access.');
+}

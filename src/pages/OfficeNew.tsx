@@ -82,6 +82,9 @@ export default function OfficeNew() {
       if (!active) return;
       setListing(l);
       setMembers(m);
+      // Accès coché par défaut : un bureau que l'équipe de direction ne voit
+      // pas est l'exception, pas la règle (bug Vision Lavage, 2026-09-25).
+      setGrant(new Set(m.map((x) => x.user_id)));
     }).finally(() => { if (active) setLoadingMeta(false); });
     return () => { active = false; };
   }, []);
@@ -338,14 +341,14 @@ export default function OfficeNew() {
             />
             <p className="text-[12px] text-text-secondary">
               {fr
-                ? 'Vous serez propriétaire de ce bureau. Donnez aussi un accès immédiat à d\'autres propriétaires ou administrateurs du bureau actuel (même rôle).'
-                : 'You will own this office. Optionally give immediate access to other owners or admins of the current office (same role).'}
+                ? 'Tous les propriétaires de l\'entreprise ont accès à ce bureau automatiquement. Décochez les administrateurs du bureau actuel qui ne doivent pas y avoir accès.'
+                : 'Every owner of the company gets access to this office automatically. Uncheck the admins of the current office who should not have access.'}
             </p>
             {members.length === 0 ? (
               <p className="text-[12px] text-text-tertiary">
                 {fr
-                  ? 'Aucun autre propriétaire ou administrateur dans le bureau actuel. Vous pourrez inviter des membres après la création.'
-                  : 'No other owner or admin in the current office. You can invite members after creation.'}
+                  ? 'Aucun administrateur dans le bureau actuel. Vous pourrez inviter des membres après la création.'
+                  : 'No admin in the current office. You can invite members after creation.'}
               </p>
             ) : (
               <div className="space-y-2">

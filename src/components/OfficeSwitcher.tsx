@@ -8,7 +8,7 @@ import { useTranslation } from '../i18n';
 /**
  * Office switcher pour le header.
  * - owner/admin avec plusieurs offices → dropdown pour basculer.
- * - rôles mono-office (sales_rep/technician) → rien (épinglés à leur office).
+ * - sales_rep/technician → seulement s'ils ont accès à plusieurs offices.
  * Le propriétaire peut créer un nouvel office depuis le pied du dropdown :
  * la création se fait sur la page pleine /offices/new (coordonnées, héritage
  * des réglages, accès) — l'ancienne modale « nom seulement » a été retirée.
@@ -23,10 +23,10 @@ export function OfficeSwitcher() {
   if (!current) return null;
 
   const officeName = current.companyName || (fr ? 'Bureau sans nom' : 'Unnamed office');
-  // Seuls owner et admin peuvent changer d'office. Les autres rôles
-  // (sales_rep, technician) sont épinglés à l'office qui leur est assigné →
-  // on n'affiche rien dans le header pour eux.
-  const canSwitch = currentRole === 'owner' || currentRole === 'admin';
+  // Owner/admin voient toujours le sélecteur. Un représentant ou technicien
+  // le voit dès qu'on lui a donné plus d'un bureau (Réglages → Bureaux →
+  // Accès) ; avec un seul bureau, rien dans le header.
+  const canSwitch = currentRole === 'owner' || currentRole === 'admin' || companies.length > 1;
   const canCreate = currentRole === 'owner';
 
   if (!canSwitch) return null;
