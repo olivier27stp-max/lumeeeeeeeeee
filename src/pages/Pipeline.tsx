@@ -11,7 +11,7 @@
  * déplacé par Lumi, un import ou du SQL produit exactement le même résultat
  * qu'un glisser-déposer ici.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GitBranch, Loader2 } from 'lucide-react';
@@ -20,7 +20,7 @@ import PageHeader from '../components/ui/PageHeader';
 import EmptyState from '../components/ui/EmptyState';
 import PipelineBoard from '../components/pipeline/PipelineBoard';
 import DealDrawer from '../components/pipeline/DealDrawer';
-import GagneJobModal from '../components/pipeline/GagneJobModal';
+import { useJobModalController } from '../contexts/JobModalController';
 import PerduModal from '../components/pipeline/PerduModal';
 import PipelineReglages from '../components/pipeline/PipelineReglages';
 import CreerPipelineModal from '../components/pipeline/CreerPipelineModal';
@@ -176,6 +176,7 @@ export default function Pipeline() {
     return deals.find((d) => d.id === dealOuvert.id) ?? dealOuvert;
   }, [dealOuvert, deals]);
   const [dealAGagner, setDealAGagner] = useState<Deal | null>(null);
+  const { openJobModal } = useJobModalController();
   const [dealAPerdre, setDealAPerdre] = useState<{ deal: Deal; versEtapeId: string } | null>(null);
 
   const rafraichir = () => {
@@ -183,6 +184,59 @@ export default function Pipeline() {
     qc.invalidateQueries({ queryKey: ['pipeline-montants', pipelineId] });
     qc.invalidateQueries({ queryKey: ['pipeline-stats'] });
   };
+
+  /**
+   * Créer la job d'un deal : la MÊME fenêtre que partout ailleurs dans l'app.
+   *
+   * Le pipeline avait sa propre petite fenêtre (`GagneJobModal`), qui ne
+   * demandait que titre, client, adresse et date. Elle créait donc une job
+   * SANS MONTANT — alors que 912 des 939 jobs de production en portent un, et
+   * que c'est `total_cents` qui les rend facturables. Une vente gagnée
+   * produisait une job vide qu'il fallait rouvrir pour la compléter.
+   *
+   * On ouvre `NewJobModal`, celle des pages Jobs, Clients et Calendrier :
+   * services, montant, équipe, horaire, notes. Le client et l'adresse
+   * viennent du deal, comme avant.
+   *
+   * Annuler laisse le deal gagné avec le badge « Job à créer » — le badge est
+   * dérivé de (étape gagnée ET aucune job), jamais stocké : il réapparaît
+   * tout seul.
+   */
+  useEffect(() => {
+    if (!dealAGagner) return;
+    const deal = dealAGagner;
+    const etaitGagne = etapeParId.get(deal.stage_id)?.kind === 'won';
+
+    openJobModal({
+      initialValues: {
+        client_id: deal.client_id,
+        property_address: deal.client?.address ?? null,
+      },
+      onCreated: async (job) => {
+        try {
+          // L'étape est déjà écrite avant l'ouverture : on ne fait que
+          // rattacher la job au deal.
+          await lierJob(deal.id, job.id);
+          rafraichir();
+          toast.success(fr ? 'Job créée et liée au deal.' : 'Job created and linked.');
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : String(e));
+        }
+      },
+      onCancel: () => {
+        // Annuler une job sur un deal ENCORE OUVERT ne le déclare pas gagné :
+        // annoncer « Deal gagné » dans ce cas serait faux.
+        if (etaitGagne) {
+          toast.info(fr ? 'Deal gagné — job à créer.' : 'Deal won — job to create.');
+        }
+      },
+    });
+
+    // Le deal est « consommé » : sans ça, l'effet rouvrirait la fenêtre à
+    // chaque rendu.
+    setDealAGagner(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealAGagner]);
 
   /** Assignation — appelée par le menu « ⋮ » d'une carte et par la fiche. */
   async function assigner(dealId: string, membreId: string | null) {
@@ -432,38 +486,6 @@ export default function Pipeline() {
         }}
       />
 
-      <GagneJobModal
-        deal={dealAGagner}
-        onFermer={() => {
-          // Cette fenêtre s'ouvre par DEUX chemins : en déplaçant un deal
-          // vers « Gagné », et par le bouton « Créer une job » d'un deal
-          // encore ouvert. Annoncer « Deal gagné » dans les deux cas était
-          // faux dans le second — on annulait une job sur un deal en cours et
-          // l'app répondait qu'il était gagné.
-          //
-          // Le deal gagné, lui, RESTE gagné : le badge « Job à créer » est
-          // dérivé de l'étape et de l'absence de job, jamais stocké.
-          const etaitGagne = dealAGagner
-            ? etapeParId.get(dealAGagner.stage_id)?.kind === 'won'
-            : false;
-          setDealAGagner(null);
-          if (etaitGagne) {
-            toast.info(fr ? 'Deal gagné — job à créer.' : 'Deal won — job to create.');
-          }
-        }}
-        onCreer={async (dealId, jobId) => {
-          try {
-            // L'étape a déjà été écrite avant l'ouverture de la fenêtre :
-            // `lierJob` ne fait plus que rattacher la job.
-            await lierJob(dealId, jobId);
-            rafraichir();
-            setDealAGagner(null);
-            toast.success(fr ? 'Job créée et liée au deal.' : 'Job created and linked.');
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : String(e));
-          }
-        }}
-      />
 
       <PerduModal
         deal={dealAPerdre?.deal ?? null}
