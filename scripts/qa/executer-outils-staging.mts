@@ -291,6 +291,14 @@ await ex('mark_notifications_read', { ids: [] });
 exclu('delete_notification', 'aucune notification ciblable sans en créer une');
 
 // ── Réglages : automatisations, taxes, services, objectifs, rapports ──
+// Création par Lumi : un VRAI appel au modèle (Haiku, ~0,3 ¢ la passe) — c'est
+// le prix d'une preuve de bout en bout. La règle naît EN PAUSE : rien ne part,
+// même en la laissant là. Elle s'accumule sur staging à chaque passe (aucun
+// outil Lumi ne supprime une règle) ; son nom est suffixé par la passe, donc
+// elle reste reconnaissable et se nettoie depuis la page Automatisations.
+await ex('create_automation_from_text',
+  { description: 'Après l’envoi d’une soumission, attends 3 jours puis envoie un texto de suivi.' },
+  (r) => { S.regleCreee = trouver(r, null, 'rule_id', 'id'); });
 await ex('toggle_automation_rule', () => S.regle && { rule_id: S.regle, is_active: false });
 await ex('toggle_automation_rule', () => S.regle && { rule_id: S.regle, is_active: true });
 await ex('update_automation_message', () => S.regle && { rule_id: S.regle, action_type: 'send_email', body: 'Bonjour {{client_name}}, petit rappel (exec).', subject: 'Rappel' });

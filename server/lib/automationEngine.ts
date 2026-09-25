@@ -22,6 +22,7 @@ import {
   premiereEtape,
 } from './automationSequences';
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
+import { orgEnPause } from './automations-pause-org';
 
 interface AutomationRule {
   id: string;
@@ -536,6 +537,14 @@ async function handleEvent(event: CRMEvent) {
   // échec. Ce qui était déjà en file y reste.
   if (!automatisationsActivesAvecTrace()) return;
 
+  /*
+   * Pause PAR ENTREPRISE (distincte de l'interrupteur global ci-dessus).
+   * Comme lui, on ignore l'événement sans rien planifier ni journaliser
+   * comme échec : ce qui est déjà en file y reste, et reprendre repart
+   * où on en était.
+   */
+  if (await orgEnPause(engineConfig.supabase, event.orgId)) return;
+
   try {
     // ── 1. Match automation_rules (legacy system) ──
     // L'ordre est EXPLICITE : sans `order by`, PostgreSQL n'en garantit aucun.
@@ -875,6 +884,17 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!tasks || tasks.length === 0) return;
 
   for (const task of tasks as any[]) {
+    /*
+     * Pause PAR ENTREPRISE. Le filtre est ici, pas dans la requête : la
+     * file dépile TOUTES les organisations d'un coup, et une entreprise
+     * en pause ne doit pas empêcher les autres d'avancer.
+     *
+     * On `continue` sans rien toucher : la tâche reste `pending`, garde
+     * son `execute_at`, et repartira telle quelle à la reprise. La
+     * marquer en échec ferait perdre un envoi légitime.
+     */
+    if (task.org_id && await orgEnPause(supabase, task.org_id)) continue;
+
     // Heures calmes : on repousse à la prochaine fenêtre sans consommer de
     // tentative. Toute tâche présente ici est par construction DIFFÉRÉE (une
     // action immédiate s'exécute en direct, sans passer par cette file) : elle

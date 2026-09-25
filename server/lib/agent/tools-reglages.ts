@@ -378,6 +378,112 @@ const toggleAutomationRule: AgentTool = {
 };
 
 /**
+ * Créer une automatisation à partir d'une phrase.
+ *
+ * POURQUOI CET OUTIL
+ * Lumi savait activer, renommer et réécrire une automatisation, jamais en
+ * créer une. La création vivait dans un module séparé (`generer-parcours`),
+ * atteignable seulement par un assistant à questions successives — qui
+ * oblige à redire ce qu'on a déjà dit et ne permet pas de se corriger.
+ * Ici, la demande arrive en une phrase dans la conversation.
+ *
+ * LE COÛT
+ * On réutilise `genererParcours` tel quel plutôt que de faire raisonner
+ * l'orchestrateur : un aller-retour Haiku, catalogue en cache, budget réservé
+ * AVANT l'appel. Mesuré en production le 2026-09-25 : 0,32 ¢ pour un parcours
+ * à deux étapes. Faire construire le JSON par l'orchestrateur (240 outils,
+ * historique complet) coûterait plusieurs fois ce prix pour un résultat moins
+ * fiable — le catalogue ne serait pas sous les yeux du modèle.
+ *
+ * CE QU'IL N'EST PAS
+ * Une écriture directe. L'outil PROPOSE ; l'automatisation naît **en pause**
+ * (`is_active: false`), comme toute règle créée dans l'app : personne ne doit
+ * déclencher des envois aux clients en fermant un formulaire. L'utilisateur
+ * l'active ensuite avec `toggle_automation_rule`, ce qui lui redemande
+ * confirmation.
+ */
+const createAutomationFromText: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'create_automation_from_text',
+    description:
+      'Create a NEW automation from a plain-language description (e.g. "after a quote is sent, wait 3 days then text a follow-up, then 2 more days and text again"). '
+      + 'The rule is created PAUSED: tell the user it will not send anything until they enable it. '
+      + 'Use this only to create; to enable, rename or reword an existing one use toggle_automation_rule / update_automation_message.',
+    parameters: {
+      type: 'object',
+      properties: {
+        description: {
+          type: 'string',
+          description: 'The automation in one or two sentences, in the user\'s own words. Include every delay and every message they asked for.',
+        },
+      },
+      required: ['description'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'create_automation_from_text', args, async () => {
+      const demande = champRequis(args.description, 'La description de l\'automatisation');
+      if (demande.trim().length < 10) {
+        throw new Error('Décris l\'automatisation en une phrase : le déclencheur, les délais et les messages.');
+      }
+
+      const { genererParcours } = await import('../lumi/generer-parcours');
+      const { sequenceEtapes } = await import('../validation');
+      const admin = getServiceClient();
+
+      const resultat = await genererParcours({
+        admin,
+        orgId: ctx.orgId,
+        userId: ctx.userId ?? null,
+        demande: demande.trim(),
+        langue: 'fr',
+      });
+      if (!resultat.parcours) {
+        throw new Error(resultat.erreur ?? 'Je n\'ai pas réussi à construire ce parcours. Reformule-le.');
+      }
+
+      // Le même garde-fou que la route : ce qui ne passerait pas le moteur
+      // n'est jamais enregistré. Sans lui, une règle invalide dormirait en
+      // base jusqu'à son premier déclenchement.
+      const verdict = sequenceEtapes.safeParse(resultat.parcours.steps);
+      if (!verdict.success) {
+        throw new Error('Le parcours proposé ne pourrait pas tourner. Reformule ta demande, ou construis-le avec le « + » dans Automatisations.');
+      }
+
+      const { data, error } = await ctx.client
+        .from('automation_rules')
+        .insert({
+          org_id: ctx.orgId,
+          name: resultat.parcours.nom,
+          description: resultat.parcours.resume,
+          trigger_event: resultat.parcours.trigger_event,
+          conditions: {},
+          delay_seconds: 0,
+          actions: [],
+          steps: verdict.data,
+          // En pause à la naissance : voir l'en-tête de l'outil.
+          is_active: false,
+        })
+        .select('id, name, trigger_event, is_active');
+      if (error) throw error;
+      const row = ligneTouchee(data, 'L\'automatisation');
+
+      return {
+        created: true,
+        rule_id: row.id,
+        name: row.name,
+        trigger_event: row.trigger_event,
+        etapes: verdict.data.length,
+        resume: resultat.parcours.resume,
+        is_active: false,
+        note: 'Créée EN PAUSE : rien ne partira tant qu\'elle n\'est pas activée. Elle est visible dans Automatisations, où le parcours peut être ajusté.',
+      };
+    }),
+};
+
+/**
  * Réécrit le corps (et l'objet, pour un courriel) de l'action d'envoi d'une
  * règle — lecture-modification-écriture, les autres actions sont intactes
  * (même logique que updateRuleMessage dans automationRulesApi.ts).
@@ -1299,7 +1405,7 @@ export const OUTILS_REGLAGES: AgentTool[] = [
   // Modèles de courriel
   listEmailTemplates, createEmailTemplate, updateEmailTemplate, setDefaultEmailTemplate, deleteEmailTemplate, duplicateEmailTemplate,
   // Automatisations
-  toggleAutomationRule, updateAutomationMessage, updateAutomationSmsBody, setAutomationLanguage,
+  createAutomationFromText, toggleAutomationRule, updateAutomationMessage, updateAutomationSmsBody, setAutomationLanguage,
   // Taxes
   getTaxConfig, setupTaxes, createTaxConfig, updateTaxConfig, deleteTaxConfig, setDefaultTaxGroup,
   // Catalogue
@@ -1327,6 +1433,9 @@ export const REGISTRE_REGLAGES: Record<string, { sensible: boolean; reversible: 
   set_default_email_template:  { sensible: false, reversible: true,  vers_client: false },
   delete_email_template:       { sensible: true,  reversible: false, vers_client: false },
   duplicate_email_template:    { sensible: false, reversible: true,  vers_client: false },
+  // Créée en pause : rien n'atteint un client tant qu'elle n'est pas activée,
+  // et elle se supprime dans l'app.
+  create_automation_from_text: { sensible: true,  reversible: true,  vers_client: false },
   toggle_automation_rule:      { sensible: true,  reversible: true,  vers_client: false },
   update_automation_message:   { sensible: true,  reversible: true,  vers_client: false },
   update_automation_sms_body:  { sensible: true,  reversible: true,  vers_client: false },
@@ -1358,6 +1467,7 @@ export const PERMISSIONS_REGLAGES: Record<string, { cle: PermissionKey; capacite
   set_default_email_template:  { cle: 'settings.update',        capacite: 'la gestion des modèles de courriel' },
   delete_email_template:       { cle: 'settings.update',        capacite: 'la gestion des modèles de courriel' },
   duplicate_email_template:    { cle: 'settings.update',        capacite: 'la gestion des modèles de courriel' },
+  create_automation_from_text: { cle: 'automations.update',     capacite: 'la création des automatisations' },
   toggle_automation_rule:      { cle: 'automations.update',     capacite: 'la modification des automatisations' },
   update_automation_message:   { cle: 'automations.update',     capacite: 'la modification des automatisations' },
   update_automation_sms_body:  { cle: 'automations.update',     capacite: 'la modification des automatisations' },
@@ -1395,7 +1505,7 @@ export const TOPICS_REGLAGES: Partial<Record<IdTopic, string[]>> = {
     'create_service', 'update_service', 'archive_service',
   ],
   rapports: [
-    'toggle_automation_rule', 'update_automation_message', 'update_automation_sms_body', 'set_automation_language',
+    'create_automation_from_text', 'toggle_automation_rule', 'update_automation_message', 'update_automation_sms_body', 'set_automation_language',
     'list_goals', 'set_goal', 'delete_goal',
     'list_scheduled_reports', 'create_scheduled_report', 'update_scheduled_report', 'delete_scheduled_report', 'send_scheduled_report_now',
     'list_notifications', 'mark_notifications_read', 'delete_notification',

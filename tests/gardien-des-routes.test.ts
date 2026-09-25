@@ -213,6 +213,14 @@ describe('aucune route ne reste sans protection', () => {
     'cron.ts': 'en-tete secret x-cron-secret',
     'reminders-cron.ts': 'en-tete secret x-cron-secret',
     'unsubscribe.ts': 'jeton de 64 caracteres dans l URL',
+    // Webhook ENTRANT : un service exterieur (formulaire de site, Zapier,
+    // Facebook Leads) n a ni compte ni session. La cle de 64 hex dans l
+    // URL EST l authentification, comme pour unsubscribe.ts. La route
+    // verifie la forme avant toute requete SQL, borne le corps a 64 Ko,
+    // limite le debit par cle, et repond 404 aussi bien pour une cle
+    // inconnue que desactivee - sans quoi elle confirmerait l existence
+    // d une cle a qui la devine.
+    'webhooks-entrants.ts': 'cle de 64 caracteres dans l URL',
   };
 
   const sansRegle = ROUTES.filter((r) => !estPublic(r.chemin) && !aUneRegle(r.methode, r.chemin));
@@ -232,7 +240,7 @@ describe('aucune route ne reste sans protection', () => {
 
   it('les derogations restent limitees et justifiees', () => {
     // Ajouter un fichier ici doit etre un geste conscient, pas un reflexe.
-    expect(Object.keys(DEROGATIONS)).toHaveLength(3);
+    expect(Object.keys(DEROGATIONS)).toHaveLength(4);
   });
 
   it('les fichiers derogatoires se protegent reellement', () => {

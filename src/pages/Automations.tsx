@@ -24,6 +24,7 @@ import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
+import BandeauPause from '../components/automations/BandeauPause';
 import MessageEditor from '../components/automations/MessageEditor';
 import CopierVersBureauxModal from '../components/automations/CopierVersBureauxModal';
 import {
@@ -946,6 +947,15 @@ export default function Automations() {
             </button>
           </nav>
         </div>
+
+        {/*
+          L'interrupteur du client, AVANT la liste : on le cherche en
+          panique quand des messages partent, pas en explorant les
+          réglages. En marche c'est un lien discret ; en pause, un bandeau
+          rouge impossible à manquer — oublier que ses automatisations
+          dorment coûte des relances pendant des jours.
+        */}
+        <BandeauPause fr={fr} />
 
         {/* ══ 2. Titre + les trois boutons ══ */}
         <div className="flex flex-wrap items-center justify-between gap-3">
