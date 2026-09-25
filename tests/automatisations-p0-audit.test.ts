@@ -51,7 +51,12 @@ describe('P0-1 — le champ « Conditions » accepte le clavier', () => {
      * déclencheur, donc on propose les plus courants plutôt qu'une liste
      * exhaustive qui serait fausse ailleurs.
      */
-    expect(panneau).toMatch(/\['statut', 'source', 'montant', 'stage_id'\]/);
+    // Les exemples portent maintenant leur SIGNE (`total_cents > `), ce qui
+    // fait découvrir les comparaisons ajoutées le 2026-09-25. On exige
+    // qu'il y en ait, pas qu'ils soient ces quatre-là pour toujours.
+    expect(panneau).toMatch(/\{\['statut = ', 'source = ',/);
+    expect(panneau, 'un exemple doit montrer une comparaison')
+      .toMatch(/total_cents > |created_at >= /);
   });
 });
 

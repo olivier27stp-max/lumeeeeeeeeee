@@ -342,8 +342,16 @@ describe('conditions — types et opérateurs', () => {
     expect(bloc.slice(0, bloc.indexOf('\n\n'))).toContain('return false');
   });
 
-  it('les quatre opérateurs supportés le restent', () => {
-    expect(fn).toContain("['eq', 'neq', 'in', 'not_in']");
+  it('les opérateurs d’égalité restent supportés', () => {
+    /*
+     * La liste s'est ÉTENDUE le 2026-09-25 (gt/gte/lt/lte pour filtrer
+     * sur une date ou un montant). On vérifie donc que les quatre
+     * d'origine sont toujours là, pas que la liste est FIGÉE — sans quoi
+     * ce test interdirait toute nouvelle comparaison.
+     */
+    for (const op of ['eq', 'neq', 'in', 'not_in']) {
+      expect(fn).toContain(`'${op}'`);
+    }
     expect(fn).toContain("'in' in expected");
     expect(fn).toContain("'not_in' in expected");
   });

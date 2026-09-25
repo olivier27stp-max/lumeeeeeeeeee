@@ -101,10 +101,58 @@ function memeValeur(a: unknown, b: unknown): boolean {
   return String(a) === String(b);
 }
 
-/** Opérateurs que `evaluateConditions` sait évaluer. */
-const OPERATEURS_CONNUS = ['eq', 'neq', 'in', 'not_in'];
+/*
+ * Comparer deux valeurs qui sont des DATES ou des NOMBRES.
+ *
+ * Retourne `null` quand la comparaison n'a pas de sens (texte libre,
+ * date illisible) : l'appelant refuse alors la règle plutôt que de
+ * deviner. Comparer « abc » à 5 ne doit jamais répondre « vrai ».
+ *
+ * Les dates arrivent en texte ISO dans les métadonnées
+ * (`2026-09-25T14:03:00Z`) : `Date.parse` les lit, et une comparaison
+ * de nombres suffit ensuite. On essaie le nombre D'ABORD, sinon
+ * `Date.parse('5')` interpréterait « 5 » comme une année.
+ */
+function versNombreComparable(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.getTime();
+  if (typeof v !== 'string') return null;
 
-function evaluateConditions(
+  const texte = v.trim();
+  if (texte === '') return null;
+
+  // Un nombre pur reste un nombre (montants en cents, quantités…).
+  if (/^-?\d+(\.\d+)?$/.test(texte)) return Number(texte);
+
+  const t = Date.parse(texte);
+  return Number.isNaN(t) ? null : t;
+}
+
+/**
+ * `a OP b` sur des dates ou des nombres. `null` = incomparable.
+ */
+function comparer(a: unknown, b: unknown, op: 'gt' | 'gte' | 'lt' | 'lte'): boolean | null {
+  const x = versNombreComparable(a);
+  const y = versNombreComparable(b);
+  if (x === null || y === null) return null;
+  switch (op) {
+    case 'gt': return x > y;
+    case 'gte': return x >= y;
+    case 'lt': return x < y;
+    case 'lte': return x <= y;
+  }
+}
+
+/** Opérateurs que `evaluateConditions` sait évaluer. */
+const OPERATEURS_CONNUS = ['eq', 'neq', 'in', 'not_in', 'gt', 'gte', 'lt', 'lte'];
+
+/**
+ * Exporté pour être éprouvé directement : c'est ici que se joue « qui
+ * reçoit le message ». Un filtre qui laisse passer ce qu'il ne comprend
+ * pas envoie à tout le monde — la faute la plus coûteuse de ce fichier.
+ */
+export function evaluateConditions(
   conditions: Record<string, any>,
   event: CRMEvent,
 ): boolean {
@@ -138,6 +186,29 @@ function evaluateConditions(
         && !expected.in.some((v: unknown) => memeValeur(actual, v))) return false;
       if ('not_in' in expected && Array.isArray(expected.not_in)
         && expected.not_in.some((v: unknown) => memeValeur(actual, v))) return false;
+
+      /*
+       * Comparaisons de DATES et de NOMBRES : « créé après le 1er juin »,
+       * « montant supérieur à 5000 ».
+       *
+       * Une comparaison IMPOSSIBLE (texte libre, date illisible, champ
+       * absent) refuse la règle. Le contraire — laisser passer ce qu'on
+       * ne sait pas juger — enverrait le message à tout le monde, ce qui
+       * est exactement la faute que ce fichier a déjà payée avec les
+       * opérateurs inconnus.
+       */
+      for (const op of ['gt', 'gte', 'lt', 'lte'] as const) {
+        if (!(op in expected)) continue;
+        const verdict = comparer(actual, expected[op], op);
+        if (verdict !== true) {
+          if (verdict === null) {
+            console.warn(
+              `[automationEngine] condition ignorée — « ${key} » n'est pas comparable (${op})`,
+            );
+          }
+          return false;
+        }
+      }
     } else {
       // Direct equality
       if (!memeValeur(actual, expected)) return false;
