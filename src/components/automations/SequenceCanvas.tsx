@@ -50,6 +50,14 @@ interface Props {
    * changer ce qui met le parcours en route.
    */
   onDeclencheur?: () => void;
+  /**
+   * Les réglages du déclencheur, en clair sous son nom.
+   *
+   * GHL affiche « Event type is "Normal" » sous la carte : on voit ce que
+   * la règle écoute vraiment sans ouvrir quoi que ce soit. Vide = rien à
+   * régler pour ce déclencheur.
+   */
+  declencheurDetail?: string | null;
   /** Lecture seule : aucun bouton d'édition (aperçu d'un préréglage). */
   lectureSeule?: boolean;
 }
@@ -220,7 +228,8 @@ function Carte({
 }
 
 export default function SequenceCanvas({
-  declencheurLabel, steps, fr, selectionId, onSelection, onAjouter, onMenu, onDeclencheur, lectureSeule,
+  declencheurLabel, steps, fr, selectionId, onSelection, onAjouter, onMenu, onDeclencheur,
+  declencheurDetail, lectureSeule,
 }: Props) {
   const parId = new Map(steps.map((e) => [e.id, e]));
 
@@ -303,6 +312,9 @@ export default function SequenceCanvas({
                   {fr ? 'Quand' : 'When'}
                 </span>
                 <span className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
+                {declencheurDetail && (
+                  <span className="mt-0.5 block truncate text-[11px] text-text-secondary">{declencheurDetail}</span>
+                )}
               </span>
               <Pencil className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
             </div>
@@ -318,6 +330,9 @@ export default function SequenceCanvas({
                   {fr ? 'Quand' : 'When'}
                 </span>
                 <span className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
+                {declencheurDetail && (
+                  <span className="mt-0.5 block truncate text-[11px] text-text-secondary">{declencheurDetail}</span>
+                )}
               </span>
             </div>
           </div>

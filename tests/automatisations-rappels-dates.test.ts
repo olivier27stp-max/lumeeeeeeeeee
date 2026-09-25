@@ -17,6 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { balayerRappelsDates, jourLocal, jourDecale } from '../server/lib/rappels-dates';
+import { problemesAvantPublication } from '../src/lib/automationCatalogue';
 
 const RACINE = resolve(__dirname, '..');
 const source = readFileSync(resolve(RACINE, 'server/lib/rappels-dates.ts'), 'utf8');
@@ -247,16 +248,69 @@ describe('les NOMS de tables — la faute que les mocks ne voient pas', () => {
     expect(source).not.toMatch(/=== 'clients'|!== 'clients'/);
   });
 
-  it('le déclencheur reste marqué « bientôt » tant qu’on ne peut pas choisir le champ', () => {
+  it('le champ date se choisit — le déclencheur n’est plus « bientôt »', () => {
     /*
-     * Le balayage a besoin de `conditions.champ_id`, et aucun écran ne
-     * permet encore de le saisir : publier une telle règle donnerait une
-     * automatisation qui ne part JAMAIS, sans message. Le marqueur
-     * `bientot` bloque la publication avec la raison.
+     * Le balayage a besoin de `conditions.champ_id`. Tant qu'aucun écran ne
+     * permettait de le saisir, le déclencheur était grisé — publier aurait
+     * donné une automatisation qui ne part JAMAIS, sans message.
+     *
+     * Le panneau de réglage existe maintenant (`PanneauDeclencheur.tsx`) :
+     * le déclencheur s'ouvre, et ses deux réglages sont déclarés au
+     * catalogue.
      */
     const catalogue = readFileSync(resolve(RACINE, 'src/lib/automationCatalogue.ts'), 'utf8');
-    const bloc = catalogue.slice(catalogue.indexOf("cle: 'date.reached'"));
-    expect(bloc.slice(0, 1200), 'sans choix du champ, la règle ne partirait jamais')
-      .toMatch(/bientot: true/);
+    // L'entrée SEULE : de sa clé à son accolade fermante. Découper jusqu'au
+    // déclencheur suivant ramassait le `bientot: true` des déclencheurs de
+    // pipeline qui viennent après — le test aurait échoué pour rien.
+    const debut = catalogue.indexOf("cle: 'date.reached'");
+    expect(debut, 'le déclencheur doit exister').toBeGreaterThan(-1);
+    const bloc = catalogue.slice(debut, catalogue.indexOf('\n  },', debut));
+    expect(bloc, 'le déclencheur est branché : plus de « bientôt »').not.toMatch(/bientot: true/);
+    expect(bloc, 'il faut pouvoir choisir QUELLE date').toMatch(/cle: 'champ_id'[\s\S]*type: 'champ_date'/);
+    expect(bloc, 'et combien de jours avant').toMatch(/cle: 'jours_avant'/);
+    expect(bloc, 'le champ date est OBLIGATOIRE').toMatch(/cle: 'champ_id'[\s\S]*obligatoire: true/);
+  });
+
+  it('publier sans champ date choisi est REFUSÉ', () => {
+    /*
+     * Le seul garde-fou qui compte vraiment : sans `champ_id`, le balayage
+     * passe son chemin et la règle est publiée, affichée active, et ne part
+     * jamais. On vérifie le comportement, pas la présence d'une ligne.
+     */
+    const bloquants = (r: Parameters<typeof problemesAvantPublication>[0]) =>
+      problemesAvantPublication(r).filter((p) => p.gravite === 'bloquant');
+
+    const parcours = {
+      trigger_event: 'date.reached',
+      actions: [{ type: 'send_sms', config: { body: 'Rappel' } }],
+      fr: true,
+    };
+
+    expect(bloquants({ ...parcours, conditions: {} }).length,
+      'sans champ date, la publication doit être refusée').toBeGreaterThan(0);
+    expect(bloquants({ ...parcours, conditions: null }).length,
+      'conditions absentes = même refus').toBeGreaterThan(0);
+    expect(bloquants({ ...parcours, conditions: { champ_id: '   ' } }).length,
+      'un champ rempli d’espaces ne compte pas').toBeGreaterThan(0);
+
+    // Avec le champ choisi, plus rien ne bloque de ce côté.
+    const avecChamp = bloquants({
+      ...parcours,
+      conditions: { champ_id: '11111111-1111-1111-1111-111111111111', jours_avant: 7 },
+    });
+    expect(avecChamp.map((p) => p.message).join(' | '))
+      .not.toMatch(/date|champ/i);
+  });
+
+  it('« jours avant » reste FACULTATIF — 0 est une valeur légitime', () => {
+    // Le jour même est un cas courant (anniversaire, échéance). Le rendre
+    // obligatoire forcerait à saisir « 0 » pour rien.
+    const bloquants = problemesAvantPublication({
+      trigger_event: 'date.reached',
+      actions: [{ type: 'send_sms', config: { body: 'x' } }],
+      conditions: { champ_id: '11111111-1111-1111-1111-111111111111' },
+      fr: true,
+    }).filter((p) => p.gravite === 'bloquant');
+    expect(bloquants.map((p) => p.message).join(' | ')).not.toMatch(/jours/i);
   });
 });

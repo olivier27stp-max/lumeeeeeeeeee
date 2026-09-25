@@ -24,9 +24,16 @@ interface Props {
   membres?: Array<{ user_id: string; nom: string }>;
   /** Étiquettes déjà utilisées, proposées en autocomplétion. */
   etiquettes?: string[];
+  /** Champs date de la fiche client, pour le type `champ_date`. */
+  champsDate?: Array<{ id: string; label: string }>;
+  /** Autres automatisations publiées, pour le type `automatisation`. */
+  automatisations?: Array<{ id: string; nom: string }>;
 }
 
-export default function ChampActionUI({ champ, valeur, onChange, fr, membres = [], etiquettes = [] }: Props) {
+export default function ChampActionUI({
+  champ, valeur, onChange, fr, membres = [], etiquettes = [], champsDate = [],
+  automatisations = [],
+}: Props) {
   // `useId` plutôt qu'un littéral : ce composant est rendu plusieurs fois
   // sur la même page (une par étape), et deux `id` identiques casseraient
   // le lien `label`/`input` — l'accessibilité et le clic sur le libellé.
@@ -101,6 +108,61 @@ export default function ChampActionUI({ champ, valeur, onChange, fr, membres = [
             {membres.map((m) => (
               <option key={m.user_id} value={m.user_id}>
                 {m.nom}
+              </option>
+            ))}
+          </select>
+        );
+
+      case 'automatisation':
+        /*
+         * Les autres automatisations PUBLIÉES. Un brouillon n'enverrait
+         * rien, et la règle courante est déjà exclue par l'appelant : une
+         * automatisation qui se démarre elle-même boucle à l'infini.
+         */
+        if (automatisations.length === 0) {
+          return (
+            <p className="rounded-lg border border-dashed border-border px-3 py-2.5 text-[13px] text-text-secondary">
+              {fr
+                ? 'Aucune autre automatisation publiée à démarrer.'
+                : 'No other published automation to start.'}
+            </p>
+          );
+        }
+        return (
+          <select id={id} value={valeur} onChange={(e) => onChange(e.target.value)} className={classeChamp}>
+            <option value="">{fr ? '— Choisir —' : '— Pick one —'}</option>
+            {automatisations.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nom}
+              </option>
+            ))}
+          </select>
+        );
+
+      case 'champ_date':
+        /*
+         * Les champs date de la fiche client, propres à l'entreprise.
+         *
+         * Quand il n'y en a AUCUN, on le dit et on renvoie vers l'écran qui
+         * les crée : une liste vide sans explication laisse croire à un
+         * bogue, et c'est le seul réglage sans lequel ce déclencheur ne part
+         * jamais.
+         */
+        if (champsDate.length === 0) {
+          return (
+            <p className="rounded-lg border border-dashed border-border px-3 py-2.5 text-[13px] text-text-secondary">
+              {fr
+                ? 'Aucun champ date sur la fiche client. Créez-en un dans Paramètres → Champs personnalisés.'
+                : 'No date field on the client record. Create one in Settings → Custom fields.'}
+            </p>
+          );
+        }
+        return (
+          <select id={id} value={valeur} onChange={(e) => onChange(e.target.value)} className={classeChamp}>
+            <option value="">{fr ? '— Choisir une date —' : '— Pick a date field —'}</option>
+            {champsDate.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
               </option>
             ))}
           </select>

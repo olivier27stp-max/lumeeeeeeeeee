@@ -16,7 +16,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { problemesAvantPublication } from '../src/lib/automationCatalogue';
+import * as catalogue from '../src/lib/automationCatalogue';
 
 /** Un parcours minimal mais valide : déclencheur émis, une action complète. */
 const parcoursValide = {
@@ -55,15 +58,47 @@ describe('ce qui doit être refusé', () => {
     expect(bloquants({ ...parcoursValide, trigger_event: null }).length).toBeGreaterThan(0);
   });
 
-  it('un déclencheur que RIEN n’émet encore', () => {
+  it('un déclencheur que RIEN n’émet encore est REFUSÉ', () => {
     /*
-     * Le piège le plus coûteux : `deal.stage_entered` est déclaré mais le
-     * pipeline de ventes ne l'émet pas. Publier dessus donne une
-     * automatisation qui ne part JAMAIS, sans le moindre message.
+     * Le piège le plus coûteux : publier sur un événement que rien n'émet
+     * donne une automatisation qui ne part JAMAIS, sans le moindre message.
+     *
+     * Ce test visait `deal.stage_entered`, qui s'est révélé BRANCHÉ (34
+     * événements émis et traités en prod, vérifié le 2026-09-25) : le
+     * marqueur était une erreur d'analyse, pas un fait. On teste donc la
+     * RÈGLE elle-même sur un déclencheur fictif, au lieu de figer une clé
+     * qui peut être branchée demain — sinon le test se met à mentir.
      */
-    const p = bloquants({ ...parcoursValide, trigger_event: 'deal.stage_entered' });
-    expect(p.length).toBeGreaterThan(0);
-    expect(p[0].message).toMatch(/jamais/);
+    const p = bloquants({ ...parcoursValide, trigger_event: '__jamais_emis__' });
+    expect(p.length, 'un déclencheur inconnu doit bloquer').toBeGreaterThan(0);
+
+    // Et la garde `bientot` tient toujours, si un déclencheur en porte un.
+    const { DECLENCHEURS } = catalogue;
+    const aVenir = DECLENCHEURS.find((d) => d.bientot);
+    if (aVenir) {
+      const q = bloquants({ ...parcoursValide, trigger_event: aVenir.cle });
+      expect(q.length, `${aVenir.cle} est marqué « bientôt » : publier doit être refusé`).toBeGreaterThan(0);
+      expect(q[0].message).toMatch(/jamais/);
+    }
+  });
+
+  it('aucun déclencheur offert n’est marqué « bientôt » sans raison', () => {
+    /*
+     * Le garde-fou inverse, et celui qui m'a manqué : j'ai grisé deux
+     * déclencheurs PARFAITEMENT fonctionnels en déduisant du code au lieu
+     * de regarder la base. Un déclencheur grisé à tort est une
+     * fonctionnalité perdue, silencieusement.
+     *
+     * On n'interdit pas `bientot` — on exige qu'il soit JUSTIFIÉ par un
+     * commentaire au-dessus, pour que le prochain qui passe sache quoi
+     * vérifier.
+     */
+    const source = readFileSync(resolve(__dirname, '..', 'src/lib/automationCatalogue.ts'), 'utf8');
+    for (const d of catalogue.DECLENCHEURS.filter((x) => x.bientot)) {
+      const i = source.indexOf(`cle: '${d.cle}'`);
+      const bloc = source.slice(i, source.indexOf('\n  },', i));
+      expect(bloc, `${d.cle} : dire POURQUOI il est grisé`).toMatch(/n'émet pas|n’émet pas|pas encore/i);
+    }
   });
 
   it('un champ obligatoire vide', () => {

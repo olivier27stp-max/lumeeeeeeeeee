@@ -65,6 +65,19 @@ export interface DeclencheurCatalogue {
    * de laisser quelqu'un bâtir un parcours mort.
    */
   bientot?: boolean;
+  /**
+   * Les réglages du DÉCLENCHEUR lui-même, stockés dans `conditions`.
+   *
+   * La plupart des déclencheurs n'en ont pas : « facture payée » se suffit
+   * à elle-même. Mais « date atteinte » ne veut rien dire sans savoir QUELLE
+   * date surveiller ni combien de jours avant — sans ces deux réponses, le
+   * balayage quotidien passe son chemin et l'automatisation ne part jamais,
+   * en silence.
+   *
+   * Même modèle que les champs d'action (`ChampAction`), donc le même
+   * composant les affiche et la même validation les contrôle.
+   */
+  champs?: ChampAction[];
 }
 
 /**
@@ -199,18 +212,28 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     aide_en: 'When a date from a custom field arrives — contract end, warranty, yearly service.',
     famille: 'client', entite: 'lead',
     /*
-     * Le balayage quotidien existe (`server/lib/rappels-dates.ts`) et lit le
-     * bon schéma, mais il a besoin de DEUX réglages que rien ne permet encore
-     * de saisir : QUEL champ date surveiller (`conditions.champ_id`) et
-     * combien de jours avant (`conditions.jours_avant`). Un déclencheur ne
-     * porte aucun champ de configuration aujourd'hui.
+     * Les deux réponses sans lesquelles le balayage quotidien
+     * (`server/lib/rappels-dates.ts`) ne peut rien faire : QUELLE date
+     * surveiller, et combien de jours avant. Elles vivent dans
+     * `conditions`, que le balayage relit à chaque passage.
      *
-     * Sans `champ_id`, le balayage passe son chemin en journalisant « règle
-     * sans champ date ». Publier là-dessus donnerait une automatisation qui
-     * ne part JAMAIS, sans message : exactement ce que `bientot` empêche.
-     * À retirer en même temps qu'on ajoutera le choix du champ.
+     * `champ_id` est OBLIGATOIRE : sans lui la règle ne partirait jamais,
+     * en silence. `problemesAvantPublication()` refuse donc de publier.
      */
-    bientot: true,
+    champs: [
+      {
+        cle: 'champ_id', fr: 'Quelle date surveiller', en: 'Which date to watch',
+        obligatoire: true, type: 'champ_date',
+        aide_fr: 'Un champ date de la fiche client — fin de contrat, garantie, entretien annuel.',
+        aide_en: 'A date field on the client record — contract end, warranty, yearly service.',
+      },
+      {
+        cle: 'jours_avant', fr: 'Combien de jours avant', en: 'How many days before',
+        obligatoire: false, type: 'nombre', min_valeur: -365, max_valeur: 365,
+        aide_fr: '7 = une semaine avant la date. 0 = le jour même. -7 = une semaine après.',
+        aide_en: '7 = one week before the date. 0 = on the day. -7 = one week after.',
+      },
+    ],
   },
 
   // ── Pipeline de ventes ──
@@ -219,16 +242,26 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     aide_fr: 'Quand une opportunité arrive dans une étape du pipeline.',
     aide_en: 'When a deal moves into a pipeline stage.',
     famille: 'vente', entite: 'deal',
-    // Le pipeline de ventes n'émet pas encore cet événement.
-    bientot: true,
+    /*
+     * BRANCHÉ. Vérifié en production le 2026-09-25 : 34 événements
+     * `deal.stage_entered` déjà émis et traités. La chaîne complète est
+     * en place — un trigger SQL remplit `pipeline_events`, le
+     * planificateur appelle `traiterEvenementsPipeline`, et le moteur
+     * résout le client d'une opportunité (`automationEngine.ts:1328`).
+     *
+     * Le marqueur `bientot` posé ici était une ERREUR de ma part : je
+     * l'avais déduit du code au lieu de regarder la base.
+     */
   },
   {
     cle: 'deal.stage_idle', fr: 'Opportunité qui dort', en: 'Deal going stale',
     aide_fr: 'Quand une opportunité stagne trop longtemps dans son étape.',
     aide_en: 'When a deal sits too long in its stage.',
     famille: 'vente', entite: 'deal',
-    // Le pipeline de ventes n'émet pas encore cet événement.
-    bientot: true,
+    // BRANCHÉ : `pipeline_detecter_stagnation()` (présente en prod,
+    // vérifiée le 2026-09-25) remplit la file, que le planificateur vide.
+    // Aucun événement en prod à ce jour, simplement parce qu'aucune
+    // opportunité n'a encore stagné assez longtemps.
   },
 
   // ── Champs personnalisés ──
@@ -285,7 +318,22 @@ export type TypeChamp =
   | 'bascule'
   | 'membre'
   | 'etiquette'
-  | 'url';
+  | 'url'
+  /**
+   * Un champ personnalisé de type DATE, sur la fiche client.
+   *
+   * La liste vient de l'organisation (`custom_fields`, object_type
+   * « client », field_type « date »), pas d'une constante : chaque
+   * entreprise a les siens — fin de contrat, garantie, entretien annuel.
+   */
+  | 'champ_date'
+  /**
+   * Une AUTRE automatisation de l'organisation.
+   *
+   * La liste vient du serveur : les règles publiées, moins celle qu'on est
+   * en train d'éditer (une règle qui se démarre elle-même boucle).
+   */
+  | 'automatisation';
 
 export interface ChampAction {
   cle: string;
@@ -682,6 +730,20 @@ export const ACTIONS: ActionCatalogue[] = [
     ],
   },
   {
+    cle: 'demarrer_automatisation', fr: 'Démarrer une automatisation', en: 'Start an automation',
+    aide_fr: 'Fait entrer le client dans un autre parcours — celui-ci continue.',
+    aide_en: 'Enrolls the client in another journey — this one carries on.',
+    famille: 'technique', vers_client: false,
+    champs: [
+      {
+        cle: 'rule_id', fr: 'Laquelle', en: 'Which one',
+        obligatoire: true, type: 'automatisation',
+        aide_fr: 'Seules les automatisations PUBLIÉES sont proposées : un brouillon n’enverrait rien.',
+        aide_en: 'Only PUBLISHED automations are offered: a draft would send nothing.',
+      },
+    ],
+  },
+  {
     cle: 'arreter_automatisation', fr: 'Arrêter une automatisation', en: 'Stop an automation',
     aide_fr: 'Sort le client des parcours en cours.',
     aide_en: 'Takes the client out of running journeys.',
@@ -893,6 +955,8 @@ export function problemesAvantPublication(regle: {
   trigger_event?: string | null;
   steps?: unknown;
   actions?: unknown;
+  /** Les réglages du déclencheur — voir `DeclencheurCatalogue.champs`. */
+  conditions?: Record<string, unknown> | null;
   fr?: boolean;
 }): ProblemePublication[] {
   const fr = regle.fr !== false;
@@ -916,6 +980,28 @@ export function problemesAvantPublication(regle: {
       `“${decl.en}” is not wired yet: the automation would never run.`,
       'bloquant',
     );
+  } else if (decl.champs?.length) {
+    /*
+     * Un déclencheur peut avoir ses propres réglages obligatoires.
+     *
+     * « Date atteinte » sans champ date choisi est le cas type : le
+     * balayage quotidien lit `conditions.champ_id`, ne trouve rien, et
+     * passe son chemin. L'automatisation est publiée, affichée comme
+     * active, et ne part JAMAIS — l'échec le plus coûteux, parce qu'il ne
+     * se voit nulle part.
+     */
+    const conditions = (regle.conditions ?? {}) as Record<string, unknown>;
+    for (const champ of decl.champs) {
+      if (!champ.obligatoire) continue;
+      const v = conditions[champ.cle];
+      if (v === undefined || v === null || String(v).trim() === '') {
+        dire(
+          `« ${decl.fr} » : « ${champ.fr} » doit être rempli, sinon l’automatisation ne partirait jamais.`,
+          `“${decl.en}”: “${champ.en}” is required, otherwise the automation would never run.`,
+          'bloquant',
+        );
+      }
+    }
   }
 
   const steps = Array.isArray(regle.steps) ? (regle.steps as Array<Record<string, any>>) : null;

@@ -64,6 +64,8 @@ interface Props {
   declencheur?: string;
   membres: Array<{ user_id: string; nom: string }>;
   etiquettes: string[];
+  /** Autres automatisations publiées, pour « Démarrer une automatisation ». */
+  automatisations?: Array<{ id: string; nom: string }>;
   /** Statistiques de l'étape, pour l'onglet du même nom. */
   stats?: { envois: number; succes: number; echecs: number } | null;
   onEnregistrer: (etape: Etape) => void;
@@ -86,7 +88,7 @@ function decomposer(secondes: number): { valeur: number; unite: string } {
 }
 
 export default function PanneauEtape({
-  etape, fr, declencheur, membres, etiquettes, stats, onEnregistrer, onSupprimer, onFermer,
+  etape, fr, declencheur, membres, etiquettes, automatisations = [], stats, onEnregistrer, onSupprimer, onFermer,
 }: Props) {
   const ids = useId();
   const [onglet, setOnglet] = useState<'edition' | 'stats'>('edition');
@@ -332,6 +334,7 @@ export default function PanneauEtape({
                       fr={fr}
                       membres={membres}
                       etiquettes={etiquettes}
+                      automatisations={automatisations}
                     />
                   ))}
 
