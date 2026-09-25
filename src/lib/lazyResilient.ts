@@ -42,7 +42,7 @@ const DELAI_ANTI_BOUCLE = 30_000;
 /** L'échec est-il « le fichier n'a pas pu être chargé » ? */
 function estEchecDeChargement(e: unknown): boolean {
   const m = e instanceof Error ? e.message : String(e);
-  return /dynamically imported module|Importing a module script failed|Failed to fetch|error loading dynamically/i.test(m);
+  return /dynamically imported module|Importing a module script failed|Failed to fetch|error loading dynamically|Unable to preload|module vide/i.test(m);
 }
 
 /**
@@ -81,9 +81,16 @@ function rechargerUneFois(): boolean {
 export function lazyResilient<T extends ComponentType<any>>(
   charger: () => Promise<{ default: T }>,
 ) {
+  // Un import qui se résout à « rien » est un échec de chargement, pas une
+  // page : sans ce garde, React lit `.default` sur undefined (écran rouge).
+  const chargerVerifie = async () => {
+    const m = await charger();
+    if (!m || !m.default) throw new Error('module vide : la page n’a pas pu être chargée (dynamically imported module)');
+    return m;
+  };
   return lazy(async () => {
     try {
-      return await charger();
+      return await chargerVerifie();
     } catch (premiere) {
       if (!estEchecDeChargement(premiere)) throw premiere;
 
@@ -97,7 +104,7 @@ export function lazyResilient<T extends ComponentType<any>>(
        */
       try {
         await new Promise((r) => setTimeout(r, 300));
-        return await charger();
+        return await chargerVerifie();
       } catch (seconde) {
         if (!estEchecDeChargement(seconde)) throw seconde;
         // Le fichier n'existe vraiment plus : reprendre le nouvel index.

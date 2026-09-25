@@ -82,7 +82,7 @@ describe('l’outil de chargement', () => {
   it('réessaie AVANT d’abandonner', () => {
     // Un réseau qui hoquette doit se rattraper tout seul, sans recharger
     // la page : recharger pour un hoquet serait brutal.
-    expect(outil).toMatch(/return await charger\(\);[\s\S]*?return await charger\(\);/);
+    expect(outil).toMatch(/return await chargerVerifie\(\);[\s\S]*?return await chargerVerifie\(\);/);
   });
 
   it('ne recharge QUE sur un échec de chargement', () => {
@@ -173,5 +173,19 @@ describe('le spinner infini — défaut observé en prod le 2026-09-25', () => {
       .not.toMatch(/location\.reload\(\)/);
     expect(bloc, 'ni poser la clé anti-boucle partagée')
       .not.toMatch(/setItem/);
+  });
+
+  it('le préchargement n’ANNULE pas l’erreur (sinon l’import rend undefined → « reading default »)', () => {
+    // Vite : `return importDeLaPage().catch(gererErreur)` — annulé, l'erreur
+    // n'est pas relancée et l'import se résout à undefined (écran rouge
+    // partout après un déploiement, 2026-09-25).
+    const i = main.indexOf("addEventListener('vite:preloadError'");
+    const bloc = main.slice(i, i + 300);
+    expect(bloc).not.toMatch(/preventDefault\(\)/);
+  });
+
+  it('un import qui rend « rien » est traité comme un échec de chargement', () => {
+    expect(outil).toContain("if (!m || !m.default) throw new Error(");
+    expect(outil).toMatch(/return await chargerVerifie\(\);[\s\S]*return await chargerVerifie\(\);/);
   });
 });
