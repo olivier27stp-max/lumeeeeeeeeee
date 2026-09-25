@@ -32,6 +32,8 @@ export interface AutomationRule {
   created_at: string;
   updated_at: string;  /** Dossier de rangement — `null` = à la racine. */
   folder_id?: string | null;
+  /** Copie liée : l'automatisation modèle (autre bureau) qu'elle suit. */
+  modele_id?: string | null;
   /** À la corbeille depuis. `null` = vivante. */
   deleted_at?: string | null;
 }

@@ -130,6 +130,36 @@ export async function dupliquerAutomatisation(id: string): Promise<AutomationRul
   return reponse.json();
 }
 
+// ─── Copier vers d'autres bureaux ───────────────────────────────────
+export interface BureauCible { org_id: string; name: string }
+export interface ResultatCopie {
+  org_id: string;
+  name: string;
+  statut: 'copiee' | 'mise_a_jour' | 'preset_mis_a_jour' | 'existe_deja' | 'sans_droit' | 'echec';
+  active?: boolean;
+  a_revoir?: string[];
+  rule_id?: string;
+  erreur?: string;
+}
+
+/** Bureaux de l'entreprise (hors bureau actif) où l'on peut modifier les automatisations. */
+export async function chargerBureauxCibles(): Promise<BureauCible[]> {
+  const reponse = await fetch('/api/automations/bureaux-cibles', { headers: await entetes() });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de lister vos bureaux.');
+  return (await reponse.json()).offices;
+}
+
+/** `lier` : les copies suivent cette automatisation (défaut). */
+export async function copierVersBureaux(id: string, orgIds: string[], lier = true): Promise<ResultatCopie[]> {
+  const reponse = await fetch(`/api/automations/rules/${id}/copier-bureaux`, {
+    method: 'POST',
+    headers: await entetes(),
+    body: JSON.stringify({ org_ids: orgIds, lier }),
+  });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de copier l’automatisation.');
+  return (await reponse.json()).results;
+}
+
 export async function supprimerAutomatisation(id: string): Promise<void> {
   const reponse = await fetch(`/api/automations/rules/${id}`, {
     method: 'DELETE',

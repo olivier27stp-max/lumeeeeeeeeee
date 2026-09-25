@@ -1196,6 +1196,13 @@ export const automationRuleCreateSchema = corpsAutomatisation.superRefine(plafon
  * passerait alors, écraserait les conditions existantes par `{}` et
  * remettrait la règle en pause — sans que personne ne l'ait demandé.
  */
+/** Copier une automatisation vers d'autres bureaux de l'entreprise. */
+export const automationCopieBureauxSchema = z.object({
+  org_ids: z.array(z.string().uuid()).min(1).max(50),
+  /** La copie suit le modèle (par défaut) ; false = copie autonome. */
+  lier: z.boolean().optional(),
+});
+
 export const automationRuleUpdateSchema = z
   .record(z.string(), z.unknown())
   .refine((o) => Object.keys(o).length > 0, 'Nothing to update.')

@@ -19,12 +19,13 @@ import {
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
   Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
   Plus, Pencil, Copy, Trash2, RotateCcw, X, EllipsisVertical,
-  Settings, FolderPlus, Filter, } from 'lucide-react';
+  Settings, FolderPlus, Filter, Building2, Link2, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
 import MessageEditor from '../components/automations/MessageEditor';
+import CopierVersBureauxModal from '../components/automations/CopierVersBureauxModal';
 import {
   chargerAutomatisations,
   creerAutomatisation,
@@ -35,6 +36,8 @@ import {
   creerDossier,
   supprimerDossier,
   rangerDansDossier,
+  chargerBureauxCibles,
+  type BureauCible,
   type CatalogueAutomatisations,
   type DossierAutomatisation,
 } from '../lib/automationBuilderApi';
@@ -639,6 +642,15 @@ export default function Automations() {
       toast.error(e instanceof Error ? e.message : String(e));
     }
   };
+
+  // Multi-bureaux : bureaux où l'on peut copier (vide = un seul bureau, l'option n'apparaît pas).
+  const [bureauxCibles, setBureauxCibles] = useState<BureauCible[]>([]);
+  const [copieVers, setCopieVers] = useState<AutomationRule | null>(null);
+  useEffect(() => {
+    chargerBureauxCibles().then(setBureauxCibles).catch((e: unknown) => {
+      console.error('[automatisations] bureaux cibles illisibles', e);
+    });
+  }, []);
 
   const dupliquer = async (regle: AutomationRule, ouvrir = false) => {
     setOccupeId(regle.id);
@@ -1364,6 +1376,12 @@ export default function Automations() {
                                     ? (fr ? `${rule.steps.length} étapes` : `${rule.steps.length} steps`)
                                     : formatDelay(rule.delay_seconds, language)}
                                 </span>
+                                {rule.modele_id && (
+                                  <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-text-tertiary" title={fr ? 'Suit l’automatisation d’un autre bureau ; la modifier ici la détache.' : 'Follows an automation from another office; editing it here detaches it.'}>
+                                    <Link2 size={11} aria-hidden="true" />
+                                    {fr ? 'Copie liée à un autre bureau' : 'Linked copy from another office'}
+                                  </span>
+                                )}
                                 {echecs > 0 && (
                                   <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-danger">
                                     <AlertTriangle size={11} aria-hidden="true" />
@@ -1506,6 +1524,17 @@ export default function Automations() {
                                       <Copy size={13} aria-hidden="true" />
                                       {fr ? 'Dupliquer' : 'Duplicate'}
                                     </button>
+                                    {bureauxCibles.length > 0 && (
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => { setMenuLigne(null); setCopieVers(rule); }}
+                                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        <Building2 size={13} aria-hidden="true" />
+                                        {fr ? 'Copier vers d’autres bureaux' : 'Copy to other offices'}
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       role="menuitem"
@@ -1670,6 +1699,16 @@ export default function Automations() {
           </div>
         )}
       </div>
+      {copieVers && (
+        <CopierVersBureauxModal
+          ruleId={copieVers.id}
+          ruleName={localizeAutomationName(copieVers.name, language)}
+          bureaux={bureauxCibles}
+          fr={fr}
+          onClose={() => setCopieVers(null)}
+          onFini={() => { void load(); }}
+        />
+      )}
     </PermissionGate>
   );
 }
