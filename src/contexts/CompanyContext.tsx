@@ -173,10 +173,22 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
         }
       }
 
+      // Bureaux fermés (archivés) : hors du sélecteur, données conservées.
+      const fermes = new Set<string>();
+      if (orgIds.length > 0) {
+        const { data: archives, error: archivesErr } = await supabase
+          .from('orgs')
+          .select('id')
+          .in('id', orgIds)
+          .not('archived_at', 'is', null);
+        if (archivesErr) console.error('[CompanyContext] bureaux fermés illisibles', archivesErr.message);
+        for (const o of archives || []) fermes.add(String(o.id));
+      }
+
       // 3. Build CompanyMembership objects
       const devRole = getDevRoleOverride();
       const mapped: CompanyMembership[] = memberships
-        .filter((m: any) => m.status === 'active')
+        .filter((m: any) => m.status === 'active' && !fermes.has(String(m.org_id)))
         .map((m: any) => {
           let role = (m.role || 'sales_rep') as TeamRole;
           let scope = (m.scope || getDefaultScope(role)) as Scope;

@@ -6,7 +6,8 @@ import { useTranslation } from '../i18n';
 import { getCurrentOrgId } from '../lib/orgApi';
 import {
   getCompanyOrgIds,
-  listPredefinedServices,
+  listPredefinedServicesGestion,
+  setReglageServiceBureau,
   createPredefinedService,
   updatePredefinedService,
   archivePredefinedService,
@@ -47,6 +48,10 @@ export default function ProductsServices() {
   const [formDuration, setFormDuration] = useState('');
   const [formUnit, setFormUnit] = useState<ServicePricingUnit>('flat');
   const [formMeasureDefault, setFormMeasureDefault] = useState(false);
+  // Réglage LOCAL du bureau actif (plan multi-bureaux) : prix propre (vide =
+  // prix de l'entreprise) et disponibilité.
+  const [formPrixLocal, setFormPrixLocal] = useState('');
+  const [formOffert, setFormOffert] = useState(true);
   const [saving, setSaving] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -68,7 +73,7 @@ export default function ProductsServices() {
   async function loadServices() {
     setLoading(true);
     try {
-      const data = await listPredefinedServices();
+      const data = await listPredefinedServicesGestion();
       setServices(data);
     } catch {
       setServices([]);
@@ -104,6 +109,8 @@ export default function ProductsServices() {
     setFormDuration('');
     setFormUnit('flat');
     setFormMeasureDefault(false);
+    setFormPrixLocal('');
+    setFormOffert(true);
     setShowForm(true);
   }
 
@@ -115,6 +122,8 @@ export default function ProductsServices() {
     setFormDuration(service.default_duration_minutes ? String(service.default_duration_minutes) : '');
     setFormUnit(service.pricing_unit || 'flat');
     setFormMeasureDefault(!!service.measure_default);
+    setFormPrixLocal(service.reglage_bureau?.prix_cents != null ? String(service.reglage_bureau.prix_cents / 100) : '');
+    setFormOffert(service.reglage_bureau?.offert !== false);
     setEditingId(service.id);
     setShowForm(true);
   }
@@ -137,7 +146,14 @@ export default function ProductsServices() {
           pricing_unit: formUnit,
           measure_default: formUnit !== 'flat' && formMeasureDefault,
         });
-        setServices((prev) => prev.map((s) => (s.id === editingId ? updated : s)));
+        let reglage = services.find((s) => s.id === editingId)?.reglage_bureau ?? null;
+        if (officeCount > 1) {
+          const brut = formPrixLocal.trim();
+          const prixLocal = brut === '' ? null : Math.max(0, Math.round((parseFloat(brut.replace(',', '.')) || 0) * 100));
+          reglage = prixLocal === null && formOffert ? null : { prix_cents: prixLocal, offert: formOffert };
+          await setReglageServiceBureau(editingId, reglage);
+        }
+        setServices((prev) => prev.map((s) => (s.id === editingId ? { ...updated, reglage_bureau: reglage } : s)));
         toast.success(isFr ? 'Service modifié' : 'Service updated');
       } else {
         const created = await createPredefinedService({
@@ -250,6 +266,29 @@ export default function ProductsServices() {
               </label>
               <input id={`${id}-price`} value={formPrice} onChange={(e) => setFormPrice(e.target.value)} type="text" inputMode="decimal" className="glass-input w-full mt-1" placeholder="475,00" />
             </div>
+            {officeCount > 1 && editingId && (
+              <div className="md:col-span-2 rounded-xl border border-outline-subtle p-3 space-y-2">
+                <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                  {isFr ? 'Dans ce bureau seulement' : 'In this office only'}
+                </p>
+                <div className="flex flex-wrap items-end gap-4">
+                  <div>
+                    <label htmlFor={`${id}-prix-local`} className="text-[12px] text-text-secondary">
+                      {isFr ? 'Prix propre à ce bureau ($)' : 'Price for this office ($)'}
+                    </label>
+                    <input id={`${id}-prix-local`} value={formPrixLocal} onChange={(e) => setFormPrixLocal(e.target.value)} type="text" inputMode="decimal"
+                      className="glass-input w-40 mt-1" placeholder={isFr ? 'Prix de l’entreprise' : 'Company price'} />
+                  </div>
+                  <label htmlFor={`${id}-offert`} className="flex items-center gap-2 text-[13px] text-text-primary cursor-pointer pb-2">
+                    <input id={`${id}-offert`} type="checkbox" className="h-4 w-4 rounded" checked={formOffert} onChange={(e) => setFormOffert(e.target.checked)} />
+                    {isFr ? 'Offert dans ce bureau' : 'Offered in this office'}
+                  </label>
+                </div>
+                <p className="text-[11px] text-text-tertiary">
+                  {isFr ? 'Laissez le prix vide pour utiliser celui de l’entreprise. Un service non offert n’apparaît plus dans les soumissions et jobs de ce bureau.' : 'Leave the price empty to use the company price. A service not offered no longer shows in this office’s quotes and jobs.'}
+                </p>
+              </div>
+            )}
             <div>
               <label htmlFor={`${id}-category`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Catégorie' : 'Category'}</label>
               <input id={`${id}-category`} value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? 'ex. Nettoyage' : 'e.g. Cleaning'} />
@@ -340,6 +379,16 @@ export default function ProductsServices() {
                         <p className="text-[12px] text-text-tertiary mt-0.5 truncate">{service.description}</p>
                       )}
                     </div>
+                    {service.reglage_bureau?.offert === false && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-surface-secondary text-text-tertiary shrink-0">
+                        {isFr ? 'Non offert ici' : 'Not offered here'}
+                      </span>
+                    )}
+                    {service.reglage_bureau?.prix_cents != null && (
+                      <span className="text-[11px] text-text-secondary shrink-0">
+                        {isFr ? 'Ici : ' : 'Here: '}{formatCurrency(service.reglage_bureau.prix_cents / 100)}
+                      </span>
+                    )}
                     <span className="text-[14px] font-bold text-text-primary tabular-nums shrink-0">
                       {formatCurrency(service.default_price_cents / 100)}
                       {service.pricing_unit === 'linear_ft' && <span className="text-[10px] text-text-tertiary font-normal"> {isFr ? '/pi lin' : '/lin ft'}</span>}
