@@ -139,7 +139,12 @@ export default function CheckoutSuccess() {
         if (cancelled) return;
         console.error('[CheckoutSuccess]', err.message);
         setStatus('error');
-        setErrorMsg(err.message);
+        /* Le message du serveur reste dans la console, jamais à l'écran :
+           « Internal server error » affiché à quelqu'un qui vient de payer
+           n'aide personne et fait croire que l'argent est perdu. Le paiement,
+           lui, est déjà encaissé par Stripe — c'est la confirmation qui
+           tarde. */
+        setErrorMsg('');
       }
     }
 
@@ -219,13 +224,18 @@ export default function CheckoutSuccess() {
             </div>
             <h1 className="text-xl font-bold text-gray-900">{isFr ? 'Une erreur est survenue' : 'Something went wrong'}</h1>
             <p className="text-sm text-gray-500 mt-2">
-              {errorMsg || (isFr ? 'Votre paiement n’a pas pu être confirmé. Veuillez contacter le soutien.' : 'Your payment could not be confirmed. Please contact support.')}
+              {errorMsg || (isFr
+                ? 'Votre paiement est bien passé, mais la confirmation tarde. Rafraîchissez dans une minute — si rien ne change, écrivez-nous à support@lumecrm.net et nous activerons votre compte.'
+                : 'Your payment went through, but the confirmation is taking longer than usual. Refresh in a minute — if nothing changes, email support@lumecrm.net and we will activate your account.')}
             </p>
             <button
-              onClick={() => navigate('/checkout')}
+              /* « Réessayer » renvoyait vers /checkout, la page de PAIEMENT :
+                 quelqu'un qui vient de payer risquait de payer deux fois.
+                 Ici on recharge la confirmation, rien d'autre. */
+              onClick={() => window.location.reload()}
               className="mt-4 px-6 py-2 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800"
             >
-              {isFr ? 'Réessayer' : 'Try again'}
+              {isFr ? 'Rafraîchir' : 'Refresh'}
             </button>
           </>
         )}
