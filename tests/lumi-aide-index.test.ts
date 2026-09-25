@@ -39,9 +39,21 @@ describe('index d aide élargi', () => {
       expect(r.map((x) => x.page), q).toContain(route);
     }
   });
-  it('la carte reste sous le plafond de cache du prompt support', () => {
-    // Depuis #412 la carte n'entre plus dans le prompt (indexée par search_help) : le plafond ne protège que la taille de l'index en mémoire.
-    // 25 000 depuis les champs personnalisés v2 (2026-09-26), aligné sur carte-app-complete.
-    expect(CARTE_APP.length).toBeLessThan(25_000);
+  it('la carte reste bornée — garde-fou large', () => {
+    /*
+     * Le plafond SERRÉ vit sur l'INDEX, dans
+     * `carte-app-complete.test.ts` : depuis #412 la carte n'entre plus
+     * dans le prompt (elle est indexée par `search_help`), seul l'index
+     * y entre, et c'est donc lui qui coûte de l'argent à chaque tour.
+     *
+     * Ce plafond-ci était la COPIE du même chiffre à un deuxième
+     * endroit : à 24 991/25 000, il ne restait que neuf caractères, et
+     * l'écrire deux fois voulait dire le relever deux fois à chaque
+     * ajout. On garde ici une borne LARGE, comme garde-fou contre un
+     * collage accidentel, et rien d'autre.
+     */
+    expect(CARTE_APP.length,
+      'au-delà, c’est qu’on a collé autre chose que la carte')
+      .toBeLessThan(60_000);
   });
 });

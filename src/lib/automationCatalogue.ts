@@ -207,6 +207,13 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
   },
 
   {
+    cle: 'webhook.received', fr: 'Appel reçu de l’extérieur', en: 'Incoming webhook',
+    aide_fr: 'Quand un service extérieur appelle votre adresse Lume — formulaire de votre site, Zapier, Facebook Leads, fournisseur d’appels. L’adresse et sa clé se créent dans Réglages › Automatisations.',
+    aide_en: 'When an outside service calls your Lume address — your website form, Zapier, Facebook Leads, a call provider. The address and its key are created in Settings › Automations.',
+    famille: 'client', entite: 'lead',
+  },
+
+  {
     cle: 'date.reached', fr: 'Date atteinte', en: 'Date reached',
     aide_fr: 'Quand une date d’un champ personnalisé arrive — fin de contrat, garantie, entretien annuel.',
     aide_en: 'When a date from a custom field arrives — contract end, warranty, yearly service.',

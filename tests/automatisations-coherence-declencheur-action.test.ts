@@ -48,6 +48,14 @@ const ENTITE_DU_DECLENCHEUR: Record<string, string> = {
   'task.completed': 'client',
   'note.added': 'client',
   'date.reached': 'client',
+  /*
+   * Un appel venu de l'EXTÉRIEUR ne porte aucune entité CRM : il porte
+   * l'id du webhook. Le catalogue annonce `lead` parce qu'il propose les
+   * variables d'un prospect (c'est l'usage : un formulaire de site crée
+   * un prospect), mais le serveur émet bien `automation_webhook`. `'*'`
+   * dit exactement ça : aucune promesse à tenir sur le type.
+   */
+  'webhook.received': '*',
   'deal.stage_entered': 'deal',
   'deal.stage_idle': 'deal',
 };
