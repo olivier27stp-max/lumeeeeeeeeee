@@ -22,7 +22,7 @@ import {
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
-import { fetchRequestForm, upsertRequestForm, regenerateApiKey } from '../lib/requestFormsApi';
+import { fetchRequestForms, upsertRequestForm, regenerateApiKey } from '../lib/requestFormsApi';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { STORAGE_BUCKETS } from '../lib/storage';
@@ -392,13 +392,24 @@ export default function RequestFormSettings() {
   const [showRegenModal, setShowRegenModal] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
+  // ── Plusieurs formulaires ──
+  // Un pour le site, un pour les publicités, un pour la carte terrain :
+  // mêmes questions, mais chacun alimente SON pipeline. `formulaires` porte
+  // la liste, `form` celui qu'on édite.
+  const [formulaires, setFormulaires] = useState<RequestForm[]>([]);
+  const [pipelineId, setPipelineId] = useState<string | null>(null);
+  const [pipelinesDispo, setPipelinesDispo] = useState<{ id: string; name: string; is_default: boolean }[]>([]);
+
   // Load form
   useEffect(() => {
     async function load() {
       try {
-        const data = await fetchRequestForm();
+        const liste = await fetchRequestForms();
+        setFormulaires(liste);
+        const data = liste[0] ?? null;
         if (data) {
           setForm(data);
+          setPipelineId(data.pipeline_id ?? null);
           setTitle(data.title);
           setDescription(data.description || '');
           setSuccessMessage(data.success_message);
@@ -421,6 +432,18 @@ export default function RequestFormSettings() {
         setLoading(false);
       }
 
+      // Les pipelines proposables. Lus ici plutôt que dans un contexte
+      // partagé : l'écran en a besoin pour UN menu déroulant, et une requête
+      // de plus au montage coûte moins qu'un contexte de plus à entretenir.
+      try {
+        const { fetchPipelines } = await import('../lib/pipelineVentesApi');
+        const pipes = await fetchPipelines();
+        setPipelinesDispo(pipes.map((x) => ({ id: x.id, name: x.name, is_default: x.is_default })));
+      } catch {
+        // Pas de pipeline (forfait sans la fonction, ou aucun créé) : le menu
+        // ne s'affiche pas et le formulaire garde le pipeline par défaut.
+      }
+
       // Company logo is the default when the form has no custom logo.
       try {
         const currentOrgId = await getCurrentOrgIdOrThrow();
@@ -438,12 +461,55 @@ export default function RequestFormSettings() {
     load();
   }, []);
 
+  /** Ouvre un autre formulaire dans l'éditeur. */
+  const ouvrirFormulaire = useCallback((f: RequestForm) => {
+    setForm(f);
+    setTitle(f.title);
+    setDescription(f.description || '');
+    setSuccessMessage(f.success_message);
+    setEnabled(f.enabled);
+    setLogoUrl(f.logo_url || '');
+    setCustomFields((f.custom_fields || []).map((c) =>
+      (c.type as string) === 'multiselect' ? { ...c, type: 'checkbox' } : c));
+    setNotifyEmail(f.notify_email);
+    setNotifyInApp(f.notify_in_app);
+    setApiKey(f.api_key);
+    setPipelineId(f.pipeline_id ?? null);
+    setSaved(false);
+  }, []);
+
+  /**
+   * « Nouveau formulaire » — une CRÉATION, jamais un écrasement.
+   *
+   * On repart des questions du formulaire ouvert : les trois formulaires
+   * (site, publicités, terrain) posent les mêmes questions, seul le pipeline
+   * change. Recopier évite de tout ressaisir.
+   *
+   * Rien n'est écrit tant qu'on n'a pas cliqué Enregistrer : `creer: true`
+   * part avec la sauvegarde, pas avec ce bouton.
+   */
+  const nouveauFormulaire = useCallback(() => {
+    setForm(null);
+    setApiKey('');
+    setPipelineId(null);
+    setSaved(false);
+    setTitle(isFr ? 'Nouveau formulaire' : 'New form');
+  }, [isFr]);
+
   // Save form
   const handleSave = useCallback(async () => {
     setSaving(true);
     setSaved(false);
     try {
       const result = await upsertRequestForm({
+        // On vise EXPLICITEMENT le formulaire ouvert. Sans cet `id`, le
+        // serveur retombe sur le plus ancien : éditer le deuxième formulaire
+        // écraserait silencieusement le premier.
+        id: form?.id,
+        // Aucun formulaire ouvert = « Nouveau ». Sans ce drapeau, le serveur
+        // viserait le plus ancien et l'écraserait.
+        creer: !form?.id ? true : undefined,
+        pipeline_id: pipelineId,
         title,
         description: description || null,
         success_message: successMessage,
@@ -459,6 +525,17 @@ export default function RequestFormSettings() {
       });
       setForm(result);
       setApiKey(result.api_key);
+      setPipelineId(result.pipeline_id ?? null);
+      // La liste suit : on remplace la ligne modifiée, ou on ajoute la
+      // nouvelle. Sans ça, créer un formulaire ne le ferait pas apparaître
+      // avant un rechargement complet de la page.
+      setFormulaires((prev) => {
+        const i = prev.findIndex((f) => f.id === result.id);
+        if (i === -1) return [...prev, result];
+        const copie = [...prev];
+        copie[i] = result;
+        return copie;
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -472,7 +549,10 @@ export default function RequestFormSettings() {
   const handleRegenKey = async () => {
     setRegenerating(true);
     try {
-      const newKey = await regenerateApiKey();
+      // Le formulaire OUVERT, pas « celui de l'organisation » : régénérer
+      // invalide le lien public, et se tromper de cible casserait les liens
+      // déjà partagés d'un autre formulaire.
+      const newKey = await regenerateApiKey(form?.id);
       setApiKey(newKey);
       setShowRegenModal(false);
     } catch (err) {
@@ -590,6 +670,46 @@ export default function RequestFormSettings() {
         ))}
       </div>
 
+      {/* ═══ MES FORMULAIRES ═══
+          Un formulaire pour le site, un pour les publicités, un pour la carte
+          terrain : mêmes questions, chacun vers SON pipeline. La barre ne
+          s'affiche qu'à partir de deux formulaires — avec un seul, elle
+          n'apprendrait rien et volerait de la place. */}
+      {(formulaires.length > 1 || !form) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {formulaires.map((f) => {
+            const ouvert = form?.id === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => ouvrirFormulaire(f)}
+                aria-pressed={ouvert}
+                className="rounded-lg border px-3 py-1.5 text-[12.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+                style={{
+                  borderColor: ouvert ? 'var(--color-accent)' : 'var(--color-outline)',
+                  background: ouvert ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
+                }}
+              >
+                {f.title}
+                {!f.enabled && (
+                  <span className="ml-1.5 text-[10.5px] text-text-tertiary">
+                    {isFr ? '(désactivé)' : '(disabled)'}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={nouveauFormulaire}
+            className="rounded-lg border border-dashed border-outline px-3 py-1.5 text-[12.5px] font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+          >
+            + {isFr ? 'Nouveau formulaire' : 'New form'}
+          </button>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
         {/* ═══ BUILDER ═══ */}
         {activeSection === 'builder' && (
@@ -600,6 +720,37 @@ export default function RequestFormSettings() {
             exit={{ opacity: 0, y: -6 }}
             className="space-y-6 max-w-2xl"
           >
+            {/* A00. Le pipeline qui reçoit les demandes de CE formulaire.
+                Ne s'affiche que s'il existe au moins un pipeline : sans ça,
+                on proposerait un réglage sans destination. */}
+            {pipelinesDispo.length > 0 && (
+              <div className="section-card p-5 space-y-3">
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
+                  {isFr ? 'Où vont les demandes' : 'Where requests go'}
+                </h3>
+                <label htmlFor={`${id}-pipeline`} className="block text-[12.5px] text-text-secondary leading-relaxed">
+                  {isFr
+                    ? "Le pipeline qui reçoit les demandes de ce formulaire. Un formulaire pour les publicités, un pour le terrain : mêmes questions, deux pipelines."
+                    : 'The pipeline that receives this form’s requests. One form for ads, one for field: same questions, two pipelines.'}
+                </label>
+                <select
+                  id={`${id}-pipeline`}
+                  value={pipelineId ?? ''}
+                  onChange={(e) => { setPipelineId(e.target.value || null); setSaved(false); }}
+                  className="input-field w-full max-w-sm text-[13px]"
+                >
+                  <option value="">
+                    {isFr ? 'Pipeline par défaut' : 'Default pipeline'}
+                  </option>
+                  {pipelinesDispo.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}{x.is_default ? (isFr ? ' (par défaut)' : ' (default)') : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* A0. Form Logo */}
             <div className="section-card p-5 space-y-4">
               <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
