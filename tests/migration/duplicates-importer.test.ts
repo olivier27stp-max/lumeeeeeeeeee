@@ -613,13 +613,16 @@ describe('rattachement client avec repli — id/nom, puis courriel, puis nom com
   it('aucune clé connue → orphelin', () => {
     expect(quote({ client_email_ref: 'nobody@ex.com' }).ok).toBe(false);
   });
-  it('job : client_name affiché prend le repli', () => {
-    const res = buildEntityRow('job', {
+  it('job : client_name affiché = nom de la fiche client, jamais le courriel de rattachement (2026-09-24)', () => {
+    const rec = {
       id: 'j', row_number: 1, entity_type: 'job', external_id: null, status: 'ready',
       normalized: { job_number: '5', title: 'T' }, relations: { client_email_ref: 'marc@ex.com' },
-    } as any, ctx) as any;
-    expect(res.row.client_id).toBe('c-mail');
-    expect(res.row.client_name).toBe('marc@ex.com');
+    } as any;
+    const sansNom = buildEntityRow('job', rec, ctx) as any;
+    expect(sansNom.row.client_id).toBe('c-mail');
+    expect(sansNom.row.client_name).toBeNull(); // pas de nom connu → pas de courriel à l'écran
+    const avecNom = buildEntityRow('job', rec, { ...ctx, clientNameById: new Map([['c-mail', 'Marc Tremblay']]) }) as any;
+    expect(avecNom.row.client_name).toBe('Marc Tremblay');
   });
 });
 

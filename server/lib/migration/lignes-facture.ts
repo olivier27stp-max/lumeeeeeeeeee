@@ -150,3 +150,110 @@ export async function creerLignesDevisImportees(
   }
   return { creees, echecs };
 }
+
+// ── Jobs ────────────────────────────────────────────────────────────────────
+//
+// L'export « One-Off Jobs » de Jobber n'a que les NOMS des services (« Nettoyage des
+// fenêtres, Nettoyage de revêtement »), parfois « Nom (qté) » (export Visits), jamais
+// les montants. Un job importé n'avait donc aucune ligne : la fiche et la visite ne
+// montraient que le total (Vision Lavage, 2026-09-24, 896 jobs sans lignes).
+//
+// Règle : (1) si le texte porte les montants (format facture) et somme au sous-total,
+// lignes réelles ; (2) sinon UNE ligne dont le nom est la liste des services, au
+// sous-total — rien d'inventé, le total ne bouge pas ; (3) sans texte, « Montant importé ».
+// Puis, à l'import des factures, une facture du job dont les lignes réelles somment au
+// sous-total du job REMPLACE cette ligne de repli par ses vraies lignes (prix unitaires).
+
+/** Noms de services d'un texte « A, B (2), C » → ['A', 'B', 'C'] (les « (qté) » et montants sont retirés). */
+export function nomsServices(texte: string): string[] {
+  return texte
+    .split(/,\s+(?=[^,()]*(?:\(|,|$))/)
+    .map((t) => t.replace(/\s*\((?:\d+(?:\.\d+)?)(?:,\s*\$[\d,]*\.\d{2})?\)\s*$/, '').trim())
+    .filter(Boolean);
+}
+
+/** Les lignes à créer pour un job importé : leur somme vaut toujours le sous-total. */
+export function lignesPourJob(texte: string, sousTotalCents: number): LigneImportee[] {
+  const lues = lireLignesExport(texte);
+  if (lues && lues.reduce((s, l) => s + l.totalCents, 0) === sousTotalCents) return lignesPourFacture(texte, sousTotalCents);
+  const noms = nomsServices(texte);
+  if (noms.length === 0) return sousTotalCents > 0 ? [{ description: LIBELLE_MONTANT_IMPORTE, qty: 1, unit_price_cents: sousTotalCents }] : [];
+  return [{ description: noms.join(', ').slice(0, 500), qty: 1, unit_price_cents: Math.max(0, sousTotalCents) }];
+}
+
+/**
+ * Crée les lignes des jobs importés (table job_line_items : name, qty, unit_price_cents,
+ * total_cents, created_by NOT NULL). Rejouable : un job qui a déjà des lignes est sauté.
+ * Jamais bloquant pour l'import.
+ */
+export async function creerLignesJobsImportees(
+  admin: SupabaseClient, orgId: string, createdBy: string, jobs: Array<{ id: string; lignes: LigneImportee[] }>,
+): Promise<{ creees: number; echecs: number }> {
+  const aFaire = jobs.filter((j) => j.lignes.length > 0);
+  let creees = 0;
+  let echecs = 0;
+  const rangeesDe = (j: { id: string; lignes: LigneImportee[] }) => j.lignes.map((l, k) => ({
+    org_id: orgId, job_id: j.id, name: l.description.slice(0, 500), qty: l.qty, unit_price_cents: l.unit_price_cents,
+    total_cents: Math.round(l.qty * l.unit_price_cents), included: true, created_by: createdBy,
+    // created_at décalé de k ms : l'app trie les lignes par created_at, sans ça l'ordre est perdu.
+    created_at: new Date(Date.now() + k).toISOString(),
+  }));
+  for (let i = 0; i < aFaire.length; i += 200) {
+    const lot = aFaire.slice(i, i + 200);
+    const { data: deja, error: eLecture } = await admin.from('job_line_items').select('job_id').in('job_id', lot.map((j) => j.id)).is('deleted_at', null);
+    if (eLecture) {
+      console.error('[migration-importer] lignes de job : lecture impossible', eLecture.message);
+      echecs += lot.length;
+      continue;
+    }
+    const avecLignes = new Set((deja ?? []).map((r) => r.job_id as string));
+    const restants = lot.filter((j) => !avecLignes.has(j.id));
+    if (restants.length === 0) continue;
+    const { error } = await admin.from('job_line_items').insert(restants.flatMap(rangeesDe));
+    if (!error) { creees += restants.reduce((s, j) => s + j.lignes.length, 0); continue; }
+    console.error('[migration-importer] lignes de job : lot refusé, reprise job par job', error.message);
+    for (const j of restants) {
+      const { error: e } = await admin.from('job_line_items').insert(rangeesDe(j));
+      if (e) { echecs += 1; console.error('[migration-importer] lignes de job refusées', j.id, e.message); } else creees += j.lignes.length;
+    }
+  }
+  return { creees, echecs };
+}
+
+/**
+ * Une facture importée rattachée à un job, dont les lignes RÉELLES somment au sous-total
+ * du job, donne ses lignes au job (prix unitaires) à la place de la ligne de repli.
+ * Ne touche jamais un job qui a plus d'une ligne (lignes saisies ou déjà réelles).
+ */
+export async function raffinerLignesJobsDepuisFactures(
+  admin: SupabaseClient, orgId: string, createdBy: string, factures: Array<{ jobId: string; lignes: LigneImportee[] }>,
+): Promise<{ jobs: number }> {
+  const reelles = factures.filter((f) => f.lignes.length > 0 && !(f.lignes.length === 1 && f.lignes[0].description === LIBELLE_MONTANT_IMPORTE));
+  const parJob = new Map<string, LigneImportee[]>();
+  for (const f of reelles) parJob.set(f.jobId, [...(parJob.get(f.jobId) ?? []), ...f.lignes]);
+  let jobs = 0;
+  const ids = Array.from(parJob.keys());
+  for (let i = 0; i < ids.length; i += 200) {
+    const lot = ids.slice(i, i + 200);
+    const [{ data: jobsRows, error: eJobs }, { data: lignesRows, error: eLignes }] = await Promise.all([
+      admin.from('jobs').select('id, subtotal_cents').in('id', lot),
+      admin.from('job_line_items').select('id, job_id').in('job_id', lot).is('deleted_at', null),
+    ]);
+    if (eJobs || eLignes) { console.error('[migration-importer] raffinement lignes de job : lecture impossible', (eJobs ?? eLignes)?.message); continue; }
+    const lignesParJob = new Map<string, string[]>();
+    for (const l of (lignesRows ?? []) as { id: string; job_id: string }[]) lignesParJob.set(l.job_id, [...(lignesParJob.get(l.job_id) ?? []), l.id]);
+    for (const j of (jobsRows ?? []) as { id: string; subtotal_cents: number | null }[]) {
+      const lignes = parJob.get(j.id) ?? [];
+      const somme = lignes.reduce((s, l) => s + Math.round(l.qty * l.unit_price_cents), 0);
+      const actuelles = lignesParJob.get(j.id) ?? [];
+      if (somme !== Number(j.subtotal_cents ?? 0) || actuelles.length > 1) continue;
+      if (actuelles.length === 1) {
+        const { error: eDel } = await admin.from('job_line_items').update({ deleted_at: new Date().toISOString() }).in('id', actuelles);
+        if (eDel) { console.error('[migration-importer] ligne de repli non retirée', j.id, eDel.message); continue; }
+      }
+      const r = await creerLignesJobsImportees(admin, orgId, createdBy, [{ id: j.id, lignes }]);
+      if (r.creees > 0) jobs += 1;
+    }
+  }
+  return { jobs };
+}

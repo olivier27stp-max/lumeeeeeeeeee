@@ -19,7 +19,7 @@ import type {
   PostImportValidation,
   TargetEntity,
 } from './types';
-import { creerLignesDevisImportees, creerLignesImportees, lignesPourFacture, texteLignes } from './lignes-facture';
+import { creerLignesDevisImportees, creerLignesImportees, creerLignesJobsImportees, lignesPourFacture, lignesPourJob, raffinerLignesJobsDepuisFactures, texteLignes } from './lignes-facture';
 
 // Taxes en premier : les services (taxable) et les documents s'y réfèrent.
 /** Libellés FR des entités pour la progression affichée dans la console. */
@@ -277,6 +277,7 @@ async function seedExistingRefs(admin: SupabaseClient, orgId: string, ctx: Build
     for (const c of data as { id: string; email: string | null; first_name: string | null; last_name: string | null; company: string | null; phone: string | null; address: string | null }[]) {
       for (const k of existingClientRefKeys(c)) seed(ctx.clientIdByRef, k, c.id, ambiguousClients);
       if (c.address) registerNameAddress(ctx, { first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '' }, c.address, c.id);
+      retenirNomClient(ctx, c.id, c);
     }
     if (data.length < STAGING_PAGE) break;
   }
@@ -419,6 +420,30 @@ export function detailIntrouvable(quoi: string, ref: string | undefined, precisi
   return `${quoi} introuvable : ${affiche} (${precision})`;
 }
 const PRECISION_CLIENT = 'homonyme ou client absent des fichiers importés';
+
+/** Nom affiché d'un client : « Prénom Nom », sinon entreprise, sinon nom complet source. */
+export function nomAffichageClient(c: { first_name?: unknown; last_name?: unknown; company?: unknown; full_name?: unknown }): string {
+  return `${str(c.first_name)} ${str(c.last_name)}`.trim() || str(c.company) || str(c.full_name);
+}
+
+/** Mémorise le nom d'un client (existant ou importé) ; un nom déjà connu n'est jamais écrasé. */
+function retenirNomClient(ctx: BuildContext, clientId: string, c: { first_name?: unknown; last_name?: unknown; company?: unknown; full_name?: unknown }): void {
+  const nom = nomAffichageClient(c);
+  if (!nom) return;
+  const map = ctx.clientNameById ?? (ctx.clientNameById = new Map());
+  if (!map.has(clientId)) map.set(clientId, nom);
+}
+
+/** jobs.client_name : la fiche client d'abord ; sinon la référence source, mais JAMAIS un courriel. */
+export function nomClientPourJob(ctx: BuildContext, clientId: string, r: Record<string, string>): string | null {
+  const connu = ctx.clientNameById?.get(clientId);
+  if (connu) return safeStr(connu) || null;
+  for (const v of [r.client_name_ref, r.client_ref]) {
+    const s = safeStr(v);
+    if (s && !/@/.test(s)) return s;
+  }
+  return null;
+}
 
 /** Clé téléphone : 10 derniers chiffres, préfixée pour ne jamais croiser un id externe numérique. */
 function phoneKey(v: string): string {
@@ -640,6 +665,9 @@ export interface BuildContext {
   invoiceIdByRef?: Map<string, string>;
   /** refKey(nom source) → user_id Lume (migration_staff_mappings). Absent/null = non assigné. */
   staffIdBySource?: Map<string, string>;
+  /** client id → nom affiché (« Prénom Nom » sinon entreprise) : jobs.client_name ne doit
+   *  jamais être un courriel (220 jobs de Vision Lavage l'affichaient, 2026-09-24). */
+  clientNameById?: Map<string, string>;
   /** visitDedupKey(job_id, start_at) → visit id déjà dans le CRM : une visite
    *  réimportée (2e migration, fichier repris) n'est jamais créée en double. */
   visitIdByKey?: Map<string, string>;
@@ -823,7 +851,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       row: {
         org_id: orgId,
         client_id: clientId,
-        client_name: safeStr(clientRefValue(r)) || null, // colonne héritée affichée par le calendrier
+        client_name: nomClientPourJob(ctx, clientId, r), // colonne héritée affichée par le calendrier et la page Jobs
         property_id: propertyId,
         title,
         description: safeStr(n.description) || null,
@@ -1128,7 +1156,7 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
       const registerRefs = (targetId: string) => {
         targetByStagingId.set(rec.id, targetId);
         if (!mapByEntity) return;
-        if (entity === 'client') registerNameAddress(ctx, rec.normalized ?? {}, str((rec.normalized ?? {}).address), targetId);
+        if (entity === 'client') { registerNameAddress(ctx, rec.normalized ?? {}, str((rec.normalized ?? {}).address), targetId); retenirNomClient(ctx, targetId, rec.normalized ?? {}); }
         for (const key of refKeysOf(entity, rec)) {
           if (entity === 'client' && intra.ambiguousKeys.has(key)) continue; // homonymes : jamais devinés
           const existing = mapByEntity.get(key);
@@ -1568,7 +1596,7 @@ export async function runFinalImport(
     const registerRefs = (rec: StagingRow, targetId: string) => {
       targetByStagingId.set(rec.id, targetId);
       if (!mapByEntity) return;
-      if (entity === 'client') registerNameAddress(ctx, rec.normalized ?? {}, str((rec.normalized ?? {}).address), targetId);
+      if (entity === 'client') { registerNameAddress(ctx, rec.normalized ?? {}, str((rec.normalized ?? {}).address), targetId); retenirNomClient(ctx, targetId, rec.normalized ?? {}); }
       for (const key of refKeysOf(entity, rec)) {
         if (entity === 'client' && intra.ambiguousKeys.has(key)) continue; // homonymes : jamais devinés
         const existing = mapByEntity.get(key);
@@ -1720,11 +1748,26 @@ export async function runFinalImport(
     // « Montant importé ») — somme toujours égale au sous-total importé.
     if (entity === 'invoice' && importedIds.length > 0) {
       const importes = new Set(importedIds);
-      const r = await creerLignesImportees(admin, migration.org_id, toInsert.filter((c) => importes.has(c.rec.id)).map((c) => ({
+      const facturesImportees = toInsert.filter((c) => importes.has(c.rec.id)).map((c) => ({
         id: c.id,
+        jobId: typeof c.row.job_id === 'string' ? c.row.job_id : null,
         lignes: lignesPourFacture(texteLignes(c.rec.normalized ?? {}), Number(c.row.subtotal_cents) || 0),
-      })));
+      }));
+      const r = await creerLignesImportees(admin, migration.org_id, facturesImportees);
       if (r.echecs > 0) console.error(`[migration-importer] ${r.echecs} facture(s) sans lignes après import`);
+      // Les vraies lignes (prix unitaires) de la facture remplacent la ligne de repli de son job.
+      const raff = await raffinerLignesJobsDepuisFactures(admin, migration.org_id, ctx.createdBy, facturesImportees.filter((f) => f.jobId).map((f) => ({ jobId: f.jobId as string, lignes: f.lignes })));
+      if (raff.jobs > 0) notes.push(`${raff.jobs} job(s) ont reçu les lignes détaillées de leur facture.`);
+    }
+    // Jobs : l'export ne porte que les noms des services → une ligne « A, B, C » au sous-total
+    // (ou les lignes réelles si le texte porte les montants). Voir lignes-facture.ts.
+    if (entity === 'job' && importedIds.length > 0) {
+      const importes = new Set(importedIds);
+      const r = await creerLignesJobsImportees(admin, migration.org_id, ctx.createdBy, toInsert.filter((c) => importes.has(c.rec.id)).map((c) => ({
+        id: c.id,
+        lignes: lignesPourJob(texteLignes(c.rec.normalized ?? {}), Number(c.row.subtotal_cents) || 0),
+      })));
+      if (r.echecs > 0) console.error(`[migration-importer] ${r.echecs} job(s) sans lignes après import`);
     }
     if (entity === 'quote' && importedIds.length > 0) {
       const importes = new Set(importedIds);
