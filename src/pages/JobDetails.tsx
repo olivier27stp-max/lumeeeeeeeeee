@@ -38,7 +38,7 @@ import AddVisitModal from '../components/AddVisitModal';
 import FinalVisitDialog from '../components/schedule/FinalVisitDialog';
 import { invalidateScheduleCache, rescheduleEvent, unscheduleJob, isAnytimeVisit, anytimeLabel, ANYTIME_START_TIME, ANYTIME_END_TIME } from '../lib/scheduleApi';
 import { listTeams, type TeamRecord } from '../lib/teamsApi';
-import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
+import { createInvoiceFromJob, getInvoiceRowUiStatus, finishJobAndPrepareInvoice } from '../lib/invoicesApi';
 import {
   listJobBillingMilestones,
   saveJobBillingMilestones,
@@ -2538,6 +2538,33 @@ export default function JobDetails() {
           open={!!finalVisitPromptOpen}
           fr={language === 'fr'}
           busy={finalVisitBusy}
+          // Le travail est fini : la suite normale, c'est de facturer.
+          //
+          // Pas de condition sur `requires_invoicing` : ce champ marque les
+          // jobs EN ATTENTE de facturation, pas celles qui sont facturables —
+          // les 6 jobs de production sont à `false` et le bouton aurait
+          // disparu partout. Le RPC sait déjà quoi faire (il rouvre la facture
+          // existante au lieu d'en créer une seconde).
+          onInvoice={() => {
+            void (async () => {
+              if (finalVisitBusy) return;
+              setFinalVisitBusy(true);
+              try {
+                // Ferme la job ET prépare la facture, en une opération —
+                // la même que le bouton « Terminer » du modal de job.
+                const result = await finishJobAndPrepareInvoice({ jobId: job.id });
+                setFinalVisitPromptOpen(false);
+                toast.success(language === 'fr'
+                  ? (result.already_exists ? 'Job terminée. Facture existante ouverte.' : 'Job terminée. Brouillon de facture créé.')
+                  : (result.already_exists ? 'Job completed. Existing invoice loaded.' : 'Job completed. Invoice draft created.'));
+                navigate(`/invoices/${result.invoice_id}`);
+              } catch (err: any) {
+                toast.error(err?.message || (language === 'fr' ? 'Impossible de créer la facture.' : 'Could not create the invoice.'));
+              } finally {
+                setFinalVisitBusy(false);
+              }
+            })();
+          }}
           onCloseJob={() => {
             void (async () => {
               if (finalVisitBusy) return;

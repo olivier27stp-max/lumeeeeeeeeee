@@ -44,7 +44,7 @@
   "src/pages/InvoiceEdit.tsx": "991fe69805d857bf",
   "src/pages/InvoiceView.tsx": "3d07cd34d5180ac0",
   "src/pages/Invoices.tsx": "eb10ed50fca80890",
-  "src/pages/JobDetails.tsx": "b1ac794a0cd2580f",
+  "src/pages/JobDetails.tsx": "fc6aaee9fab20e17",
   "src/pages/Jobs.tsx": "67cacdf8d8e7912b",
   "src/pages/Landing.tsx": "482ae7152a827447",
   "src/pages/Leaderboard.tsx": "e7b9a7544717df05",
