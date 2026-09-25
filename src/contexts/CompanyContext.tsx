@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { publierBureauActif } from '../lib/orgApi';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import type { TeamRole, Scope, PermissionsMap } from '../lib/permissions';
@@ -258,7 +259,13 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
 
     // Invalidate ALL cached queries — data must reload for new tenant
     queryClient.clear();
+    // Les abonnements realtime portent le filtre org_id de l'ancien bureau : on les ferme tous,
+    // chaque écran se réabonne sur son propre bureau via ses effets dépendant de currentOrgId.
+    void supabase.removeAllChannels();
   }, [companies, queryClient]);
+
+  // Source unique du bureau actif pour le code hors React (clients d'API, wrapper fetch, hooks).
+  useEffect(() => { publierBureauActif(activeOrgId); }, [activeOrgId]);
 
   // ── Build context value ─────────────────────────────────────────────
   const current = useMemo(() => {

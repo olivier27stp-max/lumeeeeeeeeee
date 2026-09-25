@@ -4,6 +4,7 @@
 
 import { supabase } from './supabase';
 import { versDate } from './dateSeule';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ export async function fetchJobTemplates(): Promise<JobTemplate[]> {
   const { data, error } = await supabase
     .from('job_templates')
     .select('*')
+    .eq('org_id', await getCurrentOrgIdOrThrow())
     .order('title', { ascending: true });
   if (error) {
     console.warn('job_templates fetch failed:', error.message);
@@ -64,13 +66,8 @@ export async function createJobTemplate(template: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const { data: membership } = await supabase
-    .from('memberships')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single();
-  if (!membership?.org_id) throw new Error('No organization');
+  // Bureau actif, jamais « la première membership » (mélange entre bureaux).
+  const membership = { org_id: await getCurrentOrgIdOrThrow() };
 
   const { data, error } = await supabase
     .from('job_templates')
@@ -124,13 +121,8 @@ export async function createRecurrenceRule(rule: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const { data: membership } = await supabase
-    .from('memberships')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single();
-  if (!membership?.org_id) throw new Error('No organization');
+  // Bureau actif, jamais « la première membership » (mélange entre bureaux).
+  const membership = { org_id: await getCurrentOrgIdOrThrow() };
 
   // Calculate next_run_at
   const startDate = versDate(rule.start_date);

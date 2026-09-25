@@ -218,6 +218,7 @@ import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkCreatorAccess } from './lib/creatorSpaceApi';
 // Cross-cutting hooks previously inlined in App()
 import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
+import { abonnerBureauActif, bureauActifSync } from './lib/orgApi';
 
 // Toasts (sonner) — pastille monochrome Lume, styles dans index.css (.lume-toast).
 // Partagé par les deux <Toaster> (VerifyEmailGate + AuthenticatedApp).
@@ -370,20 +371,17 @@ function AppInner() {
   // NOTE: useRealtimeNotifications uses useCompany() internally, so it must be
   // called inside <CompanyProvider>. It's hoisted into AuthenticatedApp instead.
   const [unreadSms, setUnreadSms] = useState(0);
+  // Le badge SMS se réabonne quand le bureau sélectionné change.
+  const [bureauActifBadge, setBureauActifBadge] = useState<string | null>(() => bureauActifSync());
+  useEffect(() => abonnerBureauActif(setBureauActifBadge), []);
 
   // Fetch unread SMS count + realtime subscription
   useEffect(() => {
     if (!user) { setUnreadSms(0); return; }
 
     const loadUnread = async () => {
-      // Scope to user's org for multi-tenant isolation
-      const { data: membership } = await supabase
-        .from('memberships')
-        .select('org_id')
-        .eq('user_id', user.id)
-        .limit(1)
-        .maybeSingle();
-      const oid = membership?.org_id;
+      // Bureau sélectionné (source unique), jamais la première membership.
+      const oid = bureauActifSync();
       if (!oid) { setUnreadSms(0); return; }
 
       const { data } = await supabase
@@ -398,13 +396,7 @@ function AppInner() {
 
     let channel: ReturnType<typeof supabase.channel> | null = null;
     (async () => {
-      const { data: membership } = await supabase
-        .from('memberships')
-        .select('org_id')
-        .eq('user_id', user.id)
-        .limit(1)
-        .maybeSingle();
-      const oid = membership?.org_id;
+      const oid = bureauActifSync();
       if (!oid) return;
       channel = supabase
         .channel(`sms-unread-badge-${oid}`)
@@ -414,7 +406,7 @@ function AppInner() {
         .subscribe();
     })();
     return () => { if (channel) supabase.removeChannel(channel); };
-  }, [user]);
+  }, [user, bureauActifBadge]);
 
   useEffect(() => {
     // Dark mode applies ONLY to the authenticated CRM dashboard — never to the
@@ -546,12 +538,12 @@ function AppInner() {
     (async () => {
       try {
         // 1. Ensure user has at least one membership (auto-provision org if missing)
-        const { data: mem } = await supabase
+        // Simple test d'existence : aucun bureau n'est choisi ici (le sélecteur s'en charge).
+        const { count: nbMemberships } = await supabase
           .from('memberships')
-          .select('org_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle();
+          .select('org_id', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        const mem = (nbMemberships ?? 0) > 0;
 
         if (!mem) {
           // No membership — this is a brand new user who signed up via email/password or Google.
@@ -618,12 +610,12 @@ function AppInner() {
           setGraceImpaye(null);
           return;
         }
-        const { data: mem } = await supabase
+        // Simple test d'existence : aucun bureau n'est choisi ici (le sélecteur s'en charge).
+        const { count: nbMemberships } = await supabase
           .from('memberships')
-          .select('org_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle();
+          .select('org_id', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        const mem = (nbMemberships ?? 0) > 0;
         if (!mem) {
           setHasSubscription(false);
           setAccessBlockedReason('no_membership');

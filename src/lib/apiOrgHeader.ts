@@ -6,18 +6,9 @@
 // Plutôt que de corriger 40 fichiers un à un, l'en-tête est injecté ici, une seule fois, sur les
 // requêtes same-origin vers /api. Le serveur vérifie toujours l'appartenance au bureau demandé.
 import { supabase as _supabase } from './supabase'; // s'assure que l'app est initialisée avant nous
+import { bureauActifSync } from './orgApi';
 
-const CLE = 'lume-active-org';
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function bureauActif(): string | null {
-  try {
-    const v = localStorage.getItem(CLE) ?? '';
-    return UUID.test(v) ? v : null;
-  } catch {
-    return null; // lecture seule : un stockage indisponible (navigation privée) n'a rien à journaliser
-  }
-}
+const bureauActif = (): string | null => bureauActifSync();
 
 /** Vrai pour un appel à notre API (chemin relatif /api/… ou même origine). */
 export function estAppelApi(url: string, origin: string): boolean {

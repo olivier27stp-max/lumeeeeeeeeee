@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 // ─── Types ──────────────────────────────────────────────────────
 export type GpsProvider = 'traccar' | 'life360';
@@ -89,17 +90,10 @@ export interface ProofOfPresence {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
+// Bureau actif (sélecteur), jamais « la première membership » : un compte à deux bureaux
+// écrivait ses géorepérages et positions GPS dans le mauvais bureau.
 async function getOrgId(): Promise<string> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-  const { data } = await supabase
-    .from('memberships')
-    .select('org_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single();
-  if (!data) throw new Error('No organization found');
-  return data.org_id;
+  return getCurrentOrgIdOrThrow();
 }
 
 /** Haversine distance between two coordinates in meters */

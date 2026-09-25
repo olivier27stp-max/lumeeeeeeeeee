@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { getCurrentOrgId } from '../lib/orgApi';
 import {
   type GpsPermissionState,
   type GpsPosition,
@@ -61,9 +62,8 @@ export function useGpsTracking(): GpsTrackingState & GpsTrackingActions {
       if (user) userIdRef.current = user.id;
     });
 
-    supabase.rpc('current_org_id').then(({ data }) => {
-      if (data) orgIdRef.current = data as string;
-    });
+    // bureau sélectionné, jamais le premier bureau du compte
+    void getCurrentOrgId().then((id) => { if (id) orgIdRef.current = id; });
   }, []);
 
   const getAuthToken = useCallback(async (): Promise<string> => {

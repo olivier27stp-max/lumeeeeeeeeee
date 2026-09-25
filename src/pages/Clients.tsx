@@ -145,8 +145,7 @@ export default function Clients() {
     if (selectedIds.size === 0) return;
     setIsBatchArchiving(true);
     try {
-      const { data: orgId, error: orgError } = await supabase.rpc('current_org_id');
-      if (orgError) throw orgError;
+      const orgId = await getCurrentOrgIdOrThrow();
       const { data, error } = await supabase.rpc('batch_soft_delete_clients', {
         p_org_id: orgId,
         p_client_ids: Array.from(selectedIds),
