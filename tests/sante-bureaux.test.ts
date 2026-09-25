@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { evaluerSante, type FaitsBureau } from '../server/lib/office-health';
-import { clonerLigne, NO_INHERIT } from '../server/lib/office-inheritance';
+import { clonerLigne, filtrerTaxesACopier, NO_INHERIT } from '../server/lib/office-inheritance';
 
 const modeles = (n: number) => ({
   role_templates: n, invoice_templates: n, quote_templates: n, job_templates: n, checklist_templates: n, custom_fields: n,
@@ -99,5 +99,42 @@ describe('Nouveau bureau : « exactement la même configuration » par défaut',
   });
   it('la route accepte « modeles »', () => {
     expect(readFileSync('server/routes/orgs.ts', 'utf8')).toMatch(/modeles: z\.boolean\(\)\.default\(false\)/);
+  });
+});
+
+// QA 2026-09-25 (compte Grok Audit) : « 4 taxe(s) active(s) » puis 6 après
+// chaque cycle supprimer la région → reprendre. Cause : supprimer une région
+// laissait ses taxes actives (orphelines, invisibles dans Réglages → Taxes),
+// la fiche les comptait et la copie les recopiait.
+describe('taxes orphelines (région supprimée)', () => {
+  const configs = [
+    { id: 'tps', name: 'TPS', is_active: true },
+    { id: 'tvq', name: 'TVQ', is_active: true },
+    { id: 'tps-orph', name: 'TPS', is_active: true },
+    { id: 'tvq-orph', name: 'TVQ', is_active: true },
+    { id: 'vieille', name: 'X', is_active: false },
+  ];
+
+  it('la copie ne prend que les taxes reliées à une région', () => {
+    const items = [{ tax_config_id: 'tps' }, { tax_config_id: 'tvq' }];
+    expect(filtrerTaxesACopier(configs, items).map((c) => c.id)).toEqual(['tps', 'tvq']);
+  });
+
+  it('source sans aucune région : ses taxes actives restent la vérité', () => {
+    expect(filtrerTaxesACopier(configs, null).map((c) => c.id)).toEqual(['tps', 'tvq', 'tps-orph', 'tvq-orph']);
+  });
+
+  it('la fiche compte les taxes de la région par défaut (tax_group_items), pas toutes les tax_configs', () => {
+    const src = readFileSync('server/routes/orgs.ts', 'utf8');
+    const route = src.slice(src.indexOf("router.get('/orgs/offices/sante'"), src.indexOf("router.post('/orgs/offices/:id/reprendre-base'"));
+    expect(route).toContain("from('tax_group_items')");
+    expect(route).not.toMatch(/from\('tax_configs'\)/);
+  });
+
+  it('supprimer une région désactive ses taxes devenues orphelines (jamais supprimées)', () => {
+    const src = readFileSync('server/routes/taxes.ts', 'utf8');
+    const route = src.slice(src.indexOf("router.delete('/taxes/group/:id'"), src.indexOf("router.patch('/taxes/group/:id/default'"));
+    expect(route).toMatch(/from\('tax_configs'\)\.update\(\{ is_active: false \}\)/);
+    expect(route).not.toMatch(/from\('tax_configs'\)\.delete\(/);
   });
 });
