@@ -599,7 +599,7 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
                 </div>
 
                 {/* Variables : cliquer pour insérer, plutôt que les retenir. */}
-                {modele?.champs.some((c) => c.type === 'zone') && (
+                {modele?.champs?.some((c) => c.type === 'zone') && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {VARIABLES_PROPOSEES.map((v) => (
                       <button

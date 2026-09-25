@@ -121,7 +121,7 @@ export default function CourseView() {
   useEffect(() => { void loadData(); }, [loadData]);
 
   const completedSet = useMemo(() => new Set(progress.filter((p) => p.completed).map((p) => p.lesson_id)), [progress]);
-  const totalLessons = useMemo(() => course?.modules.reduce((s, m) => s + m.lessons.length, 0) || 0, [course]);
+  const totalLessons = useMemo(() => course?.modules?.reduce((s, m) => s + m.lessons.length, 0) || 0, [course]);
   const completedCount = completedSet.size;
   const progressPct = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
 

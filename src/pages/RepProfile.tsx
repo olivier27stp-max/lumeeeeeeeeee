@@ -414,8 +414,8 @@ export default function D2DRepProfile() {
               {/* Milieu plus large : « Conversations » est le libellé le plus long */}
               <div className="grid grid-cols-[1fr_1.4fr_1fr]">
                 <TerrainCell icon={DoorOpen} value={pinCounts?.total ?? 0} label={isFr ? 'Portes' : 'Doors'} first />
-                <TerrainCell icon={MessagesSquare} value={(pinCounts?.total ?? 0) - (pinCounts?.byKind.no_answer ?? 0)} label={isFr ? 'Conversations' : 'Conversations'} />
-                <TerrainCell icon={TrendingUp} value={pinCounts?.byKind.closed_won ?? 0} label={isFr ? 'Ventes' : 'Sales'} />
+                <TerrainCell icon={MessagesSquare} value={(pinCounts?.total ?? 0) - (pinCounts?.byKind?.no_answer ?? 0)} label={isFr ? 'Conversations' : 'Conversations'} />
+                <TerrainCell icon={TrendingUp} value={pinCounts?.byKind?.closed_won ?? 0} label={isFr ? 'Ventes' : 'Sales'} />
               </div>
             </CardPanel>
 

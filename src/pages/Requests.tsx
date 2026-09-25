@@ -72,7 +72,7 @@ export default function Requests() {
     });
 
   /** Map a custom_responses key to its human label using the form config. */
-  const labelFor = (key: string) => form?.custom_fields.find((f) => f.id === key)?.label || key;
+  const labelFor = (key: string) => form?.custom_fields?.find((f) => f.id === key)?.label || key;
 
   const archivedCount = useMemo(() => submissions.filter((s) => s.archived_at).length, [submissions]);
   const visible = useMemo(

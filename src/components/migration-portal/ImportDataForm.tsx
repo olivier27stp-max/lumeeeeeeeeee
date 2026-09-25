@@ -284,7 +284,7 @@ function FichierLigne({ f, c, fr, canUpload, resume, onRetirer, onRemplacer, onR
   const detected = f.category_detected ?? null;
   const desaccord = !!declared && !!detected && declared !== detected && !(declared === 'recurring_jobs' && detected === 'jobs');
   const unit = (fr ? c.unitFr : c.unitEn)[(resume?.unique ?? 0) > 1 ? 1 : 0];
-  const aCorriger = (resume?.invalid ?? 0) + (resume?.needs_review ?? 0) + (resume?.required_missing.length ?? 0);
+  const aCorriger = (resume?.invalid ?? 0) + (resume?.needs_review ?? 0) + (resume?.required_missing?.length ?? 0);
   const motifErreur = echec ? (PARSE_ERROR_FR[f.parse_error ?? ''] ?? (rejete ? (fr ? 'Fichier refusé par le contrôle de sécurité.' : 'File rejected by the security check.') : (fr ? 'Analyse impossible.' : 'Analysis failed.'))) : null;
 
   return (
