@@ -317,10 +317,11 @@ async function seedExistingRefs(admin: SupabaseClient, orgId: string, ctx: Build
   // à l'import (2e migration sur un bureau vivant, fichier « Visits » repris).
   const visitMap = ctx.visitIdByKey ?? (ctx.visitIdByKey = new Map());
   for (let offset = 0; ; offset += STAGING_PAGE) {
-    // La table des visites est schedule_events (il n'y a PAS de table « visits » :
-    // la requête échouait et la déduplication était muette).
+    // La table des visites est schedule_events (= TABLE_BY_ENTITY.visit ; il n'y a
+    // PAS de table « visits » : la requête échouait et la déduplication était muette).
+    // Nom écrit en toutes lettres : check-schema-refs doit pouvoir vérifier les colonnes.
     const { data, error } = await admin
-      .from(TABLE_BY_ENTITY.visit)
+      .from('schedule_events')
       .select('id, job_id, start_at')
       .eq('org_id', orgId)
       .is('deleted_at', null)
