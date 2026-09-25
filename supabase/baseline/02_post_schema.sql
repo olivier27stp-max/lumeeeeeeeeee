@@ -62,6 +62,7 @@ end $$;
 
 -- ── Tâches planifiées (pg_cron) ──
 select cron.schedule('lume_invariant_checks', '40 4 * * *', $c$select public.run_invariant_checks()$c$);
+select cron.schedule('lume_payment_reminders', '0 13 * * *', $c$select public.trigger_payment_reminders()$c$);
 select cron.schedule('lume_purge_audit_events', '15 3 * * *', $c$select public.purge_old_audit_events(1095)$c$);
 select cron.schedule('lume_purge_location_data', '30 4 * * *', $c$select public.purge_old_location_data(180)$c$);
 select cron.schedule('lume_purge_oauth_states', '25 * * * *', $c$select public.cleanup_expired_oauth_states()$c$);
