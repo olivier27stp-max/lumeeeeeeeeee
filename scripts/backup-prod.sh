@@ -39,12 +39,15 @@ trap alerter EXIT
 env_get() { grep "^$1=" .env.local | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'"; }
 REF="$(env_get SUPABASE_PROJECT_REF_PROD)"
 PASS="$(env_get SUPABASE_DB_PASSWORD)"
+# Mot de passe par l'environnement, jamais dans la ligne de commande (visible
+# dans la liste des processus et affiché par toute trace) — incident 2026-09-25.
+export PGPASSWORD="$PASS"
 [ -n "$REF" ] && [ -n "$PASS" ] || { echo "ERREUR: SUPABASE_PROJECT_REF_PROD et SUPABASE_DB_PASSWORD requis dans .env.local" >&2; exit 1; }
 
 # Les hôtes db.<ref>.supabase.co sont en IPv6 seulement : on passe par le pooler.
 HOST=""
 for h in aws-1-ca-central-1.pooler.supabase.com aws-0-ca-central-1.pooler.supabase.com; do
-  if docker run --rm -e PGPASSWORD="$PASS" postgres:17 \
+  if docker run --rm -e PGPASSWORD postgres:17 \
        psql -h "$h" -p 5432 -U "postgres.$REF" -d postgres -tAc 'select 1' >/dev/null 2>&1; then
     HOST="$h"; break
   fi
@@ -54,12 +57,12 @@ done
 STAMP="$(date -u +%Y%m%d-%H%M)"
 echo "[$(date -u +%FT%TZ)] sauvegarde de $REF → $DEST/prod-$STAMP.dump"
 
-docker run --rm -e PGPASSWORD="$PASS" -v "$DEST:/out" postgres:17 \
+docker run --rm -e PGPASSWORD -v "$DEST:/out" postgres:17 \
   pg_dump -h "$HOST" -p 5432 -U "postgres.$REF" -d postgres \
   --no-owner -n public -n app -n archive -Fc -f "/out/prod-$STAMP.dump" 2>&1 | grep -v '^pg_dump: warning' || true
 
 # Les comptes vivent dans le schéma auth, hors du dump métier.
-docker run --rm -e PGPASSWORD="$PASS" -v "$DEST:/out" postgres:17 \
+docker run --rm -e PGPASSWORD -v "$DEST:/out" postgres:17 \
   pg_dump -h "$HOST" -p 5432 -U "postgres.$REF" -d postgres \
   --data-only --column-inserts -t auth.users -t auth.identities \
   -f "/out/prod-$STAMP-auth.sql" 2>&1 | grep -v '^pg_dump: warning' || true

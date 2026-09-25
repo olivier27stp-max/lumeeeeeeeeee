@@ -29,6 +29,9 @@ LOCAL_DB=(-h 127.0.0.1 -p 54322 -U postgres -d postgres)
 env_get() { grep "^$1=" .env.local | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'"; }
 PROD_REF="$(env_get SUPABASE_PROJECT_REF_PROD)"
 DB_PASS="$(env_get SUPABASE_DB_PASSWORD)"
+# Mot de passe par l'environnement, jamais dans la ligne de commande (visible
+# dans la liste des processus et affiché par toute trace) — incident 2026-09-25.
+export PGPASSWORD="$DB_PASS"
 [ -n "$PROD_REF" ] && [ -n "$DB_PASS" ] || { echo "ERREUR: SUPABASE_PROJECT_REF_PROD et SUPABASE_DB_PASSWORD requis dans .env.local" >&2; exit 1; }
 
 # La clé service_role de la PROD vit sur Railway (celle de .env.local pointe sur
@@ -43,7 +46,7 @@ echo "→ 0/6  Vérification de la pile locale…"
 
 PROD_HOST=""
 for h in aws-1-ca-central-1.pooler.supabase.com aws-0-ca-central-1.pooler.supabase.com; do
-  if docker run --rm -e PGPASSWORD="$DB_PASS" postgres:17 \
+  if docker run --rm -e PGPASSWORD postgres:17 \
        psql -h "$h" -p 5432 -U "postgres.$PROD_REF" -d postgres -tAc 'select 1' >/dev/null 2>&1; then
     PROD_HOST="$h"; break
   fi
@@ -51,7 +54,7 @@ done
 [ -n "$PROD_HOST" ] || { echo "ERREUR: aucun pooler ne répond pour la prod" >&2; exit 1; }
 
 D="$CLONE/dumps"; mkdir -p "$D"
-pgd() { docker run --rm -e PGPASSWORD="$DB_PASS" -v "$D:/out" postgres:17 pg_dump \
+pgd() { docker run --rm -e PGPASSWORD -v "$D:/out" postgres:17 pg_dump \
           -h "$PROD_HOST" -p 5432 -U "postgres.$PROD_REF" -d postgres --no-owner --no-privileges "$@"; }
 psql_local() { docker run --rm --network host -e PGPASSWORD=postgres -v "$D:/d" postgres:17 psql "${LOCAL_DB[@]}" "$@"; }
 
