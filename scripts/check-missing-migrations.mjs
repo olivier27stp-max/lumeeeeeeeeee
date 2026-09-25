@@ -33,13 +33,30 @@ import { join } from 'node:path';
 const ROOT = process.cwd();
 const DIR = join(ROOT, 'supabase', 'migrations');
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
-const REF = process.env.SUPABASE_PROJECT_REF;
-const DB_URL = process.env.DB_URL;
+/*
+ * `--prod` vise la PRODUCTION.
+ *
+ * Le 2026-09-25, la migration des dossiers d'automatisations avait été
+ * appliquée sur staging et jamais sur prod. Le code mergé lisait
+ * `folder_id` : avec PostgREST, une seule colonne inexistante fait échouer
+ * TOUTE la requête — la page Automatisations renvoyait 500 et plus aucune
+ * règle ne se chargeait, les anciennes comprises.
+ *
+ * Ce détecteur existait déjà mais ne regardait que staging, où tout était
+ * en place. Il ne pouvait donc pas voir la panne. C'est la prod qui compte.
+ */
+const PROD = process.argv.includes('--prod');
+const REF = PROD ? process.env.SUPABASE_PROJECT_REF_PROD : process.env.SUPABASE_PROJECT_REF;
+const DB_URL = PROD ? null : process.env.DB_URL;
 
 if (!DB_URL && !(TOKEN && REF)) {
-  console.error("✗ IMPOSSIBLE DE VÉRIFIER : ni DB_URL, ni SUPABASE_ACCESS_TOKEN+SUPABASE_PROJECT_REF.");
+  console.error(PROD
+    ? "✗ IMPOSSIBLE DE VÉRIFIER : SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF_PROD requis pour --prod."
+    : "✗ IMPOSSIBLE DE VÉRIFIER : ni DB_URL, ni SUPABASE_ACCESS_TOKEN+SUPABASE_PROJECT_REF.");
   process.exit(2);
 }
+
+console.log(PROD ? `Cible : PRODUCTION (${REF})` : `Cible : staging (${REF ?? 'DB_URL'})`);
 
 async function query(sql) {
   if (DB_URL) {

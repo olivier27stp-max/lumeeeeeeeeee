@@ -55,6 +55,8 @@ import {
 import SequenceCanvas from '../components/automations/SequenceCanvas';
 import PanneauEtape from '../components/automations/PanneauEtape';
 import TiroirChoix, { type ChoixTiroir } from '../components/automations/TiroirChoix';
+import PanneauDeclencheur from '../components/automations/PanneauDeclencheur';
+import { listerChamps } from '../lib/champsPersoApi';
 import {
   ACTIONS,
   DECLENCHEURS,
@@ -105,6 +107,14 @@ export default function AutomationBuilderPage() {
   // Charges une fois : un menu qui recharge a chaque ouverture de panneau
   // clignote, et ces deux listes bougent rarement.
   const [membres, setMembres] = useState<Array<{ user_id: string; nom: string }>>([]);
+  /**
+   * Les AUTRES automatisations publiées, pour « Démarrer une automatisation ».
+   *
+   * Publiées seulement (un brouillon n'enverrait rien), vivantes seulement
+   * (une règle à la corbeille ne se déclenche plus), et jamais celle qu'on
+   * édite — une automatisation qui se démarre elle-même boucle.
+   */
+  const [autresAutomatisations, setAutresAutomatisations] = useState<Array<{ id: string; nom: string }>>([]);
   const [etiquettes, setEtiquettes] = useState<string[]>([]);
 
   // ── Annuler / refaire ──
@@ -126,6 +136,15 @@ export default function AutomationBuilderPage() {
   const [ajoutEnCours, setAjoutEnCours] = useState<{ apresId: string | null; branche?: 'alors' | 'sinon' } | null>(null);
   /** Le tiroir « Ajouter un déclencheur » est-il ouvert ? */
   const [tiroirDeclencheur, setTiroirDeclencheur] = useState(false);
+  /** Le panneau de RÉGLAGE du déclencheur (« quelle date surveiller ? »). */
+  const [reglageDeclencheur, setReglageDeclencheur] = useState(false);
+  /**
+   * Les champs date de la fiche client, pour le déclencheur « Date atteinte ».
+   *
+   * Chargés une fois à l'ouverture de l'éditeur : chaque entreprise a les
+   * siens, et une liste vide doit se distinguer d'une liste pas encore lue.
+   */
+  const [champsDate, setChampsDate] = useState<Array<{ id: string; label: string }>>([]);
   /** L'étape dont le menu « … » est ouvert. */
   const [menuEtape, setMenuEtape] = useState<string | null>(null);
   /** L'aperçu (« Tester ») : ce qui partirait, sur un vrai client. */
@@ -294,6 +313,11 @@ export default function AutomationBuilderPage() {
         setSteps(etapes);
         setHistorique([etapes]);
         setPosition(0);
+        setAutresAutomatisations(
+          d.rules
+            .filter((r) => r.id !== id && r.is_active && !r.deleted_at)
+            .map((r) => ({ id: r.id, nom: r.name })),
+        );
       })
       .catch((e: unknown) => {
         console.error('[builder] chargement échoué', e instanceof Error ? e.message : String(e));
@@ -503,6 +527,10 @@ export default function AutomationBuilderPage() {
         trigger_event: regle.trigger_event,
         steps,
         actions: regle.actions,
+        // Sans les conditions, on ne verrait pas qu'un réglage OBLIGATOIRE
+        // du déclencheur manque — la règle se publierait pour ne jamais
+        // partir.
+        conditions: (regle.conditions ?? null) as Record<string, unknown> | null,
         fr,
       });
       const bloquants = problemes.filter((p) => p.gravite === 'bloquant');
@@ -563,6 +591,88 @@ export default function AutomationBuilderPage() {
     const d = catalogue.declencheurs.find((x) => x.cle === regle.trigger_event);
     return d ? (fr ? d.fr : d.en) : regle.trigger_event;
   }, [catalogue, regle, fr]);
+
+  /** Le déclencheur choisi, tel que le catalogue le décrit. */
+  const declencheurCourant = useMemo(
+    () => catalogue?.declencheurs.find((x) => x.cle === regle?.trigger_event) ?? null,
+    [catalogue, regle?.trigger_event],
+  );
+
+  /**
+   * Les champs date de la fiche client — chargés seulement si un
+   * déclencheur en a besoin.
+   *
+   * Inutile de demander la liste des champs personnalisés sur un parcours
+   * « facture payée » : un appel réseau de plus à chaque ouverture de
+   * l'éditeur, pour rien.
+   */
+  const besoinChampsDate = !!declencheurCourant?.champs?.some((c) => c.type === 'champ_date');
+  useEffect(() => {
+    if (!besoinChampsDate) return;
+    let vivant = true;
+    (async () => {
+      try {
+        const liste = await listerChamps('client');
+        if (!vivant) return;
+        setChampsDate(
+          liste.fields
+            // Seuls les champs DATE alimentent `value_date`, et un champ
+            // archivé ne doit plus déclencher d'envoi.
+            .filter((c) => c.field_type === 'date' && !c.archived_at)
+            .map((c) => ({ id: c.id, label: c.label })),
+        );
+      } catch (e: unknown) {
+        // Une liste vide se distingue mal d'un échec : on le journalise
+        // plutôt que de laisser croire qu'aucun champ date n'existe.
+        console.error('[automations] champs date illisibles', e);
+      }
+    })();
+    return () => { vivant = false; };
+  }, [besoinChampsDate]);
+
+  /**
+   * Les réglages du déclencheur, en clair sous sa carte.
+   *
+   * Reprend l'idée de GHL (« Event type is "Normal" ») : on voit ce que la
+   * règle écoute vraiment sans rien ouvrir. Un réglage obligatoire mais
+   * absent est SIGNALÉ — c'est le seul moyen de repérer d'un coup d'œil
+   * une règle qui ne partirait jamais.
+   */
+  const declencheurDetail = useMemo(() => {
+    const champs = declencheurCourant?.champs;
+    if (!champs?.length) return null;
+    const conditions = (regle?.conditions ?? {}) as Record<string, unknown>;
+    const bouts: string[] = [];
+    for (const champ of champs) {
+      const v = conditions[champ.cle];
+      if (v === undefined || v === null || String(v).trim() === '') {
+        if (champ.obligatoire) {
+          bouts.push(fr ? `⚠ ${champ.fr} à choisir` : `⚠ pick ${champ.en}`);
+        }
+        continue;
+      }
+      if (champ.type === 'champ_date') {
+        const nom = champsDate.find((c) => c.id === String(v))?.label;
+        bouts.push(nom ?? (fr ? 'champ supprimé' : 'deleted field'));
+      } else {
+        bouts.push(`${fr ? champ.fr : champ.en} : ${v}`);
+      }
+    }
+    return bouts.length ? bouts.join(' · ') : null;
+  }, [declencheurCourant, regle?.conditions, champsDate, fr]);
+
+  /** Enregistrer les réglages du déclencheur. */
+  const enregistrerDeclencheur = useCallback(async (conditions: Record<string, unknown>) => {
+    if (!regle) return;
+    try {
+      const maj = await modifierAutomatisation(regle.id, { conditions });
+      setRegle(maj);
+      setReglageDeclencheur(false);
+      toast.success(fr ? 'Réglages enregistrés' : 'Settings saved');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }, [regle, fr]);
 
   if (chargement) {
     return (
@@ -853,6 +963,25 @@ export default function AutomationBuilderPage() {
                       </span>
                     </button>
 
+                    {/*
+                      Les réglages du déclencheur, atteignables AUSSI sur un
+                      canevas vide.
+                      Sans ce bouton, « Date atteinte » ne pouvait être réglé
+                      qu'une fois une étape ajoutée — or on choisit son
+                      déclencheur AVANT de bâtir le parcours. Le réglage
+                      manquant est bloquant à la publication : on se serait
+                      retrouvé coincé sans savoir où cliquer.
+                    */}
+                    {declencheurCourant?.champs?.length ? (
+                      <button
+                        type="button"
+                        onClick={() => setReglageDeclencheur(true)}
+                        className="mt-2 w-full max-w-[300px] rounded-lg border border-border px-3 py-2 text-[12px] text-text-secondary transition-colors hover:border-accent hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      >
+                        {declencheurDetail ?? (fr ? 'Régler le déclencheur' : 'Configure the trigger')}
+                      </button>
+                    ) : null}
+
                     {/* Le connecteur, comme sur le canevas garni. */}
                     <svg width="2" height="28" className="my-1 text-border" aria-hidden="true">
                       <line x1="1" y1="0" x2="1" y2="28" stroke="currentColor" strokeWidth="2" />
@@ -884,7 +1013,18 @@ export default function AutomationBuilderPage() {
                       onSelection={setEtapeChoisie}
                       onAjouter={ouvrirAjout}
                       onMenu={setMenuEtape}
-                      onDeclencheur={() => setTiroirDeclencheur(true)}
+                      /*
+                       * Un clic sur la carte « Quand » ouvre ses RÉGLAGES
+                       * quand il y en a (« quelle date surveiller ? »), et
+                       * le tiroir de changement sinon. C'est le geste de
+                       * GHL : on règle d'abord, on change de déclencheur
+                       * depuis le tiroir que le panneau propose.
+                       */
+                      onDeclencheur={() => {
+                        if (declencheurCourant?.champs?.length) setReglageDeclencheur(true);
+                        else setTiroirDeclencheur(true);
+                      }}
+                      declencheurDetail={declencheurDetail}
                     />
                   )
                 )}
@@ -1122,7 +1262,20 @@ export default function AutomationBuilderPage() {
         />
       )}
 
-      {onglet === 'parcours' && !tiroirDeclencheur && ajoutEnCours && (
+      {/* Les réglages du déclencheur — « quelle date surveiller ? ».
+          Avant le tiroir d'ajout : un seul panneau à droite à la fois. */}
+      {onglet === 'parcours' && !tiroirDeclencheur && reglageDeclencheur && declencheurCourant?.champs?.length && (
+        <PanneauDeclencheur
+          declencheur={declencheurCourant}
+          conditions={(regle?.conditions ?? null) as Record<string, unknown> | null}
+          fr={fr}
+          champsDate={champsDate}
+          onEnregistrer={enregistrerDeclencheur}
+          onFermer={() => setReglageDeclencheur(false)}
+        />
+      )}
+
+      {onglet === 'parcours' && !tiroirDeclencheur && !reglageDeclencheur && ajoutEnCours && (
         <TiroirChoix
           titre={fr ? 'Actions' : 'Actions'}
           sousTitre={fr ? 'Ce que l’automatisation fera' : 'What the automation will do'}
@@ -1145,6 +1298,7 @@ export default function AutomationBuilderPage() {
           declencheur={regle.trigger_event}
           membres={membres}
           etiquettes={etiquettes}
+          automatisations={autresAutomatisations}
           stats={null}
           onEnregistrer={enregistrerEtape}
           onSupprimer={supprimerEtape}

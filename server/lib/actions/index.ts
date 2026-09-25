@@ -350,7 +350,8 @@ export type ActionType =
   | 'envoyer_facture'
   | 'envoyer_soumission'
   | 'webhook'
-  | 'arreter_automatisation';
+  | 'arreter_automatisation'
+  | 'demarrer_automatisation';
 
 // ── Template variable resolution ─────────────────────────────
 
@@ -2020,6 +2021,85 @@ export async function executeArreterAutomatisation(
   return { success: true, data: { annulees: data?.length ?? 0 } };
 }
 
+/**
+ * Démarrer une AUTRE automatisation sur la même entité.
+ *
+ * L'équivalent du « Add to Workflow » de GoHighLevel : chaîner deux
+ * parcours plutôt que d'en bâtir un seul, énorme et illisible. Un client
+ * qui accepte une soumission entre dans le parcours d'accueil ; une
+ * facture payée démarre la demande d'avis.
+ *
+ * ── Ce qu'on refuse, et pourquoi ───────────────────────────────
+ * · SE démarrer soi-même : la règle se rappellerait indéfiniment. Le
+ *   moteur a déjà trois gardes contre les boucles dans un parcours ; il
+ *   faut la même chose entre parcours.
+ * · une règle d'une AUTRE organisation : `org_id` est filtré, sinon une
+ *   entreprise démarrerait les automatisations d'une autre.
+ * · une règle à la corbeille ou en brouillon : la démarrer ferait partir
+ *   des messages que personne n'a publiés.
+ *
+ * ── L'anti-doublon ─────────────────────────────────────────────
+ * Même `execution_key` que le moteur (`règle:entité:index`), donc l'index
+ * unique de `automation_scheduled_tasks` fait le travail : deux parcours
+ * qui démarrent le même troisième sur le même client ne produisent qu'une
+ * seule inscription.
+ */
+export async function executeDemarrerAutomatisation(
+  config: { rule_id?: string },
+  _vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const cible = String(config.rule_id ?? '').trim();
+  if (!cible) return { success: false, error: 'Aucune automatisation choisie.' };
+
+  if (ctx.ruleId && cible === ctx.ruleId) {
+    return { success: false, error: 'Une automatisation ne peut pas se démarrer elle-même.' };
+  }
+
+  const { data: regle, error: errLecture } = await ctx.supabase
+    .from('automation_rules')
+    .select('id, name, actions, is_active, deleted_at')
+    .eq('id', cible)
+    .eq('org_id', ctx.orgId)
+    .maybeSingle();
+
+  if (errLecture) return { success: false, error: errLecture.message };
+  if (!regle || regle.deleted_at) {
+    return { success: false, error: 'Automatisation introuvable.' };
+  }
+  if (!regle.is_active) {
+    // Un brouillon n'envoie rien : le dire est plus utile que de créer des
+    // tâches pour une règle que personne n'a publiée.
+    return { success: false, error: `« ${regle.name} » est en brouillon : rien à démarrer.` };
+  }
+
+  const actions = Array.isArray(regle.actions) ? regle.actions : [];
+  if (actions.length === 0) {
+    return { success: false, error: `« ${regle.name} » n'a aucune action.` };
+  }
+
+  const maintenant = new Date().toISOString();
+  let inscrites = 0;
+  for (let i = 0; i < actions.length; i++) {
+    const { error } = await ctx.supabase.from('automation_scheduled_tasks').insert({
+      org_id: ctx.orgId,
+      automation_rule_id: regle.id,
+      entity_type: ctx.entityType,
+      entity_id: ctx.entityId,
+      action_config: { ...actions[i], trigger_event: 'automation.started' },
+      execute_at: maintenant,
+      status: 'pending',
+      execution_key: `${regle.id}:${ctx.entityId}:${i}`,
+    });
+    if (!error) { inscrites += 1; continue; }
+    // 23505 = déjà inscrit. Ce n'est pas un échec : c'est l'anti-doublon
+    // qui fait son travail.
+    if (error.code !== '23505') return { success: false, error: error.message };
+  }
+
+  return { success: true, data: { automatisation: regle.name, inscrites } };
+}
+
 // ── Actions : envoyer la facture / la soumission ────────────
 
 /**
@@ -2140,6 +2220,9 @@ export async function executeAction(
       return executeWebhook(config as any, vars, ctx);
     case 'arreter_automatisation':
       return executeArreterAutomatisation(config as any, vars, ctx);
+
+    case 'demarrer_automatisation':
+      return executeDemarrerAutomatisation(config as any, vars, ctx);
 
     default:
       return { success: false, error: `Unknown action type: ${actionType}` };
