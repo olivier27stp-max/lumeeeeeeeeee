@@ -10,6 +10,7 @@ import { Redis } from '@upstash/redis';
 import { Request, Response, NextFunction } from 'express';
 import { extractIP } from './security';
 import { logger } from './logger';
+import { messageTropDeDemandes } from './message-429';
 
 // ── Redis client (optional — falls back to in-memory) ──
 let redis: Redis | null = null;
@@ -110,7 +111,7 @@ export function redisRateLimit(opts: RedisRateLimitOpts) {
         const retryAfter = Math.ceil((reset - Date.now()) / 1000);
         res.set('Retry-After', String(Math.max(1, retryAfter)));
         return res.status(429).json({
-          error: 'Too many requests. Please try again later.',
+          error: messageTropDeDemandes(Math.max(1, retryAfter)),
           retryAfter: Math.max(1, retryAfter),
         });
       }

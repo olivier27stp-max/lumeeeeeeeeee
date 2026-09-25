@@ -9,6 +9,7 @@ import {
   placesDetailsSchema,
   elevationSchema,
 } from '../lib/validation';
+import { messageTropDeDemandes } from '../lib/message-429';
 
 const router = Router();
 
@@ -66,7 +67,7 @@ router.post('/places/autocomplete', validate(placesAutocompleteSchema), async (r
     if (!auth) return;
     if (!PLACES_KEY) return res.status(503).json({ error: 'Places API not configured.' });
     if (!consumePlacesQuota(`ac:${auth.user.id}`, 120)) {
-      return res.status(429).json({ error: 'Too many requests.' });
+      return res.status(429).json({ error: messageTropDeDemandes() });
     }
 
     const { input, countries, language, sessionToken, primaryTypes } = req.body as {
@@ -130,7 +131,7 @@ router.post('/geocode/elevation', validate(elevationSchema), async (req, res) =>
     if (!auth) return;
     if (!PLACES_KEY) return res.status(503).json({ error: 'Maps API not configured.' });
     if (!consumePlacesQuota(`elev:${auth.user.id}`, 60)) {
-      return res.status(429).json({ error: 'Too many requests.' });
+      return res.status(429).json({ error: messageTropDeDemandes() });
     }
 
     const { lat, lng, surface, target_lat, target_lng } = req.body as {
@@ -213,7 +214,7 @@ router.post('/places/details', validate(placesDetailsSchema), async (req, res) =
     if (!auth) return;
     if (!PLACES_KEY) return res.status(503).json({ error: 'Places API not configured.' });
     if (!consumePlacesQuota(`det:${auth.user.id}`, 30)) {
-      return res.status(429).json({ error: 'Too many requests.' });
+      return res.status(429).json({ error: messageTropDeDemandes() });
     }
 
     const { placeId, language, sessionToken } = req.body as {

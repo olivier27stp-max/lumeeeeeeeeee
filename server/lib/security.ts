@@ -15,6 +15,7 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { getServiceClient } from './supabase';
 import { logger } from './logger';
+import { messageTropDeDemandes, messageRafaleDetectee } from './message-429';
 
 // ============================================================================
 // 1. ENHANCED RATE LIMITER — Sliding window with burst detection
@@ -76,7 +77,7 @@ export function slidingRateLimit(opts: SlidingRateLimitOpts) {
       const retryAfter = Math.ceil((entry.blockedUntil - now) / 1000);
       res.set('Retry-After', String(retryAfter));
       return res.status(429).json({
-        error: 'Too many requests. Please try again later.',
+        error: messageTropDeDemandes(retryAfter),
         retryAfter,
       });
     }
@@ -103,7 +104,7 @@ export function slidingRateLimit(opts: SlidingRateLimitOpts) {
         ip_address: extractIP(req),
         details: { key, burstCount, path: req.path, method: req.method },
       });
-      return res.status(429).json({ error: 'Request burst detected. Temporarily blocked.' });
+      return res.status(429).json({ error: messageRafaleDetectee(Math.ceil(blockDurationMs / 1000)) });
     }
 
     // Check window limit
@@ -118,7 +119,7 @@ export function slidingRateLimit(opts: SlidingRateLimitOpts) {
         ip_address: extractIP(req),
         details: { key, count: entry.timestamps.length, path: req.path },
       });
-      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+      return res.status(429).json({ error: messageTropDeDemandes(Math.ceil(blockDurationMs / 1000)) });
     }
 
     entry.timestamps.push(now);
