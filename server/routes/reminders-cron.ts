@@ -68,6 +68,54 @@ interface ScheduleEntry {
   template_id?: string | null;
 }
 
+/**
+ * Âge maximal d'une facture encore relançable, en jours.
+ *
+ * POURQUOI CE PLAFOND EXISTE
+ * La sélection ne portait qu'une borne HAUTE (`due_date <= aujourd'hui - J`).
+ * Toute facture plus vieille restait éligible pour TOUJOURS, et à chaque
+ * palier du calendrier. Mesuré en production le 2026-09-25 : 4 factures en
+ * retard de 138 à 173 jours × 4 paliers (J+1, J+7, J+14, J+30) = 16 messages
+ * qui seraient partis la même nuit, au premier déclenchement du cron.
+ *
+ * Une facture oubliée depuis six mois ne se règle pas par une salve de
+ * rappels : elle se règle à la main. Passé ce plafond, on ne relance plus.
+ *
+ * `REMINDER_MAX_AGE_DAYS=0` désactive le plafond (comportement d'avant).
+ */
+export const PLAFOND_RELANCE_JOURS_DEFAUT = 90;
+
+export function plafondRelanceJours(env: NodeJS.ProcessEnv = process.env): number {
+  const brut = env.REMINDER_MAX_AGE_DAYS?.trim();
+  // Number(' ') vaut 0 : sans le trim, une variable laissée blanche
+  // DÉSACTIVERAIT le plafond au lieu de retomber sur la valeur par défaut.
+  if (brut === undefined || brut === '') return PLAFOND_RELANCE_JOURS_DEFAUT;
+  const n = Number(brut);
+  // Une valeur illisible ne doit pas SUPPRIMER le garde-fou en silence.
+  if (!Number.isFinite(n) || n < 0) return PLAFOND_RELANCE_JOURS_DEFAUT;
+  return Math.floor(n);
+}
+
+/**
+ * Fenêtre de dates relançable pour un palier donné.
+ *
+ * Retourne `{ max }` seul si le plafond est désactivé, sinon `{ min, max }`.
+ * `min` est la date d'échéance la plus ANCIENNE encore admise.
+ */
+export function fenetreRelance(
+  aujourdHui: Date,
+  joursApresEcheance: number,
+  plafondJours: number,
+): { min: string | null; max: string } {
+  const jour = (d: Date) => d.toISOString().slice(0, 10);
+  const haut = new Date(aujourdHui.getTime());
+  haut.setUTCDate(haut.getUTCDate() - joursApresEcheance);
+  if (plafondJours <= 0) return { min: null, max: jour(haut) };
+  const bas = new Date(aujourdHui.getTime());
+  bas.setUTCDate(bas.getUTCDate() - plafondJours);
+  return { min: jour(bas), max: jour(haut) };
+}
+
 /* Textes par défaut du rappel, dans la langue de l'entreprise.
    Ils étaient en anglais en dur : une entreprise québécoise qui n'avait pas
    écrit son propre texte relançait ses clients en anglais. Le reste du courriel
@@ -204,6 +252,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
     if (settingsErr) return sendSafeError(res, settingsErr, 'Failed to load reminder settings.', '[cron/reminders]');
 
     const today = new Date();
+    const plafond = plafondRelanceJours();
 
     for (const settings of settingsRows || []) {
       const orgId: string = settings.org_id;
@@ -227,18 +276,19 @@ router.post('/cron/payment-reminders', async (req, res) => {
         if (!Number.isFinite(daysAfter) || daysAfter < 0) continue;
         if (!['email', 'sms', 'both'].includes(channel)) continue;
 
-        const cutoff = new Date(today.getTime());
-        cutoff.setUTCDate(cutoff.getUTCDate() - daysAfter);
-        const cutoffDate = cutoff.toISOString().slice(0, 10);
+        const fenetre = fenetreRelance(today, daysAfter, plafond);
 
-        const { data: invoices, error: invErr } = await svc
+        let requete = svc
           .from('invoices')
           .select('id, org_id, client_id, invoice_number, total_cents, balance_cents, currency, due_date, status, subject')
           .eq('org_id', orgId)
           .in('status', ['sent', 'partial'])
-          .lte('due_date', cutoffDate)
-          .gt('balance_cents', 0)
-          .limit(500);
+          .lte('due_date', fenetre.max)
+          .gt('balance_cents', 0);
+        // Borne basse : au-delà du plafond, on ne relance plus (voir
+        // PLAFOND_RELANCE_JOURS_DEFAUT).
+        if (fenetre.min) requete = requete.gte('due_date', fenetre.min);
+        const { data: invoices, error: invErr } = await requete.limit(500);
         if (invErr) {
           errors.push({ error: `load invoices org=${orgId}: ${invErr.message}` });
           continue;
