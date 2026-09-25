@@ -7,6 +7,7 @@ import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, findUserByEma
 import { PLAN_FEATURE_KEYS, isPlatformOverride } from '../lib/platformFeatures';
 import { getUserContext, hasPermission } from '../lib/rbac';
 import { logger } from '../lib/logger';
+import { intervalleLu } from '../lib/abonnement-intervalle';
 import { installerModele } from '../lib/champs/service';
 import { estIndustrieModele } from '../../src/lib/champs/modeles';
 
@@ -1910,11 +1911,20 @@ router.post('/billing/confirm-checkout', async (req, res) => {
       // Webhook has processed — subscription is active. Include plan display info
       // (from the session the buyer actually paid) so the setup page can show the
       // real plan + amount, and whether the account still needs a password.
-      const interval = (meta.interval || 'monthly') as 'monthly' | 'yearly';
-      const currency = (meta.currency || 'CAD').toUpperCase();
-      let planName = '';
-      let includesSms = false;
-      if (meta.plan_id) {
+      // Lu sur l'abonnement créé par le webhook, pas sur la session : un lien
+      // de paiement Stripe n'a pas nos métadonnées (plan_id, interval), et la
+      // page affichait alors un forfait vide et « mensuel ».
+      const { data: sub } = await admin
+        .from('subscriptions')
+        .select('interval, currency, plans!subscriptions_plan_id_fkey(name, includes_sms)')
+        .eq('id', processed.subscription_id)
+        .maybeSingle();
+      const planSub = (sub as { plans?: { name?: string; includes_sms?: boolean } | null } | null)?.plans ?? null;
+      const interval = intervalleLu(sub?.interval ?? meta.interval);
+      const currency = String(sub?.currency || meta.currency || 'CAD').toUpperCase();
+      let planName = planSub?.name || '';
+      let includesSms = !!planSub?.includes_sms;
+      if (!planName && meta.plan_id) {
         const { data: plan } = await admin.from('plans').select('name, includes_sms').eq('id', meta.plan_id).maybeSingle();
         planName = plan?.name || '';
         includesSms = !!plan?.includes_sms;
