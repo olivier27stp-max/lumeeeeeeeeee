@@ -30,6 +30,7 @@ import { displayPhone } from '../lib/piiSanitizer';
 import {
   fetchInbox,
   fetchMessages,
+  assignConversation,
   sendSms,
   markConversationRead,
   formatPhoneDisplay,
@@ -292,6 +293,28 @@ export default function Messages() {
   const [offices, setOffices] = useState<InboxOffice[]>([]);
   const [filtreBureau, setFiltreBureau] = useState<string>('tous');
   const plusieursBureaux = offices.length > 1;
+  // Assignation : qui suis-je, et le filtre « À moi ».
+  const [moi, setMoi] = useState<string | null>(null);
+  const [seulementMoi, setSeulementMoi] = useState(false);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setMoi(data.user?.id ?? null)).catch((e: unknown) => console.error('[messages] utilisateur illisible', e));
+  }, []);
+  const equipe = offices.some((o) => (o.members?.length ?? 0) > 1);
+  const nomMembre = (orgId: string | null, userId: string | null | undefined) => {
+    if (!userId) return null;
+    if (userId === moi) return language === 'fr' ? 'Moi' : 'Me';
+    return offices.find((o) => o.org_id === orgId)?.members?.find((m) => m.user_id === userId)?.name || (language === 'fr' ? 'Membre' : 'Member');
+  };
+  const assigner = async (convo: Conversation, userId: string | null) => {
+    try {
+      await assignConversation(convo.id, convo.org_id, userId);
+      setConversations((cs) => cs.map((c) => (c.id === convo.id ? { ...c, assigned_to: userId } : c)));
+      setSelectedConvo((c) => (c && c.id === convo.id ? { ...c, assigned_to: userId } : c));
+    } catch (err: unknown) {
+      console.error('[messages] assignation échouée', err);
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  };
   const [selectedConvo, setSelectedConvo] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingConvos, setLoadingConvos] = useState(true);
@@ -508,6 +531,7 @@ export default function Messages() {
   // Filter conversations
   const filteredConvos = conversations.filter((c) => {
     if (plusieursBureaux && filtreBureau !== 'tous' && c.org_id !== filtreBureau) return false;
+    if (seulementMoi && c.assigned_to !== moi) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -605,10 +629,23 @@ export default function Messages() {
             </div>
           </div>
 
-          {/* Boîte unifiée : tous les bureaux, ou un seul */}
-          {plusieursBureaux && (
-            <div className="flex gap-1.5 overflow-x-auto px-4 pb-3" role="group" aria-label={language === 'fr' ? 'Filtrer par bureau' : 'Filter by office'}>
-              {[{ org_id: 'tous', name: language === 'fr' ? 'Tous les bureaux' : 'All offices' }, ...offices].map((b) => {
+          {/* Boîte unifiée : tous les bureaux, ou un seul ; et « À moi » */}
+          {(plusieursBureaux || equipe) && (
+            <div className="flex gap-1.5 overflow-x-auto px-4 pb-3" role="group" aria-label={language === 'fr' ? 'Filtrer les conversations' : 'Filter conversations'}>
+              {equipe && (
+                <button
+                  type="button"
+                  aria-pressed={seulementMoi}
+                  onClick={() => setSeulementMoi((v) => !v)}
+                  className={cn(
+                    'shrink-0 rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors',
+                    seulementMoi ? 'border-text-primary bg-text-primary text-surface' : 'border-border text-text-secondary hover:bg-surface-secondary'
+                  )}
+                >
+                  {language === 'fr' ? 'À moi' : 'Mine'}{(() => { const n = conversations.filter((c) => c.assigned_to === moi).length; return n > 0 ? ` · ${n}` : ''; })()}
+                </button>
+              )}
+              {plusieursBureaux && [{ org_id: 'tous', name: language === 'fr' ? 'Tous les bureaux' : 'All offices' }, ...offices].map((b) => {
                 const nonLus = conversations.filter((c) => b.org_id === 'tous' || c.org_id === b.org_id).reduce((t, c) => t + (c.unread_count || 0), 0);
                 return (
                   <button
@@ -695,6 +732,12 @@ export default function Messages() {
                           </span>
                         )}
                       </div>
+                      {convo.assigned_to && (
+                        <span className="mt-1 mr-1 inline-flex max-w-full items-center gap-1 rounded bg-surface-secondary px-1.5 py-0.5 text-[11px] text-text-secondary">
+                          <User size={10} className="shrink-0" aria-hidden />
+                          <span className="truncate">{nomMembre(convo.org_id, convo.assigned_to)}</span>
+                        </span>
+                      )}
                       {plusieursBureaux && convo.office_name && (
                         <span className="mt-1 inline-flex max-w-full items-center gap-1 rounded bg-surface-secondary px-1.5 py-0.5 text-[11px] text-text-secondary">
                           <Building2 size={10} className="shrink-0" aria-hidden />
@@ -734,6 +777,23 @@ export default function Messages() {
                   <ArrowLeft size={18} />
                 </button>
                 <UnifiedAvatar id={selectedConvo.client_id || selectedConvo.id} name={selectedConvo.client_name || formatPhoneDisplay(selectedConvo.phone_number)} size={36} />
+                {(() => {
+                  const membres = offices.find((o) => o.org_id === selectedConvo.org_id)?.members || [];
+                  if (selectedConvo.id.startsWith('pending-') || membres.length < 2) return null;
+                  return (
+                    <select
+                      aria-label={language === 'fr' ? 'Assigner la conversation' : 'Assign conversation'}
+                      value={selectedConvo.assigned_to || ''}
+                      onChange={(e) => { void assigner(selectedConvo, e.target.value || null); }}
+                      className="order-last max-w-[150px] shrink-0 truncate rounded-lg border border-border bg-surface px-2 py-1 text-[12px] text-text-secondary focus:outline-none focus-visible:ring-1 focus-visible:ring-border"
+                    >
+                      <option value="">{language === 'fr' ? 'Non assignée' : 'Unassigned'}</option>
+                      {membres.map((m) => (
+                        <option key={m.user_id} value={m.user_id}>{m.user_id === moi ? (language === 'fr' ? 'Moi' : 'Me') : (m.name || (language === 'fr' ? 'Membre' : 'Member'))}</option>
+                      ))}
+                    </select>
+                  );
+                })()}
                 <div className="flex-1 min-w-0">
                   <h3 className="text-[14px] font-bold text-text-primary truncate">
                     {selectedConvo.client_name || formatPhoneDisplay(selectedConvo.phone_number)}

@@ -90,6 +90,7 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/messages/inbox': 'messages.read',
   'GET /api/messages/conversations/:id/messages': 'messages.read',
   'POST /api/messages/conversations/:id/read': 'messages.read',
+  'PATCH /api/messages/conversations/:id/assign': 'messages.send',
 
   // ── Communications ──
   'POST /api/communications/send-sms': 'messages.send',

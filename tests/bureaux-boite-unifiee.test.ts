@@ -47,3 +47,16 @@ describe('page Messages', () => {
     expect(lire('src/lib/messagingApi.ts')).toContain("...(bureau ? { 'x-org-id': bureau } : {})");
   });
 });
+
+describe('assignation (scripts/qa/bureaux-assignation.mts, 7/7)', () => {
+  it('assigner exige messages.send ; la personne doit avoir messages.read dans le bureau', () => {
+    expect(lire('server/lib/route-permissions.ts')).toContain("'PATCH /api/messages/conversations/:id/assign': 'messages.send'");
+    const r = lire('server/routes/messages.ts');
+    expect(r).toContain("membresAssignables([authed.orgId])");
+    expect(lire('server/lib/boite-unifiee.ts')).toContain("hasPermission(ctx, 'messages.read')");
+  });
+  it('la base refuse une personne hors du bureau (clé étrangère vers memberships)', () => {
+    const m = lire('supabase/migrations/20260927230100_conversations_assignation.sql');
+    expect(m).toContain('foreign key (assigned_to, org_id) references public.memberships(user_id, org_id)');
+  });
+});

@@ -12,7 +12,8 @@
 import { buildSupabaseWithAuth, getServiceClient } from './supabase';
 import { getUserContext, hasPermission } from './rbac';
 
-export interface BureauBoite { org_id: string; name: string }
+export interface MembreBoite { user_id: string; name: string }
+export interface BureauBoite { org_id: string; name: string; members?: MembreBoite[] }
 
 /** Pur : bureaux retenus — actifs, non supprimés, même entreprise que le bureau actif, triés du plus ancien. */
 export function bureauxMemeEntreprise(
@@ -45,7 +46,34 @@ export async function bureauxDeLaBoite(userId: string, orgActif: string): Promis
   if (permis.length === 0) return [];
   const { data: reglages } = await admin.from('company_settings').select('org_id, company_name').in('org_id', permis.map((o) => o.id));
   const nom = new Map((reglages || []).filter((r: any) => r.company_name).map((r: any) => [String(r.org_id), String(r.company_name)]));
-  return permis.map((o) => ({ org_id: o.id, name: nom.get(o.id) || String(o.name || '') }));
+  const membres = await membresAssignables(permis.map((o) => o.id));
+  return permis.map((o) => ({ org_id: o.id, name: nom.get(o.id) || String(o.name || ''), members: membres.get(o.id) || [] }));
+}
+
+/**
+ * Personnes à qui l'on peut assigner une conversation, par bureau : adhésion
+ * active ET messages.read dans ce bureau (sinon elles ne verraient pas la
+ * conversation qu'on leur confie).
+ */
+export async function membresAssignables(orgIds: string[]): Promise<Map<string, MembreBoite[]>> {
+  const admin = getServiceClient();
+  const parBureau = new Map<string, MembreBoite[]>();
+  if (!orgIds.length) return parBureau;
+  const { data: adhesions, error } = await admin.from('memberships').select('user_id, org_id')
+    .in('org_id', orgIds).eq('status', 'active');
+  if (error) throw error;
+  const ids = [...new Set((adhesions || []).map((a: any) => String(a.user_id)))];
+  const { data: profils } = ids.length ? await admin.from('profiles').select('id, full_name').in('id', ids) : { data: [] };
+  const nom = new Map((profils || []).map((p: any) => [String(p.id), String(p.full_name || '').trim()]));
+  for (const a of adhesions || []) {
+    const ctx = await getUserContext(admin, String(a.user_id), String(a.org_id));
+    if (!ctx || !hasPermission(ctx, 'messages.read')) continue;
+    const liste = parBureau.get(String(a.org_id)) || [];
+    liste.push({ user_id: String(a.user_id), name: nom.get(String(a.user_id)) || '' });
+    parBureau.set(String(a.org_id), liste);
+  }
+  for (const liste of parBureau.values()) liste.sort((x, y) => x.name.localeCompare(y.name));
+  return parBureau;
 }
 
 /** Conversations de chaque bureau, lues avec l'identité de la personne, fusionnées du plus récent au plus ancien. */
