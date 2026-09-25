@@ -6,7 +6,7 @@ import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from '../lib/migrat
 import { twilioClient, twilioAuthToken, twilioAccountSid, Twilio, getTwilioStatusCallbackUrl, getTwilioWebhookBaseUrl } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '../lib/helpers';
-import { validate, messageSendSchema } from '../lib/validation';
+import { validate, messageSendSchema, conversationAssignSchema } from '../lib/validation';
 import { logSecurityEvent, sanitizeText, checkAnomalies, extractIP } from '../lib/security';
 import { withDeadLetter } from '../lib/dead-letter';
 import { logger } from '../lib/logger';
@@ -14,7 +14,7 @@ import { eventBus } from '../lib/eventBus';
 import { estNoteVocale, mediasAudio, transcrireMediaTwilio, messageEchecVocal } from '../lib/sms/note-vocale';
 import { membreParTelephone } from '../lib/sms/identifier-membre';
 import { repondreAuMembre } from '../lib/sms/fil-lumi';
-import { bureauxDeLaBoite, conversationsDesBureaux } from '../lib/boite-unifiee';
+import { bureauxDeLaBoite, conversationsDesBureaux, membresAssignables } from '../lib/boite-unifiee';
 
 const router = Router();
 
@@ -167,6 +167,36 @@ router.post('/messages/conversations/:id/read', async (req, res) => {
     return res.json({ ok: true });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to mark conversation read.', '[messages/read]');
+  }
+});
+
+// Assigner une conversation (x-org-id = bureau de la conversation). La
+// personne doit avoir messages.read dans ce bureau ; la base garantit en plus
+// qu'elle en est membre (clé étrangère conversations_assigned_to_membre).
+router.patch('/messages/conversations/:id/assign', validate(conversationAssignSchema), async (req, res) => {
+  try {
+    if (!CONVERSATION_ID.test(req.params.id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    const cible: string | null = req.body.assigned_to ?? null;
+    if (cible) {
+      const permis = (await membresAssignables([authed.orgId])).get(authed.orgId) || [];
+      if (!permis.some((m) => m.user_id === cible)) {
+        return res.status(400).json({ error: 'Cette personne n’a pas accès aux messages de ce bureau.', code: 'assignee_not_allowed' });
+      }
+    }
+    const { data, error } = await authed.client
+      .from('conversations')
+      .update({ assigned_to: cible, assigned_at: cible ? new Date().toISOString() : null })
+      .eq('id', req.params.id)
+      .eq('org_id', authed.orgId)
+      .select('id, assigned_to, assigned_at')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Conversation not found.' });
+    return res.json(data);
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to assign conversation.', '[messages/assign]');
   }
 });
 

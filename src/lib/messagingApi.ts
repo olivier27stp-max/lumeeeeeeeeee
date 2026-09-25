@@ -15,9 +15,13 @@ export interface Conversation {
   created_at: string;
   /** Boîte unifiée : nom du bureau de la conversation. */
   office_name?: string;
+  /** Personne assignée (membre du bureau de la conversation). */
+  assigned_to?: string | null;
 }
 
-export interface InboxOffice { org_id: string; name: string }
+export interface InboxMember { user_id: string; name: string }
+/** `members` : à qui l'on peut assigner une conversation de ce bureau. */
+export interface InboxOffice { org_id: string; name: string; members?: InboxMember[] }
 
 export interface Message {
   id: string;
@@ -86,6 +90,16 @@ export async function markConversationRead(conversationId: string, bureau: strin
     headers: await getAuthHeaders(bureau),
   });
   await lireJson(res, 'Failed to mark conversation read');
+}
+
+/** Assigner (ou désassigner avec null) une conversation, avec le bureau DE LA CONVERSATION. */
+export async function assignConversation(conversationId: string, bureau: string | null, userId: string | null): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/messages/conversations/${encodeURIComponent(conversationId)}/assign`, {
+    method: 'PATCH',
+    headers: await getAuthHeaders(bureau),
+    body: JSON.stringify({ assigned_to: userId }),
+  });
+  await lireJson(res, 'Failed to assign conversation');
 }
 
 // ─── Messages ────────────────────────────────────────────────────────

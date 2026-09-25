@@ -1196,6 +1196,11 @@ export const automationRuleCreateSchema = corpsAutomatisation.superRefine(plafon
  * passerait alors, écraserait les conditions existantes par `{}` et
  * remettrait la règle en pause — sans que personne ne l'ait demandé.
  */
+/** Assigner une conversation de la boîte de réception (null = désassigner). */
+export const conversationAssignSchema = z.object({
+  assigned_to: z.string().uuid().nullable(),
+});
+
 /** Copier une automatisation vers d'autres bureaux de l'entreprise. */
 export const automationCopieBureauxSchema = z.object({
   org_ids: z.array(z.string().uuid()).min(1).max(50),
