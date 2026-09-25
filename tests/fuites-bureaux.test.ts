@@ -51,3 +51,31 @@ describe('M1 — chaque onglet agit sur SON bureau', () => {
     expect(fautifs).toEqual([]);
   });
 });
+
+describe('M2 — le GPS suit le bureau de la session de terrain', () => {
+  const s = lire('server/routes/tracking.ts');
+  it('points, lots et position en direct au bureau de la session', () => {
+    expect(s.match(/org_id: bureauSession/g)?.length).toBe(4);
+  });
+  it("l'arrêt ne met hors ligne que CETTE session", () => {
+    expect(s).toMatch(/\.eq\('user_id', auth\.user\.id\)\s*\.eq\('session_id', sessionId\)/);
+  });
+  it('un événement ne peut viser que sa propre session', () => {
+    const corps = s.slice(s.indexOf("router.post('/tracking/event'"));
+    expect(corps).toMatch(/\.eq\('user_id', auth\.user\.id\)/);
+  });
+});
+
+describe('M3 — coordonnées d’un membre d’un autre bureau', () => {
+  it('courriel et téléphone masqués hors bureau, sauf propriétaire/admin', () => {
+    const s = lire('server/routes/leaderboard.ts');
+    expect(s).toMatch(/email: null, phone: null/);
+    expect(s).toMatch(/member: memberVisible/);
+  });
+});
+
+describe('L1 — bureau par défaut stable', () => {
+  it('les adhésions sont triées par ancienneté', () => {
+    expect(lire('src/contexts/CompanyContext.tsx')).toMatch(/\.order\('created_at', \{ ascending: true \}\)/);
+  });
+});

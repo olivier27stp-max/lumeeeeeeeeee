@@ -225,9 +225,17 @@ router.get('/leaderboard/rep/:userId/profile', async (req, res) => {
       office = org?.name || '';
     }
 
+    // Coordonnées d'un membre d'un AUTRE bureau : réservées au propriétaire /
+    // admin. Un vendeur voit le nom, la photo et le bureau d'un collègue du
+    // classement d'entreprise, pas son courriel ni son téléphone (fuite M3).
+    const memeBureau = repOrgId === auth.orgId;
+    const voitCoordonnees = memeBureau || userId === auth.user.id
+      || await isOrgAdminOrOwner(getServiceClient(), auth.user.id, auth.orgId);
+    const memberVisible = member && !voitCoordonnees ? { ...member, email: null, phone: null } : member;
+
     res.json({
       profile: profileRes.data ?? null,
-      member,
+      member: memberVisible,
       office,
       orgId: repOrgId,
       accountCreatedAt: authUserRes.data?.user?.created_at ?? null,

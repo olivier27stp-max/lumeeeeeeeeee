@@ -701,6 +701,7 @@ export async function recordLoginAttempt(params: {
         .from('memberships')
         .select('org_id')
         .eq('user_id', params.userId)
+        .order('created_at', { ascending: true }) // stable : le plus ancien bureau (pas un bureau au hasard)
         .limit(1)
         .maybeSingle();
       orgId = (mem?.org_id as string | undefined) ?? null;

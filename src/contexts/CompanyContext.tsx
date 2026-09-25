@@ -89,7 +89,11 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
         .from('memberships')
         .select('org_id, role, scope, permissions, team_id, department_id, manager_id, status, full_name, avatar_url')
         .eq('user_id', userId)
-        .in('status', ['active', 'pending']);
+        .in('status', ['active', 'pending'])
+        // Ordre stable : sans bureau mémorisé, on ouvre toujours le plus ancien
+        // (avant : ordre non garanti, bureau différent d'une connexion à l'autre).
+        .order('created_at', { ascending: true })
+        .order('org_id', { ascending: true });
 
       if (error) throw error;
       if (!memberships || memberships.length === 0) {

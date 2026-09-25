@@ -2012,6 +2012,7 @@ async function handleCheckoutSessionCompleted(
     .from('memberships')
     .select('org_id')
     .eq('user_id', userId)
+    .order('created_at', { ascending: true }) // stable : le plus ancien bureau
     .limit(1)
     .maybeSingle();
 
