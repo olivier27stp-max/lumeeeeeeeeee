@@ -525,21 +525,55 @@ export default function AutomationBuilderPage() {
     [steps],
   );
 
+  /**
+   * L'enregistrement automatique — 3 secondes après la FIN de la frappe.
+   *
+   * À 1 seconde, taper une phrase déclenchait un appel par mot : le serveur
+   * répondait « Too many requests. Please try again later. », en anglais et
+   * brut, sur l'écran de quelqu'un qui écrivait simplement son message
+   * (P1-9 de l'audit). Will a tranché : on garde l'enregistrement auto —
+   * il fait partie de la promesse — mais on respire, on réessaie, et
+   * l'utilisateur ne voit jamais l'erreur technique.
+   */
   useEffect(() => {
     if (etatSauvegarde !== 'modifie' || !regle) return;
     if (etapesIncompletes > 0) { setEtatSauvegarde('incomplet'); return; }
+    let annule = false;
+
     const minuterie = setTimeout(async () => {
       setEtatSauvegarde('en_cours');
-      try {
-        await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
-        setEtatSauvegarde('a_jour');
-      } catch (e: unknown) {
-        setEtatSauvegarde('modifie');
-        toast.error(e instanceof Error ? e.message : String(e));
+      // Trois tentatives, espacées de plus en plus : 1,5 s puis 4 s. Un
+      // plafond de débit se relâche vite ; réessayer tout de suite le
+      // relancerait pour rien.
+      const attentes = [1500, 4000];
+      for (let essai = 0; essai <= attentes.length; essai++) {
+        if (annule) return;
+        try {
+          await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
+          if (!annule) setEtatSauvegarde('a_jour');
+          return;
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
+          const tropVite = /too many requests|429|rate limit/i.test(message);
+          if (tropVite && essai < attentes.length) {
+            await new Promise((r) => setTimeout(r, attentes[essai]));
+            continue;
+          }
+          if (annule) return;
+          setEtatSauvegarde('modifie');
+          // Jamais l'erreur brute : « Too many requests » en anglais ne dit
+          // rien à un entrepreneur qui écrivait son message.
+          toast.error(tropVite
+            ? (fr
+              ? 'Trop de modifications d’un coup — on réessaie dans un instant.'
+              : 'Too many changes at once — retrying in a moment.')
+            : message);
+          return;
+        }
       }
-    }, 1000);
-    return () => clearTimeout(minuterie);
-  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes]);
+    }, 3000);
+    return () => { annule = true; clearTimeout(minuterie); };
+  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr]);
 
   // Dès que la dernière étape vide est remplie, on repart en enregistrement.
   useEffect(() => {

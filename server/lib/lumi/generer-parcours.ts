@@ -88,6 +88,13 @@ RÈGLES ABSOLUES :
   refusée et enverrait des messages à l'infini.
 - Une étape "attendre" n'est jamais la dernière : elle attendrait pour rien.
 - Les délais sont en SECONDES (1 jour = 86400).
+- RAPPEL DE RENDEZ-VOUS : ne mets JAMAIS une étape "attendre" pour un rappel
+  « la veille » ou « X jours avant ». Le déclencheur "Rendez-vous planifié"
+  part à la RÉSERVATION, qui peut avoir lieu des semaines avant la visite :
+  « attendre 1 jour puis envoyer » enverrait le rappel le lendemain de la
+  réservation, pas la veille du rendez-vous. Ce déclencheur sait envoyer
+  AVANT la date du rendez-vous (délai négatif) — c'est ce réglage qu'il faut,
+  et le parcours ne contient alors que l'envoi.
 - Les seules conditions possibles portent sur "status" avec l'opérateur "eq" :
   "sent" (toujours sans réponse), "approved" (accepté), "paid" (payé),
   "unpaid" (impayé). Aucun autre opérateur n'existe.

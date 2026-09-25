@@ -187,9 +187,15 @@ export default function AutomationsReglages() {
                 ? 'Décrire une automatisation en français et laisser Lumi la construire.'
                 : 'Describe an automation in plain words and let Lumi build it.'}
             >
+              {/*
+                Texte corrigé le 2026-09-25 (P1-7 de l'audit) : il annonçait
+                « la génération arrive » alors qu'elle fonctionne depuis
+                #531. Un réglage qui décrit une fonctionnalité au futur
+                alors qu'elle est là fait douter du reste de la page.
+              */}
               <DejaEnPlace texte={fr
-                ? 'Le champ de description est déjà dans l’éditeur, sur un parcours vide. La génération par Lumi arrive.'
-                : 'The description field is already in the editor, on an empty path. Generation by Lumi is coming.'}
+                ? 'Déjà en place : décrivez votre automatisation dans l’éditeur et Lumi monte le parcours. Il PROPOSE — rien ne part tant que vous n’avez pas publié.'
+                : 'Already available: describe your automation in the editor and Lumi builds the journey. It only PROPOSES — nothing goes out until you publish.'}
               />
             </Carte>
           </>

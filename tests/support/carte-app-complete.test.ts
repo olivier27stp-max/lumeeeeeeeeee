@@ -16,6 +16,9 @@ const EXCLUES = new Set([
   '/', '/privacy', '/terms', '/subprocessors', '/pricing', '/checkout', '/checkout/success',
   '/apps/callback', '/email/callback', '/dev/plan-switch', '/creator-space/*', '/admin/migrations',
   '/company-settings', '/manage-team', '/settings/users', '/invoices', '/lume-agent', // redirections
+  // Les deux orthographes françaises de « paramètres » : de pures
+  // redirections vers /settings (P1-6), pas des écrans à décrire.
+  '/parametres', '/paramètres',
   '/settings/team/:memberId', '/settings/team/:memberId/profile', // fiche membre (détail de /settings/team)
 ]);
 
