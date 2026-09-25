@@ -1138,6 +1138,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'line_items',
+      labelFr: 'Lignes (services facturés)',
+      labelEn: 'Line items',
+      types: ['text'],
+      synonyms: [
+        'line items', 'line item', 'invoice items', 'items', 'products and services', 'services billed',
+        'lignes', 'lignes de facture', 'articles', 'services factures',
+      ],
+    },
+    {
       field: 'paid_amount',
       labelFr: 'Montant payé',
       labelEn: 'Paid amount',

@@ -19,6 +19,7 @@ import type {
   PostImportValidation,
   TargetEntity,
 } from './types';
+import { creerLignesImportees, lignesPourFacture, texteLignes } from './lignes-facture';
 
 // Taxes en premier : les services (taxable) et les documents s'y réfèrent.
 /** Libellés FR des entités pour la progression affichée dans la console. */
@@ -1623,6 +1624,17 @@ export async function runFinalImport(
           }
         }
       }
+    }
+
+    // Factures : leurs lignes (colonne « Line items » de Jobber, sinon une ligne
+    // « Montant importé ») — somme toujours égale au sous-total importé.
+    if (entity === 'invoice' && importedIds.length > 0) {
+      const importes = new Set(importedIds);
+      const r = await creerLignesImportees(admin, migration.org_id, toInsert.filter((c) => importes.has(c.rec.id)).map((c) => ({
+        id: c.id,
+        lignes: lignesPourFacture(texteLignes(c.rec.normalized ?? {}), Number(c.row.subtotal_cents) || 0),
+      })));
+      if (r.echecs > 0) console.error(`[migration-importer] ${r.echecs} facture(s) sans lignes après import`);
     }
 
     // Taxes importées : rattachées au groupe par défaut du bureau, sinon elles
