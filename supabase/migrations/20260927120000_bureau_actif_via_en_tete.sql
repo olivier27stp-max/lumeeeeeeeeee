@@ -7,9 +7,10 @@
 -- du compte, et current_org_id() retombait sur la membership la plus ancienne.
 --
 -- Défense en base, indépendante du code :
---  1. bureau_actif_demande() lit l'en-tête HTTP `x-org-id` que PostgREST expose
---     dans current_setting('request.headers'). Le navigateur le pose sur chaque
---     requête (src/lib/supabase.ts) ; le serveur Express l'exige déjà.
+--  1. bureau_actif_demande() lit l'en-tête HTTP que PostgREST expose dans
+--     current_setting('request.headers') : `x-lume-org` (posé par le navigateur
+--     sur chaque requête Supabase, src/lib/supabase.ts, SQL 20260926120000) ou,
+--     à défaut, `x-org-id` (convention de l'API Express).
 --  2. acces_bureau(p_user, p_org) = membre ET (aucun en-tête OU en-tête = p_org).
 --  3. Une policy RESTRICTIVE « bureau_actif » est posée sur CHAQUE table métier
 --     portant org_id : elle s'ajoute (ET logique) aux policies existantes, quel
@@ -36,7 +37,10 @@ declare
   v_brut text;
 begin
   begin
-    v_brut := nullif(trim(current_setting('request.headers', true)::jsonb ->> 'x-org-id'), '');
+    v_brut := coalesce(
+      nullif(trim(current_setting('request.headers', true)::jsonb ->> 'x-lume-org'), ''),
+      nullif(trim(current_setting('request.headers', true)::jsonb ->> 'x-org-id'), '')
+    );
   exception when others then
     return null; -- pas de contexte HTTP (cron, realtime, psql)
   end;
@@ -55,7 +59,7 @@ revoke all on function public.bureau_actif_demande() from public;
 grant execute on function public.bureau_actif_demande() to authenticated, anon, service_role;
 
 comment on function public.bureau_actif_demande() is
-  'Bureau sélectionné par le client (en-tête HTTP x-org-id via PostgREST), ou null hors contexte HTTP.';
+  'Bureau sélectionné par le client (en-tête HTTP x-lume-org, sinon x-org-id, via PostgREST), ou null hors contexte HTTP.';
 
 create or replace function public.acces_bureau(p_user uuid, p_org uuid)
 returns boolean
@@ -72,9 +76,11 @@ revoke all on function public.acces_bureau(uuid, uuid) from public;
 grant execute on function public.acces_bureau(uuid, uuid) to authenticated, service_role;
 
 comment on function public.acces_bureau(uuid, uuid) is
-  'Membre du bureau ET bureau = celui de l''en-tête x-org-id quand il est présent.';
+  'Membre du bureau ET bureau = celui de l''en-tête x-lume-org / x-org-id quand il est présent.';
 
 -- ── current_org_id() : l'en-tête d'abord, puis le claim JWT, puis le repli historique ──
+-- Remplace le corps posé par 20260926120000 (même ordre, même repli) : la lecture de
+-- l'en-tête passe par bureau_actif_demande() pour n'avoir qu'une seule définition.
 create or replace function public.current_org_id()
 returns uuid
 language plpgsql
@@ -92,7 +98,7 @@ begin
     return null;
   end if;
 
-  -- 1. Bureau sélectionné dans l'application (en-tête x-org-id), si le compte en est membre.
+  -- 1. Bureau sélectionné dans l'application (en-tête x-lume-org / x-org-id), si le compte en est membre.
   v_org := public.bureau_actif_demande();
   if v_org is not null and public.has_org_membership(v_user, v_org) then
     return v_org;
@@ -125,16 +131,23 @@ begin
   end if;
 
   if to_regclass('public.org_members') is not null then
-    execute 'select org_id from public.org_members where user_id = $1 order by created_at asc limit 1'
-      into v_org using v_user;
+    select m.org_id
+      into v_org
+      from public.org_members m
+     where m.user_id = v_user
+     order by m.org_id asc
+     limit 1;
     if v_org is not null then
       return v_org;
     end if;
   end if;
 
-  return null;
+  return v_user;
 end;
 $$;
+
+comment on function public.current_org_id() is
+  'Bureau courant : en-tête x-lume-org / x-org-id (bureau actif, adhésion vérifiée) → claim JWT org_id → plus ancienne adhésion → auth.uid().';
 
 -- ── Policy RESTRICTIVE « bureau_actif » sur chaque table métier portant org_id ──
 do $$

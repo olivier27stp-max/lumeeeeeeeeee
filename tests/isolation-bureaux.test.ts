@@ -73,11 +73,11 @@ describe('1. Source unique du bureau actif côté navigateur', () => {
 });
 
 describe('2. Chaque requête du navigateur porte x-org-id', () => {
-  it('le client Supabase injecte x-org-id depuis bureauActifSync()', () => {
+  it('le client Supabase injecte x-lume-org depuis la source unique (bureauActifSync)', () => {
     const s = lire('src/lib/supabase.ts');
-    expect(s).toMatch(/global:\s*\{\s*fetch:\s*fetchAvecBureau\s*\}/);
+    expect(s).toMatch(/global:\s*\{\s*fetch:\s*fetchAvecBureauActif\s*\}/);
     expect(s).toMatch(/bureauActifSync\(\)/);
-    expect(s).toMatch(/'x-org-id'/);
+    expect(s).toMatch(/headers\.set\('x-lume-org', org\)/);
   });
 
   it('le wrapper fetch /api lit la même source', () => {
@@ -150,6 +150,7 @@ describe('5. Défense en base : policy RESTRICTIVE « bureau_actif »', () => {
   it('lit l’en-tête x-org-id exposé par PostgREST, sans jamais lever d’erreur', () => {
     expect(sql).toMatch(/create or replace function public\.bureau_actif_demande\(\)/);
     expect(sql).toMatch(/request\.headers/);
+    expect(sql).toMatch(/'x-lume-org'/);
     expect(sql).toMatch(/'x-org-id'/);
     expect(sql).toMatch(/exception when others then\s+return null/);
   });
