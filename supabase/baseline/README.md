@@ -13,8 +13,8 @@ Ce dossier est la **source de vérité** pour créer un environnement neuf.
 
 | Fichier | Contient | Généré depuis |
 |---|---|---|
-| `01_schema.sql` | schémas `public`, `app`, `archive` : 199 tables, 11 vues, 306 fonctions, 537 policies, contraintes, index, triggers, privilèges | `pg_dump` de la prod, 2026-08-03 |
-| `02_post_schema.sql` | ce que `pg_dump` ne contient pas : extensions, 5 buckets + leurs 17 policies, publication temps réel (20 tables), 10 tâches `pg_cron`, trigger de création de compte sur `auth.users` | catalogue de la prod, 2026-08-03 |
+| `01_schema.sql` | les 10 extensions (en tête : le schéma en dépend), puis schémas `public`, `app`, `archive` : 254 tables, 15 vues, 407 fonctions, 675 policies, 263 triggers, contraintes, index, privilèges | `pg_dump` de la prod, 2026-09-25 |
+| `02_post_schema.sql` | ce que `pg_dump` ne contient pas : trigger de création de compte sur `auth.users`, 7 buckets + leurs 13 policies, publication temps réel (20 tables), 10 tâches `pg_cron` | catalogue de la prod, 2026-09-25 |
 
 Oublier `02` donne un environnement qui **a l'air** correct mais où les
 fichiers, le temps réel et les jobs de fond ne fonctionnent pas.
@@ -34,29 +34,28 @@ fichiers, le temps réel et les jobs de fond ne fonctionnent pas.
 
 ## Ce qui est prouvé, ce qui ne l'est pas
 
-- ✅ `01_schema.sql` a été **rejoué avec succès sur un PostgreSQL 17 vierge**
-  (Docker) le 2026-08-03 : 199 tables, 11 vues, 306 fonctions, 537 policies
-  créées, zéro erreur. Les compteurs correspondent exactement à la prod.
-- ✅ `02_post_schema.sql` : buckets, policies de stockage et publication temps
-  réel validés sur cette même base vierge (5 / 17 / 20, identiques à la prod).
-- ⚠️ Les extensions `pg_cron`, `pg_net` et `supabase_vault` — donc les 10 tâches
-  planifiées — **ne peuvent pas être testées hors Supabase**. Elles ont été
-  créées avec succès sur le projet staging le 2026-08-03, par ce même SQL.
+- ✅ **Rejoué de bout en bout le 2026-09-25** sur un conteneur vierge de l'image
+  Supabase `public.ecr.aws/supabase/postgres:17.6.1.167` : `01` puis `02`,
+  **zéro erreur** ; la base obtenue compte exactement ce que compte la prod
+  (254 tables, 15 vues, 407 fonctions, 675 policies, 7 buckets, 13 policies de
+  storage, 10 tâches, 20 tables temps réel). Deux objets créés sur un vrai projet
+  par les services Supabase (pas par l'image) ont été ajoutés au conteneur avant
+  le rejeu : `auth.jwt()` (service d'authentification) et les tables
+  `storage.buckets` / `storage.objects` (service de stockage).
 - ⚠️ Aucune **donnée** n'est incluse, sauf la table de référence `plans` qui,
   elle, doit être copiée depuis la prod (sinon aucun abonnement n'est possible).
   Pour peupler un environnement de test : `node scripts/qa-seed.mjs`.
 
 ## Maintenance
 
-Régénérer ce dossier après tout changement structurel important :
+Régénérer ce dossier après tout changement structurel (lecture seule de la prod) :
 
 ```bash
-docker run --rm -e PGPASSWORD="$SUPABASE_DB_PASSWORD" -v "$PWD/supabase/baseline:/out" postgres:17 \
-  pg_dump -h aws-1-ca-central-1.pooler.supabase.com -p 5432 \
-  -U postgres.<ref_prod> -d postgres --schema-only --no-owner \
-  -n public -n app -n archive -f /out/01_schema.sql
+node --env-file=.env.local scripts/regenerer-baseline.mjs
 ```
 
-Puis retirer du dump les lignes refusées sur un projet neuf :
-`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin`, `CREATE SCHEMA public`,
-`COMMENT ON SCHEMA public`, et les marqueurs `\restrict` / `\unrestrict`.
+Prérequis : Docker, et dans `.env.local` `SUPABASE_DB_PASSWORD` (mot de passe
+Postgres **prod**), `SUPABASE_PROJECT_REF_PROD`, `SUPABASE_ACCESS_TOKEN`. Le script
+retire les lignes qu'un projet neuf refuse, place les extensions en tête de `01`,
+relit `02` dans le catalogue, et refuse d'écrire une tâche `pg_cron` qui ressemble
+à un secret.
