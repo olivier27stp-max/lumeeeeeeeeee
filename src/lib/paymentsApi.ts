@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 import { deviceTokenHeader } from './deviceToken';
 import { PaymentMethod, PaymentStatus } from '../types';
 
@@ -199,8 +200,10 @@ export function paymentMethodLabel(method: string | null) {
 }
 
 export async function fetchPaymentsOverview(): Promise<PaymentsOverview> {
+  // Bureau actif explicite : p_org null = plus ancienne adhésion de l'utilisateur en base
+  // (un compte à deux bureaux voyait les chiffres de l'autre bureau).
   const { data, error } = await supabase.rpc('rpc_payments_overview_kpis', {
-    p_org: null,
+    p_org: await getCurrentOrgIdOrThrow(),
     p_now: new Date().toISOString(),
   });
 
@@ -229,7 +232,7 @@ export async function listPayments(query: ListPaymentsQuery): Promise<ListPaymen
     p_to: query.date === 'custom' ? query.toDate || null : null,
     p_limit: query.pageSize,
     p_offset: (query.page - 1) * query.pageSize,
-    p_org: null,
+    p_org: await getCurrentOrgIdOrThrow(), // bureau actif, jamais null (voir fetchPaymentsOverview)
   });
 
   if (error) throw error;

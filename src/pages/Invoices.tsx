@@ -353,7 +353,8 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
       const exportParams: Record<string, unknown> = {
         p_status: status === 'all' ? 'all' : status,
         p_range: 'all', p_sort: 'due_date_desc',
-        p_limit: 10000, p_offset: 0, p_q: q || null, p_from: null, p_to: null, p_org: null,
+        // Bureau actif explicite : p_org null = plus ancienne adhésion en base, pas le bureau affiché.
+        p_limit: 10000, p_offset: 0, p_q: q || null, p_from: null, p_to: null, p_org: await getCurrentOrgIdOrThrow(),
       };
       if (salesperson !== 'All') exportParams.p_salesperson = salesperson;
       // Le filtre « Champs » de la liste s'applique aussi à l'export.

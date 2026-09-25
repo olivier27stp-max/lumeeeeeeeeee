@@ -202,7 +202,10 @@ export function getInvoiceRowUiStatus(row: InvoiceRow) {
 }
 
 export async function fetchInvoicesKpis30d(): Promise<InvoiceKpis30d> {
-  const { data, error } = await supabase.rpc('rpc_invoices_kpis_30d', {});
+  // Bureau ACTIF explicite : sans p_org, current_org_id() en base retombe sur la PLUS ANCIENNE
+  // adhésion de l'utilisateur — un compte propriétaire de deux bureaux voyait ici les factures de
+  // l'autre bureau (Vision Lavage : 15 factures affichées au lieu de 645, 2026-09-24).
+  const { data, error } = await supabase.rpc('rpc_invoices_kpis_30d', { p_org: await getCurrentOrgIdOrThrow() });
   if (error) throw error;
 
   const row = Array.isArray(data) ? data[0] : data;
@@ -318,7 +321,9 @@ export async function listInvoices(query: InvoicesListQuery): Promise<InvoicesLi
     p_offset: (query.page - 1) * query.pageSize,
     p_from: query.fromDate || null,
     p_to: query.toDate || null,
-    p_org: null,
+    // Bureau actif explicite (voir fetchInvoicesKpis30d) : jamais null, sinon la base choisit
+    // la plus ancienne adhésion de l'utilisateur.
+    p_org: await getCurrentOrgIdOrThrow(),
   };
   // Only send p_salesperson when filtering — keeps the call compatible with
   // the pre-migration 9-arg rpc_list_invoices until 20260717000000 is applied.
