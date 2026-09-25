@@ -28,7 +28,7 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Undo2, Redo2, Cloud, Check, Loader2,
-  Play, Plus, Hand, Maximize2, ZoomIn, ZoomOut, Sparkles, X,
+  Play, Plus, Hand, Maximize2, ZoomIn, ZoomOut, Sparkles, X, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -64,6 +64,7 @@ import {
   FAMILLES_DECLENCHEURS,
   actionCompatible,
   champVisible,
+  configParDefaut,
   problemesAvantPublication,
   trouverAction,
 } from '../lib/automationCatalogue';
@@ -189,7 +190,11 @@ export default function AutomationBuilderPage() {
     const estLogique = cle === 'attendre' || cle === 'si' || cle === 'arreter';
     const nouvelle = estLogique
       ? etapeVierge(cle as TypeEtape, id)
-      : { ...etapeVierge('action', id), action: { type: cle, config: {} } };
+      // Une étape neuve naît COMPLÈTE : un courriel sans objet ni corps est
+      // refusé par le serveur, donc jamais enregistré — l'étape disparaissait
+      // au rechargement (signalé le 2026-09-25). Le texte proposé est un vrai
+      // brouillon, envoyable tel quel et réécrit en un clic.
+      : { ...etapeVierge('action', id), action: { type: cle, config: configParDefaut(cle, fr) } };
     memoriser(insererEtape(steps, nouvelle, ajoutEnCours.apresId, ajoutEnCours.branche));
     setEtapeChoisie(nouvelle.id);
     setAjoutEnCours(null);
@@ -465,6 +470,30 @@ export default function AutomationBuilderPage() {
    * l'enregistrement automatique échouait en boucle et l'utilisateur voyait
    * « Modifié » sans jamais comprendre pourquoi rien ne partait.
    */
+  /**
+   * Les problèmes du parcours, calculés EN CONTINU — pas seulement au clic
+   * sur « Publier ».
+   *
+   * Signalé le 2026-09-25 : « quand l'action ne concorde pas, je veux que le
+   * système le signale automatiquement, pour qu'on ne bâtisse pas des
+   * parcours qui ne marchent pas ». Découvrir à la publication qu'une action
+   * ne va pas avec son déclencheur, c'est le découvrir après avoir tout monté.
+   */
+  const problemesVivants = useMemo(
+    () => problemesAvantPublication({
+      trigger_event: regle?.trigger_event,
+      steps,
+      actions: regle?.actions,
+      conditions: (regle?.conditions ?? null) as Record<string, unknown> | null,
+      fr,
+    }),
+    [regle?.trigger_event, regle?.actions, regle?.conditions, steps, fr],
+  );
+  const bloquantsVivants = useMemo(
+    () => problemesVivants.filter((p) => p.gravite === 'bloquant'),
+    [problemesVivants],
+  );
+
   const etapesIncompletes = useMemo(
     () => steps.filter((e) => {
       if (e.type !== 'action') return false;
@@ -894,8 +923,49 @@ export default function AutomationBuilderPage() {
                     builder de GoHighLevel, et c'est celui qui sert vraiment :
                     un propriétaire d'entreprise sait dire ce qu'il veut, pas
                     poser des nœuds. ── */}
-                {steps.length === 0 ? (
-                  <div className="mx-auto flex max-w-xl flex-col items-center px-4">
+                {/* ── Le champ « Décris ton automatisation à Lumi » ──
+                    Il reste visible EN PERMANENCE, comme chez GoHighLevel :
+                    il disparaissait dès la première étape ajoutée, or c'est
+                    précisément quand un parcours existe qu'on veut demander
+                    « ajoute une relance » ou « et si le client ne répond pas ».
+                    Signalé le 2026-09-25 : « je mets une étape, l'IA n'est
+                    plus là ». ── */}
+                {/* ── Ce qui empêcherait le parcours de fonctionner ──
+                    Affiché PENDANT la construction, pas seulement au clic sur
+                    « Publier » : découvrir à la fin qu'une action ne va pas
+                    avec son déclencheur, c'est le découvrir trop tard.
+                    Cliquer un problème ouvre l'étape fautive. ── */}
+                {bloquantsVivants.length > 0 && (
+                  <div className="mx-auto mb-4 max-w-xl px-4">
+                    <div className="rounded-xl border border-danger/40 bg-danger/5 p-3">
+                      <p className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-danger">
+                        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                        {fr
+                          ? `${bloquantsVivants.length} chose(s) à corriger avant de publier`
+                          : `${bloquantsVivants.length} thing(s) to fix before publishing`}
+                      </p>
+                      <ul className="space-y-1">
+                        {bloquantsVivants.slice(0, 4).map((p, i) => (
+                          <li key={`${p.message}-${i}`}>
+                            {p.etapeId ? (
+                              <button
+                                type="button"
+                                onClick={() => setEtapeChoisie(p.etapeId!)}
+                                className="text-left text-[12px] text-text-secondary underline decoration-dotted underline-offset-2 transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                              >
+                                {p.message}
+                              </button>
+                            ) : (
+                              <span className="text-[12px] text-text-secondary">{p.message}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mx-auto mb-4 flex max-w-xl flex-col items-center px-4">
                     <div className="w-full rounded-2xl border border-border bg-surface-card p-5 shadow-sm">
                       <p className="mb-3 flex items-center justify-center gap-2 text-center text-sm font-medium text-text-primary">
                         <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" />
@@ -944,6 +1014,10 @@ export default function AutomationBuilderPage() {
                         ))}
                       </div>
                     </div>
+                </div>
+
+                {steps.length === 0 ? (
+                  <div className="mx-auto flex max-w-xl flex-col items-center px-4">
 
                     <span className="my-4 text-xs text-text-tertiary">{fr ? 'ou' : 'or'}</span>
 

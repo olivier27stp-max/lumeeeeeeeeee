@@ -33,7 +33,14 @@ function fichiers(dir: string, ext: RegExp, acc: string[] = []): string[] {
     const rel = join(dir, nom);
     const abs = resolve(RACINE, rel);
     if (statSync(abs).isDirectory()) fichiers(rel, ext, acc);
-    else if (ext.test(nom)) acc.push(rel);
+    // Chemins TOUJOURS en barres obliques.
+    //
+    // `join()` rend « src\pages\X.tsx » sous Windows, alors que toutes les
+    // listes d'exceptions ci-dessous sont écrites en « src/pages/X.tsx ».
+    // Un fichier pourtant autorisé n'y était donc pas reconnu, et ces
+    // gardes de sécurité échouaient sur un poste Windows tout en passant
+    // en CI — un test qui dépend du système ne protège plus personne.
+    else if (ext.test(nom)) acc.push(rel.split('\\').join('/'));
   }
   return acc;
 }
@@ -117,7 +124,11 @@ describe('4. companyOrgIds (groupe) uniquement pour le catalogue et les droits',
     'server/routes/invitations.ts',                 // sièges du plan
     'server/routes/creator-space-features.ts',      // plateforme (admins Lume seulement)
     'server/routes/creator-space-notes.ts',         // plateforme (admins Lume seulement)
-    'server/routes/creator-space-billing.ts',       // plateforme : abonnement Stripe du workspace (admins Lume seulement)
+    // Même famille, même garde : chaque route passe par `requireCreatorSpace`
+    // (vérifié le 2026-09-25). Le tableau de bord des abonnements lit
+    // forcément à l'échelle du groupe — un forfait vit sur UN bureau et
+    // couvre les autres. Aucun client n'y accède.
+    'server/routes/creator-space-billing.ts',       // plateforme (admins Lume seulement)
   ]);
   it('aucun autre fichier serveur ne lit des données à l’échelle du groupe', () => {
     const fautifs = SERVEUR.filter((f) => !AUTORISES.has(f) && /companyOrgIds\(/.test(lire(f)));

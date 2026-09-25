@@ -464,7 +464,23 @@ export default function Automations() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatut, setFilterStatut] = useState<'all' | 'publiee' | 'brouillon'>('all');
   /** Pagination, comme GHL : 10 par page par défaut. */
-  const [parPage, setParPage] = useState(10);
+  /**
+   * Combien de lignes par page — RETENU d'une visite à l'autre.
+   *
+   * Signalé le 2026-09-25 : choisir « 50 par page » et retrouver « 10 » au
+   * retour oblige à refaire le geste à chaque fois. C'est une préférence
+   * d'affichage propre au navigateur : `localStorage` suffit, et une valeur
+   * illisible (stockage bloqué, mode privé, valeur trafiquée) retombe
+   * proprement sur 10.
+   */
+  const [parPage, setParPage] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem('lume-automations-par-page'));
+      return [10, 25, 50].includes(n) ? n : 10;
+    } catch {
+      return 10;
+    }
+  });
   const [page, setPage] = useState(1);
 
   useEffect(() => { getAutomationLanguage().then(setOrgLang).catch(() => {}); }, []);
@@ -1635,7 +1651,15 @@ export default function Automations() {
               <select
                 id="par-page"
                 value={parPage}
-                onChange={(e) => { setParPage(Number(e.target.value)); setPage(1); }}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  setParPage(n);
+                  setPage(1);
+                  // Retenu pour les prochaines visites. Le stockage peut être
+                  // indisponible (mode privé, cookies bloqués) : ça ne doit
+                  // jamais empêcher de changer la pagination.
+                  try { localStorage.setItem('lume-automations-par-page', String(n)); } catch { /* préférence perdue, sans conséquence */ }
+                }}
                 className="glass-input ml-1 py-1 text-[12px]"
               >
                 {[10, 25, 50].map((n) => (
