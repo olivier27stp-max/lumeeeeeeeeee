@@ -53,6 +53,8 @@ interface CompanyDetails {
   logo_url: string;
   /** Accent des documents client. Vide = encre noire, le défaut. */
   brand_color: string;
+  /** Préfixe des numéros de factures et soumissions de CE bureau (ex. CL → CL-1042). Vide = aucun. */
+  prefixe_documents: string;
   /**
    * La langue dans laquelle l'entreprise écrit À SES CLIENTS : courriels,
    * textos, soumissions, factures, pages publiques, automatisations.
@@ -99,6 +101,7 @@ const EMPTY_COMPANY: CompanyDetails = {
   weather_lng: null,
   logo_url: '',
   brand_color: '',
+  prefixe_documents: '',
   revenue_goal_cents: 0,
   currency: 'CAD',
   social_links: {},
@@ -165,6 +168,7 @@ export default function CompanySettings() {
             weather_lng: data.weather_lng ?? null,
             logo_url: data.logo_url || '',
             brand_color: data.brand_color || '',
+            prefixe_documents: data.prefixe_documents || '',
             default_language: data.default_language === 'en' ? 'en' : 'fr',
             revenue_goal_cents: Number(data.revenue_goal_cents) || 0,
             currency: data.currency || 'CAD',
@@ -209,6 +213,14 @@ export default function CompanySettings() {
       toast.error(language === 'fr' ? 'Adresse du site web invalide.' : 'Invalid website URL.');
       return;
     }
+    // Préfixe des numéros : lettres majuscules, 1 à 5 (contrainte en base).
+    const prefixe = form.prefixe_documents.trim().toUpperCase();
+    if (prefixe && !/^[A-Z]{1,5}$/.test(prefixe)) {
+      toast.error(language === 'fr'
+        ? 'Le préfixe des numéros doit contenir de 1 à 5 lettres (ex. CL).'
+        : 'The number prefix must be 1 to 5 letters (e.g. CL).');
+      return;
+    }
     // Réseaux sociaux : même tolérance que le site web (préfixe https://
     // ajouté), un lien invalide bloque la sauvegarde en nommant le réseau.
     const socialLinks: SocialLinks = {};
@@ -246,6 +258,7 @@ export default function CompanySettings() {
         logo_url: form.logo_url.trim(),
         // Vide → null : la colonne a un CHECK sur le format hex.
         brand_color: form.brand_color.trim() || null,
+        prefixe_documents: prefixe || null,
         default_language: form.default_language === 'en' ? 'en' : 'fr',
         revenue_goal_cents: Math.max(0, Math.round(form.revenue_goal_cents || 0)),
         currency: form.currency || 'CAD',
@@ -542,6 +555,29 @@ export default function CompanySettings() {
               className="glass-input w-full mt-1"
               placeholder="info@company.com"
             />
+          </div>
+
+          <div>
+            <label htmlFor={`${id}-prefixe`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+              {language === 'fr' ? 'Préfixe des numéros (factures et soumissions)' : 'Number prefix (invoices and quotes)'}
+            </label>
+            <input id={`${id}-prefixe`}
+              type="text"
+              maxLength={5}
+              value={form.prefixe_documents}
+              onChange={(e) => update('prefixe_documents', e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+              className="glass-input w-full mt-1 uppercase"
+              placeholder={language === 'fr' ? 'Ex. CL' : 'e.g. CL'}
+            />
+            <p className="text-[12px] text-text-tertiary mt-1">
+              {form.prefixe_documents
+                ? (language === 'fr'
+                  ? `Les prochaines factures et soumissions de ce bureau seront numérotées ${form.prefixe_documents}-1042. Les documents existants gardent leur numéro.`
+                  : `Upcoming invoices and quotes from this office will be numbered ${form.prefixe_documents}-1042. Existing documents keep their number.`)
+                : (language === 'fr'
+                  ? 'Utile avec plusieurs bureaux : chaque bureau a son préfixe, et deux bureaux n’ont plus le même numéro de facture.'
+                  : 'Useful with several offices: each office gets its prefix, so two offices never share an invoice number.')}
+            </p>
           </div>
         </div>
 
