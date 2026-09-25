@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Loader2 } from 'lucide-react';
 import { usePlanFeature, type PlanFeatureFlag } from '../hooks/usePlanFeature';
 import PlanUpgradeModal from './PlanUpgradeModal';
 import { useTranslation } from '../i18n';
@@ -31,7 +32,19 @@ export default function PlanFeatureGate({ flag, fallback, children }: PlanFeatur
     }
   }, [loading, hasFeature, platformBlocked]);
 
-  if (loading) return null;
+  // Pendant la vérification du forfait, on montre qu'il se passe quelque
+  // chose. `return null` affichait une page VIDE : l'utilisateur croyait que
+  // le lien n'avait pas marché et recliquait — au second clic le forfait
+  // était en cache, donc « il faut cliquer deux fois ». Signalé le
+  // 2026-09-25 sur Paramètres → Formulaire de demande.
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[240px]" role="status" aria-live="polite">
+        <Loader2 size={22} className="animate-spin text-text-tertiary" aria-hidden="true" />
+        <span className="sr-only">{fr ? 'Chargement…' : 'Loading…'}</span>
+      </div>
+    );
+  }
   if (hasFeature) return <>{children}</>;
 
   // Bloqué par la plateforme (Creator Space) : proposer un forfait supérieur

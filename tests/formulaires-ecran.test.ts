@@ -91,9 +91,12 @@ describe('la barre des formulaires', () => {
     expect(s).toMatch(/Nouveau formulaire/);
   });
 
-  it('ne s affiche pas quand il n y a qu un seul formulaire', () => {
-    // Avec un seul, elle n'apprend rien et vole de la place.
-    expect(ecran()).toContain('formulaires.length > 1 || !form');
+  it('reste visible MÊME avec un seul formulaire', () => {
+    // J'avais écrit l'inverse le 2026-09-25 : « avec un seul, elle n'apprend
+    // rien et vole de la place ». Faux — c'est elle qui porte « + Nouveau
+    // formulaire », donc la cacher rendait impossible d'en créer un second.
+    // Le cas d'un seul formulaire est celui de TOUT LE MONDE au départ.
+    expect(ecran()).not.toContain('formulaires.length > 1 || !form');
   });
 
   it('la liste suit une création sans recharger la page', () => {
