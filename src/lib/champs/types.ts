@@ -108,7 +108,7 @@ export function variableModele(objet: ObjetChamp, cle: string): string {
 
 export const LIBELLES_OBJET: Record<ObjetChamp, { fr: string; en: string }> = {
   client: { fr: 'Client', en: 'Client' },
-  deal: { fr: 'Opportunité', en: 'Opportunity' },
+  deal: { fr: 'Pipeline', en: 'Pipeline' },
   job: { fr: 'Job', en: 'Job' },
   quote: { fr: 'Devis', en: 'Quote' },
   invoice: { fr: 'Facture', en: 'Invoice' },

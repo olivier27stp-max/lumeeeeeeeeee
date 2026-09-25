@@ -18,7 +18,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  ChevronDown, Copy, FolderOpen, FolderPlus, Lock, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2, Layers, Sparkles,
+  ArrowDown, ArrowUp, ChevronDown, Copy, FolderOpen, FolderPlus, Lock, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2, Layers, Sparkles,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
@@ -161,6 +161,27 @@ export default function ChampsPersoSettings() {
       await recharger();
     } catch (err) {
       console.error('[ChampsPerso] déplacement', err);
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  // Ordre d'affichage (fiches, fenêtres de création) : parmi les champs du même
+  // objet et du même dossier. Les positions sont renumérotées 0..n pour rester nettes.
+  const voisins = (c: ChampPerso) => (data?.fields ?? [])
+    .filter((x) => x.object_type === c.object_type && (x.folder_id ?? null) === (c.folder_id ?? null) && !x.archived_at)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.created_at.localeCompare(b.created_at));
+  const bouger = async (c: ChampPerso, sens: -1 | 1) => {
+    setMenu(null);
+    const liste = voisins(c);
+    const i = liste.findIndex((x) => x.id === c.id);
+    const j = i + sens;
+    if (i < 0 || j < 0 || j >= liste.length) return;
+    [liste[i], liste[j]] = [liste[j], liste[i]];
+    try {
+      await Promise.all(liste.map((x, pos) => (x.position === pos ? null : modifierChamp(x.id, { position: pos }))));
+      await recharger();
+    } catch (err) {
+      console.error('[ChampsPerso] ordre', err);
       toast.error(err instanceof Error ? err.message : String(err));
     }
   };
@@ -400,6 +421,20 @@ export default function ChampsPersoSettings() {
                                           <Pencil size={13} aria-hidden />{fr ? 'Modifier' : 'Edit'}
                                         </button>
                                       )}
+                                      {!l.champ.archived_at && (() => {
+                                        const liste = voisins(l.champ);
+                                        const i = liste.findIndex((x) => x.id === l.champ.id);
+                                        return (
+                                          <>
+                                            <button role="menuitem" type="button" disabled={i <= 0} onClick={() => { void bouger(l.champ, -1); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-surface-secondary disabled:opacity-40">
+                                              <ArrowUp size={13} aria-hidden />{fr ? 'Monter' : 'Move up'}
+                                            </button>
+                                            <button role="menuitem" type="button" disabled={i < 0 || i >= liste.length - 1} onClick={() => { void bouger(l.champ, 1); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-surface-secondary disabled:opacity-40">
+                                              <ArrowDown size={13} aria-hidden />{fr ? 'Descendre' : 'Move down'}
+                                            </button>
+                                          </>
+                                        );
+                                      })()}
                                       {!l.champ.archived_at && (
                                         <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase text-text-tertiary">{fr ? 'Déplacer vers' : 'Move to'}</div>
                                       )}

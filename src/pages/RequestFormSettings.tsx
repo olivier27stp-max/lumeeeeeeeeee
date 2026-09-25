@@ -145,7 +145,7 @@ function FieldEditor({
             {(['deal', 'client'] as const).map((o) => {
               const liste = champsPerso.filter((c) => c.object_type === o);
               return liste.length ? (
-                <optgroup key={o} label={o === 'deal' ? (isFr ? 'Opportunité' : 'Opportunity') : 'Client'}>
+                <optgroup key={o} label={o === 'deal' ? 'Pipeline' : 'Client'}>
                   {liste.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </optgroup>
               ) : null;
