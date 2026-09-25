@@ -29,6 +29,9 @@ env_get() { grep "^$1=" .env.local | head -1 | cut -d= -f2- | tr -d '"' | tr -d 
 STAGING_REF="$(env_get SUPABASE_PROJECT_REF)"
 PROD_REF="$(env_get SUPABASE_PROJECT_REF_PROD)"
 DB_PASS="$(env_get SUPABASE_DB_PASSWORD)"
+# Mot de passe par l'environnement, jamais dans la ligne de commande (visible
+# dans la liste des processus et affiché par toute trace) — incident 2026-09-25.
+export PGPASSWORD="$DB_PASS"
 
 [ -n "$STAGING_REF" ] && [ -n "$PROD_REF" ] && [ -n "$DB_PASS" ] || {
   echo "ERREUR: SUPABASE_PROJECT_REF, SUPABASE_PROJECT_REF_PROD et SUPABASE_DB_PASSWORD requis dans .env.local" >&2
@@ -47,7 +50,7 @@ fi
 find_host() {
   local ref="$1"
   for h in aws-0-ca-central-1.pooler.supabase.com aws-1-ca-central-1.pooler.supabase.com; do
-    if docker run --rm -e PGPASSWORD="$DB_PASS" postgres:17 \
+    if docker run --rm -e PGPASSWORD postgres:17 \
          psql -h "$h" -p 5432 -U "postgres.$ref" -d postgres -tAc 'select 1' >/dev/null 2>&1; then
       echo "$h"; return 0
     fi
@@ -65,7 +68,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "→ Dump du schéma de la prod ($PROD_REF)…"
-docker run --rm -e PGPASSWORD="$DB_PASS" -v "$TMP:/out" postgres:17 \
+docker run --rm -e PGPASSWORD -v "$TMP:/out" postgres:17 \
   pg_dump -h "$PROD_HOST" -p 5432 -U "postgres.$PROD_REF" -d postgres \
   --schema-only --no-owner -n public -n app -n archive -f /out/schema.sql
 
@@ -82,7 +85,7 @@ echo "→ Remise à zéro du staging ($STAGING_REF)…"
 # recréer. La conformité stricte serait alors impossible à retrouver.
 # Les objets appartenant à une extension (pg_net vit dans public) sont
 # épargnés, sinon l'extension casse.
-docker run --rm -e PGPASSWORD="$DB_PASS" postgres:17 \
+docker run --rm -e PGPASSWORD postgres:17 \
   psql -h "$STAGING_HOST" -p 5432 -U "postgres.$STAGING_REF" -d postgres -v ON_ERROR_STOP=1 -c "
     drop schema if exists app cascade;
     drop schema if exists archive cascade;
@@ -161,12 +164,12 @@ docker run --rm -e PGPASSWORD="$DB_PASS" postgres:17 \
   " >/dev/null
 
 echo "→ Restauration du schéma…"
-docker run --rm -e PGPASSWORD="$DB_PASS" -v "$TMP:/out" postgres:17 \
+docker run --rm -e PGPASSWORD -v "$TMP:/out" postgres:17 \
   psql -h "$STAGING_HOST" -p 5432 -U "postgres.$STAGING_REF" -d postgres \
   --single-transaction -v ON_ERROR_STOP=1 -f /out/schema_clean.sql >/dev/null
 
 echo "→ Réapplication de ce que pg_dump ignore (baseline 02)…"
-docker run --rm -e PGPASSWORD="$DB_PASS" -v "$PWD/supabase/baseline:/bl" postgres:17 \
+docker run --rm -e PGPASSWORD -v "$PWD/supabase/baseline:/bl" postgres:17 \
   psql -h "$STAGING_HOST" -p 5432 -U "postgres.$STAGING_REF" -d postgres \
   -f /bl/02_post_schema.sql 2>&1 | grep -iE '^psql:.*ERROR' | grep -viE 'already exists|existe déjà' || true
 
@@ -176,7 +179,7 @@ echo "→ Alignement des privilèges sur la prod…"
 python3 scripts/sync-acl-from-prod.py
 
 echo "→ Rechargement du cache PostgREST…"
-docker run --rm -e PGPASSWORD="$DB_PASS" postgres:17 \
+docker run --rm -e PGPASSWORD postgres:17 \
   psql -h "$STAGING_HOST" -p 5432 -U "postgres.$STAGING_REF" -d postgres \
   -c "notify pgrst, 'reload schema';" >/dev/null
 
