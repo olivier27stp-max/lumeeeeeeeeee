@@ -67,3 +67,16 @@ describe('modèles de champs par métier', () => {
     expect(b).toMatch(/void installerModele\(admin, auth\.orgId, industry\)\s*\.catch\(/);
   });
 });
+
+describe('drapeau custom_fields_v2 pour tous (migration 20260926101000)', () => {
+  const sql = lire('supabase/migrations/20260926101000_champs_perso_pour_tous.sql');
+  it('entreprises existantes : allumé, sans écraser un drapeau éteint à dessein', () => {
+    expect(sql).toMatch(/insert into public\.org_features[\s\S]*'custom_fields_v2', true[\s\S]*on conflict \(org_id, feature\) do nothing;/);
+    expect(sql).toContain("o.name not like 'zz-%'");
+  });
+  it('nouvelle entreprise : allumé à la création, sans jamais pouvoir la bloquer', () => {
+    expect(sql).toMatch(/after insert on public\.orgs/);
+    expect(sql).toMatch(/exception when others then/);
+    expect(sql).toContain('revoke all on function public.org_activer_champs_perso() from public, anon, authenticated;');
+  });
+});
