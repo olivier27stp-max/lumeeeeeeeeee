@@ -10,6 +10,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CompanyContext } from '../src/contexts/CompanyContext';
 import type { CompanyContextValue, CompanyMembership } from '../src/contexts/CompanyContext';
 import { MemoryRouter } from 'react-router-dom';
+const quota = { can_create: true };
+vi.mock('../src/lib/officesApi', () => ({
+  listOffices: async () => ({ offices: [], capacity: 2, used: 2, caller_role: 'owner', can_create: quota.can_create }),
+}));
 import { OfficeSwitcher } from '../src/components/OfficeSwitcher';
 
 const ORG_A = '11111111-1111-1111-1111-111111111111';
@@ -194,5 +198,25 @@ describe('OfficeSwitcher (header pill)', () => {
     expect(container.textContent).not.toContain('Create office');
     clickByText('Bureau Québec');
     expect(switchCompany).toHaveBeenCalledWith(ORG_B);
+  });
+
+  it('owner: « Create office » only when the office quota allows it', async () => {
+    for (const permet of [false, true]) {
+      quota.can_create = permet;
+      act(() => {
+        root.render(
+          <MemoryRouter>
+          <CompanyContext.Provider value={makeCtx(vi.fn())}>
+            <OfficeSwitcher key={String(permet)} />
+          </CompanyContext.Provider>
+          </MemoryRouter>,
+        );
+      });
+      openTrigger();
+      await act(async () => { await Promise.resolve(); });
+      if (permet) expect(container.textContent).toContain('Create office');
+      else expect(container.textContent).not.toContain('Create office');
+      openTrigger(); // referme
+    }
   });
 });
