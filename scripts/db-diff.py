@@ -46,14 +46,16 @@ def env_password():
 
 def dump(target, password, out_path):
     cmd = [
-        "docker", "run", "--rm", "-e", f"PGPASSWORD={password}",
+        # Le mot de passe passe par l'environnement, jamais par la ligne de
+        # commande : une erreur de subprocess affiche la commande en clair.
+        "docker", "run", "--rm", "-e", "PGPASSWORD",
         "postgres:17", "pg_dump",
         "-h", target["host"], "-p", "5432",
         "-U", f"postgres.{target['ref']}", "-d", "postgres",
         "--schema-only", "--no-owner", "-n", "public", "-n", "app", "-n", "archive",
     ]
     with open(out_path, "w") as f:
-        subprocess.run(cmd, stdout=f, check=True)
+        subprocess.run(cmd, stdout=f, check=True, env={**os.environ, "PGPASSWORD": password})
 
 
 def parse(path):
