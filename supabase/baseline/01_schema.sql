@@ -301,6 +301,126 @@ end $$;
 
 
 --
+-- Name: _portee_bureaux_complets(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._portee_bureaux_complets(p_user uuid) RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select m.org_id from public.memberships m
+  where m.user_id = p_user and m.status = 'active'
+    and (m.role in ('owner', 'admin') or coalesce(m.scope, 'company') = 'company');
+$$;
+
+
+--
+-- Name: _portee_clients(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._portee_clients(p_user uuid) RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  with p as (select public._portee_personnes(p_user) as u),
+       b as (select org_id from public._portee_restreinte(p_user))
+  select c.id from public.clients c
+  where c.org_id in (select org_id from b)
+    and (c.created_by in (select u from p) or c.assigned_to in (select u from p))
+  union
+  select j.client_id from public.jobs j
+  where j.client_id is not null and j.id in (select public._portee_jobs(p_user))
+  union
+  select q.client_id from public.quotes q
+  where q.org_id in (select org_id from b) and q.client_id is not null
+    and (q.created_by in (select u from p) or q.salesperson_id in (select u from p))
+  union
+  select i.client_id from public.invoices i
+  where i.org_id in (select org_id from b) and i.client_id is not null
+    and (i.created_by in (select u from p) or i.salesperson_id in (select u from p));
+$$;
+
+
+--
+-- Name: FUNCTION _portee_clients(p_user uuid); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public._portee_clients(p_user uuid) IS 'Clients visibles pour p_user dans ses bureaux à portée restreinte (self/assigned/team) : les siens, et ceux de ses jobs/soumissions/factures. Serveur seulement.';
+
+
+--
+-- Name: _portee_equipes(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._portee_equipes(p_user uuid) RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select m.team_id from public.memberships m
+  join public._portee_restreinte(p_user) r on r.org_id = m.org_id and r.scope = 'team'
+  where m.user_id = p_user and m.team_id is not null
+  union
+  select ta.team_id from public.team_assignments ta
+  join public._portee_restreinte(p_user) r on r.org_id = ta.org_id and r.scope = 'team'
+  where ta.user_id = p_user;
+$$;
+
+
+--
+-- Name: _portee_jobs(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._portee_jobs(p_user uuid) RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  with p as (select public._portee_personnes(p_user) as u),
+       e as (select public._portee_equipes(p_user) as t),
+       b as (select org_id from public._portee_restreinte(p_user))
+  select j.id from public.jobs j
+  where j.org_id in (select org_id from b)
+    and (j.created_by in (select u from p) or j.salesperson_id in (select u from p)
+         or j.assigned_user_id in (select u from p) or j.team_id in (select t from e))
+  union
+  select se.job_id from public.schedule_events se
+  where se.org_id in (select org_id from b) and se.job_id is not null
+    and (se.assigned_user in (select u from p) or se.team_id in (select t from e));
+$$;
+
+
+--
+-- Name: _portee_personnes(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._portee_personnes(p_user uuid) RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select p_user
+  union
+  select m.user_id from public.memberships m
+  where m.status = 'active' and m.team_id in (select public._portee_equipes(p_user))
+  union
+  select ta.user_id from public.team_assignments ta
+  where ta.team_id in (select public._portee_equipes(p_user));
+$$;
+
+
+--
+-- Name: _portee_restreinte(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._portee_restreinte(p_user uuid) RETURNS TABLE(org_id uuid, scope text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select m.org_id, m.scope from public.memberships m
+  where m.user_id = p_user and m.status = 'active'
+    and m.role not in ('owner', 'admin') and m.scope in ('self', 'assigned', 'team');
+$$;
+
+
+--
 -- Name: _taxe_defaut_bureau(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9020,10 +9140,10 @@ $$;
 
 
 --
--- Name: ingest_lead(uuid, text, text, text, text, text, text, text, text, text, text, text, text, text, text, jsonb, boolean, uuid); Type: FUNCTION; Schema: public; Owner: -
+-- Name: ingest_lead(uuid, text, text, text, text, text, text, text, text, text, text, text, text, text, text, jsonb, boolean, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.ingest_lead(p_org_id uuid, p_source text, p_external_id text DEFAULT NULL::text, p_first_name text DEFAULT NULL::text, p_last_name text DEFAULT NULL::text, p_company text DEFAULT NULL::text, p_email text DEFAULT NULL::text, p_phone text DEFAULT NULL::text, p_address text DEFAULT NULL::text, p_notes text DEFAULT NULL::text, p_utm_source text DEFAULT NULL::text, p_utm_medium text DEFAULT NULL::text, p_utm_campaign text DEFAULT NULL::text, p_utm_content text DEFAULT NULL::text, p_fbclid text DEFAULT NULL::text, p_payload jsonb DEFAULT '{}'::jsonb, p_dedup boolean DEFAULT true, p_created_by uuid DEFAULT NULL::uuid) RETURNS jsonb
+CREATE FUNCTION public.ingest_lead(p_org_id uuid, p_source text, p_external_id text DEFAULT NULL::text, p_first_name text DEFAULT NULL::text, p_last_name text DEFAULT NULL::text, p_company text DEFAULT NULL::text, p_email text DEFAULT NULL::text, p_phone text DEFAULT NULL::text, p_address text DEFAULT NULL::text, p_notes text DEFAULT NULL::text, p_utm_source text DEFAULT NULL::text, p_utm_medium text DEFAULT NULL::text, p_utm_campaign text DEFAULT NULL::text, p_utm_content text DEFAULT NULL::text, p_fbclid text DEFAULT NULL::text, p_payload jsonb DEFAULT '{}'::jsonb, p_dedup boolean DEFAULT true, p_created_by uuid DEFAULT NULL::uuid, p_pipeline_id uuid DEFAULT NULL::uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -9043,8 +9163,6 @@ begin
     raise exception 'org_id requis';
   end if;
 
-  -- Sans session, il faut un auteur explicite : c'est ce qu'exige
-  -- `crm_enforce_scope` sur clients et deals.
   if v_auteur is null then
     select user_id into v_auteur
     from public.memberships
@@ -9058,7 +9176,6 @@ begin
   end if;
 
   -- 2a. Idempotence : la même soumission ne crée jamais deux deals.
-  --     C'est la première chose vérifiée, avant toute écriture.
   if p_external_id is not null then
     select id into v_deal
     from public.deals
@@ -9073,12 +9190,23 @@ begin
     end if;
   end if;
 
-  -- 2b. Le pipeline par défaut de l'organisation, et sa première étape
-  --     ouverte PAR POSITION — jamais par nom (décision 5 du plan).
-  select id into v_pipeline
-  from public.pipelines_ventes
-  where org_id = p_org_id and is_default
-  limit 1;
+  -- 2b. Le pipeline DEMANDÉ s'il existe encore dans cette organisation,
+  --     sinon celui par défaut. Le repli est volontaire : perdre la demande
+  --     d'un client parce qu'un pipeline a été supprimé serait pire que de
+  --     la classer au mauvais endroit.
+  if p_pipeline_id is not null then
+    select id into v_pipeline
+    from public.pipelines_ventes
+    where id = p_pipeline_id and org_id = p_org_id
+    limit 1;
+  end if;
+
+  if v_pipeline is null then
+    select id into v_pipeline
+    from public.pipelines_ventes
+    where org_id = p_org_id and is_default
+    limit 1;
+  end if;
 
   if v_pipeline is null then
     v_pipeline := public.seed_pipeline_ventes(p_org_id, 'generique');
@@ -9091,12 +9219,27 @@ begin
   order by position
   limit 1;
 
+  -- Le pipeline visé n'a aucune étape ouverte : on retombe sur le défaut
+  -- plutôt que de refuser le lead.
+  if v_etape is null and p_pipeline_id is not null then
+    select id into v_pipeline
+    from public.pipelines_ventes
+    where org_id = p_org_id and is_default
+    limit 1;
+
+    select id into v_etape
+    from public.pipeline_stages
+    where org_id = p_org_id and pipeline_id = v_pipeline
+      and kind = 'open' and archived_at is null
+    order by position
+    limit 1;
+  end if;
+
   if v_etape is null then
     raise exception 'Aucune étape ouverte dans le pipeline de cette organisation';
   end if;
 
-  -- 2c. Rapprochement (Q4) : téléphone E.164 OU courriel en minuscules,
-  --     dans la même organisation. Le plus récemment actif gagne.
+  -- 2c. Rapprochement : téléphone E.164 OU courriel en minuscules.
   if p_dedup and (v_tel is not null or v_courriel is not null) then
     select id into v_client
     from public.clients
@@ -9135,7 +9278,6 @@ begin
     )
     returning id into v_client;
   else
-    -- Contact retrouvé : on complète les trous, on n'écrase jamais.
     update public.clients set
       email   = coalesce(email, v_courriel),
       phone   = coalesce(phone, nullif(btrim(coalesce(p_phone, '')), '')),
@@ -9146,12 +9288,15 @@ begin
     where id = v_client;
   end if;
 
-  -- 2e. Un deal OUVERT existe déjà pour ce contact ? On n'en crée pas un
-  --     second : le nouveau lead devient une activité sur celui-là.
+  -- 2e. Un deal OUVERT existe déjà pour ce contact DANS CE PIPELINE ?
+  --     On n'en crée pas un second. La restriction au pipeline est le
+  --     changement : un même client peut légitimement avoir un deal en
+  --     porte-à-porte ET un deal publicitaire — ce sont deux affaires.
   select d.id into v_deal_ouvert
   from public.deals d
   join public.pipeline_stages s on s.id = d.stage_id
   where d.org_id = p_org_id and d.client_id = v_client
+    and d.pipeline_id = v_pipeline
     and d.deleted_at is null and s.kind = 'open'
   order by d.created_at desc
   limit 1;
@@ -9174,10 +9319,7 @@ begin
       'raison', 'deal_ouvert_existant');
   end if;
 
-  -- 2f. Nouveau deal. NON ASSIGNÉ, première étape ouverte (décision 5).
-  --     Les horodatages, l'historique et l'événement sont posés par les
-  --     triggers : ce chemin produit exactement le même résultat qu'un
-  --     glisser-déposer dans l'écran.
+  -- 2f. Nouveau deal. NON ASSIGNÉ, première étape ouverte.
   insert into public.deals (
     org_id, pipeline_id, stage_id, client_id, source, external_id,
     utm_source, utm_medium, utm_campaign, utm_content, fbclid, raw_payload,
@@ -9199,10 +9341,10 @@ $$;
 
 
 --
--- Name: FUNCTION ingest_lead(p_org_id uuid, p_source text, p_external_id text, p_first_name text, p_last_name text, p_company text, p_email text, p_phone text, p_address text, p_notes text, p_utm_source text, p_utm_medium text, p_utm_campaign text, p_utm_content text, p_fbclid text, p_payload jsonb, p_dedup boolean, p_created_by uuid); Type: COMMENT; Schema: public; Owner: -
+-- Name: FUNCTION ingest_lead(p_org_id uuid, p_source text, p_external_id text, p_first_name text, p_last_name text, p_company text, p_email text, p_phone text, p_address text, p_notes text, p_utm_source text, p_utm_medium text, p_utm_campaign text, p_utm_content text, p_fbclid text, p_payload jsonb, p_dedup boolean, p_created_by uuid, p_pipeline_id uuid); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.ingest_lead(p_org_id uuid, p_source text, p_external_id text, p_first_name text, p_last_name text, p_company text, p_email text, p_phone text, p_address text, p_notes text, p_utm_source text, p_utm_medium text, p_utm_campaign text, p_utm_content text, p_fbclid text, p_payload jsonb, p_dedup boolean, p_created_by uuid) IS 'Porte d''entrée unique des leads (formulaire public, création manuelle, futurs canaux), en UNE transaction. Idempotente sur (org, source, external_id). Rapproche sur téléphone E.164 ou courriel (décision Q4) ; si le contact a un deal ouvert, le lead s''y ajoute au lieu de créer un doublon.';
+COMMENT ON FUNCTION public.ingest_lead(p_org_id uuid, p_source text, p_external_id text, p_first_name text, p_last_name text, p_company text, p_email text, p_phone text, p_address text, p_notes text, p_utm_source text, p_utm_medium text, p_utm_campaign text, p_utm_content text, p_fbclid text, p_payload jsonb, p_dedup boolean, p_created_by uuid, p_pipeline_id uuid) IS 'Entree unique des leads. p_pipeline_id dirige le lead vers un pipeline precis (formulaire dedie aux publicites, a la carte terrain...) ; sans lui, le pipeline par defaut, comme avant (2026-09-25).';
 
 
 --
@@ -10325,6 +10467,23 @@ $$;
 --
 
 COMMENT ON FUNCTION public.migration_staging_counts(p_migration_id uuid) IS 'Lignes de staging d''une migration par entité et statut (fiche console + portail). Service role seulement.';
+
+
+--
+-- Name: miroir_logo_suivi_marque(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.miroir_logo_suivi_marque() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+begin
+  if new.suit_marque_entreprise and (tg_op = 'INSERT' or not old.suit_marque_entreprise) then
+    update public.orgs set logo_url = new.logo_url where id = new.org_id and logo_url is distinct from new.logo_url;
+  end if;
+  return new;
+end;
+$$;
 
 
 --
@@ -12187,6 +12346,56 @@ $$;
 --
 
 COMMENT ON FUNCTION public.pipeline_vitesse(p_from date, p_to date) IS 'Délai moyen de premier contact et taux de closing par tranche (< 1 h, < 24 h, > 24 h), plus la durée moyenne du cycle. Un taux sur zéro deal fermé rend NULL, pas 0 % — la nuance change la lecture.';
+
+
+--
+-- Name: portee_bureaux_complets(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.portee_bureaux_complets() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select public._portee_bureaux_complets(auth.uid()) $$;
+
+
+--
+-- Name: portee_clients(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.portee_clients() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select public._portee_clients(auth.uid()) $$;
+
+
+--
+-- Name: portee_equipes(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.portee_equipes() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select public._portee_equipes(auth.uid()) $$;
+
+
+--
+-- Name: portee_jobs(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.portee_jobs() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select public._portee_jobs(auth.uid()) $$;
+
+
+--
+-- Name: portee_personnes(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.portee_personnes() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select public._portee_personnes(auth.uid()) $$;
 
 
 --
@@ -18358,6 +18567,52 @@ $$;
 
 
 --
+-- Name: trigger_payment_reminders(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.trigger_payment_reminders() RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'vault', 'net'
+    AS $$
+declare
+  v_secret text;
+  v_base   text;
+begin
+  select decrypted_secret into v_secret
+    from vault.decrypted_secrets where name = 'cron_secret';
+
+  -- Sans secret, la route repondrait 401 en silence toutes les nuits. Mieux
+  -- vaut une erreur visible dans cron.job_run_details.
+  if v_secret is null then
+    raise exception 'Secret Vault "cron_secret" absent — relances non declenchees';
+  end if;
+
+  select coalesce(
+    (select decrypted_secret from vault.decrypted_secrets where name = 'app_base_url'),
+    'https://lumecrm.net'
+  ) into v_base;
+
+  perform net.http_post(
+    url     := v_base || '/api/cron/payment-reminders',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret', v_secret,
+      'x-requested-with', 'XMLHttpRequest'
+    ),
+    body    := '{}'::jsonb
+  );
+end;
+$$;
+
+
+--
+-- Name: FUNCTION trigger_payment_reminders(); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.trigger_payment_reminders() IS 'Declenche POST /api/cron/payment-reminders (relances de factures). Appelee par le job pg_cron lume_payment_reminders, jamais par un client.';
+
+
+--
 -- Name: trigger_sms_number_release(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -22656,7 +22911,7 @@ CREATE TABLE public.invitations (
     role text DEFAULT 'technician'::text NOT NULL,
     token text,
     token_hash text,
-    scope text DEFAULT 'self'::text NOT NULL,
+    scope text DEFAULT 'company'::text NOT NULL,
     team_id uuid,
     department_id uuid,
     custom_permissions jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -23673,7 +23928,8 @@ CREATE TABLE public.memberships (
     lumi_briefing boolean DEFAULT true NOT NULL,
     lumi_mode text DEFAULT 'argent'::text NOT NULL,
     CONSTRAINT memberships_experience_level_check CHECK ((experience_level = ANY (ARRAY['rookie'::text, 'experienced'::text]))),
-    CONSTRAINT memberships_lumi_mode_check CHECK ((lumi_mode = ANY (ARRAY['demander'::text, 'argent'::text, 'tout'::text])))
+    CONSTRAINT memberships_lumi_mode_check CHECK ((lumi_mode = ANY (ARRAY['demander'::text, 'argent'::text, 'tout'::text]))),
+    CONSTRAINT memberships_scope_check CHECK ((scope = ANY (ARRAY['self'::text, 'assigned'::text, 'team'::text, 'company'::text])))
 );
 
 ALTER TABLE ONLY public.memberships FORCE ROW LEVEL SECURITY;
@@ -26486,7 +26742,8 @@ CREATE TABLE public.request_forms (
     deleted_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    logo_url text
+    logo_url text,
+    pipeline_id uuid
 );
 
 ALTER TABLE ONLY public.request_forms FORCE ROW LEVEL SECURITY;
@@ -26504,6 +26761,13 @@ COMMENT ON TABLE public.request_forms IS '[CRM] Per-org embeddable request/lead 
 --
 
 COMMENT ON COLUMN public.request_forms.api_key IS 'Secret — public form submission API key.';
+
+
+--
+-- Name: COLUMN request_forms.pipeline_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.request_forms.pipeline_id IS 'Pipeline qui reçoit les leads de ce formulaire. NULL = pipeline par défaut de l''organisation (2026-09-25).';
 
 
 --
@@ -34696,7 +34960,14 @@ CREATE INDEX idx_request_forms_created_by ON public.request_forms USING btree (c
 -- Name: idx_request_forms_org; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_request_forms_org ON public.request_forms USING btree (org_id) WHERE (deleted_at IS NULL);
+CREATE INDEX idx_request_forms_org ON public.request_forms USING btree (org_id) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: idx_request_forms_pipeline; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_request_forms_pipeline ON public.request_forms USING btree (pipeline_id) WHERE ((pipeline_id IS NOT NULL) AND (deleted_at IS NULL));
 
 
 --
@@ -36867,6 +37138,13 @@ CREATE TRIGGER trg_comm_settings_updated BEFORE UPDATE ON public.communication_s
 --
 
 CREATE TRIGGER trg_company_groups_propager_marque BEFORE UPDATE OF logo_url, brand_color ON public.company_groups FOR EACH ROW EXECUTE FUNCTION public.propager_marque_entreprise();
+
+
+--
+-- Name: company_settings trg_company_settings_miroir_logo_marque; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_company_settings_miroir_logo_marque AFTER INSERT OR UPDATE OF suit_marque_entreprise ON public.company_settings FOR EACH ROW EXECUTE FUNCTION public.miroir_logo_suivi_marque();
 
 
 --
@@ -41742,6 +42020,14 @@ ALTER TABLE ONLY public.request_forms
 
 ALTER TABLE ONLY public.request_forms
     ADD CONSTRAINT request_forms_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: request_forms request_forms_pipeline_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.request_forms
+    ADD CONSTRAINT request_forms_pipeline_id_fkey FOREIGN KEY (pipeline_id) REFERENCES public.pipelines_ventes(id) ON DELETE SET NULL;
 
 
 --
@@ -48952,6 +49238,63 @@ CREATE POLICY pop_org ON public.proof_of_presence USING ((org_id IN ( SELECT mem
 
 
 --
+-- Name: clients portee_membre; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY portee_membre ON public.clients AS RESTRICTIVE TO authenticated USING (((org_id IN ( SELECT public.portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (assigned_to IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (id IN ( SELECT public.portee_clients() AS portee_clients)))) WITH CHECK (true);
+
+
+--
+-- Name: conversations portee_membre; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY portee_membre ON public.conversations AS RESTRICTIVE TO authenticated USING (((org_id IN ( SELECT public.portee_bureaux_complets() AS portee_bureaux_complets)) OR (assigned_to IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (client_id IN ( SELECT public.portee_clients() AS portee_clients)))) WITH CHECK (true);
+
+
+--
+-- Name: invoices portee_membre; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY portee_membre ON public.invoices AS RESTRICTIVE TO authenticated USING (((org_id IN ( SELECT public.portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (salesperson_id IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (client_id IN ( SELECT public.portee_clients() AS portee_clients)) OR (job_id IN ( SELECT public.portee_jobs() AS portee_jobs)))) WITH CHECK (true);
+
+
+--
+-- Name: jobs portee_membre; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY portee_membre ON public.jobs AS RESTRICTIVE TO authenticated USING (((org_id IN ( SELECT public.portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (salesperson_id IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (assigned_user_id IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (team_id IN ( SELECT public.portee_equipes() AS portee_equipes)) OR (id IN ( SELECT public.portee_jobs() AS portee_jobs)))) WITH CHECK (true);
+
+
+--
+-- Name: messages portee_membre; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY portee_membre ON public.messages AS RESTRICTIVE TO authenticated USING (((org_id IN ( SELECT public.portee_bureaux_complets() AS portee_bureaux_complets)) OR (conversation_id IN ( SELECT c.id
+   FROM public.conversations c)))) WITH CHECK (true);
+
+
+--
+-- Name: quotes portee_membre; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY portee_membre ON public.quotes AS RESTRICTIVE TO authenticated USING (((org_id IN ( SELECT public.portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (salesperson_id IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (client_id IN ( SELECT public.portee_clients() AS portee_clients)) OR (job_id IN ( SELECT public.portee_jobs() AS portee_jobs)))) WITH CHECK (true);
+
+
+--
+-- Name: schedule_events portee_membre; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY portee_membre ON public.schedule_events AS RESTRICTIVE TO authenticated USING (((org_id IN ( SELECT public.portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (assigned_user IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (team_id IN ( SELECT public.portee_equipes() AS portee_equipes)) OR (job_id IN ( SELECT public.portee_jobs() AS portee_jobs)))) WITH CHECK (true);
+
+
+--
+-- Name: tasks portee_membre; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY portee_membre ON public.tasks AS RESTRICTIVE TO authenticated USING (((org_id IN ( SELECT public.portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (assignee_user_id IN ( SELECT public.portee_personnes() AS portee_personnes)) OR (team_id IN ( SELECT public.portee_equipes() AS portee_equipes)) OR (job_id IN ( SELECT public.portee_jobs() AS portee_jobs)))) WITH CHECK (true);
+
+
+--
 -- Name: predefined_services; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -50987,6 +51330,54 @@ GRANT ALL ON FUNCTION public._membre_actif_ou_nul(p_user uuid, p_org uuid) TO se
 GRANT ALL ON FUNCTION public._point_in_zone_ring(p_lng double precision, p_lat double precision, geo jsonb) TO anon;
 GRANT ALL ON FUNCTION public._point_in_zone_ring(p_lng double precision, p_lat double precision, geo jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public._point_in_zone_ring(p_lng double precision, p_lat double precision, geo jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION _portee_bureaux_complets(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._portee_bureaux_complets(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._portee_bureaux_complets(p_user uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION _portee_clients(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._portee_clients(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._portee_clients(p_user uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION _portee_equipes(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._portee_equipes(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._portee_equipes(p_user uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION _portee_jobs(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._portee_jobs(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._portee_jobs(p_user uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION _portee_personnes(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._portee_personnes(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._portee_personnes(p_user uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION _portee_restreinte(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._portee_restreinte(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._portee_restreinte(p_user uuid) TO service_role;
 
 
 --
@@ -53734,11 +54125,11 @@ GRANT ALL ON FUNCTION public.increment_unread_count(p_conversation_id uuid) TO s
 
 
 --
--- Name: FUNCTION ingest_lead(p_org_id uuid, p_source text, p_external_id text, p_first_name text, p_last_name text, p_company text, p_email text, p_phone text, p_address text, p_notes text, p_utm_source text, p_utm_medium text, p_utm_campaign text, p_utm_content text, p_fbclid text, p_payload jsonb, p_dedup boolean, p_created_by uuid); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION ingest_lead(p_org_id uuid, p_source text, p_external_id text, p_first_name text, p_last_name text, p_company text, p_email text, p_phone text, p_address text, p_notes text, p_utm_source text, p_utm_medium text, p_utm_campaign text, p_utm_content text, p_fbclid text, p_payload jsonb, p_dedup boolean, p_created_by uuid, p_pipeline_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.ingest_lead(p_org_id uuid, p_source text, p_external_id text, p_first_name text, p_last_name text, p_company text, p_email text, p_phone text, p_address text, p_notes text, p_utm_source text, p_utm_medium text, p_utm_campaign text, p_utm_content text, p_fbclid text, p_payload jsonb, p_dedup boolean, p_created_by uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.ingest_lead(p_org_id uuid, p_source text, p_external_id text, p_first_name text, p_last_name text, p_company text, p_email text, p_phone text, p_address text, p_notes text, p_utm_source text, p_utm_medium text, p_utm_campaign text, p_utm_content text, p_fbclid text, p_payload jsonb, p_dedup boolean, p_created_by uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.ingest_lead(p_org_id uuid, p_source text, p_external_id text, p_first_name text, p_last_name text, p_company text, p_email text, p_phone text, p_address text, p_notes text, p_utm_source text, p_utm_medium text, p_utm_campaign text, p_utm_content text, p_fbclid text, p_payload jsonb, p_dedup boolean, p_created_by uuid, p_pipeline_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.ingest_lead(p_org_id uuid, p_source text, p_external_id text, p_first_name text, p_last_name text, p_company text, p_email text, p_phone text, p_address text, p_notes text, p_utm_source text, p_utm_medium text, p_utm_campaign text, p_utm_content text, p_fbclid text, p_payload jsonb, p_dedup boolean, p_created_by uuid, p_pipeline_id uuid) TO service_role;
 
 
 --
@@ -54061,6 +54452,14 @@ GRANT ALL ON FUNCTION public.membre_voit_les_montants(p_user uuid, p_org uuid) T
 
 REVOKE ALL ON FUNCTION public.migration_staging_counts(p_migration_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.migration_staging_counts(p_migration_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION miroir_logo_suivi_marque(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.miroir_logo_suivi_marque() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.miroir_logo_suivi_marque() TO service_role;
 
 
 --
@@ -54410,6 +54809,51 @@ GRANT ALL ON FUNCTION public.pipeline_tendance(p_semaines integer) TO service_ro
 
 GRANT ALL ON FUNCTION public.pipeline_vitesse(p_from date, p_to date) TO authenticated;
 GRANT ALL ON FUNCTION public.pipeline_vitesse(p_from date, p_to date) TO service_role;
+
+
+--
+-- Name: FUNCTION portee_bureaux_complets(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.portee_bureaux_complets() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.portee_bureaux_complets() TO authenticated;
+GRANT ALL ON FUNCTION public.portee_bureaux_complets() TO service_role;
+
+
+--
+-- Name: FUNCTION portee_clients(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.portee_clients() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.portee_clients() TO authenticated;
+GRANT ALL ON FUNCTION public.portee_clients() TO service_role;
+
+
+--
+-- Name: FUNCTION portee_equipes(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.portee_equipes() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.portee_equipes() TO authenticated;
+GRANT ALL ON FUNCTION public.portee_equipes() TO service_role;
+
+
+--
+-- Name: FUNCTION portee_jobs(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.portee_jobs() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.portee_jobs() TO authenticated;
+GRANT ALL ON FUNCTION public.portee_jobs() TO service_role;
+
+
+--
+-- Name: FUNCTION portee_personnes(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.portee_personnes() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.portee_personnes() TO authenticated;
+GRANT ALL ON FUNCTION public.portee_personnes() TO service_role;
 
 
 --
@@ -55506,6 +55950,14 @@ GRANT ALL ON FUNCTION public.trg_org_features_updated_at() TO service_role;
 
 REVOKE ALL ON FUNCTION public.trg_payment_to_invoice_paid() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.trg_payment_to_invoice_paid() TO service_role;
+
+
+--
+-- Name: FUNCTION trigger_payment_reminders(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.trigger_payment_reminders() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.trigger_payment_reminders() TO service_role;
 
 
 --
