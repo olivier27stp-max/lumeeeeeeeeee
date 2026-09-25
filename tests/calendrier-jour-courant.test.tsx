@@ -11,13 +11,32 @@
 // étaient calculées, le bon jour était marqué `today`. Seul le rendu le dit.
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('../src/contexts/LanguageContext', () => ({
   useLanguage: () => ({ language: 'fr', t: {} }),
 }));
 
 let conteneur: HTMLDivElement;
+
+/**
+ * Le composant est chargé UNE fois, hors du corps des tests.
+ *
+ * Il l'était par un `await import()` à l'intérieur du premier test. Seul, le
+ * module se compile en quelques centaines de ms ; dans la suite complète, la
+ * compilation dépassait les 10 s du délai de vitest (mesuré : 15,8 s). Le
+ * premier test tombait en timeout, la racine n'était jamais rendue, et les
+ * deux suivants échouaient sur un `null` — trois échecs pour une seule cause,
+ * qui n'avait rien à voir avec le produit.
+ */
+type ModuleVueMois = typeof import('../src/components/dispatch-monthly/MonthlyDispatchView');
+let MonthlyDispatchView: ModuleVueMois['default'];
+
+beforeAll(async () => {
+  ({ default: MonthlyDispatchView } = await import(
+    '../src/components/dispatch-monthly/MonthlyDispatchView'
+  ));
+}, 60_000);
 
 beforeEach(() => {
   conteneur = document.createElement('div');
@@ -31,7 +50,6 @@ afterEach(() => {
 
 /** Rend la vue mois et renvoie la case du jour, repérée par son numéro. */
 async function rendreMois() {
-  const { default: MonthlyDispatchView } = await import('../src/components/dispatch-monthly/MonthlyDispatchView');
   const racine = createRoot(conteneur);
   await act(async () => {
     racine.render(
