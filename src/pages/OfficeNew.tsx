@@ -32,6 +32,7 @@ const DEFAULT_INHERIT: OfficeInherit = {
   taxes: true,
   email_templates: true,
   tags_sources: true,
+  modeles: true,
 };
 
 export default function OfficeNew() {
@@ -135,7 +136,15 @@ export default function OfficeNew() {
       label: fr ? 'Étiquettes de jobs et sources de leads' : 'Job tags and lead sources',
       hint: fr ? 'Listes utilisées dans les formulaires.' : 'Lists used across the forms.',
     },
+    {
+      key: 'modeles' as const,
+      label: fr ? 'Modèles, rôles, champs personnalisés et automatisations' : 'Templates, roles, custom fields and automations',
+      hint: fr
+        ? 'Modèles de facture, devis, job et liste de vérification, permissions des rôles, rappels de paiement, et les automatisations telles qu’elles sont réglées.'
+        : 'Invoice, quote, job and checklist templates, role permissions, payment reminders, and automations as they are set up.',
+    },
   ]), [fr]);
+  const toutHerite = inheritOptions.every((o) => inherit[o.key]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -312,7 +321,26 @@ export default function OfficeNew() {
               title={fr ? `Hériter du bureau de base « ${nomBase} »` : `Inherit from the base office “${nomBase}”`}
               optional={fr ? 'facultatif' : 'optional'}
             />
-            <div className="space-y-3">
+            <label htmlFor={`${ids}-inh-tout`} className="flex items-start gap-3 cursor-pointer rounded-xl border border-outline-subtle bg-surface-secondary p-3">
+              <input
+                id={`${ids}-inh-tout`}
+                type="checkbox"
+                checked={toutHerite}
+                onChange={(e) => setInherit(Object.fromEntries(inheritOptions.map((o) => [o.key, e.target.checked])) as unknown as OfficeInherit)}
+                className="h-4 w-4 mt-0.5 rounded"
+              />
+              <span>
+                <span className="block text-[13px] font-semibold text-text-primary">
+                  {fr ? `Exactement la même configuration que « ${nomBase} » (recommandé)` : `Exactly the same setup as “${nomBase}” (recommended)`}
+                </span>
+                <span className="text-[12px] text-text-tertiary">
+                  {fr
+                    ? 'Le nouveau bureau démarre comme une copie des réglages du bureau de base. Tout reste modifiable ensuite, bureau par bureau.'
+                    : 'The new office starts as a copy of the base office settings. Everything stays editable afterwards, office by office.'}
+                </span>
+              </span>
+            </label>
+            <div className="space-y-3 pl-7">
               {inheritOptions.map((opt) => (
                 <label key={opt.key} htmlFor={`${ids}-inh-${opt.key}`} className="flex items-start gap-3 cursor-pointer">
                   <input
@@ -331,8 +359,8 @@ export default function OfficeNew() {
             </div>
             <p className="text-[12px] text-text-tertiary">
               {fr
-                ? 'Le catalogue produits/services est déjà partagé entre tous les bureaux. Les automatisations sont installées automatiquement.'
-                : 'The products/services catalogue is already shared across offices. Automations are installed automatically.'}
+                ? 'Le catalogue produits/services est déjà partagé entre tous les bureaux. Jamais copiés, parce qu’ils dépendent de l’entité légale ou coûtent de l’argent : les numéros de TPS/TVQ, le numéro SMS et le compte de paiement en ligne. La fiche de santé (Réglages → Bureaux) les signale.'
+                : 'The products/services catalogue is already shared across offices. Never copied, because they depend on the legal entity or cost money: tax registration numbers, the SMS number and the online payment account. The health check (Settings → Offices) flags them.'}
             </p>
           </section>
 

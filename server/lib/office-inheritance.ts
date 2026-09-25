@@ -12,7 +12,10 @@
 // NON copié, volontairement :
 //   - le catalogue produits/services : predefined_services est déjà partagé
 //     entre les bureaux d'une compagnie (migration 20260910000000) ;
-//   - les presets d'automatisation : seedés par ensureAutomationPresets ;
+//   - les presets d'automatisation : seedés par ensureAutomationPresets (la
+//     section « modèles » leur donne ensuite l'état et les messages de la source) ;
+//   - les numéros de taxes, le numéro SMS et le compte de paiement : propres à
+//     l'entité légale ou payants, la fiche de santé les signale ;
 //   - les avis Google/Facebook : l'URL d'avis est propre à chaque adresse.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -26,6 +29,13 @@ export interface InheritOptions {
   email_templates: boolean;
   /** Étiquettes de jobs et sources de leads. (pipeline_stages est déprécié.) */
   tags_sources: boolean;
+  /**
+   * Tout le reste de la configuration : rôles, modèles de facture / devis /
+   * job / liste de vérification, champs personnalisés, rappels de paiement,
+   * préférences de paiement et état + messages des automatisations.
+   * Optionnel : les anciens appelants n'en parlent pas.
+   */
+  modeles?: boolean;
 }
 
 export const NO_INHERIT: InheritOptions = {
@@ -33,7 +43,41 @@ export const NO_INHERIT: InheritOptions = {
   taxes: false,
   email_templates: false,
   tags_sources: false,
+  modeles: false,
 };
+
+/** Colonnes jamais recopiées d'une ligne de modèle : identité et horodatage. */
+const COLONNES_PROPRES_A_LA_LIGNE = new Set(['id', 'org_id', 'created_at', 'updated_at']);
+
+/** Copie conforme d'une ligne de modèle vers un autre bureau (nouvel id, nouveau propriétaire). */
+export function clonerLigne(r: Row, targetOrgId: string, createdBy: string, retirer: string[] = []): Row {
+  const out: Row = {};
+  for (const [k, v] of Object.entries(r)) {
+    if (COLONNES_PROPRES_A_LA_LIGNE.has(k) || retirer.includes(k)) continue;
+    out[k] = v;
+  }
+  out.org_id = targetOrgId;
+  if ('created_by' in r) out.created_by = createdBy;
+  if ('updated_by' in r) out.updated_by = createdBy;
+  return out;
+}
+
+/** Modèles « simples » : une ligne = un modèle, aucun lien vers une autre ligne du bureau. */
+export const TABLES_MODELES: ReadonlyArray<{ table: string; actifs: string[] }> = [
+  { table: 'invoice_templates', actifs: ['deleted_at', 'archived_at'] },
+  { table: 'quote_templates', actifs: ['deleted_at'] },
+  { table: 'job_templates', actifs: [] },
+  { table: 'checklist_templates', actifs: [] },
+];
+
+/** Réglages à une ligne par bureau (clé primaire org_id). */
+export const REGLAGES_UNIQUES = ['reminder_settings', 'payment_settings'] as const;
+
+/** Champs d'une automatisation préréglée qui portent la configuration du bureau. */
+export const CHAMPS_AUTOMATISATION = [
+  'name', 'description', 'trigger_event', 'conditions', 'delay_seconds',
+  'actions', 'steps', 'settings', 'is_active',
+] as const;
 
 /** Colonnes de company_settings portées par « identité & préférences ». */
 export const BRANDING_COLUMNS = [
@@ -143,7 +187,19 @@ export interface CopyReport {
   email_templates: number;
   job_tags: number;
   lead_sources: number;
+  /** Nombre de lignes copiées par table, section « modèles ». */
+  modeles: Record<string, number>;
   warnings: string[];
+}
+
+export interface CopyOptions {
+  /**
+   * Bureau DÉJÀ en service (« Reprendre du bureau de base » dans la fiche de
+   * santé) : on ne complète que ce qui est vide, on n'écrase jamais un réglage
+   * du bureau. Les rôles ne sont copiés que si le bureau n'en a aucun ; les
+   * automatisations ne sont pas touchées (déjà ajustées sur place).
+   */
+  seulementSiVide?: boolean;
 }
 
 /**
@@ -157,6 +213,7 @@ export async function copyOfficeSettings(
   targetOrgId: string,
   createdBy: string,
   inherit: InheritOptions,
+  options: CopyOptions = {},
 ): Promise<CopyReport> {
   const report: CopyReport = {
     branding: false,
@@ -166,8 +223,10 @@ export async function copyOfficeSettings(
     email_templates: 0,
     job_tags: 0,
     lead_sources: 0,
+    modeles: {},
     warnings: [],
   };
+  const seulementSiVide = options.seulementSiVide === true;
   const warn = (section: string, msg?: string) => {
     report.warnings.push(`${section}: ${msg || 'unknown error'}`);
   };
@@ -203,7 +262,9 @@ export async function copyOfficeSettings(
   }
 
   // ── Taxes ──
-  if (inherit.taxes) {
+  if (inherit.taxes && seulementSiVide && (await compter(admin, 'tax_groups', targetOrgId)) > 0) {
+    report.warnings.push('taxes: le bureau a déjà ses taxes, rien de copié');
+  } else if (inherit.taxes) {
     try {
       const [{ data: configs, error: cErr }, { data: groups, error: gErr }] = await Promise.all([
         admin.from('tax_configs').select('*').eq('org_id', sourceOrgId).order('sort_order'),
@@ -325,5 +386,136 @@ export async function copyOfficeSettings(
     }
   }
 
+  // ── Modèles, rôles, champs personnalisés, rappels, automatisations ──
+  if (inherit.modeles) await copierModeles(admin, sourceOrgId, targetOrgId, createdBy, seulementSiVide, report, warn);
+
   return report;
+}
+
+async function compter(admin: SupabaseClient, table: string, orgId: string): Promise<number> {
+  const { count, error } = await admin.from(table).select('*', { count: 'exact', head: true }).eq('org_id', orgId);
+  if (error) throw new Error(`${table}: ${error.message}`);
+  return count ?? 0;
+}
+
+async function lireActifs(admin: SupabaseClient, table: string, orgId: string, actifs: string[]): Promise<Row[]> {
+  let q = admin.from(table).select('*').eq('org_id', orgId);
+  for (const col of actifs) q = q.is(col, null);
+  const { data, error } = await q.order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+async function copierModeles(
+  admin: SupabaseClient,
+  sourceOrgId: string,
+  targetOrgId: string,
+  createdBy: string,
+  seulementSiVide: boolean,
+  report: CopyReport,
+  warn: (section: string, msg?: string) => void,
+): Promise<void> {
+  // Rôles : le préréglage de chaque rôle (permissions, portée) du bureau de base.
+  // En reprise, seulement si le bureau n'a encore aucun rôle réglé.
+  if (!seulementSiVide || (await compter(admin, 'role_templates', targetOrgId).catch(() => 1)) === 0) {
+    try {
+      const { data: roles, error } = await admin.from('role_templates').select('*').eq('org_id', sourceOrgId);
+      if (error) throw new Error(error.message);
+      if (roles?.length) {
+        const { error: e } = await admin.from('role_templates')
+          .upsert(roles.map((r: Row) => clonerLigne(r, targetOrgId, createdBy)), { onConflict: 'org_id,slug' });
+        if (e) throw new Error(e.message);
+        report.modeles.role_templates = roles.length;
+      }
+    } catch (e: any) { warn('role_templates', e?.message); }
+  }
+
+  for (const { table, actifs } of TABLES_MODELES) {
+    try {
+      if (seulementSiVide && (await compter(admin, table, targetOrgId)) > 0) continue;
+      const rows = await lireActifs(admin, table, sourceOrgId, actifs);
+      if (rows.length === 0) continue;
+      const { error } = await admin.from(table).insert(rows.map((r) => clonerLigne(r, targetOrgId, createdBy)));
+      if (error) throw new Error(error.message);
+      report.modeles[table] = rows.length;
+    } catch (e: any) { warn(table, e?.message); }
+  }
+
+  for (const table of REGLAGES_UNIQUES) {
+    try {
+      const { data: r, error } = await admin.from(table).select('*').eq('org_id', sourceOrgId).maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!r) continue;
+      const { error: e } = await admin.from(table)
+        .upsert(clonerLigne(r, targetOrgId, createdBy), { onConflict: 'org_id', ignoreDuplicates: seulementSiVide });
+      if (e) throw new Error(e.message);
+      report.modeles[table] = 1;
+    } catch (e: any) { warn(table, e?.message); }
+  }
+
+  // Champs personnalisés : dossiers → champs → options, ids remappés.
+  try {
+    if (!seulementSiVide || (await compter(admin, 'custom_fields', targetOrgId)) === 0) {
+      const dossiers = await lireActifs(admin, 'custom_field_folders', sourceOrgId, []);
+      const champs = await lireActifs(admin, 'custom_fields', sourceOrgId, ['archived_at']);
+      if (champs.length > 0) {
+        let dossierIds = new Map<string, string>();
+        if (dossiers.length > 0) {
+          const { data: ins, error } = await admin.from('custom_field_folders')
+            .insert(dossiers.map((d) => clonerLigne(d, targetOrgId, createdBy))).select('id');
+          if (error) throw new Error(error.message);
+          dossierIds = zipIds(dossiers, ins || []);
+        }
+        const { data: insChamps, error: eChamps } = await admin.from('custom_fields')
+          .insert(champs.map((c) => ({
+            ...clonerLigne(c, targetOrgId, createdBy, ['legacy_column_id']),
+            folder_id: c.folder_id ? dossierIds.get(String(c.folder_id)) ?? null : null,
+          })))
+          .select('id');
+        if (eChamps) throw new Error(eChamps.message);
+        const champIds = zipIds(champs, insChamps || []);
+        report.modeles.custom_fields = insChamps?.length || 0;
+
+        const { data: opts, error: eOpts } = await admin.from('custom_field_options').select('*')
+          .in('field_id', champs.map((c) => c.id)).is('archived_at', null).order('position');
+        if (eOpts) throw new Error(eOpts.message);
+        const mapped = (opts || [])
+          .filter((o: Row) => champIds.has(String(o.field_id)))
+          .map((o: Row) => ({ ...clonerLigne(o, targetOrgId, createdBy), field_id: champIds.get(String(o.field_id)) }));
+        if (mapped.length > 0) {
+          const { error } = await admin.from('custom_field_options').insert(mapped);
+          if (error) throw new Error(error.message);
+          report.modeles.custom_field_options = mapped.length;
+        }
+      }
+    }
+  } catch (e: any) { warn('custom_fields', e?.message); }
+
+  // Automatisations : les préréglages existent déjà dans le nouveau bureau
+  // (ensureAutomationPresets) ; on leur donne l'état et les messages du bureau
+  // de base. Les automatisations créées à la main suivent, sauf celles liées
+  // à un pipeline (les pipelines sont propres à chaque bureau).
+  if (!seulementSiVide) {
+    try {
+      const { data: regles, error } = await admin.from('automation_rules').select('*').eq('org_id', sourceOrgId);
+      if (error) throw new Error(error.message);
+      let n = 0;
+      for (const r of (regles || []).filter((x: Row) => x.is_preset && x.preset_key)) {
+        const patch: Row = {};
+        for (const k of CHAMPS_AUTOMATISATION) patch[k] = r[k];
+        const { error: e } = await admin.from('automation_rules').update(patch)
+          .eq('org_id', targetOrgId).eq('preset_key', r.preset_key);
+        if (e) throw new Error(e.message);
+        n++;
+      }
+      const perso = (regles || []).filter((x: Row) => !x.is_preset && !x.pipeline_id && !x.stage_id);
+      if (perso.length > 0) {
+        const { error: e } = await admin.from('automation_rules')
+          .insert(perso.map((r: Row) => clonerLigne(r, targetOrgId, createdBy)));
+        if (e) throw new Error(e.message);
+        n += perso.length;
+      }
+      report.modeles.automation_rules = n;
+    } catch (e: any) { warn('automation_rules', e?.message); }
+  }
 }

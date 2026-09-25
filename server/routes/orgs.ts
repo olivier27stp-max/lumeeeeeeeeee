@@ -14,6 +14,7 @@ import { decideAccessChange, OFFICE_ROLES, PROFIL_COPIE, type OfficeRole } from 
 import { resolveInvitePermissions } from './invitations';
 import { getDefaultScope } from '../../src/lib/permissions';
 import { chiffresDuBureau, periode, totaliser } from '../lib/offices-overview';
+import { evaluerSante, TABLES_MODELES_SANTE, type FaitsBureau, type TableModele } from '../lib/office-health';
 
 const router = Router();
 
@@ -43,6 +44,7 @@ const createOfficeSchema = z.object({
       taxes: z.boolean().default(false),
       email_templates: z.boolean().default(false),
       tags_sources: z.boolean().default(false),
+      modeles: z.boolean().default(false),
     })
     .optional(),
   grant_user_ids: z.array(z.string().uuid()).max(50).default([]),
@@ -212,6 +214,142 @@ router.get('/orgs/offices', async (req, res) => {
   }
 });
 
+// ─── GET /orgs/offices/sante ─────────────────────────────────────
+// Fiche de santé : chaque bureau ouvert comparé au bureau de base. Propriétaire
+// seulement (il est membre de tous les bureaux). Lu côté serveur : le
+// navigateur ne lit jamais un autre bureau.
+router.get('/orgs/offices/sante', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    if ((await callerRole(admin, auth.user.id, auth.orgId)) !== 'owner') {
+      return res.status(403).json({ error: 'Réservé aux propriétaires.' });
+    }
+
+    const tous = await companyOrgIds(admin, auth.orgId);
+    const { data: orgs } = await admin.from('orgs').select('id, name, created_at, archived_at, company_group_id').in('id', tous);
+    const ouverts = (orgs || []).filter((o: any) => !o.archived_at);
+    const ids = ouverts.map((o: any) => String(o.id));
+    if (ids.length === 0) return res.json({ base_id: null, bureaux: [] });
+    const baseId = await bureauDeBase(admin, ids);
+    const groupe = ouverts.find((o: any) => o.company_group_id)?.company_group_id ?? null;
+
+    const modeleActifs: Record<TableModele, string[]> = {
+      role_templates: [], invoice_templates: ['deleted_at', 'archived_at'], quote_templates: ['deleted_at'],
+      job_templates: [], checklist_templates: [], custom_fields: ['archived_at'],
+    };
+    const lireModeles = (t: TableModele) => {
+      let q = admin.from(t).select('org_id').in('org_id', ids);
+      for (const c of modeleActifs[t]) q = q.is(c, null);
+      return q;
+    };
+
+    const [cs, taxes, groupes, sms, stripe, autos, membres, marque, ...modeles] = await Promise.all([
+      admin.from('company_settings').select('org_id, company_name, default_tax_group_id, prefixe_documents, logo_url, suit_marque_entreprise').in('org_id', ids),
+      admin.from('tax_configs').select('org_id, name, registration_number').in('org_id', ids).eq('is_active', true),
+      admin.from('tax_groups').select('org_id').in('org_id', ids),
+      admin.from('communication_channels').select('org_id, phone_number').in('org_id', ids).eq('channel_type', 'sms').eq('status', 'active'),
+      admin.from('connected_accounts').select('org_id, charges_enabled').in('org_id', ids).is('deleted_at', null),
+      admin.from('automation_rules').select('org_id').in('org_id', ids).eq('is_active', true),
+      admin.from('memberships').select('org_id, role').in('org_id', ids).eq('status', 'active'),
+      groupe ? admin.from('company_groups').select('logo_url, brand_color').eq('id', groupe).maybeSingle() : Promise.resolve({ data: null, error: null }),
+      ...TABLES_MODELES_SANTE.map(lireModeles),
+    ]);
+    const erreur = [cs, taxes, groupes, sms, stripe, autos, membres, marque, ...modeles].find((r: any) => r.error);
+    if (erreur?.error) throw erreur.error;
+
+    const parOrg = <T,>(rows: T[] | null | undefined, cle: (r: T) => string) => {
+      const m = new Map<string, T[]>();
+      for (const r of rows || []) { const k = cle(r); m.set(k, [...(m.get(k) || []), r]); }
+      return m;
+    };
+    const org = (r: any) => String(r.org_id);
+    const csPar = new Map((cs.data || []).map((r: any) => [org(r), r]));
+    const taxesPar = parOrg(taxes.data as any[], org);
+    const groupesPar = parOrg(groupes.data as any[], org);
+    const smsPar = parOrg(sms.data as any[], org);
+    const stripePar = parOrg(stripe.data as any[], org);
+    const autosPar = parOrg(autos.data as any[], org);
+    const membresPar = parOrg(membres.data as any[], org);
+    const modelesPar = TABLES_MODELES_SANTE.map((_, i) => parOrg((modeles[i] as any).data as any[], org));
+
+    const faits = new Map<string, FaitsBureau>();
+    for (const o of ouverts) {
+      const id = String(o.id);
+      const s: any = csPar.get(id) || {};
+      const tx = taxesPar.get(id) || [];
+      const comptes = stripePar.get(id) || [];
+      const roles: Record<string, number> = {};
+      for (const m of membresPar.get(id) || []) roles[String(m.role)] = (roles[String(m.role)] || 0) + 1;
+      faits.set(id, {
+        org_id: id,
+        nom: s.company_name || o.name || '',
+        groupe_taxes_defaut: !!s.default_tax_group_id,
+        nb_groupes_taxes: (groupesPar.get(id) || []).length,
+        taxes_sans_numero: [...new Set(tx.filter((t: any) => !String(t.registration_number || '').trim()).map((t: any) => String(t.name)))],
+        nb_taxes_actives: tx.length,
+        sms: (smsPar.get(id) || [])[0]?.phone_number ?? null,
+        stripe: comptes.length === 0 ? 'aucun' : comptes.some((c: any) => c.charges_enabled) ? 'actif' : 'incomplet',
+        logo: !!s.logo_url,
+        suit_marque: s.suit_marque_entreprise === true,
+        automatisations_actives: (autosPar.get(id) || []).length,
+        prefixe: s.prefixe_documents || null,
+        membres: roles,
+        modeles: Object.fromEntries(TABLES_MODELES_SANTE.map((t, i) => [t, (modelesPar[i].get(id) || []).length])) as Record<TableModele, number>,
+      });
+    }
+
+    const base = baseId ? faits.get(baseId) ?? null : null;
+    const marqueCommune = !!((marque.data as any)?.logo_url || (marque.data as any)?.brand_color);
+    const ordre = [...ouverts].sort((a: any, b: any) =>
+      (String(a.id) === baseId ? -1 : String(b.id) === baseId ? 1 : String(a.created_at).localeCompare(String(b.created_at))));
+    const bureaux = ordre.map((o: any) => {
+      const id = String(o.id);
+      const f = faits.get(id) as FaitsBureau;
+      const autres = [...faits.values()].filter((x) => x.org_id !== id && x.prefixe).map((x) => String(x.prefixe));
+      return evaluerSante(f, base, { est_base: id === baseId, marque_commune: marqueCommune, prefixes_des_autres: autres });
+    });
+    return res.json({ base_id: baseId, bureaux });
+  } catch (err: any) {
+    console.error('[orgs/offices/sante]', err?.message);
+    return res.status(500).json({ error: 'Impossible de vérifier les bureaux.' });
+  }
+});
+
+// ─── POST /orgs/offices/:id/reprendre-base ───────────────────────
+// « Reprendre du bureau de base » depuis la fiche de santé : complète ce qui
+// est VIDE dans le bureau, n'écrase jamais un réglage déjà fait sur place.
+const reprendreSchema = z.object({ section: z.enum(['taxes', 'modeles']) });
+
+router.post('/orgs/offices/:id/reprendre-base', validate(reprendreSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    if ((await callerRole(admin, auth.user.id, auth.orgId)) !== 'owner') {
+      return res.status(403).json({ error: 'Réservé aux propriétaires.' });
+    }
+    const cible = String(req.params.id);
+    const tous = await companyOrgIds(admin, auth.orgId);
+    if (!tous.includes(cible)) return res.status(404).json({ error: 'Bureau introuvable.' });
+    const { data: orgs } = await admin.from('orgs').select('id, archived_at').in('id', tous);
+    const ouverts = (orgs || []).filter((o: any) => !o.archived_at).map((o: any) => String(o.id));
+    if (!ouverts.includes(cible)) return res.status(409).json({ error: 'Ce bureau est fermé.' });
+    const base = await bureauDeBase(admin, ouverts);
+    if (!base || base === cible) return res.status(409).json({ error: 'C’est le bureau de base.' });
+
+    const { section } = req.body as z.infer<typeof reprendreSchema>;
+    const rapport = await copyOfficeSettings(admin, base, cible, auth.user.id,
+      { ...NO_INHERIT, [section]: true }, { seulementSiVide: true });
+    for (const w of rapport.warnings) console.warn('[orgs/reprendre-base]', w);
+    return res.json({ rapport });
+  } catch (err: any) {
+    console.error('[orgs/reprendre-base]', err?.message);
+    return res.status(500).json({ error: 'Copie impossible.' });
+  }
+});
+
 // ─── GET /orgs/offices/grantable-members ─────────────────────────
 // Admins actifs du bureau actif : candidats à un accès immédiat au nouveau
 // bureau, depuis le formulaire de création. Les propriétaires n'y figurent
@@ -371,7 +509,7 @@ router.post('/orgs/create-office', validate(createOfficeSchema), async (req, res
     // était resté sans taxes. Best-effort.
     const bureauBase = await bureauDeBase(admin, officeIds) ?? auth.orgId;
     let inherited = null;
-    if (inherit.branding || inherit.taxes || inherit.email_templates || inherit.tags_sources) {
+    if (inherit.branding || inherit.taxes || inherit.email_templates || inherit.tags_sources || inherit.modeles) {
       inherited = await copyOfficeSettings(admin, bureauBase, newOrg.id, auth.user.id, inherit);
       for (const w of inherited.warnings) console.warn('[orgs/create-office] inherit:', w);
     }

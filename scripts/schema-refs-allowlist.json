@@ -2,6 +2,12 @@
   "_comment": "Faux positifs connus de check-schema-refs.py. N'ajouter une entrée qu'après avoir VÉRIFIÉ que la requête fonctionne réellement — chaque ligne doit porter sa justification.",
   "allow": [
     {
+      "file": "server/routes/orgs.ts",
+      "table": "orgs",
+      "ref": "org_id",
+      "reason": "Fiche de santé : `admin.from(t).select('org_id')` où t parcourt TABLES_MODELES_SANTE (role_templates, invoice_templates, quote_templates, job_templates, checklist_templates, custom_fields), qui ont toutes org_id. L'analyseur l'attribue au .from('orgs') qui précède. Vérifié contre staging (e2e 18/18, 2026-09-25)."
+    },
+    {
       "file": "src/lib/jobsApi.ts",
       "table": "clients",
       "ref": "derived_status",

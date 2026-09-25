@@ -18,6 +18,7 @@ import { captureClientException } from '../../lib/sentry';
 import EmptyState from '../../components/ui/EmptyState';
 import OfficeAccessGrid from '../../components/offices/OfficeAccessGrid';
 import MarqueEntrepriseCard from '../../components/offices/MarqueEntrepriseCard';
+import SanteBureauxCard from '../../components/offices/SanteBureauxCard';
 
 export default function OfficesSettings() {
   const navigate = useNavigate();
@@ -239,7 +240,13 @@ export default function OfficesSettings() {
       </div>
 
       {isOwner && data.offices.length > 1 && (
-        <OfficeAccessGrid onChanged={() => setVersion((v) => v + 1)} />
+        <SanteBureauxCard key={version} onChanged={() => setVersion((v) => v + 1)} />
+      )}
+
+      {isOwner && data.offices.length > 1 && (
+        <div id="acces-bureaux">
+          <OfficeAccessGrid onChanged={() => setVersion((v) => v + 1)} />
+        </div>
       )}
 
       {isOwner && data.offices.length > 1 && <MarqueEntrepriseCard offices={bureaux} onChanged={() => setVersion((v) => v + 1)} />}
