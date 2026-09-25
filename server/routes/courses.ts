@@ -1,5 +1,5 @@
 import express from 'express';
-import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, companyOrgIds } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import {
@@ -542,37 +542,34 @@ router.delete('/courses/:id', async (req, res) => {
 });
 
 /** POST /api/courses/:id/duplicate — duplicate course (admin only) */
-router.post('/courses/:id/duplicate', async (req, res) => {
-  try {
-    const auth = await requireAdmin(req, res);
-    if (!auth) return;
-    const admin = getServiceClient();
-
-    const { data: original, error: fetchErr } = await admin
-      .from('courses')
-      .select('*')
-      .eq('id', req.params.id)
-      .eq('org_id', auth.orgId)
-      .is('deleted_at', null)
-      .maybeSingle();
-    if (fetchErr) throw fetchErr;
-    if (!original) return res.status(404).json({ error: 'Course not found.' });
-
+/**
+ * Copie un cours (modules et leçons) dans un bureau. Partagé par « Dupliquer »
+ * et « Copier vers les autres bureaux ». garderPersonnes = false quand le
+ * bureau cible n'a pas les mêmes personnes (les rôles ciblés, eux, suivent).
+ */
+async function copierCours(
+  admin: ReturnType<typeof getServiceClient>,
+  original: any,
+  orgId: string,
+  userId: string,
+  titre: string,
+  options: { garderPersonnes: boolean; statut: string },
+): Promise<any> {
     const { data: newCourse, error: insertErr } = await admin
       .from('courses')
       .insert({
-        org_id: auth.orgId,
-        title: `${original.title} (copy)`,
+        org_id: orgId,
+        title: titre,
         description: original.description,
         cover_image: original.cover_image,
-        status: 'draft',
+        status: options.statut,
         ...(hasCategoryColumn ? { category: original.category } : {}),
         // Sans ça, un cours 'assigned' dupliqué retombe sur 'all' et devient
         // visible à toute l'org dès sa publication.
         ...(hasVisibilityColumn ? { visibility: original.visibility } : {}),
-        created_by: auth.user.id,
+        created_by: userId,
         ...(hasTargetingColumns && original.target_roles?.length ? { target_roles: original.target_roles } : {}),
-        ...(hasTargetingColumns && original.target_user_ids?.length ? { target_user_ids: original.target_user_ids } : {}),
+        ...(options.garderPersonnes && hasTargetingColumns && original.target_user_ids?.length ? { target_user_ids: original.target_user_ids } : {}),
       })
       .select()
       .single();
@@ -618,6 +615,65 @@ router.post('/courses/:id/duplicate', async (req, res) => {
         if (lessonErr) throw lessonErr;
       }
     }
+
+  return newCourse;
+}
+
+/**
+ * POST /api/courses/:id/copy-to-offices — formation d'ENTREPRISE (plan
+ * multi-bureaux, niveau 4) : le propriétaire la recopie dans les autres bureaux
+ * ouverts. Un bureau qui a déjà une formation du même titre est sauté.
+ */
+router.post('/courses/:id/copy-to-offices', async (req, res) => {
+  try {
+    const auth = await requireAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const { data: moi } = await admin.from('memberships').select('role')
+      .eq('org_id', auth.orgId).eq('user_id', auth.user.id).eq('status', 'active').maybeSingle();
+    if (moi?.role !== 'owner') return res.status(403).json({ error: 'Only the owner can copy a course to every office.' });
+
+    const { data: original, error: fetchErr } = await admin
+      .from('courses').select('*').eq('id', req.params.id).eq('org_id', auth.orgId).is('deleted_at', null).maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!original) return res.status(404).json({ error: 'Course not found.' });
+
+    const groupe = await companyOrgIds(admin, auth.orgId);
+    const { data: ouverts } = await admin.from('orgs').select('id').in('id', groupe).is('archived_at', null);
+    let copies = 0;
+    let sautes = 0;
+    for (const o of ouverts || []) {
+      const org = String(o.id);
+      if (org === auth.orgId) continue;
+      const { data: deja } = await admin.from('courses').select('id')
+        .eq('org_id', org).eq('title', original.title).is('deleted_at', null).limit(1).maybeSingle();
+      if (deja) { sautes += 1; continue; }
+      await copierCours(admin, original, org, auth.user.id, original.title, { garderPersonnes: false, statut: original.status || 'draft' });
+      copies += 1;
+    }
+    return res.json({ copies, sautes });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to copy course to offices.', '[courses/copy-to-offices]');
+  }
+});
+
+router.post('/courses/:id/duplicate', async (req, res) => {
+  try {
+    const auth = await requireAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+
+    const { data: original, error: fetchErr } = await admin
+      .from('courses')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('org_id', auth.orgId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!original) return res.status(404).json({ error: 'Course not found.' });
+
+    const newCourse = await copierCours(admin, original, auth.orgId, auth.user.id, `${original.title} (copy)`, { garderPersonnes: true, statut: 'draft' });
 
     return res.status(201).json(newCourse);
   } catch (err: any) {

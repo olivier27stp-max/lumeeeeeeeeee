@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
-import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, companyOrgIds } from '../lib/supabase';
 
 const router = Router();
 
@@ -28,9 +28,105 @@ const DEFAULT_SCOPE: Record<string, string> = {
   technician: 'company',
 };
 
+/**
+ * Enregistre le rôle d'UN bureau et le propage aux membres de ce rôle dont les
+ * permissions n'ont pas été personnalisées. Partagé par la page Rôles et par
+ * « appliquer à tous les bureaux ».
+ */
+async function appliquerPreset(
+  admin: ReturnType<typeof getServiceClient>,
+  orgId: string,
+  role: 'admin' | 'sales_rep' | 'technician',
+  sanitized: Record<string, boolean>,
+): Promise<{ membres: number } | { erreur: string }> {
+    // 1) Upsert role_templates row for this org+role
+    const { error: tmplErr } = await admin
+      .from('role_templates')
+      .upsert({
+        org_id: orgId,
+        slug: role,
+        name: role,
+        is_system: true,
+        default_scope: DEFAULT_SCOPE[role] ?? 'self',
+        permissions: sanitized,
+        is_active: true,
+      }, { onConflict: 'org_id,slug' });
+
+    if (tmplErr) {
+      console.error('[roles/update-preset] template upsert failed', tmplErr);
+      return { erreur: 'Failed to save role preset.' };
+    }
+
+    // 2) Propagate to every active membership with this role in the org —
+    // EXCEPT members whose permissions were customized per-user: the preset
+    // must not overwrite them. Falls back to the legacy overwrite-all
+    // behaviour while the permissions_custom migration isn't applied.
+    let propagate = await admin
+      .from('memberships')
+      .update({ permissions: sanitized })
+      .eq('org_id', orgId)
+      .eq('role', role)
+      .in('status', ['active', 'pending'])
+      .eq('permissions_custom', false)
+      .select('user_id');
+    if (propagate.error) {
+      propagate = await admin
+        .from('memberships')
+        .update({ permissions: sanitized })
+        .eq('org_id', orgId)
+        .eq('role', role)
+        .in('status', ['active', 'pending'])
+        .select('user_id');
+    }
+
+    if (propagate.error) {
+      console.error('[roles/update-preset] membership propagation failed', propagate.error);
+      return { erreur: 'Preset saved, but failed to propagate to members.' };
+    }
+
+  return { membres: propagate.data?.length ?? 0 };
+}
+
 const updatePresetSchema = z.object({
   role: z.enum(['admin', 'sales_rep', 'technician']),
   permissions: z.record(z.string(), z.boolean()),
+});
+
+// ─── POST /api/roles/apply-to-offices ───────────────────────────
+// Rôles d'ENTREPRISE (plan multi-bureaux, niveau 2) : le propriétaire applique
+// les rôles du bureau actif à tous les autres bureaux de l'entreprise (ouverts).
+// Chaque bureau peut ensuite ajuster les siens dans sa page Rôles.
+router.post('/roles/apply-to-offices', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const { data: moi } = await admin.from('memberships').select('role')
+      .eq('user_id', auth.user.id).eq('org_id', auth.orgId).eq('status', 'active').maybeSingle();
+    if (moi?.role !== 'owner') {
+      return res.status(403).json({ error: 'Only the owner can apply roles to every office.' });
+    }
+    const { data: modeles } = await admin.from('role_templates').select('slug, permissions')
+      .eq('org_id', auth.orgId).eq('is_active', true).in('slug', ['admin', 'sales_rep', 'technician']);
+    const groupe = await companyOrgIds(admin, auth.orgId);
+    const { data: ouverts } = await admin.from('orgs').select('id').in('id', groupe).is('archived_at', null);
+    const cibles = (ouverts || []).map((o: any) => String(o.id)).filter((id) => id !== auth.orgId);
+    let membres = 0;
+    for (const org of cibles) {
+      for (const m of modeles || []) {
+        const perms: Record<string, boolean> = { ...((m.permissions || {}) as Record<string, boolean>) };
+        // Un technicien n'a JAMAIS de permission financière, quel que soit le modèle.
+        if (m.slug === 'technician') for (const k of Object.keys(perms)) if (FINANCIAL_KEYS.has(k)) perms[k] = false;
+        const r = await appliquerPreset(admin, org, m.slug as 'admin' | 'sales_rep' | 'technician', perms);
+        if ('erreur' in r) return res.status(500).json({ error: r.erreur, bureaux_faits: cibles.indexOf(org) });
+        membres += r.membres;
+      }
+    }
+    return res.json({ bureaux: cibles.length, roles: (modeles || []).length, membres });
+  } catch (err: any) {
+    console.error('[roles/apply-to-offices]', err?.message || err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
 });
 
 // ─── POST /api/roles/update-preset ──────────────────────────────
@@ -60,54 +156,12 @@ router.post('/roles/update-preset', validate(updatePresetSchema), async (req, re
       }
     }
 
-    // 1) Upsert role_templates row for this org+role
-    const { error: tmplErr } = await admin
-      .from('role_templates')
-      .upsert({
-        org_id: auth.orgId,
-        slug: role,
-        name: role,
-        is_system: true,
-        default_scope: DEFAULT_SCOPE[role] ?? 'self',
-        permissions: sanitized,
-        is_active: true,
-      }, { onConflict: 'org_id,slug' });
-
-    if (tmplErr) {
-      console.error('[roles/update-preset] template upsert failed', tmplErr);
-      return res.status(500).json({ error: 'Failed to save role preset.' });
-    }
-
-    // 2) Propagate to every active membership with this role in the org —
-    // EXCEPT members whose permissions were customized per-user: the preset
-    // must not overwrite them. Falls back to the legacy overwrite-all
-    // behaviour while the permissions_custom migration isn't applied.
-    let propagate = await admin
-      .from('memberships')
-      .update({ permissions: sanitized })
-      .eq('org_id', auth.orgId)
-      .eq('role', role)
-      .in('status', ['active', 'pending'])
-      .eq('permissions_custom', false)
-      .select('user_id');
-    if (propagate.error) {
-      propagate = await admin
-        .from('memberships')
-        .update({ permissions: sanitized })
-        .eq('org_id', auth.orgId)
-        .eq('role', role)
-        .in('status', ['active', 'pending'])
-        .select('user_id');
-    }
-
-    if (propagate.error) {
-      console.error('[roles/update-preset] membership propagation failed', propagate.error);
-      return res.status(500).json({ error: 'Preset saved, but failed to propagate to members.' });
-    }
+    const resultat = await appliquerPreset(admin, auth.orgId, role, sanitized);
+    if ('erreur' in resultat) return res.status(500).json({ error: resultat.erreur });
 
     return res.json({
       message: 'Role preset updated.',
-      affected_members: propagate.data?.length ?? 0,
+      affected_members: resultat.membres,
     });
   } catch (err: any) {
     console.error('[roles/update-preset]', err?.message || err);

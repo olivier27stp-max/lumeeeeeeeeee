@@ -8,8 +8,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { useCompany } from '../contexts/CompanyContext';
 import {
-  getCourses, deleteCourse, duplicateCourse,
+  getCourses, deleteCourse, duplicateCourse, copyCourseToOffices,
   getProgressSummary, getCurrentUserRole,
   type Course, type ProgressSummary,
 } from '../lib/coursesApi';
@@ -89,6 +90,21 @@ export default function Courses() {
       toast.error(err?.message || t.courses.failedDelete);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Formation d'ENTREPRISE : le propriétaire la recopie dans ses autres bureaux.
+  const { currentRole, companies } = useCompany();
+  const peutCopierPartout = currentRole === 'owner' && companies.length > 1;
+  const handleCopierPartout = async (course: Course) => {
+    try {
+      const r = await copyCourseToOffices(course.id);
+      toast.success(fr
+        ? `Formation copiée dans ${r.copies} bureau(x)${r.sautes ? ` (${r.sautes} l’avai(en)t déjà)` : ''}.`
+        : `Course copied to ${r.copies} office(s)${r.sautes ? ` (${r.sautes} already had it)` : ''}.`);
+    } catch (err: any) {
+      console.error('[Courses] copier partout', err);
+      toast.error(err?.message || (fr ? 'Copie impossible.' : 'Copy failed.'));
     }
   };
 
@@ -332,6 +348,12 @@ export default function Courses() {
                                 className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors">
                                 <Copy size={13} className="text-text-muted" /> {t.courses.duplicateCourse}
                               </button>
+                              {peutCopierPartout && (
+                                <button onClick={() => { void handleCopierPartout(course); setMenuOpen(null); }}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors">
+                                  <Copy size={13} className="text-text-muted" /> {fr ? 'Copier vers les autres bureaux' : 'Copy to other offices'}
+                                </button>
+                              )}
                               <div className="border-t border-outline/20 my-1" />
                               <button onClick={() => { setCourseToDelete(course); setMenuOpen(null); }}
                                 className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-danger hover:bg-danger-light transition-colors">
