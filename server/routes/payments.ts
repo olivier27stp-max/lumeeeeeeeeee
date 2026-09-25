@@ -487,9 +487,16 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
 
         // Detect plan change from Stripe Schedule transition or direct update.
         // We resolve the Lume plan by matching the price recurring.interval + unit_amount.
+        // `cancel_at` : date d'annulation programmée (fin d'engagement des
+        // versements, posée par /billing/cancel). Stripe la garde à part de
+        // cancel_at_period_end ; on la miroite pour que le tableau de bord et
+        // la page Forfait affichent la vraie date de départ.
+        const cancelAt = (sub as any).cancel_at
+          ? new Date((sub as any).cancel_at * 1000).toISOString()
+          : null;
         const updateRow: Record<string, any> = {
           status: sub.status,
-          cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+          cancel_at_period_end: Boolean(sub.cancel_at_period_end) || Boolean(cancelAt),
           canceled_at: canceledAt,
           current_period_start: periodStart,
           current_period_end: periodEnd,
@@ -509,8 +516,17 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           const stripeInterval = firstItem.price.recurring?.interval; // 'month' | 'year'
           const unitAmount = firstItem.price.unit_amount as number | null;
           const currency = (firstItem.price.currency || 'usd').toUpperCase();
+          // Prix à versements (billing.ts create-checkout-session) : « tous les
+          // 4 mois » au tiers du prix annuel. Il se reconnaît par
+          // interval_count + metadata.installments — jamais par le montant seul,
+          // qui ne correspond à aucune colonne de `plans`. On le ramène au
+          // forfait annuel plein pour l'appariement.
+          const intervalCount = Number(firstItem.price.recurring?.interval_count || 1);
+          const versements = Number((firstItem.price.metadata as any)?.installments || 0);
+          const estVersements = stripeInterval === 'month' && intervalCount > 1 && versements > 1 && intervalCount * versements === 12;
           if (stripeInterval && unitAmount != null) {
-            const lumeInterval = stripeInterval === 'year' ? 'yearly' : 'monthly';
+            const lumeInterval = stripeInterval === 'year' || estVersements ? 'yearly' : 'monthly';
+            const montantPlan = estVersements ? unitAmount * versements : unitAmount;
             const priceField = lumeInterval === 'yearly'
               ? (currency === 'USD' ? 'yearly_price_usd' : 'yearly_price_cad')
               : (currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad');
@@ -520,13 +536,13 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
               .from('plans')
               .select('id, slug')
               .eq('is_active', true)
-              .eq(priceField, unitAmount)
+              .eq(priceField, montantPlan)
               .maybeSingle();
 
             if (matchingPlan) {
               updateRow.plan_id = matchingPlan.id;
               updateRow.interval = lumeInterval;
-              updateRow.amount_cents = unitAmount;
+              updateRow.amount_cents = montantPlan;
               // Clear scheduled change flags if the scheduled plan just became current.
               updateRow.scheduled_plan_id = null;
               updateRow.scheduled_interval = null;
@@ -541,6 +557,18 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           .update(updateRow)
           .eq('stripe_subscription_id', sub.id);
         if (subSyncErr) throw new Error('subscription.updated sync failed: ' + subSyncErr.message);
+
+        // `cancel_at` à part, en best-effort : la colonne arrive avec la
+        // migration 20260927140000. L'inclure dans updateRow ferait échouer la
+        // synchronisation entière (et rejouer le webhook en boucle) tant que la
+        // migration n'est pas appliquée à la main.
+        {
+          const { error: cancelAtErr } = await admin
+            .from('subscriptions')
+            .update({ cancel_at: cancelAt })
+            .eq('stripe_subscription_id', sub.id);
+          if (cancelAtErr) console.warn('[webhook/subscription.updated] cancel_at non miroité (migration 20260927140000 ?):', cancelAtErr.message);
+        }
 
         // ── Sync the org's SMS number with its new entitlement ──
         // A downgrade to a plan without SMS must not leave the number running:
@@ -696,6 +724,36 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             })
             .eq('stripe_subscription_id', stripeSubId);
           if (invPaidErr) throw new Error('invoice.paid subscription sync failed: ' + invPaidErr.message);
+
+          // ── Versements : un de plus d'encaissé ──
+          // Seules les factures de cycle comptent : la première (subscription_create)
+          // est déjà comptée par checkout.session.completed (installments_paid = 1),
+          // et une facture d'ajustement (sièges) n'est pas un versement.
+          if (invAny.billing_reason === 'subscription_cycle') {
+            const { data: ligne } = await admin
+              .from('subscriptions')
+              .select('id, installments_count, installments_paid, commitment_end')
+              .eq('stripe_subscription_id', stripeSubId)
+              .maybeSingle();
+            const nb = Number(ligne?.installments_count || 0);
+            if (ligne && nb > 1) {
+              let paye = Number(ligne.installments_paid || 0) + 1;
+              let finEngagement: string | null = ligne.commitment_end ?? null;
+              if (paye > nb) {
+                // L'engagement précédent est soldé : nouvelle année, nouveau
+                // décompte, l'engagement glisse de 12 mois.
+                paye = 1;
+                const base = finEngagement ? new Date(finEngagement) : new Date();
+                base.setFullYear(base.getFullYear() + 1);
+                finEngagement = base.toISOString();
+              }
+              const { error: versErr } = await admin
+                .from('subscriptions')
+                .update({ installments_paid: paye, commitment_end: finEngagement })
+                .eq('id', ligne.id);
+              if (versErr) throw new Error('invoice.paid installments sync failed: ' + versErr.message);
+            }
+          }
         }
         // If the invoice is on our internal invoices table (org-level), reconcile paid_cents.
         const internalInvoiceId = String((inv.metadata as any)?.invoice_id || '').trim();
@@ -1891,6 +1949,8 @@ async function handleCheckoutSessionCompleted(
   const planSlug = meta.plan_slug || '';
   const interval = (meta.interval || 'monthly') as 'monthly' | 'yearly';
   const currency = (meta.currency || 'CAD').toUpperCase();
+  // Plan annuel en 3 versements (billing.ts create-checkout-session).
+  const installments: number | null = interval === 'yearly' && Number(meta.installments) === 3 ? 3 : null;
   const promoCode = meta.promo_code || null;
   // Referral code arrives either from the app-driven checkout (set automatically)
   // or typed by hand into a Stripe Payment Link's metadata after a demo. Accept a
@@ -1979,11 +2039,22 @@ async function handleCheckoutSessionCompleted(
   if (cancelPrevErr) throw new Error('[webhook/checkout] cancel previous active subscription failed: ' + cancelPrevErr.message);
 
   // ── 6. Create subscription ──
+  // En versements, la période Stripe est de 12 / 3 = 4 mois ; l'engagement
+  // (commitment_end) court 12 mois. Le webhook customer.subscription.updated
+  // recale ensuite les dates exactes de Stripe.
   const periodEnd = new Date(now);
-  if (interval === 'yearly') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+  if (installments) periodEnd.setMonth(periodEnd.getMonth() + 12 / installments);
+  else if (interval === 'yearly') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
   else periodEnd.setMonth(periodEnd.getMonth() + 1);
+  const commitmentEnd = installments ? new Date(now) : null;
+  if (commitmentEnd) commitmentEnd.setFullYear(commitmentEnd.getFullYear() + 1);
 
-  const amountCents = session.amount_total || 0;
+  // Montant de la ligne : ce que le client a payé (facture d'activation, rabais
+  // compris). En versements, la ligne porte le prix ANNUEL plein — c'est
+  // l'engagement — et installment_amount_cents porte le versement.
+  const yearlyField = currency === 'USD' ? 'yearly_price_usd' : 'yearly_price_cad';
+  const amountCents = installments ? Number(plan[yearlyField] || 0) : (session.amount_total || 0);
+  const installmentCents = installments ? Math.round(Number(plan[yearlyField] || 0) / installments) : null;
   const stripeSubId = typeof session.subscription === 'string' ? session.subscription : (session.subscription as any)?.id || null;
   const stripeCustomerId = typeof session.customer === 'string' ? session.customer : (session.customer as any)?.id || null;
 
@@ -2013,6 +2084,24 @@ async function handleCheckoutSessionCompleted(
   if (subError) {
     console.error('[webhook/checkout] Failed to create subscription:', subError.message);
     return;
+  }
+
+  // ── 6b. Versements : colonnes de la migration 20260927140000 ──
+  // Écriture séparée pour ne JAMAIS faire échouer la création de l'abonnement
+  // d'un client qui vient de payer si la migration n'est pas encore appliquée.
+  // En cas d'échec, la ligne reste un annuel classique (Stripe encaisse quand
+  // même tous les 4 mois) et l'erreur est criée dans les logs.
+  if (installments) {
+    const { error: versErr } = await admin
+      .from('subscriptions')
+      .update({
+        installments_count: installments,
+        installments_paid: 1, // la facture d'activation vient d'être payée
+        installment_amount_cents: installmentCents,
+        commitment_end: commitmentEnd!.toISOString(),
+      })
+      .eq('id', subscription.id);
+    if (versErr) console.error('[webhook/checkout] VERSEMENTS NON ENREGISTRÉS — appliquer la migration 20260927140000 :', versErr.message, { subscription_id: subscription.id });
   }
 
   // ── 7. Update billing profile + propagate billing address to company_settings ──

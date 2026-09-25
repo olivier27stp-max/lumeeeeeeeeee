@@ -13,6 +13,7 @@ const routerSrc = read('server/routes/creator-space.ts');
 const auditSrc = read('server/routes/creator-space-audit.ts');
 const featuresSrc = read('server/routes/creator-space-features.ts');
 const notesSrc = read('server/routes/creator-space-notes.ts');
+const watchSrc = read('server/routes/creator-space-billing.ts');
 const indexSrc = read('server/index.ts');
 const appSrc = read('src/App.tsx');
 
@@ -155,6 +156,49 @@ describe('Creator Space — notes internes par workspace (creator-space-notes)',
     const writes = notesSrc.match(/\.from\('([a-z_]+)'\)\s*\.(insert|update|upsert|delete)\(/g) ?? [];
     const tables = new Set(writes.map((w) => w.match(/from\('([a-z_]+)'\)/)![1]));
     expect(tables).toEqual(new Set(['creator_space_notes']));
+  });
+});
+
+describe('Creator Space — tableau de bord des abonnements (creator-space-billing)', () => {
+  it('chaque handler est gardé par requireCreatorSpace ; les identifiants sont validés (UUID)', () => {
+    const handlers = watchSrc.split(/router\.(?:get|post|put|patch|delete)\(/).slice(1);
+    expect(handlers.length).toBeGreaterThan(0);
+    for (const h of handlers) {
+      expect(h).toContain('requireCreatorSpace(req, res)');
+      if (h.includes(':orgId')) expect(h).toContain('UUID_RE.test(orgId)');
+    }
+  });
+
+  it('lecture seule : aucun handler POST/PATCH/DELETE, aucune écriture en base', () => {
+    expect(watchSrc).not.toMatch(/router\.(post|patch|delete|put)\(/);
+    expect(watchSrc).not.toMatch(/\.(insert|update|upsert|delete)\(/);
+  });
+
+  it("/watch ne renvoie jamais d'identifiant Stripe : seul un booléen has_stripe_subscription", () => {
+    const watch = watchSrc.slice(watchSrc.indexOf("'/creator-space/billing/watch'"), watchSrc.indexOf("'/creator-space/billing/:orgId/stripe-link'"));
+    expect(watch).toContain('has_stripe_subscription: !!s.stripe_subscription_id');
+    expect(watch).not.toMatch(/stripe_subscription_id: /);
+    expect(watch).not.toMatch(/stripe_customer_id/);
+    expect(watchSrc).not.toMatch(/billing_profiles|ip_address|user_agent|token_hash/);
+  });
+
+  it("le lien Stripe est journalisé (security_events) et n'est jamais une redirection ouverte", () => {
+    const link = watchSrc.slice(watchSrc.indexOf("'/creator-space/billing/:orgId/stripe-link'"));
+    expect(link).toContain("event_type: 'creator_space_stripe_link'");
+    expect(link).toContain('https://dashboard.stripe.com');
+    expect(link).toContain('encodeURIComponent(');
+    expect(link).not.toContain('res.redirect(');
+  });
+
+  it("la grâce d'impayé vient de la même constante que le gate d'accès (JOURS_DE_GRACE)", () => {
+    expect(watchSrc).toContain("import { JOURS_DE_GRACE } from '../lib/subscription-email'");
+    expect(watchSrc).toContain('JOURS_DE_GRACE * JOUR_MS');
+  });
+
+  it('le routeur est monté dans server/index.ts après le limiteur et le journal du Creator Space', () => {
+    expect(indexSrc).toContain("import creatorSpaceBillingRouter from './routes/creator-space-billing'");
+    const monte = indexSrc.indexOf("app.use('/api', creatorSpaceBillingRouter)");
+    expect(monte).toBeGreaterThan(indexSrc.indexOf("app.use('/api/creator-space', creatorSpaceViewLogger())"));
   });
 });
 

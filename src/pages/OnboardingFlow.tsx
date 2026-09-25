@@ -128,6 +128,14 @@ export default function OnboardingFlow() {
     return intervalParam;
   });
   const setInterval = (v: 'monthly' | 'yearly') => { sessionStorage.setItem('onb_interval', v); setIntervalRaw(v); };
+  // Plan annuel en 3 versements (tous les 4 mois). Vrai seulement avec
+  // interval === 'yearly' ; le serveur ignore la valeur sur un plan mensuel.
+  const [installments, setInstallmentsRaw] = useState<boolean>(() => {
+    const stored = sessionStorage.getItem('onb_installments');
+    if (stored === '1' || stored === '0') return stored === '1';
+    return params.get('installments') === '3';
+  });
+  const setInstallments = (v: boolean) => { sessionStorage.setItem('onb_installments', v ? '1' : '0'); setInstallmentsRaw(v); };
   const [currency] = useState<'USD' | 'CAD'>('CAD');
 
   // Step 1 — basic info (persisted to survive remounts)
@@ -382,7 +390,7 @@ export default function OnboardingFlow() {
       }
 
       // Success — clean up and redirect
-      ['onb_step','onb_plan','onb_interval','onb_name','onb_email','onb_token','onb_uid'].forEach(k => sessionStorage.removeItem(k));
+      ['onb_step','onb_plan','onb_interval','onb_installments','onb_name','onb_email','onb_token','onb_uid'].forEach(k => sessionStorage.removeItem(k));
       try { localStorage.removeItem('lume_referral_code'); } catch { /* ignore */ }
       toast.success(isFr ? 'Abonnement activé! Bienvenue sur Lume.' : 'Subscription activated! Welcome to Lume.');
       // Laisse le temps de lire le toast avant la redirection (l'alert() natif bloquait, lui).
@@ -508,6 +516,8 @@ export default function OnboardingFlow() {
                   planName={PLAN_NAMES[selectedSlug] || plan.name}
                   interval={interval}
                   setInterval={setInterval}
+                  installments={interval === 'yearly' && installments}
+                  setInstallments={setInstallments}
                   currency={currency}
                   price={price}
                   discountedPrice={discountedPrice}
@@ -594,8 +604,9 @@ export default function OnboardingFlow() {
 
 // ─── Checkout Step (uses Stripe Elements) ───
 
-function CheckoutStep({ plan, planName, interval, setInterval, currency, price, discountedPrice, promoCode, setPromoCode, promoValid, setPromoValid, referralCode, email, setEmail, password, companyName, processing, isFr, onBack, onCheckout, emailVerified, resendingVerification, onResendVerification }: {
+function CheckoutStep({ plan, planName, interval, setInterval, installments, setInstallments, currency, price, discountedPrice, promoCode, setPromoCode, promoValid, setPromoValid, referralCode, email, setEmail, password, companyName, processing, isFr, onBack, onCheckout, emailVerified, resendingVerification, onResendVerification }: {
   plan: Plan; planName: string; interval: 'monthly' | 'yearly'; setInterval: (v: 'monthly' | 'yearly') => void;
+  installments: boolean; setInstallments: (v: boolean) => void;
   currency: string; price: number; discountedPrice: number;
   promoCode: string; setPromoCode: (v: string) => void;
   promoValid: any; setPromoValid: (v: any) => void;
@@ -624,7 +635,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
       const res = await fetch('/api/billing/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ plan_slug: plan.slug, interval, currency, promo_code: promoCode || undefined, referral_code: referralCode || undefined }),
+        body: JSON.stringify({ plan_slug: plan.slug, interval, currency, installments: interval === 'yearly' && installments ? 3 : undefined, promo_code: promoCode || undefined, referral_code: referralCode || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || (isFr ? 'Échec de la création de la session de paiement' : 'Failed to create checkout session'));
@@ -645,6 +656,8 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
   const yearlyPrice = currency === 'USD' ? plan.yearly_price_usd : plan.yearly_price_cad;
   const yearlyMonthly = Math.round(yearlyPrice / 12);
   const savedPerYear = (monthlyPrice * 12) - yearlyPrice;
+  // Annuel en 3 versements : même prix annuel, encaissé en trois fois (tous les 4 mois).
+  const installmentPrice = Math.round(yearlyPrice / 3);
 
   return (
     <div className="max-w-5xl mx-auto w-full">
@@ -673,9 +686,9 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
               {(['yearly', 'monthly'] as const).map(iv => {
                 const p = iv === 'yearly' ? yearlyPrice : monthlyPrice;
                 const perMonth = iv === 'yearly' ? yearlyMonthly : monthlyPrice;
-                const isSelected = interval === iv;
+                const isSelected = interval === iv && !(iv === 'yearly' && installments);
                 return (
-                  <button key={iv} onClick={() => setInterval(iv)}
+                  <button key={iv} onClick={() => { setInterval(iv); setInstallments(false); }}
                     className={cn('w-full flex items-center justify-between p-4 rounded-xl border-2 text-left transition-all',
                       isSelected ? 'border-[#1F5F4F] bg-[#1F5F4F]/5' : 'border-gray-200 hover:border-gray-300')}>
                     <div className="flex items-center gap-3">
@@ -694,6 +707,29 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
                   </button>
                 );
               })}
+              {/* Annuel en 3 versements — même rabais annuel, encaissé en trois fois. Engagement 12 mois. */}
+              {yearlyPrice > 0 && (() => {
+                const isSelected = interval === 'yearly' && installments;
+                return (
+                  <button onClick={() => { setInterval('yearly'); setInstallments(true); }}
+                    className={cn('w-full flex items-center justify-between p-4 rounded-xl border-2 text-left transition-all',
+                      isSelected ? 'border-[#1F5F4F] bg-[#1F5F4F]/5' : 'border-gray-200 hover:border-gray-300')}>
+                    <div className="flex items-center gap-3">
+                      <div className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center', isSelected ? 'border-[#1F5F4F] bg-[#1F5F4F]' : 'border-gray-300')}>
+                        {isSelected && <Check size={10} className="text-white" strokeWidth={3} />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{isFr ? 'Annuel en 3 versements' : 'Annual in 3 installments'}</p>
+                        <p className="text-xs text-[#3FAF97] font-medium">{isFr ? `Même prix annuel · engagement 12 mois` : `Same annual price · 12-month commitment`}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-base font-bold text-gray-900">${Math.round(installmentPrice / 100)}<span className="text-xs font-normal text-gray-500"> × 3</span></p>
+                      <p className="text-[10px] text-gray-400">{isFr ? 'tous les 4 mois' : 'every 4 months'}</p>
+                    </div>
+                  </button>
+                );
+              })()}
             </div>
           </div>
 
@@ -793,7 +829,13 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
                   <span className="font-semibold text-gray-900">{planName}</span>
                   <span className="font-semibold">${Math.round((interval === 'yearly' ? yearlyMonthly : monthlyPrice) / 100)}/{isFr ? 'mois' : 'mo'}</span>
                 </div>
-                <p className="text-xs text-gray-500">{interval === 'yearly' ? (isFr ? `Facturé $${Math.round(yearlyPrice / 100)}/an` : `Billed $${Math.round(yearlyPrice / 100)}/yr`) : (isFr ? 'Facturé mensuellement' : 'Billed monthly')}</p>
+                <p className="text-xs text-gray-500">
+                  {interval === 'yearly'
+                    ? installments
+                      ? (isFr ? `3 versements de $${Math.round(installmentPrice / 100)} tous les 4 mois ($${Math.round(yearlyPrice / 100)}/an)` : `3 installments of $${Math.round(installmentPrice / 100)} every 4 months ($${Math.round(yearlyPrice / 100)}/yr)`)
+                      : (isFr ? `Facturé $${Math.round(yearlyPrice / 100)}/an` : `Billed $${Math.round(yearlyPrice / 100)}/yr`)
+                    : (isFr ? 'Facturé mensuellement' : 'Billed monthly')}
+                </p>
                 {interval === 'yearly' && (
                   <div className="flex justify-between text-sm text-[#3FAF97]">
                     <span>{isFr ? 'Économie' : 'Savings'}</span>

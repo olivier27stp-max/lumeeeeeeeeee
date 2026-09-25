@@ -368,3 +368,107 @@ export function setCompanyOfficeQuota(orgId: string, quota: number, reason: stri
 export function setCompanyFeature(orgId: string, key: string, state: FeatureOverrideState, reason: string): Promise<{ ok: true; key: string; state: FeatureOverrideState; org_ids: string[] }> {
   return apiFetch(`/companies/${orgId}/features/${key}`, { method: 'PUT', body: { state, reason } });
 }
+
+// ── Billing : tableau de bord des abonnements ─────────────────────────────
+
+export type BillingSituation =
+  | 'suspended'
+  | 'past_due'
+  | 'anomaly'
+  | 'installment_due'
+  | 'renewing_7d'
+  | 'cancel_scheduled'
+  | 'trial_ending'
+  | 'renewing_30d'
+  | 'churned'
+  | 'ok';
+
+export type BillingAlertCode = 'period_expired' | 'no_stripe' | 'past_due_no_date' | 'grace_elapsed' | 'commitment_breach';
+
+export interface BillingWatchRow {
+  org_id: string;
+  org_name: string;
+  owner_name: string | null;
+  contact_email: string | null;
+  member_count: number;
+  last_activity: string | null;
+  days_since_activity: number | null;
+  engagement: EngagementLevel;
+
+  plan_name: string | null;
+  plan_slug: string | null;
+  status: string;
+  interval: 'monthly' | 'yearly';
+  currency: string;
+  amount_cents: number;
+  customer_since: string;
+  payment_confirmed_at: string | null;
+  current_period_end: string | null;
+  days_to_period_end: number | null;
+
+  situation: BillingSituation;
+  priority: number;
+  next_charge_at: string | null;
+  next_charge_cents: number;
+  days_to_next_charge: number | null;
+
+  past_due_since: string | null;
+  grace: { expire_le: string; jours_restants: number; actif: boolean } | null;
+  suspended: boolean;
+  canceled_at: string | null;
+  cancel_at_period_end: boolean;
+  cancel_effective_at: string | null;
+  cancellation_feedback: string | null;
+  cancellation_comment: string | null;
+  scheduled_plan_name: string | null;
+  scheduled_at: string | null;
+
+  installments: {
+    count: number;
+    paid: number;
+    amount_cents: number;
+    next_at: string | null;
+    commitment_end: string | null;
+    days_to_commitment_end: number | null;
+  } | null;
+
+  alerts: Array<{ code: BillingAlertCode; label: string }>;
+  has_stripe_subscription: boolean;
+  last_email: { type: string; status: string; at: string } | null;
+  last_note: { at: string; author_name: string | null; excerpt: string } | null;
+}
+
+export interface BillingWatch {
+  generated_at: string;
+  grace_days: number;
+  churn_window_days: number;
+  /** Faux tant que la migration 20260927140000 (versements, cancel_at) n'est pas appliquée. */
+  installments_available: boolean;
+  summary: {
+    active: number;
+    trialing: number;
+    past_due: number;
+    suspended: number;
+    cancel_scheduled: number;
+    renewing_7d: number;
+    renewing_30d: number;
+    installments_active: number;
+    installments_due_30d: number;
+    trial_ending_7d: number;
+    anomalies: number;
+    churned_30d: number;
+    due_7d_cents: Record<string, number>;
+    due_30d_cents: Record<string, number>;
+    mrr_cents: Record<string, number>;
+  };
+  rows: BillingWatchRow[];
+}
+
+export function getBillingWatch(): Promise<BillingWatch> {
+  return apiFetch('/billing/watch');
+}
+
+/** URL du tableau de bord Stripe (abonnement, sinon client) du workspace. */
+export function getStripeLink(orgId: string): Promise<{ url: string; kind: 'subscription' | 'customer' }> {
+  return apiFetch(`/billing/${orgId}/stripe-link`);
+}

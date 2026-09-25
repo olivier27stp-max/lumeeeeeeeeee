@@ -85,8 +85,9 @@ async function loadPlansById(admin: Admin): Promise<Map<string, any>> {
   return new Map((data ?? []).map((p: any) => [p.id, p]));
 }
 
-/** Nom d'affichage des compagnies : company_settings.company_name > orgs.name. */
-async function loadOrgDirectory(admin: Admin) {
+/** Nom d'affichage des compagnies : company_settings.company_name > orgs.name.
+ *  Exportée pour creator-space-billing.ts (tableau de bord des abonnements). */
+export async function loadOrgDirectory(admin: Admin) {
   const [{ data: orgs, error: orgErr }, { data: settings, error: setErr }] = await Promise.all([
     admin.from('orgs').select('id, name, created_by, created_at, company_group_id, logo_url'),
     admin.from('company_settings').select('org_id, company_name, email'),
@@ -121,7 +122,7 @@ export async function loadActorNames(admin: Admin, userIds: string[]): Promise<M
 /** Engagement par compagnie — mêmes formules que l'ancien back-office :
  *  dernière activité = max(login, job créé, fallback création de l'org) ;
  *  ≤1 j high, ≤7 j medium, ≤30 j low, sinon inactive. */
-async function computeWorkspaceEngagement(admin: Admin) {
+export async function computeWorkspaceEngagement(admin: Admin) {
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
   const { orgs } = await loadOrgDirectory(admin);

@@ -84,6 +84,13 @@ export interface Subscription {
   scheduled_plan_id?: string | null;
   scheduled_interval?: 'monthly' | 'yearly' | null;
   scheduled_at?: string | null;
+  /** Plan annuel en versements (migration 20260927140000) ; null = classique. */
+  installments_count?: number | null;
+  installments_paid?: number | null;
+  installment_amount_cents?: number | null;
+  commitment_end?: string | null;
+  /** Annulation programmée à une date précise (fin d'engagement), sinon null. */
+  cancel_at?: string | null;
 }
 
 export interface OnboardingData {

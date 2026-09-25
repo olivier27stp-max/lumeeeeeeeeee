@@ -754,7 +754,7 @@ router.post('/billing/cancel', async (req, res) => {
     // Stripe kept charging at the next renewal.
     const { data: subRow, error: subFetchErr } = await admin
       .from('subscriptions')
-      .select('id, stripe_subscription_id, status')
+      .select('id, stripe_subscription_id, status, current_period_end')
       .in('org_id', await companyOrgIds(admin, auth.orgId))
       .eq('status', 'active')
       .order('created_at', { ascending: false })
@@ -770,11 +770,37 @@ router.post('/billing/cancel', async (req, res) => {
       return res.status(404).json({ error: 'No active subscription to cancel.' });
     }
 
+    // ── Engagement des versements ──
+    // Un plan annuel en 3 versements est un engagement de 12 mois : annuler
+    // « à la fin de la période » (= du versement en cours) laisserait partir
+    // le client avec le rabais annuel pour un tiers du prix. On programme
+    // l'annulation à la fin de l'engagement (cancel_at) ; Stripe encaisse les
+    // versements restants d'ici là. Sans engagement en cours (ou déjà passé),
+    // comportement classique.
+    // Lecture séparée : ces colonnes arrivent avec la migration 20260927140000 ;
+    // tant qu'elle n'est pas appliquée, l'annulation classique doit marcher.
+    const { data: versements } = await admin
+      .from('subscriptions')
+      .select('installments_count, commitment_end')
+      .eq('id', subRow.id)
+      .maybeSingle();
+    const finEngagement = versements?.installments_count && versements?.commitment_end
+      ? new Date(versements.commitment_end)
+      : null;
+    const finPeriode = subRow.current_period_end ? new Date(subRow.current_period_end) : null;
+    const annulerA = finEngagement && finEngagement.getTime() > Date.now()
+      && (!finPeriode || finEngagement.getTime() > finPeriode.getTime())
+      ? finEngagement
+      : null;
+
     if (subRow.stripe_subscription_id && stripe) {
       try {
-        await stripe.subscriptions.update(subRow.stripe_subscription_id, {
-          cancel_at_period_end: true,
-        });
+        await stripe.subscriptions.update(
+          subRow.stripe_subscription_id,
+          annulerA
+            ? { cancel_at: Math.floor(annulerA.getTime() / 1000) }
+            : { cancel_at_period_end: true },
+        );
       } catch (stripeErr: any) {
         const code = stripeErr?.code || stripeErr?.raw?.code || '';
         const msg = stripeErr?.message || '';
@@ -792,14 +818,19 @@ router.post('/billing/cancel', async (req, res) => {
 
     const { error } = await admin
       .from('subscriptions')
-      .update({ cancel_at_period_end: true })
+      .update({ cancel_at_period_end: true, cancel_at: annulerA ? annulerA.toISOString() : null })
       .eq('id', subRow.id);
 
     if (error) {
       return res.status(500).json({ error: 'Failed to cancel subscription.' });
     }
 
-    return res.json({ message: 'Subscription will be canceled at the end of the billing period.' });
+    return res.json({
+      message: annulerA
+        ? 'Subscription will be canceled at the end of the current commitment.'
+        : 'Subscription will be canceled at the end of the billing period.',
+      cancel_at: annulerA ? annulerA.toISOString() : null,
+    });
   } catch (err: any) {
     console.error('[billing/cancel]', err.message);
     return res.status(500).json({ error: 'Internal server error.' });
@@ -1594,6 +1625,15 @@ router.post('/billing/create-checkout-session', async (req, res) => {
 
     if (!email) return res.status(400).json({ error: 'Email is required.' });
 
+    // ── Plan annuel en 3 versements ──
+    // Un prix Stripe récurrent « tous les 4 mois » au tiers du prix annuel.
+    // Le client s'engage pour 12 mois (3 versements) : l'engagement est suivi
+    // en base (installments_*, commitment_end — migration 20260927140000) et
+    // /billing/cancel programme toute annulation à la fin de l'engagement.
+    // Seul le forfait annuel se paie en versements ; toute autre valeur est
+    // ignorée plutôt que refusée (le front n'envoie 3 que sur « annuel »).
+    const installments: 3 | null = interval === 'yearly' && Number(req.body?.installments) === 3 ? 3 : null;
+
     // ── Email verification gate for existing users ──
     // Targeted lookup (was: listUsers — O(N) + 50-row default page)
     const existingUser: any = await findUserByEmail(admin, email);
@@ -1632,6 +1672,9 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       ? (currency === 'USD' ? 'yearly_price_usd' : 'yearly_price_cad')
       : (currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad');
     const amountCents = plan[priceField] || 0;
+    // Montant réellement facturé à chaque échéance : un tiers du prix annuel
+    // en versements (arrondi au cent), le prix plein sinon.
+    const chargeCents = installments ? Math.round(amountCents / installments) : amountCents;
 
     // ── Validate the referral code (if any) ──
     // The friend (code user) gets their first month free via a one-time coupon.
@@ -1658,10 +1701,13 @@ router.post('/billing/create-checkout-session', async (req, res) => {
     const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').trim();
 
     // Resolve persistent Stripe Price ID for this plan + interval + currency.
+    // En versements : prix dédié « tous les 4 mois » (stripe_installment_price_id_*).
     const priceIdField =
-      interval === 'yearly'
-        ? currency === 'USD' ? 'stripe_yearly_price_id_usd' : 'stripe_yearly_price_id_cad'
-        : currency === 'USD' ? 'stripe_monthly_price_id_usd' : 'stripe_monthly_price_id_cad';
+      installments
+        ? currency === 'USD' ? 'stripe_installment_price_id_usd' : 'stripe_installment_price_id_cad'
+        : interval === 'yearly'
+          ? currency === 'USD' ? 'stripe_yearly_price_id_usd' : 'stripe_yearly_price_id_cad'
+          : currency === 'USD' ? 'stripe_monthly_price_id_usd' : 'stripe_monthly_price_id_cad';
     let priceId: string | null = plan[priceIdField] || null;
 
     // Lazy fallback if the persistent Price ID isn't set yet.
@@ -1678,9 +1724,16 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       const price = await stripe.prices.create({
         product: productId,
         currency: (currency || 'CAD').toLowerCase(),
-        unit_amount: amountCents,
-        recurring: { interval: interval === 'yearly' ? 'year' : 'month' },
-        metadata: { plan_id: plan.id },
+        unit_amount: chargeCents,
+        // Versements : 12 / 3 = un prélèvement tous les 4 mois. Le webhook
+        // (customer.subscription.updated) reconnaît ce prix par
+        // interval_count + metadata.installments, jamais par le montant seul.
+        recurring: installments
+          ? { interval: 'month', interval_count: 12 / installments }
+          : { interval: interval === 'yearly' ? 'year' : 'month' },
+        metadata: installments
+          ? { plan_id: plan.id, installments: String(installments), interval: 'yearly' }
+          : { plan_id: plan.id },
       });
       priceId = price.id;
       const { error: errBill1640 } = await admin.from('plans').update({
@@ -1706,7 +1759,10 @@ router.post('/billing/create-checkout-session', async (req, res) => {
     const introPrice: number | null = plan[introPriceField] ?? null;
     const introMonths: number = plan.intro_months || 3;
 
-    if (!introCouponId && introPrice != null && introPrice < amountCents) {
+    // Pas de coupon d'intro sur les versements : son montant est calibré sur
+    // la facture annuelle pleine, il dépasserait un versement.
+    if (installments) introCouponId = null;
+    if (!introCouponId && !installments && introPrice != null && introPrice < amountCents) {
       const coupon = await stripe.coupons.create({
         name: `Lume ${plan.name} intro`,
         currency: (currency || 'CAD').toLowerCase(),
@@ -1732,7 +1788,9 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       // give a free year). amount_off is capped at the amount being charged.
       const monthlyField = currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad';
       const oneMonthCents = plan[monthlyField] || amountCents;
-      const referralCouponAmount = Math.min(oneMonthCents, amountCents);
+      // Plafonné à ce qui est réellement facturé à la première échéance
+      // (un versement en versements, la facture pleine sinon).
+      const referralCouponAmount = Math.min(oneMonthCents, chargeCents);
       try {
         // Reuse a single shared coupon per (plan, interval, currency) instead of
         // minting one per checkout — otherwise the Stripe dashboard fills up with
@@ -1788,13 +1846,14 @@ router.post('/billing/create-checkout-session', async (req, res) => {
         plan_id: plan.id,
         interval,
         currency,
+        installments: installments ? String(installments) : '',
         promo_code: promo_code || '',
         referral_code: validReferralCode || '',
       },
       success_url: `${frontendUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${frontendUrl}/checkout?plan=${plan_slug}&interval=${interval}`,
+      cancel_url: `${frontendUrl}/checkout?plan=${plan_slug}&interval=${interval}${installments ? `&installments=${installments}` : ''}`,
     }, {
-      idempotencyKey: `checkout-${customer.id}-${plan.id}-${interval}-${Math.floor(Date.now() / 60_000)}`,
+      idempotencyKey: `checkout-${customer.id}-${plan.id}-${interval}${installments ? `-x${installments}` : ''}-${Math.floor(Date.now() / 60_000)}`,
     });
 
     return res.json({ url: session.url });

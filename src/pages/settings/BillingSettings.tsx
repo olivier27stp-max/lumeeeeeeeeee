@@ -210,9 +210,23 @@ export default function BillingSettings() {
                     })()}
                   </p>
                 )}
+                {subscription.installments_count && subscription.installments_count > 1 && (
+                  <p className="text-[11px] text-white/70 font-medium">
+                    {isFr
+                      ? `Versement ${subscription.installments_paid ?? 0} sur ${subscription.installments_count} encaissé · $${Math.round((subscription.installment_amount_cents ?? 0) / 100)} tous les 4 mois`
+                      : `Installment ${subscription.installments_paid ?? 0} of ${subscription.installments_count} paid · $${Math.round((subscription.installment_amount_cents ?? 0) / 100)} every 4 months`}
+                    {subscription.commitment_end && (
+                      <span className="text-white/50"> &middot; {isFr ? 'engagement jusqu’au' : 'committed until'} {new Date(subscription.commitment_end).toLocaleDateString(isFr ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                    )}
+                  </p>
+                )}
                 {subscription.cancel_at_period_end && (
                   <p className="text-[11px] text-warning font-medium">
-                    {isFr ? 'Annulation prévue à la fin de la période' : 'Cancels at end of period'}
+                    {subscription.cancel_at
+                      ? (isFr
+                        ? `Annulation prévue le ${new Date(subscription.cancel_at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' })}${subscription.installments_count ? ' (fin de l’engagement)' : ''}`
+                        : `Cancels on ${new Date(subscription.cancel_at).toLocaleDateString('en-CA', { day: 'numeric', month: 'long', year: 'numeric' })}${subscription.installments_count ? ' (end of commitment)' : ''}`)
+                      : (isFr ? 'Annulation prévue à la fin de la période' : 'Cancels at end of period')}
                   </p>
                 )}
                 {subscription.scheduled_plan_id && subscription.scheduled_at && (() => {
