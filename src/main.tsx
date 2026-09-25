@@ -16,9 +16,24 @@ import { installerDetectionVersion } from './lib/nouvelleVersion';
 // Sentry: no-op if VITE_SENTRY_DSN not set
 initSentryClient();
 
-// Root-level crash screen labels: this boundary sits above LanguageProvider,
-// so fall back to the browser language to pick FR/EN (mirrors t.errorBoundary).
-const rootIsFr = (navigator.language || '').toLowerCase().startsWith('fr');
+/*
+ * Libellés de l'écran d'erreur racine. Cette barrière est AU-DESSUS de
+ * `LanguageProvider`, donc elle ne peut pas utiliser `t()` : on refait
+ * ici le même choix de langue qu'elle.
+ *
+ * On lit le choix enregistré, et à défaut on prend le FRANÇAIS — comme
+ * `LanguageContext` depuis #500, qui ignore délibérément
+ * `navigator.language`. Cet écran était resté en dehors de cette
+ * décision : un client québécois dont le navigateur est en anglais
+ * voyait « Something went wrong » alors que toute l'app lui parle
+ * français. Observé en prod le 2026-09-25.
+ */
+let rootIsFr = true;
+try {
+  rootIsFr = localStorage.getItem('lume-language') !== 'en';
+} catch {
+  // Stockage indisponible (mode privé) : le français par défaut.
+}
 const rootErrorLabels = rootIsFr
   ? {
       title: 'Une erreur est survenue',
@@ -42,13 +57,17 @@ const queryClient = new QueryClient({
 });
 
 /*
- * ÉCHEC DE PRÉCHARGEMENT (`vite:preloadError`).
+ * PAS DE GESTIONNAIRE `vite:preloadError` — et c'est délibéré.
  *
- * Vite précharge les fichiers des pages dès l'ouverture. Après un
- * déploiement, un onglet resté ouvert demande des noms qui n'existent
- * plus, et cet événement part AVANT tout clic.
+ * Vite enveloppe chaque `import()` dans un helper qui émet cet
+ * événement quand le PRÉchargement échoue. Piège : si un gestionnaire
+ * appelle `preventDefault()`, Vite considère l'erreur comme traitée et
+ * laisse la promesse se résoudre à `undefined` au lieu de rejeter.
  *
- * On se contente de NEUTRALISER l'événement, sans recharger.
+ * C'est exactement ce qui s'est produit en prod le 2026-09-25 : l'écran
+ * affichait « Cannot read properties of undefined (reading 'default') »,
+ * en anglais, et `lazyResilient` n'était JAMAIS atteint — son `catch` ne
+ * voyait rien, puisque rien n'avait échoué de son point de vue.
  *
  * Pourquoi pas de rechargement ici : un préchargement est une optimisation,
  * pas un besoin. Recharger à sa place consommait le budget anti-boucle de
