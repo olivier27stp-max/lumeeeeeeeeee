@@ -11,6 +11,7 @@ import './lib/apiOrgHeader'; // bureau sélectionné → x-org-id sur tous les a
 import App from './App.tsx';
 import './index.css';
 import 'leaflet/dist/leaflet.css';
+import { installerDetectionVersion } from './lib/nouvelleVersion';
 
 // Sentry: no-op if VITE_SENTRY_DSN not set
 initSentryClient();
@@ -66,6 +67,9 @@ const queryClient = new QueryClient({
  * `lazyResilient` ne voit jamais d'échec, donc ne recharge jamais.
  * On laisse l'erreur remonter : c'est `lazyResilient` qui la traite.
  */
+// Une nouvelle version en ligne : le prochain changement de page charge la page à jour.
+installerDetectionVersion();
+
 window.addEventListener('vite:preloadError', (event) => {
   console.warn('[chargement] préchargement raté — lazyResilient prendra le relais', event.payload);
 });
