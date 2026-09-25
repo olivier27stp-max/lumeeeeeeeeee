@@ -4,6 +4,7 @@ import { Building2, Check, Plus, ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useCompany } from '../contexts/CompanyContext';
 import { useTranslation } from '../i18n';
+import { listOffices } from '../lib/officesApi';
 
 /**
  * Office switcher pour le header.
@@ -19,6 +20,23 @@ export function OfficeSwitcher() {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const [open, setOpen] = React.useState(false);
+  // « Créer un bureau » seulement si le quota le permet (le serveur calcule
+  // can_create). Lu à la première ouverture du menu, pas à chaque page.
+  const [quotaPermet, setQuotaPermet] = React.useState<boolean | null>(null);
+  const estProprietaire = currentRole === 'owner';
+  React.useEffect(() => {
+    if (!open || !estProprietaire || quotaPermet !== null) return;
+    let actif = true;
+    listOffices()
+      .then((l) => { if (actif) setQuotaPermet(l.can_create); })
+      .catch((e) => {
+        // Lecture seule : sans réponse, on garde l'ancien comportement (le
+        // formulaire refuse de toute façon au-delà du quota).
+        console.error('[OfficeSwitcher] quota de bureaux', e);
+        if (actif) setQuotaPermet(true);
+      });
+    return () => { actif = false; };
+  }, [open, estProprietaire, quotaPermet]);
 
   if (!current) return null;
 
@@ -27,7 +45,7 @@ export function OfficeSwitcher() {
   // le voit dès qu'on lui a donné plus d'un bureau (Réglages → Bureaux →
   // Accès) ; avec un seul bureau, rien dans le header.
   const canSwitch = currentRole === 'owner' || currentRole === 'admin' || companies.length > 1;
-  const canCreate = currentRole === 'owner';
+  const canCreate = estProprietaire && quotaPermet === true;
 
   if (!canSwitch) return null;
 
