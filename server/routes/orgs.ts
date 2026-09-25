@@ -139,7 +139,7 @@ router.get('/orgs/offices', async (req, res) => {
 
     const officeIds = await companyOrgIds(admin, auth.orgId);
     const [orgsRes, settingsRes, membersRes, subsRes, myMemRes] = await Promise.all([
-      admin.from('orgs').select('id, name, created_at').in('id', officeIds),
+      admin.from('orgs').select('id, name, created_at, archived_at').in('id', officeIds),
       admin.from('company_settings').select('org_id, company_name, phone, street1, city, province').in('org_id', officeIds),
       admin.from('memberships').select('org_id').in('org_id', officeIds).eq('status', 'active'),
       admin.from('subscriptions').select('org_id').in('org_id', officeIds).in('status', ['active', 'trialing']),
@@ -171,6 +171,7 @@ router.get('/orgs/offices', async (req, res) => {
           is_primary: primaryIds.has(String(o.id)),
           is_member: myOrgIds.has(String(o.id)),
           is_current: String(o.id) === auth.orgId,
+          archived: !!o.archived_at,
         };
       })
       .sort((a: any, b: any) => {

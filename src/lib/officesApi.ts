@@ -54,6 +54,8 @@ export interface OfficeSummary {
   /** L'utilisateur courant en est membre (peut y basculer). */
   is_member: boolean;
   is_current: boolean;
+  /** Bureau fermé (archivé) : masqué du sélecteur, données conservées. */
+  archived?: boolean;
 }
 
 export interface OfficesListing {
@@ -199,4 +201,26 @@ export async function fetchOfficesOverview(from: string, to: string): Promise<Of
   });
   if (!res.ok) await throwApiError(res, 'Impossible de charger la vue d’ensemble des bureaux.');
   return res.json();
+}
+
+// ── Fermer / rouvrir un bureau (propriétaire) ────────────────────────
+// Archive, ne supprime jamais : voir la migration 20260928010000.
+
+export interface ResultatFermeture {
+  membres_suspendus: number;
+  automatisations: number;
+  taches_annulees: number;
+  recurrences: number;
+}
+
+export async function fermerBureau(orgId: string, raison?: string): Promise<ResultatFermeture> {
+  const { data, error } = await supabase.rpc('fermer_bureau', { p_org: orgId, p_raison: raison ?? null });
+  if (error) throw new Error(error.message);
+  return data as ResultatFermeture;
+}
+
+export async function rouvrirBureau(orgId: string): Promise<{ membres_reactives: number }> {
+  const { data, error } = await supabase.rpc('rouvrir_bureau', { p_org: orgId });
+  if (error) throw new Error(error.message);
+  return data as { membres_reactives: number };
 }

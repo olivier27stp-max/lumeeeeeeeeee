@@ -11,7 +11,10 @@ import { Building2, Check, Loader2, MapPin, Plus, Users } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useCompany } from '../../contexts/CompanyContext';
 import { useTranslation } from '../../i18n';
-import { listOffices, type OfficesListing, type OfficeSummary } from '../../lib/officesApi';
+import { fermerBureau, listOffices, rouvrirBureau, type OfficesListing, type OfficeSummary } from '../../lib/officesApi';
+import { toast } from 'sonner';
+import { confirmer } from '../../components/ui/ConfirmDialog';
+import { captureClientException } from '../../lib/sentry';
 import EmptyState from '../../components/ui/EmptyState';
 import OfficeAccessGrid from '../../components/offices/OfficeAccessGrid';
 
@@ -39,6 +42,45 @@ export default function OfficesSettings() {
 
   // Bascule = changement de tenant complet → rechargement (même règle que
   // le switcher du header : aucune donnée de l'ancien bureau ne survit).
+  // Fermer / rouvrir (propriétaire) : archive, ne supprime jamais.
+  const [enCours, setEnCours] = useState<string | null>(null);
+  const fermer = async (o: OfficeSummary) => {
+    const nomB = o.name || (fr ? 'ce bureau' : 'this office');
+    const ok = await confirmer({
+      title: fr ? `Fermer ${nomB} ?` : `Close ${nomB}?`,
+      message: fr
+        ? 'Le bureau est archivé : il disparaît du sélecteur, ses automatisations, récurrences, rappels et rapports programmés s’arrêtent, et ses membres (sauf les propriétaires) perdent l’accès. Aucune donnée n’est supprimée et vous pourrez le rouvrir. Son numéro SMS n’est pas libéré.'
+        : 'The office is archived: it leaves the switcher, its automations, recurrences, reminders and scheduled reports stop, and its members (except owners) lose access. No data is deleted and you can reopen it. Its SMS number is not released.',
+      confirmLabel: fr ? 'Fermer le bureau' : 'Close office',
+      danger: true,
+    });
+    if (!ok) return;
+    setEnCours(o.id);
+    try {
+      const r = await fermerBureau(o.id);
+      toast.success(fr
+        ? `${nomB} est fermé : ${r.membres_suspendus} accès suspendu(s), ${r.automatisations} automatisation(s) arrêtée(s).`
+        : `${nomB} closed: ${r.membres_suspendus} access(es) suspended, ${r.automatisations} automation(s) stopped.`);
+      setVersion((v) => v + 1);
+    } catch (e: any) {
+      console.error('[OfficesSettings] fermer', e);
+      captureClientException(e);
+      toast.error(e?.message || (fr ? 'Fermeture impossible.' : 'Could not close.'));
+    } finally { setEnCours(null); }
+  };
+  const rouvrir = async (o: OfficeSummary) => {
+    setEnCours(o.id);
+    try {
+      const r = await rouvrirBureau(o.id);
+      toast.success(fr ? `Bureau rouvert : ${r.membres_reactives} accès rétabli(s).` : `Office reopened: ${r.membres_reactives} access(es) restored.`);
+      setVersion((v) => v + 1);
+    } catch (e: any) {
+      console.error('[OfficesSettings] rouvrir', e);
+      captureClientException(e);
+      toast.error(e?.message || (fr ? 'Réouverture impossible.' : 'Could not reopen.'));
+    } finally { setEnCours(null); }
+  };
+
   const openOffice = (office: OfficeSummary) => {
     if (!office.is_member) return;
     if (current && office.id === current.orgId) return;
@@ -117,7 +159,7 @@ export default function OfficesSettings() {
       <div className="space-y-2">
         {data.offices.map((o) => {
           const isCurrent = current?.orgId === o.id;
-          const clickable = o.is_member && !isCurrent;
+          const clickable = o.is_member && !isCurrent && !o.archived;
           return (
             <div
               key={o.id}
@@ -149,6 +191,11 @@ export default function OfficesSettings() {
                       {fr ? 'Actuel' : 'Current'}
                     </span>
                   )}
+                  {o.archived && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-surface-secondary text-text-tertiary">
+                      {fr ? 'Fermé' : 'Closed'}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 mt-0.5 text-[12px] text-text-secondary">
                   <span className="inline-flex items-center gap-1 min-w-0">
@@ -163,8 +210,19 @@ export default function OfficesSettings() {
                   </span>
                 </div>
               </div>
-              <div className="shrink-0 text-[12px] font-medium">
-                {isCurrent ? (
+              <div className="shrink-0 text-[12px] font-medium flex items-center gap-3">
+                {isOwner && !isCurrent && (o.archived || !o.is_primary) && (
+                  <button
+                    type="button"
+                    disabled={enCours !== null}
+                    onClick={(e) => { e.stopPropagation(); void (o.archived ? rouvrir(o) : fermer(o)); }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    className={cn('text-[12px] underline-offset-2 hover:underline disabled:opacity-50', o.archived ? 'text-primary' : 'text-text-tertiary')}
+                  >
+                    {enCours === o.id ? (fr ? 'Un instant…' : 'One moment…') : o.archived ? (fr ? 'Rouvrir' : 'Reopen') : (fr ? 'Fermer…' : 'Close…')}
+                  </button>
+                )}
+                {o.archived ? null : isCurrent ? (
                   <Check size={16} className="text-primary" />
                 ) : o.is_member ? (
                   <span className="text-primary">{fr ? 'Ouvrir' : 'Open'}</span>
