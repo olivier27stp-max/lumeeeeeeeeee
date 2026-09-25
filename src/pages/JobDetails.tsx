@@ -26,6 +26,8 @@ import {
   X,
   Copy,
 } from 'lucide-react';
+import { ArrowRightLeft } from 'lucide-react';
+import TransfertBureauDialog, { usePeutTransferer } from '../components/offices/TransfertBureauDialog';
 import { AnimatePresence, motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -203,6 +205,8 @@ export default function JobDetails() {
 
   // Action states
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
+  const [transfertOuvert, setTransfertOuvert] = useState(false);
+  const peutTransferer = usePeutTransferer();
   const [isClosing, setIsClosing] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [showProfitability, setShowProfitability] = useState(false);
@@ -1208,6 +1212,8 @@ export default function JobDetails() {
 
             {/* More dropdown */}
             <div className="relative" ref={moreActionsRef}>
+              <TransfertBureauDialog entite="job" id={job.id} ouvert={transfertOuvert}
+                onFermer={() => setTransfertOuvert(false)} onTransfere={() => navigate('/jobs')} />
               <button
                 onClick={() => setMoreActionsOpen((prev) => !prev)}
                 aria-label={language === 'fr' ? 'Plus d’actions' : 'More actions'}
@@ -1248,6 +1254,9 @@ export default function JobDetails() {
                         onCreated: () => { toast.success(language === 'fr' ? 'Job dupliquée' : 'Job cloned', { action: { label: language === 'fr' ? 'Voir' : 'View', onClick: () => navigate('/jobs') } }); },
                       });
                     }} />
+                    {peutTransferer && (job.status === 'draft' || job.status === 'scheduled') && invoices.filter((inv) => inv.status !== 'void').length === 0 && (
+                      <DropdownItem icon={<ArrowRightLeft size={13} />} label={language === 'fr' ? 'Transférer vers un bureau…' : 'Move to another office…'} onClick={() => { setMoreActionsOpen(false); setTransfertOuvert(true); }} />
+                    )}
                     <DropdownItem icon={<Download size={13} />} label={language === 'fr' ? 'Télécharger le PDF' : 'Download PDF'} onClick={handleDownloadPdf} />
                     <DropdownItem icon={<Printer size={13} />} label={language === 'fr' ? 'Imprimer' : 'Print'} onClick={handlePrint} />
                   </div>

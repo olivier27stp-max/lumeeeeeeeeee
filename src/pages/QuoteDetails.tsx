@@ -13,6 +13,7 @@ import {
   Pencil, FileText,
   Plus, Check, X, Save, Ruler, Package, Archive,
 } from 'lucide-react';
+import TransfertBureauDialog, { LibelleTransfert, usePeutTransferer } from '../components/offices/TransfertBureauDialog';
 import { cn } from '../lib/utils';
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
@@ -62,6 +63,8 @@ export default function QuoteDetails() {
   const [detail, setDetail] = useState<QuoteDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [transfertOuvert, setTransfertOuvert] = useState(false);
+  const peutTransferer = usePeutTransferer();
   const [busy, setBusy] = useState(false);
   const [companySettings, setCompanySettings] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -287,6 +290,8 @@ export default function QuoteDetails() {
             <Ruler size={15} /> {isFr ? 'Mesure' : 'Measure'}
           </button>
           <div className="relative">
+            <TransfertBureauDialog entite="quote" id={quote.id} ouvert={transfertOuvert}
+              onFermer={() => setTransfertOuvert(false)} onTransfere={() => loadQuote()} />
             <button onClick={() => setMoreOpen(!moreOpen)} disabled={busy}
               className="glass-button px-3 py-2 text-[13px] font-medium flex items-center gap-1.5">
               <MoreHorizontal size={15} /> {language === 'fr' ? 'Plus' : 'More'}
@@ -341,6 +346,11 @@ export default function QuoteDetails() {
                   }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <XCircle size={14} /> {isFr ? 'Refusée' : 'Declined'}</button>
+                  {peutTransferer && ['draft', 'awaiting_response', 'changes_requested'].includes(quote.status) && (
+                    <button onClick={() => { setMoreOpen(false); setTransfertOuvert(true); }} aria-label={language === 'fr' ? 'Transférer vers un bureau' : 'Move to another office'}
+                      className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
+                      <LibelleTransfert /></button>
+                  )}
                   {quote.status === 'archived' ? (
                     <button onClick={() => act(async () => { await unarchiveQuote(quote.id); toast.success(language === 'fr' ? 'Devis désarchivé' : 'Quote unarchived'); loadQuote(); })}
                       className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
