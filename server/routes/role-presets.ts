@@ -22,8 +22,10 @@ const FINANCIAL_KEYS = new Set<string>([
 const DEFAULT_SCOPE: Record<string, string> = {
   owner: 'company',
   admin: 'company',
-  sales_rep: 'self',
-  technician: 'assigned',
+  // Tout le bureau par défaut : restreindre une personne (« moi seulement »,
+  // « mon équipe ») est un choix explicite de la page Équipe, appliqué en base.
+  sales_rep: 'company',
+  technician: 'company',
 };
 
 const updatePresetSchema = z.object({

@@ -185,6 +185,21 @@ export default function ManageTeam() {
     }
   };
 
+  // Portée de visibilité (memberships.scope) — appliquée en base : « moi seulement »
+  // ne montre que ses fiches, « mon équipe » celles de son équipe.
+  const handleSaveScope = async (member: OrgMember, scope: 'self' | 'team' | 'company') => {
+    const prev = member.scope ?? 'company';
+    setMembers((ms) => ms.map((m) => m.user_id === member.user_id ? { ...m, scope } : m));
+    try {
+      await updateMemberRole(member.user_id, member.role, { scope });
+      toast.success(isFr ? 'Visibilité enregistrée' : 'Visibility saved');
+    } catch (err: unknown) {
+      console.error('[équipe] portée non enregistrée', err);
+      setMembers((ms) => ms.map((m) => m.user_id === member.user_id ? { ...m, scope: prev } : m));
+      toast.error(isFr ? 'Échec de l\'enregistrement' : 'Failed to save');
+    }
+  };
+
   // Affiche/masque un membre sur le leaderboard des ventes (défaut : visible).
   const handleSaveLeaderboardVisibility = async (member: OrgMember, visible: boolean) => {
     const prev = member.show_on_leaderboard;
@@ -585,6 +600,7 @@ export default function ManageTeam() {
                 onSaveLeaderboardVisibility={(visible) => handleSaveLeaderboardVisibility(member, visible)}
                 teams={orgTeams}
                 onSaveTeam={(teamId) => handleSaveTeam(member, teamId)}
+                onSaveScope={(scope) => handleSaveScope(member, scope)}
                 stats={teamStats[member.user_id]}
               />
             ))}
@@ -930,6 +946,7 @@ interface MemberRowProps {
   onSaveLeaderboardVisibility?: (visible: boolean) => void;
   teams?: TeamRecord[];
   onSaveTeam?: (teamId: string | null) => void;
+  onSaveScope?: (scope: 'self' | 'team' | 'company') => void;
   isSuspended?: boolean;
   stats?: TeamMemberStats;
 }
@@ -949,6 +966,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
   onSaveLeaderboardVisibility,
   teams,
   onSaveTeam,
+  onSaveScope,
   isSuspended,
   stats,
 }) => {
@@ -1097,6 +1115,24 @@ const MemberRow: React.FC<MemberRowProps> = ({
         </div>
       )}
 
+      {/* Visibilité — propriétaire et admin voient toujours tout le bureau */}
+      {onSaveScope && member.role !== 'owner' && member.role !== 'admin' && (
+        <div className="shrink-0 flex items-center gap-1.5" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+          <label htmlFor={`${id}-scope`} className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Voit' : 'Sees'}</label>
+          <select
+            id={`${id}-scope`}
+            aria-label={isFr ? 'Ce que cette personne voit' : 'What this person sees'}
+            value={member.scope === 'assigned' ? 'self' : (member.scope ?? 'company')}
+            onChange={(e) => onSaveScope(e.target.value as 'self' | 'team' | 'company')}
+            className="rounded-lg border border-outline-subtle bg-surface-secondary/40 px-2 py-1.5 text-[12px] font-medium text-text-primary focus:border-primary focus:outline-none max-w-[150px]"
+          >
+            <option value="company">{isFr ? 'Tout le bureau' : 'Whole office'}</option>
+            <option value="team">{isFr ? 'Son équipe' : 'Their team'}</option>
+            <option value="self">{isFr ? 'Ses fiches seulement' : 'Own records only'}</option>
+          </select>
+        </div>
+      )}
+
       {/* Hourly rate (labour cost input for profitability) */}
       <div className="shrink-0 flex items-center gap-1.5" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <label htmlFor={`${id}-rate`} className="text-[11px] font-semibold text-text-tertiary hidden sm:block">{isFr ? 'Taux/h' : 'Rate/h'}</label>
@@ -1196,10 +1232,9 @@ const SCOPE_OPTIONS: { value: InviteScope; label_en: string; label_fr: string; d
   { value: 'company',  label_en: 'Entire company', label_fr: 'Toute la compagnie', desc_en: 'All records in the organization', desc_fr: 'Tous les enregistrements de l\'organisation' },
 ];
 
-function defaultScopeForRole(role: MemberRole): InviteScope {
-  if (role === 'admin') return 'company';
-  if (role === 'sales_rep') return 'team';
-  return 'self';
+/** Tout le bureau par défaut : restreindre est un choix explicite (appliqué en base). */
+function defaultScopeForRole(_role: MemberRole): InviteScope {
+  return 'company';
 }
 
 function InviteForm({
@@ -1217,7 +1252,7 @@ function InviteForm({
   const { companies, current } = useCompany();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<MemberRole>('technician');
-  const [scope, setScope] = useState<InviteScope>('self');
+  const [scope, setScope] = useState<InviteScope>('company');
   const [teamId, setTeamId] = useState<string | null>(null);
   const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
   // Office (= org) auquel assigner le nouvel utilisateur. Défaut : office courant.

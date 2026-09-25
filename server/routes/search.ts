@@ -4,6 +4,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { getUserContext, isFinanciallyRestricted, hasPermission, stripFinancialFields, filterFinancialEntities } from '../lib/rbac';
 import { rechercherDansChamps } from '../lib/champs/recherche';
+import { estRestreint, filtrerVisibles } from '../lib/portee-recherche';
 import {
   sanitizeQuery,
   clampInt,
@@ -348,6 +349,8 @@ async function handleSuggestions(req: import('express').Request, res: import('ex
           return item;
         });
       }
+      // Portée « moi seulement » / « mon équipe » : seulement ce qu'on peut ouvrir.
+      if (estRestreint(ctx)) allItems = await filtrerVisibles(client, allItems);
     }
 
     // Group results
@@ -405,6 +408,30 @@ router.get('/search/results', async (req, res) => {
       counts.invoices = 0;
       counts.payments = 0;
       counts.all = Object.values(counts).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
+    }
+
+    // Portée restreinte : les compteurs et les pages viennent des résultats
+    // revérifiés sous la RLS de la personne (search_global voit tout le bureau).
+    if (estRestreint(ctx)) {
+      const { data: brut, error: eBrut } = await (getServiceClient() as SupabaseClient).rpc('search_global', {
+        p_org: orgId, p_q: q, p_limit: 500, p_offset: 0,
+      });
+      if (eBrut) throw eBrut;
+      let visibles = await filtrerVisibles(client, mapSearchRows((brut || []) as SearchRow[]));
+      if (ctx && isFinanciallyRestricted(ctx)) visibles = filterFinancialEntities(ctx, visibles);
+      const comptes = { ...emptyCounts };
+      const groupes: Record<string, ReturnType<typeof emptyPage>> = {};
+      const pageDemandee = clampInt(req.query.page, 1, 1, 10_000);
+      for (const key of ALL_ENTITY_KEYS) {
+        const liste = visibles.filter((it) => it.type === ENTITY_KEY_TO_TYPE[key]);
+        comptes[key] = liste.length;
+        const p = tab === 'all' ? clampInt(req.query[`${key}Page`], 1, 1, 10_000) : pageDemandee;
+        const page = emptyPage(pageSize, liste.length, p);
+        page.items = (tab === 'all' || tab === key) ? liste.slice((p - 1) * pageSize, p * pageSize) : [];
+        groupes[key] = page;
+      }
+      comptes.all = ALL_ENTITY_KEYS.reduce((t, k) => t + comptes[k], 0);
+      return res.json({ query: q, tab, counts: comptes, groups: groupes });
     }
 
     if (tab === 'all') {

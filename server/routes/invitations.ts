@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { validate, passwordSchema } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, companyOrgIds } from '../lib/supabase';
 import { ROLE_PRESETS } from '../../src/lib/permissions';
+import { invalidateUserCache } from '../lib/rbac';
 import { getBaseUrl } from '../lib/config';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { extractIP } from '../lib/security';
@@ -152,7 +153,7 @@ router.get('/invitations/list', async (req, res) => {
     // Fetch memberships with profile data
     const { data: memberships, error: memError } = await admin
       .from('memberships')
-      .select('user_id, org_id, role, status, permissions, created_at, experience_level, team_id')
+      .select('user_id, org_id, role, status, permissions, created_at, experience_level, team_id, scope')
       .eq('org_id', auth.orgId);
 
     if (memError) {
@@ -194,6 +195,7 @@ router.get('/invitations/list', async (req, res) => {
         created_at: m.created_at,
         experience_level: m.experience_level || null,
         team_id: m.team_id || null,
+        scope: m.scope || 'company',
         show_on_leaderboard: !hiddenOnLeaderboard.has(m.user_id),
         full_name: profile?.full_name || '',
         avatar_url: profile?.avatar_url || null,
@@ -347,7 +349,7 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
         org_id: targetOrgId,
         email: email.toLowerCase(),
         role,
-        scope: req.body.scope || 'self',
+        scope: req.body.scope || 'company',
         team_id: req.body.team_id || null,
         department_id: req.body.department_id || null,
         custom_permissions: req.body.custom_permissions || {},
@@ -510,7 +512,7 @@ router.post('/invitations/accept', invitationLimiter, validate(acceptInviteSchem
           user_id: existingUserId,
           org_id: invitation.org_id,
           role: invitation.role,
-          scope: invitation.scope || 'self',
+          scope: invitation.scope || 'company',
           team_id: invitation.team_id || null,
           department_id: invitation.department_id || null,
           permissions: await resolveInvitePermissions(admin, invitation.org_id, invitation.role, invitation.custom_permissions),
@@ -563,7 +565,7 @@ router.post('/invitations/accept', invitationLimiter, validate(acceptInviteSchem
         user_id: newUser.id,
         org_id: invitation.org_id,
         role: invitation.role,
-        scope: invitation.scope || 'self',
+        scope: invitation.scope || 'company',
         team_id: invitation.team_id || null,
         department_id: invitation.department_id || null,
         permissions: await resolveInvitePermissions(admin, invitation.org_id, invitation.role, invitation.custom_permissions),
@@ -822,6 +824,8 @@ router.post('/invitations/update-role', validate(updateMemberRoleSchema), async 
     if (error) {
       return res.status(500).json({ error: 'Failed to update role.' });
     }
+    // Rôle, portée ou permissions changés : le contexte en cache ne vaut plus.
+    invalidateUserCache(memberId, auth.orgId);
 
     return res.json({ message: 'Role updated.' });
   } catch (err: any) {
