@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Check, Plus, ChevronDown } from 'lucide-react';
+import { Building2, Check, Plus, ChevronDown, LayoutGrid } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useCompany } from '../contexts/CompanyContext';
 import { useTranslation } from '../i18n';
@@ -102,6 +102,27 @@ export function OfficeSwitcher() {
                 )}
               </button>
             ))}
+
+            {/* Propriétaire de plusieurs bureaux : leurs chiffres côte à côte. */}
+            {estProprietaire && companies.length > 1 && (
+              <>
+                <div className="my-1 border-t border-border" />
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    navigate('/offices/overview');
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-primary/5 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <LayoutGrid className="w-4 h-4 text-primary" />
+                  </div>
+                  <span className="text-xs font-medium text-text-primary">
+                    {fr ? 'Vue d’ensemble des bureaux' : 'Offices overview'}
+                  </span>
+                </button>
+              </>
+            )}
 
             {canCreate && (
               <>

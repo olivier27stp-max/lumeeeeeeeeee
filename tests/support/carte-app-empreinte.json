@@ -58,6 +58,7 @@
   "src/pages/OAuthCallback.tsx": "c1fb3e97c7b9b149",
   "src/pages/OAuthConsent.tsx": "71eff5572969dc6c",
   "src/pages/OfficeNew.tsx": "34c5fa669ae987f5",
+  "src/pages/OfficesOverview.tsx": "3db52f2d944f5702",
   "src/pages/OnboardingFlow.tsx": "21583156fe3de067",
   "src/pages/PaymentSettings.tsx": "8cda8a07a0caa83b",
   "src/pages/Payments.tsx": "4c358598e6733172",

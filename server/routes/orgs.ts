@@ -13,6 +13,7 @@ import {
 import { decideAccessChange, OFFICE_ROLES, PROFIL_COPIE, type OfficeRole } from '../lib/office-access';
 import { resolveInvitePermissions } from './invitations';
 import { getDefaultScope } from '../../src/lib/permissions';
+import { chiffresDuBureau, periode, totaliser } from '../lib/offices-overview';
 
 const router = Router();
 
@@ -77,6 +78,49 @@ async function callerRole(admin: ReturnType<typeof getServiceClient>, userId: st
     .maybeSingle();
   return data?.role ?? null;
 }
+
+// ─── GET /orgs/offices/overview ─────────────────────────────────
+// Vue d'ensemble d'un propriétaire : les chiffres de chacun de SES bureaux
+// (propriétaire actif, même entreprise que le bureau actif) et leur total.
+// Chaque bureau est lu avec l'identité de l'appelant et l'en-tête de ce
+// bureau : mêmes fonctions et mêmes droits que la page Rapports du bureau.
+router.get('/orgs/offices/overview', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    if ((await callerRole(admin, auth.user.id, auth.orgId)) !== 'owner') {
+      return res.status(403).json({ error: 'Réservé aux propriétaires.' });
+    }
+    const { from, to } = periode(req.query.from, req.query.to);
+
+    const { data: actif } = await admin.from('orgs').select('company_group_id').eq('id', auth.orgId).maybeSingle();
+    const { data: adhesions, error: eAdh } = await admin
+      .from('memberships')
+      .select('org_id, orgs!inner(id, name, created_at, deleted_at, company_group_id)')
+      .eq('user_id', auth.user.id)
+      .eq('role', 'owner')
+      .eq('status', 'active');
+    if (eAdh) throw eAdh;
+    const bureaux = (adhesions || [])
+      .map((a: any) => a.orgs)
+      .filter((o: any) => o && !o.deleted_at && (o.id === auth.orgId || (actif?.company_group_id && o.company_group_id === actif.company_group_id)))
+      .sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
+    const { data: reglages } = await admin.from('company_settings').select('org_id, company_name').in('org_id', bureaux.map((b: any) => b.id));
+    const nom = new Map((reglages || []).filter((r: any) => r.company_name).map((r: any) => [String(r.org_id), String(r.company_name)]));
+
+    const authorization = req.header('authorization') as string;
+    const lignes = await Promise.all(bureaux.map(async (b: any) => ({
+      org_id: String(b.id),
+      name: nom.get(String(b.id)) || String(b.name || ''),
+      chiffres: await chiffresDuBureau(authorization, String(b.id), from, to),
+    })));
+    return res.json({ from, to, offices: lignes, totals: totaliser(lignes.map((l) => l.chiffres)) });
+  } catch (err: any) {
+    console.error('[orgs/offices/overview]', err?.message);
+    return res.status(500).json({ error: 'Impossible de charger la vue d’ensemble des bureaux.' });
+  }
+});
 
 // ─── GET /orgs/offices ───────────────────────────────────────────
 // Tous les bureaux de la compagnie du bureau actif (page Réglages → Bureaux).
