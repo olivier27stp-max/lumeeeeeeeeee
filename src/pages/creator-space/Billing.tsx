@@ -499,6 +499,7 @@ function DetailsAbonnement({ row: r, onOpenCompany }: { row: BillingWatchRow; on
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
+                aria-label="Note de suivi de facturation"
                 rows={2}
                 maxLength={3900}
                 placeholder="Ex. : appelé le propriétaire, carte mise à jour promise pour vendredi."
