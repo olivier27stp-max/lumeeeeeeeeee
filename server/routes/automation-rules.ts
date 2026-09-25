@@ -33,8 +33,9 @@ import { genererParcours } from '../lib/lumi/generer-parcours';
 import { sequenceEtapes } from '../lib/validation';
 import {
   validate, automationRuleCreateSchema, automationRuleUpdateSchema,
-  dossierCreateSchema, dossierUpdateSchema,
+  dossierCreateSchema, dossierUpdateSchema, automationCopieBureauxSchema,
 } from '../lib/validation';
+import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie } from '../lib/automatisations-bureaux';
 import { logger } from '../lib/logger';
 import {
   DECLENCHEURS,
@@ -46,7 +47,10 @@ import {
 const router = Router();
 
 /** Colonnes renvoyées au navigateur. `org_id` n'a aucun intérêt côté client. */
-const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, folder_id, deleted_at, created_at, updated_at';
+const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, folder_id, modele_id, deleted_at, created_at, updated_at';
+
+/** Champs dont la modification change le CONTENU d'une règle (pas son interrupteur ni son dossier). */
+const CHAMPS_CONTENU = ['name', 'description', 'trigger_event', 'conditions', 'delay_seconds', 'actions', 'steps', 'settings'] as const;
 
 /**
  * Les gardes qui ont besoin du catalogue, donc impossibles à exprimer en Zod
@@ -245,7 +249,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
 
   const { data: existante, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('id, is_preset, trigger_event, delay_seconds')
+    .select('id, is_preset, trigger_event, delay_seconds, modele_id')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .maybeSingle();
@@ -257,6 +261,10 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   if (!existante) return res.status(404).json({ error: 'Automatisation introuvable.' });
 
   const patch = { ...req.body };
+  const contenuModifie = CHAMPS_CONTENU.some((k) => k in patch);
+  // Modifier une copie liée la détache de son modèle : sinon la prochaine
+  // modification du modèle écraserait ce qu'on vient d'écrire ici.
+  if (existante.modele_id && contenuModifie) patch.modele_id = null;
 
   // Sur un préréglage, le déclencheur appartient au moteur : les conditions
   // d'arrêt (`checkStopConditions`) et le seeder s'appuient sur le couple
@@ -291,7 +299,17 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     return res.status(500).json({ error: 'Impossible de modifier l\'automatisation.' });
   }
 
-  return res.json(data);
+  // Modèle partagé : ses copies des autres bureaux suivent.
+  let copies: ResultatCopie[] = [];
+  if (contenuModifie) {
+    try {
+      copies = await propagerAuxCopies(req.header('authorization') as string, auth.user.id, auth.orgId, req.params.id);
+    } catch (err: any) {
+      logger.error('[automation-rules] propagation aux copies échouée', { rule_id: req.params.id, message: err?.message });
+    }
+  }
+
+  return res.json(copies.length ? { ...data, copies } : data);
 });
 
 // ── Dupliquer ───────────────────────────────────────────────
@@ -555,6 +573,33 @@ router.delete('/automations/folders/:id', async (req, res) => {
     return res.status(500).json({ error: 'Impossible de supprimer le dossier.' });
   }
   return res.status(204).end();
+});
+
+// ── Copier vers d'autres bureaux ────────────────────────────
+
+// Bureaux de l'entreprise (hors bureau actif) où l'on peut créer une automatisation.
+router.get('/automations/bureaux-cibles', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  try {
+    return res.json({ offices: await bureauxCibles(auth.user.id, auth.orgId) });
+  } catch (err: any) {
+    logger.error('[automation-rules] bureaux cibles illisibles', { message: err?.message });
+    return res.status(500).json({ error: 'Impossible de lister vos bureaux.' });
+  }
+});
+
+router.post('/automations/rules/:id/copier-bureaux', validate(automationCopieBureauxSchema), async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  try {
+    const resultats = await copierVersBureaux(req.header('authorization') as string, auth.user.id, auth.orgId, req.params.id, req.body.org_ids, req.body.lier !== false);
+    if (!resultats) return res.status(404).json({ error: 'Automatisation introuvable.' });
+    return res.json({ results: resultats });
+  } catch (err: any) {
+    logger.error('[automation-rules] copie vers bureaux échouée', { message: err?.message });
+    return res.status(500).json({ error: 'Impossible de copier l’automatisation.' });
+  }
 });
 
 export default router;

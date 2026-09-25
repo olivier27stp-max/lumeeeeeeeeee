@@ -74,6 +74,7 @@ vi.mock('../src/lib/automationBuilderApi', () => ({
   creerDossier: vi.fn(async () => ({ id: 'd1', name: 'X', position: 0, created_at: '' })),
   supprimerDossier: vi.fn(async () => undefined),
   rangerDansDossier: vi.fn(async () => undefined),
+  chargerBureauxCibles: vi.fn(async () => []),
 }));
 
 // La confirmation de suppression : on répond « oui » sans boîte de dialogue.
