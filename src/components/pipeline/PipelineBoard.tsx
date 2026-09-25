@@ -10,7 +10,7 @@
  * ne reste qu'une pastille ronde devant le nom. La couleur porte l'information
  * qui presse (priorité sur le liseré gauche des cartes), pas la décoration.
  */
-import { useCallback, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useContext, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   DndContext, DragOverlay, PointerSensor, closestCorners, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
@@ -42,6 +42,7 @@ import {
 } from '../../lib/pipeline/presentation';
 import type { DealSource, MockStage } from '../../lib/pipeline/mockData';
 import { useChampsCreation } from '../champs/creation';
+import { CompanyContext } from '../../contexts/CompanyContext';
 
 interface Membre { id: string; name: string }
 
@@ -1234,6 +1235,17 @@ export default function PipelineBoard({
   onChangement?: () => void;
 }) {
   const { language } = useTranslation();
+  // Les bureaux de l'utilisateur : un board vide peut simplement vouloir dire
+  // que ses deals sont dans l'autre bureau.
+  //
+  // `useContext` et non `useCompany` : ce dernier LÈVE hors provider, et le
+  // board serait alors impossible à monter seul — c'est un renseignement de
+  // confort, pas une dépendance. Sans contexte, on n'affiche simplement pas
+  // le message : mieux vaut un board silencieux qu'un board qui plante.
+  const ctxBureaux = useContext(CompanyContext);
+  const companies = ctxBureaux?.companies ?? [];
+  const currentOrgId = ctxBureaux?.currentOrgId ?? null;
+  const switchCompany = ctxBureaux?.switchCompany ?? (() => {});
   const fr = language === 'fr';
   const [actif, setActif] = useState<Deal | null>(null);
   const [filtres, setFiltres] = useState<EtatFiltres>(FILTRES_VIDES);
@@ -1643,6 +1655,24 @@ export default function PipelineBoard({
    */
   const pipelineVide = deals.length === 0 && !chargement && pipelines.length > 1;
 
+  /**
+   * Le board est vide ET l'utilisateur appartient à PLUSIEURS bureaux.
+   *
+   * Chaque bureau ne voit que ses propres deals — c'est l'isolation qui
+   * empêche les clients d'un bureau d'apparaître dans l'autre, et elle doit
+   * rester ainsi. Mais rien ne le DISAIT : on tombait sur « 0 deal », un
+   * board vide, et on concluait que l'app était cassée, alors que les deals
+   * étaient simplement dans l'autre bureau.
+   *
+   * On ne peut pas annoncer combien de deals s'y trouvent : la RLS ne les
+   * laisse pas lire depuis ici, et c'est très bien ainsi. On nomme donc le
+   * bureau affiché et on offre de basculer — le compte s'affichera une fois
+   * de l'autre côté.
+   */
+  const autresBureaux = companies.filter((c) => c.orgId !== currentOrgId);
+  const bureauVide = deals.length === 0 && !chargement && autresBureaux.length > 0;
+  const nomBureau = companies.find((c) => c.orgId === currentOrgId)?.companyName ?? null;
+
   return (
     <div>
       <BarreOutils
@@ -1858,7 +1888,38 @@ export default function PipelineBoard({
         </p>
       )}
 
-      {pipelineVide ? (
+      {bureauVide ? (
+        /*
+          Le bureau affiché n'a aucun deal, et l'utilisateur en a d'autres.
+          On le dit AVANT le message « ce pipeline est vide » : changer de
+          pipeline dans un bureau qui n'a aucun deal ne montrera jamais rien,
+          et on tournerait en rond entre des pipelines tous vides.
+        */
+        <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
+          <p className="mt-1.5 text-[15px] font-semibold text-text-primary">
+            {nomBureau
+              ? (fr ? `Aucun deal dans « ${nomBureau} »` : `No deal in “${nomBureau}”`)
+              : (fr ? 'Aucun deal dans ce bureau' : 'No deal in this office')}
+          </p>
+          <p className="max-w-[46ch] text-[12.5px] leading-relaxed text-text-tertiary">
+            {fr
+              ? "Chaque bureau a ses propres deals : ceux d'un autre bureau n'apparaissent jamais ici. Tes deals sont peut-être dans celui-ci."
+              : 'Each office keeps its own deals: another office’s deals never show up here. Yours may be in one of these.'}
+          </p>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {autresBureaux.slice(0, 3).map((c) => (
+              <button
+                key={c.orgId}
+                type="button"
+                onClick={() => switchCompany(c.orgId)}
+                className={CLASSE_BOUTON}
+              >
+                {fr ? `Ouvrir « ${c.companyName ?? 'Bureau'} »` : `Open “${c.companyName ?? 'Office'}”`}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : pipelineVide ? (
         <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
           <p className="mt-1.5 text-[15px] font-semibold text-text-primary">
             {fr ? 'Ce pipeline est vide' : 'This pipeline is empty'}
