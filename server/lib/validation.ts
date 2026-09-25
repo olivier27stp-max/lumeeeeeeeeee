@@ -1114,7 +1114,15 @@ export const automationSettingsSchema = z
       .optional(),
     /** Lundi au vendredi seulement. */
     jours_ouvrables: z.boolean().optional(),
-    /** Les messages automatiques ne remontent pas en non-lus. */
+    /*
+     * RETIRÉ de l'interface le 2026-09-25 : le moteur ne l'a jamais lu, et
+     * le problème qu'il prétendait régler n'existe pas (les non-lus
+     * suivent les messages ENTRANTS, vérifié en base).
+     *
+     * La clé reste ACCEPTÉE ici parce que le schéma est `.strict()` : la
+     * retirer ferait rejeter, à la première modification, toute règle
+     * existante qui la porte encore. Elle est ignorée, pas honorée.
+     */
     marquer_lu: z.boolean().optional(),
   })
   .strict();
