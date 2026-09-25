@@ -34,15 +34,25 @@ router.get('/request-forms', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
 
+    // `maybeSingle()` LÈVE dès qu'il y a deux lignes. Tant qu'une
+    // organisation n'avait qu'un formulaire ça passait ; le jour où elle en
+    // a deux, l'écran de réglages cesserait de charger. On lit donc une
+    // LISTE, et on renvoie le plus ancien comme `form` pour que l'écran
+    // actuel continue de fonctionner à l'identique.
+    //
+    // `forms` est le nouveau champ : l'écran s'en servira pour afficher la
+    // liste. Le garder à côté de `form` permet de livrer le serveur avant
+    // l'écran sans rien casser entre les deux.
     const { data, error } = await auth.client
       .from('request_forms')
       .select('*')
       .eq('org_id', auth.orgId)
       .is('deleted_at', null)
-      .maybeSingle();
+      .order('created_at', { ascending: true });
 
     if (error) throw error;
-    return res.json({ form: data });
+    const forms = data ?? [];
+    return res.json({ form: forms[0] ?? null, forms });
   } catch (err: any) {
     return sendSafeError(res, err, 'Unable to fetch form.', '[request-forms]');
   }
@@ -69,13 +79,54 @@ router.post('/request-forms', validate(upsertRequestFormSchema), async (req, res
       updated_at: new Date().toISOString(),
     };
 
-    // Check if form already exists for this org
-    const { data: existing } = await admin
-      .from('request_forms')
-      .select('id')
-      .eq('org_id', auth.orgId)
-      .is('deleted_at', null)
-      .maybeSingle();
+    // Le pipeline n'est écrit que s'il est FOURNI : l'écran d'aujourd'hui ne
+    // l'envoie pas, et l'absence ne doit pas remettre le formulaire sur le
+    // pipeline par défaut à chaque sauvegarde.
+    if (req.body.pipeline_id !== undefined) {
+      (payload as Record<string, unknown>).pipeline_id = req.body.pipeline_id;
+    }
+
+    // QUEL formulaire modifie-t-on ?
+    //
+    // Avant, cette route prenait « le » formulaire de l'organisation et
+    // l'écrasait. Avec plusieurs formulaires, ça voudrait dire qu'un
+    // « Nouveau formulaire » réécrirait silencieusement l'ancien : on perdrait
+    // ses questions et son lien public sans le moindre avertissement.
+    //
+    // Désormais l'appelant DÉSIGNE sa cible par `id`. Sans `id`, on crée.
+    // L'écran actuel n'en envoie pas encore : on retombe alors sur le plus
+    // ancien, ce qui reproduit exactement le comportement d'aujourd'hui tant
+    // qu'il n'y a qu'un formulaire.
+    const cibleId = typeof req.body?.id === 'string' && req.body.id ? req.body.id : null;
+
+    let existing: { id: string } | null = null;
+    if (cibleId) {
+      // La cible doit appartenir à CETTE organisation : un id venu du client
+      // ne prouve rien. Sans ce filtre, on pourrait modifier le formulaire
+      // d'une autre entreprise en devinant son identifiant.
+      const { data } = await admin
+        .from('request_forms')
+        .select('id')
+        .eq('id', cibleId)
+        .eq('org_id', auth.orgId)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (!data) {
+        return res.status(404).json({ error: 'Form not found.' });
+      }
+      existing = data;
+    } else if (req.body?.creer !== true) {
+      // Compatibilité : l'écran d'aujourd'hui envoie un formulaire sans id
+      // pour « enregistrer les réglages ». On vise le plus ancien.
+      const { data } = await admin
+        .from('request_forms')
+        .select('id')
+        .eq('org_id', auth.orgId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      existing = data?.[0] ?? null;
+    }
 
     const save = (p: Record<string, unknown>) =>
       existing?.id
@@ -104,12 +155,38 @@ router.post('/request-forms/regenerate-key', async (req, res) => {
     if (!auth) return;
 
     const admin = getServiceClient();
-    const { data: existing } = await admin
-      .from('request_forms')
-      .select('id')
-      .eq('org_id', auth.orgId)
-      .is('deleted_at', null)
-      .maybeSingle();
+
+    // Régénérer une clé INVALIDE le lien public : tous les liens déjà
+    // partagés cessent de fonctionner. Avec plusieurs formulaires, se
+    // tromper de cible casserait le lien d'un autre — on exige donc un `id`
+    // dès qu'il y en a plusieurs, plutôt que de deviner.
+    const cibleId = typeof req.body?.id === 'string' && req.body.id ? req.body.id : null;
+
+    let existing: { id: string } | null = null;
+    if (cibleId) {
+      const { data } = await admin
+        .from('request_forms')
+        .select('id')
+        .eq('id', cibleId)
+        .eq('org_id', auth.orgId)
+        .is('deleted_at', null)
+        .maybeSingle();
+      existing = data;
+    } else {
+      const { data } = await admin
+        .from('request_forms')
+        .select('id')
+        .eq('org_id', auth.orgId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true });
+      const liste = data ?? [];
+      if (liste.length > 1) {
+        return res.status(400).json({
+          error: 'Plusieurs formulaires existent : précisez lequel (id).',
+        });
+      }
+      existing = liste[0] ?? null;
+    }
 
     if (!existing?.id) {
       return res.status(404).json({ error: 'No form found. Create one first.' });
@@ -399,7 +476,7 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     step = 'form-lookup';
     const { data: form, error: formError } = await admin
       .from('request_forms')
-      .select('id, org_id, enabled, created_by, custom_fields, notify_email, notify_in_app')
+      .select('id, org_id, enabled, created_by, custom_fields, notify_email, notify_in_app, pipeline_id')
       .eq('api_key', apiKey)
       .is('deleted_at', null)
       .maybeSingle();
@@ -822,6 +899,10 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
         p_fbclid: body.fbclid || null,
         p_payload: { form_id: form.id, custom_responses: submissionResponses },
         p_created_by: actorId,
+        // Le pipeline choisi pour CE formulaire : un formulaire « publicités »
+        // alimente le pipeline des publicités, un formulaire « terrain » celui
+        // du porte-à-porte. Vide = pipeline par défaut, comme avant.
+        p_pipeline_id: (form as { pipeline_id?: string | null }).pipeline_id ?? null,
       });
       if (ingestErr) {
         console.error('[public/form] pipeline de ventes — ingestion refusée:', ingestErr.message);

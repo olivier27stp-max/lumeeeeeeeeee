@@ -425,6 +425,15 @@ const formFieldSchema = z.object({
 });
 
 export const upsertRequestFormSchema = z.object({
+  /** Le formulaire à modifier. Absent = on crée, ou on vise le plus ancien
+   *  (l'écran d'aujourd'hui, qui n'envoie pas encore d'id). */
+  id: z.string().uuid().optional(),
+  /** `true` force une CRÉATION même sans id : c'est « Nouveau formulaire ».
+   *  Sans ce drapeau, un formulaire sans id écraserait le plus ancien. */
+  creer: z.boolean().optional(),
+  /** Le pipeline qui reçoit les leads de ce formulaire. `null` = celui par
+   *  défaut de l'organisation. */
+  pipeline_id: z.string().uuid().nullable().optional(),
   title: z.string().trim().min(1, 'title is required.'),
   description: optionalString,
   success_message: z.string().trim().min(1, 'success_message is required.'),
