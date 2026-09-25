@@ -209,7 +209,7 @@ export default function MonthlyDispatchView({
         <div className="sticky top-0 z-20 grid grid-cols-7 border-b border-border bg-surface" style={{ height: HEADER_HEIGHT_PX }}>
           {weekdayLabels.map((label, i) => (
             <div key={label} className={cn('flex min-w-0 items-center justify-center border-l border-border/50', i === 0 && 'border-l-0')}>
-              <span className={cn('truncate text-[16px] font-bold text-black', i === todayCol && 'rounded-md bg-[#d8d0c2] px-2 py-0.5')}>{label}</span>
+              <span className={cn('truncate text-[16px] font-bold text-black', i === todayCol && 'rounded-md bg-primary px-2 py-0.5 text-primary-foreground')}>{label}</span>
             </div>
           ))}
         </div>
@@ -235,13 +235,15 @@ export default function MonthlyDispatchView({
                   'flex min-w-0 cursor-pointer flex-col overflow-hidden border-b border-l border-border/60 px-1 pb-0.5 pt-1 transition-colors hover:bg-surface-secondary/30',
                   i % 7 === 0 && 'border-l-0',
                   !cur && 'bg-surface-secondary/10',
-                  today && 'bg-primary/[0.02]',
+                  // Aujourd'hui : la case entière est cernée. Un voile seul
+                  // (2 % de noir auparavant) ne se distinguait pas des autres.
+                  today && 'bg-primary/[0.06] ring-1 ring-inset ring-primary/40',
                 )}
               >
                 <div className="mb-0.5 flex shrink-0">
                   <span className={cn(
                     'flex h-6 min-w-6 items-center justify-center rounded-md px-1 text-[12px] font-bold tabular-nums',
-                    today ? 'bg-[#d8d0c2] text-[#000]' : cur ? 'text-text-primary' : 'text-text-tertiary/50',
+                    today ? 'bg-primary text-primary-foreground' : cur ? 'text-text-primary' : 'text-text-tertiary/50',
                   )}>
                     {format(day, 'd')}
                   </span>
