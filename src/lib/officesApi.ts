@@ -92,6 +92,8 @@ export interface OfficeInherit {
   taxes: boolean;
   email_templates: boolean;
   tags_sources: boolean;
+  /** Modèles, rôles, champs personnalisés, rappels, automatisations. */
+  modeles: boolean;
 }
 
 export interface CreateOfficeInput {
@@ -295,5 +297,48 @@ export async function suivreMarqueEntreprise(orgId: string, suit: boolean): Prom
 export async function appliquerRolesATousLesBureaux(): Promise<{ bureaux: number; roles: number; membres: number }> {
   const res = await fetch(`${API_BASE}/roles/apply-to-offices`, { method: 'POST', headers: await authHeaders() });
   if (!res.ok) await throwApiError(res, 'Failed to apply roles to offices.');
+  return res.json();
+}
+
+// ── Santé des bureaux (Réglages → Bureaux) ──────────────────────────
+// Miroir de server/lib/office-health.ts : chaque bureau comparé au bureau de base.
+
+export type EtatSante = 'ok' | 'attention' | 'manquant';
+export type CleSante = 'taxes' | 'numeros_taxes' | 'sms' | 'paiements' | 'marque' | 'automatisations' | 'prefixe' | 'equipe' | 'modeles';
+export type ActionSante =
+  | { type: 'reprendre'; section: 'taxes' | 'modeles' }
+  | { type: 'page'; chemin: string }
+  | { type: 'suivre_marque' }
+  | { type: 'acces' };
+
+export interface PointSante {
+  cle: CleSante;
+  etat: EtatSante;
+  infos: Record<string, string | number | boolean | string[]>;
+  action?: ActionSante;
+}
+
+export interface SanteBureau {
+  org_id: string;
+  nom: string;
+  est_base: boolean;
+  points: PointSante[];
+  a_regler: number;
+}
+
+export async function getSanteBureaux(): Promise<{ base_id: string | null; bureaux: SanteBureau[] }> {
+  const res = await fetch(`${API_BASE}/orgs/offices/sante`, { headers: await authHeaders() });
+  if (!res.ok) await throwApiError(res, 'Impossible de vérifier les bureaux.');
+  return res.json();
+}
+
+/** Complète ce qui est vide dans le bureau avec la configuration du bureau de base. */
+export async function reprendreDuBureauDeBase(orgId: string, section: 'taxes' | 'modeles'): Promise<{ rapport: { modeles: Record<string, number>; tax_groups: number; warnings: string[] } }> {
+  const res = await fetch(`${API_BASE}/orgs/offices/${encodeURIComponent(orgId)}/reprendre-base`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ section }),
+  });
+  if (!res.ok) await throwApiError(res, 'Copie impossible.');
   return res.json();
 }
