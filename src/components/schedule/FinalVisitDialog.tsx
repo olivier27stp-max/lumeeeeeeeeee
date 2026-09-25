@@ -11,8 +11,11 @@ import { CalendarPlus, Archive, CircleDot, FileText } from 'lucide-react';
  * facturation est désormais le premier choix, et elle ferme la job au
  * passage (c'est ce que fait `finishJobAndPrepareInvoice`).
  *
- * `onInvoice` est optionnel : une job sans facturation (`requires_invoicing`
- * à faux) n'a rien à facturer, et l'appelant ne passe alors rien.
+ * `onInvoice` reste optionnel pour les appelants qui n'ont pas de quoi
+ * facturer, mais les deux du produit le passent TOUJOURS : ne pas le
+ * conditionner à `requires_invoicing`, qui marque les jobs EN ATTENTE de
+ * facturation, pas les jobs facturables (les 6 jobs de production sont à
+ * faux — le bouton aurait disparu partout).
  */
 export default function FinalVisitDialog({ open, fr, busy, onInvoice, onCloseJob, onScheduleNewVisit, onLeave }: {
   open: boolean;
