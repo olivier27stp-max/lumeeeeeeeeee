@@ -672,10 +672,15 @@ export default function RequestFormSettings() {
 
       {/* ═══ MES FORMULAIRES ═══
           Un formulaire pour le site, un pour les publicités, un pour la carte
-          terrain : mêmes questions, chacun vers SON pipeline. La barre ne
-          s'affiche qu'à partir de deux formulaires — avec un seul, elle
-          n'apprendrait rien et volerait de la place. */}
-      {(formulaires.length > 1 || !form) && (
+          terrain : mêmes questions, chacun vers SON pipeline.
+
+          La barre est TOUJOURS visible. Une première version la cachait tant
+          qu'il n'y avait qu'un formulaire, en se disant qu'elle n'apprenait
+          rien — mais c'est elle qui porte « + Nouveau formulaire » : avec un
+          seul formulaire, donc dans le cas de TOUT LE MONDE au départ, il
+          devenait impossible d'en créer un second. Le raisonnement était à
+          l'envers : c'est précisément là qu'elle sert le plus. */}
+      {(
         <div className="flex flex-wrap items-center gap-2">
           {formulaires.map((f) => {
             const ouvert = form?.id === f.id;
