@@ -57,10 +57,17 @@ const queryClient = new QueryClient({
  * 2026-09-25. Le vrai `import()` suivra au moment où la page est
  * demandée ; `lazyResilient` sait alors réessayer puis recharger.
  *
- * `preventDefault()` évite l'erreur non capturée dans la console.
+ * SURTOUT PAS `preventDefault()`. Le préchargeur de Vite enveloppe l'import
+ * de la page : `return importDeLaPage().catch(gererErreur)`, et gererErreur
+ * ne relance l'erreur QUE si l'événement n'a pas été annulé. Annulé, l'import
+ * se résout à `undefined` au lieu d'échouer : React lit alors `.default` sur
+ * rien (« Cannot read properties of undefined (reading 'default') », écran
+ * rouge sur toutes les pages après un déploiement, 2026-09-25) et
+ * `lazyResilient` ne voit jamais d'échec, donc ne recharge jamais.
+ * On laisse l'erreur remonter : c'est `lazyResilient` qui la traite.
  */
 window.addEventListener('vite:preloadError', (event) => {
-  event.preventDefault();
+  console.warn('[chargement] préchargement raté — lazyResilient prendra le relais', event.payload);
 });
 
 createRoot(document.getElementById('root')!).render(
