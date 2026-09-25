@@ -55,6 +55,8 @@ interface CompanyDetails {
   brand_color: string;
   /** Préfixe des numéros de factures et soumissions de CE bureau (ex. CL → CL-1042). Vide = aucun. */
   prefixe_documents: string;
+  /** Vrai : logo et couleur viennent de la marque commune (Réglages → Bureaux), lecture seule ici. */
+  suit_marque_entreprise: boolean;
   /**
    * La langue dans laquelle l'entreprise écrit À SES CLIENTS : courriels,
    * textos, soumissions, factures, pages publiques, automatisations.
@@ -102,6 +104,7 @@ const EMPTY_COMPANY: CompanyDetails = {
   logo_url: '',
   brand_color: '',
   prefixe_documents: '',
+  suit_marque_entreprise: false,
   revenue_goal_cents: 0,
   currency: 'CAD',
   social_links: {},
@@ -169,6 +172,7 @@ export default function CompanySettings() {
             logo_url: data.logo_url || '',
             brand_color: data.brand_color || '',
             prefixe_documents: data.prefixe_documents || '',
+            suit_marque_entreprise: data.suit_marque_entreprise === true,
             default_language: data.default_language === 'en' ? 'en' : 'fr',
             revenue_goal_cents: Number(data.revenue_goal_cents) || 0,
             currency: data.currency || 'CAD',
@@ -398,6 +402,26 @@ export default function CompanySettings() {
         animate={{ opacity: 1, y: 0 }}
         className="max-w-3xl space-y-6"
       >
+        {form.suit_marque_entreprise ? (
+          <div className="section-card p-6 flex items-center gap-4">
+            <div className="w-16 h-16 rounded-xl border border-outline overflow-hidden bg-surface-secondary flex items-center justify-center shrink-0">
+              {form.logo_url
+                ? <img src={form.logo_url} alt={language === 'fr' ? "Logo de l'entreprise" : 'Company logo'} className="w-full h-full object-contain" />
+                : <ImageIcon size={16} className="text-text-tertiary" />}
+            </div>
+            <div className="space-y-1">
+              <p className="text-[13px] font-medium text-text-primary">
+                {language === 'fr' ? 'Ce bureau utilise la marque commune de l’entreprise' : 'This office uses the company brand'}
+              </p>
+              <p className="text-[12px] text-text-secondary">
+                {language === 'fr'
+                  ? 'Le logo et la couleur se gèrent dans Réglages → Bureaux → Marque commune. Les coordonnées ci-dessous restent celles de ce bureau.'
+                  : 'Logo and colour are managed in Settings → Offices → Company brand. The contact details below stay this office’s own.'}
+              </p>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* Company Logo */}
         <div className="section-card p-6 space-y-4">
           <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
@@ -497,6 +521,8 @@ export default function CompanySettings() {
             </span>
           </div>
         </div>
+        </>
+        )}
 
         {/* Company Info */}
         <div className="section-card p-6 space-y-4">

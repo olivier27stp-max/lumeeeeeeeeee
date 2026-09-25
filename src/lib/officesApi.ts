@@ -223,4 +223,62 @@ export async function rouvrirBureau(orgId: string): Promise<{ membres_reactives:
   const { data, error } = await supabase.rpc('rouvrir_bureau', { p_org: orgId });
   if (error) throw new Error(error.message);
   return data as { membres_reactives: number };
+
+// ── Marque commune de l'entreprise (Réglages → Bureaux) ─────────────
+// Le logo et la couleur communs vivent dans company_groups ; un bureau qui
+// « suit la marque » les reçoit par trigger (migration 20260928020000).
+
+export interface MarqueBureau {
+  org_id: string;
+  company_name: string;
+  logo_url: string | null;
+  brand_color: string | null;
+  suit_marque_entreprise: boolean;
+}
+
+export interface MarqueEntreprise {
+  company_group_id: string;
+  logo_url: string | null;
+  brand_color: string | null;
+  bureaux: MarqueBureau[];
+}
+
+async function groupeDuBureau(orgId: string): Promise<string> {
+  const { data, error } = await supabase.from('orgs').select('company_group_id').eq('id', orgId).single();
+  if (error || !data?.company_group_id) throw new Error(error?.message || 'Entreprise introuvable.');
+  return data.company_group_id as string;
+}
+
+export async function getMarqueEntreprise(orgId: string, bureauxIds: string[]): Promise<MarqueEntreprise> {
+  const groupe = await groupeDuBureau(orgId);
+  const [{ data: g, error: eG }, { data: cs, error: eCs }] = await Promise.all([
+    supabase.from('company_groups').select('logo_url, brand_color').eq('id', groupe).single(),
+    supabase.from('company_settings')
+      .select('org_id, company_name, logo_url, brand_color, suit_marque_entreprise')
+      .in('org_id', bureauxIds),
+  ]);
+  if (eG) throw new Error(eG.message);
+  if (eCs) throw new Error(eCs.message);
+  return {
+    company_group_id: groupe,
+    logo_url: g?.logo_url ?? null,
+    brand_color: g?.brand_color ?? null,
+    bureaux: (cs || []) as MarqueBureau[],
+  };
+}
+
+/** Le logo et la couleur d'un bureau deviennent la marque commune (propriétaire). */
+export async function definirMarqueEntreprise(groupe: string, logoUrl: string | null, couleur: string | null): Promise<void> {
+  const { error } = await supabase.from('company_groups')
+    .update({ logo_url: logoUrl, brand_color: couleur })
+    .eq('id', groupe);
+  if (error) throw new Error(error.message);
+}
+
+/** Un bureau suit (ou non) la marque commune. */
+export async function suivreMarqueEntreprise(orgId: string, suit: boolean): Promise<void> {
+  const { error } = await supabase.from('company_settings')
+    .update({ suit_marque_entreprise: suit })
+    .eq('org_id', orgId);
+  if (error) throw new Error(error.message);
 }

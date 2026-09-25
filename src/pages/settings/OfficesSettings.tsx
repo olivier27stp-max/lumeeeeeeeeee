@@ -5,7 +5,7 @@
  * serveur (un admin n'est membre que de son bureau). Modifier un bureau =
  * y basculer puis Réglages → Entreprise (company_settings est déjà par bureau).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Check, Loader2, MapPin, Plus, Users } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -17,6 +17,7 @@ import { confirmer } from '../../components/ui/ConfirmDialog';
 import { captureClientException } from '../../lib/sentry';
 import EmptyState from '../../components/ui/EmptyState';
 import OfficeAccessGrid from '../../components/offices/OfficeAccessGrid';
+import MarqueEntrepriseCard from '../../components/offices/MarqueEntrepriseCard';
 
 export default function OfficesSettings() {
   const navigate = useNavigate();
@@ -29,6 +30,8 @@ export default function OfficesSettings() {
   const [error, setError] = useState<string | null>(null);
   // Incrémenté après un changement d'accès : recharge les compteurs de membres.
   const [version, setVersion] = useState(0);
+  // Liste STABLE des bureaux (un tableau recréé à chaque rendu relancerait le chargement de la carte en boucle).
+  const bureauxIds = useMemo(() => (data?.offices ?? []).map((o) => o.id), [data]);
 
   useEffect(() => {
     let active = true;
@@ -238,6 +241,8 @@ export default function OfficesSettings() {
       {isOwner && data.offices.length > 1 && (
         <OfficeAccessGrid onChanged={() => setVersion((v) => v + 1)} />
       )}
+
+      {isOwner && data.offices.length > 1 && <MarqueEntrepriseCard bureauxIds={bureauxIds} />}
 
       <p className="text-[12px] text-text-tertiary">
         {fr
