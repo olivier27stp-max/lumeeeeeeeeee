@@ -35,6 +35,8 @@ export interface OrgMember {
    * unique partagée avec Disponibilité et le RBAC. Renvoyée par le serveur.
    */
   team_id?: string | null;
+  /** Portée de visibilité dans le bureau (appliquée en base). */
+  scope?: 'self' | 'assigned' | 'team' | 'company';
   /** Apparaît sur le leaderboard des ventes (défaut true). */
   show_on_leaderboard?: boolean;
   full_name: string;
@@ -146,7 +148,7 @@ export async function revokeInvitation(invitationId: string): Promise<{ message:
 export async function updateMemberRole(
   memberId: string,
   role: MemberRole,
-  options?: { team_id?: string | null },
+  options?: { team_id?: string | null; scope?: 'self' | 'team' | 'company' },
 ): Promise<{ message: string }> {
   const res = await fetch(`${API_BASE}/invitations/update-role`, {
     method: 'POST',
@@ -155,6 +157,7 @@ export async function updateMemberRole(
       memberId,
       role,
       ...(options && 'team_id' in options ? { team_id: options.team_id } : {}),
+      ...(options?.scope ? { scope: options.scope } : {}),
     }),
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to update role.');

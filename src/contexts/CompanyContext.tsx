@@ -313,7 +313,7 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
     current,
     currentOrgId: current?.orgId || null,
     currentRole: current?.role || null,
-    currentScope: current?.scope || 'self',
+    currentScope: current?.scope || 'company',
     currentPermissions: current?.permissions || null,
     companies,
     loading,

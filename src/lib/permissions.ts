@@ -37,8 +37,10 @@ export const SCOPE_LABELS: Record<Scope, { en: string; fr: string }> = {
 export const DEFAULT_SCOPE: Record<TeamRole, Scope> = {
   owner:      'company',
   admin:      'company',
-  sales_rep:  'self',
-  technician: 'assigned',
+  // Tout le bureau par défaut ; la restriction se choisit par personne (page
+  // Équipe) et s'applique en base (policies « portee_membre »).
+  sales_rep:  'company',
+  technician: 'company',
 };
 
 // ── Permission Keys ─────────────────────────────────────────────────
