@@ -912,6 +912,41 @@ end $_$;
 
 
 --
+-- Name: appliquer_prefixe_document(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.appliquer_prefixe_document() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $_$
+declare
+  v_prefixe text;
+begin
+  if tg_table_name = 'invoices' then
+    if new.invoice_number is null or new.invoice_number !~ '^\d+$' then return new; end if;
+  elsif tg_table_name = 'quotes' then
+    if new.quote_number is null or new.quote_number !~ '^\d+$' then return new; end if;
+  else
+    return new;
+  end if;
+
+  select cs.prefixe_documents into v_prefixe
+    from public.company_settings cs
+   where cs.org_id = new.org_id
+   limit 1;
+  if v_prefixe is null then return new; end if;
+
+  if tg_table_name = 'invoices' then
+    new.invoice_number := v_prefixe || '-' || new.invoice_number;
+  else
+    new.quote_number := v_prefixe || '-' || new.quote_number;
+  end if;
+  return new;
+end;
+$_$;
+
+
+--
 -- Name: apply_appointment_contract_link(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -13066,7 +13101,7 @@ begin
       select 1 from public.quotes q
       where q.org_id = v_org_id
         and q.deleted_at is null
-        and btrim(q.quote_number) = v_wanted::text
+        and nullif(regexp_replace(q.quote_number, '\D', '', 'g'), '') = v_wanted::text
     ) then
       raise exception 'Quote number % is already in use', v_wanted;
     end if;
@@ -13104,7 +13139,7 @@ begin
     p_currency, v_valid_until, p_notes, p_contract,
     p_deposit_required, p_require_payment_method
   )
-  returning id into v_quote_id;
+  returning id, quote_number into v_quote_id, v_quote_number;  -- numéro STOCKÉ (préfixe du bureau compris)
 
   insert into public.quote_status_history (quote_id, old_status, new_status, changed_by)
   values (v_quote_id, null, 'draft', auth.uid());
@@ -15124,7 +15159,7 @@ begin
     if exists (
       select 1 from public.quotes q
       where q.org_id = v_org and q.deleted_at is null
-        and btrim(q.quote_number) = v_wanted::text and q.id <> p_id
+        and nullif(regexp_replace(q.quote_number, '\D', '', 'g'), '') = v_wanted::text and q.id <> p_id
     ) then
       raise exception 'Quote number % is already in use', v_wanted;
     end if;
@@ -15132,7 +15167,8 @@ begin
     v_stored := v_wanted::text;
     update public.quotes
     set quote_number = v_stored, updated_at = now()
-    where id = p_id and org_id = v_org and deleted_at is null;
+    where id = p_id and org_id = v_org and deleted_at is null
+    returning quote_number into v_stored;  -- numéro STOCKÉ (préfixe du bureau compris)
     get diagnostics v_count = row_count;
     if v_count = 0 then
       raise exception 'Quote not found';
@@ -15169,7 +15205,8 @@ begin
 
     update public.invoices
     set invoice_number = v_stored, updated_at = now()
-    where id = p_id and org_id = v_org and deleted_at is null;
+    where id = p_id and org_id = v_org and deleted_at is null
+    returning invoice_number into v_stored;  -- numéro STOCKÉ (préfixe du bureau compris)
     get diagnostics v_count = row_count;
     if v_count = 0 then
       raise exception 'Invoice not found';
@@ -19424,6 +19461,7 @@ CREATE TABLE public.company_settings (
     review_low_rating_message text,
     review_thank_you_message text,
     social_links jsonb DEFAULT '{}'::jsonb NOT NULL,
+    prefixe_documents text,
     CONSTRAINT company_settings_brand_color_hex CHECK (((brand_color IS NULL) OR (brand_color ~ '^#[0-9A-Fa-f]{6}$'::text))),
     CONSTRAINT company_settings_city_len CHECK ((length(city) <= 200)),
     CONSTRAINT company_settings_company_name_len CHECK ((length(company_name) <= 200)),
@@ -19433,6 +19471,7 @@ CREATE TABLE public.company_settings (
     CONSTRAINT company_settings_job_footer_text_len CHECK ((length(job_footer_text) <= 20000)),
     CONSTRAINT company_settings_phone_len CHECK ((length(phone) <= 50)),
     CONSTRAINT company_settings_postal_code_len CHECK ((length(postal_code) <= 20)),
+    CONSTRAINT company_settings_prefixe_documents_format CHECK (((prefixe_documents IS NULL) OR (prefixe_documents ~ '^[A-Z]{1,5}$'::text))),
     CONSTRAINT company_settings_province_len CHECK ((length(province) <= 200)),
     CONSTRAINT company_settings_quote_footer_text_len CHECK ((length(quote_footer_text) <= 20000)),
     CONSTRAINT company_settings_social_links_objet CHECK ((jsonb_typeof(social_links) = 'object'::text)),
@@ -19555,6 +19594,13 @@ COMMENT ON COLUMN public.company_settings.review_thank_you_message IS 'Message d
 --
 
 COMMENT ON COLUMN public.company_settings.social_links IS 'Liens réseaux sociaux {facebook, x, instagram, yelp, angi, google_business} → URL https. Affichés au bas des courriels et des pages publiques client.';
+
+
+--
+-- Name: COLUMN company_settings.prefixe_documents; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.company_settings.prefixe_documents IS 'Préfixe des numéros de factures et soumissions de ce bureau (ex. CL → CL-1042). Lettres majuscules, 1 à 5. Nul = numéros sans préfixe.';
 
 
 --
@@ -36347,6 +36393,13 @@ CREATE TRIGGER trg_invoices_suppression_douce BEFORE UPDATE OF deleted_at ON pub
 
 
 --
+-- Name: invoices trg_invoices_zz_prefixe; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_invoices_zz_prefixe BEFORE INSERT OR UPDATE OF invoice_number ON public.invoices FOR EACH ROW EXECUTE FUNCTION public.appliquer_prefixe_document();
+
+
+--
 -- Name: job_agreements trg_job_agreements_job_only; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -36883,6 +36936,13 @@ CREATE TRIGGER trg_quotes_set_updated_at BEFORE UPDATE ON public.quotes FOR EACH
 --
 
 CREATE TRIGGER trg_quotes_suppression_douce BEFORE UPDATE OF deleted_at ON public.quotes FOR EACH ROW EXECUTE FUNCTION public.garde_suppression_douce('quotes.delete');
+
+
+--
+-- Name: quotes trg_quotes_zz_prefixe; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_quotes_zz_prefixe BEFORE INSERT OR UPDATE OF quote_number ON public.quotes FOR EACH ROW EXECUTE FUNCTION public.appliquer_prefixe_document();
 
 
 --
@@ -50270,6 +50330,14 @@ GRANT ALL ON FUNCTION public.anonymize_lead(p_lead_id uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.anonymize_old_soft_deleted_clients(p_days integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.anonymize_old_soft_deleted_clients(p_days integer) TO service_role;
+
+
+--
+-- Name: FUNCTION appliquer_prefixe_document(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.appliquer_prefixe_document() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.appliquer_prefixe_document() TO service_role;
 
 
 --
