@@ -239,17 +239,37 @@ async function consentementCommercial(
   if (!ctx.commercial && canal === 'sms') return { autorise: true };
 
   try {
-    const colonne = canal === 'email' ? 'email' : 'phone';
-    const valeur = canal === 'email' ? destinataire.trim().toLowerCase() : normalizeE164(destinataire);
-    const { data, error } = await ctx.supabase
-      .from('clients')
-      .select('id, email_consent_at, sms_consent_at, email_opt_out_at')
-      .eq('org_id', ctx.orgId)
-      .eq(colonne, valeur)
-      .is('deleted_at', null)
-      .limit(1)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
+    type Fiche = { id: string; email_consent_at: string | null; sms_consent_at: string | null; email_opt_out_at: string | null; phone?: string | null };
+    let data: Fiche | null = null;
+    if (canal === 'email') {
+      const res = await ctx.supabase
+        .from('clients')
+        .select('id, email_consent_at, sms_consent_at, email_opt_out_at')
+        .eq('org_id', ctx.orgId)
+        .eq('email', destinataire.trim().toLowerCase())
+        .is('deleted_at', null)
+        .limit(1)
+        .maybeSingle();
+      if (res.error) throw new Error(res.error.message);
+      data = (res.data as Fiche | null) ?? null;
+    } else {
+      // Le numéro est stocké tel que saisi ou importé (« (819) 479-0116 »,
+      // « 819-479-0116 », « +18194790116 ») : une égalité stricte sur la forme
+      // E.164 ne retrouvait pas un tiers des clients importés de Jobber, et tout
+      // SMS commercial vers eux échouait en « destinataire inconnu du carnet »
+      // (Vision Lavage, 2026-09-25). On préfiltre sur les 4 derniers chiffres,
+      // puis on compare chiffres seuls des deux côtés.
+      const chiffres = normalizeE164(destinataire).replace(/\D/g, '').slice(-10);
+      const res = await ctx.supabase
+        .from('clients')
+        .select('id, phone, email_consent_at, sms_consent_at, email_opt_out_at')
+        .eq('org_id', ctx.orgId)
+        .ilike('phone', `%${chiffres.slice(-4)}`)
+        .is('deleted_at', null)
+        .limit(50);
+      if (res.error) throw new Error(res.error.message);
+      data = ((res.data ?? []) as Fiche[]).find((c) => String(c.phone ?? '').replace(/\D/g, '').slice(-10) === chiffres) ?? null;
+    }
 
     // Destinataire hors du carnet de clients (prospect saisi à la main,
     // adresse d'essai) : pas de commercial vers quelqu'un qu'on ne connaît pas.
