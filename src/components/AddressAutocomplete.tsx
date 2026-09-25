@@ -3,6 +3,7 @@ import { useTranslation } from '../i18n';
 import { AlertCircle, Loader2, MapPin } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { bureauActifSync } from '../lib/orgApi';
 
 /** Structured address returned when user picks a suggestion. */
 export interface StructuredAddress {
@@ -86,7 +87,7 @@ async function apiHeaders(): Promise<Record<string, string>> {
   try {
     const { data } = await supabase.auth.getSession();
     if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
-    const activeOrg = localStorage.getItem('lume-active-org') || '';
+    const activeOrg = bureauActifSync() || '';
     if (activeOrg) headers['x-org-id'] = activeOrg;
   } catch { /* unauthenticated (public form) — server will refuse, input stays manual */ }
   return headers;

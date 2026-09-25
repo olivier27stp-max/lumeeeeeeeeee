@@ -16,6 +16,7 @@ import {
 } from '../lib/d2d-pipeline-stages';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from '../i18n';
+import { bureauActifSync } from '../lib/orgApi';
 
 // ── Types ──
 
@@ -54,7 +55,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   if (!token) throw new Error('Not authenticated');
   // Office actif — le serveur scope dessus si l'utilisateur en est membre.
   let activeOrg = '';
-  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
+  try { activeOrg = bureauActifSync() || ''; } catch {}
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'x-org-id': activeOrg };
 }
 

@@ -41,6 +41,7 @@ import MeasureStatusBar from '../components/measure/MeasureStatusBar';
 import StreetViewer from '../components/measure/StreetViewer';
 import { useGMaps3D } from '../components/measure/useGMaps3D';
 import { toast } from 'sonner';
+import { bureauActifSync } from '../lib/orgApi';
 
 // ── Component ──
 export default function QuoteMeasure() {
@@ -73,7 +74,7 @@ export default function QuoteMeasure() {
   // ne servent qu'à la toute première visite.
   const activeServicesStorageKey = (() => {
     let org = '';
-    try { org = localStorage.getItem('lume-active-org') || ''; } catch { /* stockage indisponible */ }
+    try { org = bureauActifSync() || ''; } catch { /* stockage indisponible */ }
     return `lume-measure-services:${org}`;
   })();
   useEffect(() => {

@@ -5,6 +5,7 @@
  * une seule logique de filtres, de colonnes et d'échappement, côté serveur.
  */
 import { supabase } from './supabase';
+import { bureauActifSync } from './orgApi';
 
 export type Lang = 'fr' | 'en';
 export type Bilingue = { fr: string; en: string };
@@ -107,7 +108,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   if (!token) throw new Error('Not authenticated');
   // Office actif — le serveur scope dessus si l'utilisateur en est membre.
   let activeOrg = '';
-  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch { activeOrg = ''; }
+  try { activeOrg = bureauActifSync() || ''; } catch { activeOrg = ''; }
   return { Authorization: `Bearer ${token}`, 'x-org-id': activeOrg };
 }
 

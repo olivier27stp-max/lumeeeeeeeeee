@@ -3,6 +3,7 @@
 // utilisée par ces routes mais le header reste uniforme et inoffensif).
 
 import { supabase } from './supabase';
+import { bureauActifSync } from './orgApi';
 
 const BASE = '/api/creator-space';
 
@@ -12,7 +13,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   if (!token) throw new Error('Not authenticated');
   let activeOrg = '';
   try {
-    activeOrg = localStorage.getItem('lume-active-org') || '';
+    activeOrg = bureauActifSync() || '';
   } catch {
     activeOrg = '';
   }

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { LeaderboardEntry, RepPerformanceDetail, FsRepBadge } from '../types';
+import { bureauActifSync } from './orgApi';
 
 // ---------------------------------------------------------------------------
 // Auth helper
@@ -10,7 +11,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   if (!token) throw new Error('Not authenticated');
   // Office actif — le serveur scope dessus si l'utilisateur en est membre.
   let activeOrg = '';
-  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
+  try { activeOrg = bureauActifSync() || ''; } catch {}
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'x-org-id': activeOrg };
 }
 

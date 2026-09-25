@@ -8,13 +8,14 @@
  */
 import { supabase } from './supabase';
 import { deviceTokenHeader } from './deviceToken';
+import { bureauActifSync } from './orgApi';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
   let activeOrg = '';
-  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch { /* stockage indisponible */ }
+  try { activeOrg = bureauActifSync() || ''; } catch { /* stockage indisponible */ }
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${session?.access_token || ''}`,

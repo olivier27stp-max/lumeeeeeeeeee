@@ -155,7 +155,7 @@ export async function repondreAuMembre(opts: OptionsFil): Promise<void> {
       // Une écriture passe par les mêmes fonctions gardées que la lecture :
       // sans session du membre, la base refuse (`auth.uid()` nul) et la
       // confirmation échouerait alors qu'elle vient d'être donnée.
-      const { client, accessToken } = await clientPourMembre(membre.userId);
+      const { client, accessToken } = await clientPourMembre(membre.userId, membre.orgId);
       const { recu } = await executerEcriture({
         tool: enAttente.tool,
         toolUseId: enAttente.tool_use_id,

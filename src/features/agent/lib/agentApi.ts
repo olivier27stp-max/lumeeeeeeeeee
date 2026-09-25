@@ -12,6 +12,7 @@ import { createQuote } from '../../../lib/quotesApi';
 import { createInvoiceDraft, saveInvoiceDraft } from '../../../lib/invoicesApi';
 import { createJob } from '../../../lib/jobsApi';
 import { sendSms } from '../../../lib/messagingApi';
+import { bureauActifSync } from '../../../lib/orgApi';
 
 export interface AgentMessage {
   role: 'user' | 'assistant';
@@ -37,7 +38,7 @@ async function authHeaders(): Promise<Record<string, string>> {
   // Office actif : Mr Lume ne doit voir QUE cet office (aucun mélange entre
   // offices). Le serveur scope dessus si l'utilisateur en est membre.
   try {
-    const activeOrg = localStorage.getItem('lume-active-org');
+    const activeOrg = bureauActifSync();
     if (activeOrg) headers['x-org-id'] = activeOrg;
   } catch {}
   return headers;
