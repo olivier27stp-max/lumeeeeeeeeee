@@ -33,6 +33,7 @@ import {
   ClipboardList,
   Wallet,
 } from 'lucide-react';
+import TransfertBureauDialog, { LibelleTransfert, usePeutTransferer } from '../components/offices/TransfertBureauDialog';
 import { entityIconClass } from '../lib/entityColors';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { clientDisplayName, getClientById, updateClient, listClientJobs, softDeleteClient } from '../lib/clientsApi';
@@ -239,6 +240,8 @@ export default function ClientDetails() {
     return t && OVERVIEW_TABS.includes(t as OverviewTab) ? (t as OverviewTab) : 'active';
   });
   const [showActionMenu, setShowActionMenu] = useState(false);
+  const [transfertOuvert, setTransfertOuvert] = useState(false);
+  const peutTransferer = usePeutTransferer();
   const [showNewItemMenu, setShowNewItemMenu] = useState(false);
   // Menu "+" des travaux actifs — position fixed pour échapper à l'overflow:hidden du section-card
   const [activeWorkMenuPos, setActiveWorkMenuPos] = useState<{ top: number; right: number } | null>(null);
@@ -732,6 +735,8 @@ export default function ClientDetails() {
 
               {/* More dropdown */}
               <div className="relative">
+                <TransfertBureauDialog entite="client" id={client.id} ouvert={transfertOuvert}
+                  onFermer={() => setTransfertOuvert(false)} onTransfere={() => navigate('/clients')} />
                 <button onClick={() => setShowActionMenu(!showActionMenu)} aria-label={t.common.moreOptions} className="inline-flex items-center gap-1 h-9 px-2.5 bg-surface border border-outline rounded-md text-text-secondary hover:bg-surface-secondary transition-colors">
                   <MoreHorizontal size={16} />
                 </button>
@@ -751,6 +756,15 @@ export default function ClientDetails() {
                       >
                         <Archive size={13} /> {t.clients.archive}
                       </button>
+                      {peutTransferer && (
+                        <button
+                          onClick={() => { setShowActionMenu(false); setTransfertOuvert(true); }}
+                          aria-label={language === 'fr' ? 'Transférer vers un bureau' : 'Move to another office'}
+                          className="w-full px-3 py-2 text-[13px] text-text-secondary hover:bg-surface-secondary flex items-center gap-2 text-left transition-colors"
+                        >
+                          <LibelleTransfert />
+                        </button>
+                      )}
                       {(client as any).portal_token && (
                         <button
                           onClick={() => {
