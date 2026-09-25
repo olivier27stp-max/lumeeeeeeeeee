@@ -70,8 +70,6 @@ function parseSort(raw: string | null): InvoiceSortKey {
 }
 // ─── Period options for the status total boxes ─────────────────
 
-type StatBoxKey = 'paid' | 'awaiting' | 'past_due';
-
 const PERIOD_OPTIONS: Array<{ value: InvoiceStatsPeriod; fr: string; en: string }> = [
   { value: 'all_time', fr: 'Tout le temps', en: 'All Time' },
   { value: 'this_year', fr: 'Cette année', en: 'This Year' },
@@ -167,19 +165,13 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     queryFn: fetchInvoiceStatsRows,
     staleTime: 30_000,
   });
-  const [boxPeriods, setBoxPeriods] = useState<Record<StatBoxKey, InvoiceStatsPeriod>>({
-    paid: 'this_month',
-    awaiting: 'this_month',
-    past_due: 'this_month',
-  });
+  // Seule la boîte Payées a une période (argent encaissé). En attente et En retard
+  // sont des soldes ouverts : un état, affiché tel qu'il est aujourd'hui.
+  const [paidPeriod, setPaidPeriod] = useState<InvoiceStatsPeriod>('this_month');
   const statusTotals = useMemo(() => {
-    const statsRows = statsQuery.data || [];
-    return {
-      paid: computeInvoiceStatusTotals(statsRows, boxPeriods.paid).paid,
-      awaiting: computeInvoiceStatusTotals(statsRows, boxPeriods.awaiting).awaiting,
-      past_due: computeInvoiceStatusTotals(statsRows, boxPeriods.past_due).pastDue,
-    };
-  }, [statsQuery.data, boxPeriods]);
+    const t = computeInvoiceStatusTotals(statsQuery.data || [], paidPeriod);
+    return { paid: t.paid, awaiting: t.awaiting, past_due: t.pastDue };
+  }, [statsQuery.data, paidPeriod]);
 
   // Champs personnalisés : la liste passe par une RPC → le filtre calcule
   // d'abord les ids (cf_filtrer), puis les lui passe (p_ids). Colonne en plus.
@@ -541,11 +533,13 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                 </p>
               )}
               <div className="mt-2.5">
-                <PeriodSelect
-                  value={boxPeriods[box.key]}
-                  onChange={(p) => setBoxPeriods(prev => ({ ...prev, [box.key]: p }))}
-                  fr={fr}
-                />
+                {box.key === 'paid' ? (
+                  <PeriodSelect value={paidPeriod} onChange={setPaidPeriod} fr={fr} />
+                ) : (
+                  <span className="inline-flex items-center h-7 text-[12px] font-medium text-text-tertiary">
+                    {fr ? 'En ce moment' : 'Right now'}
+                  </span>
+                )}
               </div>
             </div>
           );

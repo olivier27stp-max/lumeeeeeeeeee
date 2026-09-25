@@ -245,6 +245,8 @@ export interface InvoiceStatusTotals {
 
 /**
  * Fetch the minimal invoice rows needed for the status total boxes.
+ * La période (computeInvoiceStatusTotals) ne concerne que la boîte Payées
+ * (argent encaissé dans la période) ; En attente et En retard sont l'état actuel.
  * Paginated because PostgREST caps responses at 1000 rows; period filtering
  * happens client-side (computeInvoiceStatusTotals) so switching the period
  * is instant and needs no refetch.
@@ -300,10 +302,11 @@ export function computeInvoiceStatusTotals(rows: InvoiceStatsRow[], period: Invo
       continue;
     }
     // sent/partial with a balance — awaiting payment or past due (same rule
-    // as getInvoiceRowUiStatus); dated by issue date, amounts = open balance.
+    // as getInvoiceRowUiStatus); amounts = open balance. Un solde ouvert est un
+    // ÉTAT, pas un événement : la période ne s'applique PAS ici. Avec le filtre
+    // par date d'émission, Vision Lavage (2026-09-24) voyait « En retard : 0 »
+    // alors que 20 factures émises avant le mois totalisaient 15 002 $ de retard.
     if (Number(row.balance_cents || 0) <= 0) continue;
-    const ymd = toYMD(row.issued_at) || toYMD(row.created_at);
-    if (fromYMD && (!ymd || ymd < fromYMD)) continue;
     const bucket = row.due_date && String(row.due_date).slice(0, 10) < todayYMD ? totals.pastDue : totals.awaiting;
     bucket.count += 1;
     bucket.cents += Number(row.balance_cents || 0);
