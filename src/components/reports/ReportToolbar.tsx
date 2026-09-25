@@ -57,8 +57,8 @@ export default function ReportToolbar({ definition, state, lang, onChange }: Rep
               {PRESET_LABELS[p][lang]}
             </button>
           ))}
-          <DatePickerInput value={state.from} onChange={(v) => onChange({ from: v })} language={lang} placeholder={fr ? 'Du' : 'From'} className="h-8 w-[130px]" />
-          <DatePickerInput value={state.to} onChange={(v) => onChange({ to: v })} language={lang} placeholder={fr ? 'Au' : 'To'} className="h-8 w-[130px]" />
+          <DatePickerInput value={state.from} onChange={(v) => onChange({ from: v })} language={lang} placeholder={fr ? 'Du' : 'From'} className="w-[190px]" />
+          <DatePickerInput value={state.to} onChange={(v) => onChange({ to: v })} language={lang} placeholder={fr ? 'Au' : 'To'} className="w-[190px]" />
           {definition.dateFilter.fields && definition.dateFilter.fields.length > 1 && (
             <>
               <label htmlFor={dateFieldId} className="text-[12px] text-text-tertiary ml-1">{fr ? 'sur' : 'by'}</label>
