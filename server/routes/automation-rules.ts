@@ -37,6 +37,7 @@ import {
 } from '../lib/validation';
 import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie } from '../lib/automatisations-bureaux';
 import { logger } from '../lib/logger';
+import { oublierPause } from '../lib/automations-pause-org';
 import {
   DECLENCHEURS,
   ACTIONS,
@@ -600,6 +601,70 @@ router.post('/automations/rules/:id/copier-bureaux', validate(automationCopieBur
     logger.error('[automation-rules] copie vers bureaux échouée', { message: err?.message });
     return res.status(500).json({ error: 'Impossible de copier l’automatisation.' });
   }
+});
+
+// ── Pause des automatisations (par entreprise) ────────
+
+/*
+ * L'interrupteur du CLIENT. Distinct de `AUTOMATIONS_ENABLED`, qui coupe
+ * toute la plateforme et n'appartient qu'à l'éditeur.
+ *
+ * La file est CONSERVÉE : rien n'est réclamé, marqué en échec ni
+ * supprimé. Reprendre repart où on en était.
+ */
+
+router.get('/automations/pause', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const { data, error } = await auth.client
+    .from('company_settings')
+    .select('automations_paused, automations_paused_at')
+    .eq('org_id', auth.orgId)
+    .maybeSingle();
+
+  if (error) {
+    logger.error('[automation-rules] état de pause illisible', { message: error.message });
+    return res.status(500).json({ error: 'Impossible de lire l’état des automatisations.' });
+  }
+  return res.json({
+    paused: data?.automations_paused === true,
+    pausedAt: data?.automations_paused_at ?? null,
+  });
+});
+
+router.post('/automations/pause', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const enPause = req.body?.paused === true;
+
+  const { error } = await auth.client
+    .from('company_settings')
+    .update({
+      automations_paused: enPause,
+      // QUAND et PAR QUI : sans ça, « pourquoi rien ne part depuis mardi ? »
+      // est indébogable. On efface à la reprise pour ne pas laisser une
+      // date périmée qui ferait croire à une pause en cours.
+      automations_paused_at: enPause ? new Date().toISOString() : null,
+      automations_paused_by: enPause ? auth.user.id : null,
+    })
+    .eq('org_id', auth.orgId);
+
+  if (error) {
+    if (error.code === '42501') {
+      return res.status(403).json({ error: 'Votre rôle ne permet pas de mettre les automatisations en pause.' });
+    }
+    logger.error('[automation-rules] bascule de pause échouée', { message: error.message, code: error.code });
+    return res.status(500).json({ error: 'Impossible de changer l’état des automatisations.' });
+  }
+
+  // Le moteur garde l'état en cache 15 s : on l'oublie tout de suite, sinon
+  // un arrêt d'urgence mettrait un quart de minute à mordre.
+  oublierPause(auth.orgId);
+
+  logger.warn('[automations] pause basculée', { orgId: auth.orgId, enPause, par: auth.user.id });
+  return res.json({ paused: enPause });
 });
 
 // ── Webhooks entrants ───────────────────────────
