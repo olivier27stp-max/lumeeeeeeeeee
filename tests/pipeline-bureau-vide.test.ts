@@ -55,22 +55,25 @@ describe('le board porte bien le correctif', () => {
     expect(t).toContain('switchCompany');
   });
 
-  it('le message du BUREAU passe avant celui du PIPELINE', () => {
-    // L'ordre est le cœur du correctif : inversé, on renverrait l'utilisateur
-    // vers d'autres pipelines du même bureau vide.
+  it('le board RESTE VISIBLE : une bannière, pas un écran de remplacement', () => {
+    // Le cœur du correctif. Une première version REMPLAÇAIT le board par un
+    // message plein écran : un bureau neuf — vide par définition — n'offrait
+    // alors plus ni colonnes, ni « Nouveau deal », ni filtres. Masquer le
+    // pipeline pour annoncer qu'il est vide empêchait justement de le remplir.
     const t = src();
-    expect(t.indexOf('bureauVide ?')).toBeGreaterThan(-1);
-    expect(t.indexOf('bureauVide ?')).toBeLessThan(t.indexOf('pipelineVide ?'));
+    expect(t).not.toContain('{bureauVide ? (');
+    expect(t).toContain('{bureauVide && (');
+    expect(t.indexOf('{bureauVide && (')).toBeLessThan(t.indexOf('<BarreOutils'));
   });
 
   it('on n annonce AUCUN nombre de deals de l autre bureau', () => {
     // La RLS ne laisse pas lire les deals d'un autre bureau depuis le
-    // navigateur — vérifié en base : un membre de 2 bureaux n'en voit qu'un.
-    // Afficher « 22 deals ailleurs » supposerait une lecture cross-tenant,
-    // exactement ce que l'isolation interdit.
+    // navigateur — un membre de deux bureaux n'en voit qu'un. Afficher
+    // « 22 deals ailleurs » supposerait une lecture cross-tenant, exactement
+    // ce que l'isolation interdit.
     const t = src();
-    const bloc = t.slice(t.indexOf('bureauVide ?'), t.indexOf('pipelineVide ?'));
-    expect(bloc).not.toMatch(/\bdeals\.length\b.*autre/i);
+    const bloc = t.slice(t.indexOf('{bureauVide && ('), t.indexOf('<BarreOutils'));
     expect(bloc).toContain('companyName');
+    expect(bloc).not.toContain('deals.length');
   });
 });
