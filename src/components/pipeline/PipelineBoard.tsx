@@ -1675,6 +1675,35 @@ export default function PipelineBoard({
 
   return (
     <div>
+      {/* Aucun deal ici, et l'utilisateur appartient à d'autres bureaux.
+          Une BANNIÈRE, pas un écran de remplacement : le board reste entier
+          — colonnes, « Nouveau deal », filtres, import. Un bureau neuf est
+          vide par définition, et on doit pouvoir y travailler tout de suite ;
+          masquer le pipeline pour annoncer qu'il est vide empêchait justement
+          de le remplir. */}
+      {bureauVide && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-outline bg-surface-secondary px-3.5 py-2.5">
+          <span className="text-[12px] text-text-secondary">
+            {nomBureau
+              ? (fr ? `Aucun deal dans « ${nomBureau} ».` : `No deal in “${nomBureau}”.`)
+              : (fr ? 'Aucun deal dans ce bureau.' : 'No deal in this office.')}
+          </span>
+          <span className="text-[12px] text-text-tertiary">
+            {fr ? 'Chaque bureau a les siens —' : 'Each office keeps its own —'}
+          </span>
+          {autresBureaux.slice(0, 3).map((c) => (
+            <button
+              key={c.orgId}
+              type="button"
+              onClick={() => switchCompany(c.orgId)}
+              className="text-[12px] font-semibold text-text-primary underline underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary rounded"
+            >
+              {c.companyName ?? (fr ? 'autre bureau' : 'other office')}
+            </button>
+          ))}
+        </div>
+      )}
+
       <BarreOutils
         fr={fr}
         total={filtres_.length}
@@ -1888,38 +1917,7 @@ export default function PipelineBoard({
         </p>
       )}
 
-      {bureauVide ? (
-        /*
-          Le bureau affiché n'a aucun deal, et l'utilisateur en a d'autres.
-          On le dit AVANT le message « ce pipeline est vide » : changer de
-          pipeline dans un bureau qui n'a aucun deal ne montrera jamais rien,
-          et on tournerait en rond entre des pipelines tous vides.
-        */
-        <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
-          <p className="mt-1.5 text-[15px] font-semibold text-text-primary">
-            {nomBureau
-              ? (fr ? `Aucun deal dans « ${nomBureau} »` : `No deal in “${nomBureau}”`)
-              : (fr ? 'Aucun deal dans ce bureau' : 'No deal in this office')}
-          </p>
-          <p className="max-w-[46ch] text-[12.5px] leading-relaxed text-text-tertiary">
-            {fr
-              ? "Chaque bureau a ses propres deals : ceux d'un autre bureau n'apparaissent jamais ici. Tes deals sont peut-être dans celui-ci."
-              : 'Each office keeps its own deals: another office’s deals never show up here. Yours may be in one of these.'}
-          </p>
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {autresBureaux.slice(0, 3).map((c) => (
-              <button
-                key={c.orgId}
-                type="button"
-                onClick={() => switchCompany(c.orgId)}
-                className={CLASSE_BOUTON}
-              >
-                {fr ? `Ouvrir « ${c.companyName ?? 'Bureau'} »` : `Open “${c.companyName ?? 'Office'}”`}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : pipelineVide ? (
+      {pipelineVide ? (
         <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
           <p className="mt-1.5 text-[15px] font-semibold text-text-primary">
             {fr ? 'Ce pipeline est vide' : 'This pipeline is empty'}
