@@ -164,7 +164,11 @@ function verifierEntree(e: Pick<EntreeChamp, 'object_type' | 'field_type' | 'key
 function configPour(type: TypeChamp, c: ConfigChamp = {}): ConfigChamp {
   // Seules les clés du type survivent : un vieux « decimals » n'a rien à faire sur une date.
   // `show_on_documents` vaut pour tous les types (devis / facture).
-  const doc: ConfigChamp = c.show_on_documents ? { show_on_documents: true } : {};
+  // `masque_creation` aussi : retiré de la fenêtre de création (« Gérer les champs »).
+  const doc: ConfigChamp = {
+    ...(c.show_on_documents ? { show_on_documents: true } : {}),
+    ...(c.masque_creation ? { masque_creation: true } : {}),
+  };
   if (type === 'number') return { decimals: c.decimals ?? null, min: c.min ?? null, max: c.max ?? null, ...doc };
   if (type === 'monetary') return { currency: (c.currency || 'CAD').toUpperCase(), ...doc };
   if (type === 'date') return { include_time: !!c.include_time, ...doc };

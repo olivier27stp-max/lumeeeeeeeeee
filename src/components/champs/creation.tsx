@@ -23,6 +23,18 @@ import type { ObjetChamp, ValeurChamp } from '../../lib/champs/types';
 import ChampSaisie from './ChampSaisie';
 import { messageChamps } from '../../lib/champs/messages';
 import LienAjouterChamps from './LienAjouterChamps';
+import GererChampsFenetre from './GererChampsFenetre';
+import { usePermissions } from '../../hooks/usePermissions';
+import { Settings2 } from 'lucide-react';
+
+/** Titre de la fenêtre de création, par objet (panneau « Gérer les champs »). */
+const TITRE_FENETRE: Record<ObjetChamp, { fr: string; en: string }> = {
+  client: { fr: 'Nouveau client', en: 'New client' },
+  deal: { fr: 'Nouvelle carte du pipeline', en: 'New pipeline card' },
+  job: { fr: 'Nouveau job', en: 'New job' },
+  quote: { fr: 'Nouvelle soumission', en: 'New quote' },
+  invoice: { fr: 'Nouvelle facture', en: 'New invoice' },
+};
 
 export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
   const { isEnabled } = useChampsPersoActifs();
@@ -33,7 +45,12 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
     enabled: isEnabled,
     staleTime: 60_000,
   });
-  const champs = useMemo(() => (data?.fields ?? []).filter((c) => !c.archived_at), [data]);
+  // Tous les champs actifs de l'objet (pour « Gérer les champs »), et ceux affichés dans la fenêtre.
+  const tousActifs = useMemo(() => (data?.fields ?? []).filter((c) => !c.archived_at), [data]);
+  const champs = useMemo(() => tousActifs.filter((c) => !c.config?.masque_creation), [tousActifs]);
+  const { role } = usePermissions();
+  const peutGerer = role === 'owner' || role === 'admin';
+  const [gerer, setGerer] = useState(false);
   const [valeurs, setValeurs] = useState<Record<string, ValeurChamp>>({});
   // Le clic sur « Créer » suit le blur du dernier champ texte dans le MÊME
   // événement : l'état React n'est pas encore rendu, la closure verrait
@@ -79,12 +96,35 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
     }
   };
 
-  // Aucun champ (liste chargée) : on le dit, avec où en créer, plutôt qu'un silence.
-  const bloc = !isEnabled ? null : champs.length === 0 ? (data ? <LienAjouterChamps fr={fr} /> : null) : (
+  const boutonGerer = peutGerer ? (
+    <button type="button" onClick={() => setGerer(true)}
+      className="inline-flex items-center gap-1 rounded text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+      <Settings2 size={12} aria-hidden />{fr ? 'Gérer les champs' : 'Manage fields'}
+    </button>
+  ) : null;
+  const panneau = gerer ? (
+    <GererChampsFenetre objet={objet} titreFenetre={fr ? TITRE_FENETRE[objet].fr : TITRE_FENETRE[objet].en}
+      champs={tousActifs} dossiers={data?.folders ?? []} fr={fr} onClose={() => setGerer(false)} />
+  ) : null;
+
+  // Aucun champ affiché (liste chargée) : on le dit, avec de quoi en ajouter, plutôt qu'un silence.
+  const bloc = !isEnabled ? null : champs.length === 0 ? (data ? (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      {tousActifs.length === 0 ? <LienAjouterChamps fr={fr} /> : (
+        <p className="text-[12px] text-text-tertiary">{fr ? 'Aucun champ personnalisé dans cette fenêtre.' : 'No custom fields in this window.'}</p>
+      )}
+      {boutonGerer}
+      {panneau}
+    </div>
+  ) : null) : (
     <div className="space-y-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
-        {fr ? 'Champs personnalisés' : 'Custom fields'}
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
+          {fr ? 'Champs personnalisés' : 'Custom fields'}
+        </p>
+        {boutonGerer}
+      </div>
+      {panneau}
       <div className="grid gap-3 sm:grid-cols-2">
         {champs.map((c) => {
           const id = `${idBase}-${c.id}`;

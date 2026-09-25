@@ -42,6 +42,8 @@ export interface ConfigChamp {
   include_time?: boolean;
   /** Devis / facture : afficher sur le document du client (PDF, page publique). */
   show_on_documents?: boolean;
+  /** Retiré de la fenêtre de création (« Gérer les champs ») — reste sur la fiche. */
+  masque_creation?: boolean;
 }
 
 export interface OptionChamp {
