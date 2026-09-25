@@ -60,6 +60,15 @@ function sumInto(acc: Record<string, number>, cols: ReportColumn[], rows: Row[])
   }
 }
 
+/** Totaux (colonnes `total: 'sum'`) sur un ensemble de lignes déjà chargé. */
+export function sumTotals(def: ReportDefinition, rows: Row[]): Record<string, number> | null {
+  const cols = totalColumns(def);
+  if (!cols.length) return null;
+  const acc: Record<string, number> = {};
+  sumInto(acc, cols, rows);
+  return roundTotals(acc, cols);
+}
+
 function roundTotals(acc: Record<string, number>, cols: ReportColumn[]) {
   for (const c of cols) {
     if (!(c.key in acc)) continue;

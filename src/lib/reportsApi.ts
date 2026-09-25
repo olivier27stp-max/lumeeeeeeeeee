@@ -54,6 +54,7 @@ export interface ReportCatalogue {
   reports: ReportSummary[];
   canExport: boolean;
   exportMaxRows: number;
+  pdfMaxRows: number;
 }
 
 export interface ReportDefinition {
@@ -89,6 +90,37 @@ export interface ReportRows {
   page: number;
   pageSize: number;
   exportMaxRows: number;
+  pdfMaxRows: number;
+}
+
+export type ExportFormat = 'csv' | 'xlsx' | 'pdf';
+
+/** En-tête d'export renvoyé par le serveur (période et filtres en clair, auteur, horodatage). */
+export interface ReportExportMeta {
+  reportId: string;
+  title: string;
+  description: string;
+  company: string;
+  period: string;
+  periodFrom: string | null;
+  periodTo: string | null;
+  dateField: string | null;
+  filters: Array<{ label: string; value: string }>;
+  generatedAt: string;
+  generatedAtLabel: string;
+  generatedBy: string;
+  lang: Lang;
+  rowCount: number;
+}
+
+/** Toutes les lignes filtrées/triées + en-tête : la matière du PDF. */
+export interface ReportExportData {
+  meta: ReportExportMeta;
+  columns: ReportColumn[];
+  rows: Record<string, unknown>[];
+  total: number;
+  totals: Record<string, number> | null;
+  fileName: string;
 }
 
 export class ReportExportTooLarge extends Error {
@@ -151,25 +183,41 @@ export function fetchReportRows(reportId: string, params: ReportParams): Promise
   return apiGet<ReportRows>(`/reports/rows?${toQueryString({ ...params, report: reportId })}`);
 }
 
-/**
- * Télécharge le CSV complet (toutes les lignes filtrées et triées). Lève
- * ReportExportTooLarge quand le serveur refuse au-delà du plafond.
- */
-export async function downloadReportCsv(reportId: string, params: ReportParams): Promise<{ blob: Blob; fileName: string; rows: number }> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/reports/export.csv?${toQueryString({ ...params, report: reportId })}`, { headers });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    if (res.status === 413 && body?.code === 'EXPORT_TOO_LARGE') {
-      throw new ReportExportTooLarge(body.error || 'Export too large', Number(body.total) || 0, Number(body.max) || 0);
-    }
-    throw new Error(body?.error ?? `HTTP ${res.status}`);
+async function throwExportError(res: Response): Promise<never> {
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 413 && body?.code === 'EXPORT_TOO_LARGE') {
+    throw new ReportExportTooLarge(body.error || 'Export too large', Number(body.total) || 0, Number(body.max) || 0);
   }
+  throw new Error(body?.error ?? `HTTP ${res.status}`);
+}
+
+/**
+ * Télécharge le fichier complet (toutes les lignes filtrées et triées) en
+ * CSV ou Excel. Lève ReportExportTooLarge quand le serveur refuse au-delà
+ * du plafond.
+ */
+export async function downloadReportFile(reportId: string, params: ReportParams, format: 'csv' | 'xlsx'): Promise<{ blob: Blob; fileName: string; rows: number }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/reports/export.${format}?${toQueryString({ ...params, report: reportId })}`, { headers });
+  if (!res.ok) await throwExportError(res);
   const cd = res.headers.get('Content-Disposition') || '';
   const match = cd.match(/filename="?([^";]+)"?/i);
-  const fileName = match?.[1] || `rapport-${reportId}.csv`;
+  const fileName = match?.[1] || `rapport-${reportId}.${format}`;
   const rows = Number(res.headers.get('X-Report-Rows')) || 0;
   return { blob: await res.blob(), fileName, rows };
+}
+
+/** Alias historique : CSV complet. */
+export function downloadReportCsv(reportId: string, params: ReportParams): Promise<{ blob: Blob; fileName: string; rows: number }> {
+  return downloadReportFile(reportId, params, 'csv');
+}
+
+/** Toutes les lignes + en-tête d'export (pour le PDF). Lève ReportExportTooLarge au-delà du plafond PDF. */
+export async function fetchReportExportData(reportId: string, params: ReportParams): Promise<ReportExportData> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/reports/export.json?${toQueryString({ ...params, report: reportId })}`, { headers });
+  if (!res.ok) await throwExportError(res);
+  return res.json() as Promise<ReportExportData>;
 }
 
 /** Déclenche l'enregistrement d'un Blob côté navigateur. */
@@ -185,8 +233,8 @@ export function saveBlob(blob: Blob, fileName: string): void {
 }
 
 /** Télécharge et enregistre en une étape (raccourci pour les boutons des pages). */
-export async function exportReportToFile(reportId: string, params: ReportParams): Promise<number> {
-  const { blob, fileName, rows } = await downloadReportCsv(reportId, params);
+export async function exportReportToFile(reportId: string, params: ReportParams, format: 'csv' | 'xlsx' = 'csv'): Promise<number> {
+  const { blob, fileName, rows } = await downloadReportFile(reportId, params, format);
   saveBlob(blob, fileName);
   return rows;
 }

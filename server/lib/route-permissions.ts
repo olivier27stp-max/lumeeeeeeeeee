@@ -326,6 +326,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/reports/definition': 'financial.view_reports',
   'GET /api/reports/rows': 'financial.view_reports',
   'GET /api/reports/export.csv': 'financial.export_data',
+  'GET /api/reports/export.xlsx': 'financial.export_data',
+  'GET /api/reports/export.json': 'financial.export_data',
   'POST /api/security/check-password': 'settings.read',
 
   // ── Audit Log ──

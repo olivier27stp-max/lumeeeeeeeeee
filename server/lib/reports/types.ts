@@ -173,6 +173,12 @@ export interface ReportDefinitionPublic {
 
 /** Plafond d'export : au-delà, on refuse explicitement (jamais de troncature silencieuse). */
 export const EXPORT_MAX_ROWS = 50_000;
+/**
+ * Plafond du PDF : un PDF de rapport se lit et s'imprime ; au-delà de ce
+ * nombre de lignes il devient un pavé de centaines de pages — on oriente
+ * vers Excel/CSV plutôt que de le produire.
+ */
+export const PDF_MAX_ROWS = 5_000;
 /** Taille des lots lus à la base (limite PostgREST par requête). */
 export const BATCH_SIZE = 1000;
 /** Au-delà de ce nombre de lignes, la ligne de totaux n'est pas calculée à l'écran. */

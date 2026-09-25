@@ -100,6 +100,8 @@ describe('gardes', () => {
     expect(src).toContain("'GET /api/reports/definition': 'financial.view_reports'");
     expect(src).toContain("'GET /api/reports/rows': 'financial.view_reports'");
     expect(src).toContain("'GET /api/reports/export.csv': 'financial.export_data'");
+    expect(src).toContain("'GET /api/reports/export.xlsx': 'financial.export_data'");
+    expect(src).toContain("'GET /api/reports/export.json': 'financial.export_data'");
   });
 
   it('le routeur est monté et journalise sous le type « report »', () => {

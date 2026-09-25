@@ -76,9 +76,14 @@ export function csvRows(columns: ReportColumn[], rows: Row[], lang: Lang): strin
   return out;
 }
 
-/** Nom de fichier sûr : `rapport-<id>-<from>_<to>.csv`. */
-export function csvFilename(reportId: string, from?: string, to?: string, today?: string): string {
+/** Nom de fichier sûr : `rapport-<id>-<from>_<to>.<ext>` (ext = csv, xlsx, pdf). */
+export function exportFilename(reportId: string, ext: 'csv' | 'xlsx' | 'pdf', from?: string, to?: string, today?: string): string {
   const safe = reportId.replace(/[^a-z0-9-]/gi, '');
   const period = from || to ? `${from || 'debut'}_${to || 'fin'}` : (today || new Date().toISOString().slice(0, 10));
-  return `rapport-${safe}-${period}.csv`;
+  return `rapport-${safe}-${period}.${ext}`;
+}
+
+/** Nom de fichier CSV (alias historique de exportFilename). */
+export function csvFilename(reportId: string, from?: string, to?: string, today?: string): string {
+  return exportFilename(reportId, 'csv', from, to, today);
 }

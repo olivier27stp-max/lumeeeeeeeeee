@@ -108,7 +108,7 @@
   "src/pages/settings/OfficesSettings.tsx": "a2bb43d4c59492bd",
   "src/pages/settings/PayrollPage.tsx": "7d62395efd01ded3",
   "src/pages/settings/ProfileSettings.tsx": "50c65bd9d90e6df2",
-  "src/pages/settings/ReportView.tsx": "980ed01846dbeea8",
-  "src/pages/settings/ReportsCatalog.tsx": "c259541b779ef216",
+  "src/pages/settings/ReportView.tsx": "1f700fd639d46523",
+  "src/pages/settings/ReportsCatalog.tsx": "52338e5c1675a433",
   "src/pages/settings/SettingsLayout.tsx": "fe947493633354ef"
 }

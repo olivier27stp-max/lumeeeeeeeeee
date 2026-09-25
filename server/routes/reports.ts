@@ -5,6 +5,8 @@
  *  GET /api/reports/definition?report=<id>         → colonnes, filtres (options résolues), tri par défaut
  *  GET /api/reports/rows?report=<id>&…             → une page de lignes + total + totaux (JSON)
  *  GET /api/reports/export.csv?report=<id>&…       → TOUTES les lignes filtrées/triées, en flux CSV
+ *  GET /api/reports/export.xlsx?report=<id>&…      → même contenu, classeur Excel mis en forme (flux)
+ *  GET /api/reports/export.json?report=<id>&…      → même contenu + en-tête d'export, pour le PDF (plafond PDF_MAX_ROWS)
  *
  * Paramètres communs : from, to (YYYY-MM-DD), dateField, sort, dir,
  * f_<filtre>=valeur, page, pageSize, lang.
@@ -28,10 +30,12 @@ import { sendSafeError } from '../lib/error-handler';
 import { logDataExport } from '../lib/data-export-log';
 import { dateDuJour } from '../lib/date-seule';
 import { logger } from '../lib/logger';
-import { REPORT_CATEGORIES, EXPORT_MAX_ROWS, type Lang, type ReportContext, type ReportQuery } from '../lib/reports/types';
+import { REPORT_CATEGORIES, EXPORT_MAX_ROWS, PDF_MAX_ROWS, type Lang, type ReportContext, type ReportDefinition, type ReportQuery, type Row } from '../lib/reports/types';
 import { getReport, listReports, publicDefinition } from '../lib/reports/registry';
-import { fetchPage, countAll, iterateAll } from '../lib/reports/engine';
-import { csvHeader, csvRows, csvFilename } from '../lib/reports/csv';
+import { fetchPage, countAll, iterateAll, sumTotals } from '../lib/reports/engine';
+import { csvHeader, csvRows, exportFilename } from '../lib/reports/csv';
+import { writeXlsx } from '../lib/reports/xlsx';
+import { buildExportMeta } from '../lib/reports/meta';
 import { DATE_ONLY_RE } from '../lib/reports/dates';
 
 const router = Router();
@@ -117,7 +121,7 @@ router.get('/reports/catalogue', async (req, res) => {
         description: def.description,
         link: def.link || null,
       }));
-    return res.json({ categories: REPORT_CATEGORIES, reports, canExport, exportMaxRows: EXPORT_MAX_ROWS });
+    return res.json({ categories: REPORT_CATEGORIES, reports, canExport, exportMaxRows: EXPORT_MAX_ROWS, pdfMaxRows: PDF_MAX_ROWS });
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to load reports.', '[reports/catalogue]');
   }
@@ -148,51 +152,93 @@ router.get('/reports/rows', async (req, res) => {
     const requested = Number(req.query.pageSize) || 50;
     const pageSize = PAGE_SIZES.includes(requested) ? requested : 50;
     const out = await fetchPage(def, ctx, q, page, pageSize);
-    return res.json({ ...out, page, pageSize, exportMaxRows: EXPORT_MAX_ROWS });
+    return res.json({ ...out, page, pageSize, exportMaxRows: EXPORT_MAX_ROWS, pdfMaxRows: PDF_MAX_ROWS });
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to load report rows.', '[reports/rows]');
   }
 });
 
-// ── Export CSV complet (flux) ───────────────────────────────────────
+// ── Exports complets (CSV, Excel, JSON pour le PDF) ────────────────
+
+interface ExportPrep {
+  ctx: ReportContext;
+  def: ReportDefinition;
+  q: ReportQuery;
+  total: number;
+  preloaded?: Row[];
+}
+
+function tooLargeMessage(lang: Lang, total: number, max: number, hint: 'narrow' | 'excel'): string {
+  const n = total.toLocaleString(lang === 'fr' ? 'fr-CA' : 'en-CA');
+  const m = max.toLocaleString(lang === 'fr' ? 'fr-CA' : 'en-CA');
+  if (hint === 'excel') {
+    return lang === 'fr'
+      ? `PDF refusé : ${n} lignes dépassent le plafond de ${m} pour un PDF. Réduis la période ou exporte en Excel.`
+      : `PDF refused: ${n} rows exceed the ${m} row limit for a PDF. Narrow the period or export to Excel.`;
+  }
+  return lang === 'fr'
+    ? `Export refusé : ${n} lignes dépassent le plafond de ${m}. Réduis la période ou ajoute un filtre.`
+    : `Export refused: ${n} rows exceed the ${m} row limit. Narrow the period or add a filter.`;
+}
+
+/**
+ * Tronc commun des exports : permission d'export, rapport, paramètres,
+ * comptage, refus explicite au-delà du plafond, journalisation. Répond
+ * lui-même (et renvoie null) en cas de refus.
+ */
+async function prepareExport(req: any, res: any, max: number, format: 'csv' | 'xlsx' | 'pdf'): Promise<ExportPrep | null> {
+  const ctx = await buildContext(req, res, 'financial.export_data');
+  if (!ctx) return null;
+  const def = resolveReport(req, res);
+  if (!def) return null;
+  const q = parseQuery(req);
+
+  const { total, preloaded } = await countAll(def, ctx, q);
+  if (total > max) {
+    res.status(413).json({
+      error: tooLargeMessage(ctx.lang, total, max, format === 'pdf' ? 'excel' : 'narrow'),
+      code: 'EXPORT_TOO_LARGE',
+      total,
+      max,
+    });
+    return null;
+  }
+
+  // Journalisé AVANT l'envoi : si le flux casse en cours de route, on sait
+  // quand même qui a demandé quoi (l'intention compte, pas le nombre d'octets).
+  await logDataExport({
+    orgId: ctx.orgId,
+    userId: ctx.userId,
+    exportType: 'report',
+    entityType: `${def.id}.${format}`,
+    recordCount: total,
+    req,
+  });
+  return { ctx, def, q, total, preloaded };
+}
+
+function streamHeaders(res: any, contentType: string, filename: string, total: number) {
+  res.status(200);
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('X-Report-Rows', String(total));
+  res.flushHeaders();
+}
+
+/** Un flux entamé ne peut plus renvoyer de JSON : on coupe pour que le navigateur signale l'échec. */
+function abortStream(res: any, err: any, where: string) {
+  logger.error(`[reports/${where}] flux interrompu`, { message: err?.message || String(err) });
+  res.destroy(err instanceof Error ? err : new Error(String(err)));
+}
+
 router.get('/reports/export.csv', async (req, res) => {
   try {
-    const ctx = await buildContext(req, res, 'financial.export_data');
-    if (!ctx) return;
-    const def = resolveReport(req, res);
-    if (!def) return;
-    const q = parseQuery(req);
-
-    const { total, preloaded } = await countAll(def, ctx, q);
-    if (total > EXPORT_MAX_ROWS) {
-      return res.status(413).json({
-        error: ctx.lang === 'fr'
-          ? `Export refusé : ${total.toLocaleString('fr-CA')} lignes dépassent le plafond de ${EXPORT_MAX_ROWS.toLocaleString('fr-CA')}. Réduis la période ou ajoute un filtre.`
-          : `Export refused: ${total.toLocaleString('en-CA')} rows exceed the ${EXPORT_MAX_ROWS.toLocaleString('en-CA')} row limit. Narrow the period or add a filter.`,
-        code: 'EXPORT_TOO_LARGE',
-        total,
-        max: EXPORT_MAX_ROWS,
-      });
-    }
-
-    // Journalisé AVANT l'envoi : si le flux casse en cours de route, on sait
-    // quand même qui a demandé quoi (l'intention compte, pas le nombre d'octets).
-    await logDataExport({
-      orgId: ctx.orgId,
-      userId: ctx.userId,
-      exportType: 'report',
-      entityType: def.id,
-      recordCount: total,
-      req,
-    });
-
-    res.status(200);
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${csvFilename(def.id, q.from, q.to, ctx.today)}"`);
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.setHeader('X-Report-Rows', String(total));
-    res.flushHeaders();
+    const prep = await prepareExport(req, res, EXPORT_MAX_ROWS, 'csv');
+    if (!prep) return;
+    const { ctx, def, q, total, preloaded } = prep;
+    streamHeaders(res, 'text/csv; charset=utf-8', exportFilename(def.id, 'csv', q.from, q.to, ctx.today), total);
     res.write(csvHeader(def.columns, ctx.lang));
     for await (const batch of iterateAll(def, ctx, q, preloaded)) {
       if (!res.write(csvRows(def.columns, batch, ctx.lang))) {
@@ -201,15 +247,50 @@ router.get('/reports/export.csv', async (req, res) => {
     }
     return res.end();
   } catch (err: any) {
-    if (res.headersSent) {
-      // Le flux est entamé : on ne peut plus renvoyer de JSON. On coupe la
-      // connexion pour que le navigateur signale un téléchargement échoué
-      // plutôt que de livrer un fichier partiel qui a l'air complet.
-      logger.error('[reports/export] flux CSV interrompu', { message: err?.message || String(err) });
-      res.destroy(err instanceof Error ? err : new Error(String(err)));
-      return;
-    }
+    if (res.headersSent) return abortStream(res, err, 'export.csv');
     return sendSafeError(res, err, 'Failed to export report.', '[reports/export]');
+  }
+});
+
+router.get('/reports/export.xlsx', async (req, res) => {
+  try {
+    const prep = await prepareExport(req, res, EXPORT_MAX_ROWS, 'xlsx');
+    if (!prep) return;
+    const { ctx, def, q, total, preloaded } = prep;
+    const meta = await buildExportMeta(def, ctx, q, total);
+    streamHeaders(res, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', exportFilename(def.id, 'xlsx', q.from, q.to, ctx.today), total);
+    await writeXlsx(res, { columns: def.columns, meta, rows: iterateAll(def, ctx, q, preloaded) });
+    return;
+  } catch (err: any) {
+    if (res.headersSent) return abortStream(res, err, 'export.xlsx');
+    return sendSafeError(res, err, 'Failed to export report.', '[reports/export.xlsx]');
+  }
+});
+
+/**
+ * Toutes les lignes + en-tête d'export, en JSON : la source du PDF, généré
+ * dans le navigateur avec la même mise en page que les factures. Plafond
+ * plus bas (PDF_MAX_ROWS) : un PDF se lit, il ne remplace pas Excel.
+ */
+router.get('/reports/export.json', async (req, res) => {
+  try {
+    const prep = await prepareExport(req, res, PDF_MAX_ROWS, 'pdf');
+    if (!prep) return;
+    const { ctx, def, q, total, preloaded } = prep;
+    const rows: Row[] = [];
+    for await (const batch of iterateAll(def, ctx, q, preloaded)) rows.push(...batch);
+    const meta = await buildExportMeta(def, ctx, q, rows.length);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      meta,
+      columns: def.columns,
+      rows,
+      total,
+      totals: sumTotals(def, rows),
+      fileName: exportFilename(def.id, 'pdf', q.from, q.to, ctx.today),
+    });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to export report.', '[reports/export.json]');
   }
 });
 
