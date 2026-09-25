@@ -124,9 +124,10 @@ def main():
     host = None
     for h in ('aws-0-ca-central-1.pooler.supabase.com', 'aws-1-ca-central-1.pooler.supabase.com'):
         probe = subprocess.run(
-            ['docker', 'run', '--rm', '-e', f'PGPASSWORD={password}', 'postgres:17', 'psql',
+            # Mot de passe par l'environnement (jamais dans la commande, qu'une erreur afficherait).
+            ['docker', 'run', '--rm', '-e', 'PGPASSWORD', 'postgres:17', 'psql',
              '-h', h, '-p', '5432', '-U', f'postgres.{staging}', '-d', 'postgres', '-tAc', 'select 1'],
-            capture_output=True)
+            capture_output=True, env={**os.environ, 'PGPASSWORD': password})
         if probe.returncode == 0:
             host = h
             break
@@ -136,10 +137,10 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         open(os.path.join(tmp, 'acl.sql'), 'w').write(sql)
         res = subprocess.run(
-            ['docker', 'run', '--rm', '-e', f'PGPASSWORD={password}', '-v', f'{tmp}:/s', 'postgres:17',
+            ['docker', 'run', '--rm', '-e', 'PGPASSWORD', '-v', f'{tmp}:/s', 'postgres:17',
              'psql', '-h', host, '-p', '5432', '-U', f'postgres.{staging}', '-d', 'postgres',
              '--single-transaction', '-v', 'ON_ERROR_STOP=1', '-f', '/s/acl.sql'],
-            capture_output=True, text=True)
+            capture_output=True, text=True, env={**os.environ, 'PGPASSWORD': password})
     if res.returncode != 0:
         print(res.stderr[-2000:], file=sys.stderr)
         sys.exit('ÉCHEC de l\'alignement des privilèges.')
