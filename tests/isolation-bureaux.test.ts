@@ -112,7 +112,7 @@ describe('4. companyOrgIds (groupe) uniquement pour le catalogue et les droits',
     'server/lib/agent/tools-reglages.ts',           // catalogue (Lumi)
     'server/lib/agent/tools-etendus.ts',            // catalogue (Lumi)
     'server/routes/billing.ts',                     // abonnement
-    'server/routes/orgs.ts',                        // liste/quota des bureaux
+    'server/routes/orgs.ts',                        // liste/quota/accès des bureaux
     'server/routes/invitations.ts',                 // sièges du plan
     'server/routes/creator-space-features.ts',      // plateforme (admins Lume seulement)
     'server/routes/creator-space-notes.ts',         // plateforme (admins Lume seulement)

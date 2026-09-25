@@ -13,6 +13,7 @@ import { useCompany } from '../../contexts/CompanyContext';
 import { useTranslation } from '../../i18n';
 import { listOffices, type OfficesListing, type OfficeSummary } from '../../lib/officesApi';
 import EmptyState from '../../components/ui/EmptyState';
+import OfficeAccessGrid from '../../components/offices/OfficeAccessGrid';
 
 export default function OfficesSettings() {
   const navigate = useNavigate();
@@ -23,6 +24,8 @@ export default function OfficesSettings() {
   const [data, setData] = useState<OfficesListing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Incrémenté après un changement d'accès : recharge les compteurs de membres.
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -32,7 +35,7 @@ export default function OfficesSettings() {
       .catch((e: any) => { if (active) setError(e?.message || 'error'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [version]);
 
   // Bascule = changement de tenant complet → rechargement (même règle que
   // le switcher du header : aucune donnée de l'ancien bureau ne survit).
@@ -46,7 +49,7 @@ export default function OfficesSettings() {
   const addressLine = (o: OfficeSummary) =>
     [o.street1, o.city, o.province].filter(Boolean).join(', ');
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div className="flex items-center gap-2 text-sm text-text-tertiary py-10">
         <Loader2 size={16} className="animate-spin" />
@@ -173,6 +176,10 @@ export default function OfficesSettings() {
           );
         })}
       </div>
+
+      {isOwner && data.offices.length > 1 && (
+        <OfficeAccessGrid onChanged={() => setVersion((v) => v + 1)} />
+      )}
 
       <p className="text-[12px] text-text-tertiary">
         {fr

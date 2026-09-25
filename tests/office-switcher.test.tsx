@@ -34,11 +34,12 @@ function membership(orgId: string, name: string): CompanyMembership {
 function makeCtx(
   switchCompany: (id: string) => void,
   role: 'owner' | 'admin' | 'sales_rep' | 'technician' = 'owner',
+  officeCount = 2,
 ): CompanyContextValue {
   const companies = [
     { ...membership(ORG_A, 'Bureau Montréal'), role },
-    membership(ORG_B, 'Bureau Québec'),
-  ];
+    { ...membership(ORG_B, 'Bureau Québec'), role },
+  ].slice(0, officeCount);
   return {
     current: companies[0],
     currentOrgId: ORG_A,
@@ -144,18 +145,18 @@ describe('OfficeSwitcher (header pill)', () => {
     expect(assignSpy).toHaveBeenCalledWith('/');
   });
 
-  it('renders nothing for roles that cannot switch (sales_rep)', () => {
+  it('renders nothing for a sales_rep with a single office', () => {
     const switchCompany = vi.fn();
     act(() => {
       root.render(
         <MemoryRouter>
-        <CompanyContext.Provider value={makeCtx(switchCompany, 'sales_rep')}>
+        <CompanyContext.Provider value={makeCtx(switchCompany, 'sales_rep', 1)}>
           <OfficeSwitcher />
         </CompanyContext.Provider>
         </MemoryRouter>,
       );
     });
-    // Only owner/admin may switch offices — others get no header control.
+    // Un représentant épinglé à un seul bureau n'a rien à changer.
     expect(container.querySelector('button')).toBeNull();
     expect(container.textContent?.trim()).toBe('');
   });
@@ -175,5 +176,23 @@ describe('OfficeSwitcher (header pill)', () => {
     clickByText('Bureau Québec');
     expect(switchCompany).toHaveBeenCalledWith(ORG_B);
     expect(assignSpy).toHaveBeenCalledWith('/');
+  });
+
+  it('lets a sales_rep switch once they have access to two offices', () => {
+    const switchCompany = vi.fn();
+    act(() => {
+      root.render(
+        <MemoryRouter>
+        <CompanyContext.Provider value={makeCtx(switchCompany, 'sales_rep', 2)}>
+          <OfficeSwitcher />
+        </CompanyContext.Provider>
+        </MemoryRouter>,
+      );
+    });
+    openTrigger();
+    // Pas de « Créer un bureau » : réservé au propriétaire.
+    expect(container.textContent).not.toContain('Create office');
+    clickByText('Bureau Québec');
+    expect(switchCompany).toHaveBeenCalledWith(ORG_B);
   });
 });

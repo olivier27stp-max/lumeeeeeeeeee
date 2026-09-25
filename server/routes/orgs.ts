@@ -10,6 +10,9 @@ import {
   buildOrgInsert,
   filterGrantable,
 } from '../lib/office-create';
+import { decideAccessChange, OFFICE_ROLES, PROFIL_COPIE, type OfficeRole } from '../lib/office-access';
+import { resolveInvitePermissions } from './invitations';
+import { getDefaultScope } from '../../src/lib/permissions';
 
 const router = Router();
 
@@ -327,6 +330,160 @@ router.post('/orgs/create-office', validate(createOfficeSchema), async (req, res
     return res.json({ office: newOrg, inherited, granted });
   } catch (err: any) {
     console.error('[orgs/create-office]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// ─── Accès aux bureaux (Réglages → Bureaux → Accès) ──────────────
+// Grille personnes × bureaux. Réservé au propriétaire : il est membre de
+// tous les bureaux (trigger propager_proprietaires_bureaux), un admin non.
+
+const officeAccessSchema = z.object({
+  user_id: z.string().uuid(),
+  org_id: z.string().uuid(),
+  role: z.enum(OFFICE_ROLES).nullable(),
+});
+
+router.get('/orgs/offices/access', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+
+    if ((await callerRole(admin, auth.user.id, auth.orgId)) !== 'owner') {
+      return res.status(403).json({ error: 'Only owners can manage office access.' });
+    }
+
+    const officeIds = await companyOrgIds(admin, auth.orgId);
+    const [orgsRes, settingsRes, memRes] = await Promise.all([
+      admin.from('orgs').select('id, name, created_at, deleted_at').in('id', officeIds),
+      admin.from('company_settings').select('org_id, company_name').in('org_id', officeIds),
+      admin
+        .from('memberships')
+        .select('user_id, org_id, role, status, full_name, avatar_url, created_at')
+        .in('org_id', officeIds),
+    ]);
+    if (memRes.error) throw memRes.error;
+
+    const nomParOrg = new Map<string, string>();
+    for (const s of settingsRes.data || []) if (s.company_name) nomParOrg.set(String(s.org_id), s.company_name);
+    const offices = (orgsRes.data || [])
+      .filter((o: any) => !o.deleted_at)
+      .sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)))
+      .map((o: any) => ({ id: o.id, name: nomParOrg.get(String(o.id)) || o.name || '', is_current: o.id === auth.orgId }));
+
+    type Personne = {
+      user_id: string; full_name: string; avatar_url: string | null; email: string;
+      is_owner: boolean; access: Record<string, { role: string; status: string }>;
+    };
+    const personnes = new Map<string, Personne>();
+    for (const m of memRes.data || []) {
+      const p: Personne = personnes.get(m.user_id) || {
+        user_id: m.user_id, full_name: '', avatar_url: null, email: '', is_owner: false, access: {},
+      };
+      const status = m.status || 'active';
+      p.access[m.org_id] = { role: m.role, status };
+      if (!p.full_name && m.full_name) p.full_name = m.full_name;
+      if (!p.avatar_url && m.avatar_url) p.avatar_url = m.avatar_url;
+      if (m.role === 'owner' && status === 'active') p.is_owner = true;
+      personnes.set(m.user_id, p);
+    }
+    // Seules les personnes encore actives quelque part dans l'entreprise.
+    const people = [...personnes.values()].filter((p) => Object.values(p.access).some((a) => a.status === 'active'));
+    await Promise.all(people.map(async (p) => {
+      try {
+        const { data } = await admin.auth.admin.getUserById(p.user_id);
+        p.email = data?.user?.email || '';
+        if (!p.full_name) p.full_name = (data?.user?.user_metadata as any)?.full_name || '';
+      } catch { /* non fatal : la ligne s'affiche avec son nom */ }
+    }));
+    people.sort((a, b) =>
+      Number(b.is_owner) - Number(a.is_owner) || (a.full_name || a.email).localeCompare(b.full_name || b.email, 'fr'));
+
+    return res.json({ offices, people, caller_id: auth.user.id });
+  } catch (err: any) {
+    console.error('[orgs/offices/access]', err.message);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+router.put('/orgs/offices/access', validate(officeAccessSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+
+    if ((await callerRole(admin, auth.user.id, auth.orgId)) !== 'owner') {
+      return res.status(403).json({ error: 'Only owners can manage office access.' });
+    }
+
+    const body = req.body as z.infer<typeof officeAccessSchema>;
+    const officeIds = await companyOrgIds(admin, auth.orgId);
+    const { data: rows, error: rowsErr } = await admin
+      .from('memberships')
+      .select('user_id, org_id, role, status, created_at')
+      .eq('user_id', body.user_id)
+      .in('org_id', officeIds);
+    if (rowsErr) throw rowsErr;
+
+    const decision = decideAccessChange({
+      callerId: auth.user.id,
+      targetUserId: body.user_id,
+      targetOrgId: body.org_id,
+      groupOrgIds: officeIds,
+      rows: rows || [],
+      role: body.role,
+    });
+
+    if (decision.kind === 'error') {
+      return res.status(decision.status).json({ error: decision.error, code: decision.code });
+    }
+    if (decision.kind === 'noop') return res.json({ ok: true, changed: false });
+
+    if (decision.kind === 'delete') {
+      // Suppression de la ligne, pas suspension : la RLS ne regarde pas le
+      // statut, seule l'absence de ligne coupe réellement l'accès. Jobs,
+      // ventes et historique de la personne restent dans le bureau.
+      const { error } = await admin.from('memberships').delete()
+        .eq('user_id', body.user_id).eq('org_id', body.org_id);
+      if (error) throw error;
+      return res.json({ ok: true, changed: true });
+    }
+
+    const role: OfficeRole = decision.role;
+    const permissions = await resolveInvitePermissions(admin, body.org_id, role, null);
+
+    if (decision.kind === 'update') {
+      const { error } = await admin.from('memberships')
+        .update({ role, scope: getDefaultScope(role), permissions, permissions_custom: false })
+        .eq('user_id', body.user_id).eq('org_id', body.org_id);
+      if (error) throw error;
+      return res.json({ ok: true, changed: true });
+    }
+
+    // insert : même profil (nom, paie, horaire) que le bureau d'origine.
+    const { data: source } = await admin.from('memberships')
+      .select(PROFIL_COPIE.join(', '))
+      .eq('user_id', body.user_id).eq('org_id', decision.source.org_id)
+      .maybeSingle();
+    const profil: Record<string, unknown> = {};
+    for (const col of PROFIL_COPIE) {
+      const v = (source as Record<string, unknown> | null)?.[col];
+      if (v !== undefined && v !== null) profil[col] = v;
+    }
+    const { error } = await admin.from('memberships').insert({
+      ...profil,
+      user_id: body.user_id,
+      org_id: body.org_id,
+      role,
+      scope: getDefaultScope(role),
+      permissions,
+      status: 'active',
+    });
+    if (error) throw error;
+    return res.json({ ok: true, changed: true });
+  } catch (err: any) {
+    console.error('[orgs/offices/access PUT]', err.message);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });

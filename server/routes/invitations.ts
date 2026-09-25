@@ -37,7 +37,7 @@ async function randomSleep() {
  * Previously the template was ignored, so members invited after an org
  * customized a role silently got the static default preset instead.
  */
-async function resolveInvitePermissions(
+export async function resolveInvitePermissions(
   admin: ReturnType<typeof getServiceClient>,
   orgId: string,
   role: string,
