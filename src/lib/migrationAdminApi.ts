@@ -39,6 +39,11 @@ export function activateAccount(id: string): Promise<{ ok: boolean; communicatio
   return apiFetch(`/migrations/${id}/activate-account`, { method: 'POST', body: JSON.stringify({}) });
 }
 
+/** Annule une activation : le bureau repasse en communications gelées jusqu'au prochain « Activer le compte ». */
+export function freezeAccount(id: string): Promise<{ ok: boolean; communications: EtatCommunications }> {
+  return apiFetch(`/migrations/${id}/freeze-account`, { method: 'POST', body: JSON.stringify({}) });
+}
+
 /** Dépose un fichier (CSV ou PDF) dans une migration depuis la console — même réception que le portail. */
 export async function uploadAdminFile(id: string, file: File): Promise<{ id: string; original_name: string }> {
   const headers = await getAuthHeaders();

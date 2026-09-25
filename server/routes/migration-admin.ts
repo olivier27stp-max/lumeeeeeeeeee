@@ -1151,6 +1151,26 @@ router.post('/migration-admin/migrations/:id/activate-account', async (req, res)
   }
 });
 
+// ── Regel : le pendant d'« Activer le compte » ──────────────────────────
+// Une activation prématurée (clic trop tôt, enchaînement automatique) doit
+// pouvoir être annulée : le bureau repasse en communications gelées jusqu'à
+// la prochaine activation, sans relancer d'import.
+router.post('/migration-admin/migrations/:id/freeze-account', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    await gelerCommunications(admin, migration.org_id, migration.id);
+    await logMigrationAudit(admin, { migrationId: migration.id, action: 'communications.gel', actorId: auth.user.id, actorRole: 'platform_admin', meta: { motif: 'regel manuel depuis la console' } });
+    await touchMigrationActivity(admin, migration.id);
+    return res.json({ ok: true, communications: await etatGel(admin, migration.org_id) });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Gel impossible.', '[migration-admin]');
+  }
+});
+
 // ── Fermeture ───────────────────────────────────────────────────────────
 router.post('/migration-admin/migrations/:id/close', async (req, res) => {
   try {

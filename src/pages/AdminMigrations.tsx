@@ -21,7 +21,7 @@ import { type AuditBotMigration,
   generateInvitation, revokeInvitation, extendInvitation, decideMapping, resolveIssue,
   decideDuplicate, startAnalysis, startTestImport, requestApproval, startFinalImport,
   rollbackMigration, closeMigration, sendAdminMessage, getMigrationAudit, getFileDownloadUrl,
-  reanalyzeFile, rejectFile, deleteFile, uploadAdminFile, activateAccount, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
+  reanalyzeFile, rejectFile, deleteFile, uploadAdminFile, activateAccount, freezeAccount, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
   getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate, flagMapping,
   type AdminMigrationListItem, type MigrationStaffEntry, type MappingFlag,
 } from '../lib/migrationAdminApi';
@@ -601,6 +601,13 @@ function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () =
           if (!ok) return;
           await act(() => activateAccount(m.id), 'Compte activé : les communications vers les clients repartent');
         }}>Activer le compte</button>
+      )}
+      {d.communications && !d.communications.gele && d.communications.active_le && ['completed', 'closed', 'post_import_validation'].includes(m.status) && (
+        <button type="button" className="h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-[12px] font-semibold hover:bg-amber-100 disabled:opacity-50" disabled={enCours} onClick={async () => {
+          const ok = await confirmer({ title: 'Geler à nouveau les communications', message: 'Le compte a été activé. En le regelant, plus aucun courriel, SMS, automatisation, rappel ou demande d\'avis ne partira vers les clients de ce bureau, jusqu\'au prochain « Activer le compte ». Les données importées restent en place.', confirmLabel: 'Geler les communications' });
+          if (!ok) return;
+          await act(() => freezeAccount(m.id), 'Communications gelées : rien ne part vers les clients jusqu\'à la prochaine activation');
+        }}>Geler à nouveau</button>
       )}
       {m.status === 'failed' && (
         // un import échoué ne se relance pas à l'aveugle : retour aux correspondances, bot, import test, puis import final

@@ -77,4 +77,14 @@ describe('la garde est branchée sur TOUS les canaux sortants vers les clients',
     expect(admin.split('activerCommunications(').length - 1).toBe(1);
     expect(admin.slice(admin.indexOf("'/migration-admin/migrations/:id/activate-account'"))).toContain('requirePlatformAdmin');
   });
+  it('une activation prématurée s\'annule depuis la console (« Geler à nouveau »), même garde admin', () => {
+    const admin = read('server/routes/migration-admin.ts');
+    const i = admin.indexOf("'/migration-admin/migrations/:id/freeze-account'");
+    expect(i).toBeGreaterThan(0);
+    const route = admin.slice(i, admin.indexOf("'/migration-admin/migrations/:id/close'"));
+    expect(route).toContain('requirePlatformAdmin');
+    expect(route).toContain('gelerCommunications(admin, migration.org_id, migration.id)');
+    expect(read('src/lib/migrationAdminApi.ts')).toContain('/freeze-account');
+    expect(read('src/pages/AdminMigrations.tsx')).toContain('freezeAccount(m.id)');
+  });
 });
