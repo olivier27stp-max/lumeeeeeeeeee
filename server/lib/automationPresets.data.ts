@@ -1177,7 +1177,7 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
     "name": "Lead — Welcome",
     "description": "Instant welcome message to new leads",
     "trigger_event": "lead.created",
-    "conditions": {},
+    "conditions": { "source": { "neq": "request_form" } },
     "delay_seconds": 0,
     "actions": [
       {
