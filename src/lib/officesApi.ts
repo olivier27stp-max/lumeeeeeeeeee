@@ -169,3 +169,33 @@ export async function setOfficeAccess(userId: string, orgId: string, role: Offic
   });
   if (!res.ok) await throwApiError(res, 'Failed to update office access.');
 }
+
+// ── Vue d'ensemble des bureaux (propriétaire) ────────────────────────
+
+export interface OfficeFigures {
+  revenue_cents: number;
+  invoiced_cents: number;
+  outstanding_cents: number;
+  past_due_count: number;
+  new_leads: number;
+  converted_quotes: number;
+  new_jobs: number;
+  requests: number;
+  unread_conversations: number;
+}
+
+export interface OfficesOverview {
+  from: string;
+  to: string;
+  offices: Array<{ org_id: string; name: string; chiffres: OfficeFigures }>;
+  totals: OfficeFigures;
+}
+
+/** Les chiffres de chacun des bureaux du propriétaire, sur la période, et leur total. */
+export async function fetchOfficesOverview(from: string, to: string): Promise<OfficesOverview> {
+  const res = await fetch(`${API_BASE}/orgs/offices/overview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) await throwApiError(res, 'Impossible de charger la vue d’ensemble des bureaux.');
+  return res.json();
+}

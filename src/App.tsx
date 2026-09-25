@@ -70,6 +70,7 @@ const LocationSettings = React.lazy(() => import('./pages/settings/LocationSetti
 const OfficesSettings = React.lazy(() => import('./pages/settings/OfficesSettings'));
 const ChampsPersoSettings = React.lazy(() => import('./pages/settings/ChampsPersoSettings'));
 const OfficeNew = React.lazy(() => import('./pages/OfficeNew'));
+const OfficesOverview = React.lazy(() => import('./pages/OfficesOverview'));
 const ArchivesPanel = React.lazy(() => import('./components/ArchivesPanel'));
 const SupportPage = React.lazy(() => import('./components/SupportPage'));
 const PayrollPage = React.lazy(() => import('./pages/settings/PayrollPage'));
@@ -1546,6 +1547,7 @@ function AuthenticatedApp({
                     <Route path="/clients/new" element={<Gated permission="clients.create"><NewClient /></Gated>} />
                     {/* Nouveau bureau — page pleine hors du layout Réglages (owner seulement, gate serveur) */}
                     <Route path="/offices/new" element={<Gated permission="settings.update"><OfficeNew /></Gated>} />
+                    <Route path="/offices/overview" element={<Gated permission="financial.view_analytics"><PageWrapper><OfficesOverview /></PageWrapper></Gated>} />
                     {/* Edit reuses the Clients list page, which opens its edit drawer from the :id route param */}
                     <Route path="/clients/:id/edit" element={<Gated permission="clients.update"><div className="px-8 py-6"><Clients /></div></Gated>} />
                     <Route path="/clients/:id" element={<Gated permission="clients.read"><TenantGuardRoute table="clients" redirectTo="/clients"><div className="px-8 py-6"><ClientDetails /></div></TenantGuardRoute></Gated>} />
