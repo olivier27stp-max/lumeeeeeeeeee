@@ -18,6 +18,20 @@ export default function SupportFAB() {
   const isFr = language === 'fr';
   const { pathname } = useLocation();
   const formulaire = routeAvecBarreDAction(pathname);
+
+  /*
+   * L'éditeur d'automatisation occupe TOUT l'écran (`fixed inset-0 z-50`) et
+   * porte son propre pied « Supprimer · Annuler · Enregistrer », à droite.
+   * Ce bouton, également en `z-50` et collé à droite, tombait pile dessus :
+   * cliquer « Enregistrer » ouvrait l'aide, et la modification était perdue
+   * sans le moindre message. Mesuré dans un vrai navigateur, pas déduit —
+   * `elementFromPoint` au centre du bouton renvoyait le FAB.
+   *
+   * On le retire sur cette page : une aide flottante n'a pas sa place
+   * par-dessus un plein écran qui a ses propres commandes.
+   */
+  const pleinEcran = /^\/automations\/[^/]+$/.test(pathname)
+    && !['apercu', 'reglages', 'builder', 'hub'].includes(pathname.split('/')[2] ?? '');
   const [open, setOpen] = useState(false);
   const [checklistVisible, setChecklistVisible] = useState(() => {
     try { return localStorage.getItem('lume-setup-checklist-visible') === 'true'; } catch { return false; }
@@ -49,6 +63,8 @@ export default function SupportFAB() {
     window.addEventListener('resize', measure);
     return () => { obs.disconnect(); window.removeEventListener('resize', measure); };
   }, []);
+
+  if (pleinEcran) return null;
 
   return (
     <>

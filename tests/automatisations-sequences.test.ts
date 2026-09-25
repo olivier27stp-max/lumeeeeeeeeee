@@ -358,7 +358,7 @@ describe('les deux copies des types ne divergent pas', () => {
       expect(serveur).toContain(`'${t}'`);
       expect(client).toContain(`'${t}'`);
     }
-    for (const champ of ['delai_secondes', 'suivant', 'alors', 'sinon']) {
+    for (const champ of ['delai_secondes', 'suivant', 'alors', 'sinon', 'nom?', 'mode?', 'si_reponse?']) {
       expect(serveur, `${champ} manque côté serveur`).toContain(champ);
       expect(client, `${champ} manque côté client`).toContain(champ);
     }
@@ -432,5 +432,81 @@ describe('réglages par automatisation — le moteur les respecte vraiment', () 
     // s'appliquerait qu'aux envois immédiats — et personne ne le verrait.
     const moteur = lire('server/lib/automationEngine.ts');
     expect(moteur).toContain('conditions, steps, settings)');
+  });
+});
+
+describe('attendre la RÉPONSE du client, pas seulement un délai', () => {
+  const seq = readFileSync(resolve(RACINE, 'server/lib/automationSequences.ts'), 'utf8');
+  const moteur = readFileSync(resolve(RACINE, 'server/lib/automationEngine.ts'), 'utf8');
+
+  it('une attente « réponse » n’est PAS traversée comme un simple délai', () => {
+    /*
+     * Les attentes ordinaires se cumulent en un seul délai, pour ne pas
+     * créer une tâche par attente. Celle-ci doit devenir une tâche à elle
+     * seule : sans ça, le worker ne vérifierait jamais si le client a
+     * répondu, et le mode ne servirait à rien — en silence.
+     */
+    expect(seq, 'la traversée doit s’arrêter sur une attente « réponse »')
+      .toMatch(/courante\.type === 'attendre' && courante\.mode !== 'reponse'/);
+  });
+
+  it('le mode voyage jusqu’à la tâche', () => {
+    // Sans lui dans `action_config`, le worker recevrait une attente
+    // indistinguable d'une autre.
+    const bloc = seq.slice(seq.indexOf("type: '__sequence__'"));
+    expect(bloc.slice(0, 700)).toMatch(/mode: 'reponse'/);
+    expect(bloc.slice(0, 700)).toMatch(/si_reponse/);
+  });
+
+  it('le worker suit la bonne suite selon la réponse', () => {
+    const bloc = moteur.slice(moteur.indexOf("etape.type === 'attendre' && etape.mode === 'reponse'"));
+    expect(bloc.slice(0, 1600)).toMatch(/clientARepondu/);
+    // Répondu → `si_reponse` ; sinon → `suivant`. L'inverse relancerait
+    // précisément les clients qui ont répondu.
+    expect(bloc.slice(0, 1600)).toMatch(/aRepondu \? \(etape\.si_reponse \?\? null\) : \(etape\.suivant \?\? null\)/);
+  });
+
+  it('la réponse doit être POSTÉRIEURE à la mise en attente', () => {
+    const bloc = moteur.slice(moteur.indexOf("etape.type === 'attendre' && etape.mode === 'reponse'"));
+    expect(bloc.slice(0, 1600), 'une conversation d’avant ne compte pas')
+      .toMatch(/task\.created_at/);
+  });
+
+  it('le graphe vérifie AUSSI `si_reponse`', () => {
+    /*
+     * Une attente « réponse » porte DEUX suites. Oublier la seconde
+     * laisserait passer un renvoi vers une étape inexistante, ou pire :
+     * une boucle infinie — exactement ce que ces gardes empêchent.
+     */
+    expect(seq, 'une seule fonction doit lister les suites, pour qu’elles ne divergent pas')
+      .toMatch(/function suitesDe/);
+    const fn = seq.slice(seq.indexOf('function suitesDe'), seq.indexOf('function suitesDe') + 500);
+    expect(fn).toMatch(/etape\.si_reponse/);
+  });
+
+  it('une boucle passant par `si_reponse` est refusée', () => {
+    // La preuve par le comportement, pas par la lecture du code.
+    const boucle: Etape[] = [
+      { id: 'e1', type: 'attendre', delai_secondes: 3600, mode: 'reponse', suivant: 'e2', si_reponse: 'e2' },
+      { id: 'e2', type: 'action', action: { type: 'send_sms', config: { body: 'x' } }, suivant: 'e1' },
+    ];
+    expect(problemesDuGraphe(boucle).length, 'le cycle doit être détecté').toBeGreaterThan(0);
+  });
+
+  it('un `si_reponse` vers une étape inexistante est refusé', () => {
+    const casse: Etape[] = [
+      { id: 'e1', type: 'attendre', delai_secondes: 3600, mode: 'reponse', suivant: null, si_reponse: 'fantome' },
+    ];
+    expect(problemesDuGraphe(casse).join(' ')).toContain('fantome');
+  });
+
+  it('une attente ordinaire reste inchangée', () => {
+    // La promesse de compatibilité : les parcours déjà enregistrés n'ont ni
+    // `mode` ni `si_reponse`, et doivent continuer de marcher.
+    const simple: Etape[] = [
+      { id: 'e1', type: 'attendre', delai_secondes: 86400, suivant: 'e2' },
+      { id: 'e2', type: 'action', action: { type: 'send_sms', config: { body: 'x' } }, suivant: null },
+    ];
+    expect(problemesDuGraphe(simple)).toEqual([]);
   });
 });

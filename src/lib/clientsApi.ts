@@ -54,7 +54,7 @@ export interface ClientRecord {
 export interface ClientsQuery {
   q?: string;
   status?: string;
-  sort?: 'recent' | 'oldest' | 'name_asc' | 'name_desc';
+  sort?: 'recent' | 'oldest' | 'name_asc' | 'name_desc' | 'activity_desc' | 'activity_asc';
   page?: number;
   pageSize?: number;
   /** Conditions de champs personnalisés, compilées (jointures PostgREST). */
@@ -133,6 +133,11 @@ export async function listClients(query: ClientsQuery = {}): Promise<ClientsResu
   if (query.sort === 'oldest') request = request.order('created_at', { ascending: true });
   else if (query.sort === 'name_asc') request = request.order('last_name', { ascending: true }).order('first_name', { ascending: true });
   else if (query.sort === 'name_desc') request = request.order('last_name', { ascending: false }).order('first_name', { ascending: false });
+  // Dernière activité : updated_at est bumpé par trigger à chaque changement du
+  // client (édition, synchro de statut par les jobs, activité portail) — meilleur
+  // proxy triable côté serveur de la colonne « Dernière activité ».
+  else if (query.sort === 'activity_desc') request = request.order('updated_at', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });
+  else if (query.sort === 'activity_asc') request = request.order('updated_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true });
   else request = request.order('created_at', { ascending: false });
 
   const { data, error, count } = await request;

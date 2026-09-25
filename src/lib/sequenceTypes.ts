@@ -19,6 +19,15 @@ export interface EtapeAction {
   type: 'action';
   action: { type: string; config: Record<string, string | undefined> };
   suivant?: string | null;
+  /**
+   * Le nom que l'utilisateur donne a cette etape.
+   *
+   * Sans lui, un parcours qui envoie trois courriels affiche trois cartes
+   * « Envoyer un courriel » impossibles a distinguer. C'est le champ
+   * « Action Name » de GoHighLevel, et il ne sert qu'a l'affichage : le
+   * moteur ne le lit jamais.
+   */
+  nom?: string | null;
 }
 
 export interface EtapeAttendre {
@@ -26,6 +35,26 @@ export interface EtapeAttendre {
   type: 'attendre';
   delai_secondes: number;
   suivant?: string | null;
+  /**
+   * Ce qu'on attend.
+   *
+   * `duree` (défaut, et le seul comportement d'avant) : un délai fixe.
+   *
+   * `reponse` : on attend la réponse du client, au plus `delai_secondes`.
+   * C'est le « Wait for Contact Reply » de GoHighLevel, et le plus utile
+   * pour une relance : il rend inutile la moitié des conditions. Le moteur
+   * regarde s'il y a un message ENTRANT ; si oui, il saute directement à
+   * `si_reponse` (ou arrête le parcours), sinon il continue vers `suivant`
+   * une fois le délai écoulé.
+   *
+   * Absent = `duree` : les parcours déjà enregistrés ne changent pas.
+   */
+  mode?: 'duree' | 'reponse';
+  /**
+   * Où aller si le client a répondu. Absent = le parcours s'arrête —
+   * c'est le cas le plus fréquent : il a répondu, on ne relance plus.
+   */
+  si_reponse?: string | null;
 }
 
 export interface EtapeSi {

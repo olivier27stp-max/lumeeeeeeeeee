@@ -18,8 +18,8 @@ import {
   Heart, Star, Sun, UserX, CreditCard, Banknote, Search,
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
   Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
-  Plus, Pencil, Copy, Trash2, X, EllipsisVertical,
-  Settings, FolderPlus, Filter, SlidersHorizontal,} from 'lucide-react';
+  Plus, Pencil, Copy, Trash2, RotateCcw, X, EllipsisVertical,
+  Settings, FolderPlus, Filter, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
@@ -30,7 +30,13 @@ import {
   creerAutomatisation,
   dupliquerAutomatisation,
   supprimerAutomatisation,
+  restaurerAutomatisation,
+  chargerDossiers,
+  creerDossier,
+  supprimerDossier,
+  rangerDansDossier,
   type CatalogueAutomatisations,
+  type DossierAutomatisation,
 } from '../lib/automationBuilderApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import {
@@ -424,8 +430,31 @@ export default function Automations() {
   const [menuCreer, setMenuCreer] = useState(false);
   /** Menu « … » ouvert sur quelle ligne ? */
   const [menuLigne, setMenuLigne] = useState<string | null>(null);
+
+  // ── Dossiers ──
+  // Le bouton existait depuis #525 et ne faisait qu'afficher « bientôt ».
+  const [dossiers, setDossiers] = useState<DossierAutomatisation[]>([]);
+  /** Le champ de nom est ouvert ? (pas de `prompt()` natif : test `dialogues-natifs-bannis`) */
+  const [saisieDossier, setSaisieDossier] = useState(false);
+  /** La ligne dont le sous-menu « Déplacer vers » est déplié. */
+  const [sousMenuDossier, setSousMenuDossier] = useState<string | null>(null);
+  const [nomDossier, setNomDossier] = useState('');
+  /** Le dossier affiché — `null` = tout, `'racine'` = celles sans dossier. */
+  const [dossierActif, setDossierActif] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Un échec ici ne doit PAS empêcher la page de s'afficher : sans
+    // dossiers, la liste reste simplement à plat.
+    chargerDossiers()
+      .then(setDossiers)
+      .catch((e: unknown) => console.error('[automations] dossiers', e instanceof Error ? e.message : String(e)));
+  }, []);
+
+
   /** Lignes cochées — GHL les utilise pour les actions en lot. */
   const [cochees, setCochees] = useState<Set<string>>(new Set());
+  /** Un lot en cours : on désarme la barre pour éviter le double clic. */
+  const [lotEnCours, setLotEnCours] = useState(false);
   /** Ligne dont le panneau de statistiques est déroulé (le chevron « › »). */
   const [statsId, setStatsId] = useState<string | null>(null);
   /** Ligne dépliée pour corriger le texte des messages. */
@@ -462,8 +491,19 @@ export default function Automations() {
     setLoading(true);
     try {
       const data = await getAutomationRules();
+      /*
+       * Dédoublonnage par `preset_key` : d'anciennes migrations ont semé le
+       * même préréglage plusieurs fois.
+       *
+       * Les règles à la CORBEILLE sont écartées du dédoublonnage : sinon une
+       * copie supprimée peut arriver la première et masquer sa jumelle
+       * vivante, qui disparaîtrait de la liste tout en continuant de
+       * s'exécuter. On garde les supprimées telles quelles — la corbeille
+       * doit montrer ce qu'on y a mis.
+       */
       const vues = new Set<string>();
       setRules(data.filter((r) => {
+        if (r.deleted_at) return true;
         if (!r.preset_key) return true;
         if (vues.has(r.preset_key)) return false;
         vues.add(r.preset_key);
@@ -481,6 +521,52 @@ export default function Automations() {
       setLoading(false);
     }
   }, [fr]);
+
+  const validerNouveauDossier = async () => {
+    const nom = nomDossier.trim();
+    if (!nom) { setSaisieDossier(false); return; }
+    try {
+      const d = await creerDossier(nom);
+      setDossiers((prev) => [...prev, d].sort((a, b) => a.name.localeCompare(b.name)));
+      setNomDossier('');
+      setSaisieDossier(false);
+      toast.success(fr ? `Dossier « ${d.name} » créé` : `Folder “${d.name}” created`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const retirerDossier = async (id: string, nom: string) => {
+    const ok = await confirmer({
+      title: fr ? `Supprimer le dossier « ${nom} » ?` : `Delete folder “${nom}”?`,
+      message: fr
+        ? 'Les automatisations qu’il contient reviennent à la racine et continuent de tourner. Rien n’est supprimé.'
+        : 'The automations inside move back to the root and keep running. Nothing is deleted.',
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await supprimerDossier(id);
+      setDossiers((prev) => prev.filter((d) => d.id !== id));
+      if (dossierActif === id) setDossierActif(null);
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const deplacerVers = async (ruleId: string, folderId: string | null) => {
+    setMenuLigne(null);
+    try {
+      await rangerDansDossier(ruleId, folderId);
+      await load();
+      toast.success(folderId
+        ? (fr ? 'Rangée dans le dossier' : 'Moved to folder')
+        : (fr ? 'Remise à la racine' : 'Moved back to root'));
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -556,8 +642,8 @@ export default function Automations() {
     const ok = await confirmer({
       title: fr ? 'Supprimer cette automatisation ?' : 'Delete this automation?',
       message: fr
-        ? `« ${regle.name} » sera supprimée, et les envois déjà prévus seront annulés. C'est définitif.`
-        : `“${regle.name}” will be deleted, and any queued messages cancelled. This cannot be undone.`,
+        ? `« ${regle.name} » part à la corbeille : elle cesse de se déclencher et les envois déjà prévus sont annulés. Tu pourras la restaurer.`
+        : `“${regle.name}” goes to the bin: it stops triggering and any queued messages are cancelled. You can restore it later.`,
       confirmLabel: fr ? 'Supprimer' : 'Delete',
       danger: true,
     });
@@ -565,7 +651,29 @@ export default function Automations() {
     setOccupeId(regle.id);
     try {
       await supprimerAutomatisation(regle.id);
-      toast.success(fr ? 'Automatisation supprimée' : 'Automation deleted');
+      toast.success(fr ? 'Automatisation mise à la corbeille' : 'Automation moved to the bin');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOccupeId(null);
+    }
+  };
+
+  /**
+   * Sortir une automatisation de la corbeille.
+   *
+   * Elle revient en BROUILLON, jamais publiée — décision côté serveur. Une
+   * règle restaurée qui se remettrait à écrire aux clients sans qu'on l'ait
+   * relue serait exactement la surprise qu'une corbeille doit éviter.
+   */
+  const restaurer = async (regle: AutomationRule) => {
+    setOccupeId(regle.id);
+    try {
+      await restaurerAutomatisation(regle.id);
+      toast.success(fr
+        ? 'Automatisation restaurée — elle est en brouillon'
+        : 'Automation restored — it is a draft');
       await load();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -577,15 +685,26 @@ export default function Automations() {
   const getCategory = (r: AutomationRule): CategoryKey =>
     (PRESET_META[r.preset_key || '']?.category as CategoryKey) || 'Follow-up';
 
+  /*
+   * La corbeille se sépare AVANT tout le reste.
+   *
+   * Le serveur renvoie les règles vivantes ET celles à la corbeille dans la
+   * même liste : c'est ici qu'on les départage, une seule fois. Une règle
+   * supprimée ne doit apparaître dans AUCUN autre onglet — ni dans « Toutes »,
+   * ni dans « À vérifier » où ses échecs passés la feraient remonter.
+   */
+  const vivantes = rules.filter((r) => !r.deleted_at);
+  const supprimees = rules.filter((r) => r.deleted_at);
+
   /** « À vérifier » = ce qui a échoué ces 7 derniers jours. */
-  const aVerifier = rules.filter((r) => (failureCounts[r.id] ?? 0) > 0);
-  const mesAutos = rules.filter((r) => !r.is_preset || r.is_active);
-  const modeles = rules.filter((r) => r.is_preset && !r.is_active);
+  const aVerifier = vivantes.filter((r) => (failureCounts[r.id] ?? 0) > 0);
+  const mesAutos = vivantes.filter((r) => !r.is_preset || r.is_active);
+  const modeles = vivantes.filter((r) => r.is_preset && !r.is_active);
 
   const sourceOnglet =
     onglet === 'verifier' ? aVerifier
     : onglet === 'modeles' ? modeles
-    : onglet === 'corbeille' ? []   // la corbeille arrive avec la suppression douce
+    : onglet === 'corbeille' ? supprimees
     : mesAutos;
 
   const filtrees = sourceOnglet.filter((r) => {
@@ -597,10 +716,17 @@ export default function Automations() {
     if (filterCategory !== 'all' && getCategory(r) !== filterCategory) return false;
     if (filterStatut === 'publiee' && !r.is_active) return false;
     if (filterStatut === 'brouillon' && r.is_active) return false;
+    // Le dossier affiché. `null` = tout, 'racine' = celles qui ne sont
+    // rangées nulle part.
+    if (dossierActif === 'racine' && r.folder_id) return false;
+    if (dossierActif && dossierActif !== 'racine' && r.folder_id !== dossierActif) return false;
     return true;
   });
 
   const pages = Math.max(1, Math.ceil(filtrees.length / parPage));
+
+  /** Combien d'automatisations dans chaque dossier — un dossier vide se voit. */
+  const compteParDossier = (id: string) => vivantes.filter((r) => r.folder_id === id).length;
   const visibles = filtrees.slice((page - 1) * parPage, page * parPage);
 
   const toutCoche = visibles.length > 0 && visibles.every((r) => cochees.has(r.id));
@@ -613,6 +739,110 @@ export default function Automations() {
     });
   };
 
+  /**
+   * Les actions sur plusieurs automatisations à la fois.
+   *
+   * Les cases à cocher existaient déjà mais ne commandaient rien : cocher
+   * trente lignes et n'avoir aucun bouton est pire que pas de case du tout.
+   *
+   * On travaille sur les règles RÉELLEMENT cochées et encore présentes —
+   * une coche peut survivre à un changement de filtre ou à un rechargement,
+   * et agir sur un identifiant disparu échouerait ligne par ligne.
+   */
+  const reglesCochees = rules.filter((r) => cochees.has(r.id));
+
+  /**
+   * Applique `action` à chaque règle cochée, en SÉQUENCE.
+   *
+   * En parallèle, trente écritures partiraient d'un coup sur la même table :
+   * on préfère un peu plus lent et un décompte exact de ce qui a marché.
+   * Une ligne en échec n'arrête pas les autres — sinon une seule règle
+   * verrouillée bloquerait tout le lot sans qu'on sache où ça s'est arrêté.
+   */
+  const agirEnLot = async (
+    action: (r: AutomationRule) => Promise<unknown>,
+    messages: { fr: (n: number) => string; en: (n: number) => string },
+    cibles: AutomationRule[] = reglesCochees,
+  ) => {
+    let reussis = 0;
+    const echoues: string[] = [];
+    setLotEnCours(true);
+    try {
+      for (const r of cibles) {
+        try {
+          await action(r);
+          reussis += 1;
+        } catch (e: unknown) {
+          echoues.push(localizeAutomationName(r.name, language));
+          console.error('[automations] action en lot échouée', r.id, e);
+        }
+      }
+      if (reussis > 0) toast.success(fr ? messages.fr(reussis) : messages.en(reussis));
+      if (echoues.length > 0) {
+        // On NOMME ce qui a échoué : « 3 erreurs » n'aide personne à corriger.
+        toast.error(fr
+          ? `Échec sur : ${echoues.join(', ')}`
+          : `Failed on: ${echoues.join(', ')}`);
+      }
+      setCochees(new Set());
+      await load();
+    } finally {
+      setLotEnCours(false);
+    }
+  };
+
+  /*
+   * Publier ou dépublier ne concerne que les règles VIVANTES : une règle à
+   * la corbeille est ignorée par le moteur, la publier ne changerait rien.
+   */
+  const publierLot = () => agirEnLot(
+    (r) => (r.is_active ? Promise.resolve() : toggleAutomationRule(r.id, true)),
+    { fr: (n) => `${n} automatisation(s) publiée(s)`, en: (n) => `${n} automation(s) published` },
+    reglesCochees.filter((r) => !r.deleted_at),
+  );
+
+  const depublierLot = () => agirEnLot(
+    (r) => (r.is_active ? toggleAutomationRule(r.id, false) : Promise.resolve()),
+    { fr: (n) => `${n} automatisation(s) repassée(s) en brouillon`, en: (n) => `${n} automation(s) unpublished` },
+    reglesCochees.filter((r) => !r.deleted_at),
+  );
+
+  const supprimerLot = async () => {
+    /*
+     * Les modèles ne se suppriment pas — le menu d'une ligne le refuse déjà.
+     * Sans ce garde, cocher « tout » enverrait des suppressions vouées à
+     * échouer, et la barre afficherait des erreurs pour des lignes que
+     * l'utilisateur n'a jamais voulu toucher.
+     */
+    const supprimables = reglesCochees.filter((r) => !r.is_preset);
+    if (supprimables.length === 0) {
+      toast.info(fr ? 'Un modèle ne se supprime pas.' : 'A template cannot be deleted.');
+      return;
+    }
+    const ok = await confirmer({
+      title: fr
+        ? `Supprimer ${supprimables.length} automatisation(s) ?`
+        : `Delete ${supprimables.length} automation(s)?`,
+      message: fr
+        ? 'Elles partent à la corbeille : elles cessent de se déclencher et les envois déjà prévus sont annulés. Tu pourras les restaurer.'
+        : 'They go to the bin: they stop triggering and any queued messages are cancelled. You can restore them later.',
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    await agirEnLot(
+      (r) => supprimerAutomatisation(r.id),
+      { fr: (n) => `${n} automatisation(s) à la corbeille`, en: (n) => `${n} automation(s) moved to the bin` },
+      supprimables,
+    );
+  };
+
+  const restaurerLot = () => agirEnLot(
+    (r) => restaurerAutomatisation(r.id),
+    { fr: (n) => `${n} automatisation(s) restaurée(s) en brouillon`, en: (n) => `${n} automation(s) restored as drafts` },
+    reglesCochees.filter((r) => !!r.deleted_at),
+  );
+
   const DEPARTS: Array<{ cle: string; fr: string; en: string; aideFr: string; aideEn: string; icone: typeof Zap }> = [
     { cle: 'zero', fr: 'Partir de zéro', en: 'Start from scratch', icone: Plus,
       aideFr: 'Un parcours vide, à construire.', aideEn: 'An empty path, to build.' },
@@ -620,10 +850,15 @@ export default function Automations() {
       aideFr: 'Décris ce que tu veux, Lumi le monte.', aideEn: 'Describe it, Lumi builds it.' },
     { cle: 'modele', fr: 'Partir d’un modèle', en: 'Start from a template', icone: FileText,
       aideFr: `${modeles.length} modèles prêts à l’emploi.`, aideEn: `${modeles.length} ready-made templates.` },
-    { cle: 'import', fr: 'Importer d’une campagne', en: 'Import from a campaign', icone: ArrowLeft,
-      aideFr: 'Reprendre une campagne existante.', aideEn: 'Reuse an existing campaign.' },
-    { cle: 'entreprise', fr: 'Automatisation d’entreprise', en: 'Company automation', icone: Briefcase,
-      aideFr: 'Déclenchée par l’entreprise, pas par un client.', aideEn: 'Triggered by the company, not a client.' },
+    /*
+     * GoHighLevel en offre deux de plus : « Importer d'une campagne » et
+     * « Automatisation d'entreprise ». Ni l'un ni l'autre n'a d'équivalent
+     * ici — Lume n'a pas de campagnes, et toutes nos automatisations
+     * appartiennent déjà à l'entreprise.
+     *
+     * On les RETIRE au lieu d'afficher « bientôt » : un menu qui promet ce
+     * qu'il ne fait pas est exactement le défaut qu'on reproche au leur.
+     */
   ];
 
   const choisirDepart = (cle: string) => {
@@ -631,14 +866,16 @@ export default function Automations() {
     if (cle === 'zero') { partirDeZero(false); return; }
     if (cle === 'lumi') { partirDeZero(true); return; }
     if (cle === 'modele') { setOnglet('modeles'); return; }
-    toast.info(fr ? 'Cette option arrive bientôt.' : 'This option is coming soon.');
+    // Inatteignable : les trois départs ci-dessus couvrent tout `DEPARTS`.
+    // Le garder évite qu'un ajout futur retombe dans le vide sans un mot.
+    console.error('[automations] départ inconnu :', cle);
   };
 
   const ONGLETS = [
     { cle: 'toutes' as const, fr: 'Toutes', en: 'All workflows', n: mesAutos.length },
     { cle: 'verifier' as const, fr: 'À vérifier', en: 'Needs review', n: aVerifier.length },
     { cle: 'modeles' as const, fr: 'Modèles', en: 'Templates', n: modeles.length },
-    { cle: 'corbeille' as const, fr: 'Corbeille', en: 'Deleted', n: 0 },
+    { cle: 'corbeille' as const, fr: 'Corbeille', en: 'Deleted', n: supprimees.length },
   ];
 
   const dateCourte = (iso: string | null | undefined) => {
@@ -706,14 +943,50 @@ export default function Automations() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => toast.info(fr ? 'Les dossiers arrivent bientôt.' : 'Folders are coming soon.')}
-              className="glass-button inline-flex items-center gap-1.5"
-            >
-              <FolderPlus size={14} aria-hidden="true" />
-              {fr ? 'Nouveau dossier' : 'Create folder'}
-            </button>
+            {saisieDossier ? (
+              <span className="inline-flex items-center gap-1.5">
+                <label htmlFor="nouveau-dossier" className="sr-only">
+                  {fr ? 'Nom du dossier' : 'Folder name'}
+                </label>
+                <input
+                  id="nouveau-dossier"
+                  type="text"
+                  autoFocus
+                  maxLength={60}
+                  value={nomDossier}
+                  onChange={(e) => setNomDossier(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void validerNouveauDossier();
+                    if (e.key === 'Escape') { setSaisieDossier(false); setNomDossier(''); }
+                  }}
+                  placeholder={fr ? 'Nom du dossier' : 'Folder name'}
+                  className="w-44 rounded-lg border border-border bg-surface-primary px-2.5 py-1.5 text-[13px] text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                />
+                <button
+                  type="button"
+                  onClick={() => void validerNouveauDossier()}
+                  className="glass-button-primary text-[13px]"
+                >
+                  {fr ? 'Créer' : 'Create'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setSaisieDossier(false); setNomDossier(''); }}
+                  className="text-[13px] text-text-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  {fr ? 'Annuler' : 'Cancel'}
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSaisieDossier(true)}
+                className="glass-button inline-flex items-center gap-1.5"
+              >
+                <FolderPlus size={14} aria-hidden="true" />
+                {fr ? 'Nouveau dossier' : 'Create folder'}
+              </button>
+            )}
 
             <button
               type="button"
@@ -786,25 +1059,69 @@ export default function Automations() {
                 {o.cle !== 'toutes' && ` (${o.n})`}
               </button>
             ))}
-            <button
-              type="button"
-              onClick={() => toast.info(fr ? 'Les listes personnalisées arrivent bientôt.' : 'Smart lists are coming soon.')}
-              className="inline-flex items-center gap-1 border-b-2 border-transparent px-3 pb-2.5 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Plus size={13} aria-hidden="true" />
-              {fr ? 'Nouvelle liste' : 'New smart list'}
-            </button>
+            {/* GoHighLevel a ici « Nouvelle liste » (des vues filtrées
+                enregistrées). Ce sont nos DOSSIERS, juste au-dessous — et
+                eux fonctionnent. Un second mécanisme de rangement, à moitié
+                fait, n'aiderait personne. */}
           </nav>
 
-          <button
-            type="button"
-            onClick={() => toast.info(fr ? 'Le choix des colonnes arrive bientôt.' : 'Column picker is coming soon.')}
-            className="mb-2 inline-flex items-center gap-1.5 text-[12px] text-text-tertiary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <SlidersHorizontal size={13} aria-hidden="true" />
-            {fr ? 'Personnaliser la liste' : 'Customize list'}
-          </button>
+
         </div>
+
+        {/* Les dossiers — n'apparaissent qu'une fois qu'il y en a.
+            Une barre vide occuperait de la place pour rien. */}
+        {dossiers.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5" aria-label={fr ? 'Dossiers' : 'Folders'}>
+            {([
+              [null, fr ? 'Tout' : 'All'],
+              ['racine', fr ? 'Sans dossier' : 'No folder'],
+            ] as const).map(([cle, libelle]) => (
+              <button
+                key={libelle}
+                type="button"
+                onClick={() => setDossierActif(cle)}
+                aria-pressed={dossierActif === cle}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-[12px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                  dossierActif === cle
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-text-secondary hover:text-text-primary',
+                )}
+              >
+                {libelle}
+              </button>
+            ))}
+            {dossiers.map((d) => (
+              <span
+                key={d.id}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full border pl-3 pr-1 text-[12px] transition-colors',
+                  dossierActif === d.id
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-text-secondary',
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => setDossierActif(d.id)}
+                  aria-pressed={dossierActif === d.id}
+                  className="py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  {d.name}
+                  <span className="ml-1 tabular-nums opacity-60">{compteParDossier(d.id)}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void retirerDossier(d.id, d.name)}
+                  aria-label={fr ? `Supprimer le dossier ${d.name}` : `Delete folder ${d.name}`}
+                  className="rounded-full p-1 text-text-tertiary transition-colors hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <Trash2 size={11} aria-hidden="true" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* ══ 4. Barre d'outils ══ */}
         <div className="flex flex-wrap items-center gap-2">
@@ -864,6 +1181,75 @@ export default function Automations() {
 
         {/* ══ 5. Fil d'Ariane ══ */}
         <p className="text-[13px] text-text-secondary">{fr ? 'Accueil' : 'Home'}</p>
+
+        {/*
+          La barre d'actions groupées — elle n'apparaît QUE s'il y a une
+          sélection, comme chez GoHighLevel. Dans la corbeille, la seule
+          action offerte est « Restaurer ».
+        */}
+        {reglesCochees.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2">
+            <span className="text-[13px] font-medium text-text-primary">
+              {fr
+                ? `${reglesCochees.length} sélectionnée(s)`
+                : `${reglesCochees.length} selected`}
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {onglet === 'corbeille' ? (
+                <button
+                  type="button"
+                  onClick={() => void restaurerLot()}
+                  disabled={lotEnCours}
+                  className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
+                >
+                  <RotateCcw size={13} aria-hidden="true" />
+                  {fr ? 'Restaurer' : 'Restore'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void publierLot()}
+                    disabled={lotEnCours}
+                    className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
+                  >
+                    <ToggleRight size={13} aria-hidden="true" />
+                    {fr ? 'Publier' : 'Publish'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void depublierLot()}
+                    disabled={lotEnCours}
+                    className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
+                  >
+                    <ToggleLeft size={13} aria-hidden="true" />
+                    {fr ? 'Repasser en brouillon' : 'Unpublish'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void supprimerLot()}
+                    disabled={lotEnCours}
+                    className="glass-button inline-flex items-center gap-1.5 text-[12px] text-danger disabled:opacity-50"
+                  >
+                    <Trash2 size={13} aria-hidden="true" />
+                    {fr ? 'Supprimer' : 'Delete'}
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setCochees(new Set())}
+                disabled={lotEnCours}
+                className="rounded-lg px-2 py-1 text-[12px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+              >
+                {fr ? 'Tout décocher' : 'Clear selection'}
+              </button>
+              {lotEnCours && (
+                <Loader2 size={14} className="animate-spin text-text-tertiary" aria-hidden="true" />
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ══ 6. Le tableau ══ */}
         {loading ? (
@@ -975,9 +1361,13 @@ export default function Automations() {
                           <td className="px-3 py-3">
                             <span className={cn(
                               'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium',
-                              rule.is_active ? 'bg-success-light text-success' : 'bg-surface-tertiary text-text-tertiary',
+                              rule.deleted_at ? 'bg-surface-tertiary text-text-tertiary'
+                                : rule.is_active ? 'bg-success-light text-success'
+                                : 'bg-surface-tertiary text-text-tertiary',
                             )}>
-                              {rule.is_active ? (fr ? 'Publiée' : 'Published') : (fr ? 'Brouillon' : 'Draft')}
+                              {rule.deleted_at ? (fr ? 'Supprimée' : 'Deleted')
+                                : rule.is_active ? (fr ? 'Publiée' : 'Published')
+                                : (fr ? 'Brouillon' : 'Draft')}
                             </span>
                           </td>
 
@@ -1010,7 +1400,12 @@ export default function Automations() {
                               <button
                                 type="button"
                                 onClick={() => handleToggle(rule)}
-                                disabled={togglingId === rule.id}
+                                /*
+                                 * Une règle à la corbeille ne se déclenche plus :
+                                 * le moteur la filtre. Un interrupteur qui
+                                 * s'allume sans rien changer mentirait.
+                                 */
+                                disabled={togglingId === rule.id || !!rule.deleted_at}
                                 aria-label={rule.is_active
                                   ? (fr ? `Repasser ${rule.name} en brouillon` : `Unpublish ${rule.name}`)
                                   : (fr ? `Publier ${rule.name}` : `Publish ${rule.name}`)}
@@ -1059,6 +1454,24 @@ export default function Automations() {
                                     onClick={(e) => e.stopPropagation()}
                                     className="absolute right-0 z-30 mt-1 w-[210px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
                                   >
+                                    {/*
+                                      À la corbeille, une seule action a du sens.
+                                      Modifier, dupliquer ou ranger une règle
+                                      supprimée n'aurait aucun effet visible :
+                                      mieux vaut ne pas l'offrir.
+                                    */}
+                                    {rule.deleted_at ? (
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => { setMenuLigne(null); void restaurer(rule); }}
+                                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        <RotateCcw size={13} aria-hidden="true" />
+                                        {fr ? 'Restaurer' : 'Restore'}
+                                      </button>
+                                    ) : (
+                                    <>
                                     <button
                                       type="button"
                                       role="menuitem"
@@ -1080,12 +1493,51 @@ export default function Automations() {
                                     <button
                                       type="button"
                                       role="menuitem"
-                                      onClick={() => { setMenuLigne(null); toast.info(fr ? 'Les dossiers arrivent bientôt.' : 'Folders are coming soon.'); }}
+                                      onClick={() => {
+                                        // Sans dossier, créer d'abord : proposer
+                                        // « déplacer vers rien » n'aurait aucun sens.
+                                        if (dossiers.length === 0) {
+                                          setMenuLigne(null);
+                                          setSaisieDossier(true);
+                                          toast.info(fr ? 'Créez d’abord un dossier.' : 'Create a folder first.');
+                                          return;
+                                        }
+                                        setSousMenuDossier(rule.id);
+                                      }}
                                       className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                     >
                                       <FolderPlus size={13} aria-hidden="true" />
                                       {fr ? 'Déplacer dans un dossier' : 'Move to folder'}
                                     </button>
+                                    {/* Les dossiers, en sous-liste. « Racine »
+                                        n'apparaît que si la règle est rangée
+                                        quelque part — sinon l'option ne ferait
+                                        rien. */}
+                                    {sousMenuDossier === rule.id && (
+                                      <div className="ml-4 border-l border-border pl-2">
+                                        {rule.folder_id && (
+                                          <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => { setSousMenuDossier(null); void deplacerVers(rule.id, null); }}
+                                            className="block w-full rounded-lg px-2.5 py-1.5 text-left text-[12px] text-text-secondary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                          >
+                                            {fr ? '↑ Remettre à la racine' : '↑ Move back to root'}
+                                          </button>
+                                        )}
+                                        {dossiers.filter((d) => d.id !== rule.folder_id).map((d) => (
+                                          <button
+                                            key={d.id}
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => { setSousMenuDossier(null); void deplacerVers(rule.id, d.id); }}
+                                            className="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[12px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                          >
+                                            {d.name}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
                                     {!rule.is_preset && (
                                       <button
                                         type="button"
@@ -1096,6 +1548,8 @@ export default function Automations() {
                                         <Trash2 size={13} aria-hidden="true" />
                                         {fr ? 'Supprimer' : 'Delete'}
                                       </button>
+                                    )}
+                                    </>
                                     )}
                                   </div>
                                 )}

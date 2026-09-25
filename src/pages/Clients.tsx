@@ -28,7 +28,8 @@ import { correspondancesImport, ecrireValeurs } from '../lib/champsPersoApi';
 import { valeurDepuisTexte } from '../lib/champs/valeurs';
 import { messageChamps } from '../lib/champs/messages';
 
-type ClientSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc';
+type ClientSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc' | 'activity_desc' | 'activity_asc';
+type ClientSortColumn = 'name' | 'activity';
 
 const STATUS_OPTIONS = ['All', 'active', 'lead', 'inactive'];
 
@@ -596,7 +597,35 @@ export default function Clients() {
     return items.filter(i => i.city === cityFilter);
   }, [items, cityFilter]);
 
-  const IconSort = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>;
+  // Tri par colonne : Nom (name_asc/name_desc) et Dernière activité
+  // (activity_desc/activity_asc). Clic = trier, second clic = inverser.
+  const sortColumn: ClientSortColumn | null = sortBy.startsWith('name_') ? 'name' : sortBy.startsWith('activity_') ? 'activity' : null;
+  const sortAsc = sortBy === 'name_asc' || sortBy === 'activity_asc';
+  const handleSort = (col: ClientSortColumn) => {
+    setPage(1);
+    if (col === 'name') setSortBy(sortBy === 'name_asc' ? 'name_desc' : 'name_asc');
+    else setSortBy(sortBy === 'activity_desc' ? 'activity_asc' : 'activity_desc');
+  };
+  const sortIcon = (col: ClientSortColumn) => {
+    if (sortColumn !== col) {
+      return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>;
+    }
+    return sortAsc
+      ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 14 5-5 5 5"/></svg>
+      : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 10 5 5 5-5"/></svg>;
+  };
+  const SortHeader = ({ label, col }: { label: string; col: ClientSortColumn }) => (
+    <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">
+      <button
+        type="button"
+        onClick={() => handleSort(col)}
+        aria-sort={sortColumn === col ? (sortAsc ? 'ascending' : 'descending') : 'none'}
+        className="inline-flex items-center gap-1 rounded px-1 -mx-1 hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer"
+      >
+        {label} {sortIcon(col)}
+      </button>
+    </div>
+  );
 
   return (
     <>
@@ -639,11 +668,11 @@ export default function Clients() {
       <div className="border border-[var(--color-outline)] rounded-md bg-white dark:bg-[#0e0e11]">
         <div className="grid" style={{ gridTemplateColumns: `1.4fr 1.6fr 1.3fr 200px 130px${champsListe.colonnes.length ? ' 1.4fr' : ''}` }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
-          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Nom' : 'Name'} {IconSort}</span></div>
+          <SortHeader label={fr ? 'Nom' : 'Name'} col="name" />
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Adresse' : 'Address'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Étiquettes' : 'Tags'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Statut' : 'Status'}</div>
-          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Dernière activité' : 'Last activity'}</div>
+          <SortHeader label={fr ? 'Dernière activité' : 'Last activity'} col="activity" />
           {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Champs' : 'Fields'}</div>}
 
           {/* LOADING */}

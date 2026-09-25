@@ -30,6 +30,14 @@ export interface ActionContext {
    * sinon la version FR (repli). Absent → 'fr'.
    */
   langue?: 'fr' | 'en';
+  /**
+   * La regle en cours d'execution.
+   *
+   * Sert a « arreter cette automatisation » : sans elle, l'action ne saurait
+   * pas QUELLE regle arreter et devrait tout annuler. Absente sur les appels
+   * qui ne viennent pas du moteur (un test, un rejeu manuel).
+   */
+  ruleId?: string;
 }
 
 /**
@@ -328,7 +336,21 @@ export type ActionType =
   | 'move_deal_stage'
   | 'request_review'
   | 'log_activity'
-  | 'update_custom_field';
+  | 'update_custom_field'
+  // Les actions ajoutees le 2026-09-24, transposees de GoHighLevel.
+  | 'envoyer_slack'
+  | 'ajouter_etiquette'
+  | 'retirer_etiquette'
+  | 'modifier_client'
+  | 'assigner_responsable'
+  | 'ajouter_note'
+  | 'modifier_statut_rendezvous'
+  | 'modifier_deal'
+  | 'assigner_deal'
+  | 'envoyer_facture'
+  | 'envoyer_soumission'
+  | 'webhook'
+  | 'arreter_automatisation';
 
 // ── Template variable resolution ─────────────────────────────
 
@@ -582,7 +604,7 @@ export async function resolveEntityVariables(
   if (entityType === 'quote') {
     const { data: quote } = await supabase
       .from('quotes')
-      .select('quote_number, total_cents, currency, valid_until, client_id, lead_id, job_id')
+      .select('quote_number, total_cents, currency, valid_until, client_id, lead_id, job_id, view_token')
       .eq('id', entityId)
       .eq('org_id', orgId)
       .maybeSingle();
@@ -590,6 +612,12 @@ export async function resolveEntityVariables(
       vars.quote_number = quote.quote_number || '';
       vars.quote_total = argent(quote.total_cents, quote.currency || 'CAD');
       vars.quote_valid_until = quote.valid_until || '';
+      // Le lien public de la soumission — la page `/quote/:token` que le
+      // client ouvre sans compte (`TokenRoutes`). Sans lui, une action
+      // « envoyer la soumission » n'aurait rien a mettre dans le courriel.
+      if (quote.view_token) {
+        vars.quote_link = `${resolvePublicBaseUrl()}/quote/${quote.view_token}`;
+      }
 
       // `quotes` porte DEUX liens vers `clients` : `client_id` (client
       // converti) et `lead_id` (prospect). Même repli que la route d'envoi de
@@ -636,7 +664,7 @@ export async function resolveEntityVariables(
   if (entityType === 'invoice') {
     const { data: inv } = await supabase
       .from('invoices')
-      .select('invoice_number, due_date, total_cents, client_id, job_id')
+      .select('invoice_number, due_date, total_cents, client_id, job_id, public_token')
       .eq('id', entityId)
       .eq('org_id', orgId)
       .maybeSingle();
@@ -644,6 +672,12 @@ export async function resolveEntityVariables(
       vars.invoice_number = inv.invoice_number || '';
       vars.invoice_due_date = inv.due_date || '';
       vars.invoice_total = argent(inv.total_cents);
+      // `invoices` utilise `public_token` la ou `quotes` utilise
+      // `view_token` — deux noms pour la meme idee, verifie dans le schema
+      // de production. La page servie est `/invoice/:token`.
+      if (inv.public_token) {
+        vars.invoice_link = `${resolvePublicBaseUrl()}/invoice/${inv.public_token}`;
+      }
       if (inv.client_id) {
         const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
         if (c) {
@@ -705,7 +739,6 @@ export async function resolveEntityVariables(
     }
   }
 
-
   /**
    * Champs personnalisés : {client_cf_<clé>}, {deal_cf_<clé>}, {job_cf_<clé>},
    * {quote_cf_<clé>}, {invoice_cf_<clé>} — formatés (montant, date) dans la
@@ -742,7 +775,10 @@ export async function resolveEntityVariables(
 // ── Action: Send Email ──────────────────────────────────────
 
 export async function executeSendEmail(
-  config: { to?: string; subject: string; body: string },
+  config: {
+    to?: string; subject: string; body: string;
+    from_name?: string; reply_to?: string; preheader?: string;
+  },
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
@@ -809,7 +845,11 @@ export async function executeSendEmail(
        cliquer une fois, et la plupart n'écrivent jamais.
        `null` dès que le lien ne serait pas sûr (entité sans page publique,
        jeton absent) : le courriel part alors comme avant. */
+    // La langue de l'ENTREPRISE, calculée une fois : elle habille le bouton
+    // ET le pied de page. Les deux doivent parler la même langue — un
+    // courriel anglais terminé par « Se désabonner » est un défaut visible.
     const langueRelance = langueEntreprise(company);
+
     const bouton = await boutonPourEntite(
       ctx.supabase,
       ctx.orgId,
@@ -827,13 +867,43 @@ export async function executeSendEmail(
          </p>`
       : '';
 
+    /* Nom d'expediteur et « repondre a » choisis dans l'action.
+       Seuls le NOM AFFICHE et le Reply-To sont surchargeables : l'adresse
+       d'envoi reste celle, verifiee SPF/DKIM, que `senderFor` compose —
+       la remplacer par une adresse quelconque ferait tomber le courriel
+       en indesirable chez tout le monde. C'est aussi ce que fait GHL, dont
+       le « From Email » selectionne un expediteur verifie, pas une adresse
+       libre. */
+    // `senderForOrg` : si l'entreprise a fait verifier SON domaine (PR #524),
+    // le courriel part de sa propre adresse ; sinon celle, verifiee, de la
+    // plateforme. Dans les deux cas on ne surcharge que le NOM affiche.
+    const expediteur = { ...(await senderForOrg(ctx.orgId, company)) };
+    const nomChoisi = resolveTemplate(champLocalise(config, 'from_name', ctx.langue), vars).trim();
+    if (nomChoisi) {
+      const adresse = expediteur.from.match(/<([^>]+)>/)?.[1] || expediteur.from;
+      // Les chevrons et guillemets casseraient l'en-tete From.
+      expediteur.from = `${nomChoisi.replace(/[<>"]/g, '')} <${adresse}>`;
+    }
+    const repondreA = resolveTemplate(config.reply_to || '', vars).trim();
+    // Une adresse invalide ferait rejeter le message entier par le serveur
+    // SMTP : on ignore la surcharge plutot que de perdre l'envoi.
+    if (repondreA && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(repondreA)) {
+      expediteur.replyTo = repondreA;
+    }
+
+    /* L'apercu (« Pre-Header ») : la ligne que la boite de reception affiche
+       apres l'objet. Masquee dans le corps du message — c'est la technique
+       standard, et la seule qui marche sans champ d'en-tete dedie. */
+    const apercuTexte = resolveTemplate(champLocalise(config, 'preheader', ctx.langue), vars).trim();
+    const apercu = apercuTexte
+      ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${apercuTexte.replace(/[<>]/g, '')}</div>`
+      : '';
+
     const result = await sendEmail({
-      // `senderForOrg` : sans lui, une entreprise ayant fait vérifier SON
-      // domaine voyait quand même ses relances partir de @lumecrm.net.
-      ...(await senderForOrg(ctx.orgId, company)),
+      ...expediteur,
       to,
       subject,
-      html: buildEmailLayout(company, body + pied, bouton),
+      html: buildEmailLayout(company, apercu + body + pied, bouton),
       /* Sans `suivi`, la ligne `email_deliveries` part sans entity_type, et la
          fonction de suivi en base REFUSE alors d'enregistrer l'ouverture
          (`and d.entity_type is not null`, exclusion Loi 25 des courriels de
@@ -1009,12 +1079,19 @@ export async function executeCreateNotification(
 // ── Action: Create Task ─────────────────────────────────────
 
 export async function executeCreateTask(
-  config: { title: string; description?: string; due_date?: string },
+  config: {
+    title: string; description?: string; due_date?: string;
+    // Le catalogue nomme le detail `body` (comme les autres actions) ;
+    // `description` reste accepte pour les 35 prereglages deja enregistres.
+    body?: string;
+    priorite?: string; echeance_jours?: string; membre_id?: string;
+  },
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
   const title = resolveTemplate(config.title, vars);
-  const description = config.description ? resolveTemplate(config.description, vars) : '';
+  const brut = config.body ?? config.description ?? '';
+  const description = brut ? resolveTemplate(brut, vars) : '';
 
   // tasks.created_by is NOT NULL and automations run without a user —
   // attribute the task to the org owner so it lands in someone's list.
@@ -1066,6 +1143,37 @@ export async function executeCreateTask(
     }
   }
 
+  /* La priorite : `tasks_priority_check` n'admet que low/medium/high. Une
+     autre valeur ferait echouer l'INSERT ENTIER — la tache ne serait pas
+     creee du tout. On retombe donc sur le defaut plutot que de tout perdre. */
+  const PRIORITES = new Set(['low', 'medium', 'high']);
+  const priorite = PRIORITES.has(config.priorite || '') ? config.priorite : 'medium';
+
+  /* L'echeance, en jours a partir d'aujourd'hui (le « Due In » de GHL).
+     `tasks.due_date` est une DATE, pas un timestamp : on envoie AAAA-MM-JJ,
+     sinon Postgres tronque et l'heure se perd en silence. */
+  let echeance: string | null = config.due_date || null;
+  const jours = Number(config.echeance_jours);
+  if (Number.isFinite(jours) && jours >= 0 && config.echeance_jours) {
+    const d = new Date(Date.now() + jours * 86400_000);
+    echeance = d.toISOString().slice(0, 10);
+  }
+
+  /* Le responsable. Verifie contre `memberships` : assigner une tache a
+     quelqu'un d'une autre organisation la ferait apparaitre dans sa liste. */
+  let assignee: string | null = null;
+  const membreId = (config.membre_id || '').trim();
+  if (membreId) {
+    const { data: membre } = await ctx.supabase
+      .from('memberships')
+      .select('user_id')
+      .eq('org_id', ctx.orgId)
+      .eq('user_id', membreId)
+      .maybeSingle();
+    if (!membre) return { success: false, error: "Ce membre n'appartient pas a l'organisation." };
+    assignee = membreId;
+  }
+
   // Column names verified against prod: linked_entity_* (not entity_*),
   // status enum uses 'open' (not 'pending').
   const { error } = await ctx.supabase.from('tasks').insert({
@@ -1073,10 +1181,12 @@ export async function executeCreateTask(
     title,
     description: description || null,
     status: 'open',
+    priority: priorite,
+    assignee_user_id: assignee,
     linked_entity_type: lienType,
     linked_entity_id: lienId,
     created_by: owner.user_id,
-    due_date: config.due_date || null,
+    due_date: echeance,
   });
 
   if (error) return { success: false, error: error.message };
@@ -1435,6 +1545,544 @@ export async function executeMoveDealStage(
   return { success: true, data: { stage_id: config.stage_id, etape: etape.name_fr } };
 }
 
+// ── Le client concerné, quelle que soit l'entité ────────────
+
+/**
+ * Remonte de l'entité déclenchante jusqu'à la fiche client.
+ *
+ * Presque toutes les actions « client » (étiquette, note, assignation) en ont
+ * besoin, et chacune le refaisait à sa façon. Un seul endroit, donc, et une
+ * carte des liens RÉELS — vérifiée dans le schéma de production le
+ * 2026-09-24, pas devinée :
+ *
+ *   · `lead` EST une fiche `clients` (il n'existe pas de table `leads`) ;
+ *   · `schedule_events` n'a PAS de `client_id` — on passe par son job ;
+ *   · `quotes` porte deux liens, `client_id` et `lead_id`, et les deux
+ *     pointent vers `clients` ;
+ *   · `deals.client_id` est NOT NULL.
+ *
+ * Retourne `null` quand l'entité n'a pas de client (un paiement orphelin,
+ * une visite sans job). L'appelant décide alors s'il échoue ou s'il passe.
+ */
+async function clientDeLEntite(ctx: ActionContext): Promise<string | null> {
+  const { supabase, orgId, entityType, entityId } = ctx;
+
+  // Un prospect est une fiche client : l'identifiant est déjà le bon.
+  if (entityType === 'client' || entityType === 'lead') return entityId;
+
+  const lire = async (table: string, colonnes: string) => {
+    const { data } = await supabase
+      .from(table)
+      .select(colonnes)
+      .eq('id', entityId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    return data as Record<string, string | null> | null;
+  };
+
+  switch (entityType) {
+    case 'job': {
+      const j = await lire('jobs', 'client_id');
+      return j?.client_id ?? null;
+    }
+    case 'invoice': {
+      const i = await lire('invoices', 'client_id');
+      return i?.client_id ?? null;
+    }
+    case 'quote': {
+      const q = await lire('quotes', 'client_id, lead_id');
+      return q?.client_id ?? q?.lead_id ?? null;
+    }
+    case 'deal': {
+      const d = await lire('deals', 'client_id');
+      return d?.client_id ?? null;
+    }
+    case 'schedule_event':
+    case 'appointment': {
+      // Une visite n'a pas de client : elle appartient à un job, qui en a un.
+      const e = await lire('schedule_events', 'job_id');
+      if (!e?.job_id) return null;
+      const { data: job } = await supabase
+        .from('jobs')
+        .select('client_id')
+        .eq('id', e.job_id)
+        .eq('org_id', orgId)
+        .maybeSingle();
+      return (job as { client_id?: string | null } | null)?.client_id ?? null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** Le membre visé appartient-il bien à cette organisation ? */
+async function membreDeLOrg(ctx: ActionContext, userId: string): Promise<boolean> {
+  const { data } = await ctx.supabase
+    .from('memberships')
+    .select('user_id')
+    .eq('org_id', ctx.orgId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+// ── Action : ajouter une étiquette ──────────────────────────
+
+/**
+ * `client_tags` plutôt que `clients.tags`.
+ *
+ * Les deux existent en base. La COLONNE `clients.tags` (text[]) n'est écrite
+ * nulle part dans le produit ; c'est la TABLE `client_tags` que l'interface
+ * lit et écrit (ClientDetails, Clients, leads.ts). Écrire dans la colonne
+ * aurait donné une étiquette invisible partout — le pire des résultats :
+ * l'automatisation « réussit » et rien n'apparaît.
+ */
+export async function executeAjouterEtiquette(
+  config: { etiquette?: string },
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const etiquette = resolveTemplate(config.etiquette || '', vars).trim();
+  if (!etiquette) return { success: false, error: 'Aucune étiquette à ajouter.' };
+
+  const clientId = await clientDeLEntite(ctx);
+  if (!clientId) return { success: false, error: 'Aucun client rattaché à cette entité.' };
+
+  // `client_tags_client_id_tag_key` interdit le doublon : on l'absorbe au lieu
+  // de faire échouer une action dont le résultat voulu est déjà atteint.
+  const { error } = await ctx.supabase
+    .from('client_tags')
+    .upsert({ client_id: clientId, tag: etiquette }, { onConflict: 'client_id,tag' });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, data: { etiquette } };
+}
+
+// ── Action : retirer une étiquette ──────────────────────────
+
+export async function executeRetirerEtiquette(
+  config: { etiquette?: string; toutes?: string },
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const clientId = await clientDeLEntite(ctx);
+  if (!clientId) return { success: false, error: 'Aucun client rattaché à cette entité.' };
+
+  const toutes = config.toutes === 'true';
+  if (!toutes) {
+    const etiquette = resolveTemplate(config.etiquette || '', vars).trim();
+    if (!etiquette) return { success: false, error: 'Aucune étiquette à retirer.' };
+    const { error } = await ctx.supabase
+      .from('client_tags')
+      .delete()
+      .eq('client_id', clientId)
+      .eq('tag', etiquette);
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: { etiquette } };
+  }
+
+  const { error } = await ctx.supabase.from('client_tags').delete().eq('client_id', clientId);
+  if (error) return { success: false, error: error.message };
+  return { success: true, data: { toutes: true } };
+}
+
+// ── Action : modifier le client ─────────────────────────────
+
+/** Les seuls statuts que `clients_status_check` accepte. */
+const STATUTS_CLIENT = new Set(['active', 'inactive', 'lead']);
+
+export async function executeModifierClient(
+  config: { statut?: string; source?: string; valeur?: string },
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const clientId = await clientDeLEntite(ctx);
+  if (!clientId) return { success: false, error: 'Aucun client rattaché à cette entité.' };
+
+  const patch: Record<string, string | number> = {};
+
+  if (config.statut) {
+    // Une valeur hors CHECK ferait échouer l'UPDATE ENTIER : la source et la
+    // valeur seraient perdues avec elle. On refuse avant d'écrire.
+    if (!STATUTS_CLIENT.has(config.statut)) {
+      return { success: false, error: `Statut inconnu : ${config.statut}` };
+    }
+    patch.status = config.statut;
+  }
+  if (config.source) patch.source = resolveTemplate(config.source, vars).trim().slice(0, 60);
+  if (config.valeur) {
+    const n = Number(config.valeur);
+    // `clients.value` est un numeric(12,2) : au-delà, Postgres refuse la
+    // ligne entière.
+    if (!Number.isFinite(n) || n < 0 || n > 9_999_999_999) {
+      return { success: false, error: `Valeur invalide : ${config.valeur}` };
+    }
+    patch.value = n;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return { success: false, error: 'Rien à modifier : tous les champs sont vides.' };
+  }
+
+  const { data, error } = await ctx.supabase
+    .from('clients')
+    .update(patch)
+    .eq('id', clientId)
+    .eq('org_id', ctx.orgId)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: 'Client introuvable.' };
+  return { success: true, data: patch };
+}
+
+// ── Action : assigner un responsable ────────────────────────
+
+export async function executeAssignerResponsable(
+  config: { membre_id?: string; seulement_si_vide?: string },
+  _vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const clientId = await clientDeLEntite(ctx);
+  if (!clientId) return { success: false, error: 'Aucun client rattaché à cette entité.' };
+
+  const membreId = (config.membre_id || '').trim() || null;
+  // Assigner à quelqu'un d'une AUTRE organisation ferait apparaître la fiche
+  // dans sa liste : la vérification n'est pas du confort.
+  if (membreId && !(await membreDeLOrg(ctx, membreId))) {
+    return { success: false, error: "Ce membre n'appartient pas à l'organisation." };
+  }
+
+  let requete = ctx.supabase
+    .from('clients')
+    .update({ assigned_to: membreId })
+    .eq('id', clientId)
+    .eq('org_id', ctx.orgId);
+
+  // « Seulement si personne n'est assigné » (le « Only Apply To Unassigned
+  // Contacts » de GoHighLevel) : la condition est DANS la requête, pas dans
+  // un lire-puis-écrire qui laisserait passer deux automatisations
+  // simultanées.
+  if (config.seulement_si_vide === 'true') requete = requete.is('assigned_to', null);
+
+  const { data, error } = await requete.select('id');
+  if (error) return { success: false, error: error.message };
+  // Zéro ligne avec « seulement si vide » n'est pas une panne : quelqu'un
+  // était déjà responsable, et c'est exactement ce qu'on voulait respecter.
+  if (!data || data.length === 0) {
+    if (config.seulement_si_vide === 'true') {
+      return { success: true, data: { ignore: 'un responsable était déjà assigné' } };
+    }
+    return { success: false, error: 'Client introuvable.' };
+  }
+  return { success: true, data: { membre_id: membreId } };
+}
+
+// ── Action : ajouter une note ───────────────────────────────
+
+/** Les `entity_type` que `notes_entity_type_check` accepte. */
+const TYPES_NOTE = new Set(['client', 'job', 'lead', 'invoice', 'payment', 'team_member']);
+
+export async function executeAjouterNote(
+  config: { body?: string },
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const contenu = resolveTemplate(config.body || '', vars).trim();
+  if (!contenu) return { success: false, error: 'La note est vide.' };
+
+  // `notes.entity_type` porte un CHECK à six valeurs. Le moteur émet aussi
+  // `quote`, `deal`, `schedule_event`… : les écrire tels quels violerait la
+  // contrainte et l'action échouerait en silence, réessayée trois fois pour
+  // rien — le bug exact déjà corrigé sur `create_task`.
+  let type: string | null = ctx.entityType;
+  let cible: string | null = ctx.entityId;
+  if (!TYPES_NOTE.has(ctx.entityType)) {
+    const clientId = await clientDeLEntite(ctx);
+    if (clientId) {
+      type = 'client';
+      cible = clientId;
+    } else {
+      // Note sans rattachement plutôt que pas de note du tout.
+      type = null;
+      cible = null;
+    }
+  }
+
+  const { error } = await ctx.supabase.from('notes').insert({
+    org_id: ctx.orgId,
+    content: contenu,
+    entity_type: type,
+    entity_id: cible,
+  });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, data: { longueur: contenu.length } };
+}
+
+// ── Action : changer le statut d'un rendez-vous ─────────────
+
+export async function executeStatutRendezVous(
+  config: { statut?: string },
+  _vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const statut = (config.statut || '').trim();
+  if (!statut) return { success: false, error: 'Aucun statut choisi.' };
+
+  if (ctx.entityType !== 'schedule_event' && ctx.entityType !== 'appointment') {
+    return { success: false, error: "Cette action ne vaut que pour un rendez-vous." };
+  }
+
+  const { data, error } = await ctx.supabase
+    .from('schedule_events')
+    .update({ status: statut })
+    .eq('id', ctx.entityId)
+    .eq('org_id', ctx.orgId)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: 'Rendez-vous introuvable.' };
+  return { success: true, data: { statut } };
+}
+
+// ── Action : modifier l'opportunité ─────────────────────────
+
+export async function executeModifierDeal(
+  config: { source?: string },
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  if (ctx.entityType !== 'deal') {
+    return { success: false, error: "Cette action ne vaut que pour une opportunité." };
+  }
+  const source = resolveTemplate(config.source || '', vars).trim().slice(0, 60);
+  if (!source) return { success: false, error: 'Rien à modifier.' };
+
+  const { data, error } = await ctx.supabase
+    .from('deals')
+    .update({ source })
+    .eq('id', ctx.entityId)
+    .eq('org_id', ctx.orgId)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: 'Opportunité introuvable.' };
+  return { success: true, data: { source } };
+}
+
+// ── Action : assigner l'opportunité ─────────────────────────
+
+export async function executeAssignerDeal(
+  config: { membre_id?: string },
+  _vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  if (ctx.entityType !== 'deal') {
+    return { success: false, error: "Cette action ne vaut que pour une opportunité." };
+  }
+  const membreId = (config.membre_id || '').trim() || null;
+  if (membreId && !(await membreDeLOrg(ctx, membreId))) {
+    return { success: false, error: "Ce membre n'appartient pas à l'organisation." };
+  }
+
+  const { data, error } = await ctx.supabase
+    .from('deals')
+    .update({
+      assigned_user_id: membreId,
+      // `assigned_at` accompagne l'assignation partout ailleurs dans le
+      // produit : ne pas la poser ferait mentir les rapports d'ancienneté.
+      assigned_at: membreId ? new Date().toISOString() : null,
+    })
+    .eq('id', ctx.entityId)
+    .eq('org_id', ctx.orgId)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: 'Opportunité introuvable.' };
+  return { success: true, data: { membre_id: membreId } };
+}
+
+// ── Action : envoyer dans Slack ─────────────────────────────
+
+export async function executeEnvoyerSlack(
+  config: { body?: string },
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const texte = resolveTemplate(config.body || '', vars).trim();
+  if (!texte) return { success: false, error: 'Le message est vide.' };
+
+  try {
+    const { isSlackConfigured, canalSupport, envoyerMessageSlack } = await import('../slack');
+    if (!isSlackConfigured()) {
+      return { success: false, error: 'Slack n’est pas configuré sur ce serveur.' };
+    }
+    await envoyerMessageSlack({ channel: canalSupport(), text: texte });
+    return { success: true, data: { longueur: texte.length } };
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ── Action : webhook ────────────────────────────────────────
+
+/**
+ * Une adresse est-elle sûre à appeler ?
+ *
+ * Même garde que la validation à l'enregistrement — mais refaite ICI, au
+ * moment de l'appel. Une règle peut avoir été écrite avant que la garde
+ * existe, ou modifiée en base hors du serveur : vérifier deux fois coûte une
+ * expression régulière et ferme un SSRF.
+ */
+function adresseSure(url: string): boolean {
+  if (!/^https:\/\//i.test(url)) return false;
+  try {
+    const hote = new URL(url).hostname.toLowerCase();
+    return !(
+      hote === 'localhost'
+      || hote === '169.254.169.254'
+      || /^127\./.test(hote)
+      || /^10\./.test(hote)
+      || /^192\.168\./.test(hote)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(hote)
+      || hote.endsWith('.local')
+      || hote.endsWith('.internal')
+    );
+  } catch {
+    return false;
+  }
+}
+
+export async function executeWebhook(
+  config: { url?: string },
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const url = (config.url || '').trim();
+  if (!adresseSure(url)) {
+    return { success: false, error: 'Adresse refusée : https:// et publique seulement.' };
+  }
+
+  // Un délai borné : sans lui, un serveur distant qui ne répond jamais
+  // immobiliserait le worker des tâches différées.
+  const abandon = AbortSignal.timeout(10_000);
+  try {
+    const reponse = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Lume-Automations/1' },
+      body: JSON.stringify({
+        org_id: ctx.orgId,
+        entity_type: ctx.entityType,
+        entity_id: ctx.entityId,
+        // Les variables déjà résolues : le destinataire reçoit le nom du
+        // client et les montants, pas des identifiants à recroiser.
+        data: vars,
+        sent_at: new Date().toISOString(),
+      }),
+      signal: abandon,
+    });
+    if (!reponse.ok) {
+      return { success: false, error: `Le serveur distant a répondu ${reponse.status}.` };
+    }
+    return { success: true, data: { status: reponse.status } };
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    return { success: false, error: `Appel impossible : ${message}` };
+  }
+}
+
+// ── Action : arrêter une automatisation ─────────────────────
+
+export async function executeArreterAutomatisation(
+  config: { portee?: string },
+  _vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  // On annule les tâches PRÉVUES pour cette entité. Une tâche déjà exécutée
+  // ne se rattrape pas ; une tâche en cours (`running`) est laissée finir,
+  // sinon on la marquerait annulée alors que le message est parti.
+  let requete = ctx.supabase
+    .from('automation_scheduled_tasks')
+    .update({ status: 'cancelled' })
+    .eq('org_id', ctx.orgId)
+    .eq('entity_id', ctx.entityId)
+    .eq('status', 'pending');
+
+  // « Celle-ci » (défaut) : seulement la règle en cours. `ruleId` est posé
+  // par le moteur sur le contexte.
+  if (config.portee !== 'toutes' && ctx.ruleId) {
+    requete = requete.eq('automation_rule_id', ctx.ruleId);
+  }
+
+  const { data, error } = await requete.select('id');
+  if (error) return { success: false, error: error.message };
+  return { success: true, data: { annulees: data?.length ?? 0 } };
+}
+
+// ── Actions : envoyer la facture / la soumission ────────────
+
+/**
+ * Envoie le document lié par courriel.
+ *
+ * On réutilise `executeSendEmail` plutôt que de refaire un envoi : il porte
+ * déjà le consentement (F7), le désabonnement, le plafond de fréquence, le
+ * gabarit de l'organisation et la journalisation. Un second chemin d'envoi
+ * qui oublierait l'un des quatre serait une faute de conformité, pas un
+ * détail.
+ */
+async function envoyerDocument(
+  type: 'invoice' | 'quote',
+  config: { body?: string },
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  const attendu = type === 'invoice' ? 'invoice' : 'quote';
+  if (ctx.entityType !== attendu) {
+    return {
+      success: false,
+      error: type === 'invoice'
+        ? 'Cette action ne vaut que pour une facture.'
+        : 'Cette action ne vaut que pour une soumission.',
+    };
+  }
+
+  const lien = type === 'invoice' ? vars.invoice_link : vars.quote_link;
+  if (!lien) {
+    return { success: false, error: 'Aucun lien public pour ce document.' };
+  }
+
+  const numero = type === 'invoice' ? vars.invoice_number : vars.quote_number;
+  const objet = type === 'invoice'
+    ? `Facture ${numero || ''}`.trim()
+    : `Soumission ${numero || ''}`.trim();
+
+  const mot = (config.body || '').trim();
+  const corps = mot
+    ? `${mot}\n\n${lien}`
+    : (type === 'invoice'
+      ? `Bonjour [client_first_name],\n\nVoici votre facture ${numero || ''}.\n\n${lien}`
+      : `Bonjour [client_first_name],\n\nVoici votre soumission ${numero || ''}.\n\n${lien}`);
+
+  return executeSendEmail({ subject: objet, body: corps }, vars, ctx);
+}
+
+export async function executeEnvoyerFacture(
+  config: { body?: string },
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  return envoyerDocument('invoice', config, vars, ctx);
+}
+
+export async function executeEnvoyerSoumission(
+  config: { body?: string },
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  return envoyerDocument('quote', config, vars, ctx);
+}
+
 export async function executeAction(
   actionType: ActionType,
   config: Record<string, any>,
@@ -1461,10 +2109,38 @@ export async function executeAction(
       return executeRequestReview(config, vars, ctx);
     case 'log_activity':
       return executeLogActivity(config as any, vars, ctx);
-    // Champs personnalisés : seulement l'entité de l'événement, seulement un
-    // champ de son objet (server/lib/champs/automatisations.ts).
+
     case 'update_custom_field':
-      return executerMajChamp(ctx.supabase, ctx, config);
+      return executerMajChamp(ctx.supabase, ctx, config as any);
+
+    // ── Les actions ajoutees le 2026-09-24 ──
+    case 'envoyer_slack':
+      return executeEnvoyerSlack(config as any, vars, ctx);
+    case 'ajouter_etiquette':
+      return executeAjouterEtiquette(config as any, vars, ctx);
+    case 'retirer_etiquette':
+      return executeRetirerEtiquette(config as any, vars, ctx);
+    case 'modifier_client':
+      return executeModifierClient(config as any, vars, ctx);
+    case 'assigner_responsable':
+      return executeAssignerResponsable(config as any, vars, ctx);
+    case 'ajouter_note':
+      return executeAjouterNote(config as any, vars, ctx);
+    case 'modifier_statut_rendezvous':
+      return executeStatutRendezVous(config as any, vars, ctx);
+    case 'modifier_deal':
+      return executeModifierDeal(config as any, vars, ctx);
+    case 'assigner_deal':
+      return executeAssignerDeal(config as any, vars, ctx);
+    case 'envoyer_facture':
+      return executeEnvoyerFacture(config as any, vars, ctx);
+    case 'envoyer_soumission':
+      return executeEnvoyerSoumission(config as any, vars, ctx);
+    case 'webhook':
+      return executeWebhook(config as any, vars, ctx);
+    case 'arreter_automatisation':
+      return executeArreterAutomatisation(config as any, vars, ctx);
+
     default:
       return { success: false, error: `Unknown action type: ${actionType}` };
   }

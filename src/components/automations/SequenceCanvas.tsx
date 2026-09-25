@@ -21,9 +21,14 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React from 'react';
-import { Zap, Clock, GitBranch, Send, Bell, CheckSquare, Star, Square, Plus, Pencil } from 'lucide-react';
+import {
+  Zap, Pencil, Clock, GitBranch, Send, Bell, CheckSquare, Star, Square, Plus, MoreHorizontal,
+  Mail, Hash, Tag, TagsIcon, UserCog, UserPlus, StickyNote, CalendarCheck, TrendingUp,
+  Target, FileText, Receipt, Webhook, CircleSlash,
+} from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Etape } from '../../lib/sequenceTypes';
+import { trouverAction } from '../../lib/automationCatalogue';
 
 interface Props {
   /** Le déclencheur, affiché en tête — il n'est pas une étape. */
@@ -35,31 +40,54 @@ interface Props {
   onSelection: (id: string) => void;
   /** Ajouter une étape après celle-ci (ou sur une branche donnée). */
   onAjouter: (apresId: string | null, branche?: 'alors' | 'sinon') => void;
+  /** Le menu « … » d'une carte — dupliquer, supprimer, supprimer la suite. */
+  onMenu?: (id: string) => void;
+  /**
+   * Cliquer la carte du DÉCLENCHEUR pour en changer.
+   *
+   * Sans ça, le tiroir des déclencheurs n'était atteignable que sur un
+   * canevas VIDE : dès la première étape ajoutée, plus aucun moyen de
+   * changer ce qui met le parcours en route.
+   */
+  onDeclencheur?: () => void;
   /** Lecture seule : aucun bouton d'édition (aperçu d'un préréglage). */
   lectureSeule?: boolean;
 }
 
 const ICONES: Record<string, React.ComponentType<{ className?: string }>> = {
   send_sms: Send,
-  send_email: Send,
+  send_email: Mail,
   create_notification: Bell,
   create_task: CheckSquare,
   request_review: Star,
+  envoyer_slack: Hash,
+  ajouter_etiquette: Tag,
+  retirer_etiquette: TagsIcon,
+  modifier_client: UserCog,
+  assigner_responsable: UserPlus,
+  ajouter_note: StickyNote,
+  modifier_statut_rendezvous: CalendarCheck,
+  move_deal_stage: TrendingUp,
+  modifier_deal: Target,
+  assigner_deal: UserPlus,
+  envoyer_facture: Receipt,
+  envoyer_soumission: FileText,
+  webhook: Webhook,
+  arreter_automatisation: CircleSlash,
 };
 
 /** Le titre d'une étape, en mots du métier. */
 function titreEtape(etape: Etape, fr: boolean): string {
   switch (etape.type) {
     case 'action': {
-      const libelles: Record<string, [string, string]> = {
-        send_sms: ['Envoyer un texto', 'Send a text'],
-        send_email: ['Envoyer un courriel', 'Send an email'],
-        create_notification: ['Me notifier', 'Notify me'],
-        create_task: ['Créer une tâche', 'Create a task'],
-        request_review: ['Demander un avis', 'Ask for a review'],
-      };
-      const paire = libelles[etape.action?.type] ?? ['Action', 'Action'];
-      return fr ? paire[0] : paire[1];
+      // Le nom DONNÉ par l'utilisateur prime sur le nom générique de
+      // l'action : c'est ce qui distingue « Courriel de confirmation » de
+      // « Courriel de rappel » quand un parcours en contient trois.
+      const surnom = etape.nom?.trim();
+      if (surnom) return surnom;
+      const modele = trouverAction(etape.action?.type ?? '');
+      if (modele) return fr ? modele.fr : modele.en;
+      return 'Action';
     }
     case 'attendre':
       return fr ? 'Attendre' : 'Wait';
@@ -123,8 +151,14 @@ function Connecteur({
 
 /** Une carte d'étape. */
 function Carte({
-  etape, fr, selectionnee, onClick, lectureSeule,
-}: { etape: Etape; fr: boolean; selectionnee: boolean; onClick: () => void; lectureSeule?: boolean }) {
+  etape, fr, selectionnee, onClick, onMenu, lectureSeule,
+}: {
+  etape: Etape; fr: boolean; selectionnee: boolean;
+  onClick: () => void;
+  /** Le menu « … » de la carte — dupliquer, supprimer. */
+  onMenu?: (id: string) => void;
+  lectureSeule?: boolean;
+}) {
   const Icone =
     etape.type === 'attendre' ? Clock
     : etape.type === 'si' ? GitBranch
@@ -133,17 +167,22 @@ function Carte({
 
   const detail = detailEtape(etape, fr);
 
+  // Un `div` plutot qu'un `button` : la carte porte un second bouton (le
+  // menu « … »), et un bouton dans un bouton est du HTML invalide que les
+  // navigateurs reparent en supprimant l'imbrication — le menu disparaitrait.
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={selectionnee ? 'step' : undefined}
+    <div
       className={cn(
-        'w-[260px] rounded-xl border bg-surface-primary p-3 text-left transition-all',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+        'relative w-[260px] rounded-xl border bg-surface-primary transition-all',
         selectionnee ? 'border-accent shadow-md' : 'border-border hover:border-text-tertiary',
       )}
     >
+      <button
+        type="button"
+        onClick={onClick}
+        aria-current={selectionnee ? 'step' : undefined}
+        className="w-full rounded-xl p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
       <div className="flex items-start gap-2.5">
         <span
           className={cn(
@@ -160,16 +199,28 @@ function Carte({
           <span className="block text-sm font-medium text-text-primary">{titreEtape(etape, fr)}</span>
           {detail && <span className="mt-0.5 block truncate text-xs text-text-secondary">{detail}</span>}
         </span>
-        {!lectureSeule && (
-          <Pencil className="mt-1 h-3.5 w-3.5 shrink-0 text-text-tertiary" aria-hidden="true" />
-        )}
+        {/* La place du menu « … », pour que le texte ne passe pas dessous. */}
+        {!lectureSeule && onMenu && <span className="w-4 shrink-0" aria-hidden="true" />}
       </div>
-    </button>
+      </button>
+
+      {/* Le menu de la carte, comme le « … » de GoHighLevel. */}
+      {!lectureSeule && onMenu && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onMenu(etape.id); }}
+          aria-label={fr ? `Options de l’étape ${titreEtape(etape, fr)}` : `Options for ${titreEtape(etape, fr)}`}
+          className="absolute right-2 top-2.5 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
+    </div>
   );
 }
 
 export default function SequenceCanvas({
-  declencheurLabel, steps, fr, selectionId, onSelection, onAjouter, lectureSeule,
+  declencheurLabel, steps, fr, selectionId, onSelection, onAjouter, onMenu, onDeclencheur, lectureSeule,
 }: Props) {
   const parId = new Map(steps.map((e) => [e.id, e]));
 
@@ -198,7 +249,7 @@ export default function SequenceCanvas({
     if (etape.type === 'si') {
       return (
         <div className="flex flex-col items-center">
-          <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} onClick={() => onSelection(etape.id)} lectureSeule={lectureSeule} />
+          <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
           {/* Deux branches, côte à côte : c'est le seul endroit où le
               parcours se divise, et ça doit se voir. */}
           <div className="flex items-start gap-6 pt-1">
@@ -218,7 +269,7 @@ export default function SequenceCanvas({
     const suivant = etape.type === 'arreter' ? null : etape.suivant;
     return (
       <div className="flex flex-col items-center">
-        <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} onClick={() => onSelection(etape.id)} lectureSeule={lectureSeule} />
+        <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
         {etape.type !== 'arreter' && (
           <>
             <Connecteur fr={fr} lectureSeule={lectureSeule} onAjouter={() => onAjouter(etape.id)} />
@@ -234,20 +285,43 @@ export default function SequenceCanvas({
   return (
     <div className="overflow-x-auto">
       <div className="flex min-w-fit flex-col items-center px-4 py-2">
-        {/* Le déclencheur : point de départ, jamais une étape. */}
-        <div className="w-[260px] rounded-xl border-2 border-accent/40 bg-accent/5 p-3">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent">
-              <Zap className="h-4 w-4" aria-hidden="true" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-accent">
-                {fr ? 'Quand' : 'When'}
+        {/* Le déclencheur : point de départ, jamais une étape.
+            Cliquable — c'est le chemin pour en changer une fois le parcours
+            commencé. */}
+        {onDeclencheur && !lectureSeule ? (
+          <button
+            type="button"
+            onClick={onDeclencheur}
+            className="w-[260px] rounded-xl border-2 border-accent/40 bg-accent/5 p-3 text-left transition-colors hover:border-accent hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
+                <Zap className="h-4 w-4" aria-hidden="true" />
               </span>
-              <span className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
-            </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-accent">
+                  {fr ? 'Quand' : 'When'}
+                </span>
+                <span className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
+              </span>
+              <Pencil className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
+            </div>
+          </button>
+        ) : (
+          <div className="w-[260px] rounded-xl border-2 border-accent/40 bg-accent/5 p-3">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent">
+                <Zap className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-accent">
+                  {fr ? 'Quand' : 'When'}
+                </span>
+                <span className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
+              </span>
+            </div>
           </div>
-        </div>
+        )}
 
         {depart ? (
           <>

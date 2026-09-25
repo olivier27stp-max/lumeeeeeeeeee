@@ -42,9 +42,53 @@ export type CRMEventType =
   | 'invoice.sent'
   | 'invoice.paid'
   | 'invoice.overdue'
-  // Champs personnalisés v2 : émis par customFieldsService (server/lib/champs)
-  // quand une valeur change réellement — jamais sur un rejeu identique.
-  | 'custom_field.changed';
+  /**
+   * Le client a répondu à un message de l'entreprise.
+   *
+   * Émis par le webhook des SMS entrants (`routes/messages.ts`), et SEULEMENT
+   * quand l'expéditeur est un client — un membre de l'équipe qui écrit à son
+   * assistant n'est pas une réponse de client.
+   *
+   * L'entité est le CLIENT (pas la conversation) : c'est de lui que les
+   * actions ont besoin, et c'est lui que les variables décrivent.
+   */
+  // Champs personnalises v2 : emis par customFieldsService (server/lib/champs)
+  // quand une valeur change reellement — jamais sur un rejeu identique.
+  | 'custom_field.changed'
+  | 'client.replied'
+  /**
+   * Une étiquette vient d'être posée sur un client.
+   *
+   * C'est le « handoff manuel » : un vendeur marque une fiche « À rappeler »
+   * et une séquence part. Le retrait d'étiquette N'EST PAS émis — retirer un
+   * marqueur ne devrait jamais déclencher un envoi au client.
+   */
+  | 'client.tagged'
+  /**
+   * Une tâche vient d'être marquée terminée.
+   *
+   * L'entité est le CLIENT rattaché à la tâche quand il y en a un — c'est
+   * lui que les messages décrivent. Une tâche sans lien client existe
+   * (« commander des pièces ») : elle n'émet rien, faute de destinataire.
+   */
+  | 'task.completed'
+  /**
+   * Une note vient d'être ajoutée sur un client ou un job.
+   *
+   * Usage typique : une note sur la fiche prévient le responsable. Les
+   * notes écrites PAR une automatisation n'émettent rien — sinon une règle
+   * « ajouter une note » qui écoute « note ajoutée » tournerait en boucle.
+   */
+  | 'note.added'
+  /**
+   * Une date personnalisée est atteinte (fin de contrat, échéance de
+   * garantie, anniversaire d'installation).
+   *
+   * Émis par le balayage QUOTIDIEN `balayerRappelsDates`, jamais par une
+   * écriture : une date se corrige, un client se supprime, et une règle
+   * peut être créée après la saisie. Un balayage voit l'état réel du jour.
+   */
+  | 'date.reached';
 
 export interface CRMEvent {
   type: CRMEventType;
@@ -90,6 +134,11 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'invoice.paid': 'invoice_paid',
   'invoice.overdue': 'invoice_overdue',
   'custom_field.changed': 'custom_field_changed',
+  'client.replied': 'client_replied',
+  'client.tagged': 'client_tagged',
+  'task.completed': 'task_completed',
+  'note.added': 'note_added',
+  'date.reached': 'date_reached',
 };
 
 // ── Bus singleton ───────────────────────────────────────────────

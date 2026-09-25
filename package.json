@@ -43,7 +43,6 @@
     "qa:audit-base": "node --env-file=.env.local scripts/qa/audit-base.mjs",
     "qa:formulaires": "node --env-file=.env.local scripts/qa/formulaires.mjs",
     "qa:roles": "node --env-file=.env.local scripts/qa/roles.mjs",
-    "qa:parcours-client": "node scripts/qa/parcours-client-final.mjs",
     "qa:fuite": "node --env-file=.env.local scripts/qa/fuite-entre-organisations.mjs",
     "qa:envoi-reel": "node --env-file=.env.local scripts/qa/envoi-reel.mjs",
     "qa:automatisations": "node --env-file=.env.local scripts/qa/automatisations.mjs",
@@ -56,6 +55,8 @@
     "qa:lumi-execution": "node --env-file=.env.local --import tsx scripts/qa/executer-outils-staging.mts",
     "qa:lumi": "node --env-file=.env.local scripts/qa/evaluer-lumi.mjs",
     "qa:paywall": "node --env-file=.env.local scripts/qa/verifier-paywall.mjs",
+    "qa:workflow-bout-en-bout": "tsx --env-file=.env.local scripts/qa/verifier-workflow-bout-en-bout.mjs",
+    "qa:panneau-automatisation": "node --env-file=.env.local scripts/qa/verifier-panneau-automatisation.mjs",
     "qa:boutons-atteignables": "node --env-file=.env.local scripts/qa/boutons-atteignables.mjs",
     "qa:rls-roles": "node --env-file=.env.local scripts/qa/verifier-rls-roles.mjs",
     "check:accessibilite": "node scripts/accessibilite-mesure.mjs --fichiers",
@@ -75,7 +76,8 @@
     "qa:fumee": "node --env-file=.env.local --import tsx scripts/qa/fumee-cout.mts",
     "test:quarantaine": "vitest run --config vitest.quarantaine.config.ts",
     "qa:qualite": "node --env-file=.env.local --import tsx scripts/qa/qualite-lumi.mts",
-    "qa:juge": "node --env-file=.env.local --import tsx scripts/qa/juge-lumi.mts"
+    "qa:juge": "node --env-file=.env.local --import tsx scripts/qa/juge-lumi.mts",
+    "qa:parcours-client": "node scripts/qa/parcours-client-final.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.124.0",

@@ -700,6 +700,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'valide jusqu au', 'date d expiration', 'echeance de validite',
       ],
     },
+    {
+      field: 'line_items',
+      labelFr: 'Lignes (services)',
+      labelEn: 'Line items',
+      types: ['text'],
+      synonyms: [
+        'line items', 'line item', 'quote items', 'items', 'products and services',
+        'lignes', 'lignes de soumission', 'articles',
+      ],
+    },
   ],
 
   job: [
@@ -1135,6 +1145,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'discount', 'discounts', 'discount amount', 'discount total', 'total discount', 'invoice discount',
         'rabais', 'remise', 'escompte', 'reduction', 'montant du rabais',
+      ],
+    },
+    {
+      field: 'line_items',
+      labelFr: 'Lignes (services facturés)',
+      labelEn: 'Line items',
+      types: ['text'],
+      synonyms: [
+        'line items', 'line item', 'invoice items', 'items', 'products and services', 'services billed',
+        'lignes', 'lignes de facture', 'articles', 'services factures',
       ],
     },
     {

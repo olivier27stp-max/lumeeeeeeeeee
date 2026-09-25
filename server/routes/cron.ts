@@ -10,6 +10,7 @@
  */
 
 import { Router, type Request, type Response } from 'express';
+import { balayerRappelsDates } from '../lib/rappels-dates';
 import crypto from 'crypto';
 import { getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
@@ -75,6 +76,26 @@ router.post('/cron/recurring-invoices', async (req, res) => {
     return res.status(200).json({ ok: true, ...summary });
   } catch (err: any) {
     return sendSafeError(res, err, 'Cron job failed.', '[cron/recurring-invoices]');
+  }
+});
+
+/*
+ * Les rappels sur date — une fois par jour.
+ *
+ * Fin de contrat, échéance de garantie, entretien annuel : une date dans un
+ * champ personnalisé, et le message part X jours avant. Le balayage voit
+ * l'état RÉEL du jour, alors qu'une tâche planifiée six mois plus tôt
+ * parlerait d'un monde qui n'existe plus.
+ */
+router.post('/cron/rappels-dates', async (req, res) => {
+  if (!checkCronAuth(req, res)) return;
+  try {
+    const svc = getServiceClient();
+    const resume = await balayerRappelsDates(svc);
+    logger.info('[cron] rappels-dates:', { ...resume });
+    return res.status(200).json({ ok: true, ...resume });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Cron job failed.', '[cron/rappels-dates]');
   }
 });
 
