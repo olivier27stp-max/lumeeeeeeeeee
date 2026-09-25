@@ -65,6 +65,8 @@ export function useSettingsNav(): NavGroup[] {
       heading: isFr ? 'Entreprise' : 'Business',
       items: [
         { path: '/settings/company', label: t.settings.companySettings, icon: Building },
+        // Champs personnalisés : en haut, pas cachés sous « Plus » (introuvables sans défiler, 2026-09-25).
+        ...(champsV2 ? [{ path: '/settings/custom-fields', label: isFr ? 'Champs personnalisés' : 'Custom fields', icon: Layers }] : []),
         { path: '/settings/offices', label: isFr ? 'Bureaux' : 'Offices', icon: Building2 },
         { path: '/settings/billing', label: isFr ? 'Forfait & facturation' : 'Plan & billing', icon: CreditCard },
       ],
@@ -99,7 +101,6 @@ export function useSettingsNav(): NavGroup[] {
     {
       heading: isFr ? 'Plus' : 'More',
       items: [
-        ...(champsV2 ? [{ path: '/settings/custom-fields', label: isFr ? 'Champs personnalisés' : 'Custom fields', icon: Layers }] : []),
         { path: '/settings/reports', label: isFr ? 'Rapports' : 'Reports', icon: BarChart3 },
         { path: '/settings/archives', label: (t.settings as any).archives || 'Archives', icon: Archive },
         { path: '/settings/marketplace', label: 'Marketplace', icon: Store },
