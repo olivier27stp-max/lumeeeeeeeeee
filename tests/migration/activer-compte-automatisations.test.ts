@@ -71,7 +71,10 @@ beforeEach(() => {
 
 async function envoyerSmsAutomatisation(orgId: string, to: string) {
   const { executeAction } = await import('../../server/lib/actions/index');
-  const create = vi.fn(async () => ({ sid: 'SM1', status: 'queued' }));
+  // `vi.fn(async () => …)` donne un tuple d'arguments VIDE : TypeScript
+  // refuse alors `create.mock.calls[0][0]` (TS2493). On déclare des
+  // arguments variadiques pour pouvoir inspecter l'appel.
+  const create = vi.fn(async (..._a: any[]) => ({ sid: 'SM1', status: 'queued' }));
   const ctx: any = {
     supabase: fauxAdmin, orgId, entityType: 'job', entityId: 'j1',
     twilio: { client: { messages: { create } }, phoneNumber: '+15145550000' }, baseUrl: 'https://lumecrm.net',
