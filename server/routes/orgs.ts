@@ -97,14 +97,14 @@ router.get('/orgs/offices/overview', async (req, res) => {
     const { data: actif } = await admin.from('orgs').select('company_group_id').eq('id', auth.orgId).maybeSingle();
     const { data: adhesions, error: eAdh } = await admin
       .from('memberships')
-      .select('org_id, orgs!inner(id, name, created_at, deleted_at, company_group_id)')
+      .select('org_id, orgs!inner(id, name, created_at, deleted_at, archived_at, company_group_id)')
       .eq('user_id', auth.user.id)
       .eq('role', 'owner')
       .eq('status', 'active');
     if (eAdh) throw eAdh;
     const bureaux = (adhesions || [])
       .map((a: any) => a.orgs)
-      .filter((o: any) => o && !o.deleted_at && (o.id === auth.orgId || (actif?.company_group_id && o.company_group_id === actif.company_group_id)))
+      .filter((o: any) => o && !o.deleted_at && !o.archived_at && (o.id === auth.orgId || (actif?.company_group_id && o.company_group_id === actif.company_group_id)))
       .sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
     const { data: reglages } = await admin.from('company_settings').select('org_id, company_name').in('org_id', bureaux.map((b: any) => b.id));
     const nom = new Map((reglages || []).filter((r: any) => r.company_name).map((r: any) => [String(r.org_id), String(r.company_name)]));

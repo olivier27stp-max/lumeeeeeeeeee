@@ -124,7 +124,7 @@ export async function bureauxCibles(userId: string, orgActif: string): Promise<B
   if (eActif) throw eActif;
   const { data: adhesions, error } = await admin
     .from('memberships')
-    .select('org_id, orgs!inner(id, name, created_at, deleted_at, company_group_id)')
+    .select('org_id, orgs!inner(id, name, created_at, deleted_at, archived_at, company_group_id)')
     .eq('user_id', userId)
     .eq('status', 'active');
   if (error) throw error;

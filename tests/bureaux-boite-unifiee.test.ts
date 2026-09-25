@@ -60,3 +60,14 @@ describe('assignation (scripts/qa/bureaux-assignation.mts, 7/7)', () => {
     expect(m).toContain('foreign key (assigned_to, org_id) references public.memberships(user_id, org_id)');
   });
 });
+
+describe('bureau fermé (orgs.archived_at)', () => {
+  it('exclu de la boîte, de la vue d’ensemble et des copies d’automatisations', () => {
+    const r = bureauxMemeEntreprise('a', 'g1', [
+      { id: 'a', name: 'a', created_at: '1', deleted_at: null, company_group_id: 'g1' },
+      { id: 'b', name: 'b', created_at: '2', deleted_at: null, archived_at: '2026-09-25', company_group_id: 'g1' },
+    ]);
+    expect(r.map((o) => o.id)).toEqual(['a']);
+    expect(lire('server/routes/orgs.ts')).toContain('!o.archived_at');
+  });
+});
