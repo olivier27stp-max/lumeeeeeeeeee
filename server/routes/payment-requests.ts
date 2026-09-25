@@ -5,6 +5,7 @@ import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { emailFrom, twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
+import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from '../lib/migration/gel-communications';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getInvoiceForOrg } from '../lib/payments';
 import {
@@ -207,12 +208,17 @@ async function sendPaymentSms(params: {
 
   const body = `${companyName}: Payment of ${amountFormatted} requested for invoice ${params.invoiceNumber}. Pay securely here: ${params.paymentUrl}`;
 
+  // Compte importé pas encore activé : personne ne contacte ses clients (gel-communications.ts).
+  const telephone = normalizeE164(params.clientPhone);
+  const orgGelee = await destinataireGele(getServiceClient(), { phone: telephone }, params.orgId);
+  if (orgGelee) { journaliserBlocage('sms', orgGelee, telephone, 'demande de paiement'); return { sent: false, reason: MESSAGE_GEL }; }
+
   try {
     const statusCallback = getTwilioStatusCallbackUrl();
     const msg = await twilioClient.messages.create({
       body,
       from: fromNumber,
-      to: normalizeE164(params.clientPhone),
+      to: telephone,
       // Accusé de réception Twilio (sinon le statut reste figé à « envoyé »).
       ...(statusCallback ? { statusCallback } : {}),
     });

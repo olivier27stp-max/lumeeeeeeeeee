@@ -233,7 +233,7 @@ function Frame({ fr, children, session }: { fr: boolean; children: React.ReactNo
       <header className="bg-white border-b border-[#e6e2d8]">
         <div className="max-w-[1100px] mx-auto px-6 h-16 flex items-center gap-4">
           <span className="text-[20px] font-extrabold tracking-tight">Lume</span>
-          <span className="text-[14px] text-[#6b675e] font-medium">{fr ? 'Migration des données' : 'Data migration'}</span>
+          <span className="text-[14px] text-[#6b675e] font-medium">{fr ? 'Migration accompagnée de vos données' : 'Assisted data migration'}</span>
           <span className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold">
             <ShieldCheck size={12} /> {fr ? 'Lien sécurisé' : 'Secure link'}
           </span>
@@ -411,10 +411,18 @@ function InstructionsSection({ fr, token, session }: { fr: boolean; token: strin
               </ul>
             </div>
           )}
+          {(cfg.notImported ?? []).length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5">
+              <div className="font-semibold mb-1.5 text-amber-900">{fr ? 'Ce qui ne s\'importe pas' : 'What is not imported'}</div>
+              <ul className="list-disc pl-5 space-y-0.5 text-amber-900/90">
+                {cfg.notImported.map((l: { fr: string; en: string }, i: number) => <li key={i}>{fr ? l.fr : l.en}</li>)}
+              </ul>
+            </div>
+          )}
           <div className="text-[12px] text-[#8a8578]">
             {fr
-              ? 'Formats acceptés : CSV (données) et PDF (archive de référence). XLSX et ZIP ne sont pas acceptés pour l\'instant.'
-              : 'Accepted formats: CSV (data) and PDF (reference archive). XLSX and ZIP are not accepted yet.'}
+              ? 'Formats acceptés : CSV ou Excel (.xlsx, .xls — première feuille seulement) pour les données, PDF pour une archive de référence. Fichiers ZIP refusés. 25 Mo par fichier.'
+              : 'Accepted formats: CSV or Excel (.xlsx, .xls — first sheet only) for data, PDF for a reference archive. ZIP files are refused. 25 MB per file.'}
             {cfg.docsUrl && (
               <>
                 {' · '}

@@ -9,7 +9,7 @@ import { canTransition } from './state-machine';
 import { logMigrationAudit } from './audit';
 import { prepareStaging } from './pipeline';
 import { findDuplicatesForEntity } from './duplicates';
-import { runDryRun, ENTITY_LABELS_FR } from './importer';
+import { runDryRun, ENTITY_LABELS_FR, loadStaging } from './importer';
 import type { MigrationRow, TargetEntity, DryRunReport, OnProgression } from './types';
 
 /**
@@ -150,12 +150,19 @@ async function purgerCandidatsDoublonsPerimes(admin: SupabaseClient, migrationId
 }
 
 export async function lancerImportTest(admin: SupabaseClient, migration: MigrationRow, acteur: ActeurMigration): Promise<{ batchId: string; report: DryRunReport } | null> {
+  // Transitions ATOMIQUES (compare-and-swap sur le statut) : le bot (cron de 10 min) et un
+  // clic « Import test » dans la console peuvent arriver à la même seconde. Avant, les deux
+  // passaient et deux dry-runs tournaient en parallèle sur la même migration (doublons de
+  // candidats, progression qui se marche dessus). Zéro ligne modifiée = quelqu'un d'autre a
+  // pris la main → on s'arrête sans rien casser.
   if (migration.status !== 'ready_for_test') {
     if (!canTransition(migration.status, 'ready_for_test')) return null;
-    await admin.from('data_migrations').update({ status: 'ready_for_test' }).eq('id', migration.id).eq('status', migration.status);
+    const { data: bouge } = await admin.from('data_migrations').update({ status: 'ready_for_test' }).eq('id', migration.id).eq('status', migration.status).select('id');
+    if (!bouge || bouge.length === 0) return null;
     migration.status = 'ready_for_test';
   }
-  await admin.from('data_migrations').update({ status: 'testing' }).eq('id', migration.id).eq('status', 'ready_for_test');
+  const { data: pris } = await admin.from('data_migrations').update({ status: 'testing' }).eq('id', migration.id).eq('status', 'ready_for_test').select('id');
+  if (!pris || pris.length === 0) return null;
   migration.status = 'testing';
   const { data: batch, error: batchErr } = await admin
     .from('migration_import_batches')
@@ -176,13 +183,9 @@ export async function lancerImportTest(admin: SupabaseClient, migration: Migrati
     // Même liste que main (fb3a0342) : les taxes importées sont dédoublonnées contre les taxes actives.
     const entities: TargetEntity[] = ['tax_config', 'client', 'property', 'billing_property', 'job', 'quote', 'invoice', 'payment'];
     for (const entity of entities) {
-      const { data: records } = await admin
-        .from('migration_staging_records')
-        .select('id, normalized, relations')
-        .eq('migration_id', migration.id)
-        .eq('entity_type', entity)
-        .in('status', ['ready', 'duplicate'])
-        .limit(20000);
+      // Lecture paginée (loadStaging) : l'ancien `.limit(20000)` laissait passer sans doublon
+      // toute ligne au-delà de la 20 000e d'une même entité, en silence.
+      const records = await loadStaging(admin, migration.id, entity, ['ready', 'duplicate']);
       publier({ etape: `Recherche de doublons — ${ENTITY_LABELS_FR[entity] ?? entity}`, entity, processed: 0, total: records?.length ?? 0, entites_faites: entities.indexOf(entity), entites_total: entities.length });
       if (!records || records.length === 0) continue;
       const matches = await findDuplicatesForEntity(admin, migration.org_id, entity, records as any);

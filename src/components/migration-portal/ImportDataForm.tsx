@@ -37,7 +37,7 @@ const ACCEPT = '.csv,.xlsx,.xls';
 
 const PARSE_ERROR_FR: Record<string, string> = {
   empty_file: 'Le fichier est vide.',
-  truncated: 'Fichier tronqué : trop de lignes, scindez l’export.',
+  truncated: 'Fichier trop long : plus de 50 000 lignes, seules les premières ont été lues. Scindez l’export en plusieurs fichiers (idéalement moins de 20 000 lignes chacun).',
   binary_content: 'Ce n’est pas un fichier texte CSV.',
   not_excel: 'Ce n’est pas un classeur Excel valide.',
   excel_unreadable: 'Classeur Excel illisible.',
