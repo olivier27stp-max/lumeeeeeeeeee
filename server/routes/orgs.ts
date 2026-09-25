@@ -146,8 +146,10 @@ router.get('/orgs/offices', async (req, res) => {
 });
 
 // ─── GET /orgs/offices/grantable-members ─────────────────────────
-// Owners/admins actifs du bureau actif (sauf l'appelant) : candidats à un
-// accès immédiat au nouveau bureau, depuis le formulaire de création.
+// Admins actifs du bureau actif : candidats à un accès immédiat au nouveau
+// bureau, depuis le formulaire de création. Les propriétaires n'y figurent
+// plus : ils reçoivent tous les bureaux du groupe automatiquement (trigger
+// propager_proprietaires_bureaux, migration 20260927160000).
 router.get('/orgs/offices/grantable-members', async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
@@ -164,7 +166,7 @@ router.get('/orgs/offices/grantable-members', async (req, res) => {
       .select('user_id, role, full_name, avatar_url')
       .eq('org_id', auth.orgId)
       .eq('status', 'active')
-      .in('role', ['owner', 'admin'])
+      .eq('role', 'admin')
       .neq('user_id', auth.user.id);
 
     const members = await Promise.all(
@@ -303,7 +305,8 @@ router.post('/orgs/create-office', validate(createOfficeSchema), async (req, res
       for (const w of inherited.warnings) console.warn('[orgs/create-office] inherit:', w);
     }
 
-    // Accès immédiat pour d'autres owners/admins du bureau actif.
+    // Accès immédiat pour des admins du bureau actif (les autres propriétaires
+    // ont déjà été ajoutés par le trigger à l'insertion du créateur).
     let granted: string[] = [];
     if (body.grant_user_ids.length > 0) {
       const { data: sourceMembers } = await admin
