@@ -116,6 +116,7 @@ describe('4. companyOrgIds (groupe) uniquement pour le catalogue et les droits',
     'server/routes/invitations.ts',                 // sièges du plan
     'server/routes/creator-space-features.ts',      // plateforme (admins Lume seulement)
     'server/routes/creator-space-notes.ts',         // plateforme (admins Lume seulement)
+    'server/routes/creator-space-billing.ts',       // plateforme : abonnement Stripe du workspace (admins Lume seulement)
   ]);
   it('aucun autre fichier serveur ne lit des données à l’échelle du groupe', () => {
     const fautifs = SERVEUR.filter((f) => !AUTORISES.has(f) && /companyOrgIds\(/.test(lire(f)));
