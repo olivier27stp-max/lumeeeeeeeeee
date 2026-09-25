@@ -252,6 +252,14 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
      * Le marqueur `bientot` posé ici était une ERREUR de ma part : je
      * l'avais déduit du code au lieu de regarder la base.
      */
+    champs: [
+      {
+        cle: 'stage_id', fr: 'Quelle étape', en: 'Which stage',
+        obligatoire: false, type: 'etape_pipeline',
+        aide_fr: 'Laissez vide pour toutes les étapes, ou choisissez celle qui déclenche.',
+        aide_en: 'Leave empty for every stage, or pick the one that triggers.',
+      },
+    ],
   },
   {
     cle: 'deal.stage_idle', fr: 'Opportunité qui dort', en: 'Deal going stale',
@@ -262,6 +270,14 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     // vérifiée le 2026-09-25) remplit la file, que le planificateur vide.
     // Aucun événement en prod à ce jour, simplement parce qu'aucune
     // opportunité n'a encore stagné assez longtemps.
+    champs: [
+      {
+        cle: 'stage_id', fr: 'Quelle étape', en: 'Which stage',
+        obligatoire: false, type: 'etape_pipeline',
+        aide_fr: 'Laissez vide pour toutes les étapes, ou choisissez celle à surveiller.',
+        aide_en: 'Leave empty for every stage, or pick the one to watch.',
+      },
+    ],
   },
 
   // ── Champs personnalisés ──
@@ -333,7 +349,16 @@ export type TypeChamp =
    * La liste vient du serveur : les règles publiées, moins celle qu'on est
    * en train d'éditer (une règle qui se démarre elle-même boucle).
    */
-  | 'automatisation';
+  | 'automatisation'
+  /**
+   * Une ÉTAPE d'un pipeline de ventes.
+   *
+   * La liste vient de l'organisation (`pipeline_stages`) : chaque
+   * entreprise a ses propres étapes. Le choix est stocké dans
+   * `conditions.stage_id`, que le moteur compare à
+   * `event.metadata.stage_id` (evaluateConditions).
+   */
+  | 'etape_pipeline';
 
 export interface ChampAction {
   cle: string;

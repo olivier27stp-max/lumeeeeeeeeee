@@ -53,12 +53,14 @@ import {
   retirerEtape,
   estFormatOrigine,
   projeterFormatOrigine,
+  apercuConversion,
 } from '../lib/sequenceTypes';
 import SequenceCanvas from '../components/automations/SequenceCanvas';
 import PanneauEtape from '../components/automations/PanneauEtape';
 import TiroirChoix, { type ChoixTiroir } from '../components/automations/TiroirChoix';
 import PanneauDeclencheur from '../components/automations/PanneauDeclencheur';
 import { listerChamps } from '../lib/champsPersoApi';
+import { fetchPipelines, fetchStages } from '../lib/pipelineVentesApi';
 import {
   ACTIONS,
   DECLENCHEURS,
@@ -148,6 +150,13 @@ export default function AutomationBuilderPage() {
    * siens, et une liste vide doit se distinguer d'une liste pas encore lue.
    */
   const [champsDate, setChampsDate] = useState<Array<{ id: string; label: string }>>([]);
+  /**
+   * Les étapes des pipelines, pour « Opportunité entre dans une étape ».
+   *
+   * Chargées seulement si le déclencheur en a besoin : deux appels réseau
+   * de plus sur un parcours « facture payée » ne serviraient à rien.
+   */
+  const [etapesPipeline, setEtapesPipeline] = useState<Array<{ id: string; label: string }>>([]);
   /** L'étape dont le menu « … » est ouvert. */
   const [menuEtape, setMenuEtape] = useState<string | null>(null);
   /** L'aperçu (« Tester ») : ce qui partirait, sur un vrai client. */
@@ -640,6 +649,46 @@ export default function AutomationBuilderPage() {
     [formatOrigine, regle, steps],
   );
 
+  /**
+   * Ce qu'une conversion ferait — calculé AVANT de proposer le bouton.
+   *
+   * Exigence de Will : l'utilisateur doit voir ce qui va changer avant de
+   * confirmer. Et 100 règles de prod sur 250 portent un `log_activity` que
+   * le serveur refuse : mieux vaut ne pas offrir le bouton que de le faire
+   * échouer au clic.
+   */
+  const conversion = useMemo(
+    () => (formatOrigine && regle
+      ? apercuConversion({ actions: regle.actions, delay_seconds: regle.delay_seconds })
+      : null),
+    [formatOrigine, regle],
+  );
+  const [conversionEnCours, setConversionEnCours] = useState(false);
+
+  /** Convertir : un seul écrit, confirmé, jamais automatique. */
+  const convertirParcours = useCallback(async () => {
+    if (!regle || !conversion?.possible) return;
+    const ok = await confirmer({
+      title: fr ? 'Convertir ce parcours ?' : 'Convert this journey?',
+      message: fr
+        ? `Les ${conversion.etapes.length} étapes affichées deviendront modifiables dans le canevas. L'automatisation continue de fonctionner pendant et après : les envois ne changent pas.`
+        : `The ${conversion.etapes.length} steps shown will become editable on the canvas. The automation keeps running during and after: what it sends does not change.`,
+      confirmLabel: fr ? 'Convertir' : 'Convert',
+    });
+    if (!ok) return;
+    setConversionEnCours(true);
+    try {
+      const maj = await modifierAutomatisation(regle.id, { steps: conversion.etapes });
+      setRegle(maj);
+      setSteps((maj.steps as Etape[] | undefined) ?? []);
+      toast.success(fr ? 'Parcours converti — il est modifiable' : 'Journey converted — it is editable');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setConversionEnCours(false);
+    }
+  }, [regle, conversion, fr]);
+
   const declencheurLabel = useMemo(() => {
     if (!catalogue || !regle) return fr ? '— à choisir —' : '— to pick —';
     const d = catalogue.declencheurs.find((x) => x.cle === regle.trigger_event);
@@ -684,6 +733,32 @@ export default function AutomationBuilderPage() {
     return () => { vivant = false; };
   }, [besoinChampsDate]);
 
+  /** Le déclencheur demande-t-il une étape de pipeline ? */
+  const besoinEtapes = !!declencheurCourant?.champs?.some((c) => c.type === 'etape_pipeline');
+  useEffect(() => {
+    if (!besoinEtapes) return;
+    let vivant = true;
+    (async () => {
+      try {
+        const pipelines = await fetchPipelines();
+        // Le nom du pipeline PRÉFIXE celui de l'étape : deux pipelines ont
+        // souvent une étape « Soumission envoyée », et une liste de doublons
+        // ne permet pas de choisir.
+        const listes = await Promise.all(pipelines.map(async (p) => {
+          const etapes = await fetchStages(p.id);
+          return etapes
+            .filter((e) => !e.archived_at)
+            .map((e) => ({ id: e.id, label: `${p.name} · ${fr ? e.name_fr : e.name_en}` }));
+        }));
+        if (vivant) setEtapesPipeline(listes.flat());
+      } catch (e: unknown) {
+        // Une liste vide se distingue mal d'un échec : on le journalise.
+        console.error('[automations] étapes de pipeline illisibles', e);
+      }
+    })();
+    return () => { vivant = false; };
+  }, [besoinEtapes, fr]);
+
   /**
    * Les réglages du déclencheur, en clair sous sa carte.
    *
@@ -708,12 +783,15 @@ export default function AutomationBuilderPage() {
       if (champ.type === 'champ_date') {
         const nom = champsDate.find((c) => c.id === String(v))?.label;
         bouts.push(nom ?? (fr ? 'champ supprimé' : 'deleted field'));
+      } else if (champ.type === 'etape_pipeline') {
+        const nom = etapesPipeline.find((e) => e.id === String(v))?.label;
+        bouts.push(nom ?? (fr ? 'étape supprimée' : 'deleted stage'));
       } else {
         bouts.push(`${fr ? champ.fr : champ.en} : ${v}`);
       }
     }
     return bouts.length ? bouts.join(' · ') : null;
-  }, [declencheurCourant, regle?.conditions, champsDate, fr]);
+  }, [declencheurCourant, regle?.conditions, champsDate, etapesPipeline, fr]);
 
   /** Enregistrer les réglages du déclencheur. */
   const enregistrerDeclencheur = useCallback(async (conditions: Record<string, unknown>) => {
@@ -1054,9 +1132,37 @@ export default function AutomationBuilderPage() {
                       </p>
                       <p className="mt-1 text-[12px] text-text-secondary">
                         {fr
-                          ? 'Cette automatisation fonctionne normalement — elle s’affiche ici en lecture seule. La convertir permettra de la modifier dans le canevas.'
-                          : 'This automation works normally — it is shown here read-only. Converting it will let you edit it on the canvas.'}
+                          ? 'Cette automatisation fonctionne normalement — elle s’affiche ici en lecture seule.'
+                          : 'This automation works normally — it is shown here read-only.'}
                       </p>
+
+                      {/*
+                        Convertir n'est proposé QUE si rien ne se perd. Une
+                        règle qui écrit la trace interne (`log_activity`,
+                        100 règles de prod sur 250) n'est pas convertible :
+                        le serveur refuserait le parcours, et la convertir en
+                        retirant cette étape effacerait son historique en
+                        silence. On le dit plutôt que d'offrir un bouton qui
+                        échoue.
+                      */}
+                      {conversion?.possible ? (
+                        <button
+                          type="button"
+                          onClick={() => void convertirParcours()}
+                          disabled={conversionEnCours}
+                          className="glass-button mt-2 inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
+                        >
+                          {conversionEnCours
+                            ? (fr ? 'Conversion…' : 'Converting…')
+                            : (fr ? 'Convertir en parcours modifiable' : 'Convert to an editable journey')}
+                        </button>
+                      ) : (
+                        <p className="mt-2 text-[12px] text-text-tertiary">
+                          {fr
+                            ? 'Ce parcours contient une étape technique qui ne se convertit pas : il reste en lecture seule pour ne rien perdre.'
+                            : 'This journey contains a technical step that cannot be converted: it stays read-only so nothing is lost.'}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1390,6 +1496,7 @@ export default function AutomationBuilderPage() {
           conditions={(regle?.conditions ?? null) as Record<string, unknown> | null}
           fr={fr}
           champsDate={champsDate}
+          etapesPipeline={etapesPipeline}
           onEnregistrer={enregistrerDeclencheur}
           onFermer={() => setReglageDeclencheur(false)}
         />

@@ -250,3 +250,43 @@ export function projeterFormatOrigine(regle: {
 
   return etapes;
 }
+
+/**
+ * Ce qu'une conversion ferait — AVANT de la faire.
+ *
+ * Exigence de Will : « la conversion doit être validée avant d'être
+ * appliquée (dry-run ou diff visible — l'utilisateur doit voir ce qui va
+ * changer avant de confirmer) ».
+ *
+ * Le cas qui oblige à ce contrôle : `log_activity` écrit la trace interne
+ * (`activity_log`) et n'est PAS au catalogue, donc le serveur refuse un
+ * parcours qui en contient — mesuré en prod le 2026-09-25 : 100 règles sur
+ * 250 en portent une. Les convertir en la retirant ferait disparaître leur
+ * historique en silence. On refuse donc la conversion plutôt que de mutiler
+ * la règle, et on le DIT.
+ */
+export interface ApercuConversion {
+  /** La conversion est-elle possible sans rien perdre ? */
+  possible: boolean;
+  /** Les étapes telles qu'elles seraient enregistrées. */
+  etapes: Etape[];
+  /** Les types d'action qui empêchent la conversion, en clair. */
+  bloquants: string[];
+}
+
+/** Les types que le catalogue ne connaît pas et que le serveur refusera. */
+const TYPES_HORS_CATALOGUE = ['log_activity', 'send_notification', 'update_status'];
+
+export function apercuConversion(regle: {
+  actions?: unknown;
+  delay_seconds?: number | null;
+}): ApercuConversion {
+  const etapes = projeterFormatOrigine(regle);
+  const bloquants = [...new Set(
+    etapes
+      .filter((e): e is EtapeAction => e.type === 'action')
+      .map((e) => e.action.type)
+      .filter((t) => TYPES_HORS_CATALOGUE.includes(t)),
+  )];
+  return { possible: etapes.length > 0 && bloquants.length === 0, etapes, bloquants };
+}

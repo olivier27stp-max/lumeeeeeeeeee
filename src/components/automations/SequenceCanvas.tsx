@@ -297,7 +297,14 @@ export default function SequenceCanvas({
         {/* Le déclencheur : point de départ, jamais une étape.
             Cliquable — c'est le chemin pour en changer une fois le parcours
             commencé. */}
-        {onDeclencheur && !lectureSeule ? (
+        {/*
+            La carte « Quand » reste cliquable MÊME en lecture seule : le
+            déclencheur et ses réglages (quelle étape de pipeline, quelle
+            date) ne font pas partie du parcours figé — ils se changent sur
+            une règle au format d'origine comme sur une autre. Seules les
+            ÉTAPES sont gelées.
+        */}
+        {onDeclencheur ? (
           <button
             type="button"
             onClick={onDeclencheur}

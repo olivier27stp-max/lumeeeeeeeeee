@@ -29,12 +29,14 @@ interface Props {
   fr: boolean;
   /** Champs date de la fiche client, pour le type `champ_date`. */
   champsDate: Array<{ id: string; label: string }>;
+  /** Étapes des pipelines, pour le type `etape_pipeline`. */
+  etapesPipeline?: Array<{ id: string; label: string }>;
   onEnregistrer: (conditions: Record<string, unknown>) => void;
   onFermer: () => void;
 }
 
 export default function PanneauDeclencheur({
-  declencheur, conditions, fr, champsDate, onEnregistrer, onFermer,
+  declencheur, conditions, fr, champsDate, etapesPipeline = [], onEnregistrer, onFermer,
 }: Props) {
   /*
    * Le brouillon : toutes les valeurs en TEXTE, comme les champs d'action.
@@ -121,6 +123,7 @@ export default function PanneauDeclencheur({
               onChange={(v) => setBrouillon((p) => ({ ...p, [champ.cle]: v }))}
               fr={fr}
               champsDate={champsDate}
+              etapesPipeline={etapesPipeline}
             />
           ) : null,
         )}

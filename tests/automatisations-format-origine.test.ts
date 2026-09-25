@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { estFormatOrigine, projeterFormatOrigine } from '../src/lib/sequenceTypes';
+import { apercuConversion, estFormatOrigine, projeterFormatOrigine } from '../src/lib/sequenceTypes';
 
 describe('reconnaître une règle au format d’origine', () => {
   it('steps vide + actions remplies = format d’origine', () => {
@@ -141,5 +141,46 @@ describe('la projection ne touche JAMAIS la règle', () => {
     const copie = JSON.parse(JSON.stringify(regle));
     projeterFormatOrigine(regle);
     expect(regle).toEqual(copie);
+  });
+});
+
+describe('l’aperçu de conversion — dire AVANT, pas échouer après', () => {
+  it('une règle de types connus est convertible', () => {
+    const a = apercuConversion({
+      delay_seconds: 86400,
+      actions: [{ type: 'send_email', config: { subject: 'A', body: 'B' } }],
+    });
+    expect(a.possible).toBe(true);
+    expect(a.bloquants).toEqual([]);
+    expect(a.etapes).toHaveLength(2); // l'attente + l'action
+  });
+
+  it('`log_activity` EMPÊCHE la conversion, et est nommé', () => {
+    /*
+     * Il écrit la trace interne (`activity_log`) et n'est pas au catalogue :
+     * le serveur refuse le parcours. Mesuré en prod le 2026-09-25 :
+     * 100 règles sur 250 en portent un. Les convertir en le retirant ferait
+     * disparaître leur historique EN SILENCE — on refuse et on le dit.
+     */
+    const a = apercuConversion({
+      delay_seconds: 0,
+      actions: [{ type: 'send_sms', config: { body: 'x' } }, { type: 'log_activity', config: {} }],
+    });
+    expect(a.possible).toBe(false);
+    expect(a.bloquants).toContain('log_activity');
+    // Les étapes restent calculées : l'aperçu montre quand même le parcours.
+    expect(a.etapes).toHaveLength(2);
+  });
+
+  it('une règle vide n’est pas « convertible »', () => {
+    expect(apercuConversion({ delay_seconds: 0, actions: [] }).possible).toBe(false);
+  });
+
+  it('un type bloquant n’est listé qu’UNE fois', () => {
+    const a = apercuConversion({
+      delay_seconds: 0,
+      actions: [{ type: 'log_activity', config: {} }, { type: 'log_activity', config: {} }],
+    });
+    expect(a.bloquants).toEqual(['log_activity']);
   });
 });
