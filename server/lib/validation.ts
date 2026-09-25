@@ -991,6 +991,17 @@ const conditionsAutomatisation = z
           neq: valeurCondition.optional(),
           in: z.array(valeurCondition).min(1).max(50).optional(),
           not_in: z.array(valeurCondition).min(1).max(50).optional(),
+          /*
+           * Comparaisons de DATES et de NOMBRES : « créé après le
+           * 1er juin », « montant supérieur à 5000 ». Le moteur lit une
+           * date ISO comme une date, un nombre comme un nombre, et
+           * REFUSE la règle quand la comparaison n'a pas de sens
+           * (`evaluateConditions`).
+           */
+          gt: valeurCondition.optional(),
+          gte: valeurCondition.optional(),
+          lt: valeurCondition.optional(),
+          lte: valeurCondition.optional(),
         })
         .strict()
         .refine((o) => Object.keys(o).length > 0, 'Empty condition.'),

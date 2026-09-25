@@ -150,7 +150,27 @@ router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, 
     orgId: hook.org_id,
     entityType: 'automation_webhook',
     entityId: hook.id,
-    metadata: { corps, recu_le: new Date().toISOString() },
+    /*
+     * Les champs du JSON reçu sont étalés au premier niveau, EN PLUS de
+     * `corps`.
+     *
+     * Sans ça, un filtre « source = facebook » ne trouvait rien : le
+     * moteur lit `metadata.source`, et tout était enfoui sous
+     * `metadata.corps.source`. On ne pouvait donc filtrer sur RIEN de ce
+     * que le service extérieur envoie — constaté le 2026-09-25 en
+     * éprouvant les filtres de date.
+     *
+     * `corps` reste disponible entier, et nos deux champs sont posés
+     * APRÈS : un JSON qui porterait « recu_le » ne peut pas écraser
+     * l'heure que nous avons constatée.
+     */
+    metadata: {
+      ...(corps !== null && typeof corps === 'object' && !Array.isArray(corps)
+        ? (corps as Record<string, unknown>)
+        : {}),
+      corps,
+      recu_le: new Date().toISOString(),
+    },
   });
 
   const { error: erreurTrace } = await admin.from('automation_webhook_receipts').insert({

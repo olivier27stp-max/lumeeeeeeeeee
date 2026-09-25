@@ -41,22 +41,62 @@ import type { Etape, EtapeAction, EtapeAttendre, EtapeSi } from '../../lib/seque
 import ChampActionUI from './ChampAction';
 
 /** Les conditions d'une étape « si », en texte modifiable. */
+/** L'opérateur, tel qu'on l'ecrit : `montant > 5000`. */
+const SIGNES: Array<[string, string]> = [
+  ['gte', '>='], ['lte', '<='], ['gt', '>'], ['lt', '<'], ['neq', '!='], ['eq', '='],
+];
+
 function texteDesConditions(etape: Etape): string {
   if (etape.type !== 'si') return '';
-  return Object.entries(etape.conditions ?? {})
-    .map(([k, v]) => `${k} = ${String(v)}`)
-    .join('\n');
+  const lignes: string[] = [];
+  for (const [cle, v] of Object.entries(etape.conditions ?? {})) {
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      // Un intervalle (`{ gte, lt }`) s'ecrit sur DEUX lignes : c'est ce
+      // qu'on relit le mieux, et l'analyse les recolle sur la meme cle.
+      for (const [op, signe] of SIGNES) {
+        if (op in (v as Record<string, unknown>)) {
+          lignes.push(cle + ' ' + signe + ' ' + String((v as Record<string, unknown>)[op]));
+        }
+      }
+      continue;
+    }
+    lignes.push(cle + ' = ' + String(v));
+  }
+  return lignes.join(String.fromCharCode(10));
 }
 
 /** Le texte saisi → l'objet `conditions`. Une ligne incomplète est ignorée. */
-function analyserConditions(texte: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const ligne of texte.split('\n')) {
-    const i = ligne.indexOf('=');
-    if (i <= 0) continue;
-    const cle = ligne.slice(0, i).trim();
-    const val = ligne.slice(i + 1).trim();
-    if (cle && val) out[cle] = val;
+/** Un nombre pur (montant, quantité) reste un nombre. */
+const NOMBRE_SEUL = /^-?[0-9]+([.][0-9]+)?$/;
+
+function analyserConditions(texte: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const ligne of texte.split(String.fromCharCode(10))) {
+    // `>=` et `<=` d'abord : sinon `>` couperait `>=` en deux.
+    const trouve = SIGNES
+      .map(([op, signe]) => ({ op, signe, i: ligne.indexOf(signe) }))
+      .filter((x) => x.i > 0)
+      .sort((a, b) => (a.i - b.i) || (b.signe.length - a.signe.length))[0];
+    if (!trouve) continue;
+
+    const cle = ligne.slice(0, trouve.i).trim();
+    const val = ligne.slice(trouve.i + trouve.signe.length).trim();
+    if (!cle || !val) continue;
+
+    if (trouve.op === 'eq') {
+      // L'égalité reste écrite à plat : c'est la forme d'origine, que
+      // portent toutes les règles existantes.
+      out[cle] = val;
+      continue;
+    }
+
+    // Un montant s'écrit en chiffres : on le garde en nombre pour que la
+    // comparaison ne dépende pas d'une conversion plus loin.
+    const valeur = NOMBRE_SEUL.test(val) ? Number(val) : val;
+    const existant = out[cle];
+    out[cle] = (existant !== null && typeof existant === 'object' && !Array.isArray(existant))
+      ? { ...(existant as Record<string, unknown>), [trouve.op]: valeur }
+      : { [trouve.op]: valeur };
   }
   return out;
 }
@@ -488,8 +528,8 @@ export default function PanneauEtape({
                 </label>
                 <p className="mb-2 text-[11px] text-text-tertiary">
                   {fr
-                    ? 'Une ligne par condition, sous la forme champ = valeur. Le parcours suit « alors » quand toutes sont vraies.'
-                    : 'One condition per line, as field = value. The journey follows “then” when all are true.'}
+                    ? 'Une ligne par condition : champ = valeur, ou une comparaison (montant > 5000, created_at >= 2026-06-01). Deux lignes sur le même champ font un intervalle. Le parcours suit « alors » quand toutes sont vraies.'
+                    : 'One condition per line: field = value, or a comparison (amount > 5000, created_at >= 2026-06-01). Two lines on the same field make a range. The journey follows “then” when all are true.'}
                 </p>
 
                 {/*
@@ -502,12 +542,12 @@ export default function PanneauEtape({
                   d'inventer une liste exhaustive qui serait fausse ailleurs.
                 */}
                 <div className="mb-2 flex flex-wrap gap-1">
-                  {['statut', 'source', 'montant', 'stage_id'].map((exemple) => (
+                  {['statut = ', 'source = ', 'total_cents > ', 'created_at >= '].map((exemple) => (
                     <button
                       key={exemple}
                       type="button"
                       onClick={() => {
-                        const ajout = `${conditionsTexte.trim() ? `${conditionsTexte.replace(/\n+$/, '')}\n` : ''}${exemple} = `;
+                        const ajout = `${conditionsTexte.trim() ? `${conditionsTexte.replace(/\n+$/, '')}\n` : ''}${exemple}`;
                         setConditionsTexte(ajout);
                         setBrouillon({
                           ...(brouillon as EtapeSi),

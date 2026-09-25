@@ -248,13 +248,33 @@ describe('validation — ce qui entre en base', () => {
   });
 
   it('refuse un opérateur de condition que le moteur ignore', () => {
-    // `gt` n'est pas dans OPERATEURS_CONNUS : côté moteur il ferait échouer la
-    // règle ENTIÈRE, en silence. Mieux vaut le refuser à l'enregistrement.
+    /*
+     * Un opérateur que le moteur ne connaît pas ferait échouer la règle
+     * ENTIÈRE, en silence : mieux vaut le refuser à l'enregistrement.
+     *
+     * `gt` était l'exemple ici jusqu'au 2026-09-25 — il est désormais
+     * SUPPORTÉ (filtrer sur une date ou un montant). On éprouve donc le
+     * garde avec un opérateur qui, lui, n'existe toujours pas.
+     */
     const r = automationRuleCreateSchema.safeParse({
       ...valide(),
-      conditions: { amount_cents: { gt: 50000 } },
+      conditions: { amount_cents: { between: [1, 5] } },
     });
     expect(r.success).toBe(false);
+  });
+
+  it('accepte les comparaisons de dates et de montants', () => {
+    // Ajoutées le 2026-09-25 : « créé après le 1er juin », « plus de
+    // 5 000 $ ». Sans Zod, le serveur les rejetterait avant le moteur.
+    for (const conditions of [
+      { amount_cents: { gt: 500000 } },
+      { amount_cents: { gte: 500000, lte: 900000 } },
+      { created_at: { gt: '2026-06-01T00:00:00Z' } },
+      { created_at: { gte: '2026-06-01T00:00:00Z', lt: '2026-07-01T00:00:00Z' } },
+    ]) {
+      const r = automationRuleCreateSchema.safeParse({ ...valide(), conditions });
+      expect(r.success, JSON.stringify(conditions)).toBe(true);
+    }
   });
 
   it('accepte les 4 opérateurs que le moteur connaît', () => {
