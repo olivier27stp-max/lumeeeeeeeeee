@@ -124,6 +124,7 @@ import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
 import { initSentry, attachSentryErrorHandler, captureException, captureCronFailure, withCronCheckIn } from './lib/sentry';
 import { logger } from './lib/logger';
+import { messageTropDeDemandes } from './lib/message-429';
 
 const app = express();
 
@@ -324,7 +325,9 @@ function rateLimit(opts: { windowMs: number; max: number; keyFn?: (req: express.
       return next();
     }
     if (entry.count >= opts.max) {
-      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+      return res.status(429).json({
+        error: messageTropDeDemandes(Math.ceil((entry.resetAt - now) / 1000)),
+      });
     }
     entry.count++;
     return next();

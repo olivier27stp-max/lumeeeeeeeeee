@@ -224,11 +224,11 @@ export async function handleOAuthCallback(params: {
     .maybeSingle();
 
   if (stateError || !stateRecord) {
-    return { success: false, orgId: '', error: 'Invalid or expired callback state' };
+    return { success: false, orgId: '', error: 'Le lien de connexion n’est plus valide. Relancez la connexion depuis les Réglages.' };
   }
 
   if (new Date(stateRecord.expires_at) < new Date()) {
-    return { success: false, orgId: stateRecord.org_id, error: 'OAuth state expired. Please try again.' };
+    return { success: false, orgId: stateRecord.org_id, error: 'Le lien de connexion a expiré. Relancez la connexion depuis les Réglages.' };
   }
 
   // Mark state as consumed. Si l'écriture échoue, le state reste réutilisable

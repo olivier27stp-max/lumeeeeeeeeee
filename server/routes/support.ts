@@ -364,7 +364,7 @@ router.post('/support', validate(supportRequestSchema), async (req, res) => {
     const r = await escaladerTicket(admin, ticket, ctx, 'Formulaire de contact');
     if (!r.ok) {
       console.error('[support] escalade impossible pour le ticket', ticket.id);
-      return res.status(502).json({ error: 'Could not send your request right now. Please try again, or email ' + supportEmail + '.', code: 'send_failed', supportEmail });
+      return res.status(502).json({ error: 'Votre demande n’a pas pu être transmise pour le moment. Réessayez, ou écrivez-nous à ' + supportEmail + '.', code: 'send_failed', supportEmail });
     }
     return res.json({ ok: true, ticketId: ticket.id, priority: ctx.isPriority ? 'priority' : 'normal', sla: slaTexte(ctx.slaKey, 'en'), slaKey: ctx.slaKey });
   } catch (err: any) {
