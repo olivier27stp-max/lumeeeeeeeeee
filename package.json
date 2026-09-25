@@ -45,6 +45,7 @@
     "qa:formulaires": "node --env-file=.env.local scripts/qa/formulaires.mjs",
     "qa:roles": "node --env-file=.env.local scripts/qa/roles.mjs",
     "qa:fuite": "node --env-file=.env.local scripts/qa/fuite-entre-organisations.mjs",
+    "qa:isolation-bureaux": "node --env-file=.env.local scripts/qa/isolation-bureaux.mjs",
     "qa:envoi-reel": "node --env-file=.env.local scripts/qa/envoi-reel.mjs",
     "qa:automatisations": "node --env-file=.env.local scripts/qa/automatisations.mjs",
     "qa:parcours": "node --env-file=.env.local scripts/qa/parcours.mjs",
