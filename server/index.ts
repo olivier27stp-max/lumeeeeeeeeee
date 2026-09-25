@@ -1234,6 +1234,11 @@ app.get('/api/health', async (_req, res) => {
         // Ce qui empêche le suivi, quel que soit le fournisseur : une phrase
         // qui dit quoi corriger, `null` quand tout est en place.
         suivi_bloque: raisonSmtpMalgreResend() ?? raisonSesSansSuivi(),
+        /* Le mode QA détourne TOUS les courriels vers une seule adresse et
+           préfixe leur objet de « [QA → …] ». Il n'apparaissait que dans la
+           bannière de démarrage : laissé actif après un audit, plus aucun
+           client ne recevait rien, et rien ne le signalait. */
+        qa_redirection: qaRedirectActif() ? qaRedirectResume() : null,
       },
     });
   } catch (err: any) {

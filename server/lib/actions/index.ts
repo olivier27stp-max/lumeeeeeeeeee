@@ -836,7 +836,13 @@ export async function executeSendEmail(
     const { getCompanySettings, buildEmailLayout, senderForOrg, langueEntreprise } = await import('../../routes/emails');
     const { boutonPourEntite } = await import('../courriels/bouton-automatisation');
     const company = await getCompanySettings(ctx.orgId);
-    const unsubUrl = await getUnsubscribeUrl(ctx.supabase, ctx.orgId, to);
+    /* Le lien de désabonnement n'a de sens que sur un message COMMERCIAL.
+       Il était posé sur tout, y compris l'accusé de réception d'un formulaire :
+       quelqu'un qui vient de demander une soumission n'est sur aucune liste de
+       diffusion, et s'il clique il cesse aussi de recevoir ses factures.
+       `ctx.commercial` fait déjà cette distinction pour le plafond de
+       fréquence et la base légale — le pied de page la suit. */
+    const unsubUrl = ctx.commercial ? await getUnsubscribeUrl(ctx.supabase, ctx.orgId, to) : null;
 
     /* Le bouton vers la page publique de l'entité concernée.
        Les 26 relances automatiques partaient sans aucun bouton : toutes
