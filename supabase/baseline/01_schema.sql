@@ -1367,6 +1367,11 @@ begin
       new.company_group_id := gen_random_uuid();
     end if;
   end if;
+
+  insert into public.company_groups (id, name)
+  values (new.company_group_id, new.name)
+  on conflict (id) do nothing;
+
   return new;
 end;
 $$;
@@ -10802,6 +10807,53 @@ $$;
 
 
 --
+-- Name: pipeline_definir_affichage(uuid, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipeline_definir_affichage(p_pipeline_id uuid, p_color_mode text DEFAULT NULL::text, p_use_deal_probability boolean DEFAULT NULL::boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_org uuid;
+begin
+  select org_id into v_org
+  from public.pipelines_ventes
+  where id = p_pipeline_id;
+
+  if v_org is null then
+    raise exception 'Ce pipeline n''existe pas.' using errcode = 'P0002';
+  end if;
+
+  -- La même garde que la policy d'écriture de la table.
+  if not public.has_org_admin_role(auth.uid(), v_org) then
+    raise exception 'Tu n''as pas le droit de modifier ce pipeline.' using errcode = '42501';
+  end if;
+
+  -- Bornes : `color_mode` est un texte libre en base. Une valeur inconnue
+  -- ferait retomber l'affichage sur un défaut silencieux — on refuse plutôt.
+  if p_color_mode is not null
+     and p_color_mode not in ('none', 'dot', 'tint') then
+    raise exception 'Mode de couleur inconnu : %', p_color_mode using errcode = '22023';
+  end if;
+
+  update public.pipelines_ventes
+  set color_mode = coalesce(p_color_mode, color_mode),
+      use_deal_probability = coalesce(p_use_deal_probability, use_deal_probability),
+      updated_at = now()
+  where id = p_pipeline_id;
+end;
+$$;
+
+
+--
+-- Name: FUNCTION pipeline_definir_affichage(p_pipeline_id uuid, p_color_mode text, p_use_deal_probability boolean); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.pipeline_definir_affichage(p_pipeline_id uuid, p_color_mode text, p_use_deal_probability boolean) IS 'Règle l''affichage d''un pipeline après sa création (couleurs, probabilité par opportunité) : ces deux champs n''étaient posés qu''à la création et devenaient impossibles à changer (2026-09-25).';
+
+
+--
 -- Name: pipeline_definir_defaut(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -19267,6 +19319,26 @@ COMMENT ON TABLE public.communication_settings IS '[Messaging] Communication pre
 
 
 --
+-- Name: company_groups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.company_groups (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.company_groups FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: TABLE company_groups; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.company_groups IS 'Entreprise : regroupe les bureaux (orgs.company_group_id). Propriétaire des éléments d''entreprise.';
+
+
+--
 -- Name: company_operating_profile; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -19757,7 +19829,7 @@ CREATE TABLE public.orgs (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     employee_count text,
     logo_url text,
-    company_group_id uuid,
+    company_group_id uuid NOT NULL,
     deleted_at timestamp with time zone
 );
 
@@ -22735,25 +22807,6 @@ COMMENT ON VIEW public.jobs_pour_role IS 'Les jobs, montants masqués selon le c
 
 
 --
--- Name: lead_lists; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.lead_lists (
-    lead_id uuid NOT NULL,
-    list_id uuid NOT NULL
-);
-
-ALTER TABLE ONLY public.lead_lists FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: TABLE lead_lists; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.lead_lists IS '[CRM] Join table linking leads to user-defined lists (lead_id, list_id). Tenant scope inherited via lead/list.';
-
-
---
 -- Name: lead_sources; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -22773,27 +22826,6 @@ ALTER TABLE ONLY public.lead_sources FORCE ROW LEVEL SECURITY;
 --
 
 COMMENT ON TABLE public.lead_sources IS '[CRM] Per-org lead-source options (how leads were acquired). Tenant-scoped by org_id.';
-
-
---
--- Name: lists; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.lists (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    name text NOT NULL,
-    description text,
-    user_id uuid DEFAULT auth.uid() NOT NULL
-);
-
-ALTER TABLE ONLY public.lists FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: TABLE lists; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.lists IS '[CRM] User-defined lists for grouping leads/records (name, description). Scoped by user_id.';
 
 
 --
@@ -24737,26 +24769,6 @@ COMMENT ON TABLE public.pipeline_vues IS 'Vues sauvegardées du board (filtres +
 --
 
 COMMENT ON COLUMN public.pipeline_vues.filtres IS 'Filtres en jsonb pour survivre aux versions : le client ignore les clés qu''il ne connaît pas.';
-
-
---
--- Name: pipelines; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.pipelines (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    name text NOT NULL,
-    user_id uuid DEFAULT auth.uid() NOT NULL
-);
-
-ALTER TABLE ONLY public.pipelines FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: TABLE pipelines; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.pipelines IS '[CRM] Sales pipeline definitions (name). Scoped by user_id.';
 
 
 --
@@ -27934,6 +27946,14 @@ ALTER TABLE ONLY public.communication_settings
 
 
 --
+-- Name: company_groups company_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.company_groups
+    ADD CONSTRAINT company_groups_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: company_operating_profile company_operating_profile_org_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -28982,14 +29002,6 @@ ALTER TABLE ONLY public.jobs
 
 
 --
--- Name: lead_lists lead_lists_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lead_lists
-    ADD CONSTRAINT lead_lists_pkey PRIMARY KEY (lead_id, list_id);
-
-
---
 -- Name: lead_sources lead_sources_org_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -29003,14 +29015,6 @@ ALTER TABLE ONLY public.lead_sources
 
 ALTER TABLE ONLY public.lead_sources
     ADD CONSTRAINT lead_sources_pkey PRIMARY KEY (id);
-
-
---
--- Name: lists lists_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lists
-    ADD CONSTRAINT lists_pkey PRIMARY KEY (id);
 
 
 --
@@ -29667,14 +29671,6 @@ ALTER TABLE ONLY public.pipeline_vues
 
 ALTER TABLE ONLY public.pipeline_vues
     ADD CONSTRAINT pipeline_vues_pkey PRIMARY KEY (id);
-
-
---
--- Name: pipelines pipelines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.pipelines
-    ADD CONSTRAINT pipelines_pkey PRIMARY KEY (id);
 
 
 --
@@ -32242,20 +32238,6 @@ CREATE INDEX idx_fk_jobs_team_id ON public.jobs USING btree (team_id);
 
 
 --
--- Name: idx_fk_lead_lists_list; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_fk_lead_lists_list ON public.lead_lists USING btree (list_id);
-
-
---
--- Name: idx_fk_lists_user_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_fk_lists_user_id ON public.lists USING btree (user_id);
-
-
---
 -- Name: idx_fk_login_history_org_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -32344,13 +32326,6 @@ CREATE INDEX idx_fk_payments_job ON public.payments USING btree (job_id);
 --
 
 CREATE INDEX idx_fk_pd_stage_id ON public.pipeline_deals USING btree (stage_id);
-
-
---
--- Name: idx_fk_pipelines_user; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_fk_pipelines_user ON public.pipelines USING btree (user_id);
 
 
 --
@@ -34801,6 +34776,13 @@ CREATE INDEX oauth_tokens_user_idx ON public.oauth_tokens USING btree (user_id);
 --
 
 CREATE INDEX org_sending_domains_verified ON public.org_sending_domains USING btree (org_id) WHERE (status = 'verified'::text);
+
+
+--
+-- Name: orgs_company_group_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX orgs_company_group_id_idx ON public.orgs USING btree (company_group_id);
 
 
 --
@@ -39554,27 +39536,11 @@ ALTER TABLE ONLY public.jobs
 
 
 --
--- Name: lead_lists lead_lists_list_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lead_lists
-    ADD CONSTRAINT lead_lists_list_id_fkey FOREIGN KEY (list_id) REFERENCES public.lists(id) ON DELETE CASCADE;
-
-
---
 -- Name: lead_sources lead_sources_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.lead_sources
     ADD CONSTRAINT lead_sources_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE;
-
-
---
--- Name: lists lists_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lists
-    ADD CONSTRAINT lists_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -40098,6 +40064,14 @@ ALTER TABLE ONLY public.org_sending_domains
 
 
 --
+-- Name: orgs orgs_company_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orgs
+    ADD CONSTRAINT orgs_company_group_id_fkey FOREIGN KEY (company_group_id) REFERENCES public.company_groups(id);
+
+
+--
 -- Name: payment_provider_secrets payment_provider_secrets_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -40455,14 +40429,6 @@ ALTER TABLE ONLY public.pipeline_vues
 
 ALTER TABLE ONLY public.pipeline_vues
     ADD CONSTRAINT pipeline_vues_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-
---
--- Name: pipelines pipelines_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.pipelines
-    ADD CONSTRAINT pipelines_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -44041,6 +44007,32 @@ ALTER TABLE public.communication_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.communication_settings ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: company_groups; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.company_groups ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: company_groups company_groups_select_membre; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY company_groups_select_membre ON public.company_groups FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.orgs o
+  WHERE ((o.company_group_id = company_groups.id) AND public.has_org_membership(( SELECT auth.uid() AS uid), o.id)))));
+
+
+--
+-- Name: company_groups company_groups_update_proprietaire; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY company_groups_update_proprietaire ON public.company_groups FOR UPDATE TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.orgs o
+  WHERE ((o.company_group_id = company_groups.id) AND public.has_org_role(( SELECT auth.uid() AS uid), o.id, ARRAY['owner'::text]))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM public.orgs o
+  WHERE ((o.company_group_id = company_groups.id) AND public.has_org_role(( SELECT auth.uid() AS uid), o.id, ARRAY['owner'::text])))));
+
+
+--
 -- Name: company_operating_profile; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -46776,19 +46768,6 @@ CREATE POLICY jobs_update_own ON public.jobs FOR UPDATE USING ((public.has_org_m
 
 
 --
--- Name: lead_lists; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.lead_lists ENABLE ROW LEVEL SECURITY;
-
---
--- Name: lead_lists lead_lists_deny_client; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY lead_lists_deny_client ON public.lead_lists AS RESTRICTIVE TO anon, authenticated USING (false) WITH CHECK (false);
-
-
---
 -- Name: lead_sources; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -46820,19 +46799,6 @@ CREATE POLICY lead_sources_select ON public.lead_sources FOR SELECT USING (publi
 --
 
 CREATE POLICY lead_sources_update ON public.lead_sources FOR UPDATE USING (public.has_org_membership(( SELECT auth.uid() AS uid), org_id)) WITH CHECK (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
-
-
---
--- Name: lists; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.lists ENABLE ROW LEVEL SECURITY;
-
---
--- Name: lists lists_owner_rw; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY lists_owner_rw ON public.lists TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -48115,19 +48081,6 @@ CREATE POLICY pipeline_vues_perso_write ON public.pipeline_vues TO authenticated
 --
 
 CREATE POLICY pipeline_vues_select ON public.pipeline_vues FOR SELECT TO authenticated USING ((public.has_org_membership(( SELECT auth.uid() AS uid), org_id) AND ((user_id IS NULL) OR (user_id = ( SELECT auth.uid() AS uid)))));
-
-
---
--- Name: pipelines; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.pipelines ENABLE ROW LEVEL SECURITY;
-
---
--- Name: pipelines pipelines_owner_rw; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY pipelines_owner_rw ON public.pipelines TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid))) WITH CHECK ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -53399,6 +53352,15 @@ GRANT ALL ON FUNCTION public.pipeline_deals_sync_values() TO service_role;
 
 
 --
+-- Name: FUNCTION pipeline_definir_affichage(p_pipeline_id uuid, p_color_mode text, p_use_deal_probability boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipeline_definir_affichage(p_pipeline_id uuid, p_color_mode text, p_use_deal_probability boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_definir_affichage(p_pipeline_id uuid, p_color_mode text, p_use_deal_probability boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.pipeline_definir_affichage(p_pipeline_id uuid, p_color_mode text, p_use_deal_probability boolean) TO service_role;
+
+
+--
 -- Name: FUNCTION pipeline_definir_defaut(p_pipeline_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -55073,6 +55035,21 @@ GRANT ALL ON TABLE public.communication_settings TO service_role;
 
 
 --
+-- Name: TABLE company_groups; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.company_groups TO service_role;
+GRANT SELECT ON TABLE public.company_groups TO authenticated;
+
+
+--
+-- Name: COLUMN company_groups.name; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT UPDATE(name) ON TABLE public.company_groups TO authenticated;
+
+
+--
 -- Name: TABLE company_operating_profile; Type: ACL; Schema: public; Owner: -
 --
 
@@ -55876,28 +55853,12 @@ GRANT ALL ON TABLE public.jobs_pour_role TO service_role;
 
 
 --
--- Name: TABLE lead_lists; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.lead_lists TO service_role;
-
-
---
 -- Name: TABLE lead_sources; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.lead_sources TO anon;
 GRANT ALL ON TABLE public.lead_sources TO authenticated;
 GRANT ALL ON TABLE public.lead_sources TO service_role;
-
-
---
--- Name: TABLE lists; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.lists TO anon;
-GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.lists TO authenticated;
-GRANT ALL ON TABLE public.lists TO service_role;
 
 
 --
@@ -56428,15 +56389,6 @@ GRANT ALL ON TABLE public.pipeline_stages TO service_role;
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.pipeline_vues TO anon;
 GRANT ALL ON TABLE public.pipeline_vues TO authenticated;
 GRANT ALL ON TABLE public.pipeline_vues TO service_role;
-
-
---
--- Name: TABLE pipelines; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.pipelines TO anon;
-GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.pipelines TO authenticated;
-GRANT ALL ON TABLE public.pipelines TO service_role;
 
 
 --
