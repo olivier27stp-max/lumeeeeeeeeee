@@ -194,12 +194,49 @@ export function NoCompanyState() {
 
   const handleSignOut = async () => {
     setSigningOut(true);
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      // Full reload clears the orphan session and re-shows the login screen.
+
+    /*
+     * LA SORTIE NE DOIT JAMAIS DÉPENDRE DU RÉSEAU.
+     *
+     * Avant : `await supabase.auth.signOut()` puis redirection dans le
+     * `finally`. Si l'appel ne rendait jamais la main (jeton invalide,
+     * réseau coupe, serveur qui ne répond pas), le `finally` n'était
+     * jamais atteint : le bouton restait désactivé POUR TOUJOURS et
+     * l'utilisateur ne pouvait même plus se déconnecter.
+     *
+     * Constaté au QA du 2026-09-25 : « Aucune compagnie » sur toutes les
+     * pages, bouton « Se déconnecter » DÉSACTIVÉ — compte enfermé.
+     *
+     * Maintenant : on efface la session LOCALE d'abord (c'est elle qui
+     * décide de ce que voit ce navigateur), on lance la révocation côté
+     * serveur sans l'attendre, et on part au plus tard après 3 s quoi
+     * qu'il arrive.
+     */
+    let parti = false;
+    const partir = () => {
+      if (parti) return;
+      parti = true;
+      // Rechargement complet : vide l'état React et réaffiche la connexion.
       window.location.href = '/';
+    };
+
+    // Filet : même si tout échoue, on sort.
+    const filet = setTimeout(partir, 3000);
+
+    try {
+      // `scope: 'local'` ne dépend d'aucun appel réseau : il vide le
+      // stockage du navigateur. C'est ce qui garantit la sortie.
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // Stockage indisponible : on part quand même, le rechargement
+      // suffit à remettre l'écran de connexion.
     }
+
+    // Révocation côté serveur : souhaitable, jamais bloquante.
+    void supabase.auth.signOut({ scope: 'global' }).catch(() => {});
+
+    clearTimeout(filet);
+    partir();
   };
 
   return (

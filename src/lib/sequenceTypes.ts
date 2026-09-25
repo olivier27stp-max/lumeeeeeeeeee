@@ -121,34 +121,50 @@ export function insererEtape(
   apresId: string | null,
   branche?: 'alors' | 'sinon',
 ): Etape[] {
+  /*
+   * RATTACHER LA QUEUE À LA NOUVELLE ÉTAPE.
+   *
+   * Une action ou une attente porte `suivant` ; une CONDITION porte deux
+   * branches, et la suite du parcours va sous « alors ».
+   *
+   * Sans ce traitement, insérer une condition au milieu d'un parcours
+   * laissait tout ce qui suivait ORPHELIN : l'étape précédente pointait
+   * vers la condition, la condition ne pointait vers rien, et les cartes
+   * disparaissaient du canevas. L'utilisateur qui enregistrait sans le
+   * voir perdait son parcours — QA du 2026-09-25 (P0-3).
+   *
+   * « Arrêter » est le seul type qui termine vraiment : la queue y est
+   * volontairement abandonnée.
+   */
+  const rattacher = (suite: string | null): Etape => {
+    if (nouvelle.type === 'arreter') return nouvelle;
+    if (nouvelle.type === 'si') {
+      // La suite passe sous « alors » ; « sinon » reste libre, à
+      // l'utilisateur de le remplir.
+      return { ...nouvelle, alors: nouvelle.alors ?? suite };
+    }
+    return { ...(nouvelle as EtapeAction | EtapeAttendre), suivant: suite };
+  };
+
   if (apresId === null) {
-    // En tête : la nouvelle pointe vers l'ancienne première.
-    const ancienneTete = steps[0]?.id ?? null;
-    const avecSuite = nouvelle.type === 'arreter' || nouvelle.type === 'si'
-      ? nouvelle
-      : { ...nouvelle, suivant: ancienneTete };
-    return [avecSuite, ...steps];
+    // En tête : la nouvelle reprend l'ancienne première.
+    return [rattacher(steps[0]?.id ?? null), ...steps];
   }
 
-  return [
-    ...steps.map((e) => {
-      if (e.id !== apresId) return e;
-      if (e.type === 'si') {
-        const cle = branche ?? 'alors';
-        // La nouvelle reprend la branche qu'elle remplace.
-        if (nouvelle.type !== 'arreter' && nouvelle.type !== 'si') {
-          (nouvelle as EtapeAction | EtapeAttendre).suivant = e[cle] ?? null;
-        }
-        return { ...e, [cle]: nouvelle.id };
-      }
-      if (e.type === 'arreter') return e;
-      if (nouvelle.type !== 'arreter' && nouvelle.type !== 'si') {
-        (nouvelle as EtapeAction | EtapeAttendre).suivant = e.suivant ?? null;
-      }
-      return { ...e, suivant: nouvelle.id };
-    }),
-    nouvelle,
-  ];
+  let posee: Etape = nouvelle;
+  const majes = steps.map((e) => {
+    if (e.id !== apresId) return e;
+    if (e.type === 'si') {
+      const cle = branche ?? 'alors';
+      posee = rattacher(e[cle] ?? null);
+      return { ...e, [cle]: posee.id };
+    }
+    if (e.type === 'arreter') return e;
+    posee = rattacher(e.suivant ?? null);
+    return { ...e, suivant: posee.id };
+  });
+
+  return [...majes, posee];
 }
 
 /**
