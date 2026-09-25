@@ -35,7 +35,7 @@ export function bureauActifPourEntete(): string | null {
 /**
  * Chaque requête vers Supabase porte le bureau actif dans l'en-tête `x-lume-org`.
  * En base, current_org_id() le lit en premier (SQL 20260926120000) et la policy
- * RESTRICTIVE « bureau_actif » (SQL 20260927120000) refuse toute ligne d'un autre
+ * RESTRICTIVE « bureau_actif » (SQL 20260927200000) refuse toute ligne d'un autre
  * bureau, même si une page oublie son filtre org_id. Sans ça, un compte propriétaire
  * de deux bureaux voyait les factures, les prochains numéros et les créations de
  * l'AUTRE bureau (la plus ancienne adhésion) — Vision Lavage, 2026-09-24 : 15 factures

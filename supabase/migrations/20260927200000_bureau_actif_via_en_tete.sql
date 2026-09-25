@@ -1,3 +1,8 @@
+-- RE-DATÉE le 2026-09-25 (ex-20260927120000) : commitée le 2026-09-24 mais
+-- appliquée NULLE PART (migration fantôme, db:diff ne voit pas un fichier non
+-- appliqué). Re-datée APRÈS 20260927180000 pour ne pas écraser le filtre de
+-- statut de current_org_id(), et les policies lisent l'en-tête UNE fois par
+-- requête ((select …) = initplan) au lieu d'une fois par ligne.
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ISOLATION STRICTE ENTRE BUREAUX : la base connaît enfin le bureau sélectionné.
 --
@@ -117,12 +122,13 @@ begin
     end;
   end if;
 
-  -- 3. Repli historique : membership la plus ancienne (comptes à un seul bureau).
+  -- 3. Repli historique : adhésion ACTIVE la plus ancienne (comptes à un seul bureau).
   if to_regclass('public.memberships') is not null then
     select m.org_id
       into v_org
       from public.memberships m
      where m.user_id = v_user
+       and coalesce(m.status, 'active') = 'active'
      order by m.created_at asc, m.org_id asc
      limit 1;
     if v_org is not null then
@@ -172,9 +178,9 @@ begin
      order by c.table_name
   loop
     if r.data_type = 'uuid' then
-      v_expr := 'public.bureau_actif_demande() is null or org_id is null or org_id = public.bureau_actif_demande()';
+      v_expr := '(select public.bureau_actif_demande()) is null or org_id is null or org_id = (select public.bureau_actif_demande())';
     else
-      v_expr := 'public.bureau_actif_demande() is null or org_id is null or org_id::text = public.bureau_actif_demande()::text';
+      v_expr := '(select public.bureau_actif_demande()) is null or org_id is null or org_id::text = (select public.bureau_actif_demande())::text';
     end if;
     execute format('drop policy if exists bureau_actif on public.%I', r.table_name);
     execute format(

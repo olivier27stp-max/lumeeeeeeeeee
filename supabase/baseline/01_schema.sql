@@ -691,6 +691,26 @@ $$;
 
 
 --
+-- Name: acces_bureau(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.acces_bureau(p_user uuid, p_org uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  select public.has_org_membership(p_user, p_org)
+     and (public.bureau_actif_demande() is null or public.bureau_actif_demande() = p_org);
+$$;
+
+
+--
+-- Name: FUNCTION acces_bureau(p_user uuid, p_org uuid); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.acces_bureau(p_user uuid, p_org uuid) IS 'Membre du bureau ET bureau = celui de l''en-tête x-lume-org / x-org-id quand il est présent.';
+
+
+--
 -- Name: ai_enforce_org_scope(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1975,10 +1995,9 @@ $$;
 CREATE FUNCTION public.current_org_id() RETURNS uuid
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public'
-    AS $_$
+    AS $$
 declare
   v_user uuid;
-  v_header_org text;
   v_claim_org text;
   v_org uuid;
 begin
@@ -1987,20 +2006,13 @@ begin
     return null;
   end if;
 
-  -- 1. Bureau actif envoyé par le navigateur (en-tête x-lume-org), s'il en est membre.
-  begin
-    v_header_org := nullif(current_setting('request.headers', true), '')::jsonb ->> 'x-lume-org';
-    if v_header_org is not null and v_header_org ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
-      v_org := v_header_org::uuid;
-      if public.has_org_membership(v_user, v_org) then
-        return v_org;
-      end if;
-    end if;
-  exception when others then
-    null;
-  end;
+  -- 1. Bureau sélectionné dans l'application (en-tête x-lume-org / x-org-id), si le compte en est membre.
+  v_org := public.bureau_actif_demande();
+  if v_org is not null and public.has_org_membership(v_user, v_org) then
+    return v_org;
+  end if;
 
-  -- 2. Claim JWT (déploiements qui le posent).
+  -- 2. Claim JWT explicite (jamais posé aujourd'hui, conservé pour compatibilité).
   v_claim_org := nullif(current_setting('request.jwt.claim.org_id', true), '');
   if v_claim_org is not null then
     begin
@@ -2013,7 +2025,7 @@ begin
     end;
   end if;
 
-  -- 3. Repli : plus ancienne adhésion ACTIVE (compte à un seul bureau = toujours juste).
+  -- 3. Repli historique : adhésion ACTIVE la plus ancienne (comptes à un seul bureau).
   if to_regclass('public.memberships') is not null then
     select m.org_id
       into v_org
@@ -2041,14 +2053,14 @@ begin
 
   return v_user;
 end;
-$_$;
+$$;
 
 
 --
 -- Name: FUNCTION current_org_id(); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.current_org_id() IS 'Bureau courant : en-tête x-lume-org (bureau actif du navigateur, adhésion vérifiée) → claim JWT org_id → plus ancienne adhésion → auth.uid().';
+COMMENT ON FUNCTION public.current_org_id() IS 'Bureau courant : en-tête x-lume-org / x-org-id (bureau actif, adhésion vérifiée) → claim JWT org_id → plus ancienne adhésion → auth.uid().';
 
 
 --
@@ -2554,6 +2566,44 @@ end $$;
 --
 
 COMMENT ON FUNCTION public.bump_row_version() IS 'N4.2 — garantit la progression de `version` et ignore les UPDATE sans changement. Ne remplace PAS la clause `where version = $n` cote applicatif, qui seule detecte le conflit.';
+
+
+--
+-- Name: bureau_actif_demande(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.bureau_actif_demande() RETURNS uuid
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_brut text;
+begin
+  begin
+    v_brut := coalesce(
+      nullif(trim(current_setting('request.headers', true)::jsonb ->> 'x-lume-org'), ''),
+      nullif(trim(current_setting('request.headers', true)::jsonb ->> 'x-org-id'), '')
+    );
+  exception when others then
+    return null; -- pas de contexte HTTP (cron, realtime, psql)
+  end;
+  if v_brut is null then
+    return null;
+  end if;
+  begin
+    return v_brut::uuid;
+  exception when others then
+    return null; -- en-tête mal formé = ignoré, jamais une erreur 500
+  end;
+end;
+$$;
+
+
+--
+-- Name: FUNCTION bureau_actif_demande(); Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON FUNCTION public.bureau_actif_demande() IS 'Bureau sélectionné par le client (en-tête HTTP x-lume-org, sinon x-org-id, via PostgREST), ou null hors contexte HTTP.';
 
 
 --
@@ -42506,6 +42556,1308 @@ CREATE POLICY billing_receipt_log_org_member_select ON public.billing_receipt_lo
 
 
 --
+-- Name: a2p_registrations bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.a2p_registrations AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: active_sessions bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.active_sessions AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: activity_log bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.activity_log AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: activity_notes bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.activity_notes AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: agent_actions bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.agent_actions AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: agent_messages bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.agent_messages AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: ai_reservations bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.ai_reservations AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: ai_usage bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.ai_usage AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: ai_usage_monthly bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.ai_usage_monthly AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: alert_rules bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.alert_rules AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: api_keys bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.api_keys AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: app_connections bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.app_connections AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: audit_events bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.audit_events AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: automation_execution_logs bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.automation_execution_logs AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: automation_folders bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.automation_folders AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: automation_rules bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.automation_rules AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: automation_scheduled_tasks bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.automation_scheduled_tasks AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: automations bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.automations AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: checklist_templates bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.checklist_templates AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: client_payment_profiles bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.client_payment_profiles AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: clients bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.clients AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: commission_settings bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.commission_settings AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: communication_channels bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.communication_channels AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: communication_messages bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.communication_messages AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: communication_settings bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.communication_settings AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: company_operating_profile bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.company_operating_profile AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: connected_accounts bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.connected_accounts AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: consents bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.consents AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: contacts bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.contacts AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: conversations bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.conversations AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: courses bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.courses AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: creator_space_notes bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.creator_space_notes AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: custom_field_folders bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.custom_field_folders AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: custom_field_options bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.custom_field_options AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: custom_field_pipeline_cards bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.custom_field_pipeline_cards AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: custom_field_value_options bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.custom_field_value_options AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: custom_field_values bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.custom_field_values AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: custom_fields bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.custom_fields AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: data_export_log bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.data_export_log AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: data_migrations bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.data_migrations AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: deal_stage_history bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.deal_stage_history AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: deals bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.deals AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: dsar_requests bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.dsar_requests AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: email_accounts bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.email_accounts AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: email_campaigns bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.email_campaigns AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: email_deliveries bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.email_deliveries AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: email_oauth_states bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.email_oauth_states AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: email_opt_outs bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.email_opt_outs AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: email_retry_queue bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.email_retry_queue AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: email_templates bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.email_templates AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: email_threads bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.email_threads AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: email_unsubscribes bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.email_unsubscribes AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_daily_stats bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_daily_stats AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_house_events bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_house_events AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_house_profiles bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_house_profiles AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_pin_entity_links bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_pin_entity_links AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_pin_templates bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_pin_templates AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_pins bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_pins AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_rep_performance bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_rep_performance AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_sales_reps bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_sales_reps AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_sales_teams bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_sales_teams AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_schedule_slots bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_schedule_slots AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_settings bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_settings AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_territories bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_territories AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: field_territory_assignments bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.field_territory_assignments AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: form_submissions bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.form_submissions AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: fs_badges bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.fs_badges AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: fs_battles bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.fs_battles AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: fs_challenges bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.fs_challenges AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: fs_check_in_records bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.fs_check_in_records AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: fs_commission_entries bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.fs_commission_entries AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: fs_commission_rules bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.fs_commission_rules AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: fs_field_sessions bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.fs_field_sessions AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: fs_rep_badges bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.fs_rep_badges AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: fs_rep_stat_snapshots bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.fs_rep_stat_snapshots AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: geofences bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.geofences AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: goals bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.goals AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: gps_providers bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.gps_providers AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: integration_audit_logs bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.integration_audit_logs AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: integration_oauth_states bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.integration_oauth_states AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: invitations bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.invitations AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: invoice_items bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.invoice_items AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: invoice_send_events bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.invoice_send_events AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: invoice_sequences bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.invoice_sequences AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: invoice_templates bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.invoice_templates AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: invoices bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.invoices AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: ip_blocklist bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.ip_blocklist AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: job_agreements bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.job_agreements AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: job_billing_milestones bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.job_billing_milestones AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: job_checklists bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.job_checklists AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: job_intents bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.job_intents AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: job_line_items bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.job_line_items AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: job_materials bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.job_materials AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: job_recurrence_rules bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.job_recurrence_rules AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: job_tags bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.job_tags AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: job_templates bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.job_templates AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: job_time_logs bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.job_time_logs AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: jobs bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.jobs AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: lead_sources bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.lead_sources AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: location_tracking_settings bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.location_tracking_settings AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: login_history bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.login_history AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: lumi_autorisations bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.lumi_autorisations AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: lumi_briefings bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.lumi_briefings AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: lumi_conversations bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.lumi_conversations AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: lumi_messages bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.lumi_messages AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: lumi_traces bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.lumi_traces AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: messages bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.messages AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: mfa_phone bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.mfa_phone AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: notes bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.notes AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: notifications bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.notifications AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: oauth_authorization_codes bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.oauth_authorization_codes AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: oauth_tokens bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.oauth_tokens AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: org_client_counters bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.org_client_counters AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: org_invoice_sequences bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.org_invoice_sequences AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: org_job_counters bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.org_job_counters AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: org_knowledge bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.org_knowledge AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: org_sending_domains bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.org_sending_domains AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: payment_provider_secrets bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.payment_provider_secrets AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: payment_provider_settings bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.payment_provider_settings AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: payment_providers bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.payment_providers AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: payment_requests bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.payment_requests AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: payment_requirements bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.payment_requirements AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: payment_settings bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.payment_settings AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: payments bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.payments AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: payroll_adjustments bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.payroll_adjustments AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: payroll_payments bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.payroll_payments AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: payroll_settings bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.payroll_settings AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: pipeline_acces bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.pipeline_acces AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: pipeline_deals bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.pipeline_deals AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: pipeline_events bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.pipeline_events AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: pipeline_operations_lot bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.pipeline_operations_lot AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: pipeline_raisons_perte_liste bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.pipeline_raisons_perte_liste AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: pipeline_stages bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.pipeline_stages AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: pipeline_vues bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.pipeline_vues AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: pipelines_ventes bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.pipelines_ventes AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: proof_of_presence bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.proof_of_presence AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: properties bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.properties AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: provisioning_events bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.provisioning_events AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: push_tokens bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.push_tokens AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: quote_line_items bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.quote_line_items AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: quote_measurement_camera bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.quote_measurement_camera AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: quote_measurements bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.quote_measurements AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: quote_sequences bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.quote_sequences AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: quote_templates bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.quote_templates AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: quotes bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.quotes AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: recurring_invoice_schedules bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.recurring_invoice_schedules AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: recurring_team_schedules bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.recurring_team_schedules AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: reminder_log bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.reminder_log AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: reminder_settings bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.reminder_settings AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: request_forms bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.request_forms AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: review_requests bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.review_requests AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: role_templates bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.role_templates AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: satisfaction_surveys bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.satisfaction_surveys AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: schedule_events bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.schedule_events AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: scheduled_reports bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.scheduled_reports AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: security_alerts bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.security_alerts AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: security_events bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.security_events AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: security_incidents bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.security_incidents AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: service_contracts bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.service_contracts AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: sms_opt_outs bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.sms_opt_outs AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: specific_notes bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.specific_notes AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: support_messages bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.support_messages AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: support_slack_channels bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.support_slack_channels AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: support_tickets bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.support_tickets AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: tags bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.tags AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: tasks bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.tasks AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: tax_configs bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.tax_configs AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: tax_groups bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.tax_groups AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: team_assignments bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.team_assignments AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: team_availability bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.team_availability AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: team_capabilities bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.team_capabilities AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: team_date_slots bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.team_date_slots AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: team_members bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.team_members AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: team_schedule_assignments bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.team_schedule_assignments AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: team_schedule_audit bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.team_schedule_audit AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: teams bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.teams AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: technician_device_mappings bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.technician_device_mappings AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: technician_locations bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.technician_locations AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: time_entries bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.time_entries AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: time_off_requests bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.time_off_requests AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: tracking_events bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.tracking_events AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: tracking_live_locations bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.tracking_live_locations AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: tracking_points bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.tracking_points AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: tracking_sessions bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.tracking_sessions AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: webhook_deliveries bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.webhook_deliveries AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: webhook_endpoints bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.webhook_endpoints AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
 -- Name: checklist_templates; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -48910,6 +50262,15 @@ GRANT ALL ON FUNCTION public.ac_track_survey_reviews() TO service_role;
 
 
 --
+-- Name: FUNCTION acces_bureau(p_user uuid, p_org uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.acces_bureau(p_user uuid, p_org uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.acces_bureau(p_user uuid, p_org uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.acces_bureau(p_user uuid, p_org uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION ai_enforce_org_scope(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -50299,6 +51660,16 @@ GRANT ALL ON FUNCTION public.build_job_fts_vector(r public.jobs) TO service_role
 
 REVOKE ALL ON FUNCTION public.bump_row_version() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.bump_row_version() TO service_role;
+
+
+--
+-- Name: FUNCTION bureau_actif_demande(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.bureau_actif_demande() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.bureau_actif_demande() TO authenticated;
+GRANT ALL ON FUNCTION public.bureau_actif_demande() TO service_role;
+GRANT ALL ON FUNCTION public.bureau_actif_demande() TO anon;
 
 
 --
