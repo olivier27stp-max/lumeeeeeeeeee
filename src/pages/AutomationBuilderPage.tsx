@@ -51,6 +51,8 @@ import {
   etapeVierge,
   insererEtape,
   retirerEtape,
+  estFormatOrigine,
+  projeterFormatOrigine,
 } from '../lib/sequenceTypes';
 import SequenceCanvas from '../components/automations/SequenceCanvas';
 import PanneauEtape from '../components/automations/PanneauEtape';
@@ -615,6 +617,29 @@ export default function AutomationBuilderPage() {
   };
   const recadrer = () => { setZoom(1); setDecalage({ x: 0, y: 0 }); };
 
+  /**
+   * La règle est-elle au FORMAT D'ORIGINE (`actions`, sans parcours) ?
+   *
+   * Mesuré en prod le 2026-09-25 : 250 règles sur 251. Le canevas ne lisant
+   * que `steps`, toutes affichaient « Ajouter une première étape » alors
+   * qu'elles tournent et envoient des messages — l'éditeur mentait à
+   * presque tous les clients.
+   *
+   * On les AFFICHE en lecture seule, projetées dans la forme du canevas.
+   * Aucune écriture : convertir reste un geste explicite (décision de Will
+   * — pas de conversion silencieuse d'une règle active).
+   */
+  const formatOrigine = useMemo(
+    () => !!regle && estFormatOrigine({ steps, actions: regle.actions }),
+    [regle, steps],
+  );
+  const etapesAffichees = useMemo(
+    () => (formatOrigine && regle
+      ? projeterFormatOrigine({ actions: regle.actions, delay_seconds: regle.delay_seconds })
+      : steps),
+    [formatOrigine, regle, steps],
+  );
+
   const declencheurLabel = useMemo(() => {
     if (!catalogue || !regle) return fr ? '— à choisir —' : '— to pick —';
     const d = catalogue.declencheurs.find((x) => x.cle === regle.trigger_event);
@@ -1016,7 +1041,27 @@ export default function AutomationBuilderPage() {
                     </div>
                 </div>
 
-                {steps.length === 0 ? (
+                {/* ── Le format d'origine, annoncé franchement ──
+                    On montre le parcours RÉEL (projeté depuis `actions`) au
+                    lieu d'un canevas vide, et on dit pourquoi il n'est pas
+                    modifiable. Convertir reste un geste explicite : jamais
+                    en silence sur une règle qui écrit à de vrais clients. ── */}
+                {formatOrigine && (
+                  <div className="mx-auto mb-4 max-w-xl px-4">
+                    <div className="rounded-xl border border-warning/40 bg-warning-light p-3">
+                      <p className="text-[13px] font-semibold text-warning">
+                        {fr ? 'Parcours au format d’origine' : 'Journey in the original format'}
+                      </p>
+                      <p className="mt-1 text-[12px] text-text-secondary">
+                        {fr
+                          ? 'Cette automatisation fonctionne normalement — elle s’affiche ici en lecture seule. La convertir permettra de la modifier dans le canevas.'
+                          : 'This automation works normally — it is shown here read-only. Converting it will let you edit it on the canvas.'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {etapesAffichees.length === 0 ? (
                   <div className="mx-auto flex max-w-xl flex-col items-center px-4">
 
                     <span className="my-4 text-xs text-text-tertiary">{fr ? 'ou' : 'or'}</span>
@@ -1081,8 +1126,9 @@ export default function AutomationBuilderPage() {
                   catalogue && (
                     <SequenceCanvas
                       declencheurLabel={declencheurLabel}
-                      steps={steps}
+                      steps={etapesAffichees}
                       fr={fr}
+                      lectureSeule={formatOrigine}
                       selectionId={etapeChoisie}
                       onSelection={setEtapeChoisie}
                       onAjouter={ouvrirAjout}

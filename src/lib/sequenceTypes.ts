@@ -178,3 +178,75 @@ export function retirerEtape(steps: Etape[], id: string): Etape[] {
       return { ...e, suivant: e.suivant === id ? suite : e.suivant };
     });
 }
+
+// ── Le format D'ORIGINE (`actions`) ─────────────────────────
+//
+// Avant le builder visuel, une règle portait une LISTE PLATE d'actions et un
+// seul `delay_seconds` partagé. Ce format n'est pas mort : mesuré en
+// production le 2026-09-25, **250 règles sur 251** l'utilisent encore. Le
+// canevas, lui, ne lit que `steps` — il affichait donc « Ajouter une
+// première étape » sur des automatisations actives qui envoient vraiment des
+// messages. L'éditeur mentait à presque tous les clients.
+//
+// On PROJETTE donc `actions` dans la forme du canevas, pour l'AFFICHER.
+// C'est une lecture, jamais une écriture : la règle en base n'est pas
+// touchée tant que l'utilisateur n'a pas explicitement demandé la
+// conversion.
+
+/** Une règle au format d'origine a-t-elle quelque chose à montrer ? */
+export function estFormatOrigine(regle: {
+  steps?: unknown;
+  actions?: unknown;
+}): boolean {
+  const steps = Array.isArray(regle.steps) ? regle.steps : [];
+  const actions = Array.isArray(regle.actions) ? regle.actions : [];
+  return steps.length === 0 && actions.length > 0;
+}
+
+/**
+ * `actions` + `delay_seconds` → les étapes que le canevas sait dessiner.
+ *
+ * Fidélité d'abord : on montre ce que la règle fait VRAIMENT, sinon on
+ * remplace un mensonge (canevas vide) par un autre. Donc :
+ *   · le délai partagé devient une étape « attendre » EN TÊTE — c'est bien
+ *     ce que le moteur fait : il attend, puis exécute tout ;
+ *   · les actions se suivent dans leur ordre de stockage, qui est l'ordre
+ *     d'exécution ;
+ *   · un type inconnu du catalogue (`log_activity`, écriture interne du
+ *     moteur) est conservé tel quel : le masquer donnerait un parcours
+ *     incomplet, et c'est précisément le défaut qu'on corrige.
+ */
+export function projeterFormatOrigine(regle: {
+  actions?: unknown;
+  delay_seconds?: number | null;
+}): Etape[] {
+  const actions = Array.isArray(regle.actions) ? regle.actions : [];
+  if (actions.length === 0) return [];
+
+  const etapes: Etape[] = [];
+  const delai = Number(regle.delay_seconds) || 0;
+
+  // Les identifiants sont STABLES (« origine-0 », « origine-1 »…) : un id
+  // tiré au hasard ferait remonter une carte différente à chaque rendu et
+  // casserait la sélection.
+  if (delai > 0) {
+    etapes.push({
+      id: 'origine-attente',
+      type: 'attendre',
+      delai_secondes: delai,
+      suivant: 'origine-0',
+    });
+  }
+
+  actions.forEach((brut, i) => {
+    const a = (brut ?? {}) as { type?: string; config?: Record<string, string> };
+    etapes.push({
+      id: `origine-${i}`,
+      type: 'action',
+      action: { type: String(a.type ?? ''), config: a.config ?? {} },
+      suivant: i + 1 < actions.length ? `origine-${i + 1}` : null,
+    });
+  });
+
+  return etapes;
+}
