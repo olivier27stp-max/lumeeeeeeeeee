@@ -151,7 +151,15 @@ function purger<T extends { expire: number }>(m: Map<string, T>, maintenant: num
   for (const [k, v] of m) if (v.expire <= maintenant) m.delete(k);
 }
 
-async function resoudreUtilisateur(req: express.Request, maintenant: number) {
+/**
+ * Jeton → { utilisateur, bureau actif }, avec cache.
+ *
+ * Exporté pour `feature-guard`, qui tourne juste après et a besoin de la MÊME
+ * résolution (y compris la règle anti-IDOR sur `x-org-id`). La refaire
+ * ailleurs doublerait un `auth.getUser()` par requête et ferait dériver les
+ * deux réponses.
+ */
+export async function resoudreUtilisateur(req: express.Request, maintenant: number = Date.now()) {
   const header = req.header('authorization');
   if (!header || !/^Bearer\s+\S+/i.test(header)) return null;
   const cle = header.slice(-64); // fin du JWT (signature) : unique par token

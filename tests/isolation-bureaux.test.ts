@@ -114,6 +114,7 @@ describe('4. companyOrgIds (groupe) uniquement pour le catalogue et les droits',
   const AUTORISES = new Set([
     'server/lib/supabase.ts',                       // définition
     'server/lib/subscription-guard.ts',             // paywall : le plan vit sur un bureau du groupe
+    'server/lib/feature-guard.ts',                  // gating de forfait : même lecture, même raison que le paywall
     'server/lib/twilioProvisioning.ts',             // droit aux SMS : même forfait de groupe que le paywall
     'server/lib/lumi/budget.ts',                    // budget IA du plan
     'server/lib/field-sales/commission-engine.ts',  // catégories de commission du catalogue
