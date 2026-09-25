@@ -61,6 +61,7 @@ import TiroirChoix, { type ChoixTiroir } from '../components/automations/TiroirC
 import PanneauDeclencheur from '../components/automations/PanneauDeclencheur';
 import { listerChamps } from '../lib/champsPersoApi';
 import { fetchPipelines, fetchStages } from '../lib/pipelineVentesApi';
+import { localizeAutomationName } from '../lib/automationNames';
 import {
   ACTIONS,
   DECLENCHEURS,
@@ -324,7 +325,20 @@ export default function AutomationBuilderPage() {
         setCatalogue(d.catalogue);
         const trouvee = d.rules.find((r) => r.id === id) ?? null;
         setRegle(trouvee);
-        setNom(trouvee?.name ?? '');
+        /*
+         * Le nom des préréglages est stocké en ANGLAIS en base
+         * (« Appointment Confirmation ») — 275 des 500 règles actives en
+         * portent un. La liste le traduisait déjà à l'affichage ; pas
+         * l'éditeur, faute d'accès à la table.
+         *
+         * On cliquait donc sur « Confirmation de rendez-vous » pour
+         * atterrir sur « Appointment Confirmation ». Le champ étant
+         * modifiable, ce qui est affiché est aussi ce qui sera
+         * enregistré : un préréglage renommé par son propriétaire garde
+         * son nom à lui, puisque la table ne connaît que les libellés
+         * d'origine.
+         */
+        setNom(localizeAutomationName(trouvee?.name ?? '', language));
         const etapes = (trouvee?.steps as Etape[] | undefined) ?? [];
         setSteps(etapes);
         setHistorique([etapes]);
