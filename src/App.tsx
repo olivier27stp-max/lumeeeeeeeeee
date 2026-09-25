@@ -218,6 +218,7 @@ import { rendueSansSession, estCibleInterne, CLE_NEXT } from './lib/routesSansSe
 import { TokenRoute, detectTokenKind } from './routes/TokenRoutes';
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkCreatorAccess } from './lib/creatorSpaceApi';
+import BandeauDonneesNonActivees from './components/BandeauDonneesNonActivees';
 // Cross-cutting hooks previously inlined in App()
 import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
 import { abonnerBureauActif, bureauActifSync } from './lib/orgApi';
@@ -1448,6 +1449,9 @@ function AuthenticatedApp({
 
         {/* ─── Main content ─── */}
         <main className="flex-1 flex flex-col overflow-hidden">
+          {/* Données importées pas encore activées : les automatisations et envois
+              vers les clients importés sont gelés jusqu'à « Activer le compte ». */}
+          <BandeauDonneesNonActivees peutActiver={creatorAccess.data === true} />
           {/* Impayé en cours — l'accès est maintenu, mais pas indéfiniment.
               Non refermable et présent sur toutes les pages : le client doit
               apprendre la fermeture à venir ici, pas le jour où elle arrive. */}
