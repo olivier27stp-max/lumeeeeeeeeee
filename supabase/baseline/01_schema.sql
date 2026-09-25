@@ -42348,31 +42348,10 @@ CREATE POLICY audit_events_select_org ON public.audit_events FOR SELECT USING (p
 ALTER TABLE public.automation_execution_logs ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: automation_execution_logs automation_execution_logs_delete_org; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY automation_execution_logs_delete_org ON public.automation_execution_logs FOR DELETE TO authenticated USING (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
-
-
---
--- Name: automation_execution_logs automation_execution_logs_insert_org; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY automation_execution_logs_insert_org ON public.automation_execution_logs FOR INSERT TO authenticated WITH CHECK (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
-
-
---
 -- Name: automation_execution_logs automation_execution_logs_select_org; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY automation_execution_logs_select_org ON public.automation_execution_logs FOR SELECT TO authenticated USING (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
-
-
---
--- Name: automation_execution_logs automation_execution_logs_update_org; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY automation_execution_logs_update_org ON public.automation_execution_logs FOR UPDATE TO authenticated USING (public.has_org_membership(( SELECT auth.uid() AS uid), org_id)) WITH CHECK (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
 
 
 --
@@ -42450,31 +42429,10 @@ CREATE POLICY automation_rules_update_org ON public.automation_rules FOR UPDATE 
 ALTER TABLE public.automation_scheduled_tasks ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: automation_scheduled_tasks automation_scheduled_tasks_delete_org; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY automation_scheduled_tasks_delete_org ON public.automation_scheduled_tasks FOR DELETE TO authenticated USING (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
-
-
---
--- Name: automation_scheduled_tasks automation_scheduled_tasks_insert_org; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY automation_scheduled_tasks_insert_org ON public.automation_scheduled_tasks FOR INSERT TO authenticated WITH CHECK (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
-
-
---
 -- Name: automation_scheduled_tasks automation_scheduled_tasks_select_org; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY automation_scheduled_tasks_select_org ON public.automation_scheduled_tasks FOR SELECT TO authenticated USING (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
-
-
---
--- Name: automation_scheduled_tasks automation_scheduled_tasks_update_org; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY automation_scheduled_tasks_update_org ON public.automation_scheduled_tasks FOR UPDATE TO authenticated USING (public.has_org_membership(( SELECT auth.uid() AS uid), org_id)) WITH CHECK (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
 
 
 --
