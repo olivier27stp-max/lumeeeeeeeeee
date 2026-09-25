@@ -22,6 +22,7 @@ import { preparerValeur, ErreurValeur } from '../../lib/champs/valeurs';
 import type { ObjetChamp, ValeurChamp } from '../../lib/champs/types';
 import ChampSaisie from './ChampSaisie';
 import { messageChamps } from '../../lib/champs/messages';
+import LienAjouterChamps from './LienAjouterChamps';
 
 export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
   const { isEnabled } = useModuleAccess('custom_fields_v2');
@@ -78,7 +79,8 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
     }
   };
 
-  const bloc = !isEnabled || champs.length === 0 ? null : (
+  // Aucun champ (liste chargée) : on le dit, avec où en créer, plutôt qu'un silence.
+  const bloc = !isEnabled ? null : champs.length === 0 ? (data ? <LienAjouterChamps fr={fr} /> : null) : (
     <div className="space-y-3">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
         {fr ? 'Champs personnalisés' : 'Custom fields'}
@@ -101,5 +103,5 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
     </div>
   );
 
-  return { bloc, valider, enregistrer, actif: bloc !== null };
+  return { bloc, valider, enregistrer, actif: champs.length > 0 };
 }

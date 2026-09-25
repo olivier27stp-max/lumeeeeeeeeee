@@ -19,6 +19,7 @@ import { useModuleAccess } from '../../hooks/useModuleAccess';
 import { ecrireValeurs, lireValeurs, type ObjetChamp, type ValeurChamp } from '../../lib/champsPersoApi';
 import ChampSaisie from './ChampSaisie';
 import { messageChamps } from '../../lib/champs/messages';
+import LienAjouterChamps from './LienAjouterChamps';
 
 interface Props {
   objet: ObjetChamp;
@@ -75,7 +76,8 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
       </p>
     );
   }
-  if (!data || data.fields.length === 0) return null;
+  if (!data) return null;
+  if (data.fields.length === 0) return <LienAjouterChamps fr={fr} className={cn('py-2', className)} />;
 
   const enregistrer = async (fieldId: string, valeur: ValeurChamp) => {
     const version = data.values[fieldId]?.version ?? null;
