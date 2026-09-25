@@ -1,8 +1,23 @@
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import React, { Suspense, createContext, lazy, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import NewJobModal, { JobDraftInitialValues, JobModalSourceContext } from '../components/NewJobModal';
+import type { JobDraftInitialValues, JobModalSourceContext } from '../components/NewJobModal';
+
+/*
+ * Le formulaire de job à la DEMANDE.
+ *
+ * Ce contrôleur est monté autour de toute l'application : le modal était
+ * donc dans le chunk d'entrée et se téléchargeait à chaque première
+ * visite, y compris pour quelqu'un qui ne crée jamais de job. Mesuré sur
+ * la carte de sources : 197 Ko de l'entrée, à lui seul le plus gros
+ * fichier applicatif.
+ *
+ * Il ne s'affiche que `isOpen` : le charger avant n'apporte rien. On le
+ * monte donc au premier ouvrage, et on ne le rend PAS tant qu'il est
+ * fermé — sans ça, `lazy` téléchargerait quand même dès le montage.
+ */
+const NewJobModal = lazy(() => import('../components/NewJobModal'));
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
 import { createJob, getJobModalDraftById, updateJob, softDeleteJob } from '../lib/jobsApi';
 import { geocodeJob } from '../lib/geocodeApi';
@@ -212,9 +227,22 @@ export function JobModalControllerProvider({ children }: { children: React.React
     [closeJobModal, initialValues, isOpen, openJobModal, sourceContext]
   );
 
+  /*
+   * Une fois ouvert, on le GARDE monté.
+   *
+   * Le démonter à la fermeture couperait l'animation de sortie
+   * (`AnimatePresence` a besoin que le composant reste le temps de
+   * disparaître) et reprovoquerait un téléchargement à la réouverture.
+   * `dejaOuvert` ne redescend donc jamais à false.
+   */
+  const [dejaOuvert, setDejaOuvert] = useState(false);
+  if (isOpen && !dejaOuvert) setDejaOuvert(true);
+
   return (
     <JobModalControllerContext.Provider value={value}>
       {children}
+      {dejaOuvert && (
+      <Suspense fallback={null}>
       <NewJobModal
         isOpen={isOpen}
         onClose={closeJobModal}
@@ -230,6 +258,8 @@ export function JobModalControllerProvider({ children }: { children: React.React
         onDelete={handleDelete}
         isDeleting={isDeleting}
       />
+      </Suspense>
+      )}
       <InvoicePreviewModal
         isOpen={isInvoicePreviewOpen}
         invoiceId={previewInvoiceId}
