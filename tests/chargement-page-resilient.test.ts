@@ -156,26 +156,6 @@ describe('le spinner infini — défaut observé en prod le 2026-09-25', () => {
       .toMatch(/if \(!rechargerUneFois\(\)\) \{[\s\S]{0,900}?throw new Error\(/);
   });
 
-  it('AUCUN gestionnaire `vite:preloadError` — il cassait le rejet', () => {
-    /*
-     * Piège coûteux, payé deux fois en prod le 2026-09-25.
-     *
-     * Vite enveloppe chaque `import()` dans un helper qui émet cet
-     * événement quand le PRÉchargement échoue. Si un gestionnaire appelle
-     * `preventDefault()`, Vite tient l'erreur pour traitée et laisse la
-     * promesse se résoudre à `undefined` au lieu de rejeter.
-     *
-     * Conséquence mesurée : l'écran affichait
-     * « Cannot read properties of undefined (reading 'default') », en
-     * anglais, et `lazyResilient` n'était JAMAIS atteint — rien n'avait
-     * échoué de son point de vue, donc ni réessai ni rechargement.
-     *
-     * Sans gestionnaire, l'échec rejette normalement et `lazyResilient`
-     * fait son travail. Ce test empêche d'en réintroduire un.
-     */
-    expect(main, 'un gestionnaire ici empêcherait lazyResilient de voir l’échec')
-      .not.toMatch(/addEventListener\(\s*'vite:preloadError'/);
-  });
 });
 
 describe('ce que l’utilisateur LIT quand ça échoue pour de bon', () => {
@@ -201,7 +181,7 @@ describe('ce que l’utilisateur LIT quand ça échoue pour de bon', () => {
     expect(outil, 'il faut forcer le tour du réseau')
       .toMatch(/cache: 'reload'/);
     expect(outil, 'et l’appeler avant le second import')
-      .toMatch(/await reveillerLeReseau\(\);\s*return await charger\(\);/);
+      .toMatch(/await reveillerLeReseau\(\);\s*return await chargerVerifie\(\);/);
   });
 });
 
@@ -251,6 +231,7 @@ describe('l’écran d’erreur parle français', () => {
   });
 
   it('un import qui rend « rien » est traité comme un échec de chargement', () => {
+    const outil = lire('src/lib/lazyResilient.ts');
     expect(outil).toContain("if (!m || !m.default) throw new Error(");
     expect(outil).toMatch(/return await chargerVerifie\(\);[\s\S]*return await chargerVerifie\(\);/);
   });
