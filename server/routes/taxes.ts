@@ -330,6 +330,11 @@ router.delete('/taxes/group/:id', async (req, res) => {
       .select('id').eq('id', req.params.id).eq('org_id', auth.orgId).maybeSingle();
     if (!group) return res.status(404).json({ error: 'Tax group not found.' });
 
+    // Taxes de la région, lues AVANT de défaire les liens.
+    const { data: membres, error: mErr } = await admin.from('tax_group_items')
+      .select('tax_config_id').eq('tax_group_id', req.params.id);
+    if (mErr) throw mErr;
+
     // Delete group items first (cascade), then group
     const { error: itemsErr } = await admin.from('tax_group_items').delete().eq('tax_group_id', req.params.id);
     if (itemsErr) throw itemsErr;
@@ -337,6 +342,26 @@ router.delete('/taxes/group/:id', async (req, res) => {
       .eq('id', req.params.id).eq('org_id', auth.orgId);
 
     if (error) throw error;
+
+    // Les taxes de cette région qui ne servent plus à aucune autre sont
+    // DÉSACTIVÉES (pas supprimées : les anciens documents relisent leur numéro
+    // d'inscription). Restées actives, elles devenaient invisibles dans
+    // Réglages → Taxes mais s'additionnaient : resolveTaxesForOrg, sans
+    // aucune région, applique TOUTES les taxes actives (TPS + TVQ comptées
+    // deux fois après une suppression puis un nouvel ajout de la région).
+    const ids = [...new Set((membres || []).map((m: any) => String(m.tax_config_id)))];
+    if (ids.length > 0) {
+      const { data: encore, error: eErr } = await admin.from('tax_group_items')
+        .select('tax_config_id').in('tax_config_id', ids);
+      if (eErr) throw eErr;
+      const utilisees = new Set((encore || []).map((m: any) => String(m.tax_config_id)));
+      const orphelines = ids.filter((id) => !utilisees.has(id));
+      if (orphelines.length > 0) {
+        const { error: dErr } = await admin.from('tax_configs').update({ is_active: false })
+          .in('id', orphelines).eq('org_id', auth.orgId);
+        if (dErr) throw dErr;
+      }
+    }
     return res.json({ ok: true });
   } catch (err: any) {
     console.error('[taxes] delete group failed:', err.message);

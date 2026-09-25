@@ -261,9 +261,8 @@ router.get('/orgs/offices/sante', async (req, res) => {
       return q;
     };
 
-    const [cs, taxes, groupes, sms, stripe, autos, membres, marque, ...modeles] = await Promise.all([
+    const [cs, groupes, sms, stripe, autos, membres, marque, ...modeles] = await Promise.all([
       admin.from('company_settings').select('org_id, company_name, default_tax_group_id, prefixe_documents, logo_url, suit_marque_entreprise').in('org_id', ids),
-      admin.from('tax_configs').select('org_id, name, registration_number').in('org_id', ids).eq('is_active', true),
       admin.from('tax_groups').select('org_id').in('org_id', ids),
       admin.from('communication_channels').select('org_id, phone_number').in('org_id', ids).eq('channel_type', 'sms').eq('status', 'active'),
       admin.from('connected_accounts').select('org_id, charges_enabled').in('org_id', ids).is('deleted_at', null),
@@ -272,8 +271,26 @@ router.get('/orgs/offices/sante', async (req, res) => {
       groupe ? admin.from('company_groups').select('logo_url, brand_color').eq('id', groupe).maybeSingle() : Promise.resolve({ data: null, error: null }),
       ...TABLES_MODELES_SANTE.map(lireModeles),
     ]);
-    const erreur = [cs, taxes, groupes, sms, stripe, autos, membres, marque, ...modeles].find((r: any) => r.error);
+    const erreur = [cs, groupes, sms, stripe, autos, membres, marque, ...modeles].find((r: any) => r.error);
     if (erreur?.error) throw erreur.error;
+
+    // Taxes = celles de la région PAR DÉFAUT, reliées par tax_group_items :
+    // exactement ce que montre Réglages → Taxes. Compter toutes les
+    // tax_configs du bureau comptait aussi les taxes orphelines d'une région
+    // supprimée (2, puis 4, puis 6 après chaque « Reprendre »).
+    const orgDuGroupe = new Map<string, string>();
+    for (const r of cs.data || []) if ((r as any).default_tax_group_id) orgDuGroupe.set(String((r as any).default_tax_group_id), String((r as any).org_id));
+    const { data: liens, error: eLiens } = orgDuGroupe.size
+      ? await admin.from('tax_group_items').select('tax_group_id, tax_configs(name, registration_number, is_active)').in('tax_group_id', [...orgDuGroupe.keys()])
+      : { data: [], error: null };
+    if (eLiens) throw eLiens;
+    const taxesPar = new Map<string, any[]>();
+    for (const l of (liens || []) as any[]) {
+      const t = l.tax_configs;
+      const o = orgDuGroupe.get(String(l.tax_group_id));
+      if (!t || t.is_active === false || !o) continue;
+      taxesPar.set(o, [...(taxesPar.get(o) || []), t]);
+    }
 
     const parOrg = <T,>(rows: T[] | null | undefined, cle: (r: T) => string) => {
       const m = new Map<string, T[]>();
@@ -282,7 +299,6 @@ router.get('/orgs/offices/sante', async (req, res) => {
     };
     const org = (r: any) => String(r.org_id);
     const csPar = new Map((cs.data || []).map((r: any) => [org(r), r]));
-    const taxesPar = parOrg(taxes.data as any[], org);
     const groupesPar = parOrg(groupes.data as any[], org);
     const smsPar = parOrg(sms.data as any[], org);
     const stripePar = parOrg(stripe.data as any[], org);

@@ -171,6 +171,16 @@ export function mapLeadSources(rows: Row[], targetOrgId: string, createdBy: stri
   return rows.map((r) => ({ org_id: targetOrgId, name: r.name, created_by: createdBy }));
 }
 
+/**
+ * Taxes à recopier : celles reliées à une région (`items`), ou, si la source
+ * n'a aucune région (`items` = null), ses taxes actives.
+ */
+export function filtrerTaxesACopier(configs: Row[], items: Row[] | null): Row[] {
+  if (items === null) return configs.filter((c) => c.is_active !== false);
+  const reliees = new Set(items.map((i) => String(i.tax_config_id)));
+  return configs.filter((c) => reliees.has(String(c.id)));
+}
+
 /** Construit la map ancien id → nouvel id en alignant sur l'ordre d'insertion. */
 export function zipIds(sourceRows: Row[], insertedRows: Row[]): Map<string, string> {
   const m = new Map<string, string>();
@@ -272,8 +282,19 @@ export async function copyOfficeSettings(
       ]);
       if (cErr) throw new Error(cErr.message);
       if (gErr) throw new Error(gErr.message);
-      const srcConfigs = configs || [];
       const srcGroups = groups || [];
+      // Seulement les taxes rattachées à une région de la source : une taxe
+      // orpheline (région supprimée) est invisible dans Réglages → Taxes, et la
+      // recopier la ferait s'additionner chez la cible. Sans aucune région
+      // (ancien bureau), les taxes actives restent la vérité.
+      let srcItems: Row[] = [];
+      if (srcGroups.length > 0) {
+        const { data: it, error: itErr } = await admin.from('tax_group_items').select('*')
+          .in('tax_group_id', srcGroups.map((g: Row) => g.id));
+        if (itErr) throw new Error(itErr.message);
+        srcItems = it || [];
+      }
+      const srcConfigs = filtrerTaxesACopier(configs || [], srcGroups.length > 0 ? srcItems : null);
 
       let configIdMap = new Map<string, string>();
       if (srcConfigs.length > 0) {
@@ -296,12 +317,7 @@ export async function copyOfficeSettings(
         groupIdMap = zipIds(srcGroups, ins || []);
         report.tax_groups = ins?.length || 0;
 
-        const { data: items, error: iErr } = await admin
-          .from('tax_group_items')
-          .select('*')
-          .in('tax_group_id', srcGroups.map((g: Row) => g.id));
-        if (iErr) throw new Error(iErr.message);
-        const mapped = mapTaxGroupItems(items || [], groupIdMap, configIdMap);
+        const mapped = mapTaxGroupItems(srcItems, groupIdMap, configIdMap);
         if (mapped.length > 0) {
           const { error: miErr } = await admin.from('tax_group_items').insert(mapped);
           if (miErr) throw new Error(miErr.message);
