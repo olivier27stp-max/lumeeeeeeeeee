@@ -252,6 +252,14 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
      * Le marqueur `bientot` posé ici était une ERREUR de ma part : je
      * l'avais déduit du code au lieu de regarder la base.
      */
+    champs: [
+      {
+        cle: 'stage_id', fr: 'Quelle étape', en: 'Which stage',
+        obligatoire: false, type: 'etape_pipeline',
+        aide_fr: 'Laissez vide pour toutes les étapes, ou choisissez celle qui déclenche.',
+        aide_en: 'Leave empty for every stage, or pick the one that triggers.',
+      },
+    ],
   },
   {
     cle: 'deal.stage_idle', fr: 'Opportunité qui dort', en: 'Deal going stale',
@@ -262,6 +270,14 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     // vérifiée le 2026-09-25) remplit la file, que le planificateur vide.
     // Aucun événement en prod à ce jour, simplement parce qu'aucune
     // opportunité n'a encore stagné assez longtemps.
+    champs: [
+      {
+        cle: 'stage_id', fr: 'Quelle étape', en: 'Which stage',
+        obligatoire: false, type: 'etape_pipeline',
+        aide_fr: 'Laissez vide pour toutes les étapes, ou choisissez celle à surveiller.',
+        aide_en: 'Leave empty for every stage, or pick the one to watch.',
+      },
+    ],
   },
 
   // ── Champs personnalisés ──
@@ -333,7 +349,16 @@ export type TypeChamp =
    * La liste vient du serveur : les règles publiées, moins celle qu'on est
    * en train d'éditer (une règle qui se démarre elle-même boucle).
    */
-  | 'automatisation';
+  | 'automatisation'
+  /**
+   * Une ÉTAPE d'un pipeline de ventes.
+   *
+   * La liste vient de l'organisation (`pipeline_stages`) : chaque
+   * entreprise a ses propres étapes. Le choix est stocké dans
+   * `conditions.stage_id`, que le moteur compare à
+   * `event.metadata.stage_id` (evaluateConditions).
+   */
+  | 'etape_pipeline';
 
 export interface ChampAction {
   cle: string;
@@ -341,6 +366,20 @@ export interface ChampAction {
   en: string;
   obligatoire: boolean;
   type: TypeChamp;
+  /**
+   * La valeur de DÉPART d'un champ obligatoire, à la création de l'étape.
+   *
+   * Sans elle, une étape neuve naît incomplète : le serveur refuse de
+   * l'enregistrer (à raison — un courriel sans objet n'enverrait rien),
+   * l'éditeur affiche « 1 étape à compléter » et N'ENREGISTRE PAS. L'étape
+   * disparaissait donc au rechargement. Signalé le 2026-09-25 : « je clique
+   * Envoyer un courriel, ça ne m'amène nulle part ».
+   *
+   * Le texte proposé est un vrai brouillon — envoyable tel quel, réécrit en
+   * un clic — jamais un remplissage vide.
+   */
+  defaut_fr?: string;
+  defaut_en?: string;
   /** Longueur max pour les champs texte. Un SMS trop long coûte des segments. */
   max?: number;
   /** Bornes pour `nombre`. */
@@ -437,14 +476,22 @@ export const ACTIONS: ActionCatalogue[] = [
         aide_fr: 'Vide = l’adresse de votre entreprise.',
         aide_en: 'Empty = your company address.',
       },
-      { cle: 'subject', fr: 'Objet', en: 'Subject', obligatoire: true, type: 'texte', max: 200 },
+      {
+        cle: 'subject', fr: 'Objet', en: 'Subject', obligatoire: true, type: 'texte', max: 200,
+        defaut_fr: 'Un message de [company_name]',
+        defaut_en: 'A message from [company_name]',
+      },
       {
         cle: 'preheader', fr: 'Aperçu', en: 'Preview text',
         obligatoire: false, type: 'texte', max: 200,
         aide_fr: 'La ligne affichée après l’objet dans la boîte de réception.',
         aide_en: 'The line shown after the subject in the inbox.',
       },
-      { cle: 'body', fr: 'Message', en: 'Message', obligatoire: true, type: 'zone', max: 10000 },
+      {
+        cle: 'body', fr: 'Message', en: 'Message', obligatoire: true, type: 'zone', max: 10000,
+        defaut_fr: 'Bonjour [client_name],\n\nMerci de faire affaire avec [company_name].\n\nAu plaisir,\n[company_name]',
+        defaut_en: 'Hi [client_name],\n\nThank you for choosing [company_name].\n\nBest,\n[company_name]',
+      },
     ],
   },
   {
@@ -453,7 +500,11 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_en: 'Goes to the client’s phone. Never between 8 p.m. and 8 a.m.',
     famille: 'communication', vers_client: true,
     champs: [
-      { cle: 'body', fr: 'Texte du message', en: 'Message text', obligatoire: true, type: 'zone', max: 1600 },
+      {
+        cle: 'body', fr: 'Texte du message', en: 'Message text', obligatoire: true, type: 'zone', max: 1600,
+        defaut_fr: 'Bonjour [client_name], c’est [company_name]. Merci !',
+        defaut_en: 'Hi [client_name], this is [company_name]. Thank you!',
+      },
     ],
   },
   {
@@ -462,7 +513,11 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_en: 'Stays internal. The client sees nothing.',
     famille: 'communication', vers_client: false,
     champs: [
-      { cle: 'title', fr: 'Titre', en: 'Title', obligatoire: true, type: 'texte', max: 200 },
+      {
+        cle: 'title', fr: 'Titre', en: 'Title', obligatoire: true, type: 'texte', max: 200,
+        defaut_fr: 'Suivi a faire pour [client_name]',
+        defaut_en: 'Follow up on [client_name]',
+      },
       { cle: 'body', fr: 'Détail', en: 'Details', obligatoire: false, type: 'zone', max: 2000 },
       {
         cle: 'destinataire', fr: 'Pour qui', en: 'For whom',
@@ -483,7 +538,11 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_en: 'Sends the client a link to leave a review.',
     famille: 'communication', vers_client: true,
     champs: [
-      { cle: 'body', fr: 'Texte du message', en: 'Message text', obligatoire: true, type: 'zone', max: 1600 },
+      {
+        cle: 'body', fr: 'Texte du message', en: 'Message text', obligatoire: true, type: 'zone', max: 1600,
+        defaut_fr: 'Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?',
+        defaut_en: 'Hi [client_name], thanks for choosing [company_name]! Would you leave a review?',
+      },
     ],
   },
   {
@@ -492,7 +551,11 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_en: 'Posts to your company’s Slack channel.',
     famille: 'communication', vers_client: false,
     champs: [
-      { cle: 'body', fr: 'Message', en: 'Message', obligatoire: true, type: 'zone', max: 3000 },
+      {
+        cle: 'body', fr: 'Message', en: 'Message', obligatoire: true, type: 'zone', max: 3000,
+        defaut_fr: '[client_name] — suivi a faire',
+        defaut_en: '[client_name] — follow-up needed',
+      },
     ],
   },
 
@@ -578,7 +641,11 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_en: 'Writes a note on the client record.',
     famille: 'client', vers_client: false, ecriture: true,
     champs: [
-      { cle: 'body', fr: 'La note', en: 'The note', obligatoire: true, type: 'zone', max: 4000 },
+      {
+        cle: 'body', fr: 'La note', en: 'The note', obligatoire: true, type: 'zone', max: 4000,
+        defaut_fr: 'Note automatique pour [client_name].',
+        defaut_en: 'Automatic note for [client_name].',
+      },
     ],
   },
 
@@ -589,7 +656,11 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_en: 'Adds a to-do in Lume. Stays internal.',
     famille: 'travail', vers_client: false,
     champs: [
-      { cle: 'title', fr: 'Titre de la tâche', en: 'Task title', obligatoire: true, type: 'texte', max: 200 },
+      {
+        cle: 'title', fr: 'Titre de la tâche', en: 'Task title', obligatoire: true, type: 'texte', max: 200,
+        defaut_fr: 'Rappeler [client_name]',
+        defaut_en: 'Call [client_name] back',
+      },
       { cle: 'body', fr: 'Détail', en: 'Details', obligatoire: false, type: 'zone', max: 2000 },
       {
         cle: 'priorite', fr: 'Priorité', en: 'Priority',
@@ -904,6 +975,29 @@ export const DELAI_MAX_SECONDES = 366 * 24 * 3600;
 export const DELAI_NEGATIF_MAX_SECONDES = 30 * 24 * 3600;
 
 /** Nombre d'actions par automatisation — au-delà, c'est une séquence. */
+/**
+ * La configuration de DÉPART d'une action, à la création de l'étape.
+ *
+ * Une étape neuve doit être COMPLÈTE : le serveur refuse d'enregistrer une
+ * action dont un champ obligatoire est vide — à raison, un courriel sans
+ * objet n'enverrait rien. L'éditeur n'enregistrait donc pas, affichait
+ * « 1 étape à compléter », et l'étape disparaissait au rechargement.
+ *
+ * On ne remplit QUE les champs obligatoires : proposer une valeur pour un
+ * champ facultatif ferait écrire ce que personne n'a demandé.
+ */
+export function configParDefaut(cleAction: string, fr: boolean): Record<string, string> {
+  const modele = trouverAction(cleAction);
+  if (!modele) return {};
+  const config: Record<string, string> = {};
+  for (const champ of modele.champs) {
+    if (!champ.obligatoire) continue;
+    const valeur = fr ? champ.defaut_fr : champ.defaut_en;
+    if (valeur) config[champ.cle] = valeur;
+  }
+  return config;
+}
+
 export const ACTIONS_MAX = 5;
 
 // ── Conditions ──────────────────────────────────────────────

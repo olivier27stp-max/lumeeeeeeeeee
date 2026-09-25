@@ -40,6 +40,27 @@ import {
 import type { Etape, EtapeAction, EtapeAttendre, EtapeSi } from '../../lib/sequenceTypes';
 import ChampActionUI from './ChampAction';
 
+/** Les conditions d'une étape « si », en texte modifiable. */
+function texteDesConditions(etape: Etape): string {
+  if (etape.type !== 'si') return '';
+  return Object.entries(etape.conditions ?? {})
+    .map(([k, v]) => `${k} = ${String(v)}`)
+    .join('\n');
+}
+
+/** Le texte saisi → l'objet `conditions`. Une ligne incomplète est ignorée. */
+function analyserConditions(texte: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const ligne of texte.split('\n')) {
+    const i = ligne.indexOf('=');
+    if (i <= 0) continue;
+    const cle = ligne.slice(0, i).trim();
+    const val = ligne.slice(i + 1).trim();
+    if (cle && val) out[cle] = val;
+  }
+  return out;
+}
+
 /** Les variables offertes, insérables d'un clic dans un champ de texte. */
 const VARIABLES = [
   { cle: 'client_name', fr: 'Nom du client', en: 'Client name' },
@@ -95,6 +116,20 @@ export default function PanneauEtape({
   // Le brouillon : on ne touche au parcours qu'en enregistrant.
   const [brouillon, setBrouillon] = useState<Etape>(etape);
 
+  /**
+   * Le texte BRUT du champ « Conditions », tel qu'on le tape.
+   *
+   * Il était dérivé de l'objet `conditions` à chaque rendu, et l'analyse ne
+   * gardait une ligne que si la clé ET la valeur étaient remplies. Taper
+   * « statut » (sans encore de « = ») jetait donc la ligne, et la valeur
+   * dérivée réécrivait un champ vide : le champ S'EFFAÇAIT à chaque frappe.
+   * De l'extérieur, on croyait qu'il refusait le clavier.
+   *
+   * On garde donc le texte tel quel pendant la saisie, et on ne l'analyse
+   * qu'au moment d'enregistrer.
+   */
+  const [conditionsTexte, setConditionsTexte] = useState(() => texteDesConditions(etape));
+
   /*
    * Changer de CARTE remet le panneau sur la nouvelle étape, et ramène
    * l'onglet d'édition — on ouvre une étape pour la modifier, pas pour lire
@@ -108,6 +143,7 @@ export default function PanneauEtape({
    */
   useEffect(() => {
     setBrouillon(etape);
+    setConditionsTexte(texteDesConditions(etape));
     setOnglet('edition');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- voir ci-dessus : suivre `etape` rendrait le panneau fragile à une optimisation du parent.
   }, [etape.id]);
@@ -455,22 +491,50 @@ export default function PanneauEtape({
                     ? 'Une ligne par condition, sous la forme champ = valeur. Le parcours suit « alors » quand toutes sont vraies.'
                     : 'One condition per line, as field = value. The journey follows “then” when all are true.'}
                 </p>
+
+                {/*
+                  Des exemples CLIQUABLES plutôt qu'un champ nu.
+                  L'audit du 2026-09-25 le dit : « aucune autocomplétion,
+                  aucune liste des champs valides — l'utilisateur ne sait
+                  même pas quoi écrire ». Les champs disponibles dépendent du
+                  déclencheur (le moteur compare aux métadonnées de
+                  l'événement), donc on propose les plus courants au lieu
+                  d'inventer une liste exhaustive qui serait fausse ailleurs.
+                */}
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {['statut', 'source', 'montant', 'stage_id'].map((exemple) => (
+                    <button
+                      key={exemple}
+                      type="button"
+                      onClick={() => {
+                        const ajout = `${conditionsTexte.trim() ? `${conditionsTexte.replace(/\n+$/, '')}\n` : ''}${exemple} = `;
+                        setConditionsTexte(ajout);
+                        setBrouillon({
+                          ...(brouillon as EtapeSi),
+                          conditions: analyserConditions(ajout),
+                        });
+                      }}
+                      className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-text-secondary transition-colors hover:border-accent hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      {exemple}
+                    </button>
+                  ))}
+                </div>
                 <textarea
                   id={`${ids}-cond`}
                   rows={4}
-                  value={Object.entries((brouillon as EtapeSi).conditions ?? {})
-                    .map(([k, v]) => `${k} = ${String(v)}`)
-                    .join('\n')}
+                  value={conditionsTexte}
                   onChange={(e) => {
-                    const conditions: Record<string, string> = {};
-                    for (const ligne of e.target.value.split('\n')) {
-                      const i = ligne.indexOf('=');
-                      if (i <= 0) continue;
-                      const cle = ligne.slice(0, i).trim();
-                      const val = ligne.slice(i + 1).trim();
-                      if (cle && val) conditions[cle] = val;
-                    }
-                    setBrouillon({ ...(brouillon as EtapeSi), conditions });
+                    // Le texte affiché est CELUI QU'ON TAPE, jamais une
+                    // reconstruction depuis l'objet : c'est ce qui rendait le
+                    // champ inutilisable (une ligne sans « = » était jetée, et
+                    // la valeur dérivée réécrivait un champ vide à chaque
+                    // frappe). L'objet suit, pour l'enregistrement.
+                    setConditionsTexte(e.target.value);
+                    setBrouillon({
+                      ...(brouillon as EtapeSi),
+                      conditions: analyserConditions(e.target.value),
+                    });
                   }}
                   className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 font-mono text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 />

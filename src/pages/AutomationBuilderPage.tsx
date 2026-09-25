@@ -28,7 +28,7 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Undo2, Redo2, Cloud, Check, Loader2,
-  Play, Plus, Hand, Maximize2, ZoomIn, ZoomOut, Sparkles, X,
+  Play, Plus, Hand, Maximize2, ZoomIn, ZoomOut, Sparkles, X, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -51,12 +51,16 @@ import {
   etapeVierge,
   insererEtape,
   retirerEtape,
+  estFormatOrigine,
+  projeterFormatOrigine,
+  apercuConversion,
 } from '../lib/sequenceTypes';
 import SequenceCanvas from '../components/automations/SequenceCanvas';
 import PanneauEtape from '../components/automations/PanneauEtape';
 import TiroirChoix, { type ChoixTiroir } from '../components/automations/TiroirChoix';
 import PanneauDeclencheur from '../components/automations/PanneauDeclencheur';
 import { listerChamps } from '../lib/champsPersoApi';
+import { fetchPipelines, fetchStages } from '../lib/pipelineVentesApi';
 import {
   ACTIONS,
   DECLENCHEURS,
@@ -64,6 +68,7 @@ import {
   FAMILLES_DECLENCHEURS,
   actionCompatible,
   champVisible,
+  configParDefaut,
   problemesAvantPublication,
   trouverAction,
 } from '../lib/automationCatalogue';
@@ -145,6 +150,13 @@ export default function AutomationBuilderPage() {
    * siens, et une liste vide doit se distinguer d'une liste pas encore lue.
    */
   const [champsDate, setChampsDate] = useState<Array<{ id: string; label: string }>>([]);
+  /**
+   * Les étapes des pipelines, pour « Opportunité entre dans une étape ».
+   *
+   * Chargées seulement si le déclencheur en a besoin : deux appels réseau
+   * de plus sur un parcours « facture payée » ne serviraient à rien.
+   */
+  const [etapesPipeline, setEtapesPipeline] = useState<Array<{ id: string; label: string }>>([]);
   /** L'étape dont le menu « … » est ouvert. */
   const [menuEtape, setMenuEtape] = useState<string | null>(null);
   /** L'aperçu (« Tester ») : ce qui partirait, sur un vrai client. */
@@ -189,7 +201,11 @@ export default function AutomationBuilderPage() {
     const estLogique = cle === 'attendre' || cle === 'si' || cle === 'arreter';
     const nouvelle = estLogique
       ? etapeVierge(cle as TypeEtape, id)
-      : { ...etapeVierge('action', id), action: { type: cle, config: {} } };
+      // Une étape neuve naît COMPLÈTE : un courriel sans objet ni corps est
+      // refusé par le serveur, donc jamais enregistré — l'étape disparaissait
+      // au rechargement (signalé le 2026-09-25). Le texte proposé est un vrai
+      // brouillon, envoyable tel quel et réécrit en un clic.
+      : { ...etapeVierge('action', id), action: { type: cle, config: configParDefaut(cle, fr) } };
     memoriser(insererEtape(steps, nouvelle, ajoutEnCours.apresId, ajoutEnCours.branche));
     setEtapeChoisie(nouvelle.id);
     setAjoutEnCours(null);
@@ -465,6 +481,37 @@ export default function AutomationBuilderPage() {
    * l'enregistrement automatique échouait en boucle et l'utilisateur voyait
    * « Modifié » sans jamais comprendre pourquoi rien ne partait.
    */
+  /**
+   * Les problèmes du parcours, calculés EN CONTINU — pas seulement au clic
+   * sur « Publier ».
+   *
+   * Signalé le 2026-09-25 : « quand l'action ne concorde pas, je veux que le
+   * système le signale automatiquement, pour qu'on ne bâtisse pas des
+   * parcours qui ne marchent pas ». Découvrir à la publication qu'une action
+   * ne va pas avec son déclencheur, c'est le découvrir après avoir tout monté.
+   */
+  const problemesVivants = useMemo(
+    () => problemesAvantPublication({
+      trigger_event: regle?.trigger_event,
+      steps,
+      actions: regle?.actions,
+      conditions: (regle?.conditions ?? null) as Record<string, unknown> | null,
+      fr,
+    }),
+    [regle?.trigger_event, regle?.actions, regle?.conditions, steps, fr],
+  );
+  /** Les étapes fautives, pour les signaler SUR le canevas (§6.5). */
+  const etapesEnErreur = useMemo(
+    () => new Set(problemesVivants
+      .filter((p) => p.gravite === 'bloquant' && p.etapeId)
+      .map((p) => p.etapeId as string)),
+    [problemesVivants],
+  );
+  const bloquantsVivants = useMemo(
+    () => problemesVivants.filter((p) => p.gravite === 'bloquant'),
+    [problemesVivants],
+  );
+
   const etapesIncompletes = useMemo(
     () => steps.filter((e) => {
       if (e.type !== 'action') return false;
@@ -485,21 +532,55 @@ export default function AutomationBuilderPage() {
     [steps],
   );
 
+  /**
+   * L'enregistrement automatique — 3 secondes après la FIN de la frappe.
+   *
+   * À 1 seconde, taper une phrase déclenchait un appel par mot : le serveur
+   * répondait « Too many requests. Please try again later. », en anglais et
+   * brut, sur l'écran de quelqu'un qui écrivait simplement son message
+   * (P1-9 de l'audit). Will a tranché : on garde l'enregistrement auto —
+   * il fait partie de la promesse — mais on respire, on réessaie, et
+   * l'utilisateur ne voit jamais l'erreur technique.
+   */
   useEffect(() => {
     if (etatSauvegarde !== 'modifie' || !regle) return;
     if (etapesIncompletes > 0) { setEtatSauvegarde('incomplet'); return; }
+    let annule = false;
+
     const minuterie = setTimeout(async () => {
       setEtatSauvegarde('en_cours');
-      try {
-        await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
-        setEtatSauvegarde('a_jour');
-      } catch (e: unknown) {
-        setEtatSauvegarde('modifie');
-        toast.error(e instanceof Error ? e.message : String(e));
+      // Trois tentatives, espacées de plus en plus : 1,5 s puis 4 s. Un
+      // plafond de débit se relâche vite ; réessayer tout de suite le
+      // relancerait pour rien.
+      const attentes = [1500, 4000];
+      for (let essai = 0; essai <= attentes.length; essai++) {
+        if (annule) return;
+        try {
+          await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
+          if (!annule) setEtatSauvegarde('a_jour');
+          return;
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
+          const tropVite = /too many requests|429|rate limit/i.test(message);
+          if (tropVite && essai < attentes.length) {
+            await new Promise((r) => setTimeout(r, attentes[essai]));
+            continue;
+          }
+          if (annule) return;
+          setEtatSauvegarde('modifie');
+          // Jamais l'erreur brute : « Too many requests » en anglais ne dit
+          // rien à un entrepreneur qui écrivait son message.
+          toast.error(tropVite
+            ? (fr
+              ? 'Trop de modifications d’un coup — on réessaie dans un instant.'
+              : 'Too many changes at once — retrying in a moment.')
+            : message);
+          return;
+        }
       }
-    }, 1000);
-    return () => clearTimeout(minuterie);
-  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes]);
+    }, 3000);
+    return () => { annule = true; clearTimeout(minuterie); };
+  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr]);
 
   // Dès que la dernière étape vide est remplie, on repart en enregistrement.
   useEffect(() => {
@@ -586,6 +667,114 @@ export default function AutomationBuilderPage() {
   };
   const recadrer = () => { setZoom(1); setDecalage({ x: 0, y: 0 }); };
 
+  /**
+   * La règle est-elle au FORMAT D'ORIGINE (`actions`, sans parcours) ?
+   *
+   * Mesuré en prod le 2026-09-25 : 250 règles sur 251. Le canevas ne lisant
+   * que `steps`, toutes affichaient « Ajouter une première étape » alors
+   * qu'elles tournent et envoient des messages — l'éditeur mentait à
+   * presque tous les clients.
+   *
+   * On les AFFICHE en lecture seule, projetées dans la forme du canevas.
+   * Aucune écriture : convertir reste un geste explicite (décision de Will
+   * — pas de conversion silencieuse d'une règle active).
+   */
+  const formatOrigine = useMemo(
+    () => !!regle && estFormatOrigine({ steps, actions: regle.actions }),
+    [regle, steps],
+  );
+  const etapesAffichees = useMemo(
+    () => (formatOrigine && regle
+      ? projeterFormatOrigine({ actions: regle.actions, delay_seconds: regle.delay_seconds })
+      : steps),
+    [formatOrigine, regle, steps],
+  );
+
+  /**
+   * Ce qu'une conversion ferait — calculé AVANT de proposer le bouton.
+   *
+   * Exigence de Will : l'utilisateur doit voir ce qui va changer avant de
+   * confirmer. Et 100 règles de prod sur 250 portent un `log_activity` que
+   * le serveur refuse : mieux vaut ne pas offrir le bouton que de le faire
+   * échouer au clic.
+   */
+  const conversion = useMemo(
+    () => (formatOrigine && regle
+      ? apercuConversion({ actions: regle.actions, delay_seconds: regle.delay_seconds })
+      : null),
+    [formatOrigine, regle],
+  );
+  const [conversionEnCours, setConversionEnCours] = useState(false);
+
+  /** Convertir : un seul écrit, confirmé, jamais automatique. */
+  const convertirParcours = useCallback(async () => {
+    if (!regle || !conversion?.possible) return;
+    const ok = await confirmer({
+      title: fr ? 'Convertir ce parcours ?' : 'Convert this journey?',
+      message: fr
+        ? `Les ${conversion.etapes.length} étapes affichées deviendront modifiables dans le canevas. L'automatisation continue de fonctionner pendant et après : les envois ne changent pas.`
+        : `The ${conversion.etapes.length} steps shown will become editable on the canvas. The automation keeps running during and after: what it sends does not change.`,
+      confirmLabel: fr ? 'Convertir' : 'Convert',
+    });
+    if (!ok) return;
+    setConversionEnCours(true);
+    try {
+      const maj = await modifierAutomatisation(regle.id, { steps: conversion.etapes });
+      setRegle(maj);
+      setSteps((maj.steps as Etape[] | undefined) ?? []);
+      toast.success(fr ? 'Parcours converti — il est modifiable' : 'Journey converted — it is editable');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setConversionEnCours(false);
+    }
+  }, [regle, conversion, fr]);
+
+  /**
+   * Y a-t-il du travail NON ENREGISTRÉ ?
+   *
+   * `modifie` = la minuterie n'a pas encore écrit. `incomplet` = une étape
+   * bloque l'enregistrement (un champ obligatoire vide) — c'est le cas le
+   * plus dangereux : on croit son parcours sauvé alors que rien n'est parti.
+   */
+  const travailNonEnregistre = etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet';
+
+  /**
+   * Prévenir avant de FERMER l'onglet.
+   *
+   * C'est le défaut de GoHighLevel relevé par l'audit : « nœuds non
+   * enregistrés abandonnés silencieusement (perte de travail) ». Le mandat
+   * demande explicitement de ne pas le reproduire. Le navigateur affiche
+   * son propre message — on ne peut pas le personnaliser, mais on peut
+   * refuser de laisser partir sans rien dire.
+   */
+  useEffect(() => {
+    if (!travailNonEnregistre) return;
+    const avertir = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', avertir);
+    return () => window.removeEventListener('beforeunload', avertir);
+  }, [travailNonEnregistre]);
+
+  /** Quitter l'éditeur — en demandant d'abord si du travail se perdrait. */
+  const quitterEditeur = useCallback(async () => {
+    if (travailNonEnregistre) {
+      const ok = await confirmer({
+        title: fr ? 'Quitter sans enregistrer ?' : 'Leave without saving?',
+        message: etatSauvegarde === 'incomplet'
+          ? (fr
+            ? 'Une étape est incomplète, donc le parcours n’a pas pu être enregistré. Si vous quittez maintenant, ces modifications seront perdues.'
+            : 'A step is incomplete, so the journey could not be saved. If you leave now, those changes are lost.')
+          : (fr
+            ? 'Vos dernières modifications ne sont pas encore enregistrées. Si vous quittez maintenant, elles seront perdues.'
+            : 'Your latest changes are not saved yet. If you leave now, they will be lost.'),
+        confirmLabel: fr ? 'Quitter' : 'Leave',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    navigate('/automations');
+  }, [travailNonEnregistre, etatSauvegarde, fr, navigate]);
+
   const declencheurLabel = useMemo(() => {
     if (!catalogue || !regle) return fr ? '— à choisir —' : '— to pick —';
     const d = catalogue.declencheurs.find((x) => x.cle === regle.trigger_event);
@@ -630,6 +819,32 @@ export default function AutomationBuilderPage() {
     return () => { vivant = false; };
   }, [besoinChampsDate]);
 
+  /** Le déclencheur demande-t-il une étape de pipeline ? */
+  const besoinEtapes = !!declencheurCourant?.champs?.some((c) => c.type === 'etape_pipeline');
+  useEffect(() => {
+    if (!besoinEtapes) return;
+    let vivant = true;
+    (async () => {
+      try {
+        const pipelines = await fetchPipelines();
+        // Le nom du pipeline PRÉFIXE celui de l'étape : deux pipelines ont
+        // souvent une étape « Soumission envoyée », et une liste de doublons
+        // ne permet pas de choisir.
+        const listes = await Promise.all(pipelines.map(async (p) => {
+          const etapes = await fetchStages(p.id);
+          return etapes
+            .filter((e) => !e.archived_at)
+            .map((e) => ({ id: e.id, label: `${p.name} · ${fr ? e.name_fr : e.name_en}` }));
+        }));
+        if (vivant) setEtapesPipeline(listes.flat());
+      } catch (e: unknown) {
+        // Une liste vide se distingue mal d'un échec : on le journalise.
+        console.error('[automations] étapes de pipeline illisibles', e);
+      }
+    })();
+    return () => { vivant = false; };
+  }, [besoinEtapes, fr]);
+
   /**
    * Les réglages du déclencheur, en clair sous sa carte.
    *
@@ -654,12 +869,15 @@ export default function AutomationBuilderPage() {
       if (champ.type === 'champ_date') {
         const nom = champsDate.find((c) => c.id === String(v))?.label;
         bouts.push(nom ?? (fr ? 'champ supprimé' : 'deleted field'));
+      } else if (champ.type === 'etape_pipeline') {
+        const nom = etapesPipeline.find((e) => e.id === String(v))?.label;
+        bouts.push(nom ?? (fr ? 'étape supprimée' : 'deleted stage'));
       } else {
         bouts.push(`${fr ? champ.fr : champ.en} : ${v}`);
       }
     }
     return bouts.length ? bouts.join(' · ') : null;
-  }, [declencheurCourant, regle?.conditions, champsDate, fr]);
+  }, [declencheurCourant, regle?.conditions, champsDate, etapesPipeline, fr]);
 
   /** Enregistrer les réglages du déclencheur. */
   const enregistrerDeclencheur = useCallback(async (conditions: Record<string, unknown>) => {
@@ -690,7 +908,7 @@ export default function AutomationBuilderPage() {
         </p>
         <button
           type="button"
-          onClick={() => navigate('/automations')}
+          onClick={() => void quitterEditeur()}
           className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {fr ? 'Mes automatisations' : 'My automations'}
@@ -712,7 +930,7 @@ export default function AutomationBuilderPage() {
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5">
         <button
           type="button"
-          onClick={() => navigate('/automations')}
+          onClick={() => void quitterEditeur()}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -894,8 +1112,49 @@ export default function AutomationBuilderPage() {
                     builder de GoHighLevel, et c'est celui qui sert vraiment :
                     un propriétaire d'entreprise sait dire ce qu'il veut, pas
                     poser des nœuds. ── */}
-                {steps.length === 0 ? (
-                  <div className="mx-auto flex max-w-xl flex-col items-center px-4">
+                {/* ── Le champ « Décris ton automatisation à Lumi » ──
+                    Il reste visible EN PERMANENCE, comme chez GoHighLevel :
+                    il disparaissait dès la première étape ajoutée, or c'est
+                    précisément quand un parcours existe qu'on veut demander
+                    « ajoute une relance » ou « et si le client ne répond pas ».
+                    Signalé le 2026-09-25 : « je mets une étape, l'IA n'est
+                    plus là ». ── */}
+                {/* ── Ce qui empêcherait le parcours de fonctionner ──
+                    Affiché PENDANT la construction, pas seulement au clic sur
+                    « Publier » : découvrir à la fin qu'une action ne va pas
+                    avec son déclencheur, c'est le découvrir trop tard.
+                    Cliquer un problème ouvre l'étape fautive. ── */}
+                {bloquantsVivants.length > 0 && (
+                  <div className="mx-auto mb-4 max-w-xl px-4">
+                    <div className="rounded-xl border border-danger/40 bg-danger/5 p-3">
+                      <p className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-danger">
+                        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                        {fr
+                          ? `${bloquantsVivants.length} chose(s) à corriger avant de publier`
+                          : `${bloquantsVivants.length} thing(s) to fix before publishing`}
+                      </p>
+                      <ul className="space-y-1">
+                        {bloquantsVivants.slice(0, 4).map((p, i) => (
+                          <li key={`${p.message}-${i}`}>
+                            {p.etapeId ? (
+                              <button
+                                type="button"
+                                onClick={() => setEtapeChoisie(p.etapeId!)}
+                                className="text-left text-[12px] text-text-secondary underline decoration-dotted underline-offset-2 transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                              >
+                                {p.message}
+                              </button>
+                            ) : (
+                              <span className="text-[12px] text-text-secondary">{p.message}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mx-auto mb-4 flex max-w-xl flex-col items-center px-4">
                     <div className="w-full rounded-2xl border border-border bg-surface-card p-5 shadow-sm">
                       <p className="mb-3 flex items-center justify-center gap-2 text-center text-sm font-medium text-text-primary">
                         <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" />
@@ -944,6 +1203,58 @@ export default function AutomationBuilderPage() {
                         ))}
                       </div>
                     </div>
+                </div>
+
+                {/* ── Le format d'origine, annoncé franchement ──
+                    On montre le parcours RÉEL (projeté depuis `actions`) au
+                    lieu d'un canevas vide, et on dit pourquoi il n'est pas
+                    modifiable. Convertir reste un geste explicite : jamais
+                    en silence sur une règle qui écrit à de vrais clients. ── */}
+                {formatOrigine && (
+                  <div className="mx-auto mb-4 max-w-xl px-4">
+                    <div className="rounded-xl border border-warning/40 bg-warning-light p-3">
+                      <p className="text-[13px] font-semibold text-warning">
+                        {fr ? 'Parcours au format d’origine' : 'Journey in the original format'}
+                      </p>
+                      <p className="mt-1 text-[12px] text-text-secondary">
+                        {fr
+                          ? 'Cette automatisation fonctionne normalement — elle s’affiche ici en lecture seule.'
+                          : 'This automation works normally — it is shown here read-only.'}
+                      </p>
+
+                      {/*
+                        Convertir n'est proposé QUE si rien ne se perd. Une
+                        règle qui écrit la trace interne (`log_activity`,
+                        100 règles de prod sur 250) n'est pas convertible :
+                        le serveur refuserait le parcours, et la convertir en
+                        retirant cette étape effacerait son historique en
+                        silence. On le dit plutôt que d'offrir un bouton qui
+                        échoue.
+                      */}
+                      {conversion?.possible ? (
+                        <button
+                          type="button"
+                          onClick={() => void convertirParcours()}
+                          disabled={conversionEnCours}
+                          className="glass-button mt-2 inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
+                        >
+                          {conversionEnCours
+                            ? (fr ? 'Conversion…' : 'Converting…')
+                            : (fr ? 'Convertir en parcours modifiable' : 'Convert to an editable journey')}
+                        </button>
+                      ) : (
+                        <p className="mt-2 text-[12px] text-text-tertiary">
+                          {fr
+                            ? 'Ce parcours contient une étape technique qui ne se convertit pas : il reste en lecture seule pour ne rien perdre.'
+                            : 'This journey contains a technical step that cannot be converted: it stays read-only so nothing is lost.'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {etapesAffichees.length === 0 ? (
+                  <div className="mx-auto flex max-w-xl flex-col items-center px-4">
 
                     <span className="my-4 text-xs text-text-tertiary">{fr ? 'ou' : 'or'}</span>
 
@@ -1007,8 +1318,9 @@ export default function AutomationBuilderPage() {
                   catalogue && (
                     <SequenceCanvas
                       declencheurLabel={declencheurLabel}
-                      steps={steps}
+                      steps={etapesAffichees}
                       fr={fr}
+                      lectureSeule={formatOrigine}
                       selectionId={etapeChoisie}
                       onSelection={setEtapeChoisie}
                       onAjouter={ouvrirAjout}
@@ -1025,6 +1337,7 @@ export default function AutomationBuilderPage() {
                         else setTiroirDeclencheur(true);
                       }}
                       declencheurDetail={declencheurDetail}
+                      etapesEnErreur={etapesEnErreur}
                     />
                   )
                 )}
@@ -1270,6 +1583,7 @@ export default function AutomationBuilderPage() {
           conditions={(regle?.conditions ?? null) as Record<string, unknown> | null}
           fr={fr}
           champsDate={champsDate}
+          etapesPipeline={etapesPipeline}
           onEnregistrer={enregistrerDeclencheur}
           onFermer={() => setReglageDeclencheur(false)}
         />

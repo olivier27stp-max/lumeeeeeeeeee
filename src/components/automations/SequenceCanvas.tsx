@@ -60,6 +60,14 @@ interface Props {
   declencheurDetail?: string | null;
   /** Lecture seule : aucun bouton d'édition (aperçu d'un préréglage). */
   lectureSeule?: boolean;
+  /**
+   * Les étapes qui empêchent de publier, signalées SUR le canevas.
+   *
+   * §6.5 du mandat : « nœuds en erreur signalés visuellement dans le
+   * builder ». Un bandeau en haut se lit une fois puis se perd de vue ;
+   * sur un parcours de huit cartes, on veut voir LAQUELLE cloche.
+   */
+  etapesEnErreur?: Set<string>;
 }
 
 const ICONES: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -159,9 +167,9 @@ function Connecteur({
 
 /** Une carte d'étape. */
 function Carte({
-  etape, fr, selectionnee, onClick, onMenu, lectureSeule,
+  etape, fr, selectionnee, enErreur, onClick, onMenu, lectureSeule,
 }: {
-  etape: Etape; fr: boolean; selectionnee: boolean;
+  etape: Etape; fr: boolean; selectionnee: boolean; enErreur?: boolean;
   onClick: () => void;
   /** Le menu « … » de la carte — dupliquer, supprimer. */
   onMenu?: (id: string) => void;
@@ -175,6 +183,21 @@ function Carte({
 
   const detail = detailEtape(etape, fr);
 
+  /*
+   * La bordure de la carte. Calculée ici, pas dans le JSX : le détecteur
+   * d'accessibilité lit les balises au caractère près et ne saute pas les
+   * commentaires — un commentaire dans un attribut lui fait avaler la
+   * balise entière et signaler un faux « div cliquable ».
+   *
+   * L'erreur prime sur la sélection : une carte fautive doit se voir même
+   * quand une autre est ouverte (§6.5 — nœuds en erreur signalés).
+   */
+  const bordure = enErreur
+    ? 'border-danger shadow-md'
+    : selectionnee
+      ? 'border-accent shadow-md'
+      : 'border-border hover:border-text-tertiary';
+
   // Un `div` plutot qu'un `button` : la carte porte un second bouton (le
   // menu « … »), et un bouton dans un bouton est du HTML invalide que les
   // navigateurs reparent en supprimant l'imbrication — le menu disparaitrait.
@@ -182,7 +205,7 @@ function Carte({
     <div
       className={cn(
         'relative w-[260px] rounded-xl border bg-surface-primary transition-all',
-        selectionnee ? 'border-accent shadow-md' : 'border-border hover:border-text-tertiary',
+        bordure,
       )}
     >
       <button
@@ -229,7 +252,7 @@ function Carte({
 
 export default function SequenceCanvas({
   declencheurLabel, steps, fr, selectionId, onSelection, onAjouter, onMenu, onDeclencheur,
-  declencheurDetail, lectureSeule,
+  declencheurDetail, lectureSeule, etapesEnErreur,
 }: Props) {
   const parId = new Map(steps.map((e) => [e.id, e]));
 
@@ -258,7 +281,7 @@ export default function SequenceCanvas({
     if (etape.type === 'si') {
       return (
         <div className="flex flex-col items-center">
-          <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
+          <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
           {/* Deux branches, côte à côte : c'est le seul endroit où le
               parcours se divise, et ça doit se voir. */}
           <div className="flex items-start gap-6 pt-1">
@@ -278,7 +301,7 @@ export default function SequenceCanvas({
     const suivant = etape.type === 'arreter' ? null : etape.suivant;
     return (
       <div className="flex flex-col items-center">
-        <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
+        <Carte etape={etape} fr={fr} selectionnee={selectionId === etape.id} enErreur={etapesEnErreur?.has(etape.id)} onClick={() => onSelection(etape.id)} onMenu={onMenu} lectureSeule={lectureSeule} />
         {etape.type !== 'arreter' && (
           <>
             <Connecteur fr={fr} lectureSeule={lectureSeule} onAjouter={() => onAjouter(etape.id)} />
@@ -297,7 +320,14 @@ export default function SequenceCanvas({
         {/* Le déclencheur : point de départ, jamais une étape.
             Cliquable — c'est le chemin pour en changer une fois le parcours
             commencé. */}
-        {onDeclencheur && !lectureSeule ? (
+        {/*
+            La carte « Quand » reste cliquable MÊME en lecture seule : le
+            déclencheur et ses réglages (quelle étape de pipeline, quelle
+            date) ne font pas partie du parcours figé — ils se changent sur
+            une règle au format d'origine comme sur une autre. Seules les
+            ÉTAPES sont gelées.
+        */}
+        {onDeclencheur ? (
           <button
             type="button"
             onClick={onDeclencheur}

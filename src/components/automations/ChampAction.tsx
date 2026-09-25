@@ -28,11 +28,13 @@ interface Props {
   champsDate?: Array<{ id: string; label: string }>;
   /** Autres automatisations publiées, pour le type `automatisation`. */
   automatisations?: Array<{ id: string; nom: string }>;
+  /** Étapes des pipelines, pour le type `etape_pipeline`. */
+  etapesPipeline?: Array<{ id: string; label: string }>;
 }
 
 export default function ChampActionUI({
   champ, valeur, onChange, fr, membres = [], etiquettes = [], champsDate = [],
-  automatisations = [],
+  automatisations = [], etapesPipeline = [],
 }: Props) {
   // `useId` plutôt qu'un littéral : ce composant est rendu plusieurs fois
   // sur la même page (une par étape), et deux `id` identiques casseraient
@@ -134,6 +136,33 @@ export default function ChampActionUI({
             {automatisations.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.nom}
+              </option>
+            ))}
+          </select>
+        );
+
+      case 'etape_pipeline':
+        /*
+         * Les étapes des pipelines de l'entreprise. Facultatif : laisser
+         * vide veut dire « toutes les étapes », ce qui est le comportement
+         * d'avant ce réglage — on ne change donc rien pour les règles
+         * existantes.
+         */
+        if (etapesPipeline.length === 0) {
+          return (
+            <p className="rounded-lg border border-dashed border-border px-3 py-2.5 text-[13px] text-text-secondary">
+              {fr
+                ? 'Aucune étape de pipeline. Créez-en dans Pipeline de ventes.'
+                : 'No pipeline stage yet. Create some in the sales pipeline.'}
+            </p>
+          );
+        }
+        return (
+          <select id={id} value={valeur} onChange={(e) => onChange(e.target.value)} className={classeChamp}>
+            <option value="">{fr ? '— Toutes les étapes —' : '— Every stage —'}</option>
+            {etapesPipeline.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.label}
               </option>
             ))}
           </select>

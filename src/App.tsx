@@ -1531,6 +1531,11 @@ function AuthenticatedApp({
                     <Route path="/pricing" element={<Navigate to="/settings/billing" replace />} />
                     {/* Ancien chemin encore tapé à la main / dans des favoris (audit QA P2). */}
                     <Route path="/marketplace" element={<Navigate to="/settings/marketplace" replace />} />
+                    {/* L'app est en français : quelqu'un tape « /parametres »
+                        et tombait sur un 404 (P1-6 de l'audit du 2026-09-25).
+                        Les deux orthographes mènent aux réglages. */}
+                    <Route path="/parametres" element={<Navigate to="/settings" replace />} />
+                    <Route path="/paramètres" element={<Navigate to="/settings" replace />} />
                     {/* Lume Agent masque — la fonctionnalite n'est pas encore ouverte aux
                         utilisateurs. La route est REDIRIGEE plutot que supprimee : un favori
                         ou un lien deja partage ne doit pas tomber sur une page blanche.
