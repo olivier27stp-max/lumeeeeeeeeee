@@ -92,7 +92,7 @@ export default function OfficeNew() {
   const isOwner = currentRole === 'owner';
   // Bureau de BASE (principal, sinon le plus ancien) : la référence des réglages
   // copiés — le serveur fait le même choix (bureauDeBase, routes/orgs.ts).
-  const nomBase = listing?.offices.find((o) => !o.archived)?.name || sourceName;
+  const nomBase = listing?.offices?.find((o) => !o.archived)?.name || sourceName;
   const atLimit = !!listing && !listing.can_create;
   const canSubmit = isOwner && !atLimit && !loadingMeta && !saving;
 

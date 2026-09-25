@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { abonnerBureauActif, bureauActifSync } from '../lib/orgApi';
 
 interface ModuleFlag {
   enabled: boolean;
@@ -44,6 +45,11 @@ export function useModuleAccess(moduleKey: string): UseModuleAccessReturn {
   const fetchedRef = useRef(false);
 
   const fetchFlag = useCallback(async () => {
+    // Bureau pas encore connu (démarrage) : un compte à plusieurs bureaux se
+    // ferait répondre 400 « bureau requis », et le module paraissait désactivé
+    // POUR TOUJOURS (« Cette fonctionnalité n'est pas encore activée », Rafba,
+    // 2026-09-25). On attend : l'abonnement plus bas relit dès qu'il est posé.
+    if (!bureauActifSync()) { setEchecLecture(true); return; }
     try {
       const { data: { session } } = await supabase.auth.getSession();
       // Session pas encore restauree : l'etat est INCONNU, pas « desactive ».
@@ -79,6 +85,8 @@ export function useModuleAccess(moduleKey: string): UseModuleAccessReturn {
 
   useEffect(() => {
     fetchFlag();
+    // Les modules sont par bureau : relire quand le bureau actif est posé ou change.
+    return abonnerBureauActif(() => { void fetchFlag(); });
   }, [fetchFlag]);
 
   // Listen for activation events from other hook instances
