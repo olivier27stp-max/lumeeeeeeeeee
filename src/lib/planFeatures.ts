@@ -14,6 +14,8 @@ const FEATURES_FR: Record<string, string> = {
   'Jobs & calendar': 'Jobs et calendrier',
   'Online payments (Stripe & PayPal)': 'Paiements en ligne (Stripe et PayPal)',
   'Tasks & leads pipeline': 'Tâches et pipeline de prospects',
+  // Minimum n'a pas le pipeline (Scale et Autopilot) : le libellé ne le promet plus (2026-09-25).
+  'Tasks & leads': 'Tâches et prospects',
   'Email communications': 'Communications par courriel',
   'Mobile access': 'Accès mobile',
   'Basic reporting': 'Rapports de base',
