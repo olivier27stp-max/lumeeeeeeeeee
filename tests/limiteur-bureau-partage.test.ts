@@ -111,7 +111,11 @@ describe('les abus sont toujours arrêtés', () => {
   it('un compte qui martèle est freiné — seul', () => {
     const IP = '203.0.113.20';
     let bloque = false;
-    for (let k = 0; k < 60 && !bloque; k++) bloque = passer(chaine, requete(IP, 'script')) === 429;
+    // 200 essais : la rafale par utilisateur est passée de 40 à 120 le
+    // 2026-09-25 (à 7-8 appels par page, 40 bloquait la simple navigation).
+    // Le test doit dépasser la NOUVELLE limite, sinon il prouve seulement
+    // qu'on n'a pas martelé assez fort.
+    for (let k = 0; k < 200 && !bloque; k++) bloque = passer(chaine, requete(IP, 'script')) === 429;
     expect(bloque).toBe(true);
     // Son collègue sur la même IP continue de travailler.
     expect(passer(chaine, requete(IP, 'collegue'))).toBeNull();
