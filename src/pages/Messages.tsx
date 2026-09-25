@@ -509,7 +509,9 @@ export default function Messages() {
   }
 
   return (
-    <PermissionGate permission="automations.update">
+    // messages.read (comme la route) : « automations.update » fermait la page aux
+    // représentants et techniciens, qui ont pourtant le droit de lire leurs messages.
+    <PermissionGate permission="messages.read">
     <>
       {/* ── Channel selector: SMS · Email (email masqué si EMAIL_INBOX_ENABLED=false) ── */}
       {EMAIL_INBOX_ENABLED && (

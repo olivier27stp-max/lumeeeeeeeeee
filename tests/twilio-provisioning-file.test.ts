@@ -49,7 +49,11 @@ const rpc = vi.fn(async (_nom: string, args: Ligne) => {
   (db.communication_channels ||= []).push({ id: `ch-${++idSeq}`, org_id: args.p_org_id, channel_type: 'sms', status: 'active', phone_number: args.p_phone_number, metadata: args.p_metadata });
   return { data: `ch-${idSeq}`, error: null };
 });
-vi.mock('../server/lib/supabase', () => ({ getServiceClient: () => ({ from: requete, rpc }) }));
+vi.mock('../server/lib/supabase', () => ({
+  getServiceClient: () => ({ from: requete, rpc }),
+  // Entreprise à un seul bureau : le forfait est cherché sur ce bureau.
+  companyOrgIds: async (_c: unknown, org: string) => [org],
+}));
 
 const achat = vi.fn();
 const disponibles = vi.fn();

@@ -406,10 +406,13 @@ export async function findOrCreateConversation(
 ) {
   const variants = phoneVariants(phoneNumber);
 
-  // Try to find existing conversation (match any phone variant)
+  // Conversation existante DE CE BUREAU (client service : aucune RLS ne filtre).
+  // Sans org_id, le même numéro écrit par deux entreprises atterrissait dans la
+  // conversation de la première — fuite entre clients de Lume.
   const { data: existing } = await serviceClient
     .from('conversations')
     .select('*')
+    .eq('org_id', orgId)
     .in('phone_number', variants)
     .limit(1)
     .maybeSingle();
@@ -422,6 +425,8 @@ export async function findOrCreateConversation(
     const { data: client } = await serviceClient
       .from('clients')
       .select('id, first_name, last_name')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
       .or(phoneFilter)
       .limit(1)
       .maybeSingle();
