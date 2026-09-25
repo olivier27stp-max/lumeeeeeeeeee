@@ -844,6 +844,29 @@ export async function renommerPipeline(pipelineId: string, nom: string): Promise
 }
 
 /**
+ * Règle l'affichage d'un pipeline APRÈS sa création.
+ *
+ * Ces deux champs n'étaient posés qu'à la création : pour passer d'un
+ * affichage gris à un affichage teinté, il fallait recréer le pipeline —
+ * donc perdre ses deals.
+ *
+ * Un champ laissé à `undefined` n'est pas écrit : on peut changer la couleur
+ * sans toucher au mode de probabilité. Sans ça, régler l'un depuis un onglet
+ * écraserait ce qu'un autre vient de changer.
+ */
+export async function definirAffichagePipeline(
+  pipelineId: string,
+  reglages: { color_mode?: ModeCouleur; use_deal_probability?: boolean },
+): Promise<void> {
+  const { error } = await supabase.rpc('pipeline_definir_affichage', {
+    p_pipeline_id: pipelineId,
+    p_color_mode: reglages.color_mode ?? null,
+    p_use_deal_probability: reglages.use_deal_probability ?? null,
+  });
+  if (error) throw error;
+}
+
+/**
  * Change le pipeline par défaut. Passe par un RPC : l'index partiel
  * `uq_pipelines_ventes_defaut` refuserait l'état intermédiaire à deux
  * défauts que produiraient deux `update` PostgREST séparés.

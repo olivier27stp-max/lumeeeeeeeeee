@@ -309,7 +309,10 @@ export default function Pipeline() {
     { cle: 'board', libelle: 'Board', visible: true },
     // Les prévisions suivent le board : c'est la même question, projetée.
     { cle: 'previsions', libelle: fr ? 'Prévisions' : 'Forecast', visible: voitLesStats },
-    { cle: 'reglages', libelle: fr ? 'Réglages' : 'Settings', visible: peutConfigurer },
+    // « Pipelines », comme chez GoHighLevel : l'onglet liste les pipelines et
+    // règle leurs étapes. « Réglages » laissait croire à des préférences de
+    // l'app, alors qu'on y configure le parcours de vente lui-même.
+    { cle: 'reglages', libelle: 'Pipelines', visible: peutConfigurer },
   ];
   const ongletActif = tabs.find((t) => t.cle === onglet)?.visible ? onglet : 'board';
 
