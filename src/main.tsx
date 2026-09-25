@@ -40,18 +40,27 @@ const queryClient = new QueryClient({
   },
 });
 
-// Auto-guérison après déploiement : les chunks lazy de l'ancien index.html
-// n'existent plus sur le serveur (« Failed to fetch dynamically imported
-// module ») — on recharge la page une fois pour reprendre le nouvel index.
-// Garde anti-boucle : au plus un reload par 30 s.
+/*
+ * ÉCHEC DE PRÉCHARGEMENT (`vite:preloadError`).
+ *
+ * Vite précharge les fichiers des pages dès l'ouverture. Après un
+ * déploiement, un onglet resté ouvert demande des noms qui n'existent
+ * plus, et cet événement part AVANT tout clic.
+ *
+ * On se contente de NEUTRALISER l'événement, sans recharger.
+ *
+ * Pourquoi pas de rechargement ici : un préchargement est une optimisation,
+ * pas un besoin. Recharger à sa place consommait le budget anti-boucle de
+ * `lazyResilient` (même clé), qui se retrouvait ensuite incapable de
+ * recharger pour de vrai et laissait la page sur
+ * « Chargement de l'espace… » indéfiniment — observé en prod le
+ * 2026-09-25. Le vrai `import()` suivra au moment où la page est
+ * demandée ; `lazyResilient` sait alors réessayer puis recharger.
+ *
+ * `preventDefault()` évite l'erreur non capturée dans la console.
+ */
 window.addEventListener('vite:preloadError', (event) => {
-  const KEY = 'lume-chunk-reload-at';
-  const last = Number(sessionStorage.getItem(KEY) || 0);
-  if (Date.now() - last > 30_000) {
-    sessionStorage.setItem(KEY, String(Date.now()));
-    event.preventDefault();
-    window.location.reload();
-  }
+  event.preventDefault();
 });
 
 createRoot(document.getElementById('root')!).render(

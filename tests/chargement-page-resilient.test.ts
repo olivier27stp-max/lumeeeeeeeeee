@@ -129,3 +129,49 @@ describe('l’écran d’erreur ne reste plus bloqué', () => {
     expect(bloc).toMatch(/window\.location\.reload\(\)/);
   });
 });
+
+describe('le spinner infini — défaut observé en prod le 2026-09-25', () => {
+  const outil = lire('src/lib/lazyResilient.ts');
+  const main = lire('src/main.tsx');
+
+  /*
+   * CE QUI S'EST PASSÉ. La première version du correctif a été vérifiée
+   * en bloquant le fichier au navigateur : plus d'écran rouge, tant
+   * mieux. Mais la page restait sur « Chargement de l'espace… » POUR
+   * TOUJOURS — un spinner infini, pire que l'erreur qu'on remplaçait :
+   * l'utilisateur n'a même plus de bouton.
+   *
+   * La chaîne : `vite:preloadError` rechargeait dès le PRÉchargement et
+   * posait la clé anti-boucle ; 300 ms plus tard le vrai `import()`
+   * échouait à son tour, `rechargerUneFois()` était refusé par ce même
+   * garde… et rendait quand même une promesse éternelle, en croyant
+   * qu'un rechargement était en route.
+   */
+
+  it('quand le rechargement est REFUSÉ, l’erreur remonte — pas de promesse éternelle', () => {
+    // Le garde doit POUVOIR dire non, et l'appelant doit l'écouter.
+    expect(outil, 'rechargerUneFois doit signaler son refus')
+      .toMatch(/function rechargerUneFois\(\): boolean/);
+    expect(outil, 'un refus du garde doit rendre la main à l’ErrorBoundary')
+      .toMatch(/if \(!rechargerUneFois\(\)\) \{[\s\S]{0,400}?throw seconde;/);
+  });
+
+  it('un préchargement raté ne brûle PAS le budget de rechargement', () => {
+    /*
+     * Le préchargement est une optimisation, pas un besoin : s'il échoue,
+     * il n'y a rien à réparer tout de suite. Recharger à sa place volait
+     * son unique rechargement à `lazyResilient`, qui en a besoin, lui,
+     * au moment où la page est vraiment demandée.
+     */
+    // On vise le GESTIONNAIRE, pas la première mention du nom : le
+    // commentaire au-dessus le cite aussi, et lire le commentaire à la
+    // place du code rendrait ce test aveugle au retour du défaut.
+    const i = main.indexOf("addEventListener('vite:preloadError'");
+    expect(i, 'le gestionnaire doit toujours exister').toBeGreaterThan(-1);
+    const bloc = main.slice(i, i + 300);
+    expect(bloc, 'le préchargement ne doit plus recharger la page')
+      .not.toMatch(/location\.reload\(\)/);
+    expect(bloc, 'ni poser la clé anti-boucle partagée')
+      .not.toMatch(/setItem/);
+  });
+});
