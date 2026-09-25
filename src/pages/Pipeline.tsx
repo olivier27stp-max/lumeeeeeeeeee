@@ -25,7 +25,6 @@ import PerduModal from '../components/pipeline/PerduModal';
 import PipelineReglages from '../components/pipeline/PipelineReglages';
 import CreerPipelineModal from '../components/pipeline/CreerPipelineModal';
 import PipelinePrevisions from '../components/pipeline/PipelinePrevisions';
-import PipelineJournalLots from '../components/pipeline/PipelineJournalLots';
 import { useTranslation } from '../i18n';
 import { hasPermission } from '../lib/permissions';
 import { usePermissions } from '../hooks/usePermissions';
@@ -41,7 +40,22 @@ import {
  * anciens liens `?tab=stats` retombent sur Prévisions plutôt que sur le
  * board, pour atterrir là où la donnée a déménagé.
  */
-type Onglet = 'board' | 'previsions' | 'lots' | 'reglages';
+/**
+ * « Actions en lot » a été retiré (2026-09-25).
+ *
+ * L'onglet listait les assignations et déplacements de masse, et promettait
+ * de rendre une suppression réversible. Mais AUCUNE suppression en lot
+ * n'existe dans l'interface : le journal ne consignait donc que des gestes
+ * qu'on refait en trois clics, sous cinq filtres, pour un client qui en
+ * voyait trois lignes.
+ *
+ * L'écriture du journal reste en place (`journaliserLot`) : la trace a de la
+ * valeur pour un audit, et le jour où une suppression en lot existera, elle
+ * sera déjà consignée. C'est l'ÉCRAN qui ne servait à rien, pas la donnée.
+ *
+ * Un vieux lien `?tab=lots` retombe sur le board.
+ */
+type Onglet = 'board' | 'previsions' | 'reglages';
 
 /**
  * Le dernier pipeline consulté, par navigateur. Pas en base : c'est une
@@ -56,7 +70,7 @@ export default function Pipeline() {
   const [params, setParams] = useSearchParams();
   const brut = params.get('tab');
   // Redirection douce des liens déjà partagés, signets compris.
-  const onglet = (brut === 'stats' ? 'previsions' : brut) as Onglet || 'board';
+  const onglet = (brut === 'stats' ? 'previsions' : brut === 'lots' ? 'board' : brut) as Onglet || 'board';
   const qc = useQueryClient();
 
   const perms = usePermissions();
@@ -241,8 +255,6 @@ export default function Pipeline() {
     { cle: 'board', libelle: 'Board', visible: true },
     // Les prévisions suivent le board : c'est la même question, projetée.
     { cle: 'previsions', libelle: fr ? 'Prévisions' : 'Forecast', visible: voitLesStats },
-    // Le journal des lots : réservé aux patrons, comme les actions elles-mêmes.
-    { cle: 'lots', libelle: fr ? 'Actions en lot' : 'Bulk actions', visible: estPatron },
     { cle: 'reglages', libelle: fr ? 'Réglages' : 'Settings', visible: peutConfigurer },
   ];
   const ongletActif = tabs.find((t) => t.cle === onglet)?.visible ? onglet : 'board';
@@ -338,8 +350,6 @@ export default function Pipeline() {
             }}
           />
         )}
-
-        {ongletActif === 'lots' && estPatron && <PipelineJournalLots />}
 
 
         {ongletActif === 'reglages' && peutConfigurer && (
