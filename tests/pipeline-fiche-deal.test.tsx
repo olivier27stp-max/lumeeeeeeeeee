@@ -299,6 +299,8 @@ describe('fiche du deal — dossier du client', () => {
     await rendre();
     await ouvrirOngletClient();
 
+    // Les montants sont formatés avec des espaces INSÉCABLES ( ,  ) :
+    // comparer avec une espace ordinaire échouerait sans rien dire d'utile.
     const texte = conteneur.textContent ?? '';
     // L'historique complet : deux jobs que ce deal n'a pas produits.
     expect(texte).toContain('JOB-101');
@@ -331,6 +333,35 @@ describe('fiche du deal — dossier du client', () => {
     // était donc faux dès le deuxième deal d'un client.
     expect(argent).toContain('tout le client');
     expect(argent).not.toContain('Doit encore');
+  });
+
+  it("un BROUILLON n'affiche jamais « dû » — rien n'a été réclamé", async () => {
+    dossierMock.mockResolvedValue({
+      jobs: [], devis: [],
+      factures: [
+        // Envoyée : le client la connaît, il doit vraiment 120 $.
+        { id: 'f1', numero: 'FAC-55', titre: '', statut: 'sent', cents: 45000, solde_cents: 12000, date: '2026-05-02T00:00:00Z' },
+        // Brouillon : jamais envoyé. Son solde de 450 $ ne doit apparaître
+        // nulle part — ni en rouge sur la ligne, ni dans le total.
+        { id: 'f2', numero: 'FAC-56', titre: '', statut: 'draft', cents: 45000, solde_cents: 45000, date: '2026-05-03T00:00:00Z' },
+      ],
+      messages: [], paye_cents: 33000, du_cents: 12000,
+    });
+    await rendre();
+    await ouvrirOngletClient();
+
+    // Les montants portent une espace INSÉCABLE (U+00A0) entre le nombre
+    // et le « $ » : comparer avec une espace ordinaire échoue sans rien
+    // dire d'utile. On normalise avant de comparer.
+    const texte = (conteneur.textContent ?? '').replace(/[  ]/g, ' ');
+    // Le brouillon reste VISIBLE : c'est du travail en cours, le cacher
+    // ferait croire qu'il n'existe pas.
+    expect(texte).toContain('FAC-56');
+    // Mais il ne réclame rien. « 450,00 $ dû » sur une facture que personne
+    // n'a reçue inventait une dette — 5 823 $ sur 14 brouillons en prod.
+    expect(texte).not.toContain('450 $ dû');
+    // La vraie dette, elle, s'affiche.
+    expect(texte).toContain('120 $ dû');
   });
 
   it("dit « premier contact » quand le client n'a aucun historique", async () => {

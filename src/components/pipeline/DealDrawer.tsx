@@ -451,7 +451,7 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
               <LigneDossier
                 key={f.id} vers={`/invoices/${f.id}`} numero={f.numero} titre={f.titre}
                 statut={f.statut} cents={f.cents} fr={fr}
-                alerte={(f.solde_cents ?? 0) > 0 ? `${argent(f.solde_cents ?? 0, fr)} ${fr ? 'dû' : 'due'}` : undefined}
+                alerte={f.statut !== 'draft' && (f.solde_cents ?? 0) > 0 ? `${argent(f.solde_cents ?? 0, fr)} ${fr ? 'dû' : 'due'}` : undefined}
               />
             ))}
           </div>
@@ -790,8 +790,13 @@ function OngletPaiements({ deal, fr }: { deal: Deal; fr: boolean }) {
                   <td className="py-2 px-2 text-text-tertiary">
                     {l.statut || '\u2014'}
                     {/* Le solde restant, l\u00e0 o\u00f9 il existe : une facture « envoy\u00e9e »
-                        \u00e0 moiti\u00e9 pay\u00e9e n'est pas la m\u00eame chose qu'une intacte. */}
-                    {l.genre === 'facture' && (l.solde_cents ?? 0) > 0 && (
+                        à moitié payée n'est pas la même chose qu'une intacte.
+
+                        Un BROUILLON en est exclu : jamais envoyé, donc rien n'est
+                        dû. Afficher « 450 $ dû » en rouge sur une facture que
+                        personne n'a reçue inventait une dette — 5 823 $ sur 14
+                        brouillons en production. */}
+                    {l.genre === 'facture' && l.statut !== 'draft' && (l.solde_cents ?? 0) > 0 && (
                       <span className="ml-1.5 text-[11px] font-semibold" style={{ color: 'var(--color-danger)' }}>
                         {montant(l.solde_cents ?? 0, fr)} {fr ? 'd\u00fb' : 'due'}
                       </span>
