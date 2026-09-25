@@ -45,16 +45,27 @@ function estEchecDeChargement(e: unknown): boolean {
   return /dynamically imported module|Importing a module script failed|Failed to fetch|error loading dynamically/i.test(m);
 }
 
-function rechargerUneFois(): void {
+/**
+ * Recharge la page, au plus une fois par 30 s.
+ *
+ * Retourne `false` quand le garde anti-boucle refuse : l'appelant DOIT
+ * alors laisser l'erreur remonter. C'est le défaut observé en prod le
+ * 2026-09-25 — on rendait une promesse éternelle en croyant qu'un
+ * rechargement était en route, et la page restait sur
+ * « Chargement de l'espace… » pour toujours. Un écran d'erreur
+ * lisible, avec un bouton, vaut mieux qu'un spinner infini.
+ */
+function rechargerUneFois(): boolean {
   try {
     const dernier = Number(sessionStorage.getItem(CLE_RECHARGE) || 0);
-    if (Date.now() - dernier < DELAI_ANTI_BOUCLE) return;
+    if (Date.now() - dernier < DELAI_ANTI_BOUCLE) return false;
     sessionStorage.setItem(CLE_RECHARGE, String(Date.now()));
   } catch {
     // Stockage indisponible (mode privé) : on recharge quand même, une
     // erreur bloquante est pire qu'un rechargement de trop.
   }
   window.location.reload();
+  return true;
 }
 
 /**
@@ -90,8 +101,14 @@ export function lazyResilient<T extends ComponentType<any>>(
       } catch (seconde) {
         if (!estEchecDeChargement(seconde)) throw seconde;
         // Le fichier n'existe vraiment plus : reprendre le nouvel index.
-        rechargerUneFois();
-        // On rend la promesse éternelle : le rechargement est en route, et
+        if (!rechargerUneFois()) {
+          // Le garde a refusé (on vient déjà de recharger) : le problème
+          // n'est pas un simple déploiement. On laisse remonter —
+          // l'ErrorBoundary affichera un écran lisible avec un bouton,
+          // plutôt qu'un chargement qui ne finit jamais.
+          throw seconde;
+        }
+        // Le rechargement est en route : on rend la promesse éternelle,
         // rejeter afficherait l'écran rouge une fraction de seconde pour
         // rien.
         return await new Promise<{ default: T }>(() => {});
