@@ -118,7 +118,8 @@ import creatorSpaceBillingRouter from './routes/creator-space-billing';
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, userKey } from './lib/security';
 import { redisRateLimit, useRedis } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
-import { subscriptionGuard } from './lib/subscription-guard';
+import { subscriptionGuard, resoudreUtilisateur } from './lib/subscription-guard';
+import { featureGuard } from './lib/feature-guard';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
 import { initSentry, attachSentryErrorHandler, captureException, captureCronFailure, withCronCheckIn } from './lib/sentry';
@@ -766,6 +767,11 @@ app.use(rbacMiddleware());
 // répond 402 — le check dans App.tsx n'est plus qu'un confort d'affichage.
 // Mode via SUBSCRIPTION_GUARD=enforce|log|off. Voir server/lib/subscription-guard.ts.
 app.use(subscriptionGuard());
+// Gating de FORFAIT (2026-09-25) : l'abonnement est valide, mais le forfait
+// inclut-il la fonctionnalité ? Ne vivait que dans React (<PlanFeatureGate>),
+// donc contournable par un appel direct à l'API. Démarre en mode `log` : il
+// journalise qui SERAIT bloqué sans rien couper. FEATURE_GUARD=enforce|log|off.
+app.use(featureGuard({ resoudreOrg: (req) => resoudreUtilisateur(req) }));
 
 // ── Mount all route modules under /api ──
 app.use('/api', searchRouter);
