@@ -83,3 +83,29 @@ export async function supprimerAdresseDAppel(id: string): Promise<void> {
   });
   if (!reponse.ok) throw await erreur(reponse);
 }
+
+/* ── Mettre ses automatisations en pause ─────────────────
+
+   L'interrupteur du CLIENT : le jour où des messages partent qu'il ne
+   veut pas, il arrête en un clic sans nous appeler. La file est
+   CONSERVÉE — reprendre repart où on en était. */
+
+export interface EtatPause {
+  paused: boolean;
+  pausedAt: string | null;
+}
+
+export async function lireEtatPause(): Promise<EtatPause> {
+  const reponse = await fetch('/api/automations/pause', { headers: await entetes() });
+  if (!reponse.ok) throw await erreur(reponse);
+  return reponse.json();
+}
+
+export async function basculerPause(paused: boolean): Promise<void> {
+  const reponse = await fetch('/api/automations/pause', {
+    method: 'POST',
+    headers: await entetes(),
+    body: JSON.stringify({ paused }),
+  });
+  if (!reponse.ok) throw await erreur(reponse);
+}
