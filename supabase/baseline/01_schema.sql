@@ -2013,12 +2013,13 @@ begin
     end;
   end if;
 
-  -- 3. Repli : plus ancienne adhésion (compte à un seul bureau = toujours juste).
+  -- 3. Repli : plus ancienne adhésion ACTIVE (compte à un seul bureau = toujours juste).
   if to_regclass('public.memberships') is not null then
     select m.org_id
       into v_org
       from public.memberships m
      where m.user_id = v_user
+       and coalesce(m.status, 'active') = 'active'
      order by m.created_at asc, m.org_id asc
      limit 1;
     if v_org is not null then
@@ -6449,19 +6450,30 @@ CREATE FUNCTION public.current_org_ids() RETURNS SETOF uuid
 declare
   claim_orgs jsonb;
 begin
-  -- Fast path : org_ids depuis le claim JWT (posé par custom_access_token_hook)
+  -- Fast path : org_ids depuis le claim JWT (posé par custom_access_token_hook),
+  -- re-vérifiés contre les adhésions ACTIVES : un jeton émis avant une
+  -- suspension ne rouvre rien (clé primaire (user_id, org_id) → lookup direct).
   begin
     claim_orgs := auth.jwt() -> 'app_metadata' -> 'org_ids';
   exception when others then
     claim_orgs := null;
   end;
   if claim_orgs is not null and jsonb_typeof(claim_orgs) = 'array' and jsonb_array_length(claim_orgs) > 0 then
-    return query select (jsonb_array_elements_text(claim_orgs))::uuid;
+    return query
+      select c.org_id
+        from (select (jsonb_array_elements_text(claim_orgs))::uuid as org_id) c
+       where exists (
+         select 1 from public.memberships m
+          where m.user_id = auth.uid()
+            and m.org_id = c.org_id
+            and coalesce(m.status, 'active') = 'active'
+       );
     return;
   end if;
   -- Fallback (vieux token sans claim) : requête memberships. Aucun lockout.
   if to_regclass('public.memberships') is not null then
-    return query select m.org_id from public.memberships m where m.user_id = auth.uid();
+    return query select m.org_id from public.memberships m
+      where m.user_id = auth.uid() and coalesce(m.status, 'active') = 'active';
   end if;
   return;
 end;
@@ -6484,7 +6496,8 @@ begin
   begin
     select array_agg(distinct m.org_id) into user_orgs
     from public.memberships m
-    where m.user_id = (event->>'user_id')::uuid;
+    where m.user_id = (event->>'user_id')::uuid
+      and coalesce(m.status, 'active') = 'active';
 
     claims := coalesce(event->'claims', '{}'::jsonb);
     if coalesce(claims->'app_metadata', 'null'::jsonb) = 'null'::jsonb then
@@ -6493,6 +6506,10 @@ begin
     if user_orgs is not null then
       claims := jsonb_set(claims, '{app_metadata,org_ids}', to_jsonb(user_orgs));
       claims := jsonb_set(claims, '{app_metadata,org_id}', to_jsonb(user_orgs[1]));
+    else
+      -- Plus aucune adhésion active : on retire les org_ids d'un ancien jeton.
+      claims := claims #- '{app_metadata,org_ids}';
+      claims := claims #- '{app_metadata,org_id}';
     end if;
     event := jsonb_set(event, '{claims}', claims);
   exception when others then
@@ -7174,18 +7191,19 @@ begin
   v_sensitive_change :=
        (new.role        is distinct from old.role)
     or (new.permissions is distinct from old.permissions)
-    or (new.scope       is distinct from old.scope);
+    or (new.scope       is distinct from old.scope)
+    or (new.status      is distinct from old.status);
 
   if v_sensitive_change then
     -- Opérations serveur (service_role) : pas de session utilisateur.
     if auth.uid() is null then
       return new;
     end if;
-    -- Personne ne modifie ses PROPRES droits (rôle, permissions ou portée).
+    -- Personne ne modifie ses PROPRES droits (rôle, permissions, portée, statut).
     if auth.uid() = old.user_id then
-      raise exception 'You cannot change your own role or permissions.' using errcode = '42501';
+      raise exception 'You cannot change your own role, permissions or status.' using errcode = '42501';
     end if;
-    -- Seuls owner/admin modifient les droits des autres.
+    -- Seuls owner/admin (actifs) modifient les droits des autres.
     if not public.has_org_admin_role(auth.uid(), new.org_id) then
       raise exception 'Only org owners or admins can change member roles or permissions.' using errcode = '42501';
     end if;
@@ -7210,8 +7228,9 @@ BEGIN
     IF auth.uid() IS NULL THEN
       RETURN new;
     END IF;
-    -- Allow any org member (not just admin/owner)
-    IF EXISTS (SELECT 1 FROM memberships WHERE user_id = auth.uid() AND org_id = new.org_id) THEN
+    -- Allow any ACTIVE org member (not just admin/owner)
+    IF EXISTS (SELECT 1 FROM memberships WHERE user_id = auth.uid() AND org_id = new.org_id
+                AND coalesce(status, 'active') = 'active') THEN
       IF new.deleted_by IS NULL THEN
         new.deleted_by := auth.uid();
       END IF;
@@ -8435,11 +8454,12 @@ CREATE FUNCTION public.has_org_admin_role(p_user uuid, p_org uuid) RETURNS boole
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.memberships m
-    WHERE m.user_id = p_user
-      AND m.org_id = p_org
-      AND lower(coalesce(m.role, '')) IN ('owner', 'admin')
+  select exists (
+    select 1 from public.memberships m
+    where m.user_id = p_user
+      and m.org_id = p_org
+      and lower(coalesce(m.role, '')) in ('owner', 'admin')
+      and coalesce(m.status, 'active') = 'active'
   );
 $$;
 
@@ -8468,10 +8488,11 @@ CREATE FUNCTION public.has_org_membership(p_user uuid, p_org uuid) RETURNS boole
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.memberships m
-    WHERE m.user_id = p_user
-      AND m.org_id = p_org
+  select exists (
+    select 1 from public.memberships m
+     where m.user_id = p_user
+       and m.org_id = p_org
+       and coalesce(m.status, 'active') = 'active'
   );
 $$;
 
@@ -8498,6 +8519,7 @@ begin
       where m.user_id = p_user
         and m.org_id = p_org
         and m.role = any(p_roles)
+        and coalesce(m.status, 'active') = 'active'
     ) into v_exists;
     if v_exists then return true; end if;
   end if;
@@ -16890,7 +16912,8 @@ DECLARE
   v_now timestamptz := now();
   v_job int := 0;
 BEGIN
-  IF auth.uid() IS NOT NULL AND NOT EXISTS (SELECT 1 FROM memberships WHERE user_id = auth.uid() AND org_id = p_org_id) THEN
+  IF auth.uid() IS NOT NULL AND NOT EXISTS (SELECT 1 FROM memberships WHERE user_id = auth.uid() AND org_id = p_org_id
+                                             AND coalesce(status, 'active') = 'active') THEN
     RAISE EXCEPTION 'Not authorized';
   END IF;
 
@@ -17918,12 +17941,13 @@ $_$;
 
 CREATE FUNCTION public.verify_org_access(p_user_id uuid, p_org_id uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public', 'pg_temp'
+    SET search_path TO 'public'
     AS $$
   select exists (
     select 1 from public.memberships
      where user_id = p_user_id
        and org_id  = p_org_id
+       and coalesce(status, 'active') = 'active'
   );
 $$;
 
@@ -45706,14 +45730,14 @@ CREATE POLICY memberships_insert_org ON public.memberships FOR INSERT TO authent
 -- Name: memberships memberships_select_own_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY memberships_select_own_org ON public.memberships FOR SELECT TO authenticated USING ((public.has_org_membership(( SELECT auth.uid() AS uid), org_id) OR (user_id = ( SELECT auth.uid() AS uid)) OR public.has_org_role(( SELECT auth.uid() AS uid), org_id, ARRAY['owner'::text, 'admin'::text])));
+CREATE POLICY memberships_select_own_org ON public.memberships FOR SELECT TO authenticated USING ((public.has_org_membership(( SELECT auth.uid() AS uid), org_id) OR ((user_id = ( SELECT auth.uid() AS uid)) AND (COALESCE(status, 'active'::text) = 'active'::text)) OR public.has_org_role(( SELECT auth.uid() AS uid), org_id, ARRAY['owner'::text, 'admin'::text])));
 
 
 --
 -- Name: memberships memberships_update_org; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY memberships_update_org ON public.memberships FOR UPDATE TO authenticated USING (((user_id = ( SELECT auth.uid() AS uid)) OR public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) OR public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id)));
+CREATE POLICY memberships_update_org ON public.memberships FOR UPDATE TO authenticated USING ((((user_id = ( SELECT auth.uid() AS uid)) AND (COALESCE(status, 'active'::text) = 'active'::text)) OR public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) OR public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id)));
 
 
 --
