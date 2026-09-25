@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { FilterPill } from '../ui';
-import DatePickerInput from '../ui/DatePickerInput';
+import DateRangeInput from '../ui/DateRangeInput';
 import type { Lang, PeriodPreset, ReportDefinition } from '../../lib/reportsApi';
 import { PRESET_LABELS, PRESET_ORDER, presetRange } from '../../lib/reportFormat';
 
@@ -57,8 +57,7 @@ export default function ReportToolbar({ definition, state, lang, onChange }: Rep
               {PRESET_LABELS[p][lang]}
             </button>
           ))}
-          <DatePickerInput value={state.from} onChange={(v) => onChange({ from: v })} language={lang} placeholder={fr ? 'Du' : 'From'} className="w-[190px]" />
-          <DatePickerInput value={state.to} onChange={(v) => onChange({ to: v })} language={lang} placeholder={fr ? 'Au' : 'To'} className="w-[190px]" />
+          <DateRangeInput from={state.from} to={state.to} onChange={(r) => onChange(r)} language={lang} className="w-[300px]" />
           {definition.dateFilter.fields && definition.dateFilter.fields.length > 1 && (
             <>
               <label htmlFor={dateFieldId} className="text-[12px] text-text-tertiary ml-1">{fr ? 'sur' : 'by'}</label>
