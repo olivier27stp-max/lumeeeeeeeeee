@@ -154,8 +154,32 @@ function evaluateConditions(
 // le même devis le lendemain produisait une clé différente : les 5 relances
 // déjà en attente restaient, 5 nouvelles s'ajoutaient, et le client recevait
 // tout en double (constaté en prod : 10 tâches pending pour un seul devis).
-function buildExecutionKey(ruleId: string, entityId: string, actionIndex: number): string {
-  return `${ruleId}:${entityId}:${actionIndex}`;
+function buildExecutionKey(
+  ruleId: string,
+  entityId: string,
+  actionIndex: number,
+  reentree = false,
+): string {
+  /*
+   * « Laisser le client repasser » (`settings.reentree`).
+   *
+   * Sans lui, une seconde exécution sur la MÊME (règle, entité) est
+   * refusée tant que la première est encore `pending` ou `running` —
+   * l'index unique est partiel. C'est le bon défaut : il empêche
+   * d'envoyer deux fois la même relance sur un devis renvoyé.
+   *
+   * Mais un service saisonnier revient chaque année sur le même job, et
+   * l'utilisateur doit pouvoir le demander. Un suffixe unique par
+   * déclenchement rend chaque passage distinct aux yeux de l'index, sans
+   * toucher à l'index lui-même.
+   *
+   * L'interrupteur existait dans l'interface depuis la refonte et le
+   * moteur ne l'a JAMAIS lu : une automatisation en prod l'avait coché
+   * (« Demander un avis après job complété ») en croyant changer quelque
+   * chose. Constaté le 2026-09-25.
+   */
+  const base = `${ruleId}:${entityId}:${actionIndex}`;
+  return reentree ? `${base}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` : base;
 }
 
 // ── Quiet hours (SMS only) ──────────────────────────────────
@@ -178,6 +202,7 @@ export interface ReglagesRegle {
   arret_sur_reponse?: boolean;
   fenetre?: { debut: number; fin: number };
   jours_ouvrables?: boolean;
+  /** Accepté mais IGNORÉ — voir validation.ts (retiré de l'interface le 2026-09-25). */
   marquer_lu?: boolean;
 }
 
@@ -322,7 +347,7 @@ async function executeRuleActions(
 
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
-    const executionKey = buildExecutionKey(rule.id, event.entityId, i);
+    const executionKey = buildExecutionKey(rule.id, event.entityId, i, rule.settings?.reentree === true);
 
     // Reporte à la prochaine fenêtre d'envoi les actions déclenchées en heures
     // calmes. Une règle immédiate (délai 0) porte une confirmation attendue :
@@ -493,7 +518,7 @@ async function scheduleDelayedActions(
 
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
-    const executionKey = buildExecutionKey(rule.id, event.entityId, i);
+    const executionKey = buildExecutionKey(rule.id, event.entityId, i, rule.settings?.reentree === true);
 
     // supabase-js ne lève jamais : le doublon (23505) comme toute autre erreur
     // se lit dans la réponse — un catch ici n'aurait jamais rien attrapé.

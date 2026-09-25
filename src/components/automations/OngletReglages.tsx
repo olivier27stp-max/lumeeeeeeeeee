@@ -20,7 +20,6 @@ export interface ReglagesAutomatisation {
   arret_sur_reponse?: boolean;
   fenetre?: { debut: number; fin: number };
   jours_ouvrables?: boolean;
-  marquer_lu?: boolean;
 }
 
 interface Props {
@@ -232,22 +231,22 @@ export default function OngletReglages({ ruleId, reglages, fr, onChange }: Props
         />
       </section>
 
-      {/* ── Boîte de réception ── */}
-      <section className="section-card px-4 py-1">
-        <h3 className="border-b border-outline/20 py-3 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">
-          {fr ? 'Boîte de réception' : 'Conversations'}
-        </h3>
-        <Interrupteur
-          id={`${ids}-lu`}
-          titre={fr ? 'Marquer comme lu' : 'Mark as read'}
-          aide={fr
-            ? 'Les messages envoyés par cette automatisation ne remontent pas en non-lus dans vos conversations.'
-            : 'Messages sent by this automation do not show up as unread in your conversations.'}
-          defaut={fr ? 'Par défaut : ils apparaissent comme tout message envoyé.' : 'Default: they appear like any sent message.'}
-          valeur={local.marquer_lu === true}
-          onBascule={(v) => appliquer({ marquer_lu: v })}
-        />
-      </section>
+      {/*
+        « Marquer comme lu » A ÉTÉ RETIRÉ ici le 2026-09-25.
+
+        L'interrupteur promettait que les messages d'une automatisation
+        ne remonteraient pas en non-lus. Deux raisons de le retirer :
+
+        1. le moteur ne l'a JAMAIS lu — il n'apparaissait nulle part
+           ailleurs que dans la déclaration du type ;
+        2. le problème qu'il prétendait régler n'existe pas : vérifié en
+           base, les conversations qui portent des non-lus finissent
+           TOUTES par un message entrant. Les non-lus suivent ce que le
+           CLIENT écrit, pas ce que l'entreprise envoie.
+
+        Un interrupteur qui ne fait rien coûte la confiance dans tous les
+        autres réglages de la page.
+      */}
     </div>
   );
 }
