@@ -16,7 +16,7 @@ import { invalidateScheduleCache } from './scheduleApi';
 import { syncEntityPin } from './fieldSalesApi';
 import type { FiltreListe } from './champs/filtresListe';
 
-export type JobSort = 'client' | 'job_number' | 'schedule' | 'status' | 'total';
+export type JobSort = 'client' | 'job_number' | 'schedule' | 'status' | 'total' | 'created_at';
 export type JobSortDirection = 'asc' | 'desc';
 
 export interface JobsQuery {
@@ -80,6 +80,10 @@ const SORT_MAP: Record<JobSort, string> = {
   schedule: 'scheduled_at',
   status: 'status',
   total: 'total_cents',
+  // Date de CREATION de la job, pas sa date de visite : « la plus ancienne »
+  // repond a « ajoutee quand ? », que `scheduled_at` ne dit pas (une job non
+  // planifiee a scheduled_at NULL).
+  created_at: 'created_at',
 };
 
 const isDev = import.meta.env.DEV;

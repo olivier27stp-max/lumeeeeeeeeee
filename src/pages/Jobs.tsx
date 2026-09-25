@@ -679,6 +679,24 @@ export default function Jobs() {
             ...jobTags.map((tg) => ({ value: tg.id, label: tg.name, dotColor: tg.color_hex })),
           ]}
         />
+        {/* Tri par date d'ajout. Jobs trie par (cle, direction) cote serveur :
+            ce menu pilote les deux d'un coup, sans toucher au tri par
+            en-tete de colonne qui reste disponible. */}
+        <FilterPill
+          label={fr ? 'Trier' : 'Sort'}
+          value={sortBy === 'created_at' ? (sortDirection === 'asc' ? 'oldest' : 'recent') : 'default'}
+          onChange={(v) => {
+            if (v === 'recent') { setSortBy('created_at'); setSortDirection('desc'); }
+            else if (v === 'oldest') { setSortBy('created_at'); setSortDirection('asc'); }
+            else { setSortBy('schedule'); setSortDirection('asc'); }
+            setPage(1);
+          }}
+          options={[
+            { value: 'default', label: fr ? 'Par défaut' : 'Default' },
+            { value: 'recent', label: fr ? 'La plus récente' : 'Newest first' },
+            { value: 'oldest', label: fr ? 'La plus ancienne' : 'Oldest first' },
+          ]}
+        />
         {champsListe.bouton}
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
           aria-label={fr ? 'Rechercher jobs' : 'Search jobs'}
