@@ -15,7 +15,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { SlidersHorizontal } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { filtrerParChamps, lireFuseau, lireValeursLot, listerChamps } from '../../lib/champsPersoApi';
 import { compilerFiltresListe, FILTRE_VIDE, type FiltreListe } from '../../lib/champs/filtresListe';
 import { formaterValeur } from '../../lib/champs/valeurs';
@@ -39,7 +39,7 @@ function lireColonnes(objet: ObjetChamp): string[] {
 }
 
 export function useChampsListe(objet: ObjetChamp, fr: boolean) {
-  const { isEnabled } = useModuleAccess('custom_fields_v2');
+  const { isEnabled } = useChampsPersoActifs();
   const { data } = useQuery({
     queryKey: ['champs-perso', objet],
     queryFn: () => listerChamps(objet),

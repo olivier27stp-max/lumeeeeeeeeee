@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { lireFuseau, lireValeurs } from '../../lib/champsPersoApi';
 import { formaterValeur } from '../../lib/champs/valeurs';
 
@@ -14,7 +14,7 @@ export type ChampDocument = { label: string; valeur: string };
 const AUCUN: ChampDocument[] = [];
 
 export function useChampsDocument(objet: 'quote' | 'invoice', id: string | null | undefined, fr: boolean): ChampDocument[] {
-  const { isEnabled } = useModuleAccess('custom_fields_v2');
+  const { isEnabled } = useChampsPersoActifs();
   const { data } = useQuery({
     queryKey: ['champs-perso-valeurs', objet, id],
     queryFn: () => lireValeurs(objet, id as string),

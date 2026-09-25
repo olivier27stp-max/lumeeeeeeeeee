@@ -10,14 +10,14 @@
  */
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { listerChamps } from '../../lib/champsPersoApi';
 import { LIBELLES_OBJET, OBJETS, variableModele, type ChampPerso, type ObjetChamp } from '../../lib/champs/types';
 import type { Condition } from '../../lib/champs/filtres';
 import EditeurConditions from './EditeurConditions';
 
 export function useChampsTous(): ChampPerso[] {
-  const { isEnabled } = useModuleAccess('custom_fields_v2');
+  const { isEnabled } = useChampsPersoActifs();
   const { data } = useQuery({
     queryKey: ['champs-perso', 'tous'],
     queryFn: () => listerChamps(),

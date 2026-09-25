@@ -27,6 +27,8 @@ interface UseModuleAccessReturn {
   /** Ligne posée par la plateforme (Creator Space) : le tenant ne peut ni
    *  l'activer ni la désactiver. */
   platformLocked: boolean;
+  /** Lu, et une ligne dit enabled=false (pas « inconnu », pas « absent »). */
+  desactiveExplicitement: boolean;
 }
 
 /** Event name used to sync all instances of useModuleAccess */
@@ -65,7 +67,7 @@ export function useModuleAccess(moduleKey: string): UseModuleAccessReturn {
       if (res.ok) {
         const json = await res.json();
         const flags = json.flags || {};
-        setFlag(flags[moduleKey] || { enabled: false, metadata: {} });
+        setFlag(flags[moduleKey] || { enabled: false, metadata: { absent: true } });
         setEchecLecture(false);
         fetchedRef.current = true;
       } else {
@@ -139,5 +141,6 @@ export function useModuleAccess(moduleKey: string): UseModuleAccessReturn {
     activate,
     activating,
     platformLocked: !!flag && (flag.metadata as any)?.platform_override === true,
+    desactiveExplicitement: !!flag && flag.enabled === false && (flag.metadata as { absent?: boolean })?.absent !== true,
   };
 }

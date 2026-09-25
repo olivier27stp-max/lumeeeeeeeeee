@@ -26,7 +26,7 @@ import { FilterPill } from '../../components/ui';
 import EmptyState from '../../components/ui/EmptyState';
 import DatePickerInput from '../../components/ui/DatePickerInput';
 import { confirmer } from '../../components/ui/ConfirmDialog';
-import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import {
   archiverChamp, listerChamps, lireFuseau, renommerDossier, supprimerDossier, modifierChamp,
   type ChampPerso, type ObjetChamp,
@@ -56,7 +56,7 @@ export default function ChampsPersoSettings() {
   const fr = language === 'fr';
   const ids = useId();
   const qc = useQueryClient();
-  const { isEnabled, loading: chargeDrapeau, indetermine } = useModuleAccess('custom_fields_v2');
+  const { isEnabled } = useChampsPersoActifs();
 
   const [onglet, setOnglet] = useState<Onglet>('tous');
   const [vue, setVue] = useState<'champs' | 'dossiers'>('champs');
@@ -177,8 +177,6 @@ export default function ChampsPersoSettings() {
     }
   };
 
-  // État inconnu (bureau pas encore choisi, réseau) : on attend, on n'affirme pas « pas activée ».
-  if (chargeDrapeau || indetermine) return null;
   if (!isEnabled) {
     return (
       <div className="max-w-2xl">

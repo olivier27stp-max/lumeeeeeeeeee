@@ -16,7 +16,7 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { ecrireValeurs, listerChamps } from '../../lib/champsPersoApi';
 import { preparerValeur, ErreurValeur } from '../../lib/champs/valeurs';
 import type { ObjetChamp, ValeurChamp } from '../../lib/champs/types';
@@ -25,7 +25,7 @@ import { messageChamps } from '../../lib/champs/messages';
 import LienAjouterChamps from './LienAjouterChamps';
 
 export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
-  const { isEnabled } = useModuleAccess('custom_fields_v2');
+  const { isEnabled } = useChampsPersoActifs();
   const idBase = useId();
   const { data } = useQuery({
     queryKey: ['champs-perso', objet],
