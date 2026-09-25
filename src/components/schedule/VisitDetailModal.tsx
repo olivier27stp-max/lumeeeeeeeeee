@@ -8,6 +8,7 @@ import { useTranslation } from '../../i18n';
 import { supabase } from '../../lib/supabase';
 import { invalidateScheduleCache, isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import { createInvoiceForVisit } from '../../lib/jobBillingApi';
+import { finishJobAndPrepareInvoice } from '../../lib/invoicesApi';
 import { updateJob } from '../../lib/jobsApi';
 import { listTeams, type TeamRecord } from '../../lib/teamsApi';
 import { isHexColor, toRgba } from '../../lib/colorUtils';
@@ -414,18 +415,41 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
         open={finalPromptOpen}
         fr={isFr}
         busy={finalBusy}
+        // Le travail est fini : la suite normale, c'est de facturer. Ce modal
+        // facture déjà tout seul les jobs « par visite » (plus haut) ; celles
+        // facturées à la fin n'avaient, elles, aucune porte de sortie.
+        onInvoice={() => {
+          void (async () => {
+            if (finalBusy) return;
+            setFinalBusy(true);
+            try {
+              const result = await finishJobAndPrepareInvoice({ jobId: ev.job_id });
+              invalidateScheduleCache();
+              setFinalPromptOpen(false);
+              toast.success(isFr
+                ? (result.already_exists ? 'Job terminée. Facture existante ouverte.' : 'Job terminée. Brouillon de facture créé.')
+                : (result.already_exists ? 'Job completed. Existing invoice loaded.' : 'Job completed. Invoice draft created.'));
+              onStatusChanged?.();
+              window.location.assign(`/invoices/${result.invoice_id}`);
+            } catch (err: any) {
+              toast.error(err?.message || (isFr ? 'Impossible de créer la facture.' : 'Could not create the invoice.'));
+            } finally {
+              setFinalBusy(false);
+            }
+          })();
+        }}
         onCloseJob={() => {
           void (async () => {
             if (finalBusy) return;
             setFinalBusy(true);
             try {
               await updateJob(ev.job_id, { status: 'completed' });
-              toast.success(isFr ? 'Job fermé.' : 'Job closed.');
+              toast.success(isFr ? 'Job fermée.' : 'Job closed.');
               invalidateScheduleCache();
               setFinalPromptOpen(false);
               onStatusChanged?.();
             } catch (err: any) {
-              toast.error(err?.message || (isFr ? 'Impossible de fermer le job.' : 'Could not close the job.'));
+              toast.error(err?.message || (isFr ? 'Impossible de fermer la job.' : 'Could not close the job.'));
             } finally {
               setFinalBusy(false);
             }

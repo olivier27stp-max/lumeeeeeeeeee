@@ -38,7 +38,7 @@ import AddVisitModal from '../components/AddVisitModal';
 import FinalVisitDialog from '../components/schedule/FinalVisitDialog';
 import { invalidateScheduleCache, rescheduleEvent, unscheduleJob, isAnytimeVisit, anytimeLabel, ANYTIME_START_TIME, ANYTIME_END_TIME } from '../lib/scheduleApi';
 import { listTeams, type TeamRecord } from '../lib/teamsApi';
-import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
+import { createInvoiceFromJob, getInvoiceRowUiStatus, finishJobAndPrepareInvoice } from '../lib/invoicesApi';
 import {
   listJobBillingMilestones,
   saveJobBillingMilestones,
@@ -380,7 +380,7 @@ export default function JobDetails() {
         setError(
           lienInvalide
             ? t.jobs.jobNotFound
-            : brut || (language === 'fr' ? 'Échec du chargement du job' : 'Failed to load job'),
+            : brut || (language === 'fr' ? 'Échec du chargement de la job' : 'Failed to load job'),
         );
       })
       .finally(() => setLoading(false));
@@ -753,13 +753,28 @@ export default function JobDetails() {
   );
   const confirmAfterSignKey = id ? `lume-job-confirm-after-sign:${id}` : null;
 
+  /**
+   * La visite est-elle encore à venir ?
+   *
+   * On ne propose pas de « confirmer un rendez-vous » qui a déjà eu lieu :
+   * une job saisie après coup déclenchait la bannière pour une date passée
+   * (QA 2026-09-25). Sans visite connue, on ne bloque rien.
+   */
+  const visiteAVenir = React.useMemo(() => {
+    const debuts = visits.map((v) => v.start_at).filter(Boolean) as string[];
+    if (!debuts.length) return true;
+    const derniere = Math.max(...debuts.map((d) => new Date(d).getTime()).filter((n) => !Number.isNaN(n)));
+    return !Number.isFinite(derniere) || derniere >= Date.now();
+  }, [visits]);
+
   // Ouvre le prompt post-création seulement quand on sait si un contrat existe.
   useEffect(() => {
     if (pendingCreatedPrompt && agreementChecked) {
       setPendingCreatedPrompt(false);
-      setConfirmPrompt('created');
+      // Rien à confirmer si la visite est derrière nous.
+      if (visiteAVenir) setConfirmPrompt('created');
     }
-  }, [pendingCreatedPrompt, agreementChecked]);
+  }, [pendingCreatedPrompt, agreementChecked, visiteAVenir]);
 
   // Signature reçue alors qu'on attendait pour confirmer → proposer la confirmation.
   useEffect(() => {
@@ -1206,23 +1221,31 @@ export default function JobDetails() {
                 <>
                   <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setMoreActionsOpen(false)} />
                   <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-outline bg-surface shadow-lg py-1">
-                    <DropdownItem icon={<CheckCircle2 size={13} />} label={isClosing ? (language === 'fr' ? 'Fermeture...' : 'Closing...') : (language === 'fr' ? 'Fermer le job' : 'Close Job')} onClick={handleCloseJob} disabled={isClosing} />
+                    <DropdownItem icon={<CheckCircle2 size={13} />} label={isClosing ? (language === 'fr' ? 'Fermeture...' : 'Closing...') : (language === 'fr' ? 'Fermer la job' : 'Close Job')} onClick={handleCloseJob} disabled={isClosing} />
                     <DropdownItem icon={<MessageSquare size={13} />} label={language === 'fr' ? 'Envoyer une confirmation' : 'Send Confirmation'} onClick={() => { setConfirmPrompt('manual'); setMoreActionsOpen(false); }} />
                     <DropdownItem icon={<Send size={13} />} label={language === 'fr' ? 'Envoyer un suivi' : 'Send Follow-up'} onClick={() => { setEmailMode('followup'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <DropdownItem icon={<Mail size={13} />} label={language === 'fr' ? 'Envoyer un courriel' : 'Send Email'} onClick={() => { setEmailMode('generic'); setShowEmailModal(true); setMoreActionsOpen(false); }} />
                     <div className="border-t border-border my-1" />
                     {canSeeInvoices && <DropdownItem icon={<FileText size={13} className="text-entity-invoice" />} label={isCreatingInvoice ? (language === 'fr' ? 'Création...' : 'Creating...') : (language === 'fr' ? 'Créer une facture' : 'Create Invoice')} onClick={handleCreateInvoice} disabled={isCreatingInvoice} />}
-                    <DropdownItem icon={<Copy size={13} />} label={language === 'fr' ? 'Dupliquer le job' : 'Clone Job'} onClick={() => {
+                    <DropdownItem icon={<Copy size={13} />} label={language === 'fr' ? 'Dupliquer la job' : 'Clone Job'} onClick={() => {
                       setMoreActionsOpen(false);
+                      // Les dates de la visite suivent la copie : sans elles, le
+                      // modal retombait sur « aujourd'hui 9 h – 10 h » et il
+                      // fallait tout ressaisir (QA 2026-09-25). On reprend la
+                      // PREMIÈRE visite — celle qui donne sa date à la job.
+                      const premiere = [...visits].sort((a, b) =>
+                        new Date(a.start_at || 0).getTime() - new Date(b.start_at || 0).getTime())[0];
                       openJobModal({
                         initialValues: {
                           title: `${job.title} ${language === 'fr' ? '(copie)' : '(copy)'}`,
                           client_id: job.client_id || null,
                           property_address: job.property_address || null,
                           description: (job as any).description || null,
+                          ...(premiere?.start_at ? { scheduled_at: premiere.start_at } : {}),
+                          ...(premiere?.end_at ? { end_at: premiere.end_at } : {}),
                           line_items: lineItems.map(li => ({ name: (li as any).name || (li as any).description || '', qty: li.qty, unit_price_cents: li.unit_price_cents })),
                         },
-                        onCreated: () => { toast.success(language === 'fr' ? 'Job dupliqué' : 'Job cloned', { action: { label: language === 'fr' ? 'Voir' : 'View', onClick: () => navigate('/jobs') } }); },
+                        onCreated: () => { toast.success(language === 'fr' ? 'Job dupliquée' : 'Job cloned', { action: { label: language === 'fr' ? 'Voir' : 'View', onClick: () => navigate('/jobs') } }); },
                       });
                     }} />
                     <DropdownItem icon={<Download size={13} />} label={language === 'fr' ? 'Télécharger le PDF' : 'Download PDF'} onClick={handleDownloadPdf} />
@@ -2515,6 +2538,33 @@ export default function JobDetails() {
           open={!!finalVisitPromptOpen}
           fr={language === 'fr'}
           busy={finalVisitBusy}
+          // Le travail est fini : la suite normale, c'est de facturer.
+          //
+          // Pas de condition sur `requires_invoicing` : ce champ marque les
+          // jobs EN ATTENTE de facturation, pas celles qui sont facturables —
+          // les 6 jobs de production sont à `false` et le bouton aurait
+          // disparu partout. Le RPC sait déjà quoi faire (il rouvre la facture
+          // existante au lieu d'en créer une seconde).
+          onInvoice={() => {
+            void (async () => {
+              if (finalVisitBusy) return;
+              setFinalVisitBusy(true);
+              try {
+                // Ferme la job ET prépare la facture, en une opération —
+                // la même que le bouton « Terminer » du modal de job.
+                const result = await finishJobAndPrepareInvoice({ jobId: job.id });
+                setFinalVisitPromptOpen(false);
+                toast.success(language === 'fr'
+                  ? (result.already_exists ? 'Job terminée. Facture existante ouverte.' : 'Job terminée. Brouillon de facture créé.')
+                  : (result.already_exists ? 'Job completed. Existing invoice loaded.' : 'Job completed. Invoice draft created.'));
+                navigate(`/invoices/${result.invoice_id}`);
+              } catch (err: any) {
+                toast.error(err?.message || (language === 'fr' ? 'Impossible de créer la facture.' : 'Could not create the invoice.'));
+              } finally {
+                setFinalVisitBusy(false);
+              }
+            })();
+          }}
           onCloseJob={() => {
             void (async () => {
               if (finalVisitBusy) return;
@@ -2525,7 +2575,7 @@ export default function JobDetails() {
                 toast.success(language === 'fr' ? 'Job fermé.' : 'Job closed.');
                 setFinalVisitPromptOpen(false);
               } catch (err: any) {
-                toast.error(err?.message || (language === 'fr' ? 'Impossible de fermer le job.' : 'Could not close the job.'));
+                toast.error(err?.message || (language === 'fr' ? 'Impossible de fermer la job.' : 'Could not close the job.'));
               } finally {
                 setFinalVisitBusy(false);
               }
@@ -2559,9 +2609,9 @@ export default function JobDetails() {
         const detailsSentence = isCancelled
           ? (fr ? 'Cette visite a été annulée — elle ne compte plus dans le statut du job.' : 'This visit was cancelled — it no longer counts toward the job status.')
           : isCompleted
-            ? (fr ? 'Visite complétée — elle ne rend plus le job « En retard ».' : 'Visit completed — it no longer makes the job "Late".')
+            ? (fr ? 'Visite complétée — elle ne rend plus la job « En retard ».' : 'Visit completed — it no longer makes the job "Late".')
             : isPast
-              ? (fr ? 'Cette visite est passée mais n’est pas marquée complétée — le job apparaît « En retard ».' : 'This visit is past but not marked complete — the job shows as "Late".')
+              ? (fr ? 'Cette visite est passée mais n’est pas marquée complétée — la job apparaît « En retard ».' : 'This visit is past but not marked complete — the job shows as "Late".')
               : (fr ? 'Visite à venir — elle apparaît au calendrier.' : 'Upcoming visit — it shows on the calendar.');
         const closePopup = () => { setSelectedVisitId(null); setEditingVisitId(null); setVisitMoreOpen(false); };
         return (
@@ -2585,7 +2635,7 @@ export default function JobDetails() {
               <div className="px-5 py-4 space-y-4">
                 {/* Context line — which job/client this visit belongs to */}
                 <p className="text-[13px] text-text-secondary">
-                  {fr ? 'Visite pour le job' : 'Visit for job'} <span className="font-semibold text-text-primary">#{job.job_number}</span>
+                  {fr ? 'Visite pour la job' : 'Visit for job'} <span className="font-semibold text-text-primary">#{job.job_number}</span>
                   {job.client_name ? <> — <span className="font-semibold text-text-primary">{job.client_name}</span></> : null}
                 </p>
 

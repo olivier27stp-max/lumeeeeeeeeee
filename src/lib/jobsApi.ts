@@ -598,6 +598,9 @@ export async function getJobModalDraftById(id: string): Promise<JobModalDraft | 
     postal_code: jobRow.postal_code ?? null,
     country: jobRow.country ?? 'Canada',
     description: jobRow.notes || jobRow.description || null,
+    // Sans ce champ, la case « Demander un avis » repartait cochée à chaque
+    // réouverture, quel qu'ait été le choix à la création (QA 2026-09-25).
+    ask_for_review: jobRow.ask_for_review ?? null,
     status: deriveJobDisplayStatus({ status: jobRow.status, scheduled_at: jobRow.scheduled_at, requires_invoicing: !!jobRow.requires_invoicing }),
     requires_invoicing: !!jobRow.requires_invoicing,
     billing_split: !!jobRow.billing_split,

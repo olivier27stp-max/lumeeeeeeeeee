@@ -252,8 +252,11 @@ function MiniCal({ date, onSelect }: { date: Date; onSelect: (d: Date) => void }
   const [anchor, setAnchor] = useState(date);
   useEffect(() => setAnchor(date), [date]);
   const mStart = startOfMonth(anchor);
-  const gStart = startOfWeek(mStart, { weekStartsOn: 0 });
-  const gEnd = endOfWeek(endOfMonth(anchor), { weekStartsOn: 0 });
+  // Lundi d'abord, comme la grille principale (lignes 68 et 77). Le mini
+  // calendrier commençait le dimanche : les colonnes ne s'alignaient pas
+  // entre les deux, et on cliquait à côté du jour visé (QA 2026-09-25).
+  const gStart = startOfWeek(mStart, { weekStartsOn: 1 });
+  const gEnd = endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 });
   const days: Date[] = [];
   for (let d = gStart; d <= gEnd; d = addDays(d, 1)) days.push(d);
   return (
@@ -266,7 +269,7 @@ function MiniCal({ date, onSelect }: { date: Date; onSelect: (d: Date) => void }
         </div>
       </div>
       <div className="grid grid-cols-7 text-center text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-        {(_isFr() ? ['Di','Lu','Ma','Me','Je','Ve','Sa'] : ['Su','Mo','Tu','We','Th','Fr','Sa']).map((d, i) => <div key={i} className="py-1">{d}</div>)}
+        {(_isFr() ? ['Lu','Ma','Me','Je','Ve','Sa','Di'] : ['Mo','Tu','We','Th','Fr','Sa','Su']).map((d, i) => <div key={i} className="py-1">{d}</div>)}
       </div>
       <div className="grid grid-cols-7 text-center">
         {days.map((day, i) => {
@@ -299,6 +302,24 @@ function ScheduleContent() {
   const [unassignedMode, setUnassignedMode] = useState(false);
   // Bouton « + Créer » : menu Job (heure précise) ou Tâche (heure optionnelle).
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+
+  // Échap ferme le menu ouvert.
+  //
+  // Le clic extérieur existait déjà (un fond transparent par menu), mais Échap
+  // ne faisait rien : un menu ouvert par erreur restait là, et son fond en
+  // z-30 couvre toute la barre d'outils (QA 2026-09-25). Un seul écouteur ici
+  // plutôt qu'un par menu — le comportement reste le même si un menu s'ajoute.
+  useEffect(() => {
+    const surEchap = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setViewDrop(false);
+      setCalPop(false);
+      setTeamPop(false);
+      setCreateMenuOpen(false);
+    };
+    window.addEventListener('keydown', surEchap);
+    return () => window.removeEventListener('keydown', surEchap);
+  }, []);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   // Jour/heure pré-remplis quand on crée une tâche depuis un créneau du calendrier.
   const [taskDefaults, setTaskDefaults] = useState<{ due_date?: string; scheduled_at?: string; duration_minutes?: number }>({});
@@ -380,6 +401,44 @@ function ScheduleContent() {
   const refresh = useCallback(() => { invalidateScheduleCache(); qc.invalidateQueries({ queryKey: ['calendarEvents'] }); qc.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }); qc.invalidateQueries({ queryKey: ['calendarTasks'] }); }, [qc]);
 
   const rescheduleMut = useMutation({ mutationFn: rescheduleEvent, onSuccess: refresh });
+
+  /**
+   * Annonce un déplacement réussi, avec de quoi le défaire.
+   *
+   * Un glisser-déposer partait sans un mot : une visite déplacée par erreur
+   * demandait de retrouver l'heure d'origine à la main (QA 2026-09-25). On
+   * garde l'ancienne position et on la propose en un clic.
+   */
+  const annoncerDeplacement = useCallback((
+    eventId: string,
+    avant: { start_at?: string | null; end_at?: string | null; team_id?: string | null } | undefined,
+    chevauche: boolean,
+  ) => {
+    const message = chevauche ? t.schedule.overlapping : t.schedule.eventRescheduled;
+    const peutAnnuler = Boolean(avant?.start_at && avant?.end_at);
+    const options = peutAnnuler
+      ? {
+          action: {
+            label: language === 'fr' ? 'Annuler' : 'Undo',
+            onClick: () => {
+              void rescheduleMut.mutateAsync({
+                eventId,
+                startAt: avant!.start_at!,
+                endAt: avant!.end_at!,
+                teamId: avant!.team_id ?? null,
+                clearTeam: !avant!.team_id,
+                timezone: DEFAULT_TIMEZONE,
+              }).then(
+                () => toast.success(language === 'fr' ? 'Déplacement annulé' : 'Move undone'),
+                (e: any) => toast.error(e?.message || t.schedule.couldNotReschedule),
+              );
+            },
+          },
+        }
+      : undefined;
+    if (chevauche) toast.warning(message, options);
+    else toast.success(message, options);
+  }, [rescheduleMut, t, language]);
   const scheduleMut = useMutation({
     mutationFn: scheduleUnscheduledJob,
     onSuccess: () => { refresh(); toast.success(t.schedule.jobScheduled); },
@@ -414,10 +473,13 @@ function ScheduleContent() {
   /* ── Drag & Drop ── */
   const dnd = useCalendarDnd({
     onReschedule: async (eventId, startAt, endAt, teamId) => {
+      // Position d'origine relevée AVANT le déplacement : c'est elle que le
+      // bouton « Annuler » du toast restaure.
+      const avant = events.find((e) => e.id === eventId);
+      const origine = avant ? { start_at: avant.start_at, end_at: avant.end_at, team_id: avant.team_id } : undefined;
       try {
         const result = await rescheduleMut.mutateAsync({ eventId, startAt, endAt, teamId, timezone: DEFAULT_TIMEZONE });
-        if (result.overlaps > 0) toast.warning(t.schedule.overlapping);
-        else toast.success(t.schedule.eventRescheduled);
+        annoncerDeplacement(eventId, origine, result.overlaps > 0);
         warnRoster(teamId, startAt, endAt);
       } catch (err: any) {
         toast.error(err?.message || t.schedule.couldNotReschedule);
@@ -451,18 +513,19 @@ function ScheduleContent() {
   // Vues Jour et Semaine (dispatch) — mêmes mutations que le DnD de la vue
   // Semaine, exposées en callbacks pour le drag/resize horizontal dédié.
   const handleDailyReschedule = useCallback(async (eventId: string, startAt: string, endAt: string, teamId: string | null) => {
+    const avant = events.find((e) => e.id === eventId);
+    const origine = avant ? { start_at: avant.start_at, end_at: avant.end_at, team_id: avant.team_id } : undefined;
     try {
       // teamId null = déposé sur la ligne « Non assigné » → désassignation
       // explicite de CETTE visite (les autres visites du job ne bougent pas).
       const result = await rescheduleMut.mutateAsync({ eventId, startAt, endAt, teamId, clearTeam: teamId === null, timezone: DEFAULT_TIMEZONE });
-      if (result.overlaps > 0) toast.warning(t.schedule.overlapping);
-      else toast.success(t.schedule.eventRescheduled);
+      annoncerDeplacement(eventId, origine, result.overlaps > 0);
       warnRoster(teamId, startAt, endAt);
     } catch (err: any) {
       toast.error(err?.message || t.schedule.couldNotReschedule);
       throw err;
     }
-  }, [rescheduleMut, t, warnRoster]);
+  }, [rescheduleMut, t, warnRoster, events, annoncerDeplacement]);
 
   const handleDailyResize = useCallback(async (eventId: string, startAt: string, endAt: string) => {
     try {
@@ -715,6 +778,23 @@ function ScheduleContent() {
                 toast.info(language === 'fr'
                   ? 'Passé en vue Jour. Choisissez une équipe puis recliquez sur « Optimiser ».'
                   : 'Switched to Day view. Pick one team, then click Optimize again.');
+                return;
+              }
+              // Aucune équipe configurée : « sélectionnez une équipe » envoyait
+              // l'utilisateur dans une impasse — il n'y avait rien à choisir
+              // (QA 2026-09-25). On dit quoi faire, et on y mène.
+              if (teams.length === 0) {
+                toast.info(
+                  language === 'fr'
+                    ? 'Aucune équipe n’est configurée. Créez-en une pour optimiser une tournée.'
+                    : 'No team is set up yet. Create one to optimize a route.',
+                  {
+                    action: {
+                      label: language === 'fr' ? 'Créer une équipe' : 'Create a team',
+                      onClick: () => navigate('/settings/team'),
+                    },
+                  },
+                );
                 return;
               }
               if (selectedTeamIds.length !== 1) {

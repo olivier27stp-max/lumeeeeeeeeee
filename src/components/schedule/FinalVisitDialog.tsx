@@ -1,16 +1,24 @@
 import React from 'react';
-import { CalendarPlus, Archive, CircleDot } from 'lucide-react';
+import { CalendarPlus, Archive, CircleDot, FileText } from 'lucide-react';
 
 /**
  * « Dernière visite complétée » — proposé quand la visite qu'on vient de
- * marquer terminée était la dernière visite active du job. Trois issues :
- * fermer le job, planifier une nouvelle visite, ou le laisser en
- * « Action requise » (actif sans visite à venir).
+ * marquer terminée était la dernière visite active de la job.
+ *
+ * Le travail est fini : la suite normale, c'est de FACTURER. Le dialogue ne
+ * proposait que fermer, replanifier ou laisser en « Action requise » — il
+ * fallait sortir, aller chercher la job et créer la facture à la main. La
+ * facturation est désormais le premier choix, et elle ferme la job au
+ * passage (c'est ce que fait `finishJobAndPrepareInvoice`).
+ *
+ * `onInvoice` est optionnel : une job sans facturation (`requires_invoicing`
+ * à faux) n'a rien à facturer, et l'appelant ne passe alors rien.
  */
-export default function FinalVisitDialog({ open, fr, busy, onCloseJob, onScheduleNewVisit, onLeave }: {
+export default function FinalVisitDialog({ open, fr, busy, onInvoice, onCloseJob, onScheduleNewVisit, onLeave }: {
   open: boolean;
   fr: boolean;
   busy?: boolean;
+  onInvoice?: () => void;
   onCloseJob: () => void;
   onScheduleNewVisit: () => void;
   onLeave: () => void;
@@ -29,6 +37,17 @@ export default function FinalVisitDialog({ open, fr, busy, onCloseJob, onSchedul
           {fr ? 'Compléter la dernière visite et...' : 'Complete final visit and...'}
         </h2>
         <div className="space-y-2">
+          {onInvoice && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onInvoice}
+              className="w-full rounded-lg border border-primary/40 bg-primary px-3.5 py-2.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50 inline-flex items-center justify-center gap-2"
+            >
+              <FileText size={14} />
+              {fr ? 'Facturer la job' : 'Invoice the job'}
+            </button>
+          )}
           <button
             type="button"
             disabled={busy}
@@ -36,7 +55,7 @@ export default function FinalVisitDialog({ open, fr, busy, onCloseJob, onSchedul
             className="w-full rounded-lg border border-outline-subtle bg-surface-secondary px-3.5 py-2.5 text-[13px] font-semibold text-text-primary transition-colors hover:border-primary/40 disabled:opacity-50 inline-flex items-center justify-center gap-2"
           >
             <Archive size={14} />
-            {fr ? 'Fermer le job' : 'Close Job'}
+            {fr ? 'Fermer la job' : 'Close Job'}
           </button>
           <button
             type="button"
