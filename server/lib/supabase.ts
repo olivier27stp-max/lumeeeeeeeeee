@@ -147,8 +147,22 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
   if (headerOrg && ORG_UUID_RE.test(headerOrg)) {
     const { data: isMember } = await client.rpc('has_org_membership', { p_user: user.id, p_org: headerOrg });
     if (shouldUseRequestedOrg(headerOrg, isMember === true)) orgId = headerOrg;
+    else {
+      // Bureau demandé mais pas membre : refus explicite, jamais un repli silencieux sur un autre bureau.
+      res.status(403).json({ error: 'Accès refusé à ce bureau.', code: 'org_forbidden' });
+      return null;
+    }
   }
-  if (!orgId) orgId = await resolveOrgId(client);
+  if (!orgId) {
+    // Sans en-tête : acceptable pour un compte à UN seul bureau. Avec plusieurs bureaux, deviner
+    // « le premier » mélangeait les données (Vision Lavage voyait Coquin lavage, 2026-09-24).
+    const { count } = await getServiceClient().from('memberships').select('org_id', { count: 'exact', head: true }).eq('user_id', user.id);
+    if ((count ?? 0) > 1) {
+      res.status(400).json({ error: 'Bureau requis : envoyez l\'en-tête x-org-id du bureau sélectionné.', code: 'org_required' });
+      return null;
+    }
+    orgId = await resolveOrgId(client);
+  }
   if (!orgId) {
     res.status(403).json({ error: 'No organization context found for user.' });
     return null;

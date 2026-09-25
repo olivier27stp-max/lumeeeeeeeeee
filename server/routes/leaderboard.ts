@@ -72,7 +72,9 @@ router.get('/leaderboard', async (req, res) => {
   const experience = experienceRaw === 'rookie' || experienceRaw === 'experienced' ? experienceRaw : undefined;
   // 'mine' = uniquement l'office actif ; 'all' = tous les offices de la
   // compagnie (company_group_id). Défaut prudent : 'all' (comportement legacy).
-  const scope = (req.query.scope as string) === 'mine' ? 'mine' : 'all';
+  // Par défaut : le bureau actif seulement. Mélanger les bureaux d'une compagnie exige
+  // scope=all explicite (onglet « Bureaux ») — isolation stricte, 2026-09-24.
+  const scope = (req.query.scope as string) === 'all' ? 'all' : 'mine';
 
   try {
     const sc = getServiceClient();
