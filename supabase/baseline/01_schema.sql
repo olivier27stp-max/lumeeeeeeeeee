@@ -209,6 +209,67 @@ $$;
 
 
 --
+-- Name: _client_dans_bureau(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._client_dans_bureau(p_client uuid, p_cible uuid, p_uid uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_id uuid;
+  v_src uuid;
+  v_groupe uuid;
+begin
+  if p_client is null then return null; end if;
+
+  select t.id_cible into v_id
+    from public.transferts_bureaux t
+    join public.clients c on c.id = t.id_cible and c.deleted_at is null
+   where t.entite = 'client' and t.id_source = p_client and t.org_cible = p_cible
+   order by t.fait_le desc limit 1;
+  if v_id is not null then return v_id; end if;
+
+  insert into public.clients (
+    org_id, first_name, last_name, company, email, phone, address, status, notes,
+    city, province, postal_code, country, street_number, street_name, latitude, longitude, place_id,
+    display_as_company, billing_same_as_service, billing_address, lead_status, source, lead_source,
+    title, value, description, phones, email_label, tags, tax_exempt,
+    sms_consent_at, email_consent_at, email_opt_out_at, email_opt_out_reason,
+    assigned_to, created_by
+  )
+  select p_cible, c.first_name, c.last_name, c.company, c.email, c.phone, c.address, c.status, c.notes,
+         c.city, c.province, c.postal_code, c.country, c.street_number, c.street_name, c.latitude, c.longitude, c.place_id,
+         c.display_as_company, c.billing_same_as_service, c.billing_address, c.lead_status, c.source, c.lead_source,
+         c.title, c.value, c.description, c.phones, c.email_label, c.tags, c.tax_exempt,
+         c.sms_consent_at, c.email_consent_at, c.email_opt_out_at, c.email_opt_out_reason,
+         public._membre_actif_ou_nul(c.assigned_to, p_cible), p_uid
+    from public.clients c
+   where c.id = p_client
+  returning id into v_id;
+
+  select c.org_id into v_src from public.clients c where c.id = p_client;
+  select o.company_group_id into v_groupe from public.orgs o where o.id = p_cible;
+  insert into public.transferts_bureaux (company_group_id, entite, org_source, id_source, org_cible, id_cible, fait_par, details)
+  values (v_groupe, 'client', v_src, p_client, p_cible, v_id, p_uid, jsonb_build_object('copie_liee', true));
+  return v_id;
+end;
+$$;
+
+
+--
+-- Name: _membre_actif_ou_nul(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._membre_actif_ou_nul(p_user uuid, p_org uuid) RETURNS uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+  select case when p_user is not null and public.has_org_membership(p_user, p_org) then p_user end;
+$$;
+
+
+--
 -- Name: _point_in_zone_ring(double precision, double precision, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -237,6 +298,198 @@ begin
   end loop;
   return inside;
 end $$;
+
+
+--
+-- Name: _taxe_defaut_bureau(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._taxe_defaut_bureau(p_org uuid, OUT taux numeric, OUT libelle text) RETURNS record
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  r record;
+  v_facteur numeric := 1;
+  v_simple numeric := 0;
+  v_groupe text;
+begin
+  select g.id, g.name into r
+    from public.tax_groups g
+   where g.org_id = p_org and g.is_default and coalesce(g.is_active, true)
+   order by g.created_at limit 1;
+  if r.id is null then taux := null; libelle := null; return; end if;
+  v_groupe := r.name;
+  for r in
+    select c.rate, coalesce(c.is_compound, false) as compose
+      from public.tax_group_items i
+      join public.tax_configs c on c.id = i.tax_config_id
+     where i.tax_group_id = (select g.id from public.tax_groups g where g.org_id = p_org and g.is_default and coalesce(g.is_active, true) order by g.created_at limit 1)
+       and coalesce(c.is_active, true)
+     order by i.sort_order
+  loop
+    if r.compose then v_facteur := v_facteur * (1 + r.rate / 100);
+    else v_simple := v_simple + r.rate;
+    end if;
+  end loop;
+  taux := round(((1 + v_simple / 100) * v_facteur - 1) * 100, 4);
+  libelle := v_groupe || ' (' || trim(to_char(taux, 'FM990.999')) || '%)';
+end;
+$$;
+
+
+--
+-- Name: _transferer_devis(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._transferer_devis(p_quote uuid, p_cible uuid, p_uid uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  q record;
+  v_id uuid;
+  v_num bigint;
+  v_numero text;
+  t record;
+  v_tax_rate numeric;
+  v_tax_label text;
+  v_tax_cents bigint;
+  v_taxes text := 'conservees';
+  v_groupe uuid;
+begin
+  select * into q from public.quotes where id = p_quote;
+  if q.status not in ('draft', 'awaiting_response', 'changes_requested') then
+    raise exception 'Seule une soumission non acceptée (brouillon, en attente, changements demandés) peut être transférée.' using errcode = '22023';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_cible::text || ':quote', 0));
+  v_num := public.org_smallest_free_number(p_cible, 'quote');
+  insert into public.quote_sequences (org_id, last_value, updated_at)
+  values (p_cible, v_num, now())
+  on conflict (org_id) do update
+    set last_value = greatest(public.quote_sequences.last_value, excluded.last_value), updated_at = now();
+
+  v_tax_rate := q.tax_rate; v_tax_label := q.tax_rate_label; v_tax_cents := q.tax_cents;
+  select * into t from public._taxe_defaut_bureau(p_cible);
+  if t.taux is not null then
+    v_tax_rate := t.taux; v_tax_label := t.libelle;
+    v_tax_cents := round((coalesce(q.subtotal_cents, 0) - coalesce(q.discount_cents, 0)) * t.taux / 100);
+    v_taxes := 'bureau_cible';
+  end if;
+
+  insert into public.quotes (
+    org_id, quote_number, title, lead_id, client_id, status, context_type, salesperson_id, created_by,
+    valid_until, subtotal_cents, discount_type, discount_value, discount_cents,
+    tax_rate_label, tax_rate, tax_cents, total_cents, currency, notes, internal_notes, contract_disclaimer,
+    deposit_required, deposit_type, deposit_value, deposit_cents, require_payment_method,
+    source_template_id, source_template_name, layout_type, quote_type, service_plan, logo_url
+  ) values (
+    p_cible, v_num::text, q.title,
+    public._client_dans_bureau(q.lead_id, p_cible, p_uid),
+    public._client_dans_bureau(q.client_id, p_cible, p_uid),
+    'draft', q.context_type, public._membre_actif_ou_nul(q.salesperson_id, p_cible), p_uid,
+    q.valid_until, q.subtotal_cents, q.discount_type, q.discount_value, q.discount_cents,
+    v_tax_label, v_tax_rate, v_tax_cents,
+    coalesce(q.subtotal_cents, 0) - coalesce(q.discount_cents, 0) + coalesce(v_tax_cents, 0),
+    q.currency, q.notes, q.internal_notes, q.contract_disclaimer,
+    q.deposit_required, q.deposit_type, q.deposit_value, q.deposit_cents, q.require_payment_method,
+    null, q.source_template_name, q.layout_type, q.quote_type, q.service_plan, null
+  )
+  returning id, quote_number into v_id, v_numero;
+
+  insert into public.quote_line_items (
+    quote_id, org_id, source_service_id, name, description, quantity, unit_price_cents, total_cents,
+    sort_order, is_optional, item_type, image_url, discount_type, discount_value
+  )
+  select v_id, p_cible, l.source_service_id, l.name, l.description, l.quantity, l.unit_price_cents, l.total_cents,
+         l.sort_order, l.is_optional, l.item_type, l.image_url, l.discount_type, l.discount_value
+    from public.quote_line_items l where l.quote_id = p_quote;
+
+  insert into public.quote_sections (quote_id, section_type, title, content, sort_order, enabled)
+  select v_id, s.section_type, s.title, s.content, s.sort_order, s.enabled
+    from public.quote_sections s where s.quote_id = p_quote;
+
+  update public.quotes set status = 'archived', archived_at = now(), updated_at = now() where id = p_quote;
+
+  select o.company_group_id into v_groupe from public.orgs o where o.id = p_cible;
+  insert into public.transferts_bureaux (company_group_id, entite, org_source, id_source, org_cible, id_cible, fait_par, details)
+  values (v_groupe, 'quote', q.org_id, p_quote, p_cible, v_id, p_uid,
+          jsonb_build_object('numero_source', q.quote_number, 'numero_cible', v_numero, 'taxes', v_taxes));
+
+  return jsonb_build_object('id_cible', v_id, 'numero', v_numero, 'taxes', v_taxes);
+end;
+$$;
+
+
+--
+-- Name: _transferer_job(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._transferer_job(p_job uuid, p_cible uuid, p_uid uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  j record;
+  v_id uuid;
+  v_numero text;
+  v_visites int;
+  v_groupe uuid;
+begin
+  select * into j from public.jobs where id = p_job;
+  if j.status not in ('draft', 'scheduled') then
+    raise exception 'Seul un job en brouillon ou planifié peut être transféré.' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.invoices i
+              where i.job_id = p_job and i.deleted_at is null and coalesce(i.status, '') <> 'void') then
+    raise exception 'Ce job est déjà facturé : une facture ne change jamais de bureau.' using errcode = '22023';
+  end if;
+
+  insert into public.jobs (
+    org_id, title, client_id, client_name, property_address, scheduled_at, status, currency, job_type,
+    notes, description, address, latitude, longitude, start_at, end_at, requires_invoicing,
+    deposit_required, deposit_type, deposit_value, deposit_cents, require_payment_method,
+    tags, ask_for_review, salesperson_id, assigned_user_id, lead_id, tax_lines, billing_split,
+    billing_mode, auto_charge, expenses_cents, created_by
+  ) values (
+    p_cible, j.title,
+    public._client_dans_bureau(j.client_id, p_cible, p_uid),
+    j.client_name, j.property_address, j.scheduled_at, j.status, j.currency, j.job_type,
+    j.notes, j.description, j.address, j.latitude, j.longitude, j.start_at, j.end_at, j.requires_invoicing,
+    j.deposit_required, j.deposit_type, j.deposit_value, j.deposit_cents, j.require_payment_method,
+    j.tags, j.ask_for_review,
+    public._membre_actif_ou_nul(j.salesperson_id, p_cible),
+    public._membre_actif_ou_nul(j.assigned_user_id, p_cible),
+    public._client_dans_bureau(j.lead_id, p_cible, p_uid),
+    j.tax_lines, j.billing_split, j.billing_mode, j.auto_charge, j.expenses_cents, p_uid
+  )
+  returning id, job_number into v_id, v_numero;
+
+  insert into public.job_line_items (org_id, job_id, name, qty, unit_price_cents, included, visit_date, description, created_by)
+  select p_cible, v_id, l.name, l.qty, l.unit_price_cents, l.included, l.visit_date, l.description, p_uid
+    from public.job_line_items l where l.job_id = p_job and l.deleted_at is null;
+
+  insert into public.schedule_events (org_id, job_id, title, start_time, end_time, assigned_user, notes, status, timezone, start_at, end_at, created_by)
+  select p_cible, v_id, e.title, e.start_time, e.end_time, public._membre_actif_ou_nul(e.assigned_user, p_cible),
+         e.notes, e.status, e.timezone, e.start_at, e.end_at, p_uid
+    from public.schedule_events e
+   where e.job_id = p_job and e.deleted_at is null and coalesce(e.end_time, e.start_time) >= now();
+  get diagnostics v_visites = row_count;
+
+  -- L'original : retiré du calendrier (visites futures) et archivé.
+  update public.schedule_events set deleted_at = now()
+   where job_id = p_job and deleted_at is null and coalesce(end_time, start_time) >= now();
+  update public.jobs set archived_at = now(), updated_at = now() where id = p_job;
+
+  select o.company_group_id into v_groupe from public.orgs o where o.id = p_cible;
+  insert into public.transferts_bureaux (company_group_id, entite, org_source, id_source, org_cible, id_cible, fait_par, details)
+  values (v_groupe, 'job', j.org_id, p_job, p_cible, v_id, p_uid,
+          jsonb_build_object('numero_source', j.job_number, 'numero_cible', v_numero, 'visites', v_visites));
+
+  return jsonb_build_object('id_cible', v_id, 'numero', v_numero, 'visites', v_visites);
+end;
+$$;
 
 
 --
@@ -17598,6 +17851,112 @@ $$;
 
 
 --
+-- Name: transferer_vers_bureau(text, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.transferer_vers_bureau(p_entite text, p_id uuid, p_org_cible uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_src uuid;
+  v_archive boolean;
+  v_client_cible uuid;
+  v_res jsonb;
+  v_devis int := 0;
+  v_jobs int := 0;
+  r record;
+  v_entete text;
+begin
+  if v_uid is null then
+    raise exception 'Connexion requise.' using errcode = '42501';
+  end if;
+  if p_entite not in ('client', 'quote', 'job') then
+    raise exception 'Type inconnu : %', p_entite using errcode = '22023';
+  end if;
+
+  if p_entite = 'client' then
+    select org_id into v_src from public.clients where id = p_id and deleted_at is null and archived_at is null;
+  elsif p_entite = 'quote' then
+    select org_id into v_src from public.quotes where id = p_id and deleted_at is null and archived_at is null;
+  else
+    select org_id into v_src from public.jobs where id = p_id and deleted_at is null and archived_at is null;
+  end if;
+  if v_src is null then
+    raise exception 'Introuvable (ou déjà archivé).' using errcode = 'P0002';
+  end if;
+  if v_src = p_org_cible then
+    raise exception 'C''est déjà le bureau de cet élément.' using errcode = '22023';
+  end if;
+  if (select company_group_id from public.orgs where id = v_src)
+     is distinct from (select company_group_id from public.orgs where id = p_org_cible and deleted_at is null) then
+    raise exception 'Le bureau cible n''appartient pas à la même entreprise.' using errcode = '42501';
+  end if;
+  if not (public.has_org_admin_role(v_uid, v_src) and public.has_org_admin_role(v_uid, p_org_cible)) then
+    raise exception 'Il faut être administrateur ou propriétaire des deux bureaux.' using errcode = '42501';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('transfert:' || p_id::text, 0));
+
+  -- Bureau courant = bureau CIBLE pendant la copie (voir l'en-tête du fichier).
+  v_entete := current_setting('request.headers', true);
+  perform set_config('request.headers',
+    (coalesce(nullif(v_entete, ''), '{}')::jsonb || jsonb_build_object('x-lume-org', p_org_cible::text, 'x-org-id', p_org_cible::text))::text,
+    true);
+
+  if p_entite = 'quote' then
+    v_res := public._transferer_devis(p_id, p_org_cible, v_uid) || jsonb_build_object('entite', 'quote');
+    perform set_config('request.headers', coalesce(v_entete, ''), true);
+    return v_res;
+  elsif p_entite = 'job' then
+    v_res := public._transferer_job(p_id, p_org_cible, v_uid) || jsonb_build_object('entite', 'job');
+    perform set_config('request.headers', coalesce(v_entete, ''), true);
+    return v_res;
+  end if;
+
+  -- Client : copie, puis ses soumissions ouvertes et ses jobs non facturés.
+  v_client_cible := public._client_dans_bureau(p_id, p_org_cible, v_uid);
+  for r in
+    select q.id from public.quotes q
+     where q.org_id = v_src and (q.client_id = p_id or q.lead_id = p_id)
+       and q.deleted_at is null and q.archived_at is null
+       and q.status in ('draft', 'awaiting_response', 'changes_requested')
+  loop
+    perform public._transferer_devis(r.id, p_org_cible, v_uid);
+    v_devis := v_devis + 1;
+  end loop;
+  for r in
+    select jb.id from public.jobs jb
+     where jb.org_id = v_src and (jb.client_id = p_id or jb.lead_id = p_id)
+       and jb.deleted_at is null and jb.archived_at is null
+       and jb.status in ('draft', 'scheduled')
+       and not exists (select 1 from public.invoices i
+                        where i.job_id = jb.id and i.deleted_at is null and coalesce(i.status, '') <> 'void')
+  loop
+    perform public._transferer_job(r.id, p_org_cible, v_uid);
+    v_jobs := v_jobs + 1;
+  end loop;
+
+  -- La fiche d'origine reste active si elle porte des factures (suivi des paiements).
+  v_archive := not exists (select 1 from public.invoices i where i.client_id = p_id and i.deleted_at is null);
+  if v_archive then
+    update public.clients set archived_at = now(), archived_by = v_uid, updated_at = now() where id = p_id;
+  end if;
+  update public.transferts_bureaux
+     set details = details - 'copie_liee' || jsonb_build_object('transfert', true, 'devis', v_devis, 'jobs', v_jobs, 'origine_archivee', v_archive)
+   where entite = 'client' and id_source = p_id and id_cible = v_client_cible;
+
+  v_res := jsonb_build_object('entite', 'client', 'id_cible', v_client_cible,
+    'numero', (select client_number from public.clients where id = v_client_cible),
+    'devis', v_devis, 'jobs', v_jobs, 'origine_archivee', v_archive);
+  perform set_config('request.headers', coalesce(v_entete, ''), true);
+  return v_res;
+end;
+$$;
+
+
+--
 -- Name: trg_agent_messages_after_insert(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -18857,7 +19216,9 @@ CREATE TABLE public.automation_rules (
     steps jsonb,
     settings jsonb,
     deleted_at timestamp with time zone,
-    folder_id uuid
+    folder_id uuid,
+    modele_id uuid,
+    CONSTRAINT automation_rules_modele_pas_soi CHECK (((modele_id IS NULL) OR (modele_id <> id)))
 );
 
 ALTER TABLE ONLY public.automation_rules FORCE ROW LEVEL SECURITY;
@@ -18896,6 +19257,13 @@ COMMENT ON COLUMN public.automation_rules.settings IS 'Réglages propres à cett
 --
 
 COMMENT ON COLUMN public.automation_rules.deleted_at IS 'Mise à la corbeille. NULL = vivante. Une règle en corbeille ne se déclenche plus mais reste restaurable.';
+
+
+--
+-- Name: COLUMN automation_rules.modele_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.automation_rules.modele_id IS 'Règle modèle (autre bureau de la même entreprise) que cette copie suit ; null = automatisation autonome.';
 
 
 --
@@ -27429,6 +27797,34 @@ COMMENT ON TABLE public.tracking_sessions IS '[Field Service] Technician work se
 
 
 --
+-- Name: transferts_bureaux; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.transferts_bureaux (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_group_id uuid NOT NULL,
+    entite text NOT NULL,
+    org_source uuid NOT NULL,
+    id_source uuid NOT NULL,
+    org_cible uuid NOT NULL,
+    id_cible uuid NOT NULL,
+    fait_par uuid,
+    fait_le timestamp with time zone DEFAULT now() NOT NULL,
+    details jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT transferts_bureaux_entite_check CHECK ((entite = ANY (ARRAY['client'::text, 'quote'::text, 'job'::text])))
+);
+
+ALTER TABLE ONLY public.transferts_bureaux FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: TABLE transferts_bureaux; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.transferts_bureaux IS 'Journal des transferts entre bureaux : l''original (source, archivé) et sa copie (cible).';
+
+
+--
 -- Name: v_org_members; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -30456,6 +30852,14 @@ ALTER TABLE ONLY public.tracking_sessions
 
 
 --
+-- Name: transferts_bureaux transferts_bureaux_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.transferts_bureaux
+    ADD CONSTRAINT transferts_bureaux_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: rate_limits uq_rate_limit; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -30552,6 +30956,13 @@ CREATE UNIQUE INDEX automation_folders_org_name_uniq ON public.automation_folder
 --
 
 CREATE INDEX automation_rules_folder_idx ON public.automation_rules USING btree (org_id, folder_id) WHERE (folder_id IS NOT NULL);
+
+
+--
+-- Name: automation_rules_modele_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX automation_rules_modele_idx ON public.automation_rules USING btree (modele_id) WHERE (modele_id IS NOT NULL);
 
 
 --
@@ -35063,6 +35474,20 @@ CREATE INDEX tech_locations_recorded_idx ON public.technician_locations USING bt
 
 
 --
+-- Name: transferts_bureaux_cible_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX transferts_bureaux_cible_idx ON public.transferts_bureaux USING btree (org_cible, id_cible);
+
+
+--
+-- Name: transferts_bureaux_source_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX transferts_bureaux_source_idx ON public.transferts_bureaux USING btree (org_source, id_source);
+
+
+--
 -- Name: tsa_org_team_user_date_start_uq; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -37313,6 +37738,14 @@ ALTER TABLE ONLY public.automation_folders
 
 ALTER TABLE ONLY public.automation_rules
     ADD CONSTRAINT automation_rules_folder_id_fkey FOREIGN KEY (folder_id) REFERENCES public.automation_folders(id) ON DELETE SET NULL;
+
+
+--
+-- Name: automation_rules automation_rules_modele_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_rules
+    ADD CONSTRAINT automation_rules_modele_fk FOREIGN KEY (modele_id) REFERENCES public.automation_rules(id) ON DELETE SET NULL;
 
 
 --
@@ -42001,6 +42434,30 @@ ALTER TABLE ONLY public.tracking_sessions
 
 ALTER TABLE ONLY public.tracking_sessions
     ADD CONSTRAINT tracking_sessions_time_entry_id_same_org FOREIGN KEY (org_id, time_entry_id) REFERENCES public.time_entries(org_id, id);
+
+
+--
+-- Name: transferts_bureaux transferts_bureaux_company_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.transferts_bureaux
+    ADD CONSTRAINT transferts_bureaux_company_group_id_fkey FOREIGN KEY (company_group_id) REFERENCES public.company_groups(id);
+
+
+--
+-- Name: transferts_bureaux transferts_bureaux_org_cible_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.transferts_bureaux
+    ADD CONSTRAINT transferts_bureaux_org_cible_fkey FOREIGN KEY (org_cible) REFERENCES public.orgs(id);
+
+
+--
+-- Name: transferts_bureaux transferts_bureaux_org_source_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.transferts_bureaux
+    ADD CONSTRAINT transferts_bureaux_org_source_fkey FOREIGN KEY (org_source) REFERENCES public.orgs(id);
 
 
 --
@@ -49999,6 +50456,19 @@ CREATE POLICY tracking_sessions_update ON public.tracking_sessions FOR UPDATE US
 
 
 --
+-- Name: transferts_bureaux; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.transferts_bureaux ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: transferts_bureaux transferts_bureaux_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY transferts_bureaux_select ON public.transferts_bureaux FOR SELECT TO authenticated USING ((public.has_org_membership(( SELECT auth.uid() AS uid), org_source) OR public.has_org_membership(( SELECT auth.uid() AS uid), org_cible)));
+
+
+--
 -- Name: team_schedule_assignments tsa_delete; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -50168,12 +50638,52 @@ GRANT ALL ON FUNCTION app.leads_force_org_id() TO service_role;
 
 
 --
+-- Name: FUNCTION _client_dans_bureau(p_client uuid, p_cible uuid, p_uid uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._client_dans_bureau(p_client uuid, p_cible uuid, p_uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._client_dans_bureau(p_client uuid, p_cible uuid, p_uid uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION _membre_actif_ou_nul(p_user uuid, p_org uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._membre_actif_ou_nul(p_user uuid, p_org uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._membre_actif_ou_nul(p_user uuid, p_org uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION _point_in_zone_ring(p_lng double precision, p_lat double precision, geo jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public._point_in_zone_ring(p_lng double precision, p_lat double precision, geo jsonb) TO anon;
 GRANT ALL ON FUNCTION public._point_in_zone_ring(p_lng double precision, p_lat double precision, geo jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public._point_in_zone_ring(p_lng double precision, p_lat double precision, geo jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION _taxe_defaut_bureau(p_org uuid, OUT taux numeric, OUT libelle text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._taxe_defaut_bureau(p_org uuid, OUT taux numeric, OUT libelle text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._taxe_defaut_bureau(p_org uuid, OUT taux numeric, OUT libelle text) TO service_role;
+
+
+--
+-- Name: FUNCTION _transferer_devis(p_quote uuid, p_cible uuid, p_uid uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._transferer_devis(p_quote uuid, p_cible uuid, p_uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._transferer_devis(p_quote uuid, p_cible uuid, p_uid uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION _transferer_job(p_job uuid, p_cible uuid, p_uid uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._transferer_job(p_job uuid, p_cible uuid, p_uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._transferer_job(p_job uuid, p_cible uuid, p_uid uuid) TO service_role;
 
 
 --
@@ -54533,6 +55043,15 @@ GRANT ALL ON FUNCTION public.touch_org_billing_settings_updated_at() TO service_
 
 
 --
+-- Name: FUNCTION transferer_vers_bureau(p_entite text, p_id uuid, p_org_cible uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.transferer_vers_bureau(p_entite text, p_id uuid, p_org_cible uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.transferer_vers_bureau(p_entite text, p_id uuid, p_org_cible uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.transferer_vers_bureau(p_entite text, p_id uuid, p_org_cible uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION trg_agent_messages_after_insert(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -57080,6 +57599,14 @@ GRANT ALL ON TABLE public.tracking_points TO service_role;
 GRANT ALL ON TABLE public.tracking_sessions TO anon;
 GRANT ALL ON TABLE public.tracking_sessions TO authenticated;
 GRANT ALL ON TABLE public.tracking_sessions TO service_role;
+
+
+--
+-- Name: TABLE transferts_bureaux; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.transferts_bureaux TO service_role;
+GRANT SELECT ON TABLE public.transferts_bureaux TO authenticated;
 
 
 --

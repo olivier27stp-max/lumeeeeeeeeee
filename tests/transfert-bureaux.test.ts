@@ -22,7 +22,8 @@ describe('transfert entre bureaux', () => {
   });
   it('seul le point d’entrée est exécutable par un utilisateur', () => {
     for (const f of ['_membre_actif_ou_nul', '_taxe_defaut_bureau', '_client_dans_bureau', '_transferer_devis', '_transferer_job']) {
-      expect(sql).toMatch(new RegExp(`revoke all on function public\.${f}\([^)]*\) from public, anon, authenticated`));
+      const ligne = sql.split('\n').find((l) => l.startsWith(`revoke all on function public.${f}(`));
+      expect(ligne, f).toMatch(/\) from public, anon, authenticated;$/);
     }
     expect(sql).toMatch(/grant execute on function public\.transferer_vers_bureau\(text, uuid, uuid\) to authenticated/);
   });
