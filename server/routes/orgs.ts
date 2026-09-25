@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, companyOrgIds } from '../lib/supabase';
-import { DEFAULT_OFFICE_QUOTA, OFFICE_QUOTA_KEY, resolveOfficeQuota } from '../lib/platformFeatures';
+import { DEFAULT_OFFICE_QUOTA, OFFICE_QUOTA_KEY, quotaEffectifBureaux } from '../lib/platformFeatures';
 import { ensureAutomationPresets } from '../lib/automationPresetSeeder';
 import { copyOfficeSettings, NO_INHERIT, type InheritOptions } from '../lib/office-inheritance';
 import {
@@ -53,22 +53,38 @@ const createOfficeSchema = z.object({
 // ─── Helpers ─────────────────────────────────────────────────────
 
 /**
- * Capacité de bureaux de la compagnie : quota posé par la plateforme
- * (org_features 'office_quota', n'importe quel bureau du groupe), 1 par
- * défaut. Ne dépend plus du forfait depuis 2026-09-17.
+ * Capacité de bureaux de la compagnie : le PLUS GRAND entre ce qu'inclut le
+ * forfait et ce que la plateforme a accordé (org_features 'office_quota', sur
+ * n'importe quel bureau du groupe).
+ *
+ * Le forfait était sorti de ce calcul le 2026-09-17. Autopilot, qui vend la
+ * gestion multi-équipes, se retrouvait donc à un seul bureau : il a fallu
+ * poser des quotas à la main. Le forfait établit à nouveau un plancher, sans
+ * que la plateforme perde le dernier mot.
  */
 export async function getOfficeCapacity(admin: ReturnType<typeof getServiceClient>, officeIds: string[]): Promise<number> {
-  // Depuis 2026-09-17 les bureaux ne dépendent plus du forfait ni d'un achat
-  // du tenant : 1 bureau par workspace, davantage seulement si la plateforme
-  // (Creator Space → Features) a posé un quota. Le forfait et l'abonnement ne
-  // sont plus consultés ici.
   if (officeIds.length === 0) return DEFAULT_OFFICE_QUOTA;
-  const { data: rows } = await admin
-    .from('org_features')
-    .select('feature, enabled, metadata')
-    .in('org_id', officeIds)
-    .eq('feature', OFFICE_QUOTA_KEY);
-  return resolveOfficeQuota(rows);
+  const [{ data: rows }, { data: abo }] = await Promise.all([
+    admin
+      .from('org_features')
+      .select('feature, enabled, metadata')
+      .in('org_id', officeIds)
+      .eq('feature', OFFICE_QUOTA_KEY),
+    // L'abonnement vit sur UN bureau du groupe : on interroge les mêmes ids
+    // que le quota plateforme. Une lecture ratée laisse `plan` à null, donc
+    // le plancher du forfait retombe à 1 — jamais au-dessus de ce que la
+    // plateforme a accordé.
+    admin
+      .from('subscriptions')
+      .select('plans:plan_id (slug)')
+      .in('org_id', officeIds)
+      .in('status', ['active', 'trialing', 'past_due'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const plan = ((abo as any)?.plans ?? null) as { slug?: string | null } | null;
+  return quotaEffectifBureaux(plan, rows);
 }
 
 /**
