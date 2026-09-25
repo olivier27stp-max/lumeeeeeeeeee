@@ -265,7 +265,7 @@ export function ModaleSuppression({ open, onClose, onFait, champ, fr }: {
   }, [open, champ]);
 
   if (!champ) return null;
-  const bloque = (impact?.automatisations.length ?? 0) > 0;
+  const bloque = (impact?.automatisations?.length ?? 0) > 0;
 
   const archiver = async () => {
     setEnvoi(true);

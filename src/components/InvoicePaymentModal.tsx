@@ -132,7 +132,7 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
   useEffect(() => {
     if (!open) return;
 
-    const preferred = settingsPayload?.settings.default_provider;
+    const preferred = settingsPayload?.settings?.default_provider;
     const resolvedDefault = preferred && preferred !== 'none' && enabledProviders.includes(preferred)
       ? preferred
       : enabledProviders[0] || null;
@@ -197,7 +197,7 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
     }
   }
 
-  const paypalClientId = settingsPayload?.settings.paypal_client_id || '';
+  const paypalClientId = settingsPayload?.settings?.paypal_client_id || '';
   const paypalScriptOptions = {
     clientId: paypalClientId,
     currency: (currency || 'CAD').toUpperCase(),

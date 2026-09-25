@@ -123,7 +123,7 @@ export default function RelationshipGraph() {
 
   // Run simulation when data arrives
   useEffect(() => {
-    if (!data?.nodes.length) return;
+    if (!data?.nodes?.length) return;
     const w = dimensions.width;
     const h = dimensions.height;
     const nodes = runForceSimulation(data.nodes, data.edges, w, h);

@@ -171,7 +171,7 @@ export default function SupportChat({ compact = false, initialTicketId, onNaviga
 
   useEffect(() => {
     listeRef.current?.scrollTo({ top: listeRef.current.scrollHeight });
-  }, [ticket?.messages.length, envoi]);
+  }, [ticket?.messages?.length, envoi]);
 
   const erreur = useCallback((err: unknown) => {
     const e = err as SupportRequestError;

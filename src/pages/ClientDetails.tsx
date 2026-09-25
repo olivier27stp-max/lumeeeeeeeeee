@@ -1374,7 +1374,7 @@ export default function ClientDetails() {
           onClose={() => { setIsQuoteDetailsOpen(false); setQuoteDetail(null); }}
           detail={quoteDetail}
           onRefresh={async () => {
-            if (quoteDetail?.quote.id) {
+            if (quoteDetail?.quote?.id) {
               const refreshed = await getQuoteById(quoteDetail.quote.id);
               if (refreshed) setQuoteDetail(refreshed);
             }

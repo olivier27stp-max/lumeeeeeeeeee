@@ -625,7 +625,7 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
                         {entries.map((entry) => {
                           const name = memberName.get(entry.user_id) || '?';
                           const isMe = entry.user_id === currentUserId;
-                          const rec = entry.recurring_id ? data?.recurrings.find((r) => r.id === entry.recurring_id) || null : null;
+                          const rec = entry.recurring_id ? data?.recurrings?.find((r) => r.id === entry.recurring_id) || null : null;
                           const clickable = canManage && !selecting;
                           return (
                             <button

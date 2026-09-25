@@ -90,8 +90,8 @@ export default function ReportView() {
   }, [searchParams, setSearchParams]);
 
   const sort = useMemo(() => ({
-    key: state.sort || definition?.defaultSort.key || '',
-    dir: (state.dir || definition?.defaultSort.dir || 'desc') as 'asc' | 'desc',
+    key: state.sort || definition?.defaultSort?.key || '',
+    dir: (state.dir || definition?.defaultSort?.dir || 'desc') as 'asc' | 'desc',
   }), [state.sort, state.dir, definition]);
 
   const params = useMemo<ReportParams>(() => ({

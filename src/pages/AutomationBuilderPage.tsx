@@ -783,7 +783,7 @@ export default function AutomationBuilderPage() {
 
   /** Le déclencheur choisi, tel que le catalogue le décrit. */
   const declencheurCourant = useMemo(
-    () => catalogue?.declencheurs.find((x) => x.cle === regle?.trigger_event) ?? null,
+    () => catalogue?.declencheurs?.find((x) => x.cle === regle?.trigger_event) ?? null,
     [catalogue, regle?.trigger_event],
   );
 
@@ -1443,7 +1443,7 @@ export default function AutomationBuilderPage() {
                               </p>
                             ) : (
                               Object.entries(e.rendu).map(([cle, valeur]) => {
-                                const champ = modele?.champs.find((c) => c.cle === cle);
+                                const champ = modele?.champs?.find((c) => c.cle === cle);
                                 return (
                                   <div key={cle} className="mt-1.5">
                                     <span className="block text-[10px] uppercase text-text-tertiary">

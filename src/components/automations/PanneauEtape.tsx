@@ -198,7 +198,7 @@ export default function PanneauEtape({
       // refuser l'enregistrement par la validation serveur).
       const texte = b.action.config.body;
       const cible = trouverAction(type);
-      const garde = cible?.champs.some((c) => c.cle === 'body') && texte ? { body: texte } : {};
+      const garde = cible?.champs?.some((c) => c.cle === 'body') && texte ? { body: texte } : {};
       return { ...b, action: { type, config: garde } };
     });
   };
@@ -375,7 +375,7 @@ export default function PanneauEtape({
                   ))}
 
                 {/* Variables — cliquer pour insérer, plutôt que les retenir. */}
-                {modele?.champs.some((c) => c.type === 'zone') && (
+                {modele?.champs?.some((c) => c.type === 'zone') && (
                   <div>
                     <p className="mb-1.5 text-[11px] font-medium text-text-secondary">
                       {fr ? 'Insérer une information du client' : 'Insert client information'}
