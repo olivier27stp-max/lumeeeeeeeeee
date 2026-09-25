@@ -256,6 +256,14 @@ export interface RequestForm {
   custom_fields: FormField[];
   notify_email: boolean;
   notify_in_app: boolean;
+  /**
+   * Le pipeline qui reçoit les leads de ce formulaire.
+   *
+   * `null` = le pipeline par défaut de l'organisation. C'est ce qui permet
+   * d'avoir un formulaire « publicités » et un formulaire « terrain » qui
+   * alimentent deux pipelines différents avec les mêmes questions.
+   */
+  pipeline_id?: string | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;

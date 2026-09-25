@@ -20,7 +20,31 @@ export async function fetchRequestForm(): Promise<RequestForm | null> {
   return form || null;
 }
 
+/**
+ * TOUS les formulaires de l'organisation, du plus ancien au plus récent.
+ *
+ * `fetchRequestForm()` (au singulier) reste pour ce qui n'affiche qu'un
+ * formulaire : le serveur renvoie les deux champs, `form` et `forms`.
+ */
+export async function fetchRequestForms(): Promise<RequestForm[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/request-forms`, { headers });
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to fetch forms');
+  const { forms, form } = await res.json();
+  // Repli sur `form` : un serveur pas encore redéployé ne renvoie que lui, et
+  // l'écran afficherait une liste vide alors qu'un formulaire existe.
+  if (Array.isArray(forms)) return forms;
+  return form ? [form] : [];
+}
+
 export async function upsertRequestForm(payload: {
+  /** Le formulaire à modifier. Absent + `creer` absent = le plus ancien. */
+  id?: string;
+  /** Force une CRÉATION : c'est « Nouveau formulaire ». Sans ce drapeau, un
+   *  envoi sans `id` écraserait le formulaire le plus ancien. */
+  creer?: boolean;
+  /** Le pipeline qui reçoit les leads. `null` = celui par défaut. */
+  pipeline_id?: string | null;
   title: string;
   description?: string | null;
   success_message: string;
@@ -41,11 +65,19 @@ export async function upsertRequestForm(payload: {
   return form;
 }
 
-export async function regenerateApiKey(): Promise<string> {
+/**
+ * Régénère la clé publique d'un formulaire.
+ *
+ * ATTENTION : tous les liens déjà partagés cessent de fonctionner. L'`id` est
+ * exigé dès qu'il y a plusieurs formulaires — le serveur refuse de deviner
+ * plutôt que de casser le lien d'un autre.
+ */
+export async function regenerateApiKey(formId?: string): Promise<string> {
   const headers = await authHeaders();
   const res = await fetch(`${API_BASE}/request-forms/regenerate-key`, {
     method: 'POST',
     headers,
+    body: JSON.stringify(formId ? { id: formId } : {}),
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to regenerate key');
   const { api_key } = await res.json();
