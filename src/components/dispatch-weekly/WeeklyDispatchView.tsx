@@ -448,13 +448,15 @@ export default function WeeklyDispatchView({
                   key={dayKeys[i]}
                   className={cn(
                     'flex min-w-0 flex-1 items-end border-l border-border/50 pb-2 pl-2 first:border-l-0',
-                    today && 'bg-primary/[0.02]',
+                    // Aujourd'hui : un voile ET un trait à gauche. Le voile seul
+                    // (2 % de noir auparavant) se confondait avec les autres jours.
+                    today && 'bg-primary/[0.06] border-l-2 border-l-primary first:border-l-2',
                   )}
                   style={{ minWidth: DAY_COL_MIN_PX }}
                 >
                   <span className={cn(
                     'truncate text-[16px] font-bold tabular-nums text-black',
-                    today && 'rounded-md bg-[#d8d0c2] px-2 py-0.5',
+                    today && 'rounded-md bg-primary px-2 py-0.5 text-primary-foreground',
                   )}>
                     {cap(format(d, 'EEEE d', { locale }))}
                   </span>
@@ -519,7 +521,9 @@ export default function WeeklyDispatchView({
                         className={cn(
                           'flex min-w-0 flex-1 flex-col gap-1.5 border-l border-border/40 px-1.5 first:border-l-0',
                           extActive ? 'cursor-copy' : drag?.moved ? '' : 'cursor-pointer',
-                          today && 'bg-primary/[0.02]',
+                          // Le trait descend sur toute la colonne du jour : c'est lui
+                          // qui la rend repérable, le voile seul ne suffisait pas.
+                          today && 'bg-primary/[0.06] border-l-2 border-l-primary first:border-l-2',
                           (isDragTarget || isExtTarget) && 'bg-primary/[0.05]',
                         )}
                         style={{ minWidth: DAY_COL_MIN_PX, paddingTop: ROW_PAD_Y_PX, paddingBottom: ROW_PAD_Y_PX }}

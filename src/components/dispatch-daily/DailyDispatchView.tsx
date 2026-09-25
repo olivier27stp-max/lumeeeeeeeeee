@@ -469,7 +469,7 @@ export default function DailyDispatchView({
               {/* Date du jour — box beige (mêmes couleurs que le bouton New Job) quand on regarde aujourd'hui */}
               <span className={cn(
                 'shrink-0 whitespace-nowrap text-[16px] font-bold tabular-nums text-black',
-                isSameDay(date, new Date()) && 'rounded-md bg-[#d8d0c2] px-2 py-0.5',
+                isSameDay(date, new Date()) && 'rounded-md bg-primary px-2 py-0.5 text-primary-foreground',
               )}>
                 {format(date, isFr ? 'd MMM' : 'MMM d', { locale: isFr ? frCA : enCA })}
               </span>
