@@ -50,7 +50,7 @@ export default function ReportsCatalog() {
       .filter((cat) => cat.reports.length > 0);
   }, [catalogueQ.data, query, lang]);
 
-  const totalReports = catalogueQ.data?.reports.length ?? 0;
+  const totalReports = catalogueQ.data?.reports?.length ?? 0;
 
   return (
     <div className="max-w-5xl">

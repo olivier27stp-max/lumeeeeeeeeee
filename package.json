@@ -55,6 +55,7 @@
     "qa:inscription": "node --env-file=.env.local scripts/qa/verifier-inscription.mjs",
     "qa:lumi-sante": "node --env-file=.env.local scripts/qa/sante-lumi.mjs",
     "qa:lumi-execution": "node --env-file=.env.local --import tsx scripts/qa/executer-outils-staging.mts",
+    "qa:declencheurs": "tsx --env-file=.env.local scripts/qa/eprouver-declencheurs.mts",
     "qa:lumi": "node --env-file=.env.local scripts/qa/evaluer-lumi.mjs",
     "qa:paywall": "node --env-file=.env.local scripts/qa/verifier-paywall.mjs",
     "qa:workflow-bout-en-bout": "tsx --env-file=.env.local scripts/qa/verifier-workflow-bout-en-bout.mjs",
