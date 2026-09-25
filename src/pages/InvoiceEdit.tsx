@@ -34,6 +34,7 @@ import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { listSalespeople } from '../lib/jobsApi';
 import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
 import { useChampsDocument } from '../components/champs/document';
+import { useChampsCreation } from '../components/champs/creation';
 
 // ── Line item form ──
 interface LineForm {
@@ -79,6 +80,9 @@ export default function InvoiceEdit() {
   const [draftId, setDraftId] = useState<string | null>(isNew ? null : invoiceId);
   // Champs personnalisés cochés « afficher sur le document » (aperçu).
   const champsDocument = useChampsDocument('invoice', draftId, language === 'fr');
+  // Nouvelle facture : les champs se saisissent avant le premier enregistrement
+  // (même bloc que job, devis, deal, client) puis s'écrivent sur le brouillon créé.
+  const champsCreation = useChampsCreation('invoice', language === 'fr');
 
   // Form state
   const [clientId, setClientId] = useState(prefillClientId || '');
@@ -280,6 +284,10 @@ export default function InvoiceEdit() {
       toast.error(t.invoiceEdit.pleaseSelectAClient);
       return;
     }
+    if (!draftId) {
+      const erreurChamps = champsCreation.valider();
+      if (erreurChamps) { toast.error(erreurChamps); return; }
+    }
     setSaving(true);
     try {
       let id = draftId;
@@ -292,6 +300,7 @@ export default function InvoiceEdit() {
           salespersonId: salespersonId || null,
         });
         id = draft.id;
+        await champsCreation.enregistrer(id);
         setDraftId(id);
       } else {
         // Facture existante : date de création / vendeur modifiés seulement s'ils ont changé.
@@ -814,8 +823,11 @@ export default function InvoiceEdit() {
               </div>
             </div>
 
-            {/* Champs personnalisés (v2) — le brouillon existe déjà : enregistrement en place. */}
-            <CustomFieldsPanel objet="invoice" entityId={draftId} fr={language === 'fr'} />
+            {/* Champs personnalisés (v2) — brouillon existant : enregistrement en place ;
+                nouvelle facture : saisis ici, écrits au premier enregistrement. */}
+            {draftId
+              ? <CustomFieldsPanel objet="invoice" entityId={draftId} fr={language === 'fr'} />
+              : champsCreation.bloc}
 
             {/* Invoice uses fixed layout — no template picker */}
           </div>
