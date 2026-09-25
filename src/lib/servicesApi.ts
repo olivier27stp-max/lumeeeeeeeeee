@@ -27,6 +27,31 @@ export interface PredefinedService {
   taxable?: boolean;
   created_at: string;
   updated_at: string;
+  /** Réglage local du bureau actif (prix propre, disponibilité) — null = celui de l'entreprise. */
+  reglage_bureau?: ReglageBureauService | null;
+  /** Prix de l'entreprise quand un prix local le remplace (listPredefinedServices). */
+  prix_entreprise_cents?: number;
+}
+
+/** Réglage d'un service du catalogue d'entreprise dans UN bureau (predefined_services_bureau). */
+export interface ReglageBureauService {
+  /** Nul = le prix de l'entreprise s'applique. */
+  prix_cents: number | null;
+  /** Faux = service masqué dans ce bureau. */
+  offert: boolean;
+}
+
+async function reglagesDuBureau(orgId: string): Promise<Map<string, ReglageBureauService>> {
+  const { data, error } = await supabase
+    .from('predefined_services_bureau')
+    .select('service_id, prix_cents, offert')
+    .eq('org_id', orgId);
+  if (error) {
+    // Table absente (migration pas encore posée) : catalogue d'entreprise tel quel.
+    console.error('[servicesApi] réglages du bureau illisibles', error.message);
+    return new Map();
+  }
+  return new Map((data || []).map((r: any) => [String(r.service_id), { prix_cents: r.prix_cents, offert: r.offert }]));
 }
 
 /**
@@ -73,7 +98,35 @@ export async function listPredefinedServices(): Promise<PredefinedService[]> {
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   if (error) throw error;
-  return (data || []) as PredefinedService[];
+  // Prix et disponibilité du BUREAU actif (plan multi-bureaux, étape 8) :
+  // tous les sélecteurs de services passent par ici.
+  const reglages = await reglagesDuBureau(orgId);
+  return ((data || []) as PredefinedService[])
+    .filter((s) => reglages.get(s.id)?.offert !== false)
+    .map((s) => {
+      const r = reglages.get(s.id);
+      if (!r || r.prix_cents === null) return s;
+      return { ...s, default_price_cents: r.prix_cents, prix_entreprise_cents: s.default_price_cents };
+    });
+}
+
+/**
+ * Page Produits & services : TOUS les services (même masqués dans ce bureau,
+ * pour pouvoir les réactiver), prix de l'entreprise + réglage local à part.
+ */
+export async function listPredefinedServicesGestion(): Promise<PredefinedService[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const orgIds = await getCompanyOrgIds(orgId);
+  const { data, error } = await supabase
+    .from('predefined_services')
+    .select('*')
+    .in('org_id', orgIds)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  if (error) throw error;
+  const reglages = await reglagesDuBureau(orgId);
+  return ((data || []) as PredefinedService[]).map((s) => ({ ...s, reglage_bureau: reglages.get(s.id) ?? null }));
 }
 
 export async function createPredefinedService(service: {
@@ -167,5 +220,20 @@ export async function archivePredefinedService(id: string): Promise<void> {
     .from('predefined_services')
     .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq('id', id);
+  if (error) throw error;
+}
+
+/** Prix propre / disponibilité d'un service dans le bureau actif ; null = revenir au catalogue d'entreprise. */
+export async function setReglageServiceBureau(serviceId: string, reglage: ReglageBureauService | null): Promise<void> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  if (!reglage || (reglage.prix_cents === null && reglage.offert)) {
+    const { error } = await supabase.from('predefined_services_bureau').delete().eq('service_id', serviceId).eq('org_id', orgId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase.from('predefined_services_bureau').upsert(
+    { service_id: serviceId, org_id: orgId, prix_cents: reglage.prix_cents, offert: reglage.offert, updated_at: new Date().toISOString() },
+    { onConflict: 'service_id,org_id' },
+  );
   if (error) throw error;
 }
