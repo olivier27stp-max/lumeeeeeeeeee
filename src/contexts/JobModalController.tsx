@@ -2,6 +2,7 @@ import React, { Suspense, createContext, lazy, useCallback, useContext, useMemo,
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useTranslation } from '../i18n/LanguageContext';
 import type { JobDraftInitialValues, JobModalSourceContext } from '../components/NewJobModal';
 
 /*
@@ -45,6 +46,11 @@ const JobModalControllerContext = createContext<JobModalControllerValue | null>(
 
 export function JobModalControllerProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
+  // Les messages de ce contrôleur étaient tous en anglais, y compris dans une
+  // interface française (QA 2026-09-25 : « Job deleted »). Le module dit « une
+  // job », « la job » — le féminin d'usage au Québec.
+  const { language } = useTranslation();
+  const fr = language !== 'en';
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [initialValues, setInitialValues] = useState<JobDraftInitialValues | null>(null);
@@ -79,7 +85,7 @@ export function JobModalControllerProvider({ children }: { children: React.React
         .then((draft) => {
           setInitialValues(draft || null);
           if (!draft) {
-            toast.error('Job not found.');
+            toast.error(fr ? 'Job introuvable.' : 'Job not found.');
             return;
           }
           setOnCreatedCallback(() => params?.onCreated || null);
@@ -87,7 +93,7 @@ export function JobModalControllerProvider({ children }: { children: React.React
           setIsOpen(true);
         })
         .catch((error: any) => {
-          toast.error(error?.message || 'Unable to open job.');
+          toast.error(error?.message || (fr ? "Impossible d'ouvrir la job." : 'Unable to open job.'));
         });
     } else {
       setInitialValues(params?.initialValues || null);
@@ -125,7 +131,7 @@ export function JobModalControllerProvider({ children }: { children: React.React
         queryClient.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }),
         queryClient.invalidateQueries({ queryKey: ['jobsTable'] }),
       ]);
-      toast.success(payload.id ? 'Job updated' : 'Job created');
+      toast.success(payload.id ? (fr ? 'Job modifiée' : 'Job updated') : (fr ? 'Job créée' : 'Job created'));
       return created;
     } catch (error: any) {
       const message = error?.message || 'Could not create job';
@@ -182,9 +188,11 @@ export function JobModalControllerProvider({ children }: { children: React.React
         void queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
         setPreviewInvoiceId(result.invoice_id);
         setIsInvoicePreviewOpen(true);
-        toast.success(result.already_exists ? 'Job completed. Existing invoice loaded.' : 'Job completed. Invoice draft created.');
+        toast.success(result.already_exists
+          ? (fr ? 'Job terminée. Facture existante ouverte.' : 'Job completed. Existing invoice loaded.')
+          : (fr ? 'Job terminée. Brouillon de facture créé.' : 'Job completed. Invoice draft created.'));
       } catch (error: any) {
-        toast.error(error?.message || 'Unable to finish job.');
+        toast.error(error?.message || (fr ? 'Impossible de terminer la job.' : 'Unable to finish job.'));
       } finally {
         setIsFinishingJob(false);
       }
@@ -204,11 +212,11 @@ export function JobModalControllerProvider({ children }: { children: React.React
           queryClient.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }),
           queryClient.invalidateQueries({ queryKey: ['jobsTable'] }),
         ]);
-        toast.success('Job deleted');
+        toast.success(fr ? 'Job supprimée' : 'Job deleted');
         closeJobModal();
         onCreatedCallback?.(undefined as any); // trigger list refresh
       } catch (error: any) {
-        toast.error(error?.message || 'Unable to delete job.');
+        toast.error(error?.message || (fr ? 'Impossible de supprimer la job.' : 'Unable to delete job.'));
       } finally {
         setIsDeleting(false);
       }

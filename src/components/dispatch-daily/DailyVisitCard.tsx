@@ -1,4 +1,5 @@
 import React from 'react';
+import { visiteEnRetard } from '../../lib/visiteEnRetard';
 import { cn } from '../../lib/utils';
 import type { ScheduleEventRecord } from '../../lib/scheduleApi';
 import { toRgba } from '../../lib/colorUtils';
@@ -36,6 +37,10 @@ export interface DailyVisitCardProps {
 export default function DailyVisitCard({
   ev, left, top, width, height, timeLabel, dimmed, anytime = false, tagColor, tagName, done = false, onOpen, onMoveStart, onResizeStart,
 }: DailyVisitCardProps) {
+  // Une visite passée, ni terminée ni annulée : même règle que le badge
+  // « EN RETARD » de la page job. Sans ce repère, une visite d'hier avait
+  // exactement l'allure d'une visite de demain (QA 2026-09-25).
+  const enRetard = !done && visiteEnRetard(ev);
   const clientName = ev.job?.client_name || ev.job?.title || 'Job';
   const city = shortAddress(ev.job?.property_address);
   const jobNumber = ev.job?.job_number ? `#${ev.job.job_number}` : null;
@@ -56,6 +61,8 @@ export default function DailyVisitCard({
               anytime ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing',
             ),
         !dimmed && done && 'opacity-60',
+        // Liseré ambre à gauche, comme l'icône d'alerte des vues mois/semaine.
+        !dimmed && enRetard && 'border-l-[3px] border-l-[#c2410c]',
       )}
       style={{
         left, top, width, height,

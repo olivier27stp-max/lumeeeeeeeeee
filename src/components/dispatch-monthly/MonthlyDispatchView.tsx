@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { addDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek } from 'date-fns';
 import { frCA, enCA } from 'date-fns/locale';
 import { AlertTriangle } from 'lucide-react';
+import { visiteEnRetard } from '../../lib/visiteEnRetard';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import { isAnytimeVisit, anytimeLabel, isClosedVisit, type ScheduleEventRecord } from '../../lib/scheduleApi';
@@ -174,7 +175,9 @@ export default function MonthlyDispatchView({
 
   const attentionFor = (ev: ScheduleEventRecord) => {
     const st = String(ev.job?.status || ev.status || '').trim().toLowerCase().replace(/\s+/g, '_');
-    return st === 'blocked' || st === 'late' || st === 'action_required';
+    // Le statut de la JOB ne dit « late » qu'une fois recalculé en base ; la
+    // visite, elle, est en retard dès que son heure est passée (QA 2026-09-25).
+    return st === 'blocked' || st === 'late' || st === 'action_required' || visiteEnRetard(ev);
   };
 
   /* ── Popover « +X de plus » + modale de détails ── */

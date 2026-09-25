@@ -52,6 +52,9 @@ export interface CompanyContextValue {
 
 const STORAGE_KEY = 'lume-active-org';
 
+/** Tentatives de lecture des adhésions avant d'abandonner (400 ms, 800 ms). */
+const ESSAIS_MAX = 3;
+
 // ── Context ───────────────────────────────────────────────────────────
 
 export const CompanyContext = createContext<CompanyContextValue | null>(null);
@@ -74,9 +77,20 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
     } catch { return null; }
   });
   const [loading, setLoading] = useState(true);
+  /**
+   * La dernière lecture a échoué (réseau, jeton en cours de rafraîchissement).
+   *
+   * Sans cette distinction, un `catch` qui vidait la liste faisait dire à
+   * `hasNoCompany` « ce compte n'a aucune compagnie » — et l'application
+   * affichait l'écran de déconnexion sur une session parfaitement valide.
+   * Signalé au QA du 2026-09-25 : F5 sur /jobs/<id>, ~10 s, résolu en
+   * naviguant ailleurs (ce qui relançait la lecture).
+   */
+  const [lectureEchouee, setLectureEchouee] = useState(false);
 
   // ── Fetch all memberships for user ──────────────────────────────────
-  const fetchMemberships = useCallback(async () => {
+  const fetchMemberships = useCallback(async (essai = 1): Promise<void> => {
+    setLectureEchouee(false);
     if (!userId) {
       setCompanies([]);
       setLoading(false);
@@ -231,8 +245,18 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
         }
       }
     } catch (err) {
+      // Un rechargement rafraîchit le jeton : la première lecture peut partir
+      // trop tôt et échouer. On réessaie avant de conclure quoi que ce soit —
+      // conclure « aucune compagnie » ici mettait l'utilisateur dehors.
+      if (essai < ESSAIS_MAX) {
+        await new Promise((r) => setTimeout(r, 400 * essai));
+        return fetchMemberships(essai + 1);
+      }
       console.error('[CompanyContext] Failed to fetch memberships:', err);
-      setCompanies([]);
+      // La liste n'est PAS vidée : on garde ce qu'on avait (au pire rien) et
+      // on dit que la lecture a échoué. L'écran « Aucune compagnie » est
+      // réservé aux comptes qui n'en ont réellement aucune.
+      setLectureEchouee(true);
     } finally {
       setLoading(false);
     }
@@ -294,7 +318,10 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
     companies,
     loading,
     isMultiCompany: companies.length > 1,
-    hasNoCompany: !loading && companies.length === 0,
+    // « Aucune compagnie » veut dire : la lecture a réussi et n'a rien trouvé.
+    // Une lecture en échec n'est pas une réponse — sinon un hoquet réseau
+    // déconnecte quelqu'un qui a parfaitement le droit d'être là.
+    hasNoCompany: !loading && !lectureEchouee && companies.length === 0,
     switchCompany,
     refresh: fetchMemberships,
     userId,

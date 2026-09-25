@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } 
 import { format, isSameDay } from 'date-fns';
 import { frCA, enCA } from 'date-fns/locale';
 import { AlertTriangle } from 'lucide-react';
+import { visiteEnRetard } from '../../lib/visiteEnRetard';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import { isAnytimeVisit, anytimeLabel, isClosedVisit, type ScheduleEventRecord } from '../../lib/scheduleApi';
@@ -538,7 +539,11 @@ export default function WeeklyDispatchView({
                               color={tag?.hex || teamColor}
                               tagName={tag?.name ?? null}
                               timeLabel={timeLabelFor(ev)}
-                              attention={st === 'blocked' || st === 'late' || st === 'action_required'}
+                              // Le statut de la JOB ne dit « late » qu'une fois
+                              // recalculé en base ; la visite, elle, est en retard
+                              // dès que son heure est passée. Sans ce second test,
+                              // une visite d'hier ressemblait à une de demain.
+                              attention={st === 'blocked' || st === 'late' || st === 'action_required' || visiteEnRetard(ev)}
                               dimmed={!!(drag?.moved && drag.ev.id === ev.id)}
                               done={isClosedVisit(ev)}
                               onOpen={() => openCard(ev)}

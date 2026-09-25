@@ -117,6 +117,34 @@ export interface JobDraftLineItem {
   included?: boolean;
 }
 
+/**
+ * Assemble une adresse sans répéter ce qu'elle contient déjà.
+ *
+ * L'autocomplétion Google peut mettre l'adresse COMPLÈTE dans la première
+ * ligne (`line1 || addr.formatted_address`). Y recoller la ville, la province
+ * et le code postal donnait « … Montréal, Québec, H8S 2K9, Montréal, Québec,
+ * H8S 2K9 » — vu au QA du 2026-09-25 sur la page job et en vue Agenda.
+ *
+ * On n'ajoute donc un morceau que s'il ne figure pas déjà dans la ligne, en
+ * ignorant la casse et les accents (« Quebec » ≠ « Québec » à l'œil de la
+ * machine, mais c'est le même mot).
+ */
+export function composerAdresse(
+  ligne1: string, ville: string, province: string, codePostal: string,
+): string | null {
+  const pliee = (v: string) => v.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const base = ligne1.trim();
+  const deja = pliee(base);
+  const morceaux = [base];
+  for (const part of [ville, province, codePostal]) {
+    const p = (part || '').trim();
+    if (!p) continue;
+    if (deja.includes(pliee(p))) continue;
+    morceaux.push(p);
+  }
+  return morceaux.filter(Boolean).join(', ') || null;
+}
+
 export interface JobDraftInitialValues {
   id?: string;
   lead_id?: string | null;
@@ -138,6 +166,12 @@ export interface JobDraftInitialValues {
   country?: string | null;
   description?: string | null;
   status?: string;
+  /**
+   * « Demander un avis ». Le modal lisait déjà `iv?.ask_for_review`, mais le
+   * champ ne figurait pas ici : il valait toujours `undefined`, et la case
+   * repartait cochée même après l'avoir décochée (QA 2026-09-25).
+   */
+  ask_for_review?: boolean | null;
   scheduled_at?: string | null;
   end_at?: string | null;
   requires_invoicing?: boolean;
@@ -1941,7 +1975,7 @@ export default function NewJobModal({
         show_on_leaderboard: showOnLeaderboard,
         description,
         job_type: jobType,
-        property_address: [addressLine1, addressCity, addressProvince, addressPostalCode].filter(Boolean).join(', ') || null,
+        property_address: composerAdresse(addressLine1, addressCity, addressProvince, addressPostalCode),
         address_line1: addressLine1.trim() || null,
         address_line2: addressLine2.trim() || null,
         city: addressCity.trim() || null,
