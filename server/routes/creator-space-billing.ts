@@ -31,6 +31,7 @@ import { getServiceClient, companyOrgIds } from '../lib/supabase';
 import { JOURS_DE_GRACE } from '../lib/subscription-email';
 import { logSecurityEvent } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
+import { intervalleLu, moisParPeriode } from '../lib/abonnement-intervalle';
 
 const router = Router();
 
@@ -270,9 +271,9 @@ router.get('/creator-space/billing/watch', async (req, res) => {
         }
       }
       if (s.status === 'active' || s.status === 'past_due') {
-        // MRR normalisé : mensuel tel quel, annuel / 12 (versements inclus : le
-        // montant de la ligne est le prix annuel complet).
-        const mensuel = s.interval === 'yearly' ? Number(s.amount_cents || 0) / 12 : Number(s.amount_cents || 0);
+        // MRR normalisé : mensuel tel quel, trimestriel / 3, annuel / 12
+        // (versements inclus : le montant de la ligne est le prix annuel complet).
+        const mensuel = Number(s.amount_cents || 0) / moisParPeriode(intervalleLu(s.interval));
         ajouterCents(summary.mrr_cents, s.currency, mensuel);
       }
 

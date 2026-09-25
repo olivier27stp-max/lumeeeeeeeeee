@@ -67,6 +67,7 @@ import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
 import { logDataExport } from '../lib/data-export-log';
 import { logger } from '../lib/logger';
+import { forfaitDepuisPrix, intervalleLu, intervalleDepuisPrix, estPrixVersements, appariementPlan, finDePeriode } from '../lib/abonnement-intervalle';
 import { repartirMontantRecu } from '../lib/payment-settings';
 import { notifierPaiementRecu, notifierLitigeOuvert } from '../lib/paiement-recu';
 
@@ -521,23 +522,30 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           // interval_count + metadata.installments — jamais par le montant seul,
           // qui ne correspond à aucune colonne de `plans`. On le ramène au
           // forfait annuel plein pour l'appariement.
-          const intervalCount = Number(firstItem.price.recurring?.interval_count || 1);
-          const versements = Number((firstItem.price.metadata as any)?.installments || 0);
-          const estVersements = stripeInterval === 'month' && intervalCount > 1 && versements > 1 && intervalCount * versements === 12;
-          if (stripeInterval && unitAmount != null) {
-            const lumeInterval = stripeInterval === 'year' || estVersements ? 'yearly' : 'monthly';
+          // Trimestriel : `month` / 3, reconnu par metadata.lume_interval (ou,
+          // à défaut, par interval_count) et apparié à 3 × le prix mensuel.
+          const prixMeta = (firstItem.price.metadata || {}) as Record<string, string>;
+          const estVersements = estPrixVersements(firstItem.price.recurring, prixMeta);
+          const versements = estVersements ? Number(prixMeta.installments) : 0;
+          const lumeInterval = estVersements ? 'yearly' : intervalleDepuisPrix(firstItem.price.recurring, prixMeta);
+          if (stripeInterval && unitAmount != null && !lumeInterval) {
+            logger.warn('[webhook/subscription.updated] récurrence Stripe inconnue — forfait non réapparié', {
+              subscription: sub.id, interval: stripeInterval, interval_count: firstItem.price.recurring?.interval_count,
+            });
+          }
+          if (stripeInterval && unitAmount != null && lumeInterval) {
             const montantPlan = estVersements ? unitAmount * versements : unitAmount;
-            const priceField = lumeInterval === 'yearly'
-              ? (currency === 'USD' ? 'yearly_price_usd' : 'yearly_price_cad')
-              : (currency === 'USD' ? 'monthly_price_usd' : 'monthly_price_cad');
+            const cible = appariementPlan(lumeInterval, currency, montantPlan);
 
             // Find the matching Lume plan by price + interval (active plans only).
-            const { data: matchingPlan } = await admin
-              .from('plans')
-              .select('id, slug')
-              .eq('is_active', true)
-              .eq(priceField, montantPlan)
-              .maybeSingle();
+            const { data: matchingPlan } = cible
+              ? await admin
+                .from('plans')
+                .select('id, slug')
+                .eq('is_active', true)
+                .eq(cible.colonne, cible.montant)
+                .maybeSingle()
+              : { data: null };
 
             if (matchingPlan) {
               updateRow.plan_id = matchingPlan.id;
@@ -942,8 +950,12 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             ip_address: extractIP(req),
             details: { event_id: event.id, account: connectAccountId, session_id: session.id },
           });
-        } else if (meta.plan_slug && session.payment_status === 'paid') {
-          await handleCheckoutSessionCompleted(session, meta);
+        } else if (session.payment_status === 'paid') {
+          // Lien de paiement créé dans Stripe : la session n'a pas nos
+          // métadonnées. Sans ce complément, le client payait et ne recevait
+          // ni compte ni forfait.
+          const metaForfait = meta.plan_slug ? meta : await metaDepuisPrixPaye(session, meta);
+          if (metaForfait) await handleCheckoutSessionCompleted(session, metaForfait);
         }
       }
 
@@ -1921,6 +1933,41 @@ router.post('/payments/refund', async (req, res) => {
   }
 });
 
+// ── Lien de paiement Stripe : retrouver le forfait sur le prix payé ─────────
+// Un Payment Link créé dans le tableau de bord Stripe ne porte pas plan_slug /
+// plan_id (sauf saisie à la main). On lit alors le prix réellement payé : son
+// produit porte plan_id / plan_slug, sa récurrence (ou metadata.lume_interval)
+// donne l'intervalle. null = pas un achat de forfait Lume → on ne provisionne
+// rien, comme avant. Une erreur Stripe est levée : le webhook échoue et Stripe
+// le rejoue — un client qui a payé ne doit jamais être perdu en silence.
+async function metaDepuisPrixPaye(
+  session: Stripe.Checkout.Session,
+  meta: Record<string, string>,
+): Promise<Record<string, string> | null> {
+  if (session.mode !== 'subscription' || !stripeWebhookClient) return null;
+  const lignes = await stripeWebhookClient.checkout.sessions.listLineItems(session.id, {
+    limit: 1,
+    expand: ['data.price.product'],
+  });
+  const forfait = forfaitDepuisPrix(lignes.data[0]?.price);
+  if (!forfait) {
+    logger.warn('[webhook/checkout] session sans forfait Lume reconnaissable — ignorée', { session_id: session.id });
+    return null;
+  }
+  const admin = getServiceClient();
+  let requete = admin.from('plans').select('id, slug').eq('is_active', true);
+  requete = forfait.plan_id ? requete.eq('id', forfait.plan_id) : requete.eq('slug', forfait.plan_slug as string);
+  const { data: plan, error } = await requete.maybeSingle();
+  if (error) throw new Error('[webhook/checkout] lecture du forfait échouée: ' + error.message);
+  if (!plan) {
+    logger.error('[webhook/checkout] CLIENT PAYÉ SANS FORFAIT — produit Stripe pointant vers un forfait inconnu ou inactif', {
+      session_id: session.id, plan_id: forfait.plan_id, plan_slug: forfait.plan_slug,
+    });
+    return null;
+  }
+  return { ...meta, plan_id: plan.id, plan_slug: plan.slug, interval: forfait.interval, currency: forfait.currency };
+}
+
 // ── Billing checkout.session.completed handler ──────────────────────────────
 // This is the ONLY place where billing subscriptions are activated after payment.
 // It creates the user account, org, subscription, and sends the receipt email.
@@ -1952,7 +1999,7 @@ async function handleCheckoutSessionCompleted(
   const companyName = meta.company_name || '';
   const planId = meta.plan_id || '';
   const planSlug = meta.plan_slug || '';
-  const interval = (meta.interval || 'monthly') as 'monthly' | 'yearly';
+  const interval = intervalleLu(meta.interval);
   const currency = (meta.currency || 'CAD').toUpperCase();
   // Plan annuel en 3 versements (billing.ts create-checkout-session).
   const installments: number | null = interval === 'yearly' && Number(meta.installments) === 3 ? 3 : null;
@@ -2048,10 +2095,8 @@ async function handleCheckoutSessionCompleted(
   // En versements, la période Stripe est de 12 / 3 = 4 mois ; l'engagement
   // (commitment_end) court 12 mois. Le webhook customer.subscription.updated
   // recale ensuite les dates exactes de Stripe.
-  const periodEnd = new Date(now);
+  const periodEnd = installments ? new Date(now) : finDePeriode(now, interval);
   if (installments) periodEnd.setMonth(periodEnd.getMonth() + 12 / installments);
-  else if (interval === 'yearly') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-  else periodEnd.setMonth(periodEnd.getMonth() + 1);
   const commitmentEnd = installments ? new Date(now) : null;
   if (commitmentEnd) commitmentEnd.setFullYear(commitmentEnd.getFullYear() + 1);
 
