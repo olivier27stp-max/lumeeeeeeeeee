@@ -320,8 +320,17 @@ describe('fiche du deal — dossier du client', () => {
 
     // La première question avant de rappeler quelqu'un pour lui vendre
     // autre chose : est-ce qu'il me doit déjà de l'argent ?
-    expect(conteneur.textContent).toContain('Doit encore');
-    expect(conteneur.textContent).toContain('Payé à ce jour');
+    const argent = conteneur.textContent ?? '';
+    expect(argent).toContain('Doit');
+    expect(argent).toContain('Payé');
+
+    // Et la PORTÉE doit être écrite. Ces totaux couvrent tout le client :
+    // une facture n'est rattachée qu'au client, jamais au deal. Sans le
+    // dire, trois deals d'un même client affichaient chacun la même dette,
+    // et on lisait trois dettes au lieu d'une. Le libellé nu « Doit encore »
+    // était donc faux dès le deuxième deal d'un client.
+    expect(argent).toContain('tout le client');
+    expect(argent).not.toContain('Doit encore');
   });
 
   it("dit « premier contact » quand le client n'a aucun historique", async () => {

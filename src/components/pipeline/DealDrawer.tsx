@@ -385,12 +385,19 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
   return (
     <>
       {/* Ce qu'il a payé, ce qu'il doit. La première question avant de
-          rappeler quelqu'un pour lui vendre autre chose. */}
+          rappeler quelqu'un pour lui vendre autre chose.
+
+          Ces deux montants couvrent TOUT le client, pas cette vente-là : une
+          facture n'est rattachée qu'au client (`invoices` n'a ni `deal_id` ni
+          `quote_id`). Sans le dire, la fiche laissait croire que la dette
+          venait de ce deal — en production, trois deals d'un même client
+          affichaient chacun « Doit encore 689 $ », la même dette comptée
+          trois fois. On nomme donc la portée dans le libellé. */}
       {(d.paye_cents > 0 || d.du_cents > 0) && (
         <div className="mt-4 flex gap-2">
           <div className="flex-1 rounded-xl border border-outline bg-surface-card px-3.5 py-2.5">
             <div className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
-              {fr ? 'Payé à ce jour' : 'Paid to date'}
+              {fr ? 'Payé — tout le client' : 'Paid — whole client'}
             </div>
             <div className="mt-0.5 text-[15px] font-bold tabular-nums text-text-primary">
               {argent(d.paye_cents, fr)}
@@ -405,7 +412,7 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
             }
           >
             <div className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
-              {fr ? 'Doit encore' : 'Still owes'}
+              {fr ? 'Doit — tout le client' : 'Owes — whole client'}
             </div>
             <div
               className="mt-0.5 text-[15px] font-bold tabular-nums"
@@ -707,12 +714,15 @@ function OngletPaiements({ deal, fr }: { deal: Deal; fr: boolean }) {
       </div>
 
       {/* Ce qu'il a pay\u00e9, ce qu'il doit : la question avant de lui vendre
-          autre chose. */}
+          autre chose.
+
+          Même portée que dans l'onglet Aperçu : ces deux totaux couvrent
+          TOUT le client, pas cette vente. */}
       {(d.paye_cents > 0 || d.du_cents > 0) && (
         <div className="mt-3 flex gap-2">
           <div className="flex-1 rounded-xl border border-outline bg-surface-card px-3.5 py-2.5">
             <div className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
-              {fr ? 'Pay\u00e9 \u00e0 ce jour' : 'Paid to date'}
+              {fr ? 'Payé — tout le client' : 'Paid — whole client'}
             </div>
             <div className="mt-0.5 text-[15px] font-bold tabular-nums text-text-primary">
               {montant(d.paye_cents, fr)}
@@ -727,7 +737,7 @@ function OngletPaiements({ deal, fr }: { deal: Deal; fr: boolean }) {
             }
           >
             <div className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
-              {fr ? 'Doit encore' : 'Still owes'}
+              {fr ? 'Doit — tout le client' : 'Owes — whole client'}
             </div>
             <div
               className="mt-0.5 text-[15px] font-bold tabular-nums"
