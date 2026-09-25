@@ -35,6 +35,7 @@ import { analyzeMigrationFile, prepareStaging, receptionnerFichierMigration, est
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
 import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, purgeOrphanProperties, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
 import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '../lib/migration/execution';
+import { compterStaging } from '../lib/migration/compteurs';
 import { creerPublieurProgression } from '../lib/migration/execution';
 import { logger } from '../lib/logger';
 import { executerBotMigration, passeBotEnCours } from '../lib/migration/bot';
@@ -221,7 +222,7 @@ router.get('/migration-admin/migrations/:id', async (req, res) => {
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
 
-    const [org, invitation, files, columns, mappings, issues, dupes, batches, approvals, messages] = await Promise.all([
+    const [org, invitation, files, columns, mappings, issues, dupes, batches, approvals, messages, stagingCounts] = await Promise.all([
       admin.from('orgs').select('id, name').eq('id', migration.org_id).single(),
       admin.from('migration_invitations').select('id, expires_at, revoked_at, superseded_at, opened_at, failed_attempts, created_at').eq('migration_id', migration.id).order('created_at', { ascending: false }).limit(5),
       admin.from('migration_files').select('*').eq('migration_id', migration.id).is('deleted_at', null).order('created_at'),
@@ -232,14 +233,10 @@ router.get('/migration-admin/migrations/:id', async (req, res) => {
       admin.from('migration_import_batches').select('*').eq('migration_id', migration.id).order('created_at', { ascending: false }),
       admin.from('migration_approvals').select('*').eq('migration_id', migration.id).order('created_at', { ascending: false }),
       admin.from('migration_messages').select('*').eq('migration_id', migration.id).order('created_at').limit(200),
+      // GROUP BY côté base (compteurs.ts) : lire toutes les lignes plafonnait à 1 000 et
+      // faisait la lenteur de la fiche sous charge (10 s le 2026-09-23).
+      compterStaging(admin, migration.id),
     ]);
-
-    const { data: staged } = await admin.from('migration_staging_records').select('entity_type, status').eq('migration_id', migration.id);
-    const stagingCounts: Record<string, Record<string, number>> = {};
-    for (const r of (staged ?? []) as { entity_type: string; status: string }[]) {
-      stagingCounts[r.entity_type] = stagingCounts[r.entity_type] ?? {};
-      stagingCounts[r.entity_type][r.status] = (stagingCounts[r.entity_type][r.status] ?? 0) + 1;
-    }
 
     return res.json({
       migration,
@@ -780,6 +777,16 @@ router.post('/migration-admin/migrations/:id/test-import', async (req, res) => {
     if (migration.status !== 'ready_for_test' && !canTransition(migration.status, 'ready_for_test')) {
       return res.status(409).json({ error: `L'import test n'est pas disponible depuis le statut « ${migration.status} ».` });
     }
+    // Un import test tourne déjà (bot cron de 10 min ou autre admin) : ne pas en empiler un second.
+    const { count: enCours } = await admin
+      .from('migration_import_batches')
+      .select('id', { count: 'exact', head: true })
+      .eq('migration_id', migration.id)
+      .eq('kind', 'test')
+      .eq('status', 'running');
+    if ((enCours ?? 0) > 0) {
+      return res.status(409).json({ error: 'Un import test est déjà en cours pour cette migration — attendez sa fin (progression dans l\'onglet Imports).' });
+    }
     // Même geste que le bot (server/lib/migration/execution.ts) : lancé en arrière-plan ici,
     // la progression vit dans migration_import_batches et data_migrations.status.
     void lancerImportTest(admin, migration, { id: auth.user.id, role: 'platform_admin' })
@@ -956,12 +963,17 @@ router.post('/migration-admin/migrations/:id/final-import', validate(migrationFi
       });
     }
 
-    const { error: statusErr } = await admin
+    const { data: statusRows, error: statusErr } = await admin
       .from('data_migrations')
       .update({ status: 'importing' })
       .eq('id', migration.id)
-      .eq('status', 'ready_for_final_import');
+      .eq('status', 'ready_for_final_import')
+      .select('id');
     if (statusErr) throw statusErr;
+    if (!statusRows || statusRows.length === 0) {
+      // Course : un autre appel a déjà pris la migration (double clic, deux onglets).
+      return res.status(409).json({ error: 'Un import final est déjà en cours pour cette migration.' });
+    }
     migration.status = 'importing';
     // Protection : dès que des données entrent, le bureau est gelé — aucun courriel, SMS ni
     // automatisation vers ses clients avant « Activer le compte » (voir gel-communications.ts).

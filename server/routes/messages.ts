@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { getServiceClient } from '../lib/supabase';
+import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from '../lib/migration/gel-communications';
 import { twilioClient, twilioAuthToken, twilioAccountSid, Twilio, getTwilioStatusCallbackUrl, getTwilioWebhookBaseUrl } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '../lib/helpers';
@@ -68,6 +69,10 @@ router.post('/messages/send', validate(messageSendSchema), async (req, res) => {
       }
       throw e;
     }
+
+    // Compte importé pas encore activé : personne ne contacte ses clients (gel-communications.ts).
+    const orgGelee = await destinataireGele(serviceClient, { phone: normalizedPhone }, orgId);
+    if (orgGelee) { journaliserBlocage('sms', orgGelee, normalizedPhone, 'messagerie'); return res.status(423).json({ error: MESSAGE_GEL, code: 'communications_gelees' }); }
 
     // Find or create conversation
     const conversation = await findOrCreateConversation(serviceClient, orgId, normalizedPhone, client_id, client_name);

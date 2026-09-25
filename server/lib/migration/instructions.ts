@@ -14,7 +14,33 @@ export interface CrmExportConfig {
   knownLimitations: { fr: string; en: string }[];
   docsUrl: string | null;
   tips: { fr: string; en: string }[];
+  /** Ce que la migration n'importe PAS au lancement — dit tel quel au client (voir LIMITES_LANCEMENT). */
+  notImported: { fr: string; en: string }[];
 }
+
+/**
+ * Périmètre honnête du lancement (2026-09-24) : identique pour tous les CRM
+ * sources, affiché dans le portail sous « Ce qui ne s'importe pas ». À mettre à
+ * jour le jour où l'importeur couvre l'un de ces points.
+ */
+export const LIMITES_LANCEMENT: { fr: string; en: string }[] = [
+  {
+    fr: 'Les notes, pièces jointes, étiquettes, champs personnalisés et demandes de service ne s\'importent pas.',
+    en: 'Notes, attachments, tags, custom fields and service requests are not imported.',
+  },
+  {
+    fr: 'Les plans récurrents deviennent des jobs récurrents, sans contrat de service.',
+    en: 'Recurring plans become recurring jobs, without a service contract.',
+  },
+  {
+    fr: 'Excel : seule la première feuille du classeur est lue.',
+    en: 'Excel: only the first sheet of the workbook is read.',
+  },
+  {
+    fr: 'Un fichier dépasse rarement 20 000 lignes ; au-delà, scindez-le en plusieurs fichiers (maximum absolu : 50 000 lignes).',
+    en: 'A file rarely exceeds 20,000 rows; beyond that, split it into several files (hard limit: 50,000 rows).',
+  },
+];
 
 const GENERIC_TIPS: { fr: string; en: string }[] = [
   {
@@ -35,27 +61,34 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
   jobber: {
     key: 'jobber',
     name: 'Jobber',
+    // Les cinq rapports qui font une migration complète. Chacun : Reports → le rapport →
+    // période « All time » → statut « All » → Export CSV. Le piège vu chez Vision Lavage
+    // (2026-09-23) : Jobber propose « Last 30 days » par défaut → un export « Jobs » de
+    // 29 lignes au lieu de 859.
     reports: [
-      { fr: 'Rapport « Clients » (Reports → Clients)', en: '"Clients" report (Reports → Clients)' },
-      { fr: 'Rapport « Jobs » et « Visits »', en: '"Jobs" and "Visits" reports' },
-      { fr: 'Rapport « Invoices » et « Payments »', en: '"Invoices" and "Payments" reports' },
-      { fr: 'Rapport « Quotes »', en: '"Quotes" report' },
-      { fr: 'Taux de taxe (Settings → Products & Services → Tax Rates) — un CSV nom / taux / région', en: 'Tax rates (Settings → Products & Services → Tax Rates) — one CSV with name / rate / region' },
+      { fr: '1. « Client Contact Info » (Reports → Clients) : vos clients avec courriels, téléphones et adresses', en: '1. "Client Contact Info" (Reports → Clients): your clients with emails, phones and addresses' },
+      { fr: '2. « Quotes » (Reports → Work) : toutes les soumissions, tous statuts', en: '2. "Quotes" (Reports → Work): all quotes, all statuses' },
+      { fr: '3. « One-Off Jobs » et, si vous en avez, « Recurring Jobs » (Reports → Work) : tous les jobs, tous statuts', en: '3. "One-Off Jobs" and, if you use them, "Recurring Jobs" (Reports → Work): all jobs, all statuses' },
+      { fr: '4. « Visits » (Reports → Work) : toutes les visites planifiées et complétées — c\'est ce qui remplit le calendrier', en: '4. "Visits" (Reports → Work): all scheduled and completed visits — this is what fills the calendar' },
+      { fr: '5. « Invoices » (Reports → Financial) : toutes les factures, tous statuts (payées, dues, en retard)', en: '5. "Invoices" (Reports → Financial): all invoices, all statuses (paid, due, past due)' },
+      { fr: 'Facultatif : « Products & Services » (Settings) pour votre catalogue, « Client Properties » pour les adresses de service secondaires', en: 'Optional: "Products & Services" (Settings) for your catalogue, "Client Properties" for secondary service addresses' },
     ],
-    formats: ['csv'],
+    formats: ['csv', 'xlsx'],
     steps: [
-      { fr: 'Dans Jobber, ouvrez Reports.', en: 'In Jobber, open Reports.' },
-      { fr: 'Sélectionnez le rapport (Clients, Jobs, Invoices…), période « All time ».', en: 'Select the report (Clients, Jobs, Invoices…), date range "All time".' },
-      { fr: 'Cliquez « Export CSV » et enregistrez le fichier sans le modifier.', en: 'Click "Export CSV" and save the file without editing it.' },
-      { fr: 'Répétez pour chaque type de données à migrer.', en: 'Repeat for each data type to migrate.' },
+      { fr: 'Dans Jobber, ouvrez Reports et choisissez le rapport.', en: 'In Jobber, open Reports and pick the report.' },
+      { fr: 'Période : choisissez « All time ». Par défaut Jobber n\'exporte que les 30 derniers jours — c\'est l\'erreur la plus fréquente (un fichier Jobs de 29 lignes au lieu de plusieurs centaines).', en: 'Date range: choose "All time". Jobber defaults to the last 30 days — the most common mistake (a Jobs file with 29 rows instead of several hundred).' },
+      { fr: 'Statut : « All » (ne filtrez pas sur Active, Paid ou Completed).', en: 'Status: "All" (do not filter on Active, Paid or Completed).' },
+      { fr: 'Cliquez « Export » (CSV ou Excel) et enregistrez le fichier sans le modifier : aucune colonne supprimée ni renommée.', en: 'Click "Export" (CSV or Excel) and save the file without editing it: no deleted or renamed columns.' },
+      { fr: 'Répétez pour les cinq rapports, puis déposez chaque fichier dans la bonne catégorie du portail.', en: 'Repeat for the five reports, then drop each file in the matching category of the portal.' },
     ],
-    typicalFields: ['Client Name', 'Email', 'Phone', 'Service Address', 'Job Number', 'Scheduled Start', 'Total', 'Invoice Number', 'Status'],
+    typicalFields: ['Client Name', 'Email', 'Phone', 'Service Address', 'Job #', 'Visit Start', 'Total', 'Invoice #', 'Status'],
     knownLimitations: [
-      { fr: 'Les pièces jointes et photos ne sont pas incluses dans les exports CSV.', en: 'Attachments and photos are not included in CSV exports.' },
-      { fr: 'Les items de lignes détaillés peuvent nécessiter un rapport séparé.', en: 'Detailed line items may require a separate report.' },
+      { fr: 'Les pièces jointes et photos ne sont pas incluses dans les exports Jobber.', en: 'Attachments and photos are not included in Jobber exports.' },
+      { fr: 'Les visites se rattachent aux jobs par leur numéro (Job #) : un fichier Visits sans son fichier Jobs laisse les visites orphelines.', en: 'Visits attach to jobs by their number (Job #): a Visits file without its Jobs file leaves the visits orphaned.' },
     ],
     docsUrl: 'https://help.getjobber.com/',
     tips: GENERIC_TIPS,
+    notImported: LIMITES_LANCEMENT,
   },
   housecall_pro: {
     key: 'housecall_pro',
@@ -78,6 +111,7 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
     ],
     docsUrl: 'https://help.housecallpro.com/',
     tips: GENERIC_TIPS,
+    notImported: LIMITES_LANCEMENT,
   },
   servicetitan: {
     key: 'servicetitan',
@@ -97,6 +131,7 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
     ],
     docsUrl: 'https://help.servicetitan.com/',
     tips: GENERIC_TIPS,
+    notImported: LIMITES_LANCEMENT,
   },
   gohighlevel: {
     key: 'gohighlevel',
@@ -116,6 +151,7 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
     ],
     docsUrl: 'https://help.gohighlevel.com/',
     tips: GENERIC_TIPS,
+    notImported: LIMITES_LANCEMENT,
   },
   quickbooks: {
     key: 'quickbooks',
@@ -138,6 +174,7 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
     ],
     docsUrl: 'https://quickbooks.intuit.com/learn-support/',
     tips: GENERIC_TIPS,
+    notImported: LIMITES_LANCEMENT,
   },
   other: {
     key: 'other',
@@ -156,6 +193,7 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
     knownLimitations: [],
     docsUrl: null,
     tips: GENERIC_TIPS,
+    notImported: LIMITES_LANCEMENT,
   },
   custom_files: {
     key: 'custom_files',
@@ -172,6 +210,7 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
     ],
     docsUrl: null,
     tips: GENERIC_TIPS,
+    notImported: LIMITES_LANCEMENT,
   },
 };
 

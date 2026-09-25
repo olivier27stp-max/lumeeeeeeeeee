@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuthedClient, isOrgMember, getServiceClient } from '../lib/supabase';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
+import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from '../lib/migration/gel-communications';
 import { resolvePublicBaseUrl } from '../lib/helpers';
 import { sendSafeError } from '../lib/error-handler';
 import { getCompanySettings, senderForOrg, marqueDepuis, langueEntreprise } from './emails';
@@ -1079,6 +1080,10 @@ router.post('/agreements/send-sms', async (req, res) => {
       }
       throw e;
     }
+
+    // Compte importé pas encore activé : personne ne contacte ses clients (gel-communications.ts).
+    const orgGelee = await destinataireGele(admin, { phone: formattedPhone }, agreement.org_id);
+    if (orgGelee) { journaliserBlocage('sms', orgGelee, formattedPhone, 'contrat'); return res.status(423).json({ error: MESSAGE_GEL, code: 'communications_gelees' }); }
 
     const smsStatusCallback = getTwilioStatusCallbackUrl();
     await twilioClient.messages.create({

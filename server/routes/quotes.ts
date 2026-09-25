@@ -7,6 +7,7 @@ import { twilioClient, getBaseUrl, getTwilioStatusCallbackUrl } from '../lib/con
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
+import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from '../lib/migration/gel-communications';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { eventBus } from '../lib/eventBus';
 import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe } from '../lib/stripe-connect';
@@ -573,6 +574,11 @@ router.post('/quotes/send-sms', async (req, res) => {
       }
       throw e;
     }
+
+    // Compte importé pas encore activé : personne ne contacte ses clients (gel-communications.ts).
+    // Le courriel passe par sendEmail qui porte déjà la garde ; le SMS partait direct.
+    const orgGelee = await destinataireGele(admin, { phone: formattedPhone }, quote.org_id);
+    if (orgGelee) { journaliserBlocage('sms', orgGelee, formattedPhone, 'devis'); return res.status(423).json({ error: MESSAGE_GEL, code: 'communications_gelees' }); }
 
     const smsStatusCallback = getTwilioStatusCallbackUrl();
     const twilioMsg = await twilioClient.messages.create({

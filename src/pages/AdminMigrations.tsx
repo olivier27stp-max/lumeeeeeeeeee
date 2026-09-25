@@ -1135,6 +1135,54 @@ function CarteBot({ m, onChanged, onOuvrirOnglet }: { m: any; onChanged: () => v
   );
 }
 
+/** Marche à suivre de l'admin, en six gestes (mode d'emploi du lancement, 2026-09-24).
+ *  L'étape courante est déduite du statut ; « Activer le compte » s'allume quand l'import
+ *  est terminé et que les communications du bureau sont encore gelées. */
+const MARCHE_A_SUIVRE: { titre: string; detail: string; statuts: string[] }[] = [
+  { titre: 'Confier au bot', detail: 'Il relit les correspondances, tranche les doublons évidents et lance l\'import test.', statuts: ['draft', 'invitation_sent', 'waiting_for_files', 'files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'testing'] },
+  { titre: 'Rejets', detail: 'Onglet Imports › rejects.csv : chaque ligne exclue porte la référence manquante (ex. numéro de job absent du fichier Jobs).', statuts: ['test_review'] },
+  { titre: 'Approbation', detail: 'Demandez l\'approbation au client, ou approuvez en son nom avec son accord écrit.', statuts: ['waiting_for_approval', 'approved'] },
+  { titre: 'Import final', detail: 'Saisissez le nom du workspace pour confirmer. L\'import tourne en arrière-plan ; le bureau passe en communications gelées.', statuts: ['ready_for_final_import', 'importing', 'post_import_validation'] },
+  { titre: 'Vérification', detail: 'Dans le CRM du client : Clients, Jobs, Calendrier (visites aux bonnes dates), Factures, Devis — comparez aux compteurs du rapport.', statuts: ['completed', 'completed_with_warnings', 'failed'] },
+  { titre: 'Activer le compte', detail: 'Lève le gel : courriels, SMS et automatisations repartent. Seulement après la vérification.', statuts: [] },
+];
+
+function MarcheASuivreCard({ m, gele }: { m: any; gele: boolean }) {
+  const termine = ['completed', 'completed_with_warnings'].includes(m.status);
+  const courante = termine && gele ? 5 : termine && !gele ? 6 : MARCHE_A_SUIVRE.findIndex((e) => e.statuts.includes(m.status));
+  return (
+    <div className="section-card p-5">
+      <div className="flex items-baseline justify-between gap-3 mb-3">
+        <h3 className="text-[14px] font-bold text-text-primary">Marche à suivre</h3>
+        <span className="text-[12px] text-text-tertiary">
+          {courante < 0 ? 'Migration fermée' : courante >= MARCHE_A_SUIVRE.length ? 'Tout est fait' : `Étape ${courante + 1} sur ${MARCHE_A_SUIVRE.length}`}
+        </span>
+      </div>
+      <ol className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+        {MARCHE_A_SUIVRE.map((e, i) => {
+          const faite = courante > i;
+          const active = courante === i;
+          return (
+            <li
+              key={e.titre}
+              aria-current={active ? 'step' : undefined}
+              className={`flex gap-2.5 rounded-lg border px-3 py-2.5 ${active ? 'border-[#d8d0c2] bg-[#f4f1ea]' : 'border-outline/40'} ${faite ? 'opacity-70' : ''}`}
+            >
+              <span className={`shrink-0 h-6 w-6 rounded-full text-[12px] font-bold flex items-center justify-center ${faite ? 'bg-emerald-100 text-emerald-700' : active ? 'bg-[#d8d0c2] text-black' : 'bg-surface-secondary text-text-tertiary'}`}>
+                {faite ? '✓' : i + 1}
+              </span>
+              <div className="min-w-0">
+                <div className={`text-[13px] ${active ? 'font-bold text-text-primary' : 'font-semibold text-text-secondary'}`}>{e.titre}</div>
+                <div className="text-[12px] text-text-tertiary leading-snug">{e.detail}</div>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 function ResumeTab({ d, onChanged, onOuvrirOnglet }: { d: any; onChanged: () => void; onOuvrirOnglet: (t: Tab) => void }) {
   const m = d.migration;
   const [ttl, setTtl] = useState(48);
@@ -1145,6 +1193,7 @@ function ResumeTab({ d, onChanged, onOuvrirOnglet }: { d: any; onChanged: () => 
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="lg:col-span-2"><MarcheASuivreCard m={m} gele={!!d.communications?.gele} /></div>
       <CarteBot m={m} onChanged={onChanged} onOuvrirOnglet={onOuvrirOnglet} />
       <div className="section-card p-5">
         <h3 className="text-[14px] font-bold text-text-primary mb-3">Invitation</h3>

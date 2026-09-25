@@ -184,7 +184,7 @@ export function nameKeysOf(n: { first_name?: unknown; last_name?: unknown; compa
   return Array.from(new Set(keys));
 }
 
-async function loadStaging(admin: SupabaseClient, migrationId: string, entity: TargetEntity, statuses: string[]): Promise<StagingRow[]> {
+export async function loadStaging(admin: SupabaseClient, migrationId: string, entity: TargetEntity, statuses: string[]): Promise<StagingRow[]> {
   const out: StagingRow[] = [];
   for (let offset = 0; ; offset += STAGING_PAGE) {
     const { data, error } = await admin
@@ -409,6 +409,16 @@ function resolveClientId(ctx: BuildContext, r: Record<string, string>, n: Record
     ?? lookupRef(ctx.clientIdByRef, r.client_phone_ref, phoneKey)
     ?? (address ? resolveClientByNameAddress(ctx, r, address) : null);
 }
+
+/** Motif de rejet « X introuvable » AVEC la valeur cherchée : le CSV de rejets doit permettre
+ *  de relever d'un coup d'œil les numéros de job (ou clients) absents des fichiers, au lieu
+ *  d'ouvrir la colonne JSON des données source. Tronqué à 60 caractères. */
+export function detailIntrouvable(quoi: string, ref: string | undefined, precision: string): string {
+  const v = str(ref).trim();
+  const affiche = v ? `« ${v.length > 60 ? `${v.slice(0, 57)}…` : v} »` : 'référence absente';
+  return `${quoi} introuvable : ${affiche} (${precision})`;
+}
+const PRECISION_CLIENT = 'homonyme ou client absent des fichiers importés';
 
 /** Clé téléphone : 10 derniers chiffres, préfixée pour ne jamais croiser un id externe numérique. */
 function phoneKey(v: string): string {
@@ -735,7 +745,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     const address = str(n.address) || (/^\d+[\s-]/.test(str(n.name)) ? str(n.name) : '');
     if (!address) return { ok: false, reason: 'invalid', detail: 'adresse manquante' };
     const clientId = resolveClientId(ctx, r, n);
-    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
+    if (!clientId) return { ok: false, reason: 'orphan', detail: detailIntrouvable('client', clientRefValue(r), PRECISION_CLIENT) };
     return {
       ok: true,
       row: {
@@ -759,7 +769,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     const address = str(n.address);
     if (!address) return { ok: false, reason: 'invalid', detail: 'adresse de facturation manquante' };
     const clientId = resolveClientId(ctx, r, n);
-    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
+    if (!clientId) return { ok: false, reason: 'orphan', detail: detailIntrouvable('client', clientRefValue(r), PRECISION_CLIENT) };
     // Le trigger trg_properties_billing_mirror (20260915000000) reflète cette
     // ligne dans clients.billing_address et passe billing_same_as_service à
     // false : le client est facturé à cette adresse dès l'import.
@@ -783,7 +793,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'job') {
     const clientId = resolveClientId(ctx, r, n);
-    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
+    if (!clientId) return { ok: false, reason: 'orphan', detail: detailIntrouvable('client', clientRefValue(r), PRECISION_CLIENT) };
     const propertyId = r.property_ref
       ? lookupRef(ctx.propertyIdByRef, r.property_ref, (v) => normalizeAddressKey(v))
       : null;
@@ -832,7 +842,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'quote') {
     const clientId = resolveClientId(ctx, r, n);
-    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
+    if (!clientId) return { ok: false, reason: 'orphan', detail: detailIntrouvable('client', clientRefValue(r), PRECISION_CLIENT) };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
     const subtotal = num(n.subtotal_cents);
     const tax = num(n.tax_cents);
@@ -866,7 +876,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'visit') {
     const jobId = lookupRef(ctx.jobIdByRef, r.job_ref);
-    if (!jobId) return { ok: false, reason: 'orphan', detail: 'job introuvable (numéro absent ou ambigu)' };
+    if (!jobId) return { ok: false, reason: 'orphan', detail: detailIntrouvable('job', r.job_ref, 'numéro absent du fichier Jobs ou ambigu') };
     const startAt = str(n.start_at);
     if (!startAt) return { ok: false, reason: 'invalid', detail: 'date de début manquante' };
     let endAt = str(n.end_at);
@@ -903,7 +913,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'invoice') {
     const clientId = resolveClientId(ctx, r, n);
-    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
+    if (!clientId) return { ok: false, reason: 'orphan', detail: detailIntrouvable('client', clientRefValue(r), PRECISION_CLIENT) };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
     let subtotal = num(n.subtotal_cents);
     const tax = num(n.tax_cents);
@@ -969,7 +979,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   if (entity === 'payment') {
     const invoiceId = r.invoice_ref ? lookupRef(ctx.invoiceIdByRef ?? new Map(), r.invoice_ref) : null;
     const clientId = resolveClientId(ctx, r, n);
-    if (!invoiceId && !clientId) return { ok: false, reason: 'orphan', detail: 'facture et client introuvables (référence absente ou ambiguë)' };
+    if (!invoiceId && !clientId) return { ok: false, reason: 'orphan', detail: `${detailIntrouvable('facture', r.invoice_ref, 'numéro absent ou ambigu')} ; ${detailIntrouvable('client', clientRefValue(r), PRECISION_CLIENT)}` };
     const amount = num(n.amount_cents);
     if (amount === null || amount <= 0) return { ok: false, reason: 'invalid', detail: 'montant manquant ou nul' };
     const date = str(n.date);

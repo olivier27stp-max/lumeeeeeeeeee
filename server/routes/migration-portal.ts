@@ -39,6 +39,7 @@ import {
 import { buildRejectsCsv } from '../lib/migration/rejects';
 import { maskNormalizedRecord } from '../lib/migration/masks';
 import { IMPORT_ORDER } from '../lib/migration/importer';
+import { compterStaging, totauxParEntite } from '../lib/migration/compteurs';
 
 const router = Router();
 
@@ -199,7 +200,7 @@ router.get('/migration-portal/session', async (req, res) => {
     if (!ctx) return;
     const { admin, migration } = ctx;
 
-    const [org, files, staged, issues, approval] = await Promise.all([
+    const [org, files, compteurs, issues, approval] = await Promise.all([
       admin.from('orgs').select('name').eq('id', migration.org_id).single(),
       admin
         .from('migration_files')
@@ -207,7 +208,8 @@ router.get('/migration-portal/session', async (req, res) => {
         .eq('migration_id', migration.id)
         .is('deleted_at', null)
         .order('created_at'),
-      admin.from('migration_staging_records').select('entity_type').eq('migration_id', migration.id),
+      // GROUP BY côté base (compteurs.ts) : la lecture de toutes les lignes plafonnait à 1 000.
+      compterStaging(admin, migration.id),
       admin
         .from('migration_issues')
         .select('id', { count: 'exact', head: true })
@@ -218,8 +220,7 @@ router.get('/migration-portal/session', async (req, res) => {
       admin.from('migration_approvals').select('decision, report_version, created_at').eq('migration_id', migration.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     ]);
 
-    const counts: Record<string, number> = {};
-    for (const r of (staged.data ?? []) as { entity_type: string }[]) counts[r.entity_type] = (counts[r.entity_type] ?? 0) + 1;
+    const counts = totauxParEntite(compteurs);
     const declarees = await categoriesDeclareesParFichier(admin, migration.id);
     const fichiers = (files.data ?? []).map((f: any) => ({ ...f, category_declared: declarees[f.id] ?? null }));
 
