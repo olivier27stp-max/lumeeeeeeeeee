@@ -45,7 +45,12 @@ Feuille de route reçue le 2026-09-24. Chaque point est classé : **code** (fait
 
 ## SQL à appliquer (staging puis prod)
 
-`supabase/migrations/20260926110000_migration_staging_counts.sql`. Sans lui, tout fonctionne : le code bascule sur le comptage paginé et écrit un seul avertissement dans les journaux Railway (`migration_staging_counts absente`).
+1. `supabase/migrations/20260926110000_migration_staging_counts.sql` (appliqué le 2026-09-24). Sans lui, tout fonctionne : le code bascule sur le comptage paginé et écrit un seul avertissement dans les journaux Railway.
+2. `supabase/migrations/20260926120000_current_org_id_bureau_actif.sql` : **à appliquer**. `current_org_id()` lit d'abord l'en-tête `x-lume-org` envoyé par le navigateur. Sans lui, un compte propriétaire de deux bureaux travaille dans la plus ancienne adhésion côté base.
+
+## Bug trouvé le soir même : « je n'ai que 15 factures »
+
+Le compte d'Olivier est propriétaire de Vision Lavage (645 factures) ET de Coquin lavage (15 factures). La page Factures appelait `rpc_list_invoices` avec `p_org` null → `current_org_id()` en base → plus ancienne adhésion → Coquin lavage. La page Clients passait l'org explicitement → Vision Lavage. Même défaut sur les KPI factures, la liste et les KPI paiements, le prochain numéro de facture (`rpc_peek_next_numbers`) et la création de facture (`rpc_create_invoice_draft` aurait refusé les clients Vision Lavage). Deux correctifs dans la branche : `p_org` toujours passé côté front, et l'en-tête `x-lume-org` lu par `current_org_id()` (SQL ci-dessus) pour couvrir d'un coup tous les consommateurs.
 
 ## Réserves
 
