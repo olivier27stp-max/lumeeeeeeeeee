@@ -13,7 +13,11 @@ export interface Conversation {
   unread_count: number;
   status: 'active' | 'archived';
   created_at: string;
+  /** Boîte unifiée : nom du bureau de la conversation. */
+  office_name?: string;
 }
+
+export interface InboxOffice { org_id: string; name: string }
 
 export interface Message {
   id: string;
@@ -36,13 +40,30 @@ export interface Message {
 // only when calling a backend on a different origin.
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
+/** `bureau` : le bureau visé (celui de la conversation) ; sinon le wrapper met le bureau actif. */
+async function getAuthHeaders(bureau?: string | null): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Not authenticated');
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${session.access_token}`,
+    ...(bureau ? { 'x-org-id': bureau } : {}),
   };
+}
+
+async function lireJson<T>(res: Response, repli: string): Promise<T> {
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || repli);
+  }
+  return res.json();
+}
+
+// ─── Boîte unifiée ───────────────────────────────────────────────────
+/** Conversations de tous les bureaux où l'on a messages.read (même entreprise), chacune avec son bureau. */
+export async function fetchInbox(): Promise<{ offices: InboxOffice[]; conversations: Conversation[] }> {
+  const res = await fetch(`${API_BASE}/api/messages/inbox`, { headers: await getAuthHeaders() });
+  return lireJson(res, 'Failed to load conversations');
 }
 
 // ─── Conversations ───────────────────────────────────────────────────
@@ -58,26 +79,22 @@ export async function fetchConversations(): Promise<Conversation[]> {
   return (data || []) as Conversation[];
 }
 
-export async function markConversationRead(conversationId: string): Promise<void> {
-  const { error } = await supabase
-    .from('conversations')
-    .update({ unread_count: 0 })
-    .eq('id', conversationId);
-  if (error) throw error;
+/** Passe par le serveur avec le bureau DE LA CONVERSATION (elle peut être d'un autre bureau que l'actif). */
+export async function markConversationRead(conversationId: string, bureau: string | null): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/messages/conversations/${encodeURIComponent(conversationId)}/read`, {
+    method: 'POST',
+    headers: await getAuthHeaders(bureau),
+  });
+  await lireJson(res, 'Failed to mark conversation read');
 }
 
 // ─── Messages ────────────────────────────────────────────────────────
-export async function fetchMessages(conversationId: string): Promise<Message[]> {
-  const orgId = await getCurrentOrgIdOrThrow();
-  const { data, error } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true });
-
-  if (error) throw error;
-  return (data || []) as Message[];
+/** Fil d'une conversation, lu avec le bureau DE LA CONVERSATION. */
+export async function fetchMessages(conversationId: string, bureau: string | null): Promise<Message[]> {
+  const res = await fetch(`${API_BASE}/api/messages/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    headers: await getAuthHeaders(bureau),
+  });
+  return lireJson(res, 'Failed to load messages');
 }
 
 // ─── Send SMS (via backend → Twilio) ─────────────────────────────────
@@ -86,8 +103,9 @@ export async function sendSms(payload: {
   message_text: string;
   client_id?: string;
   client_name?: string;
-}): Promise<Message> {
-  const headers = await getAuthHeaders();
+}, bureau?: string | null): Promise<Message> {
+  // Le bureau de la conversation : la réponse part de SON numéro.
+  const headers = await getAuthHeaders(bureau);
   const res = await fetch(`${API_BASE}/api/messages/send`, {
     method: 'POST',
     headers,

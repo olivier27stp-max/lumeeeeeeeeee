@@ -15,24 +15,27 @@ import {
   Plus,
   User,
   X,
+  Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import { useCompany } from '../contexts/CompanyContext';
 import { useTranslation } from '../i18n';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import PermissionGate from '../components/PermissionGate';
 import EmailInbox from '../components/messages/EmailInbox';
 import { displayPhone } from '../lib/piiSanitizer';
 import {
-  fetchConversations,
+  fetchInbox,
   fetchMessages,
   sendSms,
   markConversationRead,
   formatPhoneDisplay,
   formatE164,
   type Conversation,
+  type InboxOffice,
   type Message,
 } from '../lib/messagingApi';
 
@@ -42,11 +45,14 @@ function NewConversationModal({
   onClose,
   onSend,
   language,
+  bureauEnvoi,
 }: {
   open: boolean;
   onClose: () => void;
   onSend: (phone: string, message: string, clientId?: string, clientName?: string) => Promise<void>;
   language: string;
+  /** Plusieurs bureaux : le bureau actif, d'où part le nouveau message. */
+  bureauEnvoi?: string | null;
 }) {
   const { t } = useTranslation();
   const id = useId();
@@ -122,6 +128,12 @@ function NewConversationModal({
         </div>
 
         <div className="p-5 space-y-4">
+          {bureauEnvoi && (
+            <p className="flex items-center gap-1.5 text-[12px] text-text-secondary">
+              <Building2 size={12} aria-hidden />
+              {language === 'fr' ? `Envoyé depuis le numéro de ${bureauEnvoi}` : `Sent from the number of ${bureauEnvoi}`}
+            </p>
+          )}
           {/* Client search */}
           <div>
             <label htmlFor={`${id}-client-search`} className="block text-[12px] font-semibold text-text-secondary mb-1.5">
@@ -275,6 +287,11 @@ export default function Messages() {
   const { t, language } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  // Boîte unifiée : bureaux lisibles (messages.read) et filtre « tous » ou un bureau.
+  const { currentOrgId } = useCompany();
+  const [offices, setOffices] = useState<InboxOffice[]>([]);
+  const [filtreBureau, setFiltreBureau] = useState<string>('tous');
+  const plusieursBureaux = offices.length > 1;
   const [selectedConvo, setSelectedConvo] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingConvos, setLoadingConvos] = useState(true);
@@ -300,8 +317,9 @@ export default function Messages() {
   // Load conversations
   const loadConversations = useCallback(async () => {
     try {
-      const data = await fetchConversations();
-      setConversations(data);
+      const data = await fetchInbox();
+      setConversations(data.conversations);
+      setOffices(data.offices);
     } catch (err: any) {
       console.error('Failed to load conversations:', err);
     } finally {
@@ -356,12 +374,14 @@ export default function Messages() {
   }, [loadingConvos, conversations, searchParams, setSearchParams, language]);
 
   // Real-time subscription for new messages
+  const bureauxEcoutes = offices.map((o) => o.org_id).join(',');
   useEffect(() => {
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const channels: Array<ReturnType<typeof supabase.channel>> = [];
     (async () => {
-      const orgId = await getCurrentOrgIdOrThrow().catch(() => null);
-      if (!orgId) return;
-      channel = supabase
+      const actif = await getCurrentOrgIdOrThrow().catch(() => null);
+      const ids = bureauxEcoutes ? bureauxEcoutes.split(',') : actif ? [actif] : [];
+      for (const orgId of ids) {
+      channels.push(supabase
         .channel(`messages-live-${orgId}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `org_id=eq.${orgId}` }, (payload) => {
           const newMsg = payload.new as Message;
@@ -376,10 +396,11 @@ export default function Messages() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `org_id=eq.${orgId}` }, () => {
           loadConversations();
         })
-        .subscribe();
+        .subscribe());
+      }
     })();
-    return () => { if (channel) supabase.removeChannel(channel); };
-  }, [selectedConvo, loadConversations]);
+    return () => { for (const c of channels) supabase.removeChannel(c); };
+  }, [selectedConvo, loadConversations, bureauxEcoutes]);
 
   // Load messages when conversation selected
   useEffect(() => {
@@ -390,11 +411,11 @@ export default function Messages() {
     const load = async () => {
       setLoadingMessages(true);
       try {
-        const data = await fetchMessages(selectedConvo.id);
+        const data = await fetchMessages(selectedConvo.id, selectedConvo.org_id);
         if (!cancelled) setMessages(data);
         // Mark as read
         if (selectedConvo.unread_count > 0) {
-          await markConversationRead(selectedConvo.id);
+          await markConversationRead(selectedConvo.id, selectedConvo.org_id);
           loadConversations();
         }
       } catch (err: any) {
@@ -439,12 +460,13 @@ export default function Messages() {
         message_text: text,
         client_id: selectedConvo.client_id || undefined,
         client_name: selectedConvo.client_name || undefined,
-      });
+      }, selectedConvo.org_id);
       setMessages((prev) => [...prev, msg]);
       // If this was a placeholder, swap to the real conversation now that it exists server-side
       if (selectedConvo.id.startsWith('pending-')) {
-        const convos = await fetchConversations();
+        const { conversations: convos, offices: bureaux } = await fetchInbox();
         setConversations(convos);
+        setOffices(bureaux);
         const real = convos.find((c) => c.id === msg.conversation_id);
         if (real) setSelectedConvo(real);
       } else {
@@ -468,8 +490,9 @@ export default function Messages() {
       client_name: clientName,
     });
     // Single fetch — no duplicate
-    const convos = await fetchConversations();
+    const { conversations: convos, offices: bureaux } = await fetchInbox();
     setConversations(convos);
+    setOffices(bureaux);
     const target = convos.find((c: any) => c.id === msg.conversation_id);
     if (target) setSelectedConvo(target);
   };
@@ -484,15 +507,18 @@ export default function Messages() {
 
   // Filter conversations
   const filteredConvos = conversations.filter((c) => {
+    if (plusieursBureaux && filtreBureau !== 'tous' && c.org_id !== filtreBureau) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
       (c.client_name || '').toLowerCase().includes(q) ||
       c.phone_number.includes(q) ||
-      (c.last_message_text || '').toLowerCase().includes(q)
+      (c.last_message_text || '').toLowerCase().includes(q) ||
+      (c.office_name || '').toLowerCase().includes(q)
     );
   });
 
+  const nomBureauActif = offices.find((o) => o.org_id === currentOrgId)?.name || null;
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
 
   // Group messages by date
@@ -579,6 +605,29 @@ export default function Messages() {
             </div>
           </div>
 
+          {/* Boîte unifiée : tous les bureaux, ou un seul */}
+          {plusieursBureaux && (
+            <div className="flex gap-1.5 overflow-x-auto px-4 pb-3" role="group" aria-label={language === 'fr' ? 'Filtrer par bureau' : 'Filter by office'}>
+              {[{ org_id: 'tous', name: language === 'fr' ? 'Tous les bureaux' : 'All offices' }, ...offices].map((b) => {
+                const nonLus = conversations.filter((c) => b.org_id === 'tous' || c.org_id === b.org_id).reduce((t, c) => t + (c.unread_count || 0), 0);
+                return (
+                  <button
+                    key={b.org_id}
+                    type="button"
+                    aria-pressed={filtreBureau === b.org_id}
+                    onClick={() => setFiltreBureau(b.org_id)}
+                    className={cn(
+                      'shrink-0 rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors',
+                      filtreBureau === b.org_id ? 'border-text-primary bg-text-primary text-surface' : 'border-border text-text-secondary hover:bg-surface-secondary'
+                    )}
+                  >
+                    {b.name}{nonLus > 0 ? ` · ${nonLus}` : ''}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Conversations list */}
           <div className="flex-1 overflow-y-auto">
             {loadingConvos ? (
@@ -646,6 +695,12 @@ export default function Messages() {
                           </span>
                         )}
                       </div>
+                      {plusieursBureaux && convo.office_name && (
+                        <span className="mt-1 inline-flex max-w-full items-center gap-1 rounded bg-surface-secondary px-1.5 py-0.5 text-[11px] text-text-secondary">
+                          <Building2 size={10} className="shrink-0" aria-hidden />
+                          <span className="truncate">{convo.office_name}</span>
+                        </span>
+                      )}
                     </div>
                   </button>
                 );
@@ -687,6 +742,12 @@ export default function Messages() {
                     <Phone size={10} />
                     {formatPhoneDisplay(selectedConvo.phone_number)}
                   </p>
+                  {plusieursBureaux && (selectedConvo.office_name || nomBureauActif) && (
+                    <p className="text-[11px] text-text-secondary flex items-center gap-1 min-w-0">
+                      <Building2 size={10} className="shrink-0" aria-hidden />
+                      <span className="truncate">via {selectedConvo.office_name || nomBureauActif}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -781,6 +842,7 @@ export default function Messages() {
             onClose={() => setShowNewModal(false)}
             onSend={handleNewConvoSend}
             language={language}
+            bureauEnvoi={plusieursBureaux ? nomBureauActif : null}
           />
         )}
       </AnimatePresence>
