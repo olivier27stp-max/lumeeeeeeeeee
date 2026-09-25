@@ -703,13 +703,32 @@ router.post('/leads/convert-to-job', validate(convertLeadToJobSchema), async (re
       .eq('id', leadId);
     if (promoteErr) console.error('[leads/convert-to-job] lead status stamp failed:', { leadId, jobId: job.id, error: promoteErr.message });
 
-    // Update pipeline deal
+    // Update pipeline deal — l'ANCIEN pipeline (D2D). On le garde : 22 fichiers
+    // le lisent encore (Tableau de bord, Clients, Classement, Commissions).
     const { error: dealErr } = await auth.client
       .from('pipeline_deals')
       .update({ stage: 'closed_won', won_at: new Date().toISOString(), job_id: job.id })
       .eq('lead_id', leadId)
       .is('deleted_at', null);
     if (dealErr) console.error('[leads/convert-to-job] pipeline deal close failed:', { leadId, jobId: job.id, error: dealErr.message });
+
+    // …et le NOUVEAU, celui que la page « Ventes » affiche. Sans ça, une vente
+    // conclue depuis un lead n'existait que dans `pipeline_deals` : en prod,
+    // 98 deals y étaient gagnés (dernier le 2026-08-21) contre 1 seul dans
+    // `deals`. La vente disparaissait du pipeline affiché, sans erreur.
+    //
+    // Échouer ici ne doit PAS faire échouer la conversion : la job est créée,
+    // et renvoyer une erreur pousserait à recommencer — donc à créer une
+    // seconde job. On journalise, comme pour l'ancien pipeline juste au-dessus.
+    // `getServiceClient()` et non `auth.client` : la fonction est réservée au
+    // serveur (EXECUTE révoqué à anon/authenticated), et c'est déjà le client
+    // qui a résolu `clientId` quelques lignes plus haut.
+    const { error: venteErr } = await getServiceClient().rpc('lead_converti_gagne_pipeline', {
+      p_org_id: requestedOrgId,
+      p_client_id: clientId,
+      p_job_id: job.id,
+    });
+    if (venteErr) console.error('[leads/convert-to-job] pipeline de ventes non mis à jour:', { leadId, jobId: job.id, error: venteErr.message });
 
     // Emit lead converted event
     await eventBus.emit('lead.converted', {
