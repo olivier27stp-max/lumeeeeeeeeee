@@ -1996,7 +1996,12 @@ async function handleCheckoutSessionCompleted(
   // aren't known when the link is created).
   const userEmail = meta.email || session.customer_details?.email || '';
   const fullName = meta.full_name || session.customer_details?.name || '';
-  const companyName = meta.company_name || '';
+  // Lien de paiement Stripe : pas de métadonnées, mais Stripe collecte le nom
+  // de l'entreprise. Sans ce repli, l'entreprise prenait le début du courriel.
+  const companyName = meta.company_name
+    || session.customer_details?.business_name
+    || (session as { collected_information?: { business_name?: string | null } | null }).collected_information?.business_name
+    || '';
   const planId = meta.plan_id || '';
   const planSlug = meta.plan_slug || '';
   const interval = intervalleLu(meta.interval);
@@ -2166,6 +2171,7 @@ async function handleCheckoutSessionCompleted(
   const billingRegion = stripeAddr?.state || null;
   const billingPostal = stripeAddr?.postal_code || null;
   const billingStreet = [stripeAddr?.line1, stripeAddr?.line2].filter(Boolean).join(', ') || null;
+  const billingPhone = session.customer_details?.phone || null;
 
   try {
     await admin.from('billing_profiles').upsert({
@@ -2173,6 +2179,7 @@ async function handleCheckoutSessionCompleted(
       billing_email: userEmail,
       company_name: companyName,
       full_name: fullName,
+      ...(billingPhone ? { phone: billingPhone } : {}),
       stripe_customer_id: typeof session.customer === 'string' ? session.customer : null,
       currency,
       address: billingStreet,
@@ -2186,11 +2193,11 @@ async function handleCheckoutSessionCompleted(
   // Propagate address only if the org's fields are empty — never overwrite what the user
   // set during onboarding. Lecture ET écriture sur company_settings (colonne `province`,
   // pas `region` ; rue = `street1`). Upsert : la ligne peut ne pas encore exister.
-  if (billingCountry || billingCity || billingPostal) {
+  if (billingCountry || billingCity || billingPostal || billingPhone || companyName) {
     try {
       const { data: currentSettings } = await admin
         .from('company_settings')
-        .select('country, city, province, postal_code, street1')
+        .select('country, city, province, postal_code, street1, company_name, phone')
         .eq('org_id', orgId)
         .maybeSingle();
 
@@ -2200,6 +2207,8 @@ async function handleCheckoutSessionCompleted(
       if (!currentSettings?.province && billingRegion) patch.province = billingRegion;
       if (!currentSettings?.postal_code && billingPostal) patch.postal_code = billingPostal;
       if (!currentSettings?.street1 && billingStreet) patch.street1 = billingStreet;
+      if (!currentSettings?.company_name && companyName) patch.company_name = companyName;
+      if (!currentSettings?.phone && billingPhone) patch.phone = billingPhone;
 
       if (Object.keys(patch).length > 0) {
         await admin
