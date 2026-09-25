@@ -36,7 +36,9 @@ describe('les modales montées dans toute l’app se chargent à la demande', ()
      */
     expect(controleur, 'seul le TYPE peut être importé statiquement')
       .not.toMatch(/^import\s+NewJobModal/m);
-    expect(controleur).toMatch(/lazy\(\(\)\s*=>\s*import\('\.\.\/components\/NewJobModal'\)\)/);
+    // `lazyResilient` depuis le 2026-09-25 : même chargement différé, mais
+    // qui survit à un déploiement (voir chargement-page-resilient.test.ts).
+    expect(controleur).toMatch(/lazyResilient\(\(\)\s*=>\s*import\('\.\.\/components\/NewJobModal'\)\)/);
   });
 
   it('il n’est RENDU qu’après une première ouverture', () => {

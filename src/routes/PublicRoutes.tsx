@@ -1,29 +1,30 @@
 import React from 'react';
+import { lazyResilient } from '../lib/lazyResilient';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { rendueSansSession } from '../lib/routesSansSession';
 // Pages en chargement différé (audit I4) : chaque page est son propre chunk.
-const Auth = React.lazy(() => import('../pages/Auth'));
-const Register = React.lazy(() => import('../pages/Register'));
-const ResetPassword = React.lazy(() => import('../pages/ResetPassword'));
-const VerifyEmail = React.lazy(() => import('../pages/VerifyEmail'));
-const Privacy = React.lazy(() => import('../pages/Privacy'));
-const Terms = React.lazy(() => import('../pages/Terms'));
-const Subprocessors = React.lazy(() => import('../pages/Subprocessors'));
-const MarketingNotFound = React.lazy(() => import('../pages/marketing/NotFound'));
+const Auth = lazyResilient(() => import('../pages/Auth'));
+const Register = lazyResilient(() => import('../pages/Register'));
+const ResetPassword = lazyResilient(() => import('../pages/ResetPassword'));
+const VerifyEmail = lazyResilient(() => import('../pages/VerifyEmail'));
+const Privacy = lazyResilient(() => import('../pages/Privacy'));
+const Terms = lazyResilient(() => import('../pages/Terms'));
+const Subprocessors = lazyResilient(() => import('../pages/Subprocessors'));
+const MarketingNotFound = lazyResilient(() => import('../pages/marketing/NotFound'));
 import MarketingLayout from '../components/marketing/MarketingLayout';
 // Accueil « aperçu » (sept. 2026). L'ancienne page `pages/marketing/Home.tsx`
 // reste dans le dépôt, non routée, pour pouvoir y revenir.
-const MarketingHome = React.lazy(() => import('../pages/marketing/HomeApercu'));
-const MarketingFonction = React.lazy(() => import('../pages/marketing/FonctionDetail'));
-const MarketingFeatures = React.lazy(() => import('../pages/marketing/Features'));
-const MarketingSolutions = React.lazy(() => import('../pages/marketing/Solutions'));
-const MarketingIndustries = React.lazy(() => import('../pages/marketing/Industries'));
-const MarketingIndustryDetail = React.lazy(() => import('../pages/marketing/IndustryDetail'));
-const MarketingContact = React.lazy(() => import('../pages/marketing/Contact'));
-const MarketingPricing = React.lazy(() => import('../pages/marketing/Pricing'));
-const CheckoutSuccess = React.lazy(() => import('../pages/CheckoutSuccess'));
-const OnboardingFlow = React.lazy(() => import('../pages/OnboardingFlow'));
-const OAuthConsent = React.lazy(() => import('../pages/OAuthConsent'));
+const MarketingHome = lazyResilient(() => import('../pages/marketing/HomeApercu'));
+const MarketingFonction = lazyResilient(() => import('../pages/marketing/FonctionDetail'));
+const MarketingFeatures = lazyResilient(() => import('../pages/marketing/Features'));
+const MarketingSolutions = lazyResilient(() => import('../pages/marketing/Solutions'));
+const MarketingIndustries = lazyResilient(() => import('../pages/marketing/Industries'));
+const MarketingIndustryDetail = lazyResilient(() => import('../pages/marketing/IndustryDetail'));
+const MarketingContact = lazyResilient(() => import('../pages/marketing/Contact'));
+const MarketingPricing = lazyResilient(() => import('../pages/marketing/Pricing'));
+const CheckoutSuccess = lazyResilient(() => import('../pages/CheckoutSuccess'));
+const OnboardingFlow = lazyResilient(() => import('../pages/OnboardingFlow'));
+const OAuthConsent = lazyResilient(() => import('../pages/OAuthConsent'));
 
 type PublicRoutesProps = {
   /** Called when the user clicks Back from the Auth page. */

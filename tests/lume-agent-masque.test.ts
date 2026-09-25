@@ -55,7 +55,9 @@ describe('la remise en service reste simple', () => {
   it('le composant et l’icône sont conservés', () => {
     // Les supprimer obligerait à les réécrire pour rouvrir la fonctionnalité.
     // Chargé en différé comme toutes les pages (audit I4) — la référence reste.
-    expect(app).toMatch(/const MrLumePage = React\.lazy\(\(\) => import\('\.\/features\/agent\/components\/MrLumeChat'\)\)/);
+    // `lazyResilient` depuis le 2026-09-25 : le chargement différé est
+    // conservé, seul l'outil change (résiste à un déploiement).
+    expect(app).toMatch(/const MrLumePage = lazyResilient\(\(\) => import\('\.\/features\/agent\/components\/MrLumeChat'\)\)/);
     expect(app).toContain('const LumeAgentIcon');
   });
 

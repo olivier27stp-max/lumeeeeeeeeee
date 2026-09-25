@@ -15,13 +15,17 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  /** L'URL au moment de l'erreur — pour réarmer quand on navigue ailleurs. */
+  url?: string | null;
 }
 
 class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, error: null };
+  state: State = { hasError: false, error: null, url: null };
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    // L'URL sert de repère : on réarme dès qu'elle change (voir
+    // componentDidUpdate).
+    return { hasError: true, error, url: window.location.href };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -33,8 +37,38 @@ class ErrorBoundary extends Component<Props, State> {
     captureClientException(error, { componentStack: info.componentStack });
   }
 
+  /**
+   * Réarmer quand on CHANGE de page.
+   *
+   * Sans ça, une erreur restait affichée pour toujours : cette barrière
+   * enveloppe toutes les routes, et rien ne remettait `hasError` à false.
+   * Naviguer ailleurs montrait encore l'écran rouge de la page précédente
+   * — c'est le « bloqué » signalé le 2026-09-25 sur Automatisations.
+   *
+   * On compare l'URL à celle du moment de l'erreur : dès qu'elle change,
+   * on laisse la nouvelle page se rendre.
+   */
+  componentDidUpdate() {
+    if (this.state.hasError && this.state.url && window.location.href !== this.state.url) {
+      this.setState({ hasError: false, error: null, url: null });
+    }
+  }
+
+  /**
+   * « Réessayer » ne suffisait pas sur un chunk manquant.
+   *
+   * Remettre `hasError` à false relance le MÊME import, que le navigateur
+   * a mis en cache en échec : il redemande le fichier disparu et échoue
+   * encore. Pour cette erreur-là, seul un rechargement reprend le nouvel
+   * index.html — donc les nouveaux noms de fichiers.
+   */
   handleReset = () => {
-    this.setState({ hasError: false, error: null });
+    const message = this.state.error?.message ?? '';
+    if (/dynamically imported module|Importing a module script failed|Failed to fetch/i.test(message)) {
+      window.location.reload();
+      return;
+    }
+    this.setState({ hasError: false, error: null, url: null });
   };
 
   render() {
