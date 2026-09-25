@@ -500,6 +500,13 @@ export default function AutomationBuilderPage() {
     }),
     [regle?.trigger_event, regle?.actions, regle?.conditions, steps, fr],
   );
+  /** Les étapes fautives, pour les signaler SUR le canevas (§6.5). */
+  const etapesEnErreur = useMemo(
+    () => new Set(problemesVivants
+      .filter((p) => p.gravite === 'bloquant' && p.etapeId)
+      .map((p) => p.etapeId as string)),
+    [problemesVivants],
+  );
   const bloquantsVivants = useMemo(
     () => problemesVivants.filter((p) => p.gravite === 'bloquant'),
     [problemesVivants],
@@ -723,6 +730,51 @@ export default function AutomationBuilderPage() {
     }
   }, [regle, conversion, fr]);
 
+  /**
+   * Y a-t-il du travail NON ENREGISTRÉ ?
+   *
+   * `modifie` = la minuterie n'a pas encore écrit. `incomplet` = une étape
+   * bloque l'enregistrement (un champ obligatoire vide) — c'est le cas le
+   * plus dangereux : on croit son parcours sauvé alors que rien n'est parti.
+   */
+  const travailNonEnregistre = etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet';
+
+  /**
+   * Prévenir avant de FERMER l'onglet.
+   *
+   * C'est le défaut de GoHighLevel relevé par l'audit : « nœuds non
+   * enregistrés abandonnés silencieusement (perte de travail) ». Le mandat
+   * demande explicitement de ne pas le reproduire. Le navigateur affiche
+   * son propre message — on ne peut pas le personnaliser, mais on peut
+   * refuser de laisser partir sans rien dire.
+   */
+  useEffect(() => {
+    if (!travailNonEnregistre) return;
+    const avertir = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', avertir);
+    return () => window.removeEventListener('beforeunload', avertir);
+  }, [travailNonEnregistre]);
+
+  /** Quitter l'éditeur — en demandant d'abord si du travail se perdrait. */
+  const quitterEditeur = useCallback(async () => {
+    if (travailNonEnregistre) {
+      const ok = await confirmer({
+        title: fr ? 'Quitter sans enregistrer ?' : 'Leave without saving?',
+        message: etatSauvegarde === 'incomplet'
+          ? (fr
+            ? 'Une étape est incomplète, donc le parcours n’a pas pu être enregistré. Si vous quittez maintenant, ces modifications seront perdues.'
+            : 'A step is incomplete, so the journey could not be saved. If you leave now, those changes are lost.')
+          : (fr
+            ? 'Vos dernières modifications ne sont pas encore enregistrées. Si vous quittez maintenant, elles seront perdues.'
+            : 'Your latest changes are not saved yet. If you leave now, they will be lost.'),
+        confirmLabel: fr ? 'Quitter' : 'Leave',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    navigate('/automations');
+  }, [travailNonEnregistre, etatSauvegarde, fr, navigate]);
+
   const declencheurLabel = useMemo(() => {
     if (!catalogue || !regle) return fr ? '— à choisir —' : '— to pick —';
     const d = catalogue.declencheurs.find((x) => x.cle === regle.trigger_event);
@@ -856,7 +908,7 @@ export default function AutomationBuilderPage() {
         </p>
         <button
           type="button"
-          onClick={() => navigate('/automations')}
+          onClick={() => void quitterEditeur()}
           className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {fr ? 'Mes automatisations' : 'My automations'}
@@ -878,7 +930,7 @@ export default function AutomationBuilderPage() {
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5">
         <button
           type="button"
-          onClick={() => navigate('/automations')}
+          onClick={() => void quitterEditeur()}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -1285,6 +1337,7 @@ export default function AutomationBuilderPage() {
                         else setTiroirDeclencheur(true);
                       }}
                       declencheurDetail={declencheurDetail}
+                      etapesEnErreur={etapesEnErreur}
                     />
                   )
                 )}
