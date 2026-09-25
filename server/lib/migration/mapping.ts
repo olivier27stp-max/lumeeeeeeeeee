@@ -700,6 +700,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'valide jusqu au', 'date d expiration', 'echeance de validite',
       ],
     },
+    {
+      field: 'line_items',
+      labelFr: 'Lignes (services)',
+      labelEn: 'Line items',
+      types: ['text'],
+      synonyms: [
+        'line items', 'line item', 'quote items', 'items', 'products and services',
+        'lignes', 'lignes de soumission', 'articles',
+      ],
+    },
   ],
 
   job: [

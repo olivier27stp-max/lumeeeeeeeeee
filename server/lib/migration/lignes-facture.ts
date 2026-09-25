@@ -1,6 +1,6 @@
-// Lignes des factures importées.
+// Lignes des factures et soumissions importées.
 //
-// Les exports de facture ne portent que les totaux, sauf Jobber qui résume les
+// Les exports de facture et de soumission ne portent que les totaux, sauf Jobber qui résume les
 // services dans une colonne « Line items » : « Nom (qté, $total de la ligne), … ».
 // Sans lignes, une facture importée s'ouvrait à 0 $ dans l'éditeur (un brouillon
 // enregistré perdait son montant), son PDF n'avait aucun détail, et l'invariant
@@ -9,7 +9,8 @@
 // Règle : les lignes lues ne sont gardées que si leur somme égale EXACTEMENT le
 // sous-total importé ; sinon — ou sans colonne — une seule ligne « Montant
 // importé » égale au sous-total. Le total de la facture ne bouge jamais.
-// Même règle en SQL pour le rattrapage : migration 20260926100700.
+// Même règle en SQL pour le rattrapage : migrations 20260926100700 (factures)
+// et 20260926100800 (soumissions).
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface LigneImportee {
@@ -103,6 +104,48 @@ export async function creerLignesImportees(
         echecs += 1;
         console.error('[migration-importer] lignes de facture refusées', f.id, e.message);
       } else creees += f.lignes.length;
+    }
+  }
+  return { creees, echecs };
+}
+
+/**
+ * Soumissions : mêmes lignes, table quote_line_items. Une ligne de soumission
+ * ne recalcule pas l'en-tête (l'app le fait à l'enregistrement) : pas de
+ * contrainte d'instruction unique, mais même règle de somme et même reprise.
+ */
+export async function creerLignesDevisImportees(
+  admin: SupabaseClient, orgId: string, devis: Array<{ id: string; lignes: LigneImportee[] }>,
+): Promise<{ creees: number; echecs: number }> {
+  const aFaire = devis.filter((d) => d.lignes.length > 0);
+  let creees = 0;
+  let echecs = 0;
+  const rangeesDe = (d: { id: string; lignes: LigneImportee[] }) => d.lignes.map((l, k) => ({
+    org_id: orgId, quote_id: d.id, name: l.description.slice(0, 500), quantity: l.qty, unit_price_cents: l.unit_price_cents, sort_order: k,
+  }));
+  for (let i = 0; i < aFaire.length; i += 200) {
+    const lot = aFaire.slice(i, i + 200);
+    const { data: deja, error: eLecture } = await admin.from('quote_line_items').select('quote_id').in('quote_id', lot.map((d) => d.id));
+    if (eLecture) {
+      console.error('[migration-importer] lignes de soumission : lecture impossible', eLecture.message);
+      echecs += lot.length;
+      continue;
+    }
+    const avecLignes = new Set((deja ?? []).map((r) => r.quote_id as string));
+    const restantes = lot.filter((d) => !avecLignes.has(d.id));
+    if (restantes.length === 0) continue;
+    const { error } = await admin.from('quote_line_items').insert(restantes.flatMap(rangeesDe));
+    if (!error) {
+      creees += restantes.reduce((s, d) => s + d.lignes.length, 0);
+      continue;
+    }
+    console.error('[migration-importer] lignes de soumission : lot refusé, reprise une par une', error.message);
+    for (const d of restantes) {
+      const { error: e } = await admin.from('quote_line_items').insert(rangeesDe(d));
+      if (e) {
+        echecs += 1;
+        console.error('[migration-importer] lignes de soumission refusées', d.id, e.message);
+      } else creees += d.lignes.length;
     }
   }
   return { creees, echecs };

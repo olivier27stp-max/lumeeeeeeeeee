@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  lireLignesExport, lignesPourFacture, texteLignes, creerLignesImportees, LIBELLE_MONTANT_IMPORTE,
+  lireLignesExport, lignesPourFacture, texteLignes, creerLignesImportees, creerLignesDevisImportees, LIBELLE_MONTANT_IMPORTE,
 } from '../../server/lib/migration/lignes-facture';
 import { suggestMappings } from '../../server/lib/migration/mapping';
 
@@ -122,5 +122,37 @@ describe('rattrapage SQL (migration 20260926100700) — même règle que l’imp
   it('repli « Montant importé » et factures déjà pourvues de lignes sautées', () => {
     expect(sql).toContain(`'${LIBELLE_MONTANT_IMPORTE}'`);
     expect(sql).toMatch(/not exists \(select 1 from public\.invoice_items ii where ii\.invoice_id = i\.id and ii\.deleted_at is null\)/);
+  });
+});
+
+describe('soumissions importées', () => {
+  it('« Line items » d’un fichier de soumissions → line_items', () => {
+    const [s] = suggestMappings('quotes', [{ position: 0, header: 'Line items', detectedType: 'text', emptyRatio: 0, samplesMasked: [] }], 'quotes.csv');
+    expect(s.targetField).toBe('line_items');
+  });
+
+  it('lignes créées dans quote_line_items (nom, quantité), soumissions déjà pourvues sautées', async () => {
+    const inserts: unknown[][] = [];
+    const admin = {
+      from: vi.fn((table: string) => ({
+        select: () => ({ in: async () => ({ data: table === 'quote_line_items' ? [{ quote_id: 'q1' }] : [], error: null }) }),
+        insert: async (rows: unknown[]) => { inserts.push(rows); return { error: null }; },
+      })),
+    };
+    const r = await creerLignesDevisImportees(admin as never, 'org', [
+      { id: 'q1', lignes: [{ description: 'A', qty: 1, unit_price_cents: 100 }] },
+      { id: 'q2', lignes: [{ description: 'Fenêtres', qty: 3, unit_price_cents: 14000 }] },
+    ]);
+    expect(admin.from).toHaveBeenCalledWith('quote_line_items');
+    expect(inserts).toEqual([[{ org_id: 'org', quote_id: 'q2', name: 'Fenêtres', quantity: 3, unit_price_cents: 14000, sort_order: 0 }]]);
+    expect(r).toEqual({ creees: 1, echecs: 0 });
+  });
+
+  it('rattrapage SQL (20260926100800) : même motif, même somme, même repli', () => {
+    const sql = readFileSync(join(__dirname, '../../supabase/migrations/20260926100800_devis_importes_lignes.sql'), 'utf8');
+    expect(sql).toContain(String.raw`'(.*?) \((\d+(?:\.\d+)?), \$([\d,]*\.\d{2})\)(?:, |$)'`);
+    expect(sql).toContain('having sum(lues.total_ligne) = src.subtotal_cents');
+    expect(sql).toContain(`'${LIBELLE_MONTANT_IMPORTE}'`);
+    expect(sql).toMatch(/not exists \(select 1 from public\.quote_line_items l where l\.quote_id = q\.id\)/);
   });
 });
