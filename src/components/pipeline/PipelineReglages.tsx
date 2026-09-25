@@ -27,8 +27,8 @@ import {
   ajouterEtape, ajouterRaisonProposee, archiverEtape, archiverRaisonProposee, desarchiverEtape,
   donnerAccesPipeline, fetchAccesPipeline, fetchMembres, retirerAccesPipeline, rouvrirPipeline,
   creerPipeline, definirParDefaut, fetchPipelines, fetchRaisonsProposees,
-  renommerEtape, renommerPipeline, reordonnerEtapes,
-  type Deal, type ModelePipeline, type PipelineResume, type PipelineStage,
+  renommerEtape, renommerPipeline, reordonnerEtapes, definirAffichagePipeline,
+  type Deal, type ModeCouleur, type ModelePipeline, type PipelineResume, type PipelineStage,
 } from '../../lib/pipelineVentesApi';
 import { LIBELLE_KIND, rangsOuverts, visuelEtape } from '../../lib/pipeline/presentation';
 import type { MockStage } from '../../lib/pipeline/mockData';
@@ -732,6 +732,126 @@ function PartagePipeline({ pipelineId, membres, fr }: {
 
 // ── Écran ──────────────────────────────────────────────────
 
+/**
+ * Les deux réglages d'affichage du pipeline, repris de la page « Pipelines »
+ * de GoHighLevel : la probabilité par opportunité, et la façon dont les
+ * couleurs d'étape apparaissent.
+ *
+ * Ils étaient stockés en base depuis le début, mais posés UNIQUEMENT à la
+ * création : pour passer d'un affichage gris à un affichage teinté, il
+ * fallait recréer le pipeline — donc perdre ses deals.
+ *
+ * Chaque bascule écrit son seul champ (l'autre part à `undefined`) : régler
+ * la couleur ne doit pas réécrire le mode de probabilité qu'un autre onglet
+ * vient peut-être de changer.
+ */
+function ReglagesAffichage({ pipeline, fr, onChangement }: {
+  pipeline: PipelineResume | null;
+  fr: boolean;
+  onChangement: () => void;
+}) {
+  const idProba = useId();
+  const [occupe, setOccupe] = useState(false);
+
+  if (!pipeline) return null;
+
+  const modeActuel: ModeCouleur = pipeline.color_mode ?? 'none';
+  const probaActive = pipeline.use_deal_probability ?? false;
+
+  async function ecrire(reglages: { color_mode?: ModeCouleur; use_deal_probability?: boolean }) {
+    if (occupe) return;
+    setOccupe(true);
+    try {
+      await definirAffichagePipeline(pipeline!.id, reglages);
+      onChangement();
+    } catch (e) {
+      console.error('[PipelineReglages] affichage refusé', e);
+      toast.error(messageErreur(e, fr));
+    } finally {
+      setOccupe(false);
+    }
+  }
+
+  const modes: { cle: ModeCouleur; titre: string; sous: string }[] = [
+    { cle: 'none', titre: fr ? "Nom de l'étape" : 'Stage name', sous: fr ? 'Par défaut (sans couleur)' : 'Default (no color)' },
+    { cle: 'dot', titre: fr ? "Nom de l'étape" : 'Stage name', sous: fr ? 'Pastille colorée' : 'Colored dot' },
+    { cle: 'tint', titre: fr ? "Nom de l'étape" : 'Stage name', sous: fr ? 'Fond teinté' : 'Background tint' },
+  ];
+
+  return (
+    <div className="space-y-3">
+      {/* Probabilité par opportunité */}
+      <div className="flex items-start justify-between gap-4 rounded-xl border border-outline bg-surface-card px-4 py-3.5">
+        <div className="min-w-0">
+          <label htmlFor={idProba} className="block text-[13px] font-semibold text-text-primary">
+            {fr ? "Probabilité par opportunité" : 'Use opportunity-level probability'}
+          </label>
+          <p className="mt-0.5 text-[11.5px] text-text-secondary leading-relaxed">
+            {fr
+              ? "Activé, chaque deal porte sa propre probabilité. Désactivé, c'est celle de son étape qui s'applique."
+              : 'When enabled, each opportunity uses its own probability. When disabled, probability is based on the stage.'}
+          </p>
+        </div>
+        <button
+          id={idProba}
+          type="button"
+          role="switch"
+          aria-checked={probaActive}
+          disabled={occupe}
+          onClick={() => { void ecrire({ use_deal_probability: !probaActive }); }}
+          className="relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+          style={{ backgroundColor: probaActive ? 'var(--color-accent)' : 'var(--color-outline)' }}
+        >
+          <span
+            aria-hidden="true"
+            className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+            style={{ left: probaActive ? '1.125rem' : '0.125rem' }}
+          />
+        </button>
+      </div>
+
+      {/* Couleurs d'affichage */}
+      <div className="rounded-xl border border-outline bg-surface-card px-4 py-3.5">
+        <p className="text-[13px] font-semibold text-text-primary">
+          {fr ? "Couleurs d'affichage" : 'Set pipeline display colors'}
+        </p>
+        <p className="mt-0.5 text-[11.5px] text-text-secondary leading-relaxed">
+          {fr
+            ? "Comment les couleurs d'étape apparaissent sur le board."
+            : 'Choose how stage colors appear across your pipeline views.'}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {modes.map((m) => {
+            const choisi = modeActuel === m.cle;
+            return (
+              <button
+                key={m.cle}
+                type="button"
+                disabled={occupe}
+                aria-pressed={choisi}
+                onClick={() => { void ecrire({ color_mode: m.cle }); }}
+                className="min-w-[8.5rem] rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+                style={{
+                  borderColor: choisi ? 'var(--color-accent)' : 'var(--color-outline)',
+                  background: choisi ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
+                }}
+              >
+                <span className="flex items-center gap-1.5 text-[12px] font-semibold text-text-primary">
+                  {m.cle === 'dot' && (
+                    <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--color-accent)' }} />
+                  )}
+                  {m.titre}
+                </span>
+                <span className="mt-0.5 block text-[10.5px] text-text-tertiary">{m.sous}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PipelineReglages({
   pipelineId, etapes, deals, onChangement, onOuvrirPipeline,
 }: {
@@ -935,6 +1055,13 @@ export default function PipelineReglages({
             : 'Set up the path your leads follow: the board stages, the guidance shown to the rep at each one, and how many pipelines you keep if you sell different things. No behaviour depends on a stage name — only on its type.'}
         </p>
       </div>
+
+      {/* ── Affichage de ce pipeline ── */}
+      <ReglagesAffichage
+        pipeline={pipelines?.find((p) => p.id === pipelineId) ?? null}
+        fr={fr}
+        onChangement={() => { void rechargerPipelines(); }}
+      />
 
       {/* ── Étapes ── */}
       <Section
