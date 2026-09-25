@@ -136,7 +136,7 @@ export async function fetchPlans(): Promise<Plan[]> {
     includes_automations: p.includes_automations ?? (p.slug !== 'starter'),
     includes_marketplace: p.includes_marketplace ?? (p.slug === 'autopilot'),
     includes_timesheets: p.includes_timesheets ?? (p.slug !== 'starter'),
-    includes_request_forms: p.includes_request_forms ?? true, // tous les forfaits (2026-09-25)
+    includes_request_forms: p.includes_request_forms ?? (p.slug !== 'starter'),
     includes_advanced_roles: p.includes_advanced_roles ?? (p.slug === 'autopilot'),
     // Pipeline de ventes : la colonne existe en base (migration 20260923100100),
     // mais le repli par slug évite que la page disparaisse le temps qu'un
