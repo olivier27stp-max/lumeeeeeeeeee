@@ -147,7 +147,7 @@ describe('4b. Aucune lecture d’un autre bureau depuis le navigateur', () => {
 });
 
 describe('5. Défense en base : policy RESTRICTIVE « bureau_actif »', () => {
-  const sql = lire('supabase/migrations/20260927120000_bureau_actif_via_en_tete.sql');
+  const sql = lire('supabase/migrations/20260927200000_bureau_actif_via_en_tete.sql');
   it('lit l’en-tête x-org-id exposé par PostgREST, sans jamais lever d’erreur', () => {
     expect(sql).toMatch(/create or replace function public\.bureau_actif_demande\(\)/);
     expect(sql).toMatch(/request\.headers/);
