@@ -251,6 +251,8 @@ export interface CompanyOfficesQuota {
   /** Bureaux autorisés pour ce workspace (1 par défaut, relevé par la plateforme). */
   quota: number;
   default_quota: number;
+  /** Bureaux compris dans le forfait de la compagnie (Autopilot = 2). */
+  plan_quota?: number;
   max_quota: number;
   /** Bureaux existants (orgs du company_group). */
   used: number;

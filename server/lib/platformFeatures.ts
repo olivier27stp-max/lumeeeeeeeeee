@@ -86,10 +86,25 @@ export const OFFICE_QUOTA_KEY = 'office_quota';
 export const DEFAULT_OFFICE_QUOTA = 1;
 export const MAX_OFFICE_QUOTA = 50;
 
-/** Quota effectif d'une compagnie à partir de ses lignes org_features
- *  (n'importe quel bureau du groupe) : le plus grand quota plateforme, sinon 1. */
-export function resolveOfficeQuota(rows: Array<{ feature: string; enabled?: boolean; metadata: unknown }> | null | undefined): number {
-  let quota = DEFAULT_OFFICE_QUOTA;
+/**
+ * Bureaux compris d'office par forfait (décision de Rafba, 2026-09-25 :
+ * « Autopilot = 2 bureaux d'office »). Les autres forfaits : le défaut. Le
+ * quota plateforme (Creator Space) l'emporte s'il est plus haut.
+ */
+export const OFFICES_BY_PLAN: Readonly<Record<string, number>> = { autopilot: 2 };
+
+export function officeQuotaForPlan(slug: string | null | undefined): number {
+  return (slug && OFFICES_BY_PLAN[slug]) || DEFAULT_OFFICE_QUOTA;
+}
+
+/** Quota effectif d'une compagnie : le plus grand entre les bureaux compris
+ *  dans ses forfaits actifs et le quota plateforme (n'importe quel bureau du
+ *  groupe), sinon 1. */
+export function resolveOfficeQuota(
+  rows: Array<{ feature: string; enabled?: boolean; metadata: unknown }> | null | undefined,
+  planSlugs: ReadonlyArray<string | null | undefined> = [],
+): number {
+  let quota = Math.max(DEFAULT_OFFICE_QUOTA, ...planSlugs.map(officeQuotaForPlan));
   for (const r of rows ?? []) {
     if (r.feature !== OFFICE_QUOTA_KEY || !isPlatformOverride(r.metadata)) continue;
     const q = Number((r.metadata as any).quota);

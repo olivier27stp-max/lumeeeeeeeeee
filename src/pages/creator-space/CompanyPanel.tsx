@@ -401,10 +401,10 @@ function FeaturesTab({ orgId }: { orgId: string }) {
             <div className="min-w-0">
               <p className="text-[13px] font-medium text-text-primary">
                 {o.used} / {o.quota} bureau{o.quota > 1 ? 'x' : ''} autorisé{o.quota > 1 ? 's' : ''}
-                {o.quota !== o.default_quota && <span className="ml-1.5 text-[10.5px] font-semibold text-text-tertiary uppercase tracking-wide">forcé</span>}
+                {o.quota !== Math.max(o.default_quota, o.plan_quota ?? 0) && <span className="ml-1.5 text-[10.5px] font-semibold text-text-tertiary uppercase tracking-wide">forcé</span>}
               </p>
               <p className="text-[11.5px] text-text-tertiary mt-0.5">
-                {o.default_quota} par défaut · abaisser sous les bureaux existants n’en supprime aucun, le workspace ne peut plus en créer.
+                {(o.plan_quota ?? 0) > o.default_quota ? `${o.plan_quota} compris dans le forfait` : `${o.default_quota} par défaut`} · abaisser sous les bureaux existants n’en supprime aucun, le workspace ne peut plus en créer.
                 {o.updated_at && <> · quota posé le {fmtDate(o.updated_at)}</>}
               </p>
             </div>

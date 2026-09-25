@@ -62,13 +62,14 @@ export async function getOfficeCapacity(admin: ReturnType<typeof getServiceClien
   // du tenant : 1 bureau par workspace, davantage seulement si la plateforme
   // (Creator Space → Features) a posé un quota. Le forfait et l'abonnement ne
   // sont plus consultés ici.
+  // Exception depuis le 2026-09-25 : Autopilot comprend 2 bureaux d'office
+  // (OFFICES_BY_PLAN) ; le quota plateforme l'emporte s'il est plus haut.
   if (officeIds.length === 0) return DEFAULT_OFFICE_QUOTA;
-  const { data: rows } = await admin
-    .from('org_features')
-    .select('feature, enabled, metadata')
-    .in('org_id', officeIds)
-    .eq('feature', OFFICE_QUOTA_KEY);
-  return resolveOfficeQuota(rows);
+  const [{ data: rows }, { data: abos }] = await Promise.all([
+    admin.from('org_features').select('feature, enabled, metadata').in('org_id', officeIds).eq('feature', OFFICE_QUOTA_KEY),
+    admin.from('subscriptions').select('plans:plan_id (slug)').in('org_id', officeIds).in('status', ['active', 'trialing', 'past_due']),
+  ]);
+  return resolveOfficeQuota(rows, (abos || []).map((a: any) => a.plans?.slug as string | undefined));
 }
 
 /**

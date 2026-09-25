@@ -35,6 +35,7 @@ import {
   isPlatformOverride,
   planGrants,
   resolveOfficeQuota,
+  officeQuotaForPlan,
 } from '../lib/platformFeatures';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -83,8 +84,10 @@ router.get('/creator-space/companies/:orgId/features', async (req, res) => {
     const nameByOrg = new Map<string, string>((officeSettings ?? []).map((s: any) => [s.org_id, (s.company_name || '').trim()]));
     const quotaRow = (quotaRows ?? []).find((r: any) => isPlatformOverride(r.metadata)) ?? null;
     const offices = {
-      quota: resolveOfficeQuota(quotaRows),
+      quota: resolveOfficeQuota(quotaRows, [plan?.slug]),
       default_quota: DEFAULT_OFFICE_QUOTA,
+      /** Bureaux compris dans le forfait (Autopilot = 2). */
+      plan_quota: officeQuotaForPlan(plan?.slug),
       max_quota: MAX_OFFICE_QUOTA,
       used: orgIds.length,
       updated_at: quotaRow?.updated_at ?? null,
