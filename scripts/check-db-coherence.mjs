@@ -79,6 +79,10 @@ const EXCEPTIONS = new Map([
   // maintenant en base (20260910140000) et EST le chemin principal ; le
   // « chemin principal » admin.signOut(userId) ne fonctionnait pas (il attend un JWT).
   ['ensure_payment_settings_row', "server/lib/payments.ts:101 documente un repli explicite pour les environnements où la fonction est absente."],
+  // Réservées au service_role VOLONTAIREMENT (2026-09-25) : tous les appelants
+  // passent par le client service — jamais l'identité d'un utilisateur.
+  ['pipeline_detecter_stagnation', "appelée seulement par le planificateur (server/lib/scheduler.ts, client service_role) ; réservée au serveur."],
+  ['record_consent', "appelée seulement avec le client service (automationEngine ← serviceClient, server/routes/dsr.ts ← getServiceClient) ; journal probant, réservé au serveur."],
 ]);
 
 // ── Extraction depuis le code ──────────────────────────────────────────────
