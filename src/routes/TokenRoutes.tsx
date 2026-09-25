@@ -1,14 +1,15 @@
 import React from 'react';
+import { lazyResilient } from '../lib/lazyResilient';
 import type { ReactElement } from 'react';
 import { Route, Routes } from 'react-router-dom';
-const QuoteView = React.lazy(() => import('../pages/QuoteView'));
-const ContractView = React.lazy(() => import('../pages/ContractView'));
-const SatisfactionSurvey = React.lazy(() => import('../pages/SatisfactionSurvey'));
-const ClientPortal = React.lazy(() => import('../pages/ClientPortal'));
-const PublicPayment = React.lazy(() => import('../pages/PublicPayment'));
-const InvoiceView = React.lazy(() => import('../pages/InvoiceView'));
-const AcceptInvitation = React.lazy(() => import('../pages/AcceptInvitation'));
-const MigrationPortal = React.lazy(() => import('../pages/MigrationPortal'));
+const QuoteView = lazyResilient(() => import('../pages/QuoteView'));
+const ContractView = lazyResilient(() => import('../pages/ContractView'));
+const SatisfactionSurvey = lazyResilient(() => import('../pages/SatisfactionSurvey'));
+const ClientPortal = lazyResilient(() => import('../pages/ClientPortal'));
+const PublicPayment = lazyResilient(() => import('../pages/PublicPayment'));
+const InvoiceView = lazyResilient(() => import('../pages/InvoiceView'));
+const AcceptInvitation = lazyResilient(() => import('../pages/AcceptInvitation'));
+const MigrationPortal = lazyResilient(() => import('../pages/MigrationPortal'));
 
 type TokenKind = 'quote' | 'invoice' | 'contract' | 'survey' | 'portal' | 'pay' | 'invite' | 'migration';
 

@@ -1,4 +1,5 @@
 import React, { Suspense, createContext, lazy, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { lazyResilient } from '../lib/lazyResilient';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -18,7 +19,7 @@ import type { JobDraftInitialValues, JobModalSourceContext } from '../components
  * monte donc au premier ouvrage, et on ne le rend PAS tant qu'il est
  * fermé — sans ça, `lazy` téléchargerait quand même dès le montage.
  */
-const NewJobModal = lazy(() => import('../components/NewJobModal'));
+const NewJobModal = lazyResilient(() => import('../components/NewJobModal'));
 import InvoicePreviewModal from '../components/InvoicePreviewModal';
 import { createJob, getJobModalDraftById, updateJob, softDeleteJob } from '../lib/jobsApi';
 import { geocodeJob } from '../lib/geocodeApi';

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { lazyResilient } from './lib/lazyResilient';
 import { captureClientException } from './lib/sentry';
 import {
   LayoutDashboard,
@@ -57,86 +58,86 @@ import { cn } from './lib/utils';
 // visite. Deux frontières Suspense : une externe (plein écran, spinner) pour
 // les rendus hors coquille, une interne autour des routes pour que la barre
 // latérale reste affichée pendant qu'une page se charge.
-const CrmWorkspace = React.lazy(() => import('./pages/CrmWorkspace'));
-const LumiPage = React.lazy(() => import('./pages/Lumi'));
-const Clients = React.lazy(() => import('./pages/Clients'));
-const NewClient = React.lazy(() => import('./pages/NewClient'));
-const ClientDetails = React.lazy(() => import('./pages/ClientDetails'));
-const SettingsLayout = React.lazy(() => import('./pages/settings/SettingsLayout'));
-const SettingsIndex = React.lazy(() => import('./pages/settings/SettingsLayout').then((m) => ({ default: m.SettingsIndex })));
-const ProfileSettings = React.lazy(() => import('./pages/settings/ProfileSettings'));
-const BillingSettings = React.lazy(() => import('./pages/settings/BillingSettings'));
-const LocationSettings = React.lazy(() => import('./pages/settings/LocationSettings'));
-const OfficesSettings = React.lazy(() => import('./pages/settings/OfficesSettings'));
-const ChampsPersoSettings = React.lazy(() => import('./pages/settings/ChampsPersoSettings'));
-const OfficeNew = React.lazy(() => import('./pages/OfficeNew'));
-const OfficesOverview = React.lazy(() => import('./pages/OfficesOverview'));
-const ArchivesPanel = React.lazy(() => import('./components/ArchivesPanel'));
-const SupportPage = React.lazy(() => import('./components/SupportPage'));
-const PayrollPage = React.lazy(() => import('./pages/settings/PayrollPage'));
-const ReportsCatalog = React.lazy(() => import('./pages/settings/ReportsCatalog'));
-const ReportView = React.lazy(() => import('./pages/settings/ReportView'));
-const ApiMcpSettings = React.lazy(() => import('./pages/settings/ApiMcpSettings'));
-const OAuthConsent = React.lazy(() => import('./pages/OAuthConsent'));
-const Auth = React.lazy(() => import('./pages/Auth'));
-const Privacy = React.lazy(() => import('./pages/Privacy'));
-const Terms = React.lazy(() => import('./pages/Terms'));
-const PrivacyCenter = React.lazy(() => import('./pages/PrivacyCenter'));
-const Subprocessors = React.lazy(() => import('./pages/Subprocessors'));
+const CrmWorkspace = lazyResilient(() => import('./pages/CrmWorkspace'));
+const LumiPage = lazyResilient(() => import('./pages/Lumi'));
+const Clients = lazyResilient(() => import('./pages/Clients'));
+const NewClient = lazyResilient(() => import('./pages/NewClient'));
+const ClientDetails = lazyResilient(() => import('./pages/ClientDetails'));
+const SettingsLayout = lazyResilient(() => import('./pages/settings/SettingsLayout'));
+const SettingsIndex = lazyResilient(() => import('./pages/settings/SettingsLayout').then((m) => ({ default: m.SettingsIndex })));
+const ProfileSettings = lazyResilient(() => import('./pages/settings/ProfileSettings'));
+const BillingSettings = lazyResilient(() => import('./pages/settings/BillingSettings'));
+const LocationSettings = lazyResilient(() => import('./pages/settings/LocationSettings'));
+const OfficesSettings = lazyResilient(() => import('./pages/settings/OfficesSettings'));
+const ChampsPersoSettings = lazyResilient(() => import('./pages/settings/ChampsPersoSettings'));
+const OfficeNew = lazyResilient(() => import('./pages/OfficeNew'));
+const OfficesOverview = lazyResilient(() => import('./pages/OfficesOverview'));
+const ArchivesPanel = lazyResilient(() => import('./components/ArchivesPanel'));
+const SupportPage = lazyResilient(() => import('./components/SupportPage'));
+const PayrollPage = lazyResilient(() => import('./pages/settings/PayrollPage'));
+const ReportsCatalog = lazyResilient(() => import('./pages/settings/ReportsCatalog'));
+const ReportView = lazyResilient(() => import('./pages/settings/ReportView'));
+const ApiMcpSettings = lazyResilient(() => import('./pages/settings/ApiMcpSettings'));
+const OAuthConsent = lazyResilient(() => import('./pages/OAuthConsent'));
+const Auth = lazyResilient(() => import('./pages/Auth'));
+const Privacy = lazyResilient(() => import('./pages/Privacy'));
+const Terms = lazyResilient(() => import('./pages/Terms'));
+const PrivacyCenter = lazyResilient(() => import('./pages/PrivacyCenter'));
+const Subprocessors = lazyResilient(() => import('./pages/Subprocessors'));
 import { CookieBanner } from './components/CookieBanner';
-const Landing = React.lazy(() => import('./pages/Landing'));
+const Landing = lazyResilient(() => import('./pages/Landing'));
 import { supabase } from './lib/supabase';
 import { fetchCurrentBilling, fetchIsBetaBypassed, type GraceImpaye } from './lib/billingApi';
 import { countPendingQuotes } from './lib/quotesApi';
 import { countOverdueInvoices } from './lib/invoicesApi';
 import { User } from '@supabase/supabase-js';
-const Jobs = React.lazy(() => import('./pages/Jobs'));
-const NotFound = React.lazy(() => import('./pages/NotFound'));
+const Jobs = lazyResilient(() => import('./pages/Jobs'));
+const NotFound = lazyResilient(() => import('./pages/NotFound'));
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { JobModalControllerProvider } from './contexts/JobModalController';
 import { useTranslation } from './i18n';
-const InvoiceDetails = React.lazy(() => import('./pages/InvoiceDetails'));
-const InvoiceEdit = React.lazy(() => import('./pages/InvoiceEdit'));
-const Finances = React.lazy(() => import('./pages/Finances'));
-const PaymentSettings = React.lazy(() => import('./pages/PaymentSettings'));
-const Automations = React.lazy(() => import('./pages/Automations'));
-const AutomationBuilderPage = React.lazy(() => import('./pages/AutomationBuilderPage'));
-const AutomationsApercu = React.lazy(() => import('./pages/AutomationsApercu'));
-const AutomationsReglages = React.lazy(() => import('./pages/AutomationsReglages'));
-const CompanySettings = React.lazy(() => import('./pages/CompanySettings'));
-const ManageTeam = React.lazy(() => import('./pages/ManageTeam'));
-const TeamMemberDetails = React.lazy(() => import('./pages/TeamMemberDetails'));
+const InvoiceDetails = lazyResilient(() => import('./pages/InvoiceDetails'));
+const InvoiceEdit = lazyResilient(() => import('./pages/InvoiceEdit'));
+const Finances = lazyResilient(() => import('./pages/Finances'));
+const PaymentSettings = lazyResilient(() => import('./pages/PaymentSettings'));
+const Automations = lazyResilient(() => import('./pages/Automations'));
+const AutomationBuilderPage = lazyResilient(() => import('./pages/AutomationBuilderPage'));
+const AutomationsApercu = lazyResilient(() => import('./pages/AutomationsApercu'));
+const AutomationsReglages = lazyResilient(() => import('./pages/AutomationsReglages'));
+const CompanySettings = lazyResilient(() => import('./pages/CompanySettings'));
+const ManageTeam = lazyResilient(() => import('./pages/ManageTeam'));
+const TeamMemberDetails = lazyResilient(() => import('./pages/TeamMemberDetails'));
 import GlobalSearch from './components/GlobalSearch';
 import { OfficeSwitcher } from './components/OfficeSwitcher';
-const SearchResultsPage = React.lazy(() => import('./pages/SearchResults'));
-const Quotes = React.lazy(() => import('./pages/Quotes'));
-const QuoteDetails = React.lazy(() => import('./pages/QuoteDetails'));
+const SearchResultsPage = lazyResilient(() => import('./pages/SearchResults'));
+const Quotes = lazyResilient(() => import('./pages/Quotes'));
+const QuoteDetails = lazyResilient(() => import('./pages/QuoteDetails'));
 import type { TileColor } from './components/ui';
 import ActivityCenter from './components/ActivityCenter';
 import HeaderUserAvatar from './components/HeaderUserAvatar';
 import SupportFAB from './components/SupportFAB';
 import ErrorBoundary from './components/ErrorBoundary';
-const ProductsServices = React.lazy(() => import('./pages/ProductsServices'));
-const AppMarketplace = React.lazy(() => import('./pages/AppMarketplace'));
-const SettingsMessaging = React.lazy(() => import('./pages/SettingsMessaging'));
-const SettingsReviews = React.lazy(() => import('./pages/SettingsReviews'));
-const EmailTemplatesSettings = React.lazy(() => import('./pages/settings/EmailTemplatesSettings'));
-const RequestFormSettings = React.lazy(() => import('./pages/RequestFormSettings'));
-const QuotePresets = React.lazy(() => import('./pages/QuotePresets'));
+const ProductsServices = lazyResilient(() => import('./pages/ProductsServices'));
+const AppMarketplace = lazyResilient(() => import('./pages/AppMarketplace'));
+const SettingsMessaging = lazyResilient(() => import('./pages/SettingsMessaging'));
+const SettingsReviews = lazyResilient(() => import('./pages/SettingsReviews'));
+const EmailTemplatesSettings = lazyResilient(() => import('./pages/settings/EmailTemplatesSettings'));
+const RequestFormSettings = lazyResilient(() => import('./pages/RequestFormSettings'));
+const QuotePresets = lazyResilient(() => import('./pages/QuotePresets'));
 // Pages porteuses de CARTES (leaflet + mapbox-gl, ~1,9 Mo). Importees
 // statiquement, elles entrainaient ce poids dans le bundle principal :
 // il partait sur CHAQUE page, /checkout compris. En differe, les cartes
 // ne se chargent que lorsqu'on ouvre une page qui en affiche une.
-const DispatchMap = React.lazy(() => import('./pages/DispatchMap'));
-const D2DMap = React.lazy(() => import('./pages/D2DMap'));
-const JobDetails = React.lazy(() => import('./pages/JobDetails'));
-const RepProfile = React.lazy(() => import('./pages/RepProfile'));
-const Schedule = React.lazy(() => import('./pages/Schedule'));
-const Timesheets = React.lazy(() => import('./pages/Timesheets'));
-const Statistiques = React.lazy(() => import('./pages/Statistiques'));
-const QuoteMeasure = React.lazy(() => import('./pages/QuoteMeasure'));
-const QuoteNew = React.lazy(() => import('./pages/QuoteNew'));
+const DispatchMap = lazyResilient(() => import('./pages/DispatchMap'));
+const D2DMap = lazyResilient(() => import('./pages/D2DMap'));
+const JobDetails = lazyResilient(() => import('./pages/JobDetails'));
+const RepProfile = lazyResilient(() => import('./pages/RepProfile'));
+const Schedule = lazyResilient(() => import('./pages/Schedule'));
+const Timesheets = lazyResilient(() => import('./pages/Timesheets'));
+const Statistiques = lazyResilient(() => import('./pages/Statistiques'));
+const QuoteMeasure = lazyResilient(() => import('./pages/QuoteMeasure'));
+const QuoteNew = lazyResilient(() => import('./pages/QuoteNew'));
 // La console des migrations vit dans le Creator Space (onglet Migrations) ;
 // /admin/migrations reste comme redirection (liens des notifications, favoris).
 function AdminMigrationsRedirect() {
@@ -145,52 +146,52 @@ function AdminMigrationsRedirect() {
 }
 // Creator Space — espace interne plateforme (platformAdminIds), la page se
 // gate elle-même via GET /api/creator-space/check et redirige sinon.
-const CreatorSpace = React.lazy(() => import('./pages/creator-space/CreatorSpace'));
-const TaxSettings = React.lazy(() => import('./pages/TaxSettings'));
-const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
-const EmailOAuthCallback = React.lazy(() => import('./pages/EmailOAuthCallback'));
-const OnboardingFlow = React.lazy(() => import('./pages/OnboardingFlow'));
-const CheckoutSuccess = React.lazy(() => import('./pages/CheckoutSuccess'));
-const AcceptInvitation = React.lazy(() => import('./pages/AcceptInvitation'));
-const Register = React.lazy(() => import('./pages/Register'));
-const AccessBlocked = React.lazy(() => import('./pages/AccessBlocked'));
-const VerifyEmail = React.lazy(() => import('./pages/VerifyEmail'));
+const CreatorSpace = lazyResilient(() => import('./pages/creator-space/CreatorSpace'));
+const TaxSettings = lazyResilient(() => import('./pages/TaxSettings'));
+const OAuthCallback = lazyResilient(() => import('./pages/OAuthCallback'));
+const EmailOAuthCallback = lazyResilient(() => import('./pages/EmailOAuthCallback'));
+const OnboardingFlow = lazyResilient(() => import('./pages/OnboardingFlow'));
+const CheckoutSuccess = lazyResilient(() => import('./pages/CheckoutSuccess'));
+const AcceptInvitation = lazyResilient(() => import('./pages/AcceptInvitation'));
+const Register = lazyResilient(() => import('./pages/Register'));
+const AccessBlocked = lazyResilient(() => import('./pages/AccessBlocked'));
+const VerifyEmail = lazyResilient(() => import('./pages/VerifyEmail'));
 import VerifyEmailGate from './components/auth/VerifyEmailGate';
-const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
+const ResetPassword = lazyResilient(() => import('./pages/ResetPassword'));
 // Conserves volontairement bien que non montes : ils permettent de remettre
 // Lume Agent en service en restaurant sa route et son entree de menu.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const MrLumePage = React.lazy(() => import('./features/agent/components/MrLumeChat'));
-const Messages = React.lazy(() => import('./pages/Messages'));
-const TasksPage = React.lazy(() => import('./pages/Tasks'));
+const MrLumePage = lazyResilient(() => import('./features/agent/components/MrLumeChat'));
+const Messages = lazyResilient(() => import('./pages/Messages'));
+const TasksPage = lazyResilient(() => import('./pages/Tasks'));
 import PlanFeatureGate from './components/PlanFeatureGate';
 import { useCurrentPlan } from './hooks/usePlanFeature';
-const Courses = React.lazy(() => import('./pages/Courses'));
-const CourseView = React.lazy(() => import('./pages/CourseView'));
-const CourseBuilder = React.lazy(() => import('./pages/CourseBuilder'));
+const Courses = lazyResilient(() => import('./pages/Courses'));
+const CourseView = lazyResilient(() => import('./pages/CourseView'));
+const CourseBuilder = lazyResilient(() => import('./pages/CourseBuilder'));
 // Lume Agent icon for sidebar — brain
 const LumeAgentIcon = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
   <Brain size={size} className={className} />
 );
-const SatisfactionSurvey = React.lazy(() => import('./pages/SatisfactionSurvey'));
-const ClientPortal = React.lazy(() => import('./pages/ClientPortal'));
-const PublicPayment = React.lazy(() => import('./pages/PublicPayment'));
-const MobileAppGate = React.lazy(() => import('./pages/MobileAppGate'));
+const SatisfactionSurvey = lazyResilient(() => import('./pages/SatisfactionSurvey'));
+const ClientPortal = lazyResilient(() => import('./pages/ClientPortal'));
+const PublicPayment = lazyResilient(() => import('./pages/PublicPayment'));
+const MobileAppGate = lazyResilient(() => import('./pages/MobileAppGate'));
 import { afficherPorteMobile } from './lib/mobileGate';
-const PublicRequestForm = React.lazy(() => import('./pages/PublicRequestForm'));
-const Requests = React.lazy(() => import('./pages/Requests'));
-const RequestDetails = React.lazy(() => import('./pages/RequestDetails'));
-const Leaderboard = React.lazy(() => import('./pages/Leaderboard'));
-const Commissions = React.lazy(() => import('./pages/Commissions'));
-const D2DPipeline = React.lazy(() => import('./pages/D2DPipeline'));
-const Pipeline = React.lazy(() => import('./pages/Pipeline'));
-const D2DReports = React.lazy(() => import('./pages/D2DReports'));
+const PublicRequestForm = lazyResilient(() => import('./pages/PublicRequestForm'));
+const Requests = lazyResilient(() => import('./pages/Requests'));
+const RequestDetails = lazyResilient(() => import('./pages/RequestDetails'));
+const Leaderboard = lazyResilient(() => import('./pages/Leaderboard'));
+const Commissions = lazyResilient(() => import('./pages/Commissions'));
+const D2DPipeline = lazyResilient(() => import('./pages/D2DPipeline'));
+const Pipeline = lazyResilient(() => import('./pages/Pipeline'));
+const D2DReports = lazyResilient(() => import('./pages/D2DReports'));
 // D2DSettingsGeneral (mock non branché) puis D2DSettingsTeams (config terrain)
 // retirées sur demande de Rafba — les équipes restent assignables à
 // l'invitation ; /d2d-settings/* redirige vers /settings/team.
-const D2DOnboarding = React.lazy(() => import('./pages/D2DOnboarding'));
-const SettingsRoles = React.lazy(() => import('./pages/SettingsRoles'));
-const DevPlanSwitch = React.lazy(() => import('./pages/DevPlanSwitch'));
+const D2DOnboarding = lazyResilient(() => import('./pages/D2DOnboarding'));
+const SettingsRoles = lazyResilient(() => import('./pages/SettingsRoles'));
+const DevPlanSwitch = lazyResilient(() => import('./pages/DevPlanSwitch'));
 import PermissionGate from './components/PermissionGate';
 import { TenantGuardRoute } from './components/TenantGuard';
 import ModuleGate from './components/ModuleGate';
@@ -199,7 +200,7 @@ import type { PermissionKey } from './lib/permissions';
 import { hasPermission, ROLE_LABELS } from './lib/permissions';
 import { usePermissions } from './hooks/usePermissions';
 import { useRealtimeNotifications } from './hooks/useRealtimeNotifications';
-const WorkspaceNew = React.lazy(() => import('./pages/WorkspaceNew'));
+const WorkspaceNew = lazyResilient(() => import('./pages/WorkspaceNew'));
 import SetupChecklist from './components/SetupChecklist';
 import CommandPalette from './components/CommandPalette';
 import DevRoleSwitcher from './components/DevRoleSwitcher';
