@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
+import { bureauActifSync, getCurrentOrgIdOrThrow } from '../lib/orgApi';
 
 type TaskLite = { id: string; title: string; due_date: string; priority: string };
 
@@ -24,11 +25,12 @@ export default function HomeTasksCard({ className = '' }: { className?: string }
   const [view, setView] = useState<'late' | 'next'>('late');
 
   const { data: tasks = [] } = useQuery({
-    queryKey: ['home-tasks-open'],
+    queryKey: ['home-tasks-open', bureauActifSync()],
     queryFn: async () => {
       const { data } = await supabase
         .from('tasks_active')
         .select('id, title, due_date, priority, status')
+        .eq('org_id', await getCurrentOrgIdOrThrow())
         .eq('status', 'open')
         .not('due_date', 'is', null)
         .order('due_date', { ascending: true })

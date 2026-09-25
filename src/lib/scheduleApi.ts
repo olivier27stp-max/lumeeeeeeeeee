@@ -435,6 +435,7 @@ export async function listUnassignedUnscheduledJobs(): Promise<UnscheduledJobRec
   const { data, error } = await supabase
     .from('jobs')
     .select('id,title,status,team_id,client_name,property_address,lead_id,scheduled_at,total_cents')
+    .eq('org_id', await getCurrentOrgIdOrThrow())
     .is('deleted_at', null)
     .is('scheduled_at', null)
     .is('team_id', null)

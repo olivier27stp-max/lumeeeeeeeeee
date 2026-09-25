@@ -28,6 +28,7 @@ import { listPropertiesByClient, type PropertyRecord } from '../lib/propertiesAp
 import { cn } from '../lib/utils';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import LeaveFormConfirm from './ui/LeaveFormConfirm';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 
 interface CreateInvoiceModalProps {
   isOpen: boolean;
@@ -158,6 +159,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
         const { data } = await supabase
           .from('clients')
           .select('id, first_name, last_name, company, email, status')
+          .eq('org_id', await getCurrentOrgIdOrThrow())
           .is('deleted_at', null)
           .order('last_name', { ascending: true })
           .limit(30);

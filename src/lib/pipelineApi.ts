@@ -288,7 +288,7 @@ function mapDeal(row: any): PipelineDeal {
 export async function listPipelineDeals(): Promise<PipelineDeal[]> {
   // Use pipeline_deals_visible view as single source of truth.
   // This view filters out: soft-deleted deals, orphaned leads/clients,
-  // WON deals older than 2 days, LOST deals older than 15 days.
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('pipeline_deals_visible')
     .select(
@@ -305,6 +305,7 @@ export async function listPipelineDeals(): Promise<PipelineDeal[]> {
         job:jobs!pipeline_deals_job_id_fkey(id,title,status,team_id)
       `
     )
+    .eq('org_id', orgId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;

@@ -39,6 +39,7 @@ export async function listEmailTemplates(
   let query = supabase
     .from('email_templates')
     .select('*')
+    .eq('org_id', await getCurrentOrgIdOrThrow())
     .order('is_default', { ascending: false })
     .order('name', { ascending: true });
 
@@ -154,6 +155,7 @@ export async function getDefaultEmailTemplate(
   const { data, error } = await supabase
     .from('email_templates')
     .select('*')
+    .eq('org_id', await getCurrentOrgIdOrThrow())
     .eq('type', type)
     .eq('is_default', true)
     .maybeSingle();

@@ -24,6 +24,7 @@ import { fetchNotes, addNote, deleteNote, type ActivityNote } from '../../lib/ac
 import { formatDate } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import { toast } from 'sonner';
+import { bureauActifSync } from '../../lib/orgApi';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   plus: <Plus size={14} />, edit: <Edit2 size={14} />, refresh: <RefreshCw size={14} />,
@@ -162,7 +163,7 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
     // Realtime: new activity_log rows for this entity or related.
     const channel = supabase
       .channel(`events-${entityType}-${entityId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log', ...(bureauActifSync() ? { filter: `org_id=eq.${bureauActifSync()}` } : {}) }, (payload) => {
         const e = payload.new as ActivityLogEntry;
         if (
           (e.entity_type === entityType && e.entity_id === entityId) ||

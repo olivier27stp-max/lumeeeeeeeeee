@@ -182,7 +182,7 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
   const orderQuery = useQuery({
     queryKey: ['team-display-order', currentOrgId],
     queryFn: async () => {
-      const { data: rows, error } = await supabase.from('teams').select('id,display_order');
+      const { data: rows, error } = await supabase.from('teams').select('id,display_order').eq('org_id', await getCurrentOrgIdOrThrow());
       if (error) throw error;
       const map = new Map<string, number>();
       for (const r of (rows || []) as Array<{ id: string; display_order: number | null }>) {

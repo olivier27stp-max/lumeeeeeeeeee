@@ -30,7 +30,8 @@ export async function listTasks(params: {
 
   let query = supabase
     .from('tasks_active')
-    .select('*', { count: 'exact', head: false });
+    .select('*', { count: 'exact', head: false })
+    .eq('org_id', await getCurrentOrgIdOrThrow());
 
   // Status filter
   if (params.status !== 'all') {

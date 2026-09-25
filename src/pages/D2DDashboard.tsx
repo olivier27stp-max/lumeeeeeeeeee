@@ -459,6 +459,7 @@ function RepDashboard({ userId }: { userId: string | null }) {
           supabase
             .from('schedule_events')
             .select('start_at, end_at, status, job:jobs!schedule_events_job_id_fkey!inner(title)')
+            .eq('org_id', await getCurrentOrgIdOrThrow())
             .gte('start_at', dayStart)
             .lte('start_at', dayEnd)
             .is('deleted_at', null)

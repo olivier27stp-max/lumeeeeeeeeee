@@ -8,6 +8,7 @@ import { confirmer } from '../components/ui/ConfirmDialog';
 import { PageHeader } from '../components/ui';
 import type { RecurrenceRule, RecurrenceFrequency } from '../lib/recurringJobsApi';
 import { deactivateRecurrenceRule } from '../lib/recurringJobsApi';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 
 interface RuleWithJob extends RecurrenceRule {
   job_title?: string;
@@ -43,6 +44,7 @@ export default function RecurringJobs() {
       const { data, error } = await supabase
         .from('job_recurrence_rules')
         .select('*, jobs!job_recurrence_rules_job_id_fkey(title, client_name)')
+        .eq('org_id', await getCurrentOrgIdOrThrow())
         .order('next_run_at', { ascending: true });
 
       if (error) throw error;

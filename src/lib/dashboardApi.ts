@@ -211,6 +211,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   let jobsTodayQuery = supabase
     .from('schedule_events')
     .select('id')
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .gte('start_at', dayStart)
     .lte('start_at', dayEnd);
@@ -219,6 +220,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   let allLeadsQuery = supabase
     .from('pipeline_deals')
     .select('id,stage')
+    .eq('org_id', orgId)
     .is('deleted_at', null);
 
   dealsQuery = dealsQuery.eq('org_id', orgId);

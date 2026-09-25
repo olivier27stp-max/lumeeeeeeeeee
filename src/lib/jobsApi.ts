@@ -438,7 +438,7 @@ export async function getJobs(query: JobsQuery): Promise<JobsResult> {
 
   // count 'estimated' : exact sous un seuil, estimé (stats Postgres) au-dessus.
   // 'exact' scannait toute la table filtrée sous RLS à CHAQUE page (O(n)/page).
-  let request = supabase.from('jobs_active').select(`*${query.champs?.select ?? ''}`, { count: 'estimated' }).range(rangeFrom, rangeTo);
+  let request = supabase.from('jobs_active').select(`*${query.champs?.select ?? ''}`, { count: 'estimated' }).eq('org_id', await getCurrentOrgIdOrThrow()).range(rangeFrom, rangeTo);
   request = applyTableFilters(request, query);
   if (query.champs) request = query.champs.appliquer(request);
   // Non planifiés (NULL) en tête en ordre croissant (comportement historique), en queue en décroissant → inversion réelle.
@@ -1204,6 +1204,7 @@ export async function getSuggestedJobNumber(): Promise<string> {
   const { data, error } = await supabase
     .from('jobs_active')
     .select('job_number')
+    .eq('org_id', await getCurrentOrgIdOrThrow())
     .order('created_at', { ascending: false })
     .limit(50);
   if (error) throw error;

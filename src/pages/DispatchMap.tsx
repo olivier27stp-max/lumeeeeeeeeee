@@ -151,6 +151,7 @@ export default function DispatchMap() {
         const { data: entries } = await supabase
           .from('time_entries')
           .select('employee_id')
+          .eq('org_id', await getCurrentOrgIdOrThrow())
           .eq('date', today)
           .is('punch_out', null);
         setPunchedIds(new Set((entries || []).map((e: any) => e.employee_id)));

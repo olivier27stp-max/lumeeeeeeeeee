@@ -45,6 +45,7 @@ export async function listAvailability(teamId?: string): Promise<AvailabilityRec
   let query = supabase
     .from('team_availability_active')
     .select('*')
+    .eq('org_id', await getCurrentOrgIdOrThrow())
     .order('weekday', { ascending: true })
     .order('start_minute', { ascending: true });
 
@@ -160,6 +161,7 @@ export async function findFreeSlots(params: {
   const { data: events } = await supabase
     .from('schedule_events')
     .select('team_id,start_at,end_at')
+    .eq('org_id', await getCurrentOrgIdOrThrow())
     .is('deleted_at', null)
     .gte('start_at', now.toISOString())
     .lte('end_at', endDate.toISOString());

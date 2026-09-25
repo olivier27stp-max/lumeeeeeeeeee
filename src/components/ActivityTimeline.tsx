@@ -14,6 +14,7 @@ import { supabase } from '../lib/supabase';
 import { fetchActivityLog, EVENT_TYPE_LABELS, type ActivityLogEntry } from '../lib/activityApi';
 import { formatDate } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { bureauActifSync } from '../lib/orgApi';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   plus: <Plus size={14} />,
@@ -110,6 +111,7 @@ export default function ActivityTimeline({ entityType, entityId }: ActivityTimel
         event: 'INSERT',
         schema: 'public',
         table: 'activity_log',
+        ...(bureauActifSync() ? { filter: `org_id=eq.${bureauActifSync()}` } : {}),
       }, (payload) => {
         const newEntry = payload.new as ActivityLogEntry;
         if (

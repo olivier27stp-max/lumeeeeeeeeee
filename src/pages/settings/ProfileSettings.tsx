@@ -144,7 +144,7 @@ export default function ProfileSettings() {
             : Promise.resolve({ data: null } as any),
           // Feature-detect the birth_date column (ships behind a migration)
           // independently of whether this user has a team_members row yet.
-          supabase.from('team_members').select('birth_date').limit(1),
+          supabase.from('team_members').select('birth_date').eq('org_id', currentOrgId ?? '').limit(1),
           currentOrgId
             ? supabase.from('company_settings').select('city').eq('org_id', currentOrgId).limit(1).maybeSingle()
             : Promise.resolve({ data: null } as any),

@@ -931,6 +931,7 @@ export async function listVisualTemplates() {
   const { data, error } = await supabase
     .from('invoice_templates')
     .select('id,name,slug,description,layout_type,is_default,is_system_template,branding,archived_at')
+    .eq('org_id', await getCurrentOrgIdOrThrow())
     .is('archived_at', null)
     .order('is_default', { ascending: false })
     .order('name', { ascending: true });
@@ -1002,6 +1003,7 @@ export async function listInvoiceTemplates() {
   const { data, error } = await supabase
     .from('invoice_templates')
     .select('id,name,content,is_default,updated_at')
+    .eq('org_id', await getCurrentOrgIdOrThrow())
     .is('deleted_at', null)
     .order('is_default', { ascending: false })
     .order('updated_at', { ascending: false });
@@ -1010,7 +1012,7 @@ export async function listInvoiceTemplates() {
 }
 
 export async function getOrgBillingSettings() {
-  const { data, error } = await supabase.from('org_billing_settings').select('*').maybeSingle();
+  const { data, error } = await supabase.from('org_billing_settings').select('*').eq('org_id', await getCurrentOrgIdOrThrow()).maybeSingle();
   if (error) throw error;
   return data;
 }
