@@ -92,6 +92,8 @@ export interface InvoicesListQuery {
   fromDate?: string | null;
   toDate?: string | null;
   salespersonId?: string | null;
+  /** Filtre par champs personnalisés : ids retenus par cf_filtrer (null = aucun filtre). */
+  ids?: string[] | null;
 }
 
 export interface InvoicesListResult {
@@ -321,6 +323,8 @@ export async function listInvoices(query: InvoicesListQuery): Promise<InvoicesLi
   // Only send p_salesperson when filtering — keeps the call compatible with
   // the pre-migration 9-arg rpc_list_invoices until 20260717000000 is applied.
   if (query.salespersonId && query.salespersonId !== 'All') params.p_salesperson = query.salespersonId;
+  // Seulement quand un filtre de champs est actif : l'appel reste identique sinon.
+  if (query.ids) params.p_ids = query.ids;
   const { data, error } = await supabase.rpc('rpc_list_invoices', params);
 
   if (error) throw error;

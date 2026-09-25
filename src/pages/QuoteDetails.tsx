@@ -4,6 +4,8 @@
 
 import React, { useState, useEffect } from 'react';
 import EmailDeliveryBadge from '../components/EmailDeliveryBadge';
+import EmailTrackingLine, { CLE_REQUETE_ENVOIS } from '../components/EmailTrackingLine';
+import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MoreHorizontal, Mail, MessageSquare, Briefcase, Copy,
@@ -39,6 +41,8 @@ import type { PredefinedService } from '../lib/servicesApi';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { versDate } from '../lib/dateSeule';
+import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
+import { useChampsDocument } from '../components/champs/document';
 
 const MONTHS_SHORT_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 const MONTHS_SHORT_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -49,7 +53,10 @@ export default function QuoteDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t, language } = useTranslation();
+  // Champs personnalisés cochés « afficher sur le document » (aperçu + PDF).
+  const champsDocument = useChampsDocument('quote', id, language === 'fr');
   const isFr = language === 'fr';
+  const queryClient = useQueryClient();
   const { permissions } = usePermissions();
   const canMeasure = hasPermission(permissions, 'quotes.update');
   const [detail, setDetail] = useState<QuoteDetail | null>(null);
@@ -308,7 +315,7 @@ export default function QuoteDetails() {
                     const target = entityEmail || '';
                     if (!target) return;
                     if (!(await confirmer({ message: isFr ? `Envoyer la soumission à ${target}?` : `Send quote to ${target}?` }))) return;
-                    act(async () => { await sendQuoteEmail(quote.id); toast.success(isFr ? 'Courriel envoyé' : 'Email sent'); loadQuote(); });
+                    act(async () => { await sendQuoteEmail(quote.id); toast.success(isFr ? 'Courriel envoyé' : 'Email sent'); queryClient.invalidateQueries({ queryKey: [CLE_REQUETE_ENVOIS, 'quote', quote.id] }); loadQuote(); });
                   }}
                     disabled={!entityEmail || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
                     <Mail size={14} /> {isFr ? 'Courriel' : 'Email'}</button>
@@ -347,7 +354,7 @@ export default function QuoteDetails() {
                   <button onClick={() => { window.open(`/quote/${quote.view_token}`, '_blank'); setMoreOpen(false); }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <Eye size={14} /> {isFr ? 'Aperçu côté client' : 'Preview as Client'}</button>
-                  <button onClick={() => { downloadQuotePdf(detail!, companySettings); setMoreOpen(false); }}
+                  <button onClick={() => { downloadQuotePdf(detail!, companySettings, champsDocument); setMoreOpen(false); }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <Printer size={14} /> {isFr ? 'Imprimer ou enregistrer en PDF' : 'Print or Save PDF'}</button>
                   <div className="border-t border-outline my-1" />
@@ -408,6 +415,8 @@ export default function QuoteDetails() {
             </div>
             {/* Courriel non livré (rebond capté par le webhook) — audit QA n°8 */}
             <EmailDeliveryBadge entityType="quote" entityId={quote.id} />
+            {/* « Envoyé le … · Vu le … · Lien cliqué » — suivi Resend (plan courriels pro) */}
+            <EmailTrackingLine entityType="quote" entityId={quote.id} />
           </div>
 
           {/* Plan de service — calendrier des visites (visible aussi par le client) */}
@@ -650,6 +659,9 @@ export default function QuoteDetails() {
           {/* Specific Notes */}
           <SpecificNotes entityType="quote" entityId={quote.id} mode="full" />
 
+          {/* Champs personnalisés (v2) */}
+          <CustomFieldsPanel objet="quote" entityId={quote.id} fr={language === 'fr'} className="section-card p-4" />
+
           {/* Quote Preview Button */}
           <div className="section-card p-4">
             <button onClick={() => setShowPreview(true)}
@@ -672,7 +684,7 @@ export default function QuoteDetails() {
               </button>
             </div>
             <div className="rounded-b-xl overflow-hidden">
-              <QuoteRenderer data={buildQuoteRenderData(detail, companySettings)} />
+              <QuoteRenderer data={{ ...buildQuoteRenderData(detail, companySettings), champsPerso: champsDocument }} />
             </div>
           </div>
         </div>

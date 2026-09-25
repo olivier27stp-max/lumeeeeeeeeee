@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Target,
   Palette,
+  Share2,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
@@ -28,6 +29,9 @@ import FileUpload from '../components/FileUpload';
 import { DEFAULT_BRAND, readableOn, resolveBrand } from '../lib/brandColor';
 import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 import { STORAGE_BUCKETS, deleteFile } from '../lib/storage';
+import { RESEAUX, RESEAU_LABEL, lireLiensSociaux, normaliserUrlSociale, type SocialLinks } from '../lib/socialLinks';
+import { IconeReseau } from '../components/IconeReseau';
+import SendingDomainCard from '../components/settings/SendingDomainCard';
 
 interface CompanyDetails {
   id?: string;
@@ -50,6 +54,8 @@ interface CompanyDetails {
   brand_color: string;
   revenue_goal_cents: number;
   currency: string;
+  /** Réseaux sociaux — icônes au bas des courriels et des pages publiques. */
+  social_links: SocialLinks;
   review_widget_settings: {
     theme: 'light' | 'dark';
     filter: string;
@@ -57,6 +63,15 @@ interface CompanyDetails {
     max_display: number;
   };
 }
+
+const PLACEHOLDER_SOCIAL: Record<(typeof RESEAUX)[number], string> = {
+  facebook: 'https://www.facebook.com/monentreprise',
+  x: 'https://x.com/monentreprise',
+  instagram: 'https://www.instagram.com/monentreprise/',
+  yelp: 'https://www.yelp.ca/biz/monentreprise',
+  angi: 'https://www.angi.com/companylist/us/...',
+  google_business: 'https://g.page/monentreprise',
+};
 
 const EMPTY_COMPANY: CompanyDetails = {
   company_name: '',
@@ -75,6 +90,7 @@ const EMPTY_COMPANY: CompanyDetails = {
   brand_color: '',
   revenue_goal_cents: 0,
   currency: 'CAD',
+  social_links: {},
   review_widget_settings: { theme: 'light', filter: 'all', layout: 'cards', max_display: 6 },
 };
 
@@ -140,6 +156,7 @@ export default function CompanySettings() {
             brand_color: data.brand_color || '',
             revenue_goal_cents: Number(data.revenue_goal_cents) || 0,
             currency: data.currency || 'CAD',
+            social_links: lireLiensSociaux(data.social_links),
             review_widget_settings: data.review_widget_settings || EMPTY_COMPANY.review_widget_settings,
           });
         }
@@ -180,6 +197,20 @@ export default function CompanySettings() {
       toast.error(language === 'fr' ? 'Adresse du site web invalide.' : 'Invalid website URL.');
       return;
     }
+    // Réseaux sociaux : même tolérance que le site web (préfixe https://
+    // ajouté), un lien invalide bloque la sauvegarde en nommant le réseau.
+    const socialLinks: SocialLinks = {};
+    for (const reseau of RESEAUX) {
+      const brut = form.social_links[reseau] ?? '';
+      const propre = normaliserUrlSociale(brut);
+      if (propre === null) {
+        toast.error(language === 'fr'
+          ? `Lien ${RESEAU_LABEL[reseau]} invalide.`
+          : `Invalid ${RESEAU_LABEL[reseau]} link.`);
+        return;
+      }
+      if (propre) socialLinks[reseau] = propre;
+    }
 
     setSaving(true);
     setSaved(false);
@@ -205,6 +236,7 @@ export default function CompanySettings() {
         brand_color: form.brand_color.trim() || null,
         revenue_goal_cents: Math.max(0, Math.round(form.revenue_goal_cents || 0)),
         currency: form.currency || 'CAD',
+        social_links: socialLinks,
         review_widget_settings: form.review_widget_settings,
         updated_at: new Date().toISOString(),
       };
@@ -249,7 +281,7 @@ export default function CompanySettings() {
       setSaved(true);
       setDirty(false);
       // Reflect normalized values (e.g. auto-prefixed https://) in the form.
-      setForm((prev) => ({ ...prev, website, email }));
+      setForm((prev) => ({ ...prev, website, email, social_links: socialLinks }));
       queryClient.invalidateQueries({ queryKey: ['crm-revenue-goal'] });
       queryClient.invalidateQueries({ queryKey: ['org-revenue-goal'] });
       // La météo de l'accueil dépend de la ville — sinon elle reste en cache
@@ -500,6 +532,41 @@ export default function CompanySettings() {
           </div>
         </div>
 
+        {/* Réseaux sociaux — icônes au bas des courriels sortants et des
+            pages publiques client (soumission, facture, contrat, paiement). */}
+        <div className="section-card p-6 space-y-4">
+          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+            <Share2 size={12} /> {language === 'fr' ? 'Réseaux sociaux' : 'Social networks'}
+          </h3>
+          <p className="text-[12px] text-text-secondary -mt-1">
+            {language === 'fr'
+              ? 'Les icônes apparaissent au bas de tes courriels et de tes pages client (soumission, facture, contrat, paiement). Laisse vide ce que tu n\'utilises pas.'
+              : 'Icons appear at the bottom of your emails and client pages (quote, invoice, contract, payment). Leave blank what you don\'t use.'}
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {RESEAUX.map((reseau) => (
+              <div key={reseau}>
+                <label htmlFor={`${id}-social-${reseau}`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+                  <IconeReseau reseau={reseau} size={10} />
+                  {reseau === 'google_business'
+                    ? (language === 'fr' ? 'Profil Google Business' : 'Google Business profile')
+                    : RESEAU_LABEL[reseau]}
+                </label>
+                <input id={`${id}-social-${reseau}`}
+                  type="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={form.social_links[reseau] ?? ''}
+                  onChange={(e) => update('social_links', { ...form.social_links, [reseau]: e.target.value })}
+                  className="glass-input w-full mt-1"
+                  placeholder={PLACEHOLDER_SOCIAL[reseau]}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Address */}
         <div className="section-card p-6 space-y-4">
           <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
@@ -659,6 +726,9 @@ export default function CompanySettings() {
             {language === 'fr' ? 'Configurer' : 'Configure'} <ExternalLink size={12} />
           </Link>
         </div>
+
+        {/* ── Envoyer depuis mon adresse (domaine d'envoi propre) ── */}
+        <SendingDomainCard />
 
         {/* ── Regional ── */}
         <div className="section-card p-6 space-y-4">

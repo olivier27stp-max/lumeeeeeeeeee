@@ -36,12 +36,11 @@ export interface Plan {
   seats_included?: number | null;
   extra_seat_price_usd?: number | null;
   extra_seat_price_cad?: number | null;
-  included_offices?: number | null;
-  extra_office_price_usd?: number | null;
-  extra_office_price_cad?: number | null;
   includes_sms?: boolean;
   includes_ai?: boolean;
   includes_d2d?: boolean;
+  /** Pipeline de ventes — Scale (slug `pro`) et Autopilot. */
+  includes_pipeline?: boolean;
   includes_courses?: boolean;
   includes_api?: boolean;
   includes_automations?: boolean;
@@ -131,6 +130,10 @@ export async function fetchPlans(): Promise<Plan[]> {
     includes_timesheets: p.includes_timesheets ?? (p.slug !== 'starter'),
     includes_request_forms: p.includes_request_forms ?? (p.slug !== 'starter'),
     includes_advanced_roles: p.includes_advanced_roles ?? (p.slug === 'autopilot'),
+    // Pipeline de ventes : la colonne existe en base (migration 20260923100100),
+    // mais le repli par slug évite que la page disparaisse le temps qu'un
+    // serveur non redéployé cesse de renvoyer des plans sans ce champ.
+    includes_pipeline: p.includes_pipeline ?? (p.slug !== 'starter'),
   }));
 }
 
@@ -153,6 +156,9 @@ export async function fetchCurrentBilling(): Promise<{
   billing_profile: BillingProfile | null;
   restricted?: boolean;
   grace?: GraceImpaye | null;
+  /** Overrides posés par la plateforme (Creator Space) : clé includes_* →
+   *  activé/bloqué, par-dessus le forfait. */
+  feature_overrides?: Record<string, boolean>;
 }> {
   const res = await fetch(`${API_BASE}/billing/current`, {
     headers: await authHeaders(),
@@ -266,30 +272,8 @@ export async function setExtraSeats(count: number): Promise<{ message: string; e
   return res.json();
 }
 
-export interface OfficeUsage {
-  included: number;
-  /** Bureaux réels de la compagnie (orgs dont le owner est propriétaire). */
-  used: number;
-  extras_charged: number;
-  extra_price_cents: number;
-  currency: string;
-}
-
-export async function fetchOfficeUsage(): Promise<OfficeUsage> {
-  const res = await fetch(`${API_BASE}/billing/offices`, { headers: await authHeaders() });
-  if (!res.ok) throw new Error((await res.json()).error || 'Failed to load office usage.');
-  return res.json();
-}
-
-export async function setExtraOffices(count: number): Promise<{ message: string; extra_offices?: number; no_change?: boolean; no_stripe?: boolean }> {
-  const res = await fetch(`${API_BASE}/billing/offices`, {
-    method: 'POST',
-    headers: await authHeaders(),
-    body: JSON.stringify({ extra_offices: count }),
-  });
-  if (!res.ok) throw new Error((await res.json()).error || 'Failed to update extra offices.');
-  return res.json();
-}
+// Bureaux : plus vendus par forfait (2026-09-17) — quota par workspace posé
+// par la plateforme (Creator Space). Voir officesApi.listOffices (capacity).
 
 export async function cancelScheduledChange(): Promise<{ message: string }> {
   const res = await fetch(`${API_BASE}/billing/cancel-scheduled-change`, {

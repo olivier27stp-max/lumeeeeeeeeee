@@ -1,0 +1,43 @@
+{
+  "preset_key": "quote_followup_21d",
+  "trigger_event": "quote.sent",
+  "delay_seconds": 1814400,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2026-10-04T15:00:00.000Z",
+      "execution_key": "regle-quote_followup_21d:aaaaaaaa-0000-4000-8000-000000000004:0"
+    },
+    {
+      "action": "create_notification",
+      "execute_at": "2026-10-04T15:00:00.000Z",
+      "execution_key": "regle-quote_followup_21d:aaaaaaaa-0000-4000-8000-000000000004:1"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-10-04T15:00:00.000Z",
+      "execution_key": "regle-quote_followup_21d:aaaaaaaa-0000-4000-8000-000000000004:2"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — On garde votre dossier ouvert",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre soumission.</p><p>Répondez à ce courriel à tout moment.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "notification",
+      "body": "Soumission close — aucune réponse\nMarie Tremblay n'a jamais répondu après 21 jours. Le dossier est clos.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "follow_up_final",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

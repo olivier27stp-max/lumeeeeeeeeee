@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { sendExpoPushToOrg } from './pushNotifications';
+import { getServiceClient } from './supabase';
+import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from './migration/gel-communications';
 
 interface TwilioConfig {
   client: any;
@@ -259,8 +261,8 @@ export async function getUnsubscribeUrl(
 export interface SmsSendResult {
   sent: boolean;
   sid?: string;
-  /** `not_configured` | `no_recipient` | `send_failed` */
-  reason?: 'not_configured' | 'no_recipient' | 'send_failed';
+  /** `not_configured` | `no_recipient` | `send_failed` | `communications_gelees` (compte importé non activé) */
+  reason?: 'not_configured' | 'no_recipient' | 'send_failed' | 'communications_gelees';
   error?: string;
 }
 
@@ -292,6 +294,11 @@ export async function sendSmsIfConfigured(
   if (!to) {
     console.warn('[sms] skipped — recipient has no phone number');
     return { sent: false, reason: 'no_recipient' };
+  }
+  const orgGelee = await destinataireGele(getServiceClient(), { phone: to });
+  if (orgGelee) {
+    journaliserBlocage('sms', orgGelee, to);
+    return { sent: false, reason: 'communications_gelees', error: MESSAGE_GEL };
   }
   try {
     const { getTwilioStatusCallbackUrl } = await import('./config');
@@ -327,14 +334,30 @@ export async function sendSmsIfConfigured(
 }
 
 /**
- * Apply {variable} substitution on a template string.
- * Also supports legacy [variable] syntax for backward compat.
+ * Remplace {variable} dans un modèle, et [variable] par compatibilité — les
+ * `objetOrigine` du catalogue sont écrits avec des crochets.
+ *
+ * Deux règles, chacune pour un vrai dégât observé :
+ *
+ * 1. Une clé commence par une LETTRE. Sinon `[50]` était reconnu comme une
+ *    variable, `vars['50']` valait undefined, et `?? ''` l'effaçait : une
+ *    entreprise qui écrivait « Rabais [50] % » envoyait « Rabais  % » à son
+ *    client. Le nombre disparaissait sans un mot.
+ *
+ * 2. Une clé INCONNUE est laissée telle quelle, au lieu d'être effacée. Une
+ *    faute de frappe (`{invoice_numbr}`) produisait un trou muet — « Facture  »
+ *    — impossible à diagnostiquer. Visible, elle se corrige.
+ *
+ * Une clé connue dont la valeur est vide s'efface toujours : c'est le cas
+ * normal d'un champ absent (pas de date d'échéance, par exemple).
  */
 export function applyTemplate(
   template: string,
   vars: Record<string, string | null | undefined>,
 ): string {
+  const remplacer = (entier: string, cle: string) =>
+    Object.prototype.hasOwnProperty.call(vars, cle) ? (vars[cle] ?? '') : entier;
   return template
-    .replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '')
-    .replace(/\[(\w+)\]/g, (_, key) => vars[key] ?? '');
+    .replace(/\{([A-Za-z]\w*)\}/g, remplacer)
+    .replace(/\[([A-Za-z]\w*)\]/g, remplacer);
 }

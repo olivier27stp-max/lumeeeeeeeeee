@@ -43,6 +43,7 @@
     "qa:audit-base": "node --env-file=.env.local scripts/qa/audit-base.mjs",
     "qa:formulaires": "node --env-file=.env.local scripts/qa/formulaires.mjs",
     "qa:roles": "node --env-file=.env.local scripts/qa/roles.mjs",
+    "qa:parcours-client": "node scripts/qa/parcours-client-final.mjs",
     "qa:fuite": "node --env-file=.env.local scripts/qa/fuite-entre-organisations.mjs",
     "qa:envoi-reel": "node --env-file=.env.local scripts/qa/envoi-reel.mjs",
     "qa:automatisations": "node --env-file=.env.local scripts/qa/automatisations.mjs",
@@ -51,11 +52,14 @@
     "qa:invariants": "node --env-file=.env.local scripts/qa/invariants.mjs",
     "qa:mobile": "node --env-file=.env.local scripts/qa/mobile.mjs",
     "qa:inscription": "node --env-file=.env.local scripts/qa/verifier-inscription.mjs",
+    "qa:lumi-sante": "node --env-file=.env.local scripts/qa/sante-lumi.mjs",
+    "qa:lumi-execution": "node --env-file=.env.local --import tsx scripts/qa/executer-outils-staging.mts",
     "qa:lumi": "node --env-file=.env.local scripts/qa/evaluer-lumi.mjs",
     "qa:paywall": "node --env-file=.env.local scripts/qa/verifier-paywall.mjs",
     "qa:boutons-atteignables": "node --env-file=.env.local scripts/qa/boutons-atteignables.mjs",
     "qa:rls-roles": "node --env-file=.env.local scripts/qa/verifier-rls-roles.mjs",
     "check:accessibilite": "node scripts/accessibilite-mesure.mjs --fichiers",
+    "carte:empreinte": "node scripts/carte-app-empreinte.mjs",
     "qa:tout": "node scripts/qa/tout.mjs",
     "qa:rapport": "node scripts/qa/rapport.mjs",
     "qa:campagne": "node scripts/qa/campagne.mjs",
@@ -66,7 +70,12 @@
     "check:invariants": "node --env-file=.env.local scripts/check-invariants.mjs",
     "check:multitenant": "node --env-file=.env.local scripts/check-multitenant.mjs",
     "check:sms": "tsx server/scripts/diagnose-sms-provisioning.ts",
-    "test:parcours": "tsx --env-file=.env.local scripts/test-parcours-contrat.mjs"
+    "test:parcours": "tsx --env-file=.env.local scripts/test-parcours-contrat.mjs",
+    "qa:depense": "node --env-file=.env.local --import tsx scripts/qa/depense-llm.mts",
+    "qa:fumee": "node --env-file=.env.local --import tsx scripts/qa/fumee-cout.mts",
+    "test:quarantaine": "vitest run --config vitest.quarantaine.config.ts",
+    "qa:qualite": "node --env-file=.env.local --import tsx scripts/qa/qualite-lumi.mts",
+    "qa:juge": "node --env-file=.env.local --import tsx scripts/qa/juge-lumi.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.124.0",
@@ -97,6 +106,7 @@
     "date-fns-tz": "^3.2.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "jpeg-js": "0.4.4",
     "jsdom": "^29.0.2",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
@@ -118,6 +128,7 @@
     "tailwind-merge": "^3.5.0",
     "tus-js-client": "4.3.1",
     "twilio": "^5.12.2",
+    "xlsx": "0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

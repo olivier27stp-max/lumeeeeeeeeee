@@ -17,17 +17,29 @@ import {
   ToggleLeft, ToggleRight, Loader2, Send, UserPlus, AlertTriangle,
   Heart, Star, Sun, UserX, CreditCard, Banknote, Search,
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
-  Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,} from 'lucide-react';
+  Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
+  Plus, Pencil, Copy, Trash2, X, EllipsisVertical,
+  Settings, FolderPlus, Filter, SlidersHorizontal,} from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
 import MessageEditor from '../components/automations/MessageEditor';
 import {
+  chargerAutomatisations,
+  creerAutomatisation,
+  dupliquerAutomatisation,
+  supprimerAutomatisation,
+  type CatalogueAutomatisations,
+} from '../lib/automationBuilderApi';
+import { confirmer } from '../components/ui/ConfirmDialog';
+import {
   type AutomationRule,
   getAutomationRules,
   toggleAutomationRule,
   getFailureCountsByRule,
+  getRecentAutomationFailures,
+  type AutomationFailure,
   getAutomationLanguage,
   setAutomationLanguage,
 } from '../lib/automationRulesApi';
@@ -36,6 +48,9 @@ import {
 // Couvre toutes les variantes de noms semées par les migrations
 // (default_workflow_presets, advanced_automation_presets, dedup, activate_all).
 const AUTOMATION_NAME_FR: Record<string, string> = {
+  // Contrats — le seul preset dont le nom semé en anglais restait tel quel
+  // dans l'interface française (2026-09-23).
+  'Contract Signed': 'Contrat signé',
   // Leads
   'Lead — Welcome': 'Prospect — Bienvenue',
   'Welcome New Lead': 'Bienvenue au nouveau prospect',
@@ -112,6 +127,34 @@ const AUTOMATION_NAME_FR: Record<string, string> = {
 function localizeAutomationName(name: string, lang: string): string {
   if (lang !== 'fr') return name;
   return AUTOMATION_NAME_FR[name] ?? name;
+}
+
+/**
+ * La cause d'un échec, dite à quelqu'un qui n'est pas développeur.
+ *
+ * La page affichait « 2 échecs » et s'arrêtait là : l'entrepreneur voyait que
+ * ça n'avait pas marché, sans jamais savoir POURQUOI ni quoi faire. Les
+ * messages bruts (« SMTP not configured », « Frequency cap reached for
+ * +1514… ») sont en anglais, techniques, et ne doivent jamais sortir tels
+ * quels.
+ *
+ * Une cause non reconnue est rendue `null` : on préfère n'afficher que le
+ * compteur plutôt qu'un jargon anglais qui n'aide personne.
+ */
+function raisonLisible(erreur: string | null, fr: boolean): string | null {
+  const e = (erreur || '').toLowerCase();
+  if (!e) return null;
+  if (e.includes('no recipient phone')) return fr ? 'Ce client n’a pas de numéro de téléphone.' : 'This client has no phone number.';
+  if (e.includes('no recipient email')) return fr ? 'Ce client n’a pas d’adresse courriel.' : 'This client has no email address.';
+  if (e.includes('opted out') || e.includes('unsubscribed')) return fr ? 'Ce client s’est désabonné.' : 'This client unsubscribed.';
+  if (e.includes('frequency cap')) return fr ? 'Plafond atteint : ce client a déjà reçu plusieurs messages aujourd’hui.' : 'Cap reached: this client already got several messages today.';
+  if (e.includes('consentement') || e.includes('consent')) return fr ? 'Le consentement de ce client n’est pas enregistré.' : 'This client’s consent is not recorded.';
+  if (e.includes('smtp') && e.includes('not configured')) return fr ? 'Courriel non configuré : impossible d’envoyer.' : 'Email not configured: cannot send.';
+  if (e.includes('twilio') && e.includes('not configured')) return fr ? 'Envoi de textos non configuré : impossible d’envoyer.' : 'SMS sending not configured: cannot send.';
+  if (e.includes('not configured')) return fr ? 'Envoi non configuré dans les réglages.' : 'Sending is not configured in settings.';
+  if (e.includes('plan does not include')) return fr ? 'Votre forfait n’inclut pas cet envoi.' : 'Your plan does not include this send.';
+  if (e.includes('are disabled')) return fr ? 'Cette fonctionnalité est désactivée dans les réglages.' : 'This feature is disabled in settings.';
+  return null;
 }
 
 // ── Category definitions ────────────────────────────────────
@@ -274,6 +317,25 @@ const TRIGGER_DISPLAY: Record<string, { en: string; fr: string }> = {
   'lead.created':          { en: 'Lead created',          fr: 'Lead créé' },
   'lead.status_changed':   { en: 'Lead status changed',   fr: 'Statut du lead changé' },
   'payment.received':      { en: 'Payment received',      fr: 'Paiement reçu' },
+  // Ajoutés le 2026-09-23 : 14 des 27 déclencheurs du bus n'avaient pas
+  // d'entrée ici et s'affichaient en CLÉ TECHNIQUE dans la colonne
+  // « Déclencheur » — une règle sur `invoice.created` montrait littéralement
+  // « invoice.created » à l'entrepreneur. Le repli existait (`|| rule.trigger_event`)
+  // mais il n'était jamais censé servir de traduction.
+  'agreement.signed':      { en: 'Contract signed',       fr: 'Contrat signé' },
+  'client.archived':       { en: 'Client archived',       fr: 'Client archivé' },
+  'client.deleted':        { en: 'Client deleted',        fr: 'Client supprimé' },
+  'estimate.accepted':     { en: 'Quote accepted',        fr: 'Devis accepté' },
+  'estimate.rejected':     { en: 'Quote rejected',        fr: 'Devis refusé' },
+  'invoice.created':       { en: 'Invoice created',       fr: 'Facture créée' },
+  'job.created':           { en: 'Job created',           fr: 'Job créé' },
+  'job.ready_for_invoicing': { en: 'Job ready to invoice', fr: 'Job prêt à facturer' },
+  'lead.converted':        { en: 'Lead converted',        fr: 'Lead converti en client' },
+  'lead.updated':          { en: 'Lead updated',          fr: 'Lead modifié' },
+  'pipeline_deal.stage_changed': { en: 'Deal stage changed', fr: 'Étape du pipeline changée' },
+  'quote.changes_requested': { en: 'Changes requested on quote', fr: 'Modifications demandées au devis' },
+  'quote.converted':       { en: 'Quote converted',       fr: 'Devis converti' },
+  'quote.created':         { en: 'Quote created',         fr: 'Devis créé' },
 };
 
 function formatDelay(seconds: number, lang: string): string {
@@ -323,8 +385,26 @@ function getActionLabel(type: string, fr: boolean): string {
 
 // ═════════════════════════════════════════════════════════════
 
+/**
+ * LA LISTE DES AUTOMATISATIONS — copie de l'écran « Workflows list » de
+ * GoHighLevel, relevée sur leur app le 2026-09-24.
+ *
+ * Décision de Rafba : on reprend LEUR structure au complet, y compris les
+ * éléments qui n'ont pas encore de contenu chez nous (dossiers, corbeille,
+ * listes intelligentes). Les libellés, eux, sont en français.
+ *
+ * Disposition, de haut en bas :
+ *   1. sous-navigation  Automatisations · Vue d'ensemble · Réglages globaux
+ *   2. titre + 3 boutons (Nouveau dossier · Construire avec Lumi · Créer)
+ *   3. onglets          Toutes · À vérifier (N) · Corbeille · + Liste
+ *   4. barre d'outils   Filtres avancés · vues · recherche
+ *   5. fil d'Ariane     Accueil
+ *   6. tableau          ☑ Nom · Statut · Total déclenché · En cours ·
+ *                       Modifiée le · Créée le · Stats · › · ⋮
+ *   7. pagination       Précédent · 1 · Suivant · 10 / page
+ */
 export default function Automations() {
-  const { t, language } = useTranslation();
+  const { language } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
 
@@ -332,52 +412,63 @@ export default function Automations() {
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  /** Échecs par règle sur 7 jours — alimente le badge d'alerte. */
   const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
-  // Langue dans laquelle les messages d'automatisation partent aux clients.
+  const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
+  const [occupeId, setOccupeId] = useState<string | null>(null);
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
   const [savingLang, setSavingLang] = useState(false);
+
+  /** Onglet de la liste — les quatre de GHL. */
+  const [onglet, setOnglet] = useState<'toutes' | 'verifier' | 'corbeille' | 'modeles'>('toutes');
+  /** Menu « Créer » : les cinq départs de GHL. */
+  const [menuCreer, setMenuCreer] = useState(false);
+  /** Menu « … » ouvert sur quelle ligne ? */
+  const [menuLigne, setMenuLigne] = useState<string | null>(null);
+  /** Lignes cochées — GHL les utilise pour les actions en lot. */
+  const [cochees, setCochees] = useState<Set<string>>(new Set());
+  /** Ligne dont le panneau de statistiques est déroulé (le chevron « › »). */
+  const [statsId, setStatsId] = useState<string | null>(null);
+  /** Ligne dépliée pour corriger le texte des messages. */
+  const [deplieId, setDeplieId] = useState<string | null>(null);
+  /** Filtres avancés visibles ? */
+  const [filtresOuverts, setFiltresOuverts] = useState(false);
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterStatut, setFilterStatut] = useState<'all' | 'publiee' | 'brouillon'>('all');
+  /** Pagination, comme GHL : 10 par page par défaut. */
+  const [parPage, setParPage] = useState(10);
+  const [page, setPage] = useState(1);
+
   useEffect(() => { getAutomationLanguage().then(setOrgLang).catch(() => {}); }, []);
+
   const changerLangue = async (lang: 'fr' | 'en') => {
     if (lang === orgLang || savingLang) return;
     setSavingLang(true);
     const avant = orgLang;
-    setOrgLang(lang); // optimiste
+    setOrgLang(lang);
     try {
       await setAutomationLanguage(lang);
-      toast.success(fr ? (lang === 'en' ? 'Messages en anglais' : 'Messages en français') : (lang === 'en' ? 'Messages set to English' : 'Messages set to French'));
+      toast.success(fr
+        ? (lang === 'en' ? 'Messages en anglais' : 'Messages en français')
+        : (lang === 'en' ? 'Messages set to English' : 'Messages set to French'));
     } catch {
-      setOrgLang(avant); // rollback si échec
+      setOrgLang(avant);
       toast.error(fr ? 'Impossible de changer la langue' : 'Could not change language');
     } finally {
       setSavingLang(false);
     }
   };
 
-  // ── Load (read only — no auto-seed) ──
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getAutomationRules();
-      // Client-side safety: deduplicate by preset_key (keep first per key)
-      const seen = new Set<string>();
-      const deduped = data.filter((r) => {
+      const vues = new Set<string>();
+      setRules(data.filter((r) => {
         if (!r.preset_key) return true;
-        if (seen.has(r.preset_key)) return false;
-        seen.add(r.preset_key);
+        if (vues.has(r.preset_key)) return false;
+        vues.add(r.preset_key);
         return true;
-      });
-      setRules(deduped);
-
-      // Échecs des 7 derniers jours. Le moteur les journalisait déjà, mais
-      // aucune page ne lisait la table : une automatisation cassée restait
-      // affichée « active » avec un badge vert, et l'utilisateur n'apprenait
-      // jamais que ses clients n'avaient rien reçu.
-      // Non bloquant : la liste doit s'afficher même si ce chargement échoue.
+      }));
       try {
         setFailureCounts(await getFailureCountsByRule());
       } catch (e: any) {
@@ -385,440 +476,722 @@ export default function Automations() {
       }
     } catch (e: any) {
       console.error('Failed to load rules:', e.message);
-      toast.error(language === 'fr' ? 'Impossible de charger les automatisations' : 'Failed to load automations');
+      toast.error(fr ? 'Impossible de charger les automatisations' : 'Failed to load automations');
     } finally {
       setLoading(false);
     }
-  }, [language]);
+  }, [fr]);
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Toggle ──
+  useEffect(() => {
+    let vivant = true;
+    chargerAutomatisations()
+      .then((d) => { if (vivant) setCatalogue(d.catalogue); })
+      .catch((e: unknown) => {
+        console.error('[Automations] catalogue indisponible', e instanceof Error ? e.message : String(e));
+      });
+    return () => { vivant = false; };
+  }, []);
+
+  // Fermer les menus au clic ailleurs.
+  useEffect(() => {
+    if (!menuCreer && !menuLigne) return;
+    const fermer = () => { setMenuCreer(false); setMenuLigne(null); };
+    document.addEventListener('click', fermer);
+    return () => document.removeEventListener('click', fermer);
+  }, [menuCreer, menuLigne]);
+
+  // Changer d'onglet ou de filtre remet à la première page : rester en page 3
+  // d'une liste qui n'en a plus qu'une donne un écran vide inexplicable.
+  useEffect(() => { setPage(1); }, [onglet, search, filterCategory, filterStatut]);
+
   const handleToggle = async (rule: AutomationRule) => {
     const newActive = !rule.is_active;
     setTogglingId(rule.id);
-    setRules((prev) => prev.map((r) => r.id === rule.id ? { ...r, is_active: newActive } : r));
+    setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: newActive } : r)));
     try {
       await toggleAutomationRule(rule.id, newActive);
       toast.success(newActive
-        ? (t.automations.workflowEnabled)
-        : (t.automations.workflowDisabled));
+        ? (fr ? 'Automatisation publiée' : 'Automation published')
+        : (fr ? 'Repassée en brouillon' : 'Back to draft'));
     } catch {
-      toast.error(t.automations.failedToUpdate);
-      setRules((prev) => prev.map((r) => r.id === rule.id ? { ...r, is_active: rule.is_active } : r));
+      toast.error(fr ? 'Impossible de mettre à jour' : 'Could not update');
+      setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: rule.is_active } : r)));
     } finally {
       setTogglingId(null);
     }
   };
 
-  // ── Category resolution ──
-  const getCategory = (r: AutomationRule): CategoryKey => {
-    const meta = PRESET_META[r.preset_key || ''];
-    return meta?.category || 'Follow-up';
+  const partirDeZero = async (avecLumi: boolean) => {
+    try {
+      const creee = await creerAutomatisation({
+        name: fr ? 'Nouvelle automatisation' : 'New automation',
+        trigger_event: 'quote.sent',
+        delay_seconds: 0,
+        actions: [{ type: 'send_sms', config: { body: fr ? 'À compléter' : 'To complete' } }],
+        steps: [],
+      });
+      navigate(`/automations/${creee.id}${avecLumi ? '?lumi=1' : ''}`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
   };
 
-  // ── Filter ──
-  const filtered = rules.filter((r) => {
+  const dupliquer = async (regle: AutomationRule, ouvrir = false) => {
+    setOccupeId(regle.id);
+    try {
+      const copie = await dupliquerAutomatisation(regle.id);
+      toast.success(fr ? 'Copie créée — elle est en brouillon' : 'Copy created — it is a draft');
+      if (ouvrir) { navigate(`/automations/${copie.id}`); return; }
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOccupeId(null);
+    }
+  };
+
+  const supprimer = async (regle: AutomationRule) => {
+    const ok = await confirmer({
+      title: fr ? 'Supprimer cette automatisation ?' : 'Delete this automation?',
+      message: fr
+        ? `« ${regle.name} » sera supprimée, et les envois déjà prévus seront annulés. C'est définitif.`
+        : `“${regle.name}” will be deleted, and any queued messages cancelled. This cannot be undone.`,
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    setOccupeId(regle.id);
+    try {
+      await supprimerAutomatisation(regle.id);
+      toast.success(fr ? 'Automatisation supprimée' : 'Automation deleted');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOccupeId(null);
+    }
+  };
+
+  const getCategory = (r: AutomationRule): CategoryKey =>
+    (PRESET_META[r.preset_key || '']?.category as CategoryKey) || 'Follow-up';
+
+  /** « À vérifier » = ce qui a échoué ces 7 derniers jours. */
+  const aVerifier = rules.filter((r) => (failureCounts[r.id] ?? 0) > 0);
+  const mesAutos = rules.filter((r) => !r.is_preset || r.is_active);
+  const modeles = rules.filter((r) => r.is_preset && !r.is_active);
+
+  const sourceOnglet =
+    onglet === 'verifier' ? aVerifier
+    : onglet === 'modeles' ? modeles
+    : onglet === 'corbeille' ? []   // la corbeille arrive avec la suppression douce
+    : mesAutos;
+
+  const filtrees = sourceOnglet.filter((r) => {
     if (search) {
       const q = search.toLowerCase();
-      if (!r.name.toLowerCase().includes(q) && !(r.description || '').toLowerCase().includes(q)) return false;
+      const nom = localizeAutomationName(r.name, language).toLowerCase();
+      if (!nom.includes(q) && !(r.description || '').toLowerCase().includes(q)) return false;
     }
-    if (filterStatus === 'active' && !r.is_active) return false;
-    if (filterStatus === 'inactive' && r.is_active) return false;
     if (filterCategory !== 'all' && getCategory(r) !== filterCategory) return false;
+    if (filterStatut === 'publiee' && !r.is_active) return false;
+    if (filterStatut === 'brouillon' && r.is_active) return false;
     return true;
   });
 
-  // ── Group by category, sorted alphabetically within each ──
-  const grouped: Record<string, AutomationRule[]> = {};
-  for (const r of filtered) {
-    const cat = getCategory(r);
-    if (!grouped[cat]) grouped[cat] = [];
-    grouped[cat].push(r);
-  }
-  // Sort rules alphabetically within each category
-  for (const cat of Object.keys(grouped)) {
-    grouped[cat].sort((a, b) => a.name.localeCompare(b.name));
-  }
+  const pages = Math.max(1, Math.ceil(filtrees.length / parPage));
+  const visibles = filtrees.slice((page - 1) * parPage, page * parPage);
 
-  // ── Counts ──
-  const totalCount = rules.length;
-  const activeCount = rules.filter((r) => r.is_active).length;
-  const inactiveCount = totalCount - activeCount;
+  const toutCoche = visibles.length > 0 && visibles.every((r) => cochees.has(r.id));
+  const basculerTout = () => {
+    setCochees((prev) => {
+      const n = new Set(prev);
+      if (toutCoche) visibles.forEach((r) => n.delete(r.id));
+      else visibles.forEach((r) => n.add(r.id));
+      return n;
+    });
+  };
 
-  const toggleCategory = (cat: string) => {
-    setCollapsedCategories(prev => {
-      const next = new Set(prev);
-      next.has(cat) ? next.delete(cat) : next.add(cat);
-      return next;
+  const DEPARTS: Array<{ cle: string; fr: string; en: string; aideFr: string; aideEn: string; icone: typeof Zap }> = [
+    { cle: 'zero', fr: 'Partir de zéro', en: 'Start from scratch', icone: Plus,
+      aideFr: 'Un parcours vide, à construire.', aideEn: 'An empty path, to build.' },
+    { cle: 'lumi', fr: 'Construire avec Lumi', en: 'Build with Lumi', icone: Sparkles,
+      aideFr: 'Décris ce que tu veux, Lumi le monte.', aideEn: 'Describe it, Lumi builds it.' },
+    { cle: 'modele', fr: 'Partir d’un modèle', en: 'Start from a template', icone: FileText,
+      aideFr: `${modeles.length} modèles prêts à l’emploi.`, aideEn: `${modeles.length} ready-made templates.` },
+    { cle: 'import', fr: 'Importer d’une campagne', en: 'Import from a campaign', icone: ArrowLeft,
+      aideFr: 'Reprendre une campagne existante.', aideEn: 'Reuse an existing campaign.' },
+    { cle: 'entreprise', fr: 'Automatisation d’entreprise', en: 'Company automation', icone: Briefcase,
+      aideFr: 'Déclenchée par l’entreprise, pas par un client.', aideEn: 'Triggered by the company, not a client.' },
+  ];
+
+  const choisirDepart = (cle: string) => {
+    setMenuCreer(false);
+    if (cle === 'zero') { partirDeZero(false); return; }
+    if (cle === 'lumi') { partirDeZero(true); return; }
+    if (cle === 'modele') { setOnglet('modeles'); return; }
+    toast.info(fr ? 'Cette option arrive bientôt.' : 'This option is coming soon.');
+  };
+
+  const ONGLETS = [
+    { cle: 'toutes' as const, fr: 'Toutes', en: 'All workflows', n: mesAutos.length },
+    { cle: 'verifier' as const, fr: 'À vérifier', en: 'Needs review', n: aVerifier.length },
+    { cle: 'modeles' as const, fr: 'Modèles', en: 'Templates', n: modeles.length },
+    { cle: 'corbeille' as const, fr: 'Corbeille', en: 'Deleted', n: 0 },
+  ];
+
+  const dateCourte = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString(fr ? 'fr-CA' : 'en-CA', {
+      day: 'numeric', month: 'short', year: 'numeric',
     });
   };
 
   return (
     <PermissionGate permission="automations.update">
-    <div className="space-y-6 max-w-[1100px] mx-auto">
+      <div className="mx-auto max-w-[1400px] space-y-4">
 
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-text-primary">
-            {fr ? 'Automatisations' : 'Automations'}
-          </h1>
-          <p className="text-[13px] text-text-tertiary mt-0.5">
-            {fr
-              ? 'Automatisations événementielles pour votre entreprise'
-              : 'Event-driven automations for your business'}
-          </p>
+        {/* ══ 1. Sous-navigation ══ */}
+        <div className="flex flex-wrap items-center gap-5 border-b border-border pb-0">
+          <span className="pb-3 text-[15px] font-semibold text-text-primary">
+            {fr ? 'Automatisation' : 'Automation'}
+          </span>
+          <nav className="flex items-center gap-1" aria-label={fr ? 'Sections' : 'Sections'}>
+            <span className="border-b-2 border-primary px-3 pb-3 pt-1 text-[13px] font-semibold text-primary">
+              {fr ? 'Automatisations' : 'Workflows'}
+            </span>
+            <button
+              type="button"
+              onClick={() => navigate('/automations/apercu')}
+              className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {fr ? 'Vue d’ensemble' : 'Overview'}
+              <span className="rounded bg-warning-light px-1 py-0.5 text-[9px] font-bold uppercase text-warning">
+                {fr ? 'Bêta' : 'Beta'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/automations/reglages')}
+              className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Settings size={13} aria-hidden="true" />
+              {fr ? 'Réglages globaux' : 'Global settings'}
+            </button>
+          </nav>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
-          {/* Langue dans laquelle les messages partent aux clients */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-text-tertiary">{fr ? 'Messages en' : 'Messages in'}</span>
-            <div className="inline-flex rounded-lg border border-outline/50 overflow-hidden text-[12px]">
-              {(['fr', 'en'] as const).map((l) => (
-                <button
-                  key={l}
-                  onClick={() => changerLangue(l)}
-                  disabled={savingLang}
-                  className={`px-2.5 py-1 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-surface-primary' : 'text-text-secondary hover:bg-surface-tertiary'}`}
+
+        {/* ══ 2. Titre + les trois boutons ══ */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-[26px] font-bold tracking-tight text-text-primary">
+            {fr ? 'Mes automatisations' : 'Workflows list'}
+          </h1>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="mr-1 flex items-center gap-2">
+              <span className="text-[11px] text-text-tertiary">{fr ? 'Messages en' : 'Messages in'}</span>
+              <div className="inline-flex overflow-hidden rounded-lg border border-outline/50 text-[12px]">
+                {(['fr', 'en'] as const).map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => changerLangue(l)}
+                    disabled={savingLang}
+                    className={`px-2.5 py-1 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary'}`}
+                  >
+                    {l === 'fr' ? 'FR' : 'EN'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => toast.info(fr ? 'Les dossiers arrivent bientôt.' : 'Folders are coming soon.')}
+              className="glass-button inline-flex items-center gap-1.5"
+            >
+              <FolderPlus size={14} aria-hidden="true" />
+              {fr ? 'Nouveau dossier' : 'Create folder'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => partirDeZero(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent/5 px-3 py-1.5 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Sparkles size={14} aria-hidden="true" />
+              {fr ? 'Construire avec Lumi' : 'Build using AI'}
+            </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setMenuCreer((m) => !m); }}
+                aria-haspopup="menu"
+                aria-expanded={menuCreer}
+                className="glass-button-primary inline-flex items-center gap-1.5"
+              >
+                <Plus size={14} aria-hidden="true" />
+                {fr ? 'Créer' : 'Create workflow'}
+                <ChevronDown size={13} aria-hidden="true" />
+              </button>
+
+              {menuCreer && (
+                <div
+                  role="menu"
+                  tabIndex={-1}
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute right-0 z-30 mt-1.5 w-[300px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
                 >
-                  {l === 'fr' ? 'FR' : 'EN'}
-                </button>
-              ))}
+                  {DEPARTS.map((d) => (
+                    <button
+                      key={d.cle}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => choisirDepart(d.cle)}
+                      className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      <d.icone size={15} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
+                      <span className="min-w-0">
+                        <span className="block text-[13px] font-medium text-text-primary">{fr ? d.fr : d.en}</span>
+                        <span className="block text-[11px] text-text-tertiary">{fr ? d.aideFr : d.aideEn}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
+        </div>
+
+        {/* ══ 3. Onglets ══ */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border">
+          <nav className="flex items-center gap-1" role="tablist" aria-label={fr ? 'Filtres' : 'Filters'}>
+            {ONGLETS.map((o) => (
+              <button
+                key={o.cle}
+                type="button"
+                role="tab"
+                aria-selected={onglet === o.cle}
+                onClick={() => setOnglet(o.cle)}
+                className={cn(
+                  'border-b-2 px-3 pb-2.5 pt-1 text-[13px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                  onglet === o.cle
+                    ? 'border-primary font-semibold text-primary'
+                    : 'border-transparent text-text-secondary hover:text-text-primary',
+                )}
+              >
+                {fr ? o.fr : o.en}
+                {o.cle !== 'toutes' && ` (${o.n})`}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => toast.info(fr ? 'Les listes personnalisées arrivent bientôt.' : 'Smart lists are coming soon.')}
+              className="inline-flex items-center gap-1 border-b-2 border-transparent px-3 pb-2.5 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Plus size={13} aria-hidden="true" />
+              {fr ? 'Nouvelle liste' : 'New smart list'}
+            </button>
+          </nav>
+
           <button
-            onClick={() => navigate('/settings')}
-            className="glass-button-ghost inline-flex items-center gap-1.5 text-[12px]"
+            type="button"
+            onClick={() => toast.info(fr ? 'Le choix des colonnes arrive bientôt.' : 'Column picker is coming soon.')}
+            className="mb-2 inline-flex items-center gap-1.5 text-[12px] text-text-tertiary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            <ArrowLeft size={14} />
-            {fr ? 'Retour' : 'Back'}
+            <SlidersHorizontal size={13} aria-hidden="true" />
+            {fr ? 'Personnaliser la liste' : 'Customize list'}
           </button>
         </div>
-      </div>
 
-      {/* ── Stats row ── */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Total', value: totalCount },
-          { label: fr ? 'Actives' : 'Active', value: activeCount },
-          { label: fr ? 'Inactives' : 'Inactive', value: inactiveCount },
-        ].map((s) => (
-          <div key={s.label} className="section-card px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">{s.label}</p>
-            <p className="text-lg font-bold text-text-primary tabular-nums mt-0.5">{s.value}</p>
+        {/* ══ 4. Barre d'outils ══ */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFiltresOuverts((f) => !f)}
+            aria-expanded={filtresOuverts}
+            className="glass-button inline-flex items-center gap-1.5"
+          >
+            <Filter size={13} aria-hidden="true" />
+            {fr ? 'Filtres avancés' : 'Advanced filters'}
+          </button>
+
+          <div className="ml-auto flex items-center gap-2">
+            <div className="relative w-[260px]">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden="true" />
+              <label htmlFor="rech-automations" className="sr-only">{fr ? 'Rechercher' : 'Search'}</label>
+              <input
+                id="rech-automations"
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={fr ? 'Rechercher' : 'Search'}
+                className="glass-input w-full pl-9"
+              />
+            </div>
           </div>
-        ))}
-      </div>
-
-      {/* ── Filters ── */}
-      <div className="flex items-center gap-2.5 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-[300px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-          <input
-            type="text"
-            placeholder={t.automations.search}
-            aria-label={t.common.search}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="glass-input w-full pl-9 text-[13px]"
-          />
         </div>
-        <select
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-          aria-label={t.automations.category}
-          className="glass-input text-[13px] py-2"
-        >
-          <option value="all">{t.automations.allCategories}</option>
-          {CATEGORY_ORDER.map((c) => (
-            <option key={c} value={c}>
-              {fr ? CATEGORY_META[c].labelFr : CATEGORY_META[c].labelEn}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as any)}
-          aria-label={t.automations.status}
-          className="glass-input text-[13px] py-2"
-        >
-          <option value="all">{fr ? 'Toutes' : 'All'}</option>
-          <option value="active">{fr ? 'Actives' : 'Active'}</option>
-          <option value="inactive">{fr ? 'Inactives' : 'Inactive'}</option>
-        </select>
-        <span className="text-[11px] text-text-tertiary ml-auto">
-          {filtered.length} {t.automations.results}
-        </span>
-      </div>
 
-      {/* ── Content ── */}
-      {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 size={20} className="animate-spin text-text-tertiary" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="section-card p-10 text-center">
-          <Zap size={28} className="mx-auto text-text-tertiary/30 mb-3" />
-          <p className="text-[13px] text-text-tertiary">
-            {search
-              ? (t.automations.noResults)
-              : (t.automations.noWorkflows)}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {CATEGORY_ORDER.filter(cat => grouped[cat]?.length).map((cat) => {
-            const catMeta = CATEGORY_META[cat];
-            const CatIcon = catMeta.icon;
-            const catRules = grouped[cat];
-            const isCollapsed = collapsedCategories.has(cat);
-            const catActiveCount = catRules.filter(r => r.is_active).length;
+        {filtresOuverts && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-secondary p-3">
+            <label htmlFor="f-categorie" className="text-[12px] text-text-secondary">{fr ? 'Catégorie' : 'Category'}</label>
+            <select
+              id="f-categorie"
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="glass-input"
+            >
+              <option value="all">{fr ? 'Toutes' : 'All'}</option>
+              {CATEGORY_ORDER.map((c) => (
+                <option key={c} value={c}>{fr ? CATEGORY_META[c].labelFr : CATEGORY_META[c].labelEn}</option>
+              ))}
+            </select>
+            <label htmlFor="f-statut" className="ml-2 text-[12px] text-text-secondary">{fr ? 'Statut' : 'Status'}</label>
+            <select
+              id="f-statut"
+              value={filterStatut}
+              onChange={(e) => setFilterStatut(e.target.value as typeof filterStatut)}
+              className="glass-input"
+            >
+              <option value="all">{fr ? 'Tous' : 'All'}</option>
+              <option value="publiee">{fr ? 'Publiée' : 'Published'}</option>
+              <option value="brouillon">{fr ? 'Brouillon' : 'Draft'}</option>
+            </select>
+          </div>
+        )}
 
-            return (
-              <div key={cat} className="section-card overflow-hidden">
-                {/* Category header */}
-                <button
-                  onClick={() => toggleCategory(cat)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-secondary/30 transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-surface-tertiary flex items-center justify-center shrink-0">
-                    <CatIcon size={15} className="text-text-secondary" />
-                  </div>
-                  <div className="text-left min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[14px] font-semibold text-text-primary">
-                        {fr ? catMeta.labelFr : catMeta.labelEn}
-                      </span>
-                      <span className="text-[11px] text-text-tertiary">
-                        {catActiveCount}/{catRules.length} {fr ? 'actives' : 'active'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-text-tertiary mt-0.5 truncate">
-                      {fr ? catMeta.descFr : catMeta.descEn}
-                    </p>
-                  </div>
-                  {isCollapsed ? (
-                    <ChevronRight size={16} className="text-text-tertiary shrink-0" />
-                  ) : (
-                    <ChevronDown size={16} className="text-text-tertiary shrink-0" />
-                  )}
-                </button>
+        {/* ══ 5. Fil d'Ariane ══ */}
+        <p className="text-[13px] text-text-secondary">{fr ? 'Accueil' : 'Home'}</p>
 
-                {/* Rules table */}
-                {!isCollapsed && (
-                  <table className="w-full text-[13px]">
-                    <thead>
-                      <tr className="border-t border-b border-outline bg-surface-secondary/40">
-                        {[
-                          { label: fr ? 'Automatisation' : 'Automation', cls: 'text-left' },
-                          { label: t.automations.trigger, cls: 'text-left hidden md:table-cell' },
-                          { label: t.automations.timing, cls: 'text-left hidden lg:table-cell' },
-                          { label: t.automations.channels, cls: 'text-left hidden lg:table-cell' },
-                          { label: t.automations.status, cls: 'text-center w-[80px]' },
-                          { label: '', cls: 'text-right w-[60px]' },
-                        ].map((col) => (
-                          <th key={col.label || 'action'} className={cn('px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary', col.cls)}>
-                            {col.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {catRules.map((rule) => {
-                        const meta = PRESET_META[rule.preset_key || ''];
-                        const Icon = meta?.icon || Zap;
-                        const trigger = TRIGGER_DISPLAY[rule.trigger_event];
-                        const isDefault = rule.is_preset && DEFAULT_ACTIVE_PRESETS.has(rule.preset_key || '');
-                        const channels = getChannels(rule.actions, fr);
-                        const isExpanded = expandedId === rule.id;
+        {/* ══ 6. Le tableau ══ */}
+        {loading ? (
+          <div className="section-card flex items-center justify-center py-16">
+            <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" aria-hidden="true" />
+          </div>
+        ) : (
+          <div className="section-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] text-[13px]">
+                <thead>
+                  <tr className="border-b border-outline/40 text-left text-[12px] text-text-secondary">
+                    <th scope="col" className="w-10 px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={toutCoche}
+                        onChange={basculerTout}
+                        aria-label={fr ? 'Tout cocher' : 'Select all'}
+                        className="h-3.5 w-3.5 rounded border-outline"
+                      />
+                    </th>
+                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Nom' : 'Name'}</th>
+                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Statut' : 'Status'}</th>
+                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Total déclenché' : 'Total enrolled'}</th>
+                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'En cours' : 'Active enrolled'}</th>
+                    <th scope="col" className="hidden px-3 py-3 font-medium lg:table-cell">{fr ? 'Modifiée le' : 'Last updated'}</th>
+                    <th scope="col" className="hidden px-3 py-3 font-medium lg:table-cell">{fr ? 'Créée le' : 'Created on'}</th>
+                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Stats' : 'Stats'}</th>
+                    <th scope="col" className="w-24 px-3 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibles.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-14 text-center">
+                        <Zap className="mx-auto mb-3 h-7 w-7 text-text-tertiary" aria-hidden="true" />
+                        <p className="text-[13px] font-medium text-text-primary">
+                          {onglet === 'corbeille'
+                            ? (fr ? 'La corbeille est vide' : 'The bin is empty')
+                            : onglet === 'verifier'
+                              ? (fr ? 'Aucune erreur — tout roule' : 'No errors — all running smoothly')
+                              : (fr ? 'Aucune automatisation' : 'No automations')}
+                        </p>
+                        {onglet === 'toutes' && modeles.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setOnglet('modeles')}
+                            className="glass-button mt-4 inline-flex items-center gap-1.5"
+                          >
+                            <FileText size={13} aria-hidden="true" />
+                            {fr ? 'Voir les modèles' : 'Browse templates'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ) : visibles.map((r) => {
+                    const rule = r;
+                    const echecs = failureCounts[rule.id] ?? 0;
+                    const decl = TRIGGER_DISPLAY[rule.trigger_event];
+                    const meta = PRESET_META[rule.preset_key || ''];
+                    const Icone = meta?.icon ?? Zap;
+                    return (
+                      <React.Fragment key={rule.id}>
+                        <tr className="border-b border-outline/20 transition-colors last:border-0 hover:bg-surface-secondary/40">
+                          <td className="px-3 py-3">
+                            <input
+                              type="checkbox"
+                              checked={cochees.has(rule.id)}
+                              onChange={() => setCochees((prev) => {
+                                const n = new Set(prev);
+                                if (n.has(rule.id)) n.delete(rule.id); else n.add(rule.id);
+                                return n;
+                              })}
+                              aria-label={fr ? `Cocher ${rule.name}` : `Select ${rule.name}`}
+                              className="h-3.5 w-3.5 rounded border-outline"
+                            />
+                          </td>
 
-                        return (
-                          <React.Fragment key={rule.id}>
-                            <tr
-                              className={cn(
-                                'border-b border-outline/40 transition-colors cursor-pointer',
-                                !rule.is_active && 'opacity-50',
-                                isExpanded ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30',
-                              )}
-                              role="button"
-                              tabIndex={0}
-                              aria-expanded={isExpanded}
-                              onClick={() => setExpandedId(isExpanded ? null : rule.id)}
-                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(isExpanded ? null : rule.id); } }}
+                          <td className="px-3 py-3">
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/automations/${rule.id}`)}
+                              className="flex items-start gap-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                             >
-                              {/* Name */}
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-7 h-7 rounded-md bg-surface-tertiary flex items-center justify-center shrink-0">
-                                    <Icon size={13} className="text-text-secondary" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-semibold text-text-primary truncate">{localizeAutomationName(rule.name, language)}</span>
-                                      {isDefault && (
-                                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-secondary shrink-0">
-                                          {t.automations.default}
-                                        </span>
-                                      )}
-                                      {rule.is_preset && !isDefault && (
-                                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-tertiary shrink-0">
-                                          {t.automations.optional}
-                                        </span>
-                                      )}
-                                      {/* Échecs récents : sans ce badge, une automatisation
-                                          cassée restait « active » en vert et l'utilisateur
-                                          ignorait que ses clients n'avaient rien reçu. */}
-                                      {(failureCounts[rule.id] || 0) > 0 && (
-                                        <span
-                                          title={fr
-                                            ? `${failureCounts[rule.id]} échec(s) dans les 7 derniers jours`
-                                            : `${failureCounts[rule.id]} failure(s) in the last 7 days`}
-                                          className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 shrink-0"
-                                        >
-                                          {fr ? `${failureCounts[rule.id]} échec` : `${failureCounts[rule.id]} failed`}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* Trigger */}
-                              <td className="px-4 py-3 text-[12px] text-text-secondary hidden md:table-cell">
-                                {trigger ? (fr ? trigger.fr : trigger.en) : rule.trigger_event}
-                              </td>
-
-                              {/* Timing */}
-                              <td className="px-4 py-3 hidden lg:table-cell">
-                                <span className="text-[12px] text-text-tertiary flex items-center gap-1">
-                                  <Clock size={10} />
-                                  {formatDelay(rule.delay_seconds, language)}
+                              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface-tertiary">
+                                <Icone size={13} className="text-text-secondary" aria-hidden="true" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block font-medium text-primary hover:underline">
+                                  {localizeAutomationName(rule.name, language)}
                                 </span>
-                              </td>
-
-                              {/* Channels */}
-                              <td className="px-4 py-3 hidden lg:table-cell">
-                                <div className="flex gap-1">
-                                  {channels.map((ch) => (
-                                    <span key={ch} className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-tertiary text-text-secondary">
-                                      {ch}
-                                    </span>
-                                  ))}
-                                </div>
-                              </td>
-
-                              {/* Status */}
-                              <td className="px-4 py-3 text-center">
-                                <span className={cn(
-                                  'inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full',
-                                  rule.is_active
-                                    ? 'bg-primary/8 text-text-primary'
-                                    : 'bg-surface-tertiary text-text-tertiary',
-                                )}>
-                                  {rule.is_active ? 'Active' : (t.automations.off)}
+                                <span className="block text-[11px] text-text-tertiary">
+                                  {decl ? (fr ? decl.fr : decl.en) : rule.trigger_event}
+                                  {' · '}
+                                  {Array.isArray(rule.steps) && rule.steps.length > 0
+                                    ? (fr ? `${rule.steps.length} étapes` : `${rule.steps.length} steps`)
+                                    : formatDelay(rule.delay_seconds, language)}
                                 </span>
-                              </td>
+                                {echecs > 0 && (
+                                  <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-danger">
+                                    <AlertTriangle size={11} aria-hidden="true" />
+                                    {echecs} {fr ? 'échec(s) dans les 7 derniers jours' : 'failure(s) in the last 7 days'}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          </td>
 
-                              {/* Toggle */}
-                              <td className="px-4 py-3 text-right" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+                          <td className="px-3 py-3">
+                            <span className={cn(
+                              'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium',
+                              rule.is_active ? 'bg-success-light text-success' : 'bg-surface-tertiary text-text-tertiary',
+                            )}>
+                              {rule.is_active ? (fr ? 'Publiée' : 'Published') : (fr ? 'Brouillon' : 'Draft')}
+                            </span>
+                          </td>
+
+                          {/* Total déclenché / En cours : les chiffres arrivent avec
+                              l'onglet Historique (les données sont déjà en base). */}
+                          <td className="px-3 py-3 text-primary">—</td>
+                          <td className="px-3 py-3 text-primary">—</td>
+
+                          <td className="hidden px-3 py-3 text-text-secondary lg:table-cell">{dateCourte(rule.updated_at)}</td>
+                          <td className="hidden px-3 py-3 text-text-secondary lg:table-cell">{dateCourte(rule.created_at)}</td>
+
+                          <td className="px-3 py-3">
+                            <button
+                              type="button"
+                              onClick={() => setStatsId((s) => (s === rule.id ? null : rule.id))}
+                              aria-expanded={statsId === rule.id}
+                              aria-label={fr ? `Statistiques de ${rule.name}` : `Stats for ${rule.name}`}
+                              className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            >
+                              <ChevronRight
+                                size={15}
+                                className={cn('transition-transform', statsId === rule.id && 'rotate-90')}
+                                aria-hidden="true"
+                              />
+                            </button>
+                          </td>
+
+                          <td className="px-3 py-3">
+                            <div className="flex items-center justify-end gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleToggle(rule)}
+                                disabled={togglingId === rule.id}
+                                aria-label={rule.is_active
+                                  ? (fr ? `Repasser ${rule.name} en brouillon` : `Unpublish ${rule.name}`)
+                                  : (fr ? `Publier ${rule.name}` : `Publish ${rule.name}`)}
+                                aria-pressed={rule.is_active}
+                                className="rounded-md p-1 transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                              >
+                                {togglingId === rule.id
+                                  ? <Loader2 size={17} className="animate-spin text-text-tertiary" aria-hidden="true" />
+                                  : rule.is_active
+                                    ? <ToggleRight size={19} className="text-text-primary" aria-hidden="true" />
+                                    : <ToggleLeft size={19} className="text-text-tertiary" aria-hidden="true" />}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setDeplieId((d) => (d === rule.id ? null : rule.id))}
+                                aria-expanded={deplieId === rule.id}
+                                aria-label={fr ? `Voir les messages de ${rule.name}` : `View messages of ${rule.name}`}
+                                className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                              >
+                                <ChevronDown
+                                  size={14}
+                                  className={cn('transition-transform', deplieId === rule.id && 'rotate-180')}
+                                  aria-hidden="true"
+                                />
+                              </button>
+
+                              <div className="relative">
                                 <button
-                                  onClick={() => handleToggle(rule)}
-                                  disabled={togglingId === rule.id}
-                                  aria-label={rule.is_active ? (fr ? 'Désactiver' : 'Deactivate') : (fr ? 'Activer' : 'Activate')}
-                                  aria-pressed={rule.is_active}
-                                  className="p-1 rounded-md hover:bg-surface-tertiary transition-colors inline-flex"
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setMenuLigne((m) => (m === rule.id ? null : rule.id)); }}
+                                  aria-haspopup="menu"
+                                  aria-expanded={menuLigne === rule.id}
+                                  aria-label={fr ? `Actions pour ${rule.name}` : `Actions for ${rule.name}`}
+                                  className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                 >
-                                  {togglingId === rule.id ? (
-                                    <Loader2 size={18} className="animate-spin text-text-tertiary" />
-                                  ) : rule.is_active ? (
-                                    <ToggleRight size={20} className="text-text-primary" />
-                                  ) : (
-                                    <ToggleLeft size={20} className="text-text-tertiary" />
-                                  )}
+                                  {occupeId === rule.id
+                                    ? <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                                    : <EllipsisVertical size={14} aria-hidden="true" />}
                                 </button>
-                              </td>
-                            </tr>
 
-                            {/* Expanded detail row */}
-                            {isExpanded && (
-                              <tr className="bg-surface-secondary/30">
-                                <td colSpan={6} className="px-6 py-4">
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[12px]">
-                                    <div>
-                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
-                                        {t.automations.description}
-                                      </p>
-                                      <p className="text-text-secondary leading-relaxed">
-                                        {rule.description || (t.automations.noDescription)}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
-                                        {t.automations.actions}
-                                      </p>
-                                      <div className="space-y-1">
-                                        {rule.actions.map((a, i) => (
-                                          <div key={i} className="flex items-center gap-1.5 text-text-secondary">
-                                            <span className="w-1 h-1 rounded-full bg-text-tertiary shrink-0" />
-                                            <span>{getActionLabel(a.type, fr)}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
-                                        {t.automations.details}
-                                      </p>
-                                      <div className="space-y-1 text-text-secondary">
-                                        <div className="flex items-center gap-1.5">
-                                          <Clock size={10} className="text-text-tertiary" />
-                                          {formatDelay(rule.delay_seconds, language)}
-                                        </div>
-                                        {rule.preset_key && (
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-text-tertiary text-[10px]">key:</span>
-                                            <code className="text-[10px] bg-surface-tertiary px-1 py-0.5 rounded">{rule.preset_key}</code>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
+                                {menuLigne === rule.id && (
+                                  <div
+                                    role="menu"
+                                    tabIndex={-1}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="absolute right-0 z-30 mt-1 w-[210px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
+                                  >
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => { setMenuLigne(null); navigate(`/automations/${rule.id}`); }}
+                                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                    >
+                                      <Pencil size={13} aria-hidden="true" />
+                                      {fr ? 'Modifier' : 'Edit'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => { setMenuLigne(null); dupliquer(rule, rule.is_preset); }}
+                                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                    >
+                                      <Copy size={13} aria-hidden="true" />
+                                      {fr ? 'Dupliquer' : 'Duplicate'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => { setMenuLigne(null); toast.info(fr ? 'Les dossiers arrivent bientôt.' : 'Folders are coming soon.'); }}
+                                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                    >
+                                      <FolderPlus size={13} aria-hidden="true" />
+                                      {fr ? 'Déplacer dans un dossier' : 'Move to folder'}
+                                    </button>
+                                    {!rule.is_preset && (
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => { setMenuLigne(null); supprimer(rule); }}
+                                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-danger transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        <Trash2 size={13} aria-hidden="true" />
+                                        {fr ? 'Supprimer' : 'Delete'}
+                                      </button>
+                                    )}
                                   </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
 
-                                  {/* Le texte réellement envoyé au client, éditable.
-                                      La page n'affichait que le TYPE d'action
-                                      (« Envoyer un courriel ») : l'utilisateur ne
-                                      pouvait ni relire ni corriger ce qui partait en
-                                      son nom. */}
-                                  {rule.actions
-                                    .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
-                                    .map((a, i) => (
-                                      <MessageEditor
-                                        ruleName={localizeAutomationName(rule.name, language)}
-                                        key={`${rule.id}-${a.type}-${i}`}
-                                        ruleId={rule.id}
-                                        actionType={a.type as 'send_sms' | 'send_email'}
-                                        body={String(a.config?.body ?? '')}
-                                        subject={a.type === 'send_email' ? String(a.config?.subject ?? '') : undefined}
-                                        fr={fr}
-                                        onSaved={load}
-                                      />
-                                    ))}
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+                        {/* Panneau de statistiques, ouvert par le chevron « › ». */}
+                        {statsId === rule.id && (
+                          <tr className="bg-surface-secondary/30">
+                            <td colSpan={9} className="px-6 py-4">
+                              <p className="text-[12px] text-text-secondary">
+                                {echecs > 0
+                                  ? (fr
+                                    ? `${echecs} envoi(s) ont échoué ces 7 derniers jours. Le détail arrivera dans l’onglet « Journaux » de l’automatisation.`
+                                    : `${echecs} send(s) failed in the last 7 days. Details will appear in the automation’s “Logs” tab.`)
+                                  : (fr
+                                    ? 'Aucun échec ces 7 derniers jours. Les chiffres d’envoi arrivent avec l’onglet « Historique ».'
+                                    : 'No failures in the last 7 days. Send counts are coming with the “History” tab.')}
+                              </p>
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* Les messages, modifiables sur place. */}
+                        {deplieId === rule.id && (
+                          <tr className="bg-surface-secondary/30">
+                            <td colSpan={9} className="px-6 py-4">
+                              {rule.actions.filter((a) => a.type === 'send_sms' || a.type === 'send_email').length === 0 ? (
+                                <p className="text-[12px] text-text-tertiary">
+                                  {fr
+                                    ? 'Cette automatisation n’envoie ni texto ni courriel.'
+                                    : 'This automation sends neither text nor email.'}
+                                </p>
+                              ) : (
+                                rule.actions
+                                  .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
+                                  .map((a, i) => (
+                                    <MessageEditor
+                                      key={`${rule.id}-${a.type}-${i}`}
+                                      ruleId={rule.id}
+                                      ruleName={localizeAutomationName(rule.name, language)}
+                                      actionType={a.type as 'send_sms' | 'send_email'}
+                                      body={String(a.config?.body ?? '')}
+                                      subject={a.config?.subject ? String(a.config.subject) : undefined}
+                                      fr={fr}
+                                      onSaved={load}
+                                    />
+                                  ))
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ══ 7. Pagination ══ */}
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-outline/30 px-4 py-3 text-[12px]">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="rounded-lg px-2.5 py-1 text-text-secondary transition-colors hover:bg-surface-tertiary disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                {fr ? 'Précédent' : 'Previous'}
+              </button>
+              <span className="rounded-lg border border-primary px-2.5 py-1 font-medium text-primary">{page}</span>
+              <span className="text-text-tertiary">{fr ? `sur ${pages}` : `of ${pages}`}</span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(pages, p + 1))}
+                disabled={page >= pages}
+                className="rounded-lg px-2.5 py-1 text-text-secondary transition-colors hover:bg-surface-tertiary disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                {fr ? 'Suivant' : 'Next'}
+              </button>
+              <label htmlFor="par-page" className="sr-only">{fr ? 'Lignes par page' : 'Rows per page'}</label>
+              <select
+                id="par-page"
+                value={parPage}
+                onChange={(e) => { setParPage(Number(e.target.value)); setPage(1); }}
+                className="glass-input ml-1 py-1 text-[12px]"
+              >
+                {[10, 25, 50].map((n) => (
+                  <option key={n} value={n}>{fr ? `${n} / page` : `${n} / page`}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
     </PermissionGate>
   );
 }

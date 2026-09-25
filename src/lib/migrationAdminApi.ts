@@ -32,6 +32,27 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export interface EtatCommunications { gele: boolean; migration_id: string | null; gele_le: string | null; active_le: string | null; active_par: string | null }
+/** « Activer le compte » : lève le gel des communications posé à l'import final. */
+export function activateAccount(id: string): Promise<{ ok: boolean; communications: EtatCommunications }> {
+  return apiFetch(`/migrations/${id}/activate-account`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+/** Dépose un fichier (CSV ou PDF) dans une migration depuis la console — même réception que le portail. */
+export async function uploadAdminFile(id: string, file: File): Promise<{ id: string; original_name: string }> {
+  const headers = await getAuthHeaders();
+  delete headers['Content-Type'];
+  const res = await fetch(`${BASE}/migration-admin/migrations/${id}/files?name=${encodeURIComponent(file.name)}`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+  let body: any = null;
+  try { body = await res.json(); } catch { body = null; }
+  if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
+  return body;
+}
+
 export async function checkPlatformAdmin(): Promise<boolean> {
   try {
     const { data } = await supabase.auth.getSession();
@@ -118,6 +139,10 @@ export function extendInvitation(id: string, ttlHours: number): Promise<{ ok: bo
 
 export function rejectFile(id: string, fileId: string): Promise<{ ok: boolean }> {
   return apiFetch(`/migrations/${id}/files/${fileId}/reject`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+export function deleteFile(id: string, fileId: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/migrations/${id}/files/${fileId}`, { method: 'DELETE' });
 }
 
 export function reanalyzeFile(id: string, fileId: string): Promise<{ ok: boolean }> {
@@ -220,14 +245,59 @@ export function saveMappingTemplate(id: string, name: string): Promise<{ ok: boo
   return apiFetch(`/migrations/${id}/save-template`, { method: 'POST', body: JSON.stringify({ name }) });
 }
 
-/** Le bot fait une passe maintenant (analyse, correspondances, doublons, import test, questions) et renvoie ce qu'il a décidé. */
-export function lancerBotMigration(id: string): Promise<RapportBotMigration> {
+/** Lance une passe du bot en arrière-plan (plusieurs minutes possibles) ; `depuis` sert à reconnaître la fin de passe. */
+export function lancerBotMigration(id: string): Promise<{ started: true; depuis: string }> {
   return apiFetch(`/migrations/${id}/bot`, { method: 'POST' });
 }
+/** Rapport du bot, partiel pendant une passe (en_cours, etape_courante, progression) : lecture légère pour le suivi en direct. */
+export function getRapportBot(id: string): Promise<{ rapport: RapportBotMigration | null; derniere_execution: string | null }> {
+  return apiFetch(`/migrations/${id}/bot`);
+}
+/** Attend la fin d'une passe lancée par lancerBotMigration : suit bot_derniere_execution (toutes les 5 s, 20 min max). */
+/**
+ * Attend la fin de LA passe lancée par ce clic. Trois conditions, toutes sur le rapport lui-même
+ * (pas de comparaison de chaînes ISO aux formats différents) :
+ * - le rapport n'est plus marqué `en_cours` ;
+ * - sa `fin` est postérieure au lancement (`depuis`) ;
+ * - sa `debut` aussi — un rapport final d'une passe antérieure ne compte pas.
+ * Le 2026-09-21, « Passe du bot terminée » s'affichait alors qu'une passe tournait encore.
+ */
+export async function attendreFinBot(id: string, depuis: string, opts: { intervalleMs?: number; maxMs?: number } = {}): Promise<RapportBotMigration | null> {
+  const intervalle = opts.intervalleMs ?? 5000;
+  const limite = Date.now() + (opts.maxMs ?? 20 * 60 * 1000);
+  const t0 = new Date(depuis).getTime() - 5000; // tolérance : `depuis` est pris juste avant le vrai démarrage
+  while (Date.now() < limite) {
+    await new Promise((r) => setTimeout(r, intervalle));
+    let etat: { rapport: RapportBotMigration | null; derniere_execution: string | null };
+    try { etat = await getRapportBot(id); } catch { continue; }
+    const r = etat.rapport;
+    if (!r || r.en_cours) continue;
+    const debut = r.debut ? new Date(r.debut).getTime() : NaN;
+    const fin = r.fin ? new Date(r.fin).getTime() : NaN;
+    if (Number.isFinite(debut) && Number.isFinite(fin) && debut >= t0 && fin >= t0) return r;
+  }
+  return null;
+}
 export interface DecisionBotMigration { etape: string; cible: string; decision: string; detail?: string }
+export interface AuditBotMigration {
+  fichiers: Array<{ nom: string; entite: string | null; nature: string | null }>;
+  corrections: Array<{ fichier: string; colonne: string; avant: string | null; apres: string | null; pourquoi: string }>;
+  alertes: Array<{ fichier: string; colonne: string; message: string; action: string }>;
+  a_verifier: Array<{ fichier: string; colonne: string; actuel: string | null; candidats: string[]; pourquoi: string }>;
+  manques: Array<{ fichier: string; colonne: string; entite: string; proposition: string; besoin: string }>;
+  modele: string | null;
+  /** Markdown prêt à coller dans Claude Code (« applique l'audit »). */
+  texte_pour_claude: string;
+}
 export interface RapportBotMigration {
   migration_id: string; declencheur: 'manuel' | 'cron'; debut: string; fin: string;
   statut_avant: string; statut_apres: string; decisions: DecisionBotMigration[]; questions_posees: number; arret: string; cout_cents: number | null;
+  /** Absent sur les rapports d'avant 2026-09-17. */
+  audit?: AuditBotMigration;
+  /** Vrai pendant la passe : le rapport est partiel et se met à jour. */
+  en_cours?: boolean;
+  etape_courante?: string | null;
+  progression?: { fichiers_faits: number; fichiers_total: number } | null;
 }
 /** Le cron reprend la migration tout seul tant que c'est vrai. */
 export function definirBotActif(id: string, actif: boolean): Promise<any> {

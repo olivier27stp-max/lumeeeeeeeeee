@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { twilioClient, emailFrom, getTwilioStatusCallbackUrl } from '../lib/config';
+import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from '../lib/migration/gel-communications';
+import { twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { normalizeE164, findOrCreateConversation } from '../lib/helpers';
-import { provisionSmsNumber, getOrgSmsChannel, orgPlanIncludesSms } from '../lib/twilioProvisioning';
+import { provisionSmsNumber, getOrgSmsChannel, orgPlanIncludesSms, etatProvisionnementSms } from '../lib/twilioProvisioning';
 import {
   submitA2PBrand,
   submitA2PCampaign,
@@ -17,6 +18,7 @@ import { requireRole } from '../lib/rbac';
 import { validate, sendSmsSchema } from '../lib/validation';
 import { sanitizeText, sanitizeHtml, sanitizeMessageContent, stripCRLF, logSecurityEvent, checkAnomalies, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
+import { getCompanySettings, buildEmailLayout, senderForOrg } from './emails';
 
 const router = Router();
 
@@ -88,6 +90,10 @@ router.post('/communications/send-sms', validate(sendSmsSchema), async (req, res
         code: 'sms_opted_out',
       });
     }
+
+    // Compte importé pas encore activé : personne ne contacte ses clients.
+    const orgGelee = await destinataireGele(serviceClient, { phone: normalizedTo }, orgId);
+    if (orgGelee) { journaliserBlocage('sms', orgGelee, normalizedTo, 'sms manuel'); return res.status(423).json({ error: MESSAGE_GEL, code: 'communications_gelees' }); }
 
     // Accusé de réception : sans ce callback, la ligne `messages` insérée juste
     // après reste bloquée à `status: 'sent'` même si le SMS n'arrive jamais.
@@ -173,21 +179,24 @@ router.post('/communications/send-email', async (req, res) => {
     ensureMailer();
     const serviceClient = getServiceClient();
 
-    // Resolve sender identity: user email or org default
-    const senderReplyTo = reply_to || user.email || undefined;
+    // Voix ENTREPRISE : « De : {Entreprise} », réponses vers l'auteur (ou la
+    // boîte de l'entreprise), contenu libre enveloppé dans le gabarit commun.
+    const company = await getCompanySettings(orgId);
+    const expediteur = await senderForOrg(orgId, company);
+    const senderReplyTo = reply_to || user.email || expediteur.replyTo || undefined;
 
     // Sanitize subject (strip CRLF to prevent email header injection) and body
     const safeSubject = stripCRLF(subject);
     const safeBodyHtml = body_html ? sanitizeHtml(body_html) : null;
-    const htmlContent = safeBodyHtml || `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;white-space:pre-wrap;">${sanitizeText(body || '').replace(/\n/g, '<br/>')}</div>`;
+    const htmlContent = safeBodyHtml || `<p style="margin:0;white-space:pre-wrap;">${sanitizeText(body || '').replace(/\n/g, '<br/>')}</p>`;
 
     // Send via SMTP
     const result = await sendEmail({
-      from: emailFrom,
+      from: expediteur.from,
       to,
       replyTo: senderReplyTo,
       subject: safeSubject,
-      html: htmlContent,
+      html: buildEmailLayout(company, htmlContent),
     });
 
     if (!result.sent) throw new Error(result.error || 'Email send failed');
@@ -204,7 +213,7 @@ router.post('/communications/send-email', async (req, res) => {
         channel_type: 'email',
         direction: 'outbound',
         provider: 'resend',
-        from_value: emailFrom,
+        from_value: expediteur.from,
         to_value: to,
         subject,
         body_text: body || null,
@@ -286,6 +295,18 @@ router.get('/communications/channels', async (req, res) => {
     return res.json(data || []);
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to fetch channels.', '[communications/channels]');
+  }
+});
+
+// GET /api/communications/sms-provisioning — demande de numéro en file ou
+// abandonnée (null sinon). Affichage seulement : la relance est automatique.
+router.get('/communications/sms-provisioning', async (req, res) => {
+  try {
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    return res.json({ etat: await etatProvisionnementSms(authed.orgId) });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to fetch provisioning state.', '[communications/sms-provisioning]');
   }
 });
 

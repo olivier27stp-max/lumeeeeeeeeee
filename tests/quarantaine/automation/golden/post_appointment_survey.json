@@ -1,0 +1,32 @@
+{
+  "preset_key": "post_appointment_survey",
+  "trigger_event": "job.completed",
+  "delay_seconds": 86400,
+  "planifie": [
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-14T15:00:00.000Z",
+      "execution_key": "regle-post_appointment_survey:aaaaaaaa-0000-4000-8000-000000000002:0"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-14T15:00:00.000Z",
+      "execution_key": "regle-post_appointment_survey:aaaaaaaa-0000-4000-8000-000000000002:1"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, est-ce que tout est à votre goût depuis notre passage? Répondez à ce message si quelque chose ne va pas. — Plomberie Tremblay inc.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "satisfaction_check_sent",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

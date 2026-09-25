@@ -47,10 +47,12 @@ export interface EntreeSemantique {
   ts: number;
 }
 
-export type Portee = { genre: 'tenant'; orgId: string; userId: string } | { genre: 'public' };
+export type Portee = { genre: 'tenant'; orgId: string; userId: string } | { genre: 'public' } | { genre: 'global'; espace: string };
 
 export function cleIndex(p: Portee): string {
-  return p.genre === 'public' ? 'lumi:sem:public' : `lumi:sem:${p.orgId}:${p.userId}`;
+  if (p.genre === 'public') return 'lumi:sem:public';
+  if (p.genre === 'global') return `lumi:sem:global:${p.espace}`;
+  return `lumi:sem:${p.orgId}:${p.userId}`;
 }
 
 export function cosinus(a: number[], b: number[]): number {
@@ -80,19 +82,50 @@ export async function embed(texte: string, fetchImpl: typeof fetch = fetch): Pro
 }
 
 /** La meilleure entrée au-dessus du seuil, pour cette portée et cette version (pur sur l'index). */
-export function meilleure(index: EntreeSemantique[], vec: number[], version: number | null): { entree: EntreeSemantique; similarite: number } | null {
+/** Mots creux d'une question (verbes de demande, déterminants) : ils ne distinguent rien. */
+const MOTS_CREUX: ReadonlySet<string> = new Set(['montre', 'montrer', 'voir', 'liste', 'lister', 'dis', 'donne', 'quoi', 'quel', 'quels', 'quelle', 'quelles', 'combien', 'comment', 'avec', 'pour', 'dans', 'tous', 'toutes', 'mes', 'mon', 'les', 'des', 'une', 'pas', 'que', 'qui', 'est', 'sont', 'jai', 'moi', 'peux', 'peut', 'veux', 'faut', 'pourrais', 'stp', 'svp', 'plait', 'chez', 'encore', 'actuellement', 'presentement', 'show', 'list', 'what', 'which', 'the', 'and', 'all', 'can', 'you', 'please', 'have']);
+/** Mots porteurs d'un énoncé normalisé (≥ 3 lettres, hors mots creux), pour le garde lexical. */
+function motsPorteurs(enonce: string): Set<string> {
+  return new Set((normaliserEnonce(enonce) ?? '').split(/\s+/).filter((m) => m.length >= 3 && !MOTS_CREUX.has(m)));
+}
+
+/**
+ * Garde lexical : deux questions courtes qui ne diffèrent que par le nom clé
+ * (« mes modèles de soumission » / « mes modèles de facture ») ont un cosinus
+ * ≥ 0,92 et recevaient la même réponse (batterie du 2026-09-16). En plus du
+ * cosinus, il faut que ≥ 75 % des mots porteurs de la question soient dans
+ * l'énoncé mémorisé (60 % laissait passer « enlève la carte enregistrée de
+ * Gagnon » ← « supprime la carte de Gagnon du pipeline » : le nom propre
+ * pèse trop). Un cache raté coûte 1 ¢ ; une fausse réponse coûte la
+ * confiance. Sans énoncé fourni (appelants anciens) : pas de garde.
+ */
+export const PART_MOTS_COMMUNS_MIN = 0.75;
+export function lexicalementProche(enonce: string, memorise: string): boolean {
+  const a = motsPorteurs(enonce);
+  if (a.size === 0) return true;
+  const b = motsPorteurs(memorise);
+  let communs = 0;
+  for (const m of a) if (b.has(m)) communs += 1;
+  return communs / a.size >= PART_MOTS_COMMUNS_MIN;
+}
+
+export function meilleure(index: EntreeSemantique[], vec: number[], version: number | null, ageMaxMs = Infinity, maintenant = Date.now(), enonce?: string | null): { entree: EntreeSemantique; similarite: number } | null {
   let best: { entree: EntreeSemantique; similarite: number } | null = null;
   for (const e of index) {
     if (version !== null && e.version !== version) continue;
+    // Expiration PAR ENTRÉE : la clé de l'index est prolongée à chaque écriture,
+    // une vieille réponse survivait tant que l'org en mémorisait d'autres.
+    if (maintenant - e.ts > ageMaxMs) continue;
+    if (enonce && !lexicalementProche(enonce, e.enonce)) continue;
     const s = cosinus(vec, e.vec);
     if (s >= SEUIL_SIMILARITE && (!best || s > best.similarite)) best = { entree: e, similarite: s };
   }
   return best;
 }
 
-export async function chercherSemantique(p: Portee, vec: number[], version: number | null): Promise<{ entree: EntreeSemantique; similarite: number } | null> {
+export async function chercherSemantique(p: Portee, vec: number[], version: number | null, enonce?: string | null): Promise<{ entree: EntreeSemantique; similarite: number } | null> {
   const index = (await magasin().get<EntreeSemantique[]>(cleIndex(p))) ?? [];
-  return meilleure(index, vec, version);
+  return meilleure(index, vec, version, (p.genre === 'tenant' ? TTL_TENANT_S : TTL_PUBLIC_S) * 1000, Date.now(), enonce);
 }
 
 export async function memoriserSemantique(p: Portee, e: Omit<EntreeSemantique, 'ts'>): Promise<void> {
@@ -102,7 +135,12 @@ export async function memoriserSemantique(p: Portee, e: Omit<EntreeSemantique, '
   const sans = index.filter((x) => x.enonce !== enonce);
   sans.push({ ...e, enonce, ts: Date.now() });
   while (sans.length > MAX_ENTREES) sans.shift();
-  await magasin().set(cle, sans, p.genre === 'public' ? TTL_PUBLIC_S : TTL_TENANT_S);
+  await magasin().set(cle, sans, p.genre === 'tenant' ? TTL_TENANT_S : TTL_PUBLIC_S);
+}
+
+/** Tout oublier dans une portée (l'équipe vient d'apprendre quelque chose à Lumi : les réponses mémorisées avant sont suspectes). */
+export async function viderSemantique(p: Portee): Promise<void> {
+  await magasin().del(cleIndex(p));
 }
 
 /** Repli : la réponse mémorisée pour cet énoncé n'était pas la bonne. */
@@ -111,5 +149,5 @@ export async function oublierSemantique(p: Portee, enonce: string): Promise<void
   const index = (await magasin().get<EntreeSemantique[]>(cle)) ?? [];
   const n = normaliserEnonce(enonce) ?? '';
   const reste = index.filter((x) => x.enonce !== n);
-  if (reste.length !== index.length) await magasin().set(cle, reste, p.genre === 'public' ? TTL_PUBLIC_S : TTL_TENANT_S);
+  if (reste.length !== index.length) await magasin().set(cle, reste, p.genre === 'tenant' ? TTL_TENANT_S : TTL_PUBLIC_S);
 }

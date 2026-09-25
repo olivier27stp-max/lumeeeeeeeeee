@@ -23,6 +23,9 @@ interface UseModuleAccessReturn {
   activate: () => Promise<boolean>;
   /** Whether activation is in progress */
   activating: boolean;
+  /** Ligne posée par la plateforme (Creator Space) : le tenant ne peut ni
+   *  l'activer ni la désactiver. */
+  platformLocked: boolean;
 }
 
 /** Event name used to sync all instances of useModuleAccess */
@@ -127,5 +130,6 @@ export function useModuleAccess(moduleKey: string): UseModuleAccessReturn {
     loading,
     activate,
     activating,
+    platformLocked: !!flag && (flag.metadata as any)?.platform_override === true,
   };
 }

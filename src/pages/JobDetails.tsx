@@ -84,6 +84,7 @@ import TeamDayRoster from '../components/TeamDayRoster';
 import ClientPinMiniMap, { type ClientMapPin } from '../components/map-d2d/ClientPinMiniMap';
 import { getPins } from '../lib/fieldSalesApi';
 import { SignedLink } from '../components/ui/SignedMedia';
+import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface ScheduleEvent {
@@ -2193,6 +2194,8 @@ export default function JobDetails() {
         {/* ═══ NOTES + CLIENT SALES-MAP PIN ═══ */}
         <div className="grid gap-4 md:grid-cols-2">
           <SpecificNotes entityType="job" entityId={id!} mode="full" legacyNote={job.notes} />
+          {/* Champs personnalisés (v2) — dont ceux copiés depuis l'opportunité gagnée. */}
+          <CustomFieldsPanel objet="job" entityId={id} fr={language === 'fr'} className="section-card p-4 md:col-span-2 md:order-last" />
           <ClientPinMiniMap
             pin={miniMapPin}
             hasClient={Boolean(job.client_id)}

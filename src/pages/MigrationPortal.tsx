@@ -13,6 +13,7 @@ import {
   Loader2, Trash2, MessageSquare, ChevronDown, ChevronRight, Send, Lock,
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
+import { ImportDataForm } from '../components/migration-portal/ImportDataForm';
 import { supabase } from '../lib/supabase';
 import {
   PortalError,
@@ -80,8 +81,10 @@ function ConfidenceBadge({ value }: { value: number }) {
   return <span className={`inline-flex items-center px-2 h-5 rounded-full border text-[11px] font-semibold ${cls}`}>{value}%</span>;
 }
 
-function SectionCard({ title, icon, children, defaultOpen = true }: { title: string; icon?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
+function SectionCard({ title, icon, children, defaultOpen = true, openKey }: { title: string; icon?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; openKey?: number }) {
   const [open, setOpen] = useState(defaultOpen);
+  // « Continuer » du formulaire d'importation : déplie la section visée
+  useEffect(() => { if (openKey) setOpen(true); }, [openKey]);
   return (
     <div className="rounded-xl border border-[#e6e2d8] bg-white shadow-sm">
       <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-2 px-5 py-4 text-left">
@@ -301,6 +304,11 @@ function PortalBody({ fr, token, session, onRefresh }: { fr: boolean; token: str
     refetchOnWindowFocus: false,
   });
   const files = filesQuery.data ?? [];
+  const [mappingOpenKey, setMappingOpenKey] = useState(0);
+  const continuer = () => {
+    setMappingOpenKey((k) => k + 1);
+    setTimeout(() => document.getElementById('section-mapping')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
 
   return (
     <Frame fr={fr} session={session}>
@@ -337,8 +345,8 @@ function PortalBody({ fr, token, session, onRefresh }: { fr: boolean; token: str
             </div>
           )}
           <InstructionsSection fr={fr} token={token} session={session} />
-          <FilesSection fr={fr} token={token} session={session} files={files} onChanged={() => { qc.invalidateQueries({ queryKey: ['migration-portal-files', token] }); onRefresh(); }} />
-          <MappingsSection fr={fr} token={token} session={session} />
+          <ImportDataForm fr={fr} token={token} session={session} files={files} onChanged={() => { qc.invalidateQueries({ queryKey: ['migration-portal-files', token] }); onRefresh(); }} onContinue={continuer} />
+          <MappingsSection fr={fr} token={token} session={session} openKey={mappingOpenKey} />
           <QuestionsSection fr={fr} token={token} />
           <PreviewSection fr={fr} token={token} session={session} onDecided={onRefresh} />
           {['completed', 'completed_with_warnings', 'rolled_back'].includes(session.status) && <ReportSection fr={fr} token={token} />}
@@ -422,131 +430,7 @@ function InstructionsSection({ fr, token, session }: { fr: boolean; token: strin
   );
 }
 
-const FILE_STATUS_LABELS: Record<string, { fr: string; en: string; tone: 'ok' | 'warn' | 'err' | 'busy' }> = {
-  pending: { fr: 'En attente', en: 'Pending', tone: 'busy' },
-  parsing: { fr: 'Analyse…', en: 'Parsing…', tone: 'busy' },
-  parsed: { fr: 'Analysé', en: 'Parsed', tone: 'ok' },
-  failed: { fr: 'Échec', en: 'Failed', tone: 'err' },
-};
-
-function FilesSection({ fr, token, session, files, onChanged }: {
-  fr: boolean; token: string; session: PortalSession; files: PortalFile[]; onChanged: () => void;
-}) {
-  const [uploading, setUploading] = useState(false);
-  const [dragging, setDragging] = useState(false);
-
-  async function handleFiles(list: FileList | File[]) {
-    const arr = Array.from(list);
-    if (arr.length === 0) return;
-    setUploading(true);
-    for (const file of arr) {
-      try {
-        await uploadPortalFile(token, file);
-        toast.success(fr ? `${file.name} téléversé` : `${file.name} uploaded`);
-      } catch (err: any) {
-        toast.error(err?.message ?? (fr ? 'Téléversement impossible' : 'Upload failed'));
-      }
-    }
-    setUploading(false);
-    onChanged();
-  }
-
-  return (
-    <SectionCard title={fr ? 'Téléverser vos fichiers' : 'Upload your files'} icon={<UploadCloud size={16} className="text-[#8a8578]" />}>
-      {session.can_upload ? (
-        <label
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files) void handleFiles(e.dataTransfer.files); }}
-          className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-6 py-8 cursor-pointer transition-colors ${
-            dragging ? 'border-[#b9ae99] bg-[#f4f1ea]' : 'border-[#e6e2d8] bg-[#fbfaf7] hover:bg-[#f4f1ea]'
-          }`}
-        >
-          {uploading ? <Loader2 size={20} className="animate-spin text-[#8a8578]" /> : <UploadCloud size={20} className="text-[#8a8578]" />}
-          <span className="text-[13px] text-[#6b675e]">
-            {fr ? 'Glissez vos fichiers CSV ici, ou cliquez pour choisir' : 'Drag your CSV files here, or click to choose'}
-          </span>
-          <span className="text-[11px] text-[#a09a8c]">{fr ? 'CSV ou PDF · max 25 Mo par fichier' : 'CSV or PDF · max 25 MB per file'}</span>
-          <input
-            type="file"
-            multiple
-            accept=".csv,.pdf"
-            aria-label={fr ? 'Choisir des fichiers CSV ou PDF' : 'Choose CSV or PDF files'}
-            className="hidden"
-            disabled={uploading}
-            onChange={(e) => { if (e.target.files) void handleFiles(e.target.files); e.target.value = ''; }}
-          />
-        </label>
-      ) : (
-        <div className="text-[13px] text-[#8a8578]">
-          {fr ? 'Le téléversement n\'est pas disponible à cette étape.' : 'Uploading is not available at this stage.'}
-        </div>
-      )}
-
-      {files.length > 0 && (
-        <div className="mt-4 border border-[#e6e2d8] rounded-lg overflow-hidden">
-          <div className="grid text-[12px]" style={{ gridTemplateColumns: '1fr 90px 110px 90px 110px 40px' }}>
-            {[fr ? 'Fichier' : 'File', fr ? 'Taille' : 'Size', fr ? 'Catégorie' : 'Category', fr ? 'Lignes' : 'Rows', fr ? 'Statut' : 'Status', ''].map((h) => (
-              <div key={h} className="px-3 py-2 bg-[#fbfaf7] border-b border-[#e6e2d8] font-semibold text-[#6b675e]">{h}</div>
-            ))}
-            {files.map((f) => {
-              const st = f.security_status === 'rejected'
-                ? { fr: 'Rejeté', en: 'Rejected', tone: 'err' as const }
-                : FILE_STATUS_LABELS[f.parse_status] ?? FILE_STATUS_LABELS.pending;
-              return (
-                <FileRow key={f.id} f={f} st={st} fr={fr} canDelete={session.can_upload} onDelete={async () => {
-                  try {
-                    await deletePortalFile(token, f.id);
-                    toast.success(fr ? 'Fichier supprimé' : 'File deleted');
-                    onChanged();
-                  } catch (err: any) {
-                    toast.error(err?.message ?? 'Erreur');
-                  }
-                }}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </SectionCard>
-  );
-}
-
-function FileRow({ f, st, fr, canDelete, onDelete }: {
-  f: PortalFile; st: { fr: string; en: string; tone: 'ok' | 'warn' | 'err' | 'busy' }; fr: boolean; canDelete: boolean; onDelete: () => void;
-}) {
-  const toneCls = st.tone === 'ok'
-    ? 'text-emerald-700'
-    : st.tone === 'err'
-      ? 'text-red-600'
-      : 'text-[#8a8578]';
-  const cell = 'px-3 py-2 border-b border-[#f0ece2] text-[#444] flex items-center min-w-0';
-  return (
-    <>
-      <div className={cell}>
-        <span className="truncate font-medium">{f.original_name}</span>
-      </div>
-      <div className={cell}>{formatBytes(f.size_bytes)}</div>
-      <div className={cell}>{f.category_detected ? (ENTITY_LABELS_FR[f.category_detected] ?? f.category_detected) : '—'}</div>
-      <div className={cell}>{f.row_count ?? '—'}</div>
-      <div className={`${cell} ${toneCls} gap-1.5`}>
-        {st.tone === 'busy' && <Loader2 size={12} className="animate-spin" />}
-        {fr ? st.fr : st.en}
-        {f.parse_error === 'truncated' && <span title={fr ? 'Fichier tronqué (limite de lignes)' : 'File truncated (row cap)'}>⚠</span>}
-      </div>
-      <div className={`${cell} justify-center`}>
-        {canDelete && (
-          <button type="button" onClick={onDelete} className="text-[#a09a8c] hover:text-red-600" title={fr ? 'Supprimer' : 'Delete'}>
-            <Trash2 size={14} />
-          </button>
-        )}
-      </div>
-    </>
-  );
-}
-
-function MappingsSection({ fr, token, session }: { fr: boolean; token: string; session: PortalSession }) {
+function MappingsSection({ fr, token, session, openKey }: { fr: boolean; token: string; session: PortalSession; openKey?: number }) {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: ['migration-portal-mappings', token],
@@ -567,7 +451,8 @@ function MappingsSection({ fr, token, session }: { fr: boolean; token: string; s
   }
 
   return (
-    <SectionCard title={fr ? 'Correspondance des colonnes' : 'Column mapping'} icon={<CheckCircle2 size={16} className="text-[#8a8578]" />} defaultOpen={stepIndexForStatus(session.status) === 2}>
+    <div id="section-mapping" className="scroll-mt-6">
+    <SectionCard title={fr ? 'Correspondance des colonnes' : 'Column mapping'} icon={<CheckCircle2 size={16} className="text-[#8a8578]" />} defaultOpen={stepIndexForStatus(session.status) === 2} openKey={openKey}>
       <p className="text-[12px] text-[#8a8578] mb-3">
         {fr
           ? 'Les aperçus sont masqués pour protéger vos données. Les correspondances incertaines sont vérifiées par l\'équipe Lume.'
@@ -602,6 +487,7 @@ function MappingsSection({ fr, token, session }: { fr: boolean; token: string; s
         ))}
       </div>
     </SectionCard>
+    </div>
   );
 }
 

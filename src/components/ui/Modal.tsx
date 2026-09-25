@@ -9,7 +9,7 @@ interface ModalProps {
   title?: string;
   description?: string;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   footer?: React.ReactNode;
 }
 
@@ -18,6 +18,8 @@ const sizeMap = {
   md: 'max-w-md',
   lg: 'max-w-lg',
   xl: 'max-w-xl',
+  // Formulaire + aperçu côte à côte (création de champ personnalisé).
+  '2xl': 'max-w-3xl',
 };
 
 export default function Modal({ open, onClose, title, description, children, size = 'md', footer }: ModalProps) {

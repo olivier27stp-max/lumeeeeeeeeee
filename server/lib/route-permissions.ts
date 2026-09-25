@@ -93,6 +93,7 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/communications/send-email': 'messages.send',
   'GET /api/communications/messages': 'messages.read',
   'GET /api/communications/channels': 'integrations.read',
+  'GET /api/communications/sms-provisioning': 'integrations.read',
   'GET /api/communications/settings': 'settings.read',
   'POST /api/communications/provision-sms': 'integrations.update',
 
@@ -103,6 +104,16 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
 
   // ── Automations ──
   'GET /api/automations/test': 'automations.read',
+  // Automatisations personnalisées : voir la liste demande le droit de
+  // lecture, tout le reste écrit des règles qui enverront de vrais textos et
+  // courriels aux clients — donc le droit de modification.
+  'GET /api/automations/rules': 'automations.read',
+  'POST /api/automations/rules': 'automations.update',
+  'PATCH /api/automations/rules/:id': 'automations.update',
+  'DELETE /api/automations/rules/:id': 'automations.update',
+  'POST /api/automations/rules/:id/duplicate': 'automations.update',
+  // Générer coûte un appel au modèle : même droit que créer à la main.
+  'POST /api/automations/rules/generer': 'automations.update',
   'POST /api/automations/events/appointment-created': 'automations.update',
   'POST /api/automations/events/appointment-cancelled': 'automations.update',
   'POST /api/automations/events/job-completed': 'jobs.complete',
@@ -140,6 +151,22 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/features': 'settings.read',
   'PUT /api/features/:feature': 'settings.update',
 
+  // ── Champs personnalisés v2 (définitions = réglages ; valeurs = RLS de l'objet parent) ──
+  'GET /api/custom-fields': 'settings.read',
+  'POST /api/custom-fields': 'settings.update',
+  'GET /api/custom-fields/templates': 'settings.read',
+  'POST /api/custom-fields/templates': 'settings.update',
+  'PATCH /api/custom-fields/:id': 'settings.update',
+  'POST /api/custom-fields/:id/archive': 'settings.update',
+  'GET /api/custom-fields/:id/impact': 'settings.update',
+  'DELETE /api/custom-fields/:id': 'settings.update',
+  'PUT /api/custom-fields/searchable': 'settings.update',
+  'PUT /api/custom-fields/unique': 'settings.update',
+  'PUT /api/custom-fields/pipeline-cards/:id': 'settings.update',
+  'POST /api/custom-field-folders': 'settings.update',
+  'PATCH /api/custom-field-folders/:id': 'settings.update',
+  'DELETE /api/custom-field-folders/:id': 'settings.update',
+
   // ── Billing ──
   // 'GET /api/billing/current' is NOT permission-gated: every member must be
   // able to resolve the org's PLAN (it gates whole app areas). The route
@@ -154,6 +181,12 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/connect/create-onboarding-link': 'settings.update',
   'POST /api/connect/refresh-onboarding-link': 'settings.update',
   'GET /api/connect/account-status': 'financial.view_payments',
+
+  // ── Domaine d'envoi propre à l'entreprise (courriels depuis facturation@sondomaine) ──
+  'GET /api/sending-domain': 'settings.read',
+  'POST /api/sending-domain': 'settings.update',
+  'POST /api/sending-domain/verify': 'settings.update',
+  'DELETE /api/sending-domain': 'settings.update',
 
   // ── Commissions ── (financial: reports)
   'GET /api/commissions': 'financial.view_reports',

@@ -18,6 +18,7 @@ import {
 } from './tools-etendus';
 import { OUTILS_RAPPORTS } from './tools-rapports';
 import { searchHelp } from './tools-aide';
+import { OUTILS_DOMAINES } from './outils-domaines';
 
 export interface ToolContext {
   client: SupabaseClient;
@@ -173,7 +174,7 @@ const searchLeads: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'search_leads',
-    description: 'Search leads (prospects) by name, company, email or phone. Returns total_matching (exact count) and the matching leads with id and status.',
+    description: 'Search leads (prospects) by name, company, email or phone. Returns total_matching (exact count) and the matching leads with id and status. Create, edit, move in the pipeline, delete, convert → create_lead, update_lead, update_lead_status, delete_lead, convert_lead_to_client, convert_lead_to_job. The pipeline BOARD (deal cards, stages, values) → list_deals, update_deal_stage, delete_deal.',
     parameters: {
       type: 'object',
       properties: {
@@ -194,8 +195,12 @@ const searchLeads: AgentTool = {
     const term = String(args.query || '').trim();
     if (term) {
       const t = term.replace(/[%,()]/g, ' ');
-      q = q.or(
-        `first_name.ilike.%${t}%,last_name.ilike.%${t}%,company.ilike.%${t}%,email.ilike.%${t}%,phone.ilike.%${t}%`,
+      // « Julie Fortin » cherché d'un bloc dans first_name OU last_name → 0 résultat
+      // (batterie d'exécution du 2026-09-17). Même découpage que search_clients :
+      // chaque mot doit se trouver dans un des champs.
+      const mots = t.replace(/[%,()]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 5);
+      for (const mot of mots) q = q.or(
+        `first_name.ilike.%${mot}%,last_name.ilike.%${mot}%,company.ilike.%${mot}%,email.ilike.%${mot}%,phone.ilike.%${mot}%`,
       );
     }
     const { data, error, count } = await q;
@@ -322,15 +327,27 @@ const getJob: AgentTool = {
       .eq('id', String(args.job_id))
       .maybeSingle();
     if (error) return toolError('db', error);
-    if (!data) return { error: 'Job not found.' };
+    // `introuvable`, pas `error` : le job n'existe pas, ce n'est PAS une panne.
+    // Avec `error`, Lumi répondait « la consultation a échoué côté Lume »
+    // (mesuré le 2026-09-22 sur le job 33, qui n'existe simplement pas) — le
+    // client croit à un bug et le signale, alors que tout fonctionne.
+    if (!data) return { introuvable: true, message: "Ce job n'existe pas (ou plus) dans cette entreprise. Si un NUMÉRO de job a été donné, le chercher avec list_jobs — cet outil-ci attend l'identifiant interne, pas le numéro affiché." };
     // Le job complet inclut ses lignes d'items — sans elles, « c'est quoi le
     // détail du job » ne sait répondre que le total.
+    // Les visites du job avec leur identifiant : « facture la visite d'hier »
+    // (create_invoice_for_visit) n'avait aucun moyen de le trouver.
+    const { data: visites } = await ctx.client
+      .from('schedule_events')
+      .select('id, start_at, end_at, status')
+      .eq('job_id', (data as any).id)
+      .order('start_at', { ascending: true })
+      .limit(50);
     const { data: items } = await ctx.client
       .from('job_line_items')
       .select('name, qty, unit_price_cents, total_cents, included')
       .eq('job_id', (data as any).id)
       .is('deleted_at', null);
-    return { ...data, line_items: items || [] };
+    return { ...data, line_items: items || [], visits: (visites || []).map((v: any) => ({ visit_id: v.id, start_at: v.start_at, end_at: v.end_at, status: v.status })) };
   },
 };
 
@@ -432,7 +449,7 @@ const listQuotes: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_quotes',
-    description: 'List quotes, optionally filtered by status or a search term. Returns total_matching (exact count), then number, title, status and total.',
+    description: 'List quotes, optionally filtered by status or a search term. Returns total_matching (exact count), then number, title, status and total. Edit, duplicate, send by text, convert to invoice, presets → update_quote, duplicate_quote, send_quote_sms, convert_quote_to_invoice, *_quote_preset.',
     parameters: {
       type: 'object',
       properties: {
@@ -482,7 +499,7 @@ const listInvoices: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'list_invoices',
-    description: 'List invoices, optionally filtered by status (all, draft, past_due, paid). Returns invoice number, client, status, total and balance.',
+    description: 'List invoices, optionally filtered by status (all, draft, past_due, paid). Returns invoice number, client, status, total and balance. Partial payment, void, back to draft, edit, duplicate, delete, recurring, invoice templates, payment link, refund, card on file → record_invoice_payment, void_invoice, revert_invoice_to_draft, update_invoice, duplicate_invoice, delete_invoice, *_recurring_invoice, *_invoice_template, create_payment_request, resend_payment_request, refund_payment, charge_card_on_file.',
     parameters: {
       type: 'object',
       properties: {
@@ -873,6 +890,36 @@ createJob.needsIdentity = true;
 sendSms.handler = handlerSendSms;
 sendSms.needsIdentity = true;
 
+
+/**
+ * Météo — la seule information hors CRM que Lumi connaisse (2026-09-22).
+ * Les clients de Lume travaillent dehors : la pluie décide si la journée a
+ * lieu. Source Open-Meteo, gratuite ; aucune donnée de l'org ne sort, juste
+ * des coordonnées. Voir server/lib/agent/meteo.ts.
+ */
+const getWeather: AgentTool = {
+  // Lecture pure : aucune écriture, donc aucune carte de confirmation.
+  kind: 'read',
+  declaration: {
+    name: 'get_weather',
+    description: "Weather forecast for the company's area, today or tomorrow, with an outdoor-work verdict (bon/variable/mauvais). Use for questions about rain, wind, temperature, or whether a job can be done outside. Only covers today and tomorrow.",
+    parameters: {
+      type: 'object',
+      properties: {
+        jour: { type: 'string', enum: ['aujourdhui', 'demain'], description: "Day to forecast. Defaults to today." },
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const { previsionPourOrg } = await import('./meteo');
+    const p = await previsionPourOrg(ctx.client, ctx.orgId, { jour: args.jour === 'demain' ? 1 : 0 });
+    // Pas de prévision (adresse manquante, service indisponible) : on le DIT.
+    // Le modèle doit répondre qu'il ne sait pas, jamais inventer une météo.
+    if (!p) return { disponible: false, raison: "Aucune prévision : l'adresse de l'entreprise est peut-être incomplète (Paramètres → Entreprise)." };
+    return p;
+  },
+};
+
 export const AGENT_TOOLS: AgentTool[] = [
   searchHelp,
   searchClients,
@@ -887,6 +934,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   getOverduePayments,
   getRevenueSummary,
   getDayRoute,
+  getWeather,
   createQuote,
   createInvoice,
   createJob,
@@ -894,6 +942,8 @@ export const AGENT_TOOLS: AgentTool[] = [
   ...OUTILS_LECTURE_ETENDUS,
   ...OUTILS_ECRITURE_ETENDUS,
   ...OUTILS_RAPPORTS,
+  // Couverture d'exécution à 100 % (2026-09-16) : leads, argent, terrain, équipe, réglages, porte-à-porte, formations.
+  ...OUTILS_DOMAINES,
 ];
 
 export const TOOLS_BY_NAME: Record<string, AgentTool> = Object.fromEntries(

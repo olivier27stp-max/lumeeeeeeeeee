@@ -31,6 +31,7 @@ import clientErrorsRouter from './routes/client-errors';
 import leadsRouter from './routes/leads';
 import paymentsRouter, { stripeWebhookHandler } from './routes/payments';
 import { emailWebhookHandler } from './routes/webhooks-email';
+import { sesWebhookHandler } from './routes/webhooks-ses';
 import { slackWebhookHandler } from './routes/webhooks-slack';
 import messagesRouter from './routes/messages';
 import quotesRouter, { quoteRedirectRouter } from './routes/quotes';
@@ -38,6 +39,7 @@ import invoicesPublicRouter from './routes/invoices-public';
 import agreementsRouter from './routes/agreements';
 import notificationsRouter from './routes/notifications';
 import emailsRouter from './routes/emails';
+import emailDeliveriesRouter from './routes/email-deliveries';
 import integrationsRouter from './routes/integrations';
 import emailAccountsRouter from './routes/email-accounts';
 import surveysRouter from './routes/surveys';
@@ -45,8 +47,10 @@ import emailTemplatesRouter from './routes/email-templates';
 import communicationsRouter from './routes/communications';
 import automationTestRouter from './routes/automation-test';
 import automationEventsRouter from './routes/automation-events';
+import automationRulesRouter from './routes/automation-rules';
 import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
+import sendingDomainsRouter from './routes/sending-domains';
 import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
 import unsubscribeRouter from './routes/unsubscribe';
@@ -65,6 +69,7 @@ import quoteTemplatesRouter from './routes/quote-templates';
 import checklistsRouter from './routes/checklists';
 import taxesRouter from './routes/taxes';
 import featureFlagsRouter from './routes/feature-flags';
+import customFieldsRouter from './routes/custom-fields';
 import scheduledReportsRouter from './routes/scheduled-reports';
 import goalsRouter from './routes/goals';
 import auditLogRouter from './routes/audit-log';
@@ -105,6 +110,8 @@ import migrationAdminRouter from './routes/migration-admin';
 import migrationPortalRouter from './routes/migration-portal';
 import creatorSpaceRouter from './routes/creator-space';
 import creatorSpaceAuditRouter, { creatorSpaceViewLogger } from './routes/creator-space-audit';
+import creatorSpaceFeaturesRouter from './routes/creator-space-features';
+import creatorSpaceNotesRouter from './routes/creator-space-notes';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, userKey } from './lib/security';
@@ -256,8 +263,20 @@ const WEBHOOK_PATHS_EXEMPT_FROM_CSRF = [
   '/webhooks/stripe-connect',
   '/webhooks/paypal',
   '/webhooks/email',   // Resend (rebonds), signature Svix vérifiée
+  '/webhooks/ses',     // Amazon SES via SNS (rebonds, suivi), jeton partagé dans l'URL
   '/webhooks/slack',   // Réponses du support humain, signature Slack vérifiée
 ];
+// Aucune réponse d'API n'est mise en cache par le navigateur. Chrome traite un
+// 410 Gone sans Cache-Control comme frais POUR TOUJOURS (même règle que 301/308) :
+// le portail de migration répondait 410 « expired » sur GET /api/migration-portal/session
+// — jeton dans un en-tête, donc même URL pour tous les liens — et Chrome resservait
+// ce corps depuis son cache à chaque nouveau lien, sans requête réseau (2026-09-19).
+// Les réponses portent aussi l'Authorization sans Vary dessus. Les routes qui veulent
+// un cache explicite le redéfinissent après (elles s'exécutent plus tard).
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   // External webhooks: signature-validated downstream, never carry CSRF headers.
@@ -328,6 +347,8 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: 
 app.post('/api/webhooks/stripe-connect', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhookHandler);
 // Rebonds courriel (Resend) : corps brut pour la signature Svix (audit QA n°8).
 app.post('/api/webhooks/email', express.raw({ type: 'application/json', limit: '1mb' }), emailWebhookHandler);
+// SES publie ses rebonds par SNS (corps brut, jeton dans l'URL) — voir routes/webhooks-ses.ts.
+app.post('/api/webhooks/ses', express.raw({ type: ['application/json', 'text/plain'], limit: '1mb' }), sesWebhookHandler);
 // Slack (support humain) : signature sur le corps brut, comme les deux précédents.
 app.post('/api/webhooks/slack', express.raw({ type: 'application/json', limit: '1mb' }), slackWebhookHandler);
 
@@ -619,6 +640,9 @@ if (!useRedis) {
   app.use('/api/quotes', quoteLimiterStrict);
   app.use('/api/agreements/public', agreementPublicLimiter);
   app.use('/api/automations/events', automationLimiter);
+  // Les écritures d'automatisations passent par le même plafond : une règle
+  // enregistrée met en file des textos et des courriels réels.
+  app.use('/api/automations/rules', automationLimiter);
   app.use('/api/agent', agentLimiter);
   app.use('/api/lumi', agentLimiter);
   app.use('/api/dsr', dsrLimiterMem);
@@ -676,6 +700,22 @@ app.get('/.well-known/oauth-protected-resource/api/mcp', (_req, res) => {
   try { res.json(protectedResourceMetadata()); }
   catch { res.status(503).json({ error: 'PUBLIC_BASE_URL non configuré.' }); }
 });
+// Apple Pay (Lume Payments) : Apple vérifie que le domaine nous appartient en
+// lisant ce fichier, fourni par Stripe et identique pour tous ses marchands
+// (https://stripe.com/files/apple-pay/apple-developer-merchantid-domain-association).
+// Sans lui, le bouton Apple Pay n'apparaît jamais sur la page de paiement,
+// même après l'ajout du domaine dans le dashboard Stripe. express.static
+// ignore les dossiers pointés (.well-known), d'où la route explicite.
+// Constaté le 2026-09-17 : le chemin renvoyait index.html.
+const FICHIER_APPLE_PAY = path.resolve(__dirname, 'assets', 'apple-developer-merchantid-domain-association');
+app.get('/.well-known/apple-developer-merchantid-domain-association', (_req, res) => {
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.type('text/plain');
+  res.sendFile(FICHIER_APPLE_PAY, (err) => {
+    if (err && !res.headersSent) res.status(404).type('text/plain').send('Not found');
+  });
+});
+
 // L'échange de jeton est public par nature (le client n'a pas encore de
 // session) mais reste une cible de force brute : limité par IP.
 app.use('/api/oauth', rateLimit({ windowMs: 60_000, max: 30 }), oauthRouter);
@@ -728,6 +768,7 @@ app.use(subscriptionGuard());
 
 // ── Mount all route modules under /api ──
 app.use('/api', searchRouter);
+app.use('/api', customFieldsRouter);
 app.use('/api', geocodeRouter);
 app.use('/api', clientErrorsRouter);
 app.use('/api', routeOptimizationRouter);
@@ -736,14 +777,18 @@ app.use('/api', paymentsRouter);
 app.use('/api', notificationsRouter);
 app.use('/api', messagesRouter);
 app.use('/api', emailsRouter);
+app.use('/api', emailDeliveriesRouter);
 app.use('/api', integrationsRouter);
 app.use('/api', emailAccountsRouter);
 app.use('/api', emailTemplatesRouter);
 app.use('/api', communicationsRouter);
 app.use('/api', automationTestRouter);
 app.use('/api', automationEventsRouter);
+app.use('/api', automationRulesRouter);
 app.use('/api', portalRouter);
 app.use('/api', connectRouter);
+// Domaine d'envoi propre à l'entreprise (Resend Domains) — owner/admin, sous son propre préfixe.
+app.use('/api/sending-domain', sendingDomainsRouter);
 app.use('/api', paymentRequestsRouter);
 app.use('/api', publicPayRouter);
 // Désinscription courriel — publique, authentifiée par le jeton de l'URL.
@@ -855,6 +900,11 @@ app.use('/api/creator-space', creatorSpaceLimiter);
 app.use('/api/creator-space', creatorSpaceViewLogger());
 app.use('/api', creatorSpaceRouter);
 app.use('/api', creatorSpaceAuditRouter);
+// Fonctionnalités par workspace (activer / bloquer par-dessus le forfait) :
+// seules écritures du Creator Space avec reveal-actor, chacune journalisée.
+app.use('/api', creatorSpaceFeaturesRouter);
+// Notes internes par workspace : table dédiée, jamais visible du tenant.
+app.use('/api', creatorSpaceNotesRouter);
 const migrationPortalLimiter = rateLimit({ windowMs: 60_000, max: 120, keyFn: (req) => `migportal:${userKey(req)}` });
 app.use('/api/migration-portal', migrationPortalLimiter);
 // Anti force-brute sur la résolution du jeton : limite serrée par IP (Redis si dispo).
@@ -1151,7 +1201,41 @@ app.get('/api/health', async (_req, res) => {
     const admin = getServiceClient();
     const { error } = await admin.from('orgs').select('id').limit(1);
     if (error) throw new Error(error.message);
-    res.json({ status: 'ok', uptime: process.uptime(), db_ms: Date.now() - started });
+
+    /* Le fournisseur de courriel réellement actif.
+       Sans cette ligne, un envoi qui part en SMTP alors que RESEND_API_KEY est
+       posée sur Railway ne se diagnostique qu'en lisant `email_deliveries`
+       APRÈS coup — et personne ne pense à le faire. Le SMTP ne renvoie aucun
+       accusé : ouvertures, clics et rebonds restent à zéro pour toujours.
+       Aucun secret n'est exposé : seulement le nom du fournisseur et le fait
+       que la clé soit présente ou non. */
+    const { fournisseurCourriel, raisonSmtpMalgreResend, raisonSesSansSuivi } = await import('./lib/mailer.js');
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      db_ms: Date.now() - started,
+      courriel: {
+        fournisseur: fournisseurCourriel(),
+        force: process.env.COURRIEL_FOURNISSEUR || null,
+        resend_cle: Boolean(String(process.env.RESEND_API_KEY || '').trim()),
+        /* `fournisseur: 'smtp'` ne dit pas QUI envoie vraiment : Amazon SES
+           fournit des identifiants SMTP ordinaires, qu'on peut coller dans
+           SMTP_HOST sans jamais toucher aux variables SES_*. Le courriel part
+           alors par Amazon, le code croit faire du SMTP générique, et aucun
+           accusé ne revient — exactement notre cas.
+           L'hôte tranche : « email-smtp.… » = Amazon, « smtp.resend.com » =
+           Resend, autre chose = un vrai serveur SMTP. L'hôte n'est pas un
+           secret ; les identifiants ne sont jamais exposés ici. */
+        smtp_hote: process.env.SMTP_HOST || null,
+        /* La FORME de l'identifiant, pas seulement sa présence. Une variable
+           posée à « a » passait ce test et affichait « tout va bien » pendant
+           que chaque envoi échouait en 535. */
+        ses_variables: /^AKIA[A-Z0-9]{12,}$/.test(String(process.env.SES_SMTP_USER || '').trim()),
+        // Ce qui empêche le suivi, quel que soit le fournisseur : une phrase
+        // qui dit quoi corriger, `null` quand tout est en place.
+        suivi_bloque: raisonSmtpMalgreResend() ?? raisonSesSansSuivi(),
+      },
+    });
   } catch (err: any) {
     // Pas de captureCronFailure ici : la panne se répéterait à chaque sondage et
     // noierait Sentry. Le moniteur externe est le bon canal d'alerte.
@@ -1230,6 +1314,23 @@ process.on('uncaughtException', (err: Error) => {
 
 app.listen(port, '0.0.0.0', () => {
   logger.info(`API listening on 0.0.0.0:${port}`);
+
+  /* Le SMTP n'accuse RIEN : ni ouverture, ni clic, ni rebond. Partir par ce
+     chemin alors qu'une clé Resend existe est donc silencieux, et ça s'est vu
+     37 fois avant qu'on lise la colonne `provider` d'`email_deliveries`.
+     La bannière le dit au démarrage, et dit quoi corriger. */
+  void import('./lib/mailer.js').then(({ fournisseurCourriel, raisonSmtpMalgreResend, raisonSesSansSuivi }) => {
+    const raison = raisonSmtpMalgreResend() ?? raisonSesSansSuivi();
+    logger.info(`[courriels] fournisseur : ${fournisseurCourriel()}`);
+    if (raison) {
+      console.warn('');
+      console.warn('  ╔════════════════════════════════════════════════════════════╗');
+      console.warn('  ║  COURRIELS — aucun suivi ne reviendra                      ║');
+      console.warn('  ╚════════════════════════════════════════════════════════════╝');
+      console.warn(`  ${raison}`);
+      console.warn('');
+    }
+  }).catch(() => { /* diagnostic best-effort : ne bloque jamais le démarrage */ });
 
   // Mode QA : impossible de l'oublier armé. Sans cette bannière, on pourrait
   // croire que les messages partent aux clients alors qu'ils sont tous détournés
@@ -1310,6 +1411,19 @@ app.listen(port, '0.0.0.0', () => {
           logger.info('[migration-bot] Cron started (every 10min, lock-guarded)');
         });
 
+        // Numéros SMS en attente — reprend les achats échoués ou mis en file
+        // (conformité Twilio non approuvée, stock vide, arrêt d'urgence levé).
+        // Sans effet pendant l'arrêt d'urgence TWILIO_AUTO_PROVISION=false.
+        import('./lib/twilioProvisioning').then(({ relancerProvisionnementsEnAttente }) => {
+          const runProv = () =>
+            withAdvisoryLock('sms-provisioning-retry', () =>
+              withCronCheckIn('sms-provisioning-retry', () => relancerProvisionnementsEnAttente()))
+              .catch((e: any) => captureCronFailure('sms-provisioning-retry', e));
+          setInterval(runProv, 10 * 60 * 1000);
+          setTimeout(runProv, 90_000);
+          logger.info('[sms-provisioning-retry] Cron started (every 10min, lock-guarded)');
+        }).catch((e: any) => captureCronFailure('sms-provisioning-retry-import', e));
+
         // Abonnements figés — période dépassée alors que le statut reste
         // `active`. Ne suspend RIEN : pose une trace dans security_events.
         // Constat du 2026-09-03 : les 7 abonnements de prod étaient dans ce
@@ -1357,9 +1471,29 @@ app.listen(port, '0.0.0.0', () => {
     import('./lib/support/relais-slack').then(({ demarrerReleveSlack }) => {
       demarrerReleveSlack();
     }).catch((e: any) => captureCronFailure('slack-relais-startup', e));
+    // Ce que l'équipe a appris à Lumi (📌 dans Slack) : chargé au démarrage, rechargé toutes les dix minutes.
+    Promise.all([import('./lib/support/savoir'), import('./lib/supabase')]).then(([{ demarrerSavoir }, { getServiceClient: serviceClient }]) => {
+      demarrerSavoir(serviceClient);
+    }).catch((e: any) => captureCronFailure('support-savoir-startup', e));
+    // Résumé quotidien du support (7 h Montréal) dans le canal central : une ligne par conversation de la veille.
+    Promise.all([import('./lib/support/resume-quotidien'), import('./lib/supabase')]).then(([{ demarrerResumeQuotidien }, { getServiceClient: serviceClient }]) => {
+      demarrerResumeQuotidien(serviceClient);
+    }).catch((e: any) => captureCronFailure('support-resume-startup', e));
+    // File de reprise des courriels de fond (sendEmail({ reessayer: true })) : 5 min / 30 min / 3 h, puis abandon signalé à l'exploitant.
+    Promise.all([import('./lib/courriels/reprises'), import('./lib/supabase')]).then(([{ demarrerReprisesCourriels }, { getServiceClient: serviceClient }]) => {
+      demarrerReprisesCourriels(serviceClient);
+    }).catch((e: any) => captureCronFailure('email-retry-startup', e));
+    // Santé des courriels (8 h Montréal) : taux de rebond > 2 % sur 24 h (≥ 20 envois) → un courriel à l'exploitant.
+    Promise.all([import('./lib/courriels/sante'), import('./lib/supabase')]).then(([{ demarrerSanteCourriels }, { getServiceClient: serviceClient }]) => {
+      demarrerSanteCourriels(serviceClient);
+    }).catch((e: any) => captureCronFailure('courriels-sante-startup', e));
     import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
       demarrerAlertingSecurite();
     }).catch((e: any) => captureCronFailure('security-alerting-startup', e));
+    // Cache 1 h de Lumi gardé chaud dans la foulée d'une activité réelle (0,15 ¢ le ping contre 2,7 ¢ le démarrage à froid).
+    import('./lib/lumi/cache-chaud').then(({ demarrerMaintienCacheChaud }) => {
+      demarrerMaintienCacheChaud();
+    }).catch((e: any) => captureCronFailure('lumi-cache-chaud-startup', e));
 
     // Scheduled reports — check every hour
     import('./lib/scheduled-reports').then(({ processScheduledReports }) => {

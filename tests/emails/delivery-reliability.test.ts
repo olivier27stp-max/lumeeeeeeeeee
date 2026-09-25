@@ -292,18 +292,34 @@ describe('statusCallback — les SMS ne restent plus figés à « envoyé »', (
     // La signature Twilio se valide contre l'URL EXACTE appelée : toute
     // divergence ferait rejeter 100 % des callbacks avec une erreur 403.
     const config = read('server/lib/config.ts');
-    const fn = config.slice(
+    const base = config.slice(
+      config.indexOf('export function getTwilioWebhookBaseUrl'),
       config.indexOf('export function getTwilioStatusCallbackUrl'),
-      config.indexOf('export const stripeWebhookClient'),
     );
     const order = ['TWILIO_WEBHOOK_BASE_URL', 'PUBLIC_URL', 'PUBLIC_BASE_URL', 'FRONTEND_URL'];
     let cursor = -1;
     for (const v of order) {
-      const idx = fn.indexOf(v);
+      const idx = base.indexOf(v);
       expect(idx, `${v} manquant ou dans le désordre`).toBeGreaterThan(cursor);
       cursor = idx;
     }
-    expect(fn).toContain('/api/messages/status');
+    const cb = config.slice(
+      config.indexOf('export function getTwilioStatusCallbackUrl'),
+      config.indexOf('export const stripeWebhookClient'),
+    );
+    expect(cb).toContain('getTwilioWebhookBaseUrl()');
+    expect(cb).toContain('/api/messages/status');
+  });
+
+  it('achat d’un numéro et validation de signature lisent la MÊME base d’URL', () => {
+    // L'achat lisait PUBLIC_URL en premier, la validation TWILIO_WEBHOOK_BASE_URL :
+    // deux variables différentes = chaque nouveau numéro rejeté à la signature.
+    const prov = read('server/lib/twilioProvisioning.ts');
+    expect(prov).toContain('getTwilioWebhookBaseUrl()');
+    expect(prov).not.toMatch(/process\.env\.(PUBLIC_URL|TWILIO_WEBHOOK_BASE_URL)/);
+    const messages = read('server/routes/messages.ts');
+    expect(messages.match(/getTwilioWebhookBaseUrl\(\) \|\| resolvePublicBaseUrl\(req\)/g)).toHaveLength(2);
+    expect(messages).not.toMatch(/process\.env\.TWILIO_WEBHOOK_BASE_URL/);
   });
 
   it('aucun callback annoncé quand l’URL est absente ou locale', () => {
@@ -429,7 +445,7 @@ describe('provisionnement SMS — branché sur le chemin réellement utilisé', 
       lib.indexOf('export async function provisionSmsForNewSubscription'),
       lib.indexOf('async function findAvailableNumber'),
     );
-    expect(fn).toContain('return { provisioned: false, error: message }');
+    expect(fn).toContain('return { provisioned: false, error: message, nature }');
     expect(fn).not.toMatch(/^\s*throw err;/m);
 
     for (const site of ['server/routes/billing.ts', 'server/routes/payments.ts']) {
@@ -495,7 +511,9 @@ describe('formulaire public — le visiteur reçoit enfin une confirmation', () 
   it('l’envoi est brandé au nom de l’entreprise, pas de Lume', () => {
     // C'est le client de l'org qui reçoit ce message : il doit voir le nom de
     // l'entreprise, et une réponse doit atterrir dans SA boîte.
-    expect(submit).toContain('senderFor(company)');
+    // senderForOrg respecte la même règle et va plus loin : il honore le domaine
+    // vérifié de l'entreprise quand elle en a fait vérifier un.
+    expect(submit).toContain('senderForOrg(orgId, company)');
     expect(submit).toContain('buildEmailLayout(company');
     expect(submit).toContain('getCompanySettings(orgId)');
   });
@@ -650,15 +668,21 @@ describe('automatisations — identité de l’org, plus de « Lume CRM »', () 
     // Avant : ni `from` ni `replyTo`. Le client d'un locataire recevait
     // « Rappel : facture INV-042 » signé Lume CRM, et sa réponse arrivait dans
     // la boîte de la plateforme au lieu de celle de l'entrepreneur.
-    expect(fn).toContain('senderFor(company)');
+    expect(fn).toContain('senderForOrg(ctx.orgId, company)');
     expect(fn).toContain('getCompanySettings(ctx.orgId)');
   });
 
-  it('le courriel est brandé (logo, pied de page, numéros de taxes)', () => {
+  it('le courriel est brandé (logo, pied de page, numéros de taxes) et porte un bouton', () => {
     // Avant : `html: body` brut. Tous les autres envois du produit passent par
     // ce layout — l'automatisation était le seul trou. Le corps porte
     // désormais aussi le lien de désinscription.
-    expect(fn).toContain('buildEmailLayout(company, body + pied)');
+    //
+    // Le 3e argument est arrivé le 2026-09-22 : les 26 relances partaient sans
+    // AUCUN bouton et demandaient toutes de « répondre à ce courriel ». Une
+    // relance de soumission sans bouton « Accepter » oblige le client à écrire
+    // au lieu de cliquer une fois.
+    expect(fn).toContain('buildEmailLayout(company, body + pied, bouton)');
+    expect(fn).toContain('boutonPourEntite');
     expect(fn).not.toMatch(/html:\s*body,/);
   });
 
@@ -948,16 +972,34 @@ describe('heures calmes — plus de relance courriel à 3h du matin', () => {
   it('les tâches différées respectent la fenêtre sur les DEUX canaux', () => {
     // Toute tâche de cette file est par construction différée : elle porte une
     // relance, jamais une confirmation.
-    expect(engine).toContain("(taskType === 'send_sms' || taskType === 'send_email') && isQuietHours()");
+    // Depuis 2026-09-24, la fenêtre peut être réglée par automatisation
+    // (`horsFenetre(reglages)`), avec 8 h-20 h comme défaut. Ce qui doit
+    // rester vrai : LES DEUX CANAUX sont soumis à la fenêtre — auparavant
+    // seuls les SMS l'étaient, et un courriel partait à 3 h du matin.
+    expect(engine).toMatch(/taskType === 'send_sms' \|\| taskType === 'send_email'\) && horsFenetre\(/);
   });
 
   it('le report ne consomme pas de tentative', () => {
     // Sinon une nuit suffirait à épuiser le quota de reprises.
+    // On cherche l'écriture du nouveau créneau, quelle que soit la façon dont
+    // la date est calculée : depuis 2026-09-23 le moteur passe par une variable
+    // (`prochaine`) pour pouvoir d'abord décider si le rappel est périmé.
     const bloc = engine.slice(engine.indexOf('const taskType = task.action_config?.type;'));
-    const push = bloc.indexOf('execute_at: nextSendTime()');
+    const push = Math.max(
+      bloc.indexOf('execute_at: nextSendTime()'),
+      bloc.indexOf('execute_at: prochaine.toISOString()'),
+    );
     const attempts = bloc.indexOf('attempts:');
-    expect(push).toBeGreaterThan(-1);
+    expect(push, 'aucune écriture de execute_at dans la branche « heures calmes »').toBeGreaterThan(-1);
     expect(attempts === -1 || attempts > push).toBe(true);
+  });
+
+  it('un rappel que le report ferait tomber APRÈS son rendez-vous est annulé', () => {
+    // « Votre rendez-vous est dans 2 heures » reçu une heure après le passage
+    // du technicien est pire qu'un silence : le client doute de ce qu'il lit.
+    const bloc = engine.slice(engine.indexOf('const taskType = task.action_config?.type;'));
+    expect(bloc).toContain('prochaine.getTime() > momentPrevu');
+    expect(bloc).toContain("status: 'cancelled'");
   });
 
   it('la fenêtre reste 8h–20h, heure du Québec', () => {
@@ -968,19 +1010,34 @@ describe('heures calmes — plus de relance courriel à 3h du matin', () => {
 });
 
 // ───────────────────────────────────────────────────────────────────
-// 18. Modèles de courriels : module inerte, documenté comme tel
+// 18. Modèles de courriels : branchés de bout en bout
 // ───────────────────────────────────────────────────────────────────
 
-describe('modèles de courriels — état documenté', () => {
-  it('le CRUD porte un avertissement sur son inaccessibilité', () => {
-    // Décision prise : conserver sans câbler. La note évite qu'on redécouvre
-    // le problème dans six mois — ou qu'on supprime `review_request` avec.
-    const routes = read('server/routes/email-templates.ts');
-    expect(routes).toContain('MODULE INACCESSIBLE DEPUIS L’APPLICATION'.replace('’', "'"));
-    expect(routes).toContain('review_request');
+/* Ce bloc vérifiait l'INVERSE jusqu'au 2026-09-18 : le CRUD des modèles
+   existait, sa RLS était complète, et personne ne s'en servait. Un test figeait
+   cet état en exigeant la note « MODULE INACCESSIBLE ». La page
+   /settings/email-templates branche enfin la chaîne, donc le test garde
+   désormais le chemin OUVERT au lieu de documenter qu'il est fermé. */
+describe('modèles de courriels — branchés de bout en bout', () => {
+  it('le serveur résout le modèle de l’organisation sans attendre un id du client', () => {
+    // Le bogue d'origine : un modèle n'était chargé que si le front passait un
+    // `emailTemplateId` explicite — ce qu'aucune page ne faisait jamais.
+    expect(read('server/lib/courriels/modeles.ts')).toContain('texteDuCourriel');
+    expect(read('server/routes/emails.ts')).toContain('texteDuCourriel');
+    expect(read('server/routes/reminders-cron.ts')).toContain('texteDuCourriel');
   });
 
-  it('review_request reste le seul type réellement consommé', () => {
+  it('une page permet d’écrire ces textes', () => {
+    expect(read('src/App.tsx')).toContain('email-templates');
+    expect(read('src/pages/settings/SettingsLayout.tsx')).toContain('/settings/email-templates');
+  });
+
+  it('le HTML importé est assaini avant d’être rendu', () => {
+    // Un `<script>` collé dans un modèle partirait dans la boîte de chaque client.
+    expect(read('server/lib/courriels/modeles.ts')).toContain('assainirHtmlCourriel');
+  });
+
+  it('review_request reste consommé par les actions', () => {
     const actions = read('server/lib/actions/index.ts');
     expect(actions).toContain("'review_request'");
   });

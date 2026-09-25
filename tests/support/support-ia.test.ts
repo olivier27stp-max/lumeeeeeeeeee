@@ -59,8 +59,12 @@ describe('transfert : seulement quand il le faut', () => {
     await repondreSupportIA(contexte, [], 'comment je fais pour supprimer des taches');
     const systeme: string = appels[0].system.map((b: any) => b.text).join('\n');
     expect(systeme).toContain('HOW-TO QUESTIONS ARE YOURS');
-    expect(systeme).toContain('APP MAP');
-    expect(systeme).toContain('/tasks');
+    expect(systeme).toContain('APP MAP index');
+    expect(systeme).toContain('Tâches (/tasks)');
+    // La carte complète et les réponses de la FAQ ne sont plus dans le prompt : search_help les porte (prompt 4× plus court).
+    expect(systeme).not.toContain('icône corbeille « Supprimer »');
+    expect(systeme).not.toContain('FAQ:\n');
+    expect(systeme.length).toBeLessThan(9000);
     expect(systeme).not.toContain('you searched and found nothing useful');
     const route = readFileSync('server/routes/support.ts', 'utf8');
     expect(route).toContain('await humainActifRecemment(admin, ticket.id)');

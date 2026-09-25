@@ -21,7 +21,7 @@ interface ModuleGateProps {
  */
 export default function ModuleGate({ moduleKey, moduleName, children }: ModuleGateProps) {
   const { t } = useTranslation();
-  const { isEnabled, loading, indetermine, activate, activating } = useModuleAccess(moduleKey);
+  const { isEnabled, loading, indetermine, activate, activating, platformLocked } = useModuleAccess(moduleKey);
   const { currentRole } = useCompany();
   const canActivate = currentRole === 'owner' || currentRole === 'admin';
 
@@ -42,7 +42,8 @@ export default function ModuleGate({ moduleKey, moduleName, children }: ModuleGa
       <ModuleLockedScreen
         moduleName={moduleName}
         activating={activating}
-        canActivate={canActivate}
+        canActivate={canActivate && !platformLocked}
+        platformLocked={platformLocked}
         onActivate={async () => {
           const ok = await activate();
           if (ok) {

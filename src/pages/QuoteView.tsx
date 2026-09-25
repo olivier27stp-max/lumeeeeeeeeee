@@ -1,6 +1,9 @@
 import React, { useEffect, useId, useState, useRef } from 'react';
 import { captureClientException } from '../lib/sentry';
 import { resolveBrand, readableOn } from '../lib/brandColor';
+import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
+import PastilleLume from '../components/PastilleLume';
+import type { SocialLinks } from '../lib/socialLinks';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, XCircle, PenLine, Pencil, Download, Phone, Mail, Globe, MapPin, Calendar, Hash, User, FileText, CreditCard, Loader2, AlertCircle } from 'lucide-react';
 import { formatQuoteMoney } from '../lib/quotesApi';
@@ -10,7 +13,6 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { versDate, finDeJournee } from '../lib/dateSeule';
 
 // ── Lume fallback logo (panda) ──
-const LUME_LOGO_URL = '/lume-logo.png';
 
 interface CompanyBranding {
   company_name: string;
@@ -25,9 +27,13 @@ interface CompanyBranding {
   country: string | null;
   /** Accent choisi par l'entreprise. null = encre noire. */
   brand_color?: string | null;
+  /** Réseaux sociaux — icônes au pied de la page. */
+  social_links?: SocialLinks | null;
 }
 
 interface QuoteData {
+  /** Champs personnalisés cochés « afficher sur le document ». */
+  custom_fields?: Array<{ label: string; valeur: string }>;
   quote: {
     id: string;
     quote_number: string;
@@ -58,6 +64,8 @@ interface QuoteData {
     service_plan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
   };
   images?: string[];
+  /** Réglages Lume Payments de l'entreprise (server/routes/quotes.ts, GET public). */
+  payments?: { quote_payments_enabled: boolean; wallets_enabled: boolean };
   company: CompanyBranding;
   client: { first_name: string; last_name: string; company: string | null; email: string | null; phone: string | null } | null;
   lead: { first_name: string; last_name: string; company: string | null; email: string | null; phone: string | null } | null;
@@ -111,7 +119,7 @@ function buildCompanyAddress(c: CompanyBranding): string | null {
 // Stripe Deposit Payment Form
 // ══════════════════════════════════════════════════════════════
 
-function DepositPaymentForm({ brand, onSuccess, onError }: { brand: string; onSuccess: () => Promise<void> | void; onError: (msg: string) => void }) {
+function DepositPaymentForm({ brand, wallets = true, onSuccess, onError }: { brand: string; wallets?: boolean; onSuccess: () => Promise<void> | void; onError: (msg: string) => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
@@ -140,7 +148,7 @@ function DepositPaymentForm({ brand, onSuccess, onError }: { brand: string; onSu
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
+      <PaymentElement options={{ wallets: { applePay: wallets ? 'auto' : 'never', googlePay: wallets ? 'auto' : 'never' } }} />
       <button
         type="submit"
         disabled={processing || !stripe || !elements}
@@ -216,8 +224,12 @@ export default function QuoteView() {
       setData(result);
 
       if (quote.status === 'approved') {
-        // Check if deposit is pending - auto-load payment
-        if (quote.deposit_required && quote.deposit_status === 'pending' && Number(quote.deposit_value || 0) > 0) {
+        // Check if deposit is pending - auto-load payment. Si l'entreprise a
+        // coupé le paiement des devis en ligne, le devis est simplement
+        // accepté : le dépôt sera perçu autrement (le serveur refuse de
+        // toute façon la création du PaymentIntent).
+        const paiementEnLigne = result?.payments?.quote_payments_enabled !== false;
+        if (paiementEnLigne && quote.deposit_required && quote.deposit_status === 'pending' && Number(quote.deposit_value || 0) > 0) {
           setViewState('deposit_payment');
           setTimeout(() => loadDepositIntent().catch((err) => {
             console.error('[QuoteView] Deposit intent failed:', err);
@@ -370,8 +382,9 @@ export default function QuoteView() {
       const result = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((result as any)?.error || (isFr ? 'Échec de l’acceptation de la soumission' : 'Failed to accept quote'));
 
-      // If deposit is required, transition to payment step
-      if (data.quote.deposit_required && data.quote.deposit_value > 0) {
+      // If deposit is required, transition to payment step (only when the
+      // business still accepts online quote payments)
+      if (data.payments?.quote_payments_enabled !== false && data.quote.deposit_required && data.quote.deposit_value > 0) {
         setViewState('deposit_payment');
         // Load the payment intent immediately
         await loadDepositIntent();
@@ -466,8 +479,9 @@ export default function QuoteView() {
   const depositAmount = calcDepositAmount(quote);
   const companyAddress = buildCompanyAddress(company);
 
-  // Company logo: fallback to Lume panda
-  const logoUrl = company.logo_url || LUME_LOGO_URL;
+  // Sans logo d'entreprise, on n'affiche rien : le nom suit juste en dessous.
+  // Un repli sur le logo de Lume ferait passer le devis pour un devis de Lume.
+  const logoUrl = company.logo_url || null;
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -527,12 +541,14 @@ export default function QuoteView() {
             <div className="flex items-start justify-between">
               {/* Logo + Company info */}
               <div className="flex-1">
-                <img
-                  src={logoUrl}
-                  alt={company.company_name}
-                  className="h-10 max-w-[180px] object-contain mb-3"
-                  onError={(e) => { (e.target as HTMLImageElement).src = LUME_LOGO_URL; }}
-                />
+                {logoUrl && (
+                  <img
+                    src={logoUrl}
+                    alt={company.company_name}
+                    className="h-10 max-w-[180px] object-contain mb-3"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
                 <h2 className="text-[14px] font-semibold text-[#111]">{company.company_name}</h2>
                 {companyAddress && (
                   <p className="text-[12px] text-[#888] mt-0.5">{companyAddress}</p>
@@ -793,6 +809,24 @@ export default function QuoteView() {
               )}
             </div>
           </div>
+
+          {/* ── Champs personnalisés cochés « afficher sur le document » ── */}
+          {data.custom_fields && data.custom_fields.length > 0 && (
+            <>
+              <div className="border-t border-[#eee]" />
+              <div className="px-8 py-5">
+                <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">{isFr ? 'Informations' : 'Details'}</p>
+                <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+                  {data.custom_fields.map((c) => (
+                    <div key={c.label} className="flex justify-between gap-4 text-[13px]">
+                      <dt className="text-[#888]">{c.label}</dt>
+                      <dd className="text-right text-[#333]">{c.valeur}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </>
+          )}
 
           {/* ── NOTES ── */}
           {quote.notes && (
@@ -1138,6 +1172,7 @@ export default function QuoteView() {
                       >
                         <DepositPaymentForm
                           brand={brand}
+                          wallets={data.payments?.wallets_enabled !== false}
                           onSuccess={async () => {
                             if (depositIntentData.payment_intent_id) {
                               await confirmDepositPayment(depositIntentData.payment_intent_id);
@@ -1180,9 +1215,11 @@ export default function QuoteView() {
         </div>
 
         {/* ── Footer ── */}
-        <p className="text-center text-[11px] text-[#bbb] mt-6 no-print">
-          {company.company_name} &mdash; {isFr ? 'Propulsé par Lume' : 'Powered by Lume'}
-        </p>
+        <ReseauxSociauxPied liens={company.social_links} className="flex items-center justify-center gap-4 mt-6 no-print" />
+        {company.company_name && (
+          <p className="text-center text-[11px] text-[#bbb] mt-3 no-print">{company.company_name}</p>
+        )}
+        <PastilleLume className="mt-3 no-print" />
       </div>
     </div>
   );

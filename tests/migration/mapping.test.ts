@@ -125,3 +125,56 @@ describe('trous de catalogue attrapés au round 8b', () => {
     expect(s.confidence).toBeGreaterThanOrEqual(90);
   });
 });
+
+describe('champs de rattachement client de repli', () => {
+  it('présents sur soumissions, jobs, factures, propriétés et adresses de facturation', () => {
+    for (const e of ['quote', 'job', 'invoice', 'property', 'billing_property'] as const) {
+      const fields = FIELD_CATALOG[e].map((f) => f.field);
+      expect(fields).toEqual(expect.arrayContaining(['client_ref', 'client_email_ref', 'client_name_ref']));
+    }
+  });
+  it('« Client email » sur un fichier de soumissions → client_email_ref', () => {
+    const [s] = suggestMappings('quotes', [col('Client email', 'email')], 'quotes.csv');
+    expect(s.targetField).toBe('client_email_ref');
+  });
+  it('« Customer Name » reste sur client_ref', () => {
+    const [s] = suggestMappings('quotes', [col('Customer Name', 'name')], 'quotes.csv');
+    expect(s.targetField).toBe('client_ref');
+  });
+});
+
+describe('manques comblés (rapport du bot, export Jobber 2026-09)', () => {
+  it('« Service Street 2 » d\'un client → address_line2, jamais address', () => {
+    const [s] = suggestMappings('clients', [col('Service Street 2', 'address')], 'clients.csv');
+    expect(s.targetField).toBe('address_line2');
+  });
+  it('« Service Street 1 » reste sur address', () => {
+    const [s] = suggestMappings('clients', [col('Service Street 1', 'address')], 'clients.csv');
+    expect(s.targetField).toBe('address');
+  });
+  it('« Archived » (oui/non) → archived ; « Lead (as of …) » → is_lead', () => {
+    const [a] = suggestMappings('clients', [col('Archived', 'boolean')], 'clients.csv');
+    expect(a.targetField).toBe('archived');
+    const [l] = suggestMappings('clients', [col('Lead (as of 2026-09-15 15:07)', 'boolean')], 'clients.csv');
+    expect(l.targetField).toBe('is_lead');
+  });
+  it('« Lead source » reste sur lead_source', () => {
+    const [s] = suggestMappings('clients', [col('Lead source', 'text')], 'clients.csv');
+    expect(s.targetField).toBe('lead_source');
+  });
+  it('« Marked paid date » d\'une facture → paid_date, pas issued_date', () => {
+    const [s] = suggestMappings('invoices', [col('Marked paid date', 'date')], 'invoices.csv');
+    expect(s.targetField).toBe('paid_date');
+    const [i] = suggestMappings('invoices', [col('Issued date', 'date')], 'invoices.csv');
+    expect(i.targetField).toBe('issued_date');
+  });
+  it('« Billing address » d\'un fichier adresses de facturation → address', () => {
+    const [s] = suggestMappings('billing_addresses', [col('Billing address', 'address')], 'billing.csv');
+    expect(s.targetField).toBe('address');
+  });
+  it('address_line2 présent sur client, propriété et adresse de facturation', () => {
+    for (const e of ['client', 'property', 'billing_property'] as const) {
+      expect(FIELD_CATALOG[e].map((f) => f.field)).toContain('address_line2');
+    }
+  });
+});

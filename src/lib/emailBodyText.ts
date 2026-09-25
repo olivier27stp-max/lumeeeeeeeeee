@@ -146,6 +146,19 @@ const EXEMPLES: Record<string, string> = {
   company_name: 'Votre entreprise',
   invoice_number: 'FAC-1042',
   invoice_total: '450,00 $',
+  // Les variables des modèles de courriel (Réglages → Modèles de courriel).
+  // Sans elles, le propriétaire voyait « {invoice_amount} » en toutes lettres
+  // dans son propre aperçu et croyait la variable cassée.
+  invoice_amount: '450,00 $',
+  amount_due: '450,00 $',
+  due_date: '30 août 2026',
+  payment_link: 'lumecrm.net/invoice/…',
+  pay_url: 'lumecrm.net/pay/…',
+  quote_amount: '1 250,00 $',
+  quote_link: 'lumecrm.net/quote/…',
+  valid_until: '2 mai 2026',
+  contract_number: 'CTR-12',
+  contract_link: 'lumecrm.net/contract/…',
   invoice_due_date: '2026-08-30',
   quote_number: 'SOU-218',
   quote_total: '1 250,00 $',
@@ -159,7 +172,12 @@ const EXEMPLES: Record<string, string> = {
 };
 
 export function remplacerVariables(s: string): string {
-  return s.replace(/\[(\w+)\]/g, (tout, cle) => EXEMPLES[cle] ?? tout);
+  // Les deux syntaxes : les automatisations écrivent [cle], les modèles de
+  // courriel {cle}. `applyTemplate` côté serveur accepte déjà les deux ; un
+  // aperçu qui n'en montre qu'une laisse croire que l'autre est cassée.
+  return s
+    .replace(/\[(\w+)\]/g, (tout, cle) => EXEMPLES[cle] ?? tout)
+    .replace(/\{(\w+)\}/g, (tout, cle) => EXEMPLES[cle] ?? tout);
 }
 
 /**
@@ -181,3 +199,42 @@ export const VARIABLES_PROPOSEES: Array<{ cle: string; fr: string; en: string }>
   { cle: 'appointment_date', fr: 'Date du RDV', en: 'Appointment date' },
   { cle: 'appointment_time', fr: 'Heure du RDV', en: 'Appointment time' },
 ];
+
+/**
+ * TOUTES les variables que le serveur sait résoudre — pas seulement les huit
+ * proposées ci-dessus, qui ne sont qu'un raccourci de saisie.
+ *
+ * Relevée dans `resolveEntityVariables` (server/lib/actions/index.ts). Elle
+ * sert à repérer une variable ÉCRITE À LA MAIN qui n'existe pas : le serveur
+ * remplace alors `[prenom]` par une chaîne vide (`vars[key] ?? ''`), et le
+ * client reçoit « Bonjour , à demain. » sans que personne ne soit prévenu.
+ *
+ * Si le serveur en ajoute une, l'oublier ici ne casse rien : on signalerait
+ * une variable valide comme inconnue, ce qui se voit tout de suite — l'inverse
+ * (ne rien dire) est le défaut qu'on corrige.
+ */
+export const VARIABLES_CONNUES: readonly string[] = [
+  'appointment_address', 'appointment_date', 'appointment_time', 'appointment_title',
+  'client_email', 'client_first_name', 'client_last_name', 'client_name', 'client_phone',
+  'company_name', 'company_phone', 'facebook_review_url', 'google_review_url',
+  'invoice_due_date', 'invoice_number', 'invoice_total', 'job_name',
+  'quote_number', 'quote_total', 'quote_valid_until', 'review_page_url',
+  // Contrats : ajoutées par resolveContractVars / resolveSignedContractVars.
+  'contract_link', 'contract_line', 'contract_html',
+  'signed_contract_link', 'deposit_amount', 'deposit_line',
+];
+
+/**
+ * Les variables d'un gabarit que le serveur ne saura PAS remplir.
+ * Accepte les deux syntaxes reconnues par `resolveTemplate` : `{var}` et `[var]`.
+ */
+export function variablesInconnues(texte: string, variablesChamps?: readonly string[]): string[] {
+  const citees = [...texte.matchAll(/[{[](\w+)[}\]]/g)].map((m) => m[1]);
+  // Champs personnalisés : {client_cf_<clé>}… Avec la liste des champs de
+  // l'entreprise, une clé mal tapée reste signalée ; sans elle, on ne peut
+  // pas trancher et on ne crie pas au loup.
+  const estChamp = (v: string) => (variablesChamps
+    ? variablesChamps.includes(v)
+    : /^(client|deal|job|quote|invoice)_cf_[a-z0-9_]+$/.test(v));
+  return [...new Set(citees.filter((v) => !VARIABLES_CONNUES.includes(v) && !estChamp(v)))];
+}

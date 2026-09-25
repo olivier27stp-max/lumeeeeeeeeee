@@ -239,6 +239,8 @@ export interface FormField {
   required: boolean;
   options?: string[];
   section: 'service_details' | 'final_notes';
+  /** La réponse remplit ce champ personnalisé (opportunité ou client). */
+  cf_field_id?: string | null;
 }
 
 export interface RequestForm {

@@ -3,7 +3,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import InfiniteScrollSentinel from '../components/InfiniteScrollSentinel';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { StatusBadge, FilterPill, statusDotColor } from '../components/ui';
@@ -15,6 +16,7 @@ import {
   updateQuoteStatus,
   unarchiveQuote,
   QUOTE_STATUS_LABELS,
+  type Quote,
   type QuoteStatus,
 } from '../lib/quotesApi';
 import { listSalespeople } from '../lib/jobsApi';
@@ -26,6 +28,7 @@ import PresetSelectModal from '../components/quotes/PresetSelectModal';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import type { QuotePreset } from '../types';
 import { CirclePlus, ArrowUpDown, Ruler, Eye } from 'lucide-react';
+import { useChampsListe, useValeursPage, CelluleChamps } from '../components/champs/liste';
 
 const PAGE_SIZE = 20;
 type StatusTab = 'all' | QuoteStatus;
@@ -125,7 +128,6 @@ export default function Quotes() {
   const [salespersonFilter, setSalespersonFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
-  const [page, setPage] = useState(1);
   const [sort, setSort] = useState<QuoteSort>('recent');
   const [presetSelectOpen, setPresetSelectOpen] = useState(false);
   const location = useLocation();
@@ -157,14 +159,20 @@ export default function Quotes() {
   };
 
   React.useEffect(() => {
-    const id = setTimeout(() => { setDebounced(search.trim()); setPage(1); }, 300);
+    const id = setTimeout(() => { setDebounced(search.trim()); }, 300);
     return () => clearTimeout(id);
   }, [search]);
 
-  const { data: res, isLoading } = useQuery({
-    queryKey: ['quotes-list', tab, salespersonFilter, debounced, page],
-    queryFn: () => listAllQuotes({ status: tab, salespersonId: salespersonFilter, search: debounced, page, pageSize: PAGE_SIZE }),
+  // Champs personnalisés : filtre côté base + colonne (drapeau custom_fields_v2).
+  const champsListe = useChampsListe('quote', fr);
+  // Liste infinie : chaque page s'ajoute sous les précédentes dans le même tableau.
+  const quotesQuery = useInfiniteQuery({
+    queryKey: ['quotes-list', tab, salespersonFilter, debounced, champsListe.cle],
+    queryFn: ({ pageParam }) => listAllQuotes({ status: tab, salespersonId: salespersonFilter, search: debounced, page: pageParam, pageSize: PAGE_SIZE, champs: champsListe.filtre }),
+    initialPageParam: 1,
+    getNextPageParam: (last, all) => (all.length * PAGE_SIZE < (last?.total || 0) ? all.length + 1 : undefined),
   });
+  const isLoading = quotesQuery.isLoading;
 
   // Org-wide per-status counts + salespeople for the filter pills.
   const { data: statusCounts } = useQuery({
@@ -178,9 +186,17 @@ export default function Quotes() {
     staleTime: 300_000,
   });
 
-  const rows = res?.data || [];
-  const total = res?.total || 0;
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rows = React.useMemo(() => {
+    const seen = new Set<string>();
+    const out: Quote[] = [];
+    for (const p of quotesQuery.data?.pages || []) {
+      for (const q of p.data || []) { if (!seen.has(q.id)) { seen.add(q.id); out.push(q); } }
+    }
+    return out;
+  }, [quotesQuery.data]);
+  const valeursChamps = useValeursPage('quote', rows.map((q) => q.id), champsListe.colonnes.length > 0);
+  const pagesLoaded = quotesQuery.data?.pages || [];
+  const total = pagesLoaded.length ? (pagesLoaded[pagesLoaded.length - 1]?.total || 0) : 0;
 
   const sorted = React.useMemo(() => {
     const l = [...rows];
@@ -297,7 +313,7 @@ export default function Quotes() {
         <FilterPill
           label={fr ? 'Statut' : 'Status'}
           value={tab}
-          onChange={(v) => { setTab(v as StatusTab); setPage(1); }}
+          onChange={(v) => setTab(v as StatusTab)}
           options={STATUS_TABS.map(s => ({
             value: s,
             label: sLabel(s, fr),
@@ -308,12 +324,13 @@ export default function Quotes() {
         <FilterPill
           label={fr ? 'Vendeur' : 'Salesperson'}
           value={salespersonFilter}
-          onChange={(v) => { setSalespersonFilter(v); setPage(1); }}
+          onChange={(v) => setSalespersonFilter(v)}
           options={[
             { value: 'All', label: fr ? 'Tous' : 'All' },
             ...(salespeople || []).map((p) => ({ value: p.id, label: p.label })),
           ]}
         />
+        {champsListe.bouton}
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder={fr ? 'Rechercher devis...' : 'Search quotes...'}
           aria-label={fr ? 'Rechercher devis' : 'Search quotes'}
@@ -337,7 +354,7 @@ export default function Quotes() {
 
       {/* ── TABLE ── */}
       <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1.2fr 0.7fr 1.2fr 1fr 200px 0.9fr 110px 48px' }} onMouseLeave={() => setHoveredId(null)}>
+        <div className="grid" style={{ gridTemplateColumns: `40px 1.2fr 0.7fr 1.2fr 1fr 200px 0.9fr 110px${champsListe.colonnes.length ? ' 1.4fr' : ''} 48px` }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} aria-label={fr ? 'Tout sélectionner' : 'Select all'} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Client {IconSort}</span></div>
@@ -347,6 +364,7 @@ export default function Quotes() {
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Total {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Ouverture' : 'Opened'}</span></div>
+          {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">{fr ? 'Champs' : 'Fields'}</div>}
           <div className="py-3 border-b border-outline" />
 
           {/* LOADING */}
@@ -360,13 +378,14 @@ export default function Quotes() {
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-8 bg-surface-tertiary rounded animate-pulse" /></div>
+              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>}
               <div className="py-3 border-b border-outline/30" />
             </React.Fragment>
           ))}
 
           {/* EMPTY */}
           {!isLoading && sorted.length === 0 && (
-            <div className="col-span-9 py-20 text-center text-[14px] text-text-tertiary">{fr ? 'Aucun devis trouvé' : 'No quotes found'}</div>
+            <div className="py-20 text-center text-[14px] text-text-tertiary" style={{ gridColumn: '1 / -1' }}>{fr ? 'Aucun devis trouvé' : 'No quotes found'}</div>
           )}
 
           {/* ROWS */}
@@ -411,6 +430,11 @@ export default function Quotes() {
                     <span className="text-[14px] text-text-tertiary" title={fr ? 'Pas encore ouvert' : 'Not opened yet'}>—</span>
                   )}
                 </div>
+                {champsListe.colonnes.length > 0 && (
+                  <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={() => nav(`/quotes/${q.id}`)} onMouseEnter={hover}>
+                    <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[q.id]} fr={fr} fuseau={champsListe.fuseau} />
+                  </div>
+                )}
                 <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <button
                     className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
@@ -447,17 +471,22 @@ export default function Quotes() {
             );
           })}
         </div>
+        {/* Liste infinie — charge la page suivante dans le même tableau */}
+        {!isLoading && sorted.length > 0 && (
+          <InfiniteScrollSentinel
+            hasMore={Boolean(quotesQuery.hasNextPage)}
+            loading={quotesQuery.isFetchingNextPage}
+            onLoadMore={() => { if (!quotesQuery.isFetchingNextPage) void quotesQuery.fetchNextPage(); }}
+            loaded={rows.length}
+            total={total}
+            className="border-t border-outline/30"
+          />
+        )}
       </div>
 
       {/* ── FOOTER ── */}
       <div className="flex items-center justify-between mt-3">
         <span className="text-[14px] text-text-secondary">{t.common.rowsSelected.replace('{selected}', String(sel.size)).replace('{total}', String(total))}</span>
-        <div className="flex items-center gap-2">
-          <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
-            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.previous}</button>
-          <button disabled={page >= pages} onClick={() => setPage(p => Math.min(pages, p + 1))}
-            className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">{t.common.next}</button>
-        </div>
       </div>
 
       <PresetSelectModal

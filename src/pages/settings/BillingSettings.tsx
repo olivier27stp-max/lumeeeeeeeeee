@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import SeatsBanner from '../../components/SeatsBanner';
-import OfficesManager from '../../components/OfficesManager';
 import {
   fetchPlans,
   fetchCurrentBilling,
@@ -277,11 +276,6 @@ export default function BillingSettings() {
         <SeatsBanner onChange={refresh} />
       )}
 
-      {/* ── Offices allowance + extra-office billing ── */}
-      {subscription && subscription.status !== 'canceled' && (
-        <OfficesManager onChange={refresh} />
-      )}
-
       {/* ── Plans Grid — Premium cards ── */}
       <PlansGrid
         plans={plans}
@@ -442,19 +436,12 @@ function PlansGrid({
           const isDowngrade = hasActiveSub && plan.sort_order < currentOrder;
           const price = (currency === 'USD' ? plan.monthly_price_usd : plan.monthly_price_cad) / 100;
           const extraSeatPrice = currency === 'USD' ? plan.extra_seat_price_usd : plan.extra_seat_price_cad;
-          const extraOfficePrice = currency === 'USD' ? plan.extra_office_price_usd : plan.extra_office_price_cad;
           const features: string[] = Array.isArray(plan.features) ? plan.features : [];
           const seatsInfo = plan.seats_included
             ? `${plan.seats_included} ${isFr ? 'utilisateurs inclus' : 'users included'}`
             : null;
           const extraSeat = extraSeatPrice
             ? `+$${extraSeatPrice / 100}/${isFr ? 'utilisateur supplémentaire' : 'extra user'}`
-            : null;
-          const officesInfo = plan.included_offices
-            ? `${plan.included_offices} ${isFr ? (plan.included_offices === 1 ? 'bureau inclus' : 'bureaux inclus') : (plan.included_offices === 1 ? 'office included' : 'offices included')}`
-            : null;
-          const extraOffice = extraOfficePrice
-            ? `+$${extraOfficePrice / 100}/${isFr ? 'bureau supplémentaire' : 'extra office'}`
             : null;
 
           let ctaLabel: string;
@@ -500,20 +487,12 @@ function PlansGrid({
                 </p>
               )}
 
-              {/* Offices */}
-              {officesInfo && (
-                <p className="text-[11px] uppercase tracking-wider font-semibold text-text-tertiary mt-0.5">
-                  {officesInfo}
-                </p>
-              )}
-
               {/* Price */}
               <div className="mt-4 mb-1">
                 <span className="text-4xl font-extrabold tabular-nums text-text-primary">${price}</span>
                 <span className="text-sm font-normal text-text-tertiary ml-1">/{isFr ? 'mois' : 'mo'}</span>
               </div>
               {extraSeat && <p className="text-[11px] text-text-tertiary">{extraSeat}</p>}
-              {extraOffice && <p className="text-[11px] text-text-tertiary">{extraOffice}</p>}
 
               {/* Divider */}
               <div className="border-t border-outline-subtle my-4" />
@@ -639,9 +618,6 @@ function DowngradeModal({
 
   // Seats lost
   const seatsLost = (fromPlan.seats_included ?? 0) - (toPlan.seats_included ?? 0);
-
-  // Offices lost
-  const officesLost = (fromPlan.included_offices ?? 0) - (toPlan.included_offices ?? 0);
 
   // Prices — real yearly price from the plans table when available (the old
   // hardcoded ×0.85 drifted from the actual pricing model).
@@ -771,18 +747,6 @@ function DowngradeModal({
                   {isFr
                     ? `${seatsLost} sièges utilisateur (${fromPlan.seats_included} → ${toPlan.seats_included})`
                     : `${seatsLost} user seats (${fromPlan.seats_included} → ${toPlan.seats_included})`}
-                </span>
-              </li>
-            )}
-            {officesLost > 0 && (
-              <li className="flex items-start gap-3 text-[13px] text-text-primary font-medium">
-                <div className="shrink-0 w-5 h-5 rounded-full bg-red-500/10 flex items-center justify-center mt-0.5">
-                  <X size={11} className="text-red-600" strokeWidth={3} />
-                </div>
-                <span>
-                  {isFr
-                    ? `${officesLost} ${officesLost === 1 ? 'bureau' : 'bureaux'} (${fromPlan.included_offices} → ${toPlan.included_offices})`
-                    : `${officesLost} ${officesLost === 1 ? 'office' : 'offices'} (${fromPlan.included_offices} → ${toPlan.included_offices})`}
                 </span>
               </li>
             )}

@@ -106,6 +106,21 @@ export interface WorkspaceEngagement {
   engagement: EngagementLevel;
 }
 
+/** Un bureau (org) d'un workspace. */
+export interface CompanyOffice {
+  id: string;
+  name: string;
+  org_name: string;
+  member_count: number;
+  created_at: string;
+  /** Bureau porteur de l'abonnement (sinon le plus ancien) — celui que le
+   *  panneau ouvre quand on clique le workspace. */
+  is_primary: boolean;
+}
+
+/** Un WORKSPACE (company_group ; une org sans groupe = son propre workspace).
+ *  `id` = bureau principal ; `member_count` = utilisateurs distincts tous
+ *  bureaux confondus. */
 export interface CompanyListItem {
   id: string;
   name: string;
@@ -120,6 +135,7 @@ export interface CompanyListItem {
   subscription_status: string | null;
   plan_name: string | null;
   plan_slug: string | null;
+  offices: CompanyOffice[];
 }
 
 export interface SafeSubscription {
@@ -134,8 +150,7 @@ export interface SafeSubscription {
   canceled_at: string | null;
   created_at: string;
   extra_seats: number;
-  extra_offices: number;
-  plan: { name: string; name_fr: string; slug: string; seats_included: number | null; included_offices: number | null } | null;
+  plan: { name: string; name_fr: string; slug: string; seats_included: number | null } | null;
 }
 
 export interface CompanyDetail {
@@ -217,6 +232,38 @@ export interface CompanyEngagement {
   caveats: string[];
 }
 
+export type FeatureOverrideState = 'inherit' | 'on' | 'off';
+
+export interface CompanyFeature {
+  key: string;
+  kind: 'plan' | 'module';
+  label: string;
+  description: string;
+  /** Défaut hors override : forfait (plan) ou choix du tenant (module). null = aucun forfait. */
+  inherited: boolean | null;
+  override: FeatureOverrideState;
+  effective: boolean | null;
+  updated_at: string | null;
+}
+
+export interface CompanyOfficesQuota {
+  /** Bureaux autorisés pour ce workspace (1 par défaut, relevé par la plateforme). */
+  quota: number;
+  default_quota: number;
+  max_quota: number;
+  /** Bureaux existants (orgs du company_group). */
+  used: number;
+  updated_at: string | null;
+  list: Array<{ id: string; name: string; created_at: string; is_current: boolean }>;
+}
+
+export interface CompanyFeatures {
+  plan: { name: string; name_fr: string; slug: string } | null;
+  office_count: number;
+  features: CompanyFeature[];
+  offices: CompanyOfficesQuota;
+}
+
 export interface Paginated<T> {
   data: T[];
   total: number;
@@ -276,6 +323,48 @@ export function revealActor(userId: string, reason: string): Promise<{ user_id: 
   return apiFetch('/reveal-actor', { method: 'POST', body: { user_id: userId, reason } });
 }
 
+// ── Notes internes par workspace ────────────────────────────────────────
+export interface CompanyNote {
+  id: string;
+  org_id: string;
+  author_id: string;
+  author_name: string | null;
+  body: string;
+  created_at: string;
+  /** L'utilisateur courant est l'auteur : peut la retirer. */
+  can_delete: boolean;
+}
+
+export function getCompanyNotes(orgId: string): Promise<{ data: CompanyNote[] }> {
+  return apiFetch(`/companies/${orgId}/notes`);
+}
+
+export function addCompanyNote(orgId: string, body: string): Promise<CompanyNote> {
+  return apiFetch(`/companies/${orgId}/notes`, { method: 'POST', body: { body } });
+}
+
+export function deleteCompanyNote(orgId: string, noteId: string): Promise<{ ok: true }> {
+  return apiFetch(`/companies/${orgId}/notes/${noteId}`, { method: 'DELETE' });
+}
+
 export function getCompanyEngagement(orgId: string): Promise<CompanyEngagement> {
   return apiFetch(`/companies/${orgId}/engagement`);
+}
+
+export function getCompanyFeatures(orgId: string): Promise<CompanyFeatures> {
+  return apiFetch(`/companies/${orgId}/features`);
+}
+
+/** Force (on), bloque (off) ou rend au forfait (inherit) une fonctionnalité
+ *  pour tous les bureaux de la compagnie. La raison est obligatoire et
+ *  journalisée côté serveur (creator_space_feature_override) avant l'écriture. */
+/** Relève ou abaisse le quota de bureaux du workspace (tous ses bureaux).
+ *  Abaisser sous les bureaux existants n'en supprime aucun. Raison
+ *  obligatoire, journalisée (creator_space_office_quota). */
+export function setCompanyOfficeQuota(orgId: string, quota: number, reason: string): Promise<{ ok: true; quota: number; used: number; org_ids: string[] }> {
+  return apiFetch(`/companies/${orgId}/office-quota`, { method: 'PUT', body: { quota, reason } });
+}
+
+export function setCompanyFeature(orgId: string, key: string, state: FeatureOverrideState, reason: string): Promise<{ ok: true; key: string; state: FeatureOverrideState; org_ids: string[] }> {
+  return apiFetch(`/companies/${orgId}/features/${key}`, { method: 'PUT', body: { state, reason } });
 }

@@ -18,11 +18,12 @@ import PageHeader from '../components/ui/PageHeader';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { confirmer } from '../components/ui/ConfirmDialog';
+import { supabase } from '../lib/supabase';
 import {
   chargerConversationLumi, deciderPropositionLumi, envoyerMessageLumi, listerConversationsLumi, quotaLumi, supprimerConversationLumi,
   listerAutorisationsLumi, definirAutorisationLumi, modeLumi, definirModeLumi, executerActionLumi, type ModeLumi, type OrigineMessageLumi, type SuggestionLumi,
   ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type FicheLumi, type MessageLumi, type PropositionLumi, type RapportLumi,
-} from '../lib/lumiApi';
+ type UsageLumi } from '../lib/lumiApi';
 import { CarteAutorisation, FichesLiees, avecLiensFiches } from '../components/lumi/CarteAutorisation';
 
 /** Fiches du message en cours de rendu : les noms qui y correspondent deviennent des liens dans le texte. */
@@ -35,6 +36,17 @@ interface Item extends MessageLumi {
   /** Début et durée (ms) de la réponse, pour « Réflexion · 3 s ». */
   debut?: number;
   duree?: number;
+}
+
+/** « claude-sonnet-5 » → « Sonnet 5 » : le modèle, lisible, dans le pied de la réponse. */
+function nomModele(m: string | null | undefined): string {
+  if (!m) return '';
+  const x = m.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1');
+  return x.charAt(0).toUpperCase() + x.slice(1);
+}
+/** « 1 240 → 312 tokens » */
+function fmtTokens(n: number, fr: boolean): string {
+  return n.toLocaleString(fr ? 'fr-CA' : 'en-CA');
 }
 
 /** Page du CRM où vérifier ce qu'un outil a consulté (ligne « Sources »). */
@@ -236,6 +248,13 @@ export default function Lumi() {
   const voixTimerRef = useRef<number | null>(null);
   useEffect(() => () => { if (voixTimerRef.current) window.clearTimeout(voixTimerRef.current); }, []);
   const [budget, setBudget] = useState<BudgetLumi | null>(null);
+  /** Total tokens/coût de la conversation chargée depuis l'historique (ai_usage). */
+  const [usageConversation, setUsageConversation] = useState<UsageLumi | null>(null);
+  /** Compte interne (@lume-test.ca : bots d'évaluation, équipe Lume) : voit modèle et tokens. Un client ne voit que le coût. */
+  const [interne, setInterne] = useState(false);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setInterne(/@lume-test\.ca$/i.test(data.user?.email || ''))).catch(() => setInterne(false));
+  }, []);
   const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
   const idRef = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -282,8 +301,9 @@ export default function Lumi() {
   const ouvrirConversation = useCallback(async (id: string) => {
     setErreur(null);
     try {
-      const { messages } = await chargerConversationLumi(id);
+      const { messages, usage } = await chargerConversationLumi(id);
       setConversationId(id);
+      setUsageConversation(usage ?? null);
       setItems(messages.map((m) => ({ ...m, id: nextId() })));
     } catch {
       setErreur({ code: 'chargement', message: fr ? 'Impossible de charger cette conversation.' : 'Could not load this conversation.' });
@@ -291,6 +311,7 @@ export default function Lumi() {
   }, [fr]);
 
   function nouvelleConversation() {
+    setUsageConversation(null);
     abortRef.current?.abort();
     setConversationId(null);
     setItems([]);
@@ -361,6 +382,20 @@ export default function Lumi() {
         case 'report':
           dernier.report = e.rapport;
           break;
+        case 'usage': {
+          // Un tour = un ou plusieurs appels au modèle : on additionne. C'est ce
+          // que le rapport coûts/tokens du 2026-09-15 n'arrivait pas à vérifier.
+          const u = dernier.usage ?? { model: null, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cost_cents: 0, appels: 0 };
+          dernier.usage = {
+            model: e.model || u.model,
+            input_tokens: u.input_tokens + (e.usage?.input_tokens ?? 0),
+            output_tokens: u.output_tokens + (e.usage?.output_tokens ?? 0),
+            cache_read_input_tokens: u.cache_read_input_tokens + (e.usage?.cache_read_input_tokens ?? 0),
+            cost_cents: u.cost_cents + (e.cost_cents ?? 0),
+            appels: u.appels + 1,
+          };
+          break;
+        }
         case 'done':
           dernier.enCours = false;
           dernier.outilsActifs = [];
@@ -543,6 +578,13 @@ export default function Lumi() {
           >
             <Sparkles size={12} className={pctBudget >= 90 ? 'text-danger' : 'text-primary'} />
             {fmtDollars(budget.depense_cents)} / {fmtDollars(budget.budget_cents)}
+            {usageConversation && conversationId && (
+              <span className="ml-2 text-text-tertiary" title={fr ? 'Cette conversation (historique) : tokens entrés → sortis, coût' : 'This conversation (history): tokens in → out, cost'}>
+                {interne
+                  ? `· ${fmtTokens(usageConversation.input_tokens, fr)} → ${fmtTokens(usageConversation.output_tokens, fr)} tokens · ${fmtDollars(usageConversation.cost_cents)}`
+                  : `· ${fr ? 'cette conversation' : 'this conversation'} ${fmtDollars(usageConversation.cost_cents)}`}
+              </span>
+            )}
           </span>
         )}
         <div className="relative">
@@ -686,6 +728,13 @@ export default function Lumi() {
                             ? (fr ? 'Lumi réfléchit…' : 'Lumi is thinking…')
                             : `${fr ? 'Réflexion' : 'Thinking'}${secondes ? ` · ${secondes} s` : ''}`}
                         </span>
+                        {!reflechit && m.usage && (
+                          <span className="text-[11px] font-normal text-text-tertiary" title={fr ? `${m.usage.appels} appel(s) au modèle · ${fmtTokens(m.usage.cache_read_input_tokens, fr)} tokens lus en cache` : `${m.usage.appels} model call(s) · ${fmtTokens(m.usage.cache_read_input_tokens, fr)} cached tokens read`}>
+                            {interne
+                              ? `· ${nomModele(m.usage.model)} · ${fmtTokens(m.usage.input_tokens, fr)} → ${fmtTokens(m.usage.output_tokens, fr)} tokens · ${fmtDollars(m.usage.cost_cents)}`
+                              : `· ${fmtDollars(m.usage.cost_cents)}`}
+                          </span>
+                        )}
                         {etapes.length > 0 && <ChevronDown size={12} className="lumi-chev text-text-tertiary" />}
                       </summary>
                       {etapes.length > 0 && (
@@ -744,7 +793,7 @@ export default function Lumi() {
                   : erreur.code === 'quota_epuise'
                 ? (fr ? 'Le budget IA du mois est atteint. Lumi reprend le 1er du mois prochain.' : 'This month’s AI budget is reached. Lumi resumes on the 1st of next month.')
                 : erreur.code === 'plan_sans_lumi'
-                  ? (fr ? 'Lumi est inclus dans les plans Scale et Autopilot.' : 'Lumi is included in the Scale and Autopilot plans.')
+                  ? (fr ? 'Lumi est inclus dans le forfait Autopilot.' : 'Lumi is included in the Autopilot plan.')
                   : erreur.code === 'lumi_not_configured'
                     ? (fr ? 'Lumi n’est pas encore activé sur ce serveur.' : 'Lumi is not enabled on this server yet.')
                     : erreur.message}

@@ -21,6 +21,41 @@ export interface Article {
 
 export const ARTICLES: Article[] = [
   {
+    /**
+     * Sujet le plus répété en production (mesuré le 2026-09-22 : 6 + 4 + 2
+     * occurrences, 0,29 $). Le contenu existait déjà — dans la FAQ des pages
+     * Fonctionnalités — mais pas dans le centre d'aide, donc chaque question
+     * repartait au modèle qui reconstruisait la réponse à chaque fois.
+     * Repris mot pour mot de src/pages/marketing/fonctionsData.ts : une seule
+     * vérité, écrite une fois.
+     */
+    id: 'quote-preset',
+    path: '/quotes',
+    q_fr: 'C\'est quoi un préréglage de soumission, et qu\'est-ce qu\'il contient ?',
+    q_en: 'What is a quote preset, and what does it contain?',
+    a_fr: "Un modèle de soumission prêt à envoyer, à votre nom : un titre, une description, une image de couverture, la liste de vos services avec prix et quantités, un texte d'introduction, vos conditions, et un dépôt (fixe ou en pourcentage) si vous en demandez un. À la création du compte, Lume propose des services de départ selon votre métier ; ensuite, vos préréglages ne contiennent que ce que vous y avez mis.",
+    a_en: 'A ready-to-send quote template in your name: a title, a description, a cover image, your services with prices and quantities, an intro text, your terms, and a deposit (fixed or percentage) if you ask for one. When the account is created Lume suggests starter services for your trade; after that, your presets contain only what you put in them.',
+    tags: 'prereglage preset preregle modele soumission devis catalogue service contenu inclus quote template',
+  },
+  {
+    id: 'quote-preset-edit',
+    path: '/quotes',
+    q_fr: 'Jusqu\'où je peux modifier un préréglage ?',
+    q_en: 'How far can I edit a preset?',
+    a_fr: "Entièrement : titre, description, images, services (ajouter, retirer, changer prix et quantités), texte d'intro, conditions, dépôt et sections personnalisées, dans Soumissions → Modèles et préréglages. Les soumissions déjà envoyées ne changent pas : un préréglage est un point de départ, chaque soumission garde sa propre copie. Un préréglage dont vous ne vous servez plus se désactive plutôt que de se supprimer, pour garder l'historique.",
+    a_en: 'Entirely: title, description, images, services (add, remove, change prices and quantities), intro text, terms, deposit and custom sections, under Quotes → Templates and presets. Quotes already sent do not change: a preset is a starting point and each quote keeps its own copy. A preset you no longer use is deactivated rather than deleted, so the history stays intact.',
+    tags: 'modifier preset prereglage editer changer personnaliser jusqu ou limite soumission devis modele',
+  },
+  {
+    id: 'quote-preset-trade',
+    path: '/quotes',
+    q_fr: 'Mon métier n\'est pas dans les préréglages proposés — je fais quoi ?',
+    q_en: 'My trade is not in the suggested presets — what do I do?',
+    a_fr: "Les services proposés au départ ne sont qu'une suggestion selon le métier choisi : vous pouvez créer vos propres préréglages de zéro dans Soumissions → Modèles et préréglages, avec vos services, vos prix et vos conditions. Rien ne vous oblige à partir d'un modèle existant.",
+    a_en: "The starter services are only a suggestion based on the trade you picked: you can build your own presets from scratch under Quotes → Templates and presets, with your own services, prices and terms. Nothing forces you to start from an existing template.",
+    tags: 'metier trade preset prereglage absent pas dans propose creer zero personnalise soumission',
+  },
+  {
     id: 'quote-to-invoice',
     path: '/quotes',
     q_fr: 'Comment transformer un devis en facture ?',
@@ -31,7 +66,7 @@ export const ARTICLES: Article[] = [
   },
   {
     id: 'get-paid',
-    path: '/payments',
+    path: '/settings/payments',
     q_fr: 'Comment me faire payer par carte ?',
     q_en: 'How do I get paid by card?',
     a_fr: "Activez Lume Payments dans Paramètres → Lume Payments. Une fois votre compte connecté, chaque facture envoyée contient un bouton de paiement, et l'argent est déposé automatiquement dans votre compte bancaire.",
@@ -40,7 +75,7 @@ export const ARTICLES: Article[] = [
   },
   {
     id: 'add-member',
-    path: '/manage-team',
+    path: '/settings/team',
     q_fr: 'Comment ajouter un employé à mon équipe ?',
     q_en: 'How do I add an employee to my team?',
     a_fr: "Allez dans Paramètres → Membres, puis invitez la personne par courriel. Elle recevra un lien pour créer son compte. Si votre forfait n'a plus de sièges disponibles, un siège supplémentaire vous sera facturé au prorata.",
@@ -86,11 +121,11 @@ export const ARTICLES: Article[] = [
   {
     id: 'automations',
     path: '/automations',
-    q_fr: 'Comment automatiser les rappels et les suivis ?',
-    q_en: 'How do I automate reminders and follow-ups?',
-    a_fr: "Dans Automatisations, créez une règle du type « quand un devis est approuvé → envoyer un courriel ». Les rappels de rendez-vous et les relances de factures impayées sont les plus utilisés.",
-    a_en: 'Under Automations, build a rule such as “when a quote is approved → send an email.” Appointment reminders and overdue-invoice follow-ups are the most common ones.',
-    tags: 'automatisation automation rappel relance suivi workflow declencheur',
+    q_fr: 'Comment fonctionnent les automatisations ?',
+    q_en: 'How do automations work?',
+    a_fr: "Dans Automatisations, chaque règle (devis approuvé → courriel, facture en retard → rappel, job terminé → demande d'avis…) a un interrupteur pour l'activer ou la mettre en pause, et un panneau qui montre ce qu'elle a envoyé et à qui. Les filtres en haut trient par statut. Les textes des messages se modifient dans la règle. Rien ne se supprime : une règle inutile se met en pause.",
+    a_en: 'In Automations, each rule (quote approved → email, overdue invoice → reminder, job done → review request…) has a switch to enable or pause it, and a panel showing what it sent and to whom. The filters at the top sort by status. Message texts are edited inside the rule. Nothing gets deleted: an unneeded rule is paused.',
+    tags: 'automatisation automation règle rule déclencheur trigger relance rappel avis pause activer',
   },
   {
     id: 'change-plan',
@@ -102,8 +137,30 @@ export const ARTICLES: Article[] = [
     tags: 'forfait plan abonnement annuler upgrade downgrade facturation prix',
   },
   {
+    // Question la plus répétée du support en prod (8 fois le 2026-09-18, payée
+    // au modèle à chaque fois) : la réponse ne dépend d'aucune donnée du compte.
+    id: 'billing-failed',
+    path: '/settings/billing',
+    q_fr: 'Mon paiement d\'abonnement a échoué — que faire ?',
+    q_en: 'My subscription payment failed — what now?',
+    a_fr: "Allez dans Paramètres → Forfait & facturation : tant que le paiement n'est pas réglé, un bandeau vous propose de mettre votre carte à jour. Votre compte reste utilisable pendant ce délai — corrigez la carte et le paiement est repris automatiquement, sans rien perdre.",
+    a_en: 'Go to Settings → Plan & billing: while a payment is outstanding, a banner lets you update your card. Your account keeps working in the meantime — fix the card and the payment retries automatically, with nothing lost.',
+    tags: 'paiement echoue refuse carte expiree past due abonnement facturation retard prelevement declined',
+  },
+  {
+    // « comment je parle à un humain » — 2 fois en prod, aucune réponse écrite.
+    id: 'talk-to-human',
+    q_fr: 'Comment parler à un humain de l\'équipe ?',
+    q_en: 'How do I talk to a human on the team?',
+    a_fr: "Dites-le simplement ici (« je veux parler à quelqu'un ») : je transmets la conversation à l'équipe avec tout le contexte, et une vraie personne vous répond dans ce même fil. Pas de file d'attente ni de numéro à composer.",
+    a_en: 'Just say so here (“I’d like to talk to someone”): I hand the conversation to the team with all the context, and a real person replies in this same thread. No queue, no phone number to dial.',
+    // Les mots-clés servent à une comparaison EXACTE, sans racinisation :
+    // « parle » et « parler » comptent chacun pour eux-mêmes.
+    tags: 'humain personne equipe support agent conseiller parle parler contacter contact quelqu un escalade vrai monde',
+  },
+  {
     id: 'invoice-unpaid',
-    path: '/invoices',
+    path: '/finances',
     q_fr: 'Un client n\'a pas payé sa facture — que faire ?',
     q_en: 'A client hasn’t paid their invoice — what now?',
     a_fr: "La facture apparaît comme « en retard » dans Factures. Vous pouvez la renvoyer en un clic, ou configurer une relance automatique dans Automatisations pour que Lume s'en occupe à votre place.",
@@ -121,11 +178,12 @@ export const ARTICLES: Article[] = [
   },
   {
     id: 'mobile',
+    path: '/day',
     q_fr: 'Est-ce que Lume fonctionne sur téléphone ?',
     q_en: 'Does Lume work on a phone?',
-    a_fr: "Oui, Lume s'adapte au mobile dans le navigateur — vos employés peuvent consulter leur horaire, remplir leurs feuilles de temps et marquer un travail comme terminé sur le terrain, sans installer d'application.",
-    a_en: 'Yes — Lume adapts to mobile in the browser. Your crew can check their schedule, fill timesheets and mark jobs complete in the field, with nothing to install.',
-    tags: 'mobile telephone cellulaire app application terrain ipad tablette',
+    a_fr: "Lume se travaille sur ordinateur (tableaux, calendrier de répartition, glisser-déposer). Sur un téléphone, l'app affiche une page d'attente : l'application mobile est en bêta fermée et n'est pas encore publiée. Par contre, tout ce que reçoivent VOS clients fonctionne sur leur téléphone sans rien installer : soumission à approuver, contrat à signer, paiement en ligne, portail et formulaire de demande.",
+    a_en: 'Lume is built for a computer screen (tables, dispatch calendar, drag and drop). On a phone, the app shows a waiting page: the mobile app is in closed beta and not published yet. Everything YOUR clients receive works on their phone with nothing to install: quote approval, contract signing, online payment, portal and request form.',
+    tags: 'mobile téléphone cellulaire application app ios android testflight hors ligne offline',
   },
   {
     id: 'delete-task',
@@ -180,5 +238,59 @@ export const ARTICLES: Article[] = [
     a_fr: "Paramètres → Mon profil, section « Langue de l'interface » : choisissez « Français » ou « English », c'est appliqué tout de suite. La langue des messages envoyés à vos clients se règle à part, dans Automatisations.",
     a_en: 'Settings → My profile, “Interface language” section: pick “Français” or “English”, it applies right away. The language of messages sent to your clients is set separately, in Automations.',
     tags: 'langue language francais anglais english interface profil',
+  },
+  {
+    id: 'two-factor',
+    path: '/settings/team',
+    q_fr: 'Comment activer la double authentification (2FA) ?',
+    q_en: 'How do I turn on two-factor authentication (2FA)?',
+    a_fr: "Elle s'active d'elle-même à votre première action sensible, par exemple inviter un membre dans Paramètres → Membres : Lume affiche un code QR à scanner avec une application d'authentification (Google Authenticator, Authy, 1Password ou l'app Mots de passe), puis vous entrez le code à 6 chiffres. Ensuite, un code vous sera demandé pour ces actions.",
+    a_en: 'It turns on by itself at your first sensitive action, for example inviting a member in Settings → Members: Lume shows a QR code to scan with an authenticator app (Google Authenticator, Authy, 1Password or the Passwords app), then you enter the 6-digit code. A code is then requested for those actions.',
+    tags: '2fa mfa double authentification deux facteurs sécurité code qr authenticator',
+  },
+  {
+    id: 'forgot-password',
+    path: '/auth',
+    q_fr: "J'ai oublié mon mot de passe, comment me reconnecter ?",
+    q_en: 'I forgot my password, how do I sign back in?',
+    a_fr: "Sur la page de connexion, cliquez « Mot de passe oublié », entrez votre courriel : vous recevez un lien qui ouvre la page de réinitialisation. Choisissez un nouveau mot de passe et reconnectez-vous. Pas de courriel après quelques minutes ? Vérifiez les indésirables et que l'adresse est bien celle du compte.",
+    a_en: 'On the sign-in page, click "Forgot password", enter your email: you receive a link that opens the reset page. Choose a new password and sign in again. No email after a few minutes? Check spam and that the address is the one on the account.',
+    tags: 'mot de passe oublié réinitialiser reset password connexion login courriel',
+  },
+  {
+    id: 'taxes-setup',
+    path: '/settings/taxes',
+    q_fr: 'Comment régler mes taxes (TPS/TVQ) ?',
+    q_en: 'How do I set up my taxes (GST/QST)?',
+    a_fr: "Paramètres → Taxes : « Ajouter une région » (Québec : TPS 5 % et TVQ 9,975 %), puis « Définir par défaut ». Ces taxes s'appliquent automatiquement aux nouveaux devis, jobs et factures ; un document peut être marqué sans taxes au cas par cas. Modifier une taxe ne change pas les documents déjà émis.",
+    a_en: 'Settings → Taxes: "Add a region" (Quebec: GST 5% and QST 9.975%), then "Set as default". These taxes apply automatically to new quotes, jobs and invoices; a document can be marked tax-free case by case. Changing a tax does not alter documents already issued.',
+    tags: 'taxes tps tvq gst qst hst région défaut paramètres',
+  },
+  {
+    id: 'leads-vs-clients',
+    path: '/quotes',
+    q_fr: "C'est quoi la différence entre un prospect (lead) et un client ?",
+    q_en: 'What is the difference between a lead and a client?',
+    a_fr: "Un prospect est une personne qui n'a pas encore acheté : une demande reçue du formulaire, un appel, un contact de porte-à-porte. Il vit dans le pipeline des soumissions. Dès qu'une soumission est approuvée ou qu'un job est créé, il devient un client avec sa fiche complète (historique, factures, messages). Lumi peut convertir un prospect en client sur demande.",
+    a_en: 'A lead is someone who has not bought yet: a form request, a call, a door-to-door contact. It lives in the quotes pipeline. Once a quote is approved or a job is created, it becomes a client with a full profile (history, invoices, messages). Lumi can convert a lead into a client on request.',
+    tags: 'lead prospect client pipeline convertir conversion demande',
+  },
+  {
+    id: 'google-reviews',
+    path: '/settings/reviews',
+    q_fr: 'Comment demander des avis Google à mes clients ?',
+    q_en: 'How do I ask my clients for Google reviews?',
+    a_fr: "Paramètres → Avis clients : activez « Demander un avis à la fin d'un job » et collez le lien de votre fiche Google. À la fin de chaque job, le client reçoit un texto avec un sondage étoiles ; une bonne note l'envoie vers votre page Google, une mauvaise vous revient en privé. Le message se personnalise au même endroit.",
+    a_en: 'Settings → Client reviews: turn on "Ask for a review when a job ends" and paste your Google listing link. At the end of each job the client gets a text with a star survey; a good rating sends them to your Google page, a bad one comes back to you privately. The message is customized in the same place.',
+    tags: 'avis google review étoiles sondage réputation fin de job',
+  },
+  {
+    id: 'job-profit',
+    path: '/jobs',
+    q_fr: 'Comment voir si un job a été rentable ?',
+    q_en: 'How do I see whether a job was profitable?',
+    a_fr: "Dans la fiche du job, cliquez « Afficher la rentabilité » : revenu facturé, main-d'œuvre (heures pointées × taux), dépenses et profit. Pour enregistrer des dépenses (essence, matériaux, sous-traitant), demandez à Lumi : « ajoute 80 $ de dépenses sur le job 12 ». Le rapport Finances donne la vue d'ensemble par période.",
+    a_en: 'In the job sheet, click "Show profitability": billed revenue, labour (clocked hours × rate), expenses and profit. To record expenses (gas, materials, subcontractor), ask Lumi: "add $80 of expenses to job 12". The Finances report gives the overview per period.',
+    tags: 'rentabilité profit marge dépenses coûts main-d’œuvre job',
   },
 ];

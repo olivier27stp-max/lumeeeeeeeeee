@@ -8,7 +8,9 @@
  * classique (SupportPanel), qui crée quand même un ticket.
  */
 import React, { useEffect, useId, useRef, useState, useCallback } from 'react';
-import { Loader2, Send, LifeBuoy, ArrowLeft, Plus, History } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader2, Send, LifeBuoy, ArrowLeft, Plus, History, ThumbsUp, ThumbsDown, ImagePlus, X } from 'lucide-react';
+import { normalizeImageForUpload } from '../lib/imageNormalize';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -19,7 +21,7 @@ import { ARTICLES } from './supportArticles';
 /** Les mêmes questions classiques que le tiroir d'aide ; un clic = réponse fixe côté serveur (étage 0), sans modèle. */
 const SUGGESTIONS_IDS = ['quote-to-invoice', 'get-paid', 'add-member', 'schedule-job', 'import-clients'];
 import {
-  chatSupport, sendSupportMessage, escalateSupportTicket, listSupportTickets, getSupportTicket,
+  chatSupport, sendSupportMessage, escalateSupportTicket, listSupportTickets, getSupportTicket, noterReponseSupport, televerserCaptureSupport,
   type SupportTicket, type SlaKey, type SupportRequestError,
 } from '../lib/supportApi';
 
@@ -38,8 +40,40 @@ function heureCourte(iso: string, fr: boolean): string {
   return d.toLocaleString(fr ? 'fr-CA' : 'en-CA', auj ? { hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 const POLL_MS = 8000;
+const MAX_CAPTURES = 3;
 
-export default function SupportChat({ compact = false, initialTicketId }: { compact?: boolean; initialTicketId?: string | null } = {}) {
+/** Les premiers segments des routes de l'app (src/App.tsx) : une route citée par Lumi devient un lien. */
+const SEGMENTS_APP = 'day|dashboard|tasks|jobs|calendar|dispatch|clients|requests|quotes|messages|search|lumi|finances|invoices|payments|settings|commissions|timesheets|availability|courses|training|field-sales|pipeline|leaderboard|d2d-reports|d2d-dashboard|d2d-pipeline|reps|insights|automations|offices|account|apps|marketplace|leads';
+const ROUTE_RE = new RegExp(`(/(?:${SEGMENTS_APP})(?:/[A-Za-z0-9_-]+)*)(?![A-Za-z0-9_:/-])`, 'g');
+
+/**
+ * Le texte d'une réponse, avec chaque route de l'app (« /settings/team ») en
+ * lien : cliquer y va — depuis le tiroir, il se ferme d'abord. Une route avec
+ * un paramètre (« /jobs/:id ») reste du texte.
+ */
+export function TexteAvecLiens({ texte, onNavigate }: { texte: string; onNavigate?: (path: string) => void }) {
+  const morceaux: React.ReactNode[] = [];
+  let i = 0;
+  let n = 0;
+  for (const m of texte.matchAll(ROUTE_RE)) {
+    const route = m[1];
+    const debut = m.index ?? 0;
+    if (route.includes(':')) continue;
+    if (debut > i) morceaux.push(texte.slice(i, debut));
+    morceaux.push(
+      <button key={`l${n++}`} type="button" onClick={() => onNavigate?.(route)} className="underline decoration-dotted underline-offset-2 text-primary hover:decoration-solid font-medium">
+        {route}
+      </button>,
+    );
+    i = debut + route.length;
+  }
+  if (i < texte.length) morceaux.push(texte.slice(i));
+  return <>{morceaux}</>;
+}
+
+export default function SupportChat({ compact = false, initialTicketId, onNavigate }: { compact?: boolean; initialTicketId?: string | null; onNavigate?: (path: string) => void } = {}) {
+  const navigate = useNavigate();
+  const allerA = useCallback((path: string) => { if (onNavigate) onNavigate(path); else navigate(path); }, [onNavigate, navigate]);
   const { t, language } = useTranslation();
   const ts = t.support;
   const fr = language === 'fr';
@@ -48,10 +82,51 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
   const [showList, setShowList] = useState(false);
   const [texte, setTexte] = useState('');
   const [envoi, setEnvoi] = useState(false);
+  // Un « comment faire » prend deux appels (recherche dans l'aide, puis réponse) : après 3 s, on dit ce que Lumi fait.
+  const [longueAttente, setLongueAttente] = useState(false);
+  useEffect(() => {
+    if (!envoi) { setLongueAttente(false); return; }
+    const id = window.setTimeout(() => setLongueAttente(true), 3000);
+    return () => window.clearTimeout(id);
+  }, [envoi]);
   const [fallbackForm, setFallbackForm] = useState(false);
   const [charge, setCharge] = useState(true);
+  // Captures en attente d'envoi (réduites à 1 600 px), avec un aperçu local.
+  const [captures, setCaptures] = useState<Array<{ fichier: File; apercu: string }>>([]);
   const listeRef = useRef<HTMLDivElement>(null);
+  const fichierRef = useRef<HTMLInputElement>(null);
   const champId = useId();
+  const fichierId = useId();
+
+  async function ajouterCaptures(liste: FileList | null) {
+    if (!liste?.length) return;
+    if (captures.length + liste.length > MAX_CAPTURES) { toast.error(ts.screenshotTooMany); return; }
+    const nouvelles: Array<{ fichier: File; apercu: string }> = [];
+    for (const f of Array.from(liste)) {
+      if (!f.type.startsWith('image/')) continue;
+      try {
+        const reduit = await normalizeImageForUpload(f, { maxDim: 1600, quality: 0.85 });
+        nouvelles.push({ fichier: reduit, apercu: URL.createObjectURL(reduit) });
+      } catch (e) {
+        captureClientException(e, { module: 'support', action: 'capture-reduire' });
+        toast.error(ts.screenshotFailed);
+      }
+    }
+    setCaptures((c) => [...c, ...nouvelles].slice(0, MAX_CAPTURES));
+    if (fichierRef.current) fichierRef.current.value = '';
+  }
+  function retirerCapture(i: number) {
+    setCaptures((c) => { URL.revokeObjectURL(c[i]?.apercu); return c.filter((_, j) => j !== i); });
+  }
+  /** Téléverse les captures en attente ; renvoie leurs chemins (vide si aucune). Lève si une échoue. */
+  async function televerserCaptures(): Promise<Array<{ chemin: string; nom: string }>> {
+    const chemins: Array<{ chemin: string; nom: string }> = [];
+    for (const c of captures) {
+      const { capture } = await televerserCaptureSupport(c.fichier, c.fichier.name || 'capture.jpg');
+      chemins.push({ chemin: capture.chemin, nom: capture.nom });
+    }
+    return chemins;
+  }
 
   const sla = (key: SlaKey | null | undefined) => (key ? ts[SLA_KEYS[key]] : ts.sla2d);
 
@@ -110,12 +185,13 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
   }, [ts]);
 
   async function envoyer(humain = false, suggestion?: string) {
-    const message = (suggestion ?? texte).trim();
+    const message = (suggestion ?? texte).trim() || (captures.length && !humain ? (fr ? '(capture d’écran)' : '(screenshot)') : '');
     if ((!message && !humain) || envoi) return;
     setEnvoi(true);
     try {
+      const chemins = suggestion ? [] : await televerserCaptures();
       if (ticket && (ticket.status === 'open' || ticket.status === 'answered')) {
-        const { ticket: maj } = await sendSupportMessage(ticket.id, message);
+        const { ticket: maj } = await sendSupportMessage(ticket.id, message, chemins);
         setTicket(maj);
       } else if (humain && ticket) {
         const r = await escalateSupportTicket(ticket.id);
@@ -124,15 +200,31 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
       } else {
         // La page courante part avec la question : Lumi dit où cliquer d'ici, pas depuis le menu.
         const page = typeof window !== 'undefined' && /^\/[A-Za-z0-9/_-]*$/.test(window.location.pathname) ? window.location.pathname.slice(0, 200) : undefined;
-        const r = await chatSupport({ ticketId: ticket?.id, message: message || (fr ? 'Je veux parler à un humain.' : 'I want to talk to a human.'), humain, origine: suggestion ? 'suggestion' : 'texte', page });
+        const r = await chatSupport({ ticketId: ticket?.id, message: message || (fr ? 'Je veux parler à un humain.' : 'I want to talk to a human.'), humain, origine: suggestion ? 'suggestion' : 'texte', page, ...(chemins.length ? { captures: chemins } : {}) });
         setTicket(r.ticket);
         if (r.escalated) toast.success(ts.humanNotified.replace('{delay}', sla(r.slaKey)));
       }
       setTexte('');
+      captures.forEach((c) => URL.revokeObjectURL(c.apercu));
+      setCaptures([]);
     } catch (err) {
       erreur(err);
     } finally {
       setEnvoi(false);
+    }
+  }
+
+  // 👍 / 👎 sur une réponse de Lumi : enregistré tout de suite, l'état local suit ; un 👎 invite à préciser ou à demander l'équipe.
+  async function noter(messageId: string, avis: 'bon' | 'mauvais') {
+    if (!ticket) return;
+    const avant = ticket;
+    setTicket({ ...ticket, messages: ticket.messages.map((m) => (m.id === messageId ? { ...m, avis } : m)) });
+    try {
+      await noterReponseSupport(ticket.id, messageId, avis);
+      if (avis === 'mauvais') toast.message(ts.feedbackBad);
+    } catch (e) {
+      setTicket(avant);
+      captureClientException(e, { module: 'support', action: 'avis' });
     }
   }
 
@@ -202,7 +294,18 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
         )}
         {messages.map((m) => (
           m.author === 'user' ? (
-            <div key={m.id} className="ml-auto bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-2xl rounded-tr-sm px-3.5 py-3 text-[13.5px] leading-relaxed max-w-[92%] whitespace-pre-wrap">{m.body}</div>
+            <div key={m.id} className="ml-auto max-w-[92%]">
+              <div className="bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-2xl rounded-tr-sm px-3.5 py-3 text-[13.5px] leading-relaxed whitespace-pre-wrap">{m.body}</div>
+              {!!m.pieces?.length && (
+                <div className="flex flex-wrap gap-1.5 justify-end mt-1.5">
+                  {m.pieces.map((p) => (
+                    <a key={p.url} href={p.url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border border-outline-subtle">
+                      <img src={p.url} alt={`${ts.screenshotOf} ${p.nom}`} className="h-20 w-auto object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : m.author === 'agent' ? (
             // Réponse d'une personne de l'équipe : avatar aux initiales, nom et
             // heure au-dessus, bulle soulignée d'un filet — sobre, pas de vert.
@@ -213,15 +316,32 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
                   <span className="font-semibold text-text-primary">{m.authorName || ts.agentLabel}</span>
                   {m.authorName ? ` · ${ts.agentLabel}` : ''}{` · ${heureCourte(m.createdAt, fr)}`}
                 </p>
-                <div className="bg-surface border border-outline-subtle border-l-2 border-l-primary rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-primary shadow-sm whitespace-pre-wrap">{m.body}</div>
+                <div className="bg-surface border border-outline-subtle border-l-2 border-l-primary rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-primary shadow-sm whitespace-pre-wrap"><TexteAvecLiens texte={m.body} onNavigate={allerA} /></div>
               </div>
             </div>
           ) : (
-            <div key={m.id} className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary max-w-[92%] shadow-sm whitespace-pre-wrap">{m.body}</div>
+            <div key={m.id} className="max-w-[92%]">
+              <div className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary shadow-sm whitespace-pre-wrap"><TexteAvecLiens texte={m.body} onNavigate={allerA} /></div>
+              {/* 👍 / 👎 : un geste, pas un formulaire. Visible tant que la réponse n'est pas notée ; ensuite, seul le choix reste. */}
+              <div className="flex items-center gap-1 mt-1 pl-1" aria-label={ts.feedbackQuestion}>
+                {(!m.avis || m.avis === 'bon') && (
+                  <button type="button" onClick={() => noter(m.id, 'bon')} disabled={!!m.avis} aria-label={ts.helpful} aria-pressed={m.avis === 'bon'} className={cn('p-1 rounded-full text-text-tertiary hover:text-primary hover:bg-surface-secondary', m.avis === 'bon' && 'text-primary')}>
+                    <ThumbsUp size={13} aria-hidden="true" />
+                  </button>
+                )}
+                {(!m.avis || m.avis === 'mauvais') && (
+                  <button type="button" onClick={() => noter(m.id, 'mauvais')} disabled={!!m.avis} aria-label={ts.notHelpful} aria-pressed={m.avis === 'mauvais'} className={cn('p-1 rounded-full text-text-tertiary hover:text-danger hover:bg-surface-secondary', m.avis === 'mauvais' && 'text-danger')}>
+                    <ThumbsDown size={13} aria-hidden="true" />
+                  </button>
+                )}
+                {m.avis && <span className="text-[10.5px] text-text-tertiary">{m.avis === 'bon' ? ts.feedbackThanks : ts.feedbackBad}</span>}
+              </div>
+            </div>
           )
         ))}
         {envoi && (
-          <div className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 max-w-[60%] shadow-sm" aria-label={chezHumain ? ts.sending : ts.aiThinking}>
+          <div className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 max-w-[60%] shadow-sm" aria-label={chezHumain ? ts.sending : longueAttente ? ts.aiSearching : ts.aiThinking}>
+            {longueAttente && !chezHumain && <span className="block text-[11.5px] text-text-tertiary mb-1">{ts.aiSearching}</span>}
             <span className="inline-flex gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce [animation-delay:-0.3s]" />
               <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce [animation-delay:-0.15s]" />
@@ -251,7 +371,26 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
       {/* Saisie — aussi quand la conversation est fermée : écrire la rouvre. */}
       {(
         <form onSubmit={(e) => { e.preventDefault(); envoyer(false); }} className="shrink-0 border-t border-outline-subtle">
+          {captures.length > 0 && (
+            <div className="flex gap-2 px-3.5 pt-3">
+              {captures.map((c, i) => (
+                <div key={c.apercu} className="relative">
+                  <img src={c.apercu} alt={`${ts.screenshotOf} ${c.fichier.name}`} className="h-14 w-auto rounded-lg border border-outline-subtle object-cover" />
+                  <button type="button" onClick={() => retirerCapture(i)} aria-label={ts.removeScreenshot} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-900 text-white dark:bg-white dark:text-gray-900 flex items-center justify-center">
+                    <X size={11} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 px-3.5 pt-3 pb-2">
+            <label htmlFor={fichierId} className="sr-only">{ts.attachScreenshot}</label>
+            <input id={fichierId} ref={fichierRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => void ajouterCaptures(e.target.files)} />
+            {!chezHumain || ticket ? (
+              <button type="button" onClick={() => fichierRef.current?.click()} disabled={envoi || captures.length >= MAX_CAPTURES} aria-label={ts.attachScreenshot} className="w-9 h-9 rounded-full text-text-tertiary hover:text-text-primary hover:bg-surface-secondary flex items-center justify-center shrink-0 disabled:opacity-40">
+                <ImagePlus size={17} aria-hidden="true" />
+              </button>
+            ) : null}
             <label htmlFor={champId} className="sr-only">{ts.chatPlaceholder}</label>
             <input
               id={champId}
@@ -264,7 +403,7 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
             />
             <button
               type="submit"
-              disabled={envoi || !texte.trim()}
+              disabled={envoi || (!texte.trim() && !captures.length)}
               aria-label={ts.send}
               className="w-9 h-9 rounded-full bg-gray-900 text-white dark:bg-white dark:text-gray-900 flex items-center justify-center shrink-0 disabled:opacity-40"
             >

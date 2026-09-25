@@ -184,18 +184,18 @@ export interface FieldDailyStats {
   updated_at?: string;
 }
 
+/** Réglages porte-à-porte — les colonnes RÉELLES de field_settings (alignées le 2026-09-16 ; l'ancienne forme n'existait pas en base). */
 export interface FieldSettings {
   org_id: string;
-  allow_voice_notes: boolean;
-  default_pin_radius: number;
-  require_gps_on_knock: boolean;
-  daily_goal_knocks: number;
-  daily_goal_leads: number;
-  custom_statuses: string[];
-  pin_colors: Record<string, string>;
-  working_hours_start: string; // HH:MM
-  working_hours_end: string;   // HH:MM
-  timezone: string;
+  feature_enabled: boolean;
+  territory_restriction_enabled: boolean;
+  auto_revisit_days: number;
+  auto_followup_days: number;
+  voice_notes_enabled: boolean;
+  ai_summaries_enabled: boolean;
+  show_peer_payouts: boolean;
+  default_pin_template_id: string | null;
+  automation_defaults: Record<string, unknown>;
   updated_at?: string;
 }
 

@@ -1,28 +1,33 @@
-// Console interne des migrations assistées — /admin/migrations
-// Réservée à l'administrateur plateforme Lume (PLATFORM_OWNER_ID). La page se
-// gate elle-même via GET /api/migration-admin/check et redirige sinon ; le
-// serveur re-vérifie de toute façon chaque requête. Hors navigation : on y
-// accède par URL directe. Périmètre limité aux projets de migration.
+// Console interne des migrations assistées — onglet « Migrations » du
+// Creator Space (/creator-space/migrations ; l'ancienne URL /admin/migrations
+// y redirige). Réservée aux comptes de platformAdminIds. Montée en mode
+// `embedded` par le Creator Space, qui a déjà passé la sonde
+// /api/creator-space/check (même liste platformAdminIds) ; montée seule, la
+// page se gate elle-même via GET /api/migration-admin/check et redirige sinon.
+// Le serveur re-vérifie de toute façon chaque requête. Périmètre limité aux
+// projets de migration.
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { captureClientException } from '../lib/sentry';
 import {
   ArrowLeft, Copy, Flag, Loader2, Plus, RefreshCw, Search, ShieldCheck, Database,
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
-import {
+import { type AuditBotMigration,
   checkPlatformAdmin, listMigrations, createMigration, getMigrationDetail, setMigrationStatus,
   generateInvitation, revokeInvitation, extendInvitation, decideMapping, resolveIssue,
   decideDuplicate, startAnalysis, startTestImport, requestApproval, startFinalImport,
   rollbackMigration, closeMigration, sendAdminMessage, getMigrationAudit, getFileDownloadUrl,
-  reanalyzeFile, rejectFile, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
+  reanalyzeFile, rejectFile, deleteFile, uploadAdminFile, activateAccount, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
   getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate, flagMapping,
   type AdminMigrationListItem, type MigrationStaffEntry, type MappingFlag,
 } from '../lib/migrationAdminApi';
-import { lancerBotMigration, definirBotActif, definirModeBot, approuverAuNomDuClient, type RapportBotMigration } from '../lib/migrationAdminApi';
+import { lancerBotMigration, attendreFinBot, getRapportBot, definirBotActif, definirModeBot, approuverAuNomDuClient, type RapportBotMigration } from '../lib/migrationAdminApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
+import FieldTargetPicker, { ENTITY_LABELS_FR, type FieldCatalog } from '../components/migration/FieldTargetPicker';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Brouillon',
@@ -90,17 +95,21 @@ function StatusBadgeMig({ status }: { status: string }) {
   );
 }
 
-export default function AdminMigrations() {
-  const gate = useQuery({ queryKey: ['migration-admin-check'], queryFn: checkPlatformAdmin, staleTime: 5 * 60_000, retry: false });
+export default function AdminMigrations({ embedded = false }: { embedded?: boolean }) {
+  // Embarquée dans le Creator Space : la sonde /api/creator-space/check a déjà
+  // validé l'appartenance à platformAdminIds, inutile de re-sonder ici.
+  const gate = useQuery({ queryKey: ['migration-admin-check'], queryFn: checkPlatformAdmin, staleTime: 5 * 60_000, retry: false, enabled: !embedded });
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  if (gate.isLoading) {
-    return <div className="flex items-center justify-center py-24 text-text-tertiary"><Loader2 size={22} className="animate-spin" /></div>;
+  if (!embedded) {
+    if (gate.isLoading) {
+      return <div className="flex items-center justify-center py-24 text-text-tertiary"><Loader2 size={22} className="animate-spin" /></div>;
+    }
+    if (!gate.data) return <Navigate to="/" replace />;
   }
-  if (!gate.data) return <Navigate to="/" replace />;
 
   return (
-    <div className="px-8 py-6">
+    <div className={embedded ? undefined : 'px-8 py-6'}>
       {selectedId
         ? <MigrationDetail id={selectedId} onBack={() => setSelectedId(null)} />
         : <MigrationList onOpen={setSelectedId} />}
@@ -331,11 +340,12 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
 
 // ── Détail ───────────────────────────────────────────────────────────────
 
-type Tab = 'resume' | 'files' | 'mappings' | 'issues' | 'duplicates' | 'imports' | 'audit' | 'messages';
+type Tab = 'resume' | 'files' | 'mappings' | 'bot' | 'issues' | 'duplicates' | 'imports' | 'audit' | 'messages';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'resume', label: 'Résumé' },
   { id: 'files', label: 'Fichiers' },
   { id: 'mappings', label: 'Correspondances' },
+  { id: 'bot', label: 'Rapport du bot' },
   { id: 'issues', label: 'Problèmes' },
   { id: 'duplicates', label: 'Doublons' },
   { id: 'imports', label: 'Imports' },
@@ -350,12 +360,36 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
     queryKey: ['migration-admin-detail', id],
     queryFn: () => getMigrationDetail(id),
     refetchInterval: (query) => {
-      const status = (query.state.data as any)?.migration?.status;
-      return ['parsing', 'testing', 'importing', 'post_import_validation'].includes(status) ? 4000 : false;
+      const migration = (query.state.data as any)?.migration;
+      const status = migration?.status;
+      if (passeBotActive(migration?.bot_dernier_rapport)) return 2500;
+      // un lot (test ou final) qui tourne encore : suivi même si le statut n'a pas encore basculé
+      if (((query.state.data as any)?.batches ?? []).some((b: any) => b.status === 'running')) return 2500;
+      return ['parsing', 'testing', 'importing', 'post_import_validation'].includes(status) ? 2500 : false;
     },
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ['migration-admin-detail', id] });
+  // Vérité sur la passe du bot : sondage léger (une colonne) toutes les 4 s tant que la fiche est
+  // ouverte, quel que soit l'onglet ou la fenêtre qui a cliqué. La fiche complète est trop lourde
+  // pour ça (10 s sous charge pendant un import test), et une passe lancée ailleurs restait
+  // invisible : bouton cliquable, aucun chargement (2026-09-21).
+  const botLive = useQuery({
+    queryKey: ['migration-admin-bot-live', id],
+    queryFn: () => getRapportBot(id),
+    refetchInterval: 4000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  const rapportBot = ((botLive.data?.rapport ?? (detail.data as any)?.migration?.bot_dernier_rapport) ?? null) as RapportBotMigration | null;
+  const botEnCours = passeBotActive(rapportBot);
+  // Fin de passe détectée par le sondage : recharger la fiche (rapport final, statut, doublons, rejets).
+  const botEnCoursPrecedent = useRef(botEnCours);
+  useEffect(() => {
+    if (botEnCoursPrecedent.current && !botEnCours) refresh();
+    botEnCoursPrecedent.current = botEnCours;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh est stable (qc + id)
+  }, [botEnCours]);
 
   if (detail.isLoading || !detail.data) {
     return <div className="flex items-center justify-center py-24 text-text-tertiary"><Loader2 size={22} className="animate-spin" /></div>;
@@ -373,11 +407,14 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <StatusBadgeMig status={m.status} />
         <span className="text-[13px] text-text-tertiary">{CRM_LABELS[m.source_crm] ?? m.source_crm}</span>
         <div className="flex-1" />
-        <ActionsBar m={m} d={d} onDone={refresh} />
+        <ActionsBar m={m} d={d} onDone={refresh} rapportBot={rapportBot} />
       </div>
       <p className="text-[12px] text-text-tertiary mb-4">
         ID {m.id} · créée le {new Date(m.created_at).toLocaleDateString('fr-CA')} · dernière activité {new Date(m.last_activity_at).toLocaleString('fr-CA')}
       </p>
+
+      <CarteImportEnCours d={d} />
+      <CarteBotEnCours rapport={rapportBot} />
 
       <div className="flex items-center gap-1 p-1 rounded-xl bg-surface-secondary/60 border border-outline w-fit mb-5 flex-wrap">
         {TABS.map((t) => (
@@ -391,11 +428,21 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
             {t.id === 'issues' && d.issues.filter((i: any) => !i.resolved_at).length > 0 && (
               <span className="ml-1.5 text-amber-700 font-bold">{d.issues.filter((i: any) => !i.resolved_at).length}</span>
             )}
+            {t.id === 'bot' && aFaireBot(m.bot_dernier_rapport) > 0 && (
+              <span className="ml-1.5 text-amber-700 font-bold">{aFaireBot(m.bot_dernier_rapport)}</span>
+            )}
+            {t.id === 'duplicates' && (d.duplicates?.length ?? 0) > 0 && (
+              doublonsATrancher(d.duplicates) > 0
+                // ambre : encore à trancher ; gris : tous tranchés, on montre le total détecté
+                ? <span className="ml-1.5 text-amber-700 font-bold" title="Doublons à trancher">{doublonsATrancher(d.duplicates)}{(d.duplicates?.length ?? 0) >= 500 ? '+' : ''}</span>
+                : <span className="ml-1.5 text-text-tertiary font-semibold" title="Doublons détectés, tous tranchés">{d.duplicates.length}{d.duplicates.length >= 500 ? '+' : ''}</span>
+            )}
           </button>
         ))}
       </div>
 
-      {tab === 'resume' && <ResumeTab d={d} onChanged={refresh} />}
+      {tab === 'resume' && <ResumeTab d={d} onChanged={refresh} onOuvrirOnglet={setTab} />}
+      {tab === 'bot' && <RapportBotTab d={d} onOuvrirOnglet={setTab} />}
       {tab === 'files' && <FilesTab d={d} onChanged={refresh} />}
       {tab === 'mappings' && <MappingsTab d={d} onChanged={refresh} />}
       {tab === 'issues' && <IssuesTab d={d} onChanged={refresh} />}
@@ -407,33 +454,134 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
   );
 }
 
-function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
+function formatDuree(secondes: number): string {
+  if (secondes < 60) return `${secondes} s`;
+  return `${Math.floor(secondes / 60)} min ${String(secondes % 60).padStart(2, '0')} s`;
+}
+
+/** Suivi en direct d'un import test ou final : étape courante, lignes faites,
+ *  types de données faits, durée. Lit totals.progress du lot « running »
+ *  (relu toutes les 2,5 s par la fiche) ; le chrono tourne localement. */
+function CarteImportEnCours({ d }: { d: any }) {
+  const m = d.migration;
+  const lot = (d.batches ?? []).find((b: any) => b.status === 'running') ?? null;
+  const actif = !!lot || ['testing', 'importing', 'post_import_validation'].includes(m.status);
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+  useEffect(() => {
+    if (!actif) return;
+    const t = setInterval(() => setMaintenant(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [actif]);
+  if (!actif) return null;
+  const p = lot?.totals?.progress ?? null;
+  const debut = lot?.started_at ? new Date(lot.started_at).getTime() : null;
+  const secondes = debut ? Math.max(0, Math.round((maintenant - debut) / 1000)) : null;
+  const titre = m.status === 'post_import_validation'
+    ? 'Validation après import'
+    : (lot?.kind === 'final' || m.status === 'importing') ? 'Import final en cours' : 'Import test en cours';
+  const pctEntites = p && p.entites_total > 0 ? Math.round((p.entites_faites / p.entites_total) * 100) : null;
+  const pctLignes = p && p.total > 0 ? Math.min(100, Math.round((p.processed / p.total) * 100)) : null;
+  const depuisMaj = p?.updated_at ? Math.max(0, Math.round((maintenant - new Date(p.updated_at).getTime()) / 1000)) : null;
+  return (
+    <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50/60 p-4" role="status" aria-live="polite">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="relative flex h-2.5 w-2.5" aria-hidden="true"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600" /></span>
+        <p className="text-[13px] font-semibold text-blue-900">{titre}{secondes !== null && ` — ${formatDuree(secondes)}`}</p>
+        <span className="text-[11.5px] text-blue-900/60">{depuisMaj !== null ? `dernier signe de vie il y a ${depuisMaj} s` : 'la fiche se rafraîchit toute seule'}</span>
+      </div>
+      <p className="mt-1 text-[12.5px] text-blue-900/90">{p?.etape ?? 'Démarrage…'}</p>
+      {pctEntites !== null && (
+        <div className="mt-2">
+          <div className="h-1.5 w-full rounded-full bg-blue-100 overflow-hidden"><div className="h-full bg-blue-500 transition-all" style={{ width: `${pctEntites}%` }} /></div>
+          <p className="mt-1 text-[11.5px] text-blue-900/80">{p.entites_faites} / {p.entites_total} types de données faits</p>
+        </div>
+      )}
+      {pctLignes !== null && (
+        <div className="mt-2">
+          <div className="h-1.5 w-full rounded-full bg-blue-100 overflow-hidden"><div className="h-full bg-blue-400 transition-all" style={{ width: `${pctLignes}%` }} /></div>
+          <p className="mt-1 text-[11.5px] text-blue-900/80">{p.processed} / {p.total} lignes dans cette étape</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Une passe du bot est-elle en cours d'après le rapport publié ? Même règle que le verrou serveur
+ *  (bot.ts › passeBotEnCours) : `en_cours` vrai ET démarrée il y a moins de 20 min — au-delà, un
+ *  drapeau resté vrai après un redémarrage du serveur ne fige plus la console. */
+function passeBotActive(r: RapportBotMigration | null | undefined): boolean {
+  if (!r?.en_cours || !r.debut) return false;
+  return Date.now() - new Date(r.debut).getTime() < 20 * 60 * 1000;
+}
+
+function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () => void; rapportBot: RapportBotMigration | null }) {
   const [confirmKind, setConfirmKind] = useState<'final' | 'rollback' | null>(null);
+  // Une action à la fois : absorbe les doubles clics (deux passes du bot lancées à 20 s d'écart le 2026-09-19).
+  const [enCours, setEnCours] = useState(false);
+  // Passe du bot en cours d'après le serveur : visible depuis n'importe quel onglet, et même après un
+  // rechargement de la page (la fiche se rafraîchit toutes les 2,5 s tant que ça tourne).
+  const botEnCours = passeBotActive(rapportBot);
+  const botOccupe = enCours || botEnCours;
   const btn = 'h-9 px-3.5 rounded-md text-[13px] font-medium border transition-colors';
   const subtle = `${btn} bg-surface-card border-outline text-text-secondary hover:bg-surface-secondary`;
   const primary = `${btn} bg-[#d8d0c2] border-transparent text-black hover:bg-[#cabfad]`;
   const danger = `${btn} bg-red-50 border-red-200 text-red-700 hover:bg-red-100`;
 
   const act = async (fn: () => Promise<unknown>, okMsg: string) => {
+    if (enCours) return;
+    setEnCours(true);
     try {
       await fn();
       toast.success(okMsg);
       onDone();
     } catch (err: any) {
-      toast.error(err?.message ?? 'Erreur');
+      const msg: string = err?.message ?? 'Erreur';
+      // Le serveur refuse un second lancement pendant une passe : ce n'est pas une erreur, la
+      // fiche se met simplement à suivre la passe en cours.
+      if (/déjà en cours/i.test(msg)) { toast.message(msg); onDone(); }
+      else toast.error(msg);
+    } finally {
+      setEnCours(false);
     }
   };
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'test_review'].includes(m.status) && (
-        <button type="button" className={primary} onClick={() => act(async () => { const r = await lancerBotMigration(m.id); toast.message(`Bot : ${r.decisions.length} décision${r.decisions.length > 1 ? 's' : ''} — ${r.arret}`); }, 'Passe du bot terminée')}>Confier au bot</button>
+        <button type="button" className={`${primary} inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed`} disabled={botOccupe} onClick={() => act(async () => {
+          const { depuis } = await lancerBotMigration(m.id);
+          // Le bot publie « Démarrage… » dans la fiche quelques centaines de ms après le 202 : on
+          // recharge tout de suite puis deux fois encore pour attraper en_cours et enclencher le
+          // rafraîchissement automatique (bande verte au-dessus des onglets).
+          onDone();
+          setTimeout(onDone, 1500);
+          setTimeout(onDone, 4000);
+          toast.message('Passe du bot lancée : suivi en direct au-dessus des onglets, environ 1 minute par fichier.');
+          const r = await attendreFinBot(m.id, depuis);
+          if (!r) throw new Error('La passe du bot dépasse 20 minutes : rafraîchissez la page plus tard, le rapport apparaîtra dans la carte Bot.');
+          toast.message(`Bot : ${r.decisions.length} décision${r.decisions.length > 1 ? 's' : ''} — ${r.arret}`);
+        }, 'Passe du bot terminée')}>
+          {botOccupe && <Loader2 size={13} className="animate-spin" />}
+          {botOccupe ? 'Passe du bot en cours…' : 'Confier au bot'}
+        </button>
+      )}
+      {botEnCours && (
+        <span className="inline-flex items-center gap-1.5 text-[12px] text-text-tertiary">
+          {rapportBot?.etape_courante ?? 'Le bot travaille'}
+          {rapportBot?.progression && rapportBot.progression.fichiers_total > 0 ? ` — ${rapportBot.progression.fichiers_faits}/${rapportBot.progression.fichiers_total} fichiers` : ''}
+        </span>
       )}
       {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client'].includes(m.status) && (
         <button type="button" className={subtle} onClick={() => act(() => startAnalysis(m.id), 'Analyse relancée')}>Relancer l'analyse</button>
       )}
       {['mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'test_review'].includes(m.status) && (
-        <button type="button" className={primary} onClick={() => act(() => startTestImport(m.id), 'Import test lancé')}>Lancer l'import test</button>
+        <button type="button" className={primary} disabled={enCours} onClick={() => act(async () => {
+          await startTestImport(m.id);
+          // l'import tourne en arrière-plan : on recharge tout de suite puis deux fois pour attraper le
+          // lot « running » et enclencher le suivi (carte bleue « Import test en cours »)
+          setTimeout(onDone, 1500);
+          setTimeout(onDone, 4000);
+        }, 'Import test lancé — suivi ci-dessus')}>{enCours ? 'Lancement…' : 'Lancer l\'import test'}</button>
       )}
       {m.status === 'test_review' && (
         <button type="button" className={primary} onClick={() => act(() => requestApproval(m.id), 'Approbation demandée au client')}>Demander l'approbation</button>
@@ -445,6 +593,23 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
           await act(() => approuverAuNomDuClient(m.id), 'Approuvée au nom du client — passez la migration « prête pour l\'import final »');
         }}>Approuver au nom du client</button>
       )}
+      {d.communications?.gele && !['importing', 'post_import_validation'].includes(m.status) && (
+        // Protection post-import : tant que ce bouton n'a pas été cliqué, aucun courriel, SMS ni
+        // automatisation ne part vers les clients de ce bureau (garde dans les fonctions d'envoi).
+        <button type="button" className={primary} onClick={async () => {
+          const ok = await confirmer({ title: 'Activer le compte', message: 'Les communications vers les clients de ce bureau (courriels, SMS, automatisations, rappels, demandes d\'avis) sont gelées depuis l\'import. En activant le compte, elles repartent normalement. Vérifiez d\'abord que les données importées sont en ordre.', confirmLabel: 'Activer le compte' });
+          if (!ok) return;
+          await act(() => activateAccount(m.id), 'Compte activé : les communications vers les clients repartent');
+        }}>Activer le compte</button>
+      )}
+      {m.status === 'failed' && (
+        // un import échoué ne se relance pas à l'aveugle : retour aux correspondances, bot, import test, puis import final
+        <button type="button" className={primary} onClick={() => act(() => setMigrationStatus(m.id, 'mapping'), 'Migration reprise aux correspondances')}>Reprendre aux correspondances</button>
+      )}
+      {m.status === 'rolled_back' && (
+        // après un rollback, la migration repart des correspondances (machine à états : rolled_back → mapping)
+        <button type="button" className={primary} onClick={() => act(() => setMigrationStatus(m.id, 'mapping'), 'Migration reprise aux correspondances')}>Reprendre après rollback</button>
+      )}
       {(m.status === 'approved' || m.status === 'completed_with_warnings') && (
         <button type="button" className={primary} onClick={() => act(() => setMigrationStatus(m.id, 'ready_for_final_import'), 'Migration prête pour l\'import final')}>
           {m.status === 'approved' ? 'Marquer prête pour l\'import' : 'Préparer l\'import complémentaire'}
@@ -454,6 +619,15 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
         <button type="button" className={subtle} onClick={() => act(async () => { const r = await retryErrors(m.id); toast.success(`${r.reset} ligne(s) remises en file`); }, 'Lignes en erreur relancées')}>
           Relancer les lignes en erreur
         </button>
+      )}
+      {m.status === 'failed' && (
+        // failed → ready_for_final_import (machine à états) : l'import est idempotent,
+        // la reprise ne recrée rien (migration_import_records + ids déterministes).
+        <button type="button" className={primary} onClick={() => act(async () => {
+          const r = await retryErrors(m.id);
+          await setMigrationStatus(m.id, 'ready_for_final_import');
+          toast.message(`${r.reset} ligne(s) en erreur remises en file — cliquez maintenant « Lancer l'import final » : seules les lignes manquantes seront écrites.`);
+        }, 'Prête pour la reprise de l\'import final')}>Reprendre l'import final</button>
       )}
       <button
         type="button"
@@ -474,8 +648,15 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
       {m.status === 'ready_for_final_import' && (
         <button type="button" className={danger} onClick={() => setConfirmKind('final')}>Lancer l'import final</button>
       )}
-      {['completed', 'completed_with_warnings', 'failed'].includes(m.status) && (
-        <button type="button" className={danger} onClick={() => setConfirmKind('rollback')}>Rollback</button>
+      {(['completed', 'completed_with_warnings', 'failed', 'rolled_back'].includes(m.status)
+        // un lot final complété reste en place même si le statut a été repris (failed → prête pour l'import)
+        || (d.batches ?? []).some((b: any) => b.kind === 'final' && ['completed', 'failed'].includes(b.status))) && (
+        <button type="button" className={danger} onClick={() => setConfirmKind('rollback')}>
+          {m.status !== 'rolled_back'
+            ? 'Rollback'
+            // déjà annulée : lots finaux antérieurs (import repris) encore en place, sinon nettoyage des orphelins
+            : (d.batches ?? []).some((b: any) => b.kind === 'final' && ['completed', 'failed'].includes(b.status)) ? 'Rollback des lots restants' : 'Nettoyer les orphelins du rollback'}
+        </button>
       )}
       {!m.closed_at && ['completed', 'completed_with_warnings', 'rolled_back', 'cancelled', 'failed'].includes(m.status) && (
         <button type="button" className={subtle} onClick={() => act(() => closeMigration(m.id), 'Migration fermée')}>Fermer</button>
@@ -489,10 +670,10 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
           orgName={d.org_name ?? ''}
           summary={confirmKind === 'final'
             ? 'L\'import final écrira les données approuvées dans le workspace du client. Approbation client et absence d\'erreurs bloquantes déjà vérifiées côté serveur.'
-            : 'Le rollback retire (soft-delete) UNIQUEMENT les dossiers créés par le dernier lot d\'import final. Les dossiers fusionnés et les données préexistantes ne sont pas touchés.'}
+            : 'Le rollback retire (soft-delete) UNIQUEMENT les dossiers créés par les lots d\'import final encore en place (tous, du plus récent au plus ancien). Les dossiers fusionnés et les données préexistantes ne sont pas touchés.'}
           onClose={() => setConfirmKind(null)}
           onConfirm={async (typed) => {
-            if (confirmKind === 'final') await act(() => startFinalImport(m.id, typed), 'Import final démarré');
+            if (confirmKind === 'final') await act(async () => { await startFinalImport(m.id, typed); setTimeout(onDone, 1500); setTimeout(onDone, 4000); }, 'Import final démarré — suivi ci-dessus');
             else await act(() => rollbackMigration(m.id, typed), 'Rollback effectué');
             setConfirmKind(null);
           }}
@@ -600,10 +781,288 @@ function StaffCard({ migrationId }: { migrationId: string }) {
   );
 }
 
-/** Le bot de migration : actif ou non, dernière passe, ses décisions. L'approbation et l'import final restent humains. */
-function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
+/** Bande de suivi en direct d'une passe du bot, au-dessus des onglets (visible partout). La fiche se
+ *  rafraîchit toutes les 2,5 s tant que `bot_dernier_rapport.en_cours` est vrai (refetchInterval). */
+function CarteBotEnCours({ rapport }: { rapport: RapportBotMigration | null }) {
+  const actif = passeBotActive(rapport);
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+  useEffect(() => {
+    if (!actif) return;
+    const t = setInterval(() => setMaintenant(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [actif]);
+  if (!actif || !rapport) return null;
+  const secondes = Math.max(0, Math.round((maintenant - new Date(rapport.debut).getTime()) / 1000));
+  const p = rapport.progression;
+  return (
+    <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4" role="status" aria-live="polite">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="relative flex h-2.5 w-2.5" aria-hidden="true"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600" /></span>
+        <p className="text-[13px] font-semibold text-emerald-900">Passe du bot en cours — {secondes} s</p>
+        <span className="text-[11.5px] text-emerald-900/60">{rapport.declencheur === 'cron' ? 'lancée par le cron' : 'lancée à la main'} · la fiche se rafraîchit toute seule</span>
+      </div>
+      <p className="mt-1 text-[12.5px] text-emerald-900/90">{rapport.etape_courante ?? 'Démarrage…'}</p>
+      {p && p.fichiers_total > 0 && (
+        <div className="mt-2">
+          <div className="h-1.5 w-full rounded-full bg-emerald-100 overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{ width: `${Math.round((p.fichiers_faits / p.fichiers_total) * 100)}%` }} /></div>
+          <p className="mt-1 text-[11.5px] text-emerald-900/80">{p.fichiers_faits} / {p.fichiers_total} fichiers</p>
+        </div>
+      )}
+      {rapport.decisions.length > 0 && (
+        <ul className="mt-2 space-y-0.5 max-h-32 overflow-auto text-[12px] text-emerald-950/90">
+          {rapport.decisions.slice(-5).map((d, i) => <li key={`${rapport.decisions.length}-${i}`}>· {d.etape} — {d.cible} : {d.decision}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Doublons encore à trancher (pending/review) — badge de l'onglet, même règle que le compteur du bot.
+ *  La fiche n'en renvoie que 500 : au-delà, le badge porte un « + ». */
+function doublonsATrancher(dupes: any[] | null | undefined): number {
+  return (dupes ?? []).filter((d) => d.decision === 'pending' || d.decision === 'review').length;
+}
+
+/** Nombre d'éléments qui attendent quelqu'un (à trancher + manques) dans le dernier rapport du bot — badge de l'onglet. */
+function aFaireBot(rapport: any): number {
+  const a = (rapport as RapportBotMigration | null)?.audit;
+  return a ? a.a_verifier.length + a.manques.length : 0;
+}
+
+async function copierTextePourClaude(texte: string, ouvrirTexte: () => void): Promise<void> {
+  try { await navigator.clipboard.writeText(texte); toast.success('Audit copié : collez-le à Claude Code avec « applique l\'audit »'); }
+  catch (err) { captureClientException(err, { where: 'copierTextePourClaude' }); toast.error('Copie impossible : sélectionnez le texte affiché'); ouvrirTexte(); }
+}
+
+/** Résumé compact dans la carte Bot : 4 compteurs + accès au rapport complet. */
+function ResumeAuditBot({ audit, onOuvrir }: { audit: AuditBotMigration; onOuvrir: () => void }) {
+  const tuiles: Array<{ n: number; label: string; ton: string }> = [
+    { n: audit.a_verifier.length, label: 'à trancher par vous', ton: audit.a_verifier.length ? 'text-amber-700' : 'text-text-tertiary' },
+    { n: audit.manques.length, label: 'manques pour Claude', ton: audit.manques.length ? 'text-violet-700' : 'text-text-tertiary' },
+    { n: audit.corrections.length, label: 'corrections faites', ton: audit.corrections.length ? 'text-emerald-700' : 'text-text-tertiary' },
+    { n: audit.alertes.length, label: 'alertes', ton: audit.alertes.length ? 'text-red-700' : 'text-text-tertiary' },
+  ];
+  return (
+    <div className="mt-3 flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-4 flex-wrap">
+        {tuiles.map((t) => (
+          <div key={t.label} className="flex items-baseline gap-1.5"><span className={`text-[20px] font-bold leading-none ${t.ton}`}>{t.n}</span><span className="text-[12px] text-text-secondary">{t.label}</span></div>
+        ))}
+      </div>
+      <div className="flex-1" />
+      <button type="button" onClick={onOuvrir} className="h-8 px-3 rounded-md text-[12.5px] font-medium bg-[#d8d0c2] text-black hover:bg-[#cabfad]">Voir le rapport</button>
+    </div>
+  );
+}
+
+/** Regroupe des lignes par fichier, dans l'ordre d'apparition. */
+function parFichier<T extends { fichier: string }>(items: T[]): Array<{ fichier: string; items: T[] }> {
+  const groupes = new Map<string, T[]>();
+  for (const it of items) groupes.set(it.fichier, [...(groupes.get(it.fichier) ?? []), it]);
+  return [...groupes.entries()].map(([fichier, items]) => ({ fichier, items }));
+}
+
+function SectionRapport({ id, titre, sousTitre, n, ton, vide, enfants, action }: { id: string; titre: string; sousTitre: string; n: number; ton: string; vide: string; enfants: ReactNode; action?: ReactNode }) {
+  return (
+    <section id={id} className="section-card p-5 scroll-mt-4" aria-labelledby={`${id}-titre`}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h3 id={`${id}-titre`} className="text-[15px] font-bold text-text-primary flex items-center gap-2">
+            <span className={`inline-flex items-center justify-center min-w-[26px] h-[26px] px-1.5 rounded-full text-[12.5px] font-bold ${ton}`}>{n}</span>
+            {titre}
+          </h3>
+          <p className="text-[12.5px] text-text-secondary mt-0.5">{sousTitre}</p>
+        </div>
+        {action}
+      </div>
+      <div className="mt-3">{n === 0 ? <p className="text-[13px] text-text-tertiary">{vide}</p> : enfants}</div>
+    </section>
+  );
+}
+
+/** Tableau groupé par fichier : le nom du fichier est un sous-en-tête, les colonnes restent lisibles à l'horizontale (overflow). */
+function TableRapport<T extends { fichier: string }>({ items, colonnes }: { items: T[]; colonnes: Array<{ titre: string; largeur?: string; rendu: (it: T) => ReactNode }> }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-outline">
+      <table className="w-full text-[12.5px]">
+        <thead className="bg-surface-secondary/60 text-text-secondary">
+          <tr>{colonnes.map((c) => <th key={c.titre} scope="col" className={`text-left font-semibold px-3 py-2 ${c.largeur ?? ''}`}>{c.titre}</th>)}</tr>
+        </thead>
+        {parFichier(items).map((g) => (
+          <tbody key={g.fichier}>
+            <tr className="bg-surface-secondary/30"><th scope="rowgroup" colSpan={colonnes.length} className="text-left px-3 py-1.5 text-[12px] font-semibold text-text-primary">📄 {g.fichier}</th></tr>
+            {g.items.map((it, i) => (
+              <tr key={i} className="border-t border-outline/40 align-top hover:bg-surface-secondary/20">
+                {colonnes.map((c) => <td key={c.titre} className="px-3 py-2 text-text-secondary">{c.rendu(it)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        ))}
+      </table>
+    </div>
+  );
+}
+
+const Champ = ({ v }: { v: string | null }) => (v ? <span className="inline-block px-1.5 py-0.5 rounded bg-surface-secondary text-text-primary font-medium whitespace-nowrap">{v}</span> : <span className="text-text-tertiary italic">ne pas importer</span>);
+const Colonne = ({ v }: { v: string }) => <span className="font-medium text-text-primary">« {v} »</span>;
+
+/** Onglet « Rapport du bot » : la dernière passe, organisée par ce qu'il reste à faire. */
+function RapportBotTab({ d, onOuvrirOnglet }: { d: any; onOuvrirOnglet: (t: Tab) => void }) {
+  const m = d.migration;
   const rapport = (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
+  const [texteOuvert, setTexteOuvert] = useState(false);
+  const [journalOuvert, setJournalOuvert] = useState(false);
+  if (!rapport) {
+    return <div className="section-card p-6 text-[13px] text-text-secondary">Aucune passe du bot pour l'instant. Cliquez « Confier au bot » dans la barre d'actions : le rapport apparaîtra ici, organisé par ce qu'il vous reste à faire.</div>;
+  }
+  if (rapport.en_cours) {
+    return <div className="section-card p-6 text-[13px] text-text-secondary">Une passe est en cours ({rapport.etape_courante ?? 'démarrage'}). Suivez-la en direct dans l'onglet Résumé ; le rapport s'affichera ici à la fin.</div>;
+  }
+  const a = rapport.audit;
+  if (!a) {
+    return <div className="section-card p-6 text-[13px] text-text-secondary">Ce rapport date d'avant la mise à jour du bot (pas d'audit détaillé). Relancez « Confier au bot » pour obtenir le rapport organisé.</div>;
+  }
+  const duree = Math.max(0, Math.round((new Date(rapport.fin).getTime() - new Date(rapport.debut).getTime()) / 1000));
+  const aFaire: string[] = [];
+  if (a.a_verifier.length) aFaire.push(`Tranchez ${a.a_verifier.length} colonne${a.a_verifier.length > 1 ? 's' : ''} dans Correspondances.`);
+  if (a.manques.length) aFaire.push(`Copiez le rapport pour Claude : ${a.manques.length} manque${a.manques.length > 1 ? 's' : ''} à construire dans Lume.`);
+  if (!aFaire.length) aFaire.push('Rien à trancher : le bot a tout réglé de son côté. Suite : import test, puis approbation.');
+  const tuiles: Array<{ id: string; n: number; label: string; ton: string }> = [
+    { id: 'rb-trancher', n: a.a_verifier.length, label: 'À trancher par vous', ton: 'bg-amber-100 text-amber-800' },
+    { id: 'rb-manques', n: a.manques.length, label: 'Manques pour Claude', ton: 'bg-violet-100 text-violet-800' },
+    { id: 'rb-corrections', n: a.corrections.length, label: 'Corrections faites', ton: 'bg-emerald-100 text-emerald-800' },
+    { id: 'rb-alertes', n: a.alertes.length, label: 'Alertes des gardes', ton: 'bg-red-100 text-red-800' },
+    { id: 'rb-journal', n: rapport.decisions.length, label: 'Décisions (journal)', ton: 'bg-surface-secondary text-text-primary' },
+  ];
+  const aller = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  return (
+    <div className="space-y-4">
+      <div className="section-card p-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-[17px] font-bold text-text-primary">Rapport de la dernière passe</h2>
+            <p className="text-[12.5px] text-text-secondary mt-0.5">
+              {new Date(rapport.fin).toLocaleString('fr-CA')} · {rapport.declencheur === 'cron' ? 'automatique' : 'lancée à la main'} · {duree} s · {a.modele ?? 'sans appel modèle'}{rapport.cout_cents != null ? ` · ${rapport.cout_cents.toFixed(1)} ¢` : ''} · statut {rapport.statut_avant} → {rapport.statut_apres}
+            </p>
+            <p className="text-[12.5px] text-text-secondary mt-0.5">Arrêt : {rapport.arret || '—'}</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setTexteOuvert((v) => !v)} className="h-9 px-3.5 rounded-md text-[13px] border border-outline bg-surface-card text-text-secondary hover:bg-surface-secondary">{texteOuvert ? 'Masquer le texte' : 'Voir le texte'}</button>
+            <button type="button" onClick={() => copierTextePourClaude(a.texte_pour_claude, () => setTexteOuvert(true))} disabled={!a.texte_pour_claude} className="h-9 px-3.5 rounded-md text-[13px] font-medium bg-[#d8d0c2] text-black hover:bg-[#cabfad] disabled:opacity-50">Copier pour Claude</button>
+          </div>
+        </div>
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
+          <p className="text-[12.5px] font-semibold text-amber-900">Quoi faire maintenant</p>
+          <ol className="mt-1 list-decimal pl-5 text-[13px] text-amber-950 space-y-0.5">{aFaire.map((t, i) => <li key={i}>{t}</li>)}</ol>
+        </div>
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {tuiles.map((t) => (
+            <button key={t.id} type="button" onClick={() => aller(t.id)} className="text-left rounded-lg border border-outline bg-surface-card p-3 hover:bg-surface-secondary/50 transition-colors">
+              <span className={`inline-flex items-center justify-center min-w-[30px] h-[30px] px-2 rounded-full text-[14px] font-bold ${t.ton}`}>{t.n}</span>
+              <p className="mt-1.5 text-[12.5px] text-text-secondary leading-tight">{t.label}</p>
+            </button>
+          ))}
+        </div>
+        {texteOuvert && <textarea readOnly aria-label="Audit à coller à Claude Code" value={a.texte_pour_claude} className="mt-4 w-full h-72 p-3 text-[12px] font-mono rounded-md border border-outline bg-surface-card text-text-primary" />}
+      </div>
+
+      <SectionRapport id="rb-trancher" titre="À trancher par vous" sousTitre="Le bot n'a pas osé décider : la proposition du moteur reste en place, à confirmer ou corriger." n={a.a_verifier.length} ton="bg-amber-100 text-amber-800"
+        vide="Rien : toutes les colonnes ont été tranchées."
+        action={a.a_verifier.length ? <button type="button" onClick={() => onOuvrirOnglet('mappings')} className="h-9 px-3.5 rounded-md text-[13px] font-medium bg-[#d8d0c2] text-black hover:bg-[#cabfad]">Ouvrir Correspondances</button> : undefined}
+        enfants={<TableRapport items={a.a_verifier} colonnes={[
+          { titre: 'Colonne', largeur: 'w-[22%]', rendu: (v) => <Colonne v={v.colonne} /> },
+          { titre: 'Champ actuel', largeur: 'w-[16%]', rendu: (v) => <Champ v={v.actuel} /> },
+          { titre: 'Candidats', largeur: 'w-[18%]', rendu: (v) => v.candidats.length ? v.candidats.join(' / ') : <span className="text-text-tertiary">—</span> },
+          { titre: 'Pourquoi le bot hésite', rendu: (v) => v.pourquoi },
+        ]} />} />
+
+      <SectionRapport id="rb-manques" titre="Manques dans Lume" sousTitre="Données utiles sans champ Lume : à construire dans l'importeur. Copiez le rapport pour Claude, il s'en charge." n={a.manques.length} ton="bg-violet-100 text-violet-800"
+        vide="Aucun : Lume a un champ pour tout ce que contiennent vos fichiers."
+        action={a.manques.length ? <button type="button" onClick={() => copierTextePourClaude(a.texte_pour_claude, () => setTexteOuvert(true))} className="h-9 px-3.5 rounded-md text-[13px] font-medium bg-[#d8d0c2] text-black hover:bg-[#cabfad]">Copier pour Claude</button> : undefined}
+        enfants={<TableRapport items={a.manques} colonnes={[
+          { titre: 'Colonne', largeur: 'w-[22%]', rendu: (v) => <Colonne v={v.colonne} /> },
+          { titre: 'Entité', largeur: 'w-[10%]', rendu: (v) => ENTITY_LABELS_FR[v.entite] ?? v.entite },
+          { titre: 'Champ proposé', largeur: 'w-[18%]', rendu: (v) => <Champ v={v.proposition} /> },
+          { titre: 'Ce que l\'importeur devrait en faire', rendu: (v) => v.besoin },
+        ]} />} />
+
+      <SectionRapport id="rb-corrections" titre="Corrections faites par le bot" sousTitre="Déjà appliquées dans Correspondances. Vérifiez d'un coup d'œil, rien à faire sauf désaccord." n={a.corrections.length} ton="bg-emerald-100 text-emerald-800"
+        vide="Aucune : les propositions du moteur étaient bonnes."
+        enfants={<TableRapport items={a.corrections} colonnes={[
+          { titre: 'Colonne', largeur: 'w-[22%]', rendu: (v) => <Colonne v={v.colonne} /> },
+          { titre: 'Avant', largeur: 'w-[16%]', rendu: (v) => <Champ v={v.avant} /> },
+          { titre: 'Après', largeur: 'w-[16%]', rendu: (v) => <Champ v={v.apres} /> },
+          { titre: 'Pourquoi', rendu: (v) => v.pourquoi },
+        ]} />} />
+
+      <SectionRapport id="rb-alertes" titre="Alertes des gardes" sousTitre="Pièges attrapés sans modèle (écrasement, type incompatible, tags, champs personnalisés…) et points à surveiller au dry-run." n={a.alertes.length} ton="bg-red-100 text-red-800"
+        vide="Aucune alerte."
+        enfants={<TableRapport items={a.alertes} colonnes={[
+          { titre: 'Colonne', largeur: 'w-[22%]', rendu: (v) => <Colonne v={v.colonne} /> },
+          { titre: 'Problème', rendu: (v) => v.message },
+          { titre: 'Ce qui a été fait', largeur: 'w-[26%]', rendu: (v) => v.action },
+        ]} />} />
+
+      <section className="section-card p-5" aria-labelledby="rb-fichiers-titre">
+        <h3 id="rb-fichiers-titre" className="text-[15px] font-bold text-text-primary">Fichiers examinés</h3>
+        {a.fichiers.length === 0 ? <p className="mt-2 text-[13px] text-text-tertiary">Aucun fichier examiné dans cette passe.</p> : (
+          <ul className="mt-2 divide-y divide-outline/40">
+            {a.fichiers.map((f, i) => (
+              <li key={i} className="py-2 flex items-start gap-3 flex-wrap text-[13px]">
+                <span className="font-medium text-text-primary">📄 {f.nom}</span>
+                <span className="text-text-tertiary">→ {f.entite ? (ENTITY_LABELS_FR[f.entite] ?? f.entite) : 'aucune entité (non importé)'}</span>
+                {f.nature && <span className="basis-full text-text-secondary">{f.nature}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section id="rb-journal" className="section-card p-5 scroll-mt-4" aria-labelledby="rb-journal-titre">
+        <div className="flex items-center justify-between gap-3">
+          <h3 id="rb-journal-titre" className="text-[15px] font-bold text-text-primary">Journal des décisions <span className="text-text-tertiary font-normal">({rapport.decisions.length})</span></h3>
+          <button type="button" onClick={() => setJournalOuvert((v) => !v)} className="h-8 px-3 rounded-md text-[12.5px] border border-outline bg-surface-card text-text-secondary hover:bg-surface-secondary">{journalOuvert ? 'Replier' : 'Déplier'}</button>
+        </div>
+        {journalOuvert && (
+          <ul className="mt-3 space-y-1 text-[12.5px]">
+            {rapport.decisions.map((dcs, i) => (
+              <li key={i} className="flex gap-2"><span className="text-text-tertiary w-32 shrink-0">{dcs.etape}</span><span className="text-text-secondary">{dcs.cible} — <span className="text-text-primary">{dcs.decision}</span>{dcs.detail ? ` (${dcs.detail})` : ''}</span></li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/** Le bot de migration : actif ou non, dernière passe, ses décisions. L'approbation et l'import final restent humains. */
+function CarteBot({ m, onChanged, onOuvrirOnglet }: { m: any; onChanged: () => void; onOuvrirOnglet: (t: Tab) => void }) {
+  const [live, setLive] = useState<RapportBotMigration | null>(null);
+  const rapport = (live ?? m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
   const [busy, setBusy] = useState(false);
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+  // Suivi en direct : tant qu'une passe est en cours, relire le rapport partiel toutes les 3 s ; à la fin, recharger la fiche.
+  useEffect(() => {
+    let arret = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tick = async () => {
+      if (arret) return;
+      try {
+        const { rapport: r } = await getRapportBot(m.id);
+        if (arret) return;
+        setLive(r);
+        setMaintenant(Date.now());
+        if (r?.en_cours) timer = setTimeout(tick, 3000);
+        else if (live?.en_cours) onChanged();
+      } catch (err) {
+        captureClientException(err, { where: 'CarteBot.suivi' });
+        if (!arret) timer = setTimeout(tick, 6000);
+      }
+    };
+    timer = setTimeout(tick, (m.bot_dernier_rapport as RapportBotMigration | null)?.en_cours ? 0 : 3000);
+    return () => { arret = true; if (timer) clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- relance à chaque changement de fiche ; `live` est lu, pas suivi
+  }, [m.id, m.bot_derniere_execution, (m.bot_dernier_rapport as RapportBotMigration | null)?.en_cours]);
   const autonome = m.bot_mode !== 'client';
   const basculer = async () => {
     setBusy(true);
@@ -634,7 +1093,27 @@ function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
           {m.bot_actif ? 'Actif — mettre en pause' : 'Activer le bot (toutes les 10 min)'}
         </button>
       </div>
-      {rapport ? (
+      {rapport?.en_cours && (
+        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3" role="status" aria-live="polite">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5" aria-hidden="true"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600" /></span>
+            <p className="text-[13px] font-semibold text-emerald-900">Bot en cours — {Math.max(0, Math.round((maintenant - new Date(rapport.debut).getTime()) / 1000))} s</p>
+          </div>
+          <p className="mt-1 text-[12.5px] text-emerald-900/90">{rapport.etape_courante ?? 'Démarrage…'}</p>
+          {rapport.progression && rapport.progression.fichiers_total > 0 && (
+            <div className="mt-2">
+              <div className="h-1.5 w-full rounded-full bg-emerald-100 overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{ width: `${Math.round((rapport.progression.fichiers_faits / rapport.progression.fichiers_total) * 100)}%` }} /></div>
+              <p className="mt-1 text-[11.5px] text-emerald-900/80">{rapport.progression.fichiers_faits} / {rapport.progression.fichiers_total} fichiers</p>
+            </div>
+          )}
+          {rapport.decisions.length > 0 && (
+            <ul className="mt-2 space-y-0.5 max-h-40 overflow-auto text-[12px] text-emerald-950/90">
+              {rapport.decisions.slice(-8).map((d, i) => <li key={`${rapport.decisions.length}-${i}`}>· {d.etape} — {d.cible} : {d.decision}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+      {rapport && !rapport.en_cours ? (
         <div className="mt-3">
           <p className="text-[12.5px] text-text-secondary">
             Dernière passe {new Date(rapport.fin).toLocaleString('fr-CA')} ({rapport.declencheur}) : {rapport.statut_avant} → {rapport.statut_apres} · {rapport.decisions.length} décision{rapport.decisions.length > 1 ? 's' : ''} · {rapport.arret}
@@ -647,24 +1126,26 @@ function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
               ))}
             </ul>
           )}
+          {rapport.audit && <ResumeAuditBot audit={rapport.audit} onOuvrir={() => onOuvrirOnglet('bot')} />}
         </div>
-      ) : (
+      ) : !rapport ? (
         <p className="mt-3 text-[12.5px] text-text-tertiary">Aucune passe encore. « Confier au bot » lance une passe maintenant ; « Activer » le fait revenir tout seul.</p>
-      )}
+      ) : null}
     </div>
   );
 }
 
-function ResumeTab({ d, onChanged }: { d: any; onChanged: () => void }) {
+function ResumeTab({ d, onChanged, onOuvrirOnglet }: { d: any; onChanged: () => void; onOuvrirOnglet: (t: Tab) => void }) {
   const m = d.migration;
   const [ttl, setTtl] = useState(48);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [generation, setGeneration] = useState(false);
   const activeInv = (d.invitations ?? []).find((i: any) => !i.revoked_at && !i.superseded_at);
   const staging = d.staging_counts ?? {};
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <CarteBot m={m} onChanged={onChanged} />
+      <CarteBot m={m} onChanged={onChanged} onOuvrirOnglet={onOuvrirOnglet} />
       <div className="section-card p-5">
         <h3 className="text-[14px] font-bold text-text-primary mb-3">Invitation</h3>
         {activeInv ? (
@@ -701,17 +1182,20 @@ function ResumeTab({ d, onChanged }: { d: any; onChanged: () => void }) {
           </select>
           <button
             type="button"
+            disabled={generation}
             onClick={async () => {
+              if (generation) return;
+              setGeneration(true);
               try {
                 const res = await generateInvitation(m.id, ttl);
                 setInviteUrl(res.invite_url);
                 toast.success('Invitation générée (l\'ancienne est invalidée)');
                 onChanged();
-              } catch (err: any) { toast.error(err?.message ?? 'Erreur'); }
+              } catch (err: any) { toast.error(err?.message ?? 'Erreur'); } finally { setGeneration(false); }
             }}
             className="h-9 px-4 bg-[#d8d0c2] text-black hover:bg-[#cabfad] rounded-md font-medium"
           >
-            {activeInv ? 'Regénérer le lien' : 'Générer le lien'}
+            {generation ? 'Génération…' : activeInv ? 'Regénérer le lien' : 'Générer le lien'}
           </button>
           {activeInv && (
             <>
@@ -764,10 +1248,51 @@ function ResumeTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   );
 }
 
+/** Statuts où un fichier peut encore être déposé (miroir de UPLOAD_ALLOWED_STATUSES côté serveur). */
+const STATUTS_DEPOT_FICHIERS = ['invitation_sent', 'waiting_for_files', 'files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'test_review'];
+
 function FilesTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   const m = d.migration;
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [depot, setDepot] = useState<string | null>(null);
+  const peutDeposer = STATUTS_DEPOT_FICHIERS.includes(m.status);
+  const deposer = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    for (const f of Array.from(files)) {
+      setDepot(f.name);
+      try {
+        await uploadAdminFile(m.id, f);
+        toast.success(`${f.name} reçu — analyse en cours`);
+      } catch (err: any) {
+        toast.error(`${f.name} : ${err?.message ?? 'Erreur'}`);
+      }
+    }
+    setDepot(null);
+    if (inputRef.current) inputRef.current.value = '';
+    onChanged();
+  };
   return (
     <div className="section-card p-5">
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        {/* `hidden` : ouvert par le bouton au-dessus. Il porte quand même un
+            nom accessible — un lecteur d'écran qui l'atteint doit savoir ce
+            que c'est, et le cliquet d'accessibilité ne tolère aucun champ
+            anonyme (tests/accessibilite-statique.test.ts). */}
+        <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls,.pdf" multiple hidden aria-label="Choisir des fichiers CSV, Excel ou PDF à déposer" onChange={(e) => void deposer(e.target.files)} />
+        <button
+          type="button"
+          disabled={!peutDeposer || depot !== null}
+          onClick={() => inputRef.current?.click()}
+          className="h-9 px-4 bg-[#d8d0c2] text-black hover:bg-[#cabfad] rounded-md text-[13px] font-medium inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {depot ? <><Loader2 size={13} className="animate-spin" /> Dépôt de {depot}…</> : 'Déposer des fichiers (CSV, Excel, PDF)'}
+        </button>
+        <span className="text-[12px] text-text-tertiary">
+          {peutDeposer
+            ? 'Même réception que le portail client : analyse automatique, puis « Confier au bot » pour les correspondances.'
+            : 'Le dépôt n\'est plus permis à cette étape (après approbation).'}
+        </span>
+      </div>
       {(d.files ?? []).length === 0 ? (
         <p className="text-[13px] text-text-tertiary">Aucun fichier reçu.</p>
       ) : (
@@ -836,6 +1361,23 @@ function FileAdminRow({ f, cell, migrationId, onChanged }: { f: any; cell: strin
             Rejeter
           </button>
         )}
+        <button
+          type="button"
+          className="underline text-red-600 font-semibold"
+          onClick={async () => {
+            const ok = await confirmer({ title: 'Supprimer le fichier', message: `Supprimer définitivement « ${f.original_name} » et ses correspondances ? Cette action est irréversible.`, confirmLabel: 'Supprimer', danger: true });
+            if (!ok) return;
+            try {
+              await deleteFile(migrationId, f.id);
+              toast.success('Fichier supprimé');
+              onChanged();
+            } catch (err: any) {
+              toast.error(err?.message ?? 'Erreur');
+            }
+          }}
+        >
+          Supprimer
+        </button>
       </div>
     </>
   );
@@ -882,12 +1424,24 @@ function TemplateControls({ migrationId, sourceCrm, onChanged }: { migrationId: 
 const MAPPING_STATUS_LABELS_FR: Record<string, string> = {
   suggested: 'Proposé', confirmed: 'Confirmé', corrected: 'Corrigé', rejected: 'Ignoré', needs_review: 'À vérifier',
 };
-const ENTITY_LABELS_FR: Record<string, string> = {
-  tax_config: 'Noms de taxes', client: 'Clients', property: 'Propriétés', billing_property: 'Adresses de facturation',
-  service: 'Produits et services', quote: 'Soumissions',
-  job: 'Jobs', visit: 'Visites', invoice: 'Factures', line_item: 'Lignes', payment: 'Paiements',
+// Miroir de entityForCategory (server/lib/migration/mapping.ts) : catégorie
+// détectée d'un fichier → entité ouverte par défaut dans le sélecteur.
+const CATEGORY_TO_ENTITY: Record<string, string> = {
+  taxes: 'tax_config', clients: 'client', properties: 'property', billing_addresses: 'billing_property',
+  services: 'service', quotes: 'quote', jobs: 'job', visits: 'visit', invoices: 'invoice', payments: 'payment',
 };
-type FieldCatalog = Record<string, { field: string; labelFr: string; labelEn: string }[]>;
+
+/** Entité par défaut d'un fichier : sa catégorie détectée, sinon l'entité la plus fréquente parmi ses correspondances. */
+function defaultEntityForFile(file: any, mappings: any[]): string | null {
+  const fromCategory = CATEGORY_TO_ENTITY[file?.category_detected ?? ''];
+  if (fromCategory) return fromCategory;
+  const counts = new Map<string, number>();
+  for (const mp of mappings) if (mp?.target_entity) counts.set(mp.target_entity, (counts.get(mp.target_entity) ?? 0) + 1);
+  let best: string | null = null;
+  let bestN = 0;
+  for (const [entity, n] of counts) if (n > bestN) { best = entity; bestN = n; }
+  return best;
+}
 
 function ConfidenceBadge({ value }: { value: number }) {
   const cls = value >= 90
@@ -899,7 +1453,7 @@ function ConfidenceBadge({ value }: { value: number }) {
 }
 
 // Même tableau que le portail client (MigrationPortal › Correspondance des colonnes) :
-// une liste déroulante par colonne, alimentée par FIELD_CATALOG, « Ne pas importer » = rejet.
+// un sélecteur par colonne (FieldTargetPicker), alimenté par FIELD_CATALOG, « Ne pas importer » = rejet.
 function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   const qc = useQueryClient();
   const m = d.migration;
@@ -979,6 +1533,7 @@ function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
                     col={col}
                     mapping={mappingByColumn.get(col.id)}
                     catalog={catalog}
+                    defaultEntity={defaultEntityForFile(file, (byFile.get(file.id) ?? []).map((c) => mappingByColumn.get(c.id)))}
                     onSelect={(mp, entity, field) => {
                       if (!entity || !field) return decide(mp, { status: 'rejected', target_entity: null, target_field: null }, 'Colonne ignorée');
                       return decide(mp, { status: 'corrected', target_entity: entity, target_field: field }, 'Correspondance mise à jour');
@@ -1052,18 +1607,18 @@ function FlagPicker({ value, onChange, label }: { value: MappingFlag | null; onC
   );
 }
 
-function MappingAdminRow({ col, mapping, catalog, onSelect, onConfirm, onFlag }: {
+function MappingAdminRow({ col, mapping, catalog, defaultEntity, onSelect, onConfirm, onFlag }: {
   col: any;
   mapping?: any;
   catalog: FieldCatalog;
+  defaultEntity: string | null;
   onSelect: (mp: any, entity: string | null, field: string | null) => void;
   onConfirm: (mp: any) => void;
   onFlag: (mp: any, flag: MappingFlag | null) => void;
 }) {
   const flag = FLAG_COLORS.find((c) => c.id === mapping?.admin_flag) ?? null;
   const cell = `px-3 py-2 border-b border-outline/30 flex items-center min-w-0 text-text-primary ${flag ? flag.row : ''}`;
-  const value = mapping?.target_entity && mapping?.target_field ? `${mapping.target_entity}:${mapping.target_field}` : '';
-  const knownValue = !value || (catalog[mapping.target_entity] ?? []).some((f) => f.field === mapping.target_field);
+  const value = mapping?.target_entity && mapping?.target_field ? { entity: mapping.target_entity as string, field: mapping.target_field as string } : null;
   const canConfirm = mapping && (mapping.status === 'suggested' || mapping.status === 'needs_review') && !!mapping.target_field;
   return (
     <>
@@ -1081,29 +1636,14 @@ function MappingAdminRow({ col, mapping, catalog, onSelect, onConfirm, onFlag }:
       </div>
       <div className={cell}>
         {mapping ? (
-          <select
-            aria-label={`Champ cible pour ${col.header}`}
-            className="w-full h-8 px-2 text-[12px] bg-surface-card border border-outline rounded-md"
+          <FieldTargetPicker
+            catalog={catalog}
             value={value}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (!v) onSelect(mapping, null, null);
-              else {
-                const [entity, field] = v.split(':');
-                onSelect(mapping, entity, field);
-              }
-            }}
-          >
-            <option value="">— Ne pas importer —</option>
-            {!knownValue && <option value={value}>{ENTITY_LABELS_FR[mapping.target_entity] ?? mapping.target_entity} · {mapping.target_field}</option>}
-            {Object.entries(catalog).map(([entity, fields]) => (
-              <optgroup key={entity} label={ENTITY_LABELS_FR[entity] ?? entity}>
-                {fields.map((f) => (
-                  <option key={`${entity}:${f.field}`} value={`${entity}:${f.field}`}>{f.labelFr}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+            excluded={mapping.status === 'rejected'}
+            defaultEntity={defaultEntity}
+            columnLabel={col.header}
+            onChange={(entity, field) => onSelect(mapping, entity, field)}
+          />
         ) : (
           <span className="text-text-tertiary">—</span>
         )}
@@ -1253,6 +1793,9 @@ function ImportsTab({ d }: { d: any }) {
             <span className="text-[11px] text-text-tertiary">{new Date(b.started_at).toLocaleString('fr-CA')}</span>
             <span className="text-[10px] text-text-tertiary">lot {b.id.slice(0, 8)}</span>
           </div>
+          {b.status === 'running' && b.totals?.progress?.etape && (
+            <p className="text-[12px] text-blue-900/90 mb-1">En cours : {b.totals.progress.etape}{b.totals.progress.total > 0 ? ` (${b.totals.progress.processed} / ${b.totals.progress.total} lignes)` : ''}</p>
+          )}
           {b.totals?.byEntity && (
             <div className="border border-outline rounded-md overflow-hidden mt-1 max-w-[560px]">
               <div className="grid text-[12px]" style={{ gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr' }}>

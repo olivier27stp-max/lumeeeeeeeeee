@@ -1,3 +1,4 @@
+import type { SocialLinks } from './socialLinks';
 import { supabase } from './supabase';
 import { deviceTokenHeader } from './deviceToken';
 import type { ConnectedAccount, PaymentRequest } from '../types';
@@ -69,6 +70,53 @@ export async function createDashboardLink(): Promise<{ url: string }> {
   });
 }
 
+// ── Réglages Lume Payments (interrupteurs, pourboires, portefeuilles…) ──
+
+export interface PaymentSettings {
+  org_id: string;
+  quote_payments_enabled: boolean;
+  invoice_payments_enabled: boolean;
+  tips_enabled: boolean;
+  wallets_enabled: boolean;
+  require_payment_method_default: boolean;
+  notify_owner_email: boolean;
+  updated_at: string | null;
+}
+
+export type PaymentSettingsPatch = Partial<Omit<PaymentSettings, 'org_id' | 'updated_at'>>;
+
+export async function getPaymentSettings(): Promise<PaymentSettings> {
+  const { settings } = await fetchApiJson<{ settings: PaymentSettings }>('/api/connect/settings');
+  return settings;
+}
+
+export async function updatePaymentSettings(patch: PaymentSettingsPatch): Promise<PaymentSettings> {
+  const { settings } = await fetchApiJson<{ settings: PaymentSettings }>('/api/connect/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+  return settings;
+}
+
+// ── Aperçu des versements (lecture seule, admin/owner) ──
+
+export interface PayoutsOverview {
+  currency: string;
+  available_cents: number;
+  pending_cents: number;
+  next_payout: { amount_cents: number; arrival_date: string; status: string } | null;
+  recent_payouts: Array<{ id: string; amount_cents: number; arrival_date: string; status: string; method: string }>;
+  bank: { kind: 'bank_account' | 'card'; label: string; last4: string } | null;
+  payout_schedule: { interval: string; delay_days: number | null } | null;
+  instant_payouts_available: boolean;
+  disputes: { open_count: number };
+}
+
+export async function getPayoutsOverview(): Promise<PayoutsOverview> {
+  const { overview } = await fetchApiJson<{ overview: PayoutsOverview }>('/api/connect/payouts-overview');
+  return overview;
+}
+
 // ── Payment Requests ──
 
 export interface CreatePaymentRequestResponse {
@@ -114,12 +162,18 @@ export async function getPaymentRequestsForInvoice(invoiceId: string): Promise<{
 // ── Public Payment Page (no auth needed) ──
 
 export interface PublicPaymentData {
+  /** 'pending' | 'sent' | 'paid' | 'disabled' (paiements en ligne coupés par l'entreprise). */
   status: string;
   payment_request_id?: string;
   public_token?: string;
   amount_cents: number;
   currency: string;
   message?: string;
+  /** Réglages Lume Payments de l'entreprise qui touchent la page. */
+  options?: {
+    tips_enabled: boolean;
+    wallets_enabled: boolean;
+  };
   invoice?: {
     invoice_number: string;
     subject: string | null;
@@ -144,6 +198,10 @@ export interface PublicPaymentData {
     phone: string | null;
     /** Couleur de marque de l'org — renvoyée par server/routes/public-pay.ts. */
     brand_color?: string | null;
+    /** Réseaux sociaux — icônes au pied de la page. */
+    social_links?: SocialLinks | null;
+    /** Langue de l'entreprise : la page s'affiche dans celle-là. */
+    language?: 'fr' | 'en' | null;
   } | null;
 }
 
@@ -162,6 +220,23 @@ export interface CreatePublicPaymentIntentResponse {
   amount_cents: number;
   currency: string;
   publishable_key: string;
+}
+
+/**
+ * Pourboire choisi sur la page publique : le serveur recalcule le montant du
+ * PaymentIntent (solde + pourboire) et renvoie le total à afficher.
+ */
+export async function setPublicTip(publicToken: string, tipCents: number): Promise<{ ok: boolean; tip_cents: number; amount_cents: number }> {
+  const response = await fetch(`/api/pay/${publicToken}/tip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tip_cents: tipCents }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error((payload as any)?.error || `Request failed (${response.status}).`);
+  }
+  return payload as { ok: boolean; tip_cents: number; amount_cents: number };
 }
 
 export async function createPublicPaymentIntent(publicToken: string): Promise<CreatePublicPaymentIntentResponse> {

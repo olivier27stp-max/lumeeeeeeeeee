@@ -26,6 +26,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 type Demande = {
   id: string;
@@ -128,6 +130,21 @@ describe('le lien de paiement public', () => {
   it('une facture marquée payée ne se paie pas deux fois non plus', () => {
     const payee: Facture = { id: 'fac_1', balance_cents: 11500, status: 'paid' };
     expect(ouvrirLienDePaiement('j', demandeValide, payee).etat).toBe('paid');
+  });
+
+  it('le verrou de création du paiement accepte un lien « sent » (pas seulement « pending ») et se relâche si Stripe refuse', () => {
+    // 2026-09-17 : le lien passe en « sent » dès l'envoi (payment-requests/create), mais le verrou
+    // n'acceptait que « pending » → 409 « déjà en traitement » à CHAQUE première tentative ; aucun
+    // paiement par lien n'avait jamais abouti en prod. Garde statique sur la route.
+    const src = readFileSync(resolve(__dirname, '..', 'server', 'routes', 'public-pay.ts'), 'utf8');
+    const verrou = src.indexOf(".update({ status: 'processing' })");
+    expect(verrou).toBeGreaterThan(0);
+    const bloc = src.slice(verrou, verrou + 400);
+    expect(bloc).toContain(".in('status', ['pending', 'sent'])");
+    expect(bloc).not.toContain(".eq('status', 'pending')");
+    // Le statut d'avant est restauré : après création de l'intent, en cas de facture d'une autre org, et si Stripe lève.
+    expect(src).toContain("await updatePaymentRequestStatus(paymentRequest.id, statutAvant as any, {");
+    expect((src.match(/update\(\{ status: statutAvant \}\)/g) || []).length).toBe(2);
   });
 
   it('l’expiration est vérifiée AVANT le statut', () => {

@@ -6,7 +6,7 @@
 // analytiques inter-tenants (décision produit documentée dans index.ts).
 
 import { Router } from 'express';
-import type express from 'express';
+import express from 'express';
 import { requireAuthedClient, getServiceClient, buildSupabaseWithAuth } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import {
@@ -31,11 +31,14 @@ import { extractIP } from '../lib/security';
 import { assertTransition, canTransition, InvalidTransitionError } from '../lib/migration/state-machine';
 import { generateInviteToken, expiryFromNow } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
-import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/migration/pipeline';
+import { analyzeMigrationFile, prepareStaging, receptionnerFichierMigration, estCategorieValide, MIGRATION_BUCKET } from '../lib/migration/pipeline';
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
-import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
+import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, purgeOrphanProperties, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
 import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '../lib/migration/execution';
-import { executerBotMigration } from '../lib/migration/bot';
+import { creerPublieurProgression } from '../lib/migration/execution';
+import { logger } from '../lib/logger';
+import { executerBotMigration, passeBotEnCours } from '../lib/migration/bot';
+import { activerCommunications, etatGel, gelerCommunications } from '../lib/migration/gel-communications';
 import { buildRejectsCsv } from '../lib/migration/rejects';
 import { getCrmConfig } from '../lib/migration/instructions';
 import { entityForCategory, normalizeHeader, FIELD_CATALOG } from '../lib/migration/mapping';
@@ -252,6 +255,7 @@ router.get('/migration-admin/migrations/:id', async (req, res) => {
       messages: messages.data ?? [],
       staging_counts: stagingCounts,
       crm_config: getCrmConfig(migration.source_crm),
+      communications: await etatGel(admin, migration.org_id),
       field_catalog: FIELD_CATALOG,
     });
   } catch (err: any) {
@@ -448,6 +452,27 @@ router.post('/migration-admin/migrations/:id/invitation/extend', validate(migrat
 });
 
 // ── Fichiers : rejeter / ré-analyser / téléchargement signé ────────────
+// ── Téléversement depuis la console (même réception que le portail client) ──
+const rawFileParser = express.raw({ type: () => true, limit: '26mb' });
+router.post('/migration-admin/migrations/:id/files', rawFileParser, async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    const rawName = typeof req.query.name === 'string' ? req.query.name : '';
+    const rawCategory = typeof req.query.category === 'string' ? req.query.category : '';
+    if (rawCategory && !estCategorieValide(rawCategory)) return res.status(400).json({ error: 'Catégorie inconnue.' });
+    const buf: Buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    const r = await receptionnerFichierMigration(admin, migration, { buf, name: rawName, uploadedBy: auth.user.id, actorRole: 'platform_admin', categoryDeclared: rawCategory ? (rawCategory as any) : null });
+    if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code });
+    return res.status(201).json(r.file);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Téléversement impossible.', '[migration-admin]');
+  }
+});
+
 router.post('/migration-admin/migrations/:id/files/:fileId/reject', async (req, res) => {
   try {
     const auth = await requirePlatformAdmin(req, res);
@@ -466,6 +491,47 @@ router.post('/migration-admin/migrations/:id/files/:fileId/reject', async (req, 
     return res.json({ ok: true });
   } catch (err: any) {
     return sendSafeError(res, err, 'Rejet du fichier impossible.', '[migration-admin]');
+  }
+});
+
+// Suppression définitive d'un fichier en double (nettoie colonnes/correspondances/staging via cascade DB).
+router.delete('/migration-admin/migrations/:id/files/:fileId', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+
+    const { data: file, error: fileErr } = await admin
+      .from('migration_files')
+      .select('id, original_name, storage_path')
+      .eq('id', req.params.fileId)
+      .eq('migration_id', migration.id)
+      .maybeSingle();
+    if (fileErr) throw fileErr;
+    if (!file) return res.status(404).json({ error: 'Fichier introuvable.' });
+
+    const { count: importedCount, error: importedErr } = await admin
+      .from('migration_staging_records')
+      .select('id', { count: 'exact', head: true })
+      .eq('file_id', file.id)
+      .in('status', ['imported', 'merged']);
+    if (importedErr) throw importedErr;
+    if ((importedCount ?? 0) > 0) {
+      return res.status(409).json({ error: 'Fichier déjà importé dans des données actives — impossible à supprimer (utiliser le rollback).' });
+    }
+
+    const { error: deleteErr } = await admin.from('migration_files').delete().eq('id', file.id);
+    if (deleteErr) throw deleteErr;
+
+    const { error: storageErr } = await admin.storage.from(MIGRATION_BUCKET).remove([file.storage_path]);
+    if (storageErr) console.error('[migration-admin] storage removal failed:', storageErr);
+
+    await logMigrationAudit(admin, { migrationId: migration.id, action: 'file.deleted', actorId: auth.user.id, actorRole: 'platform_admin', target: `file:${file.id}`, meta: { original_name: file.original_name } });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Suppression du fichier impossible.', '[migration-admin]');
   }
 });
 
@@ -740,6 +806,21 @@ router.post('/migration-admin/migrations/:id/request-approval', async (req, res)
   }
 });
 
+// ── Bot de migration : rapport (partiel pendant la passe) ────────────
+router.get('/migration-admin/migrations/:id/bot', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const { data, error } = await admin.from('data_migrations').select('bot_dernier_rapport, bot_derniere_execution').eq('id', req.params.id).is('deleted_at', null).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Migration introuvable.' });
+    return res.json({ rapport: data.bot_dernier_rapport ?? null, derniere_execution: data.bot_derniere_execution ?? null });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Rapport du bot indisponible.', '[migration-admin]');
+  }
+});
+
 // ── Bot de migration : une passe « lorsque demandé » ─────────────────
 router.post('/migration-admin/migrations/:id/bot', async (req, res) => {
   try {
@@ -748,8 +829,20 @@ router.post('/migration-admin/migrations/:id/bot', async (req, res) => {
     const admin = getServiceClient();
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
-    const rapport = await executerBotMigration(admin, migration.id, { acteurId: auth.user.id, declencheur: 'manuel' });
-    return res.json(rapport);
+    // Verrou anti double clic : une seule passe à la fois par migration (voir passesEnCours dans bot.ts).
+    if (await passeBotEnCours(admin, migration.id)) {
+      return res.status(409).json({ error: 'Une passe du bot est déjà en cours pour cette migration — attendez la fin de la passe (carte Bot).' });
+    }
+    // Une passe peut durer plusieurs minutes (≈ 50 s par fichier sur Fable 5.1) : par défaut elle tourne
+    // en arrière-plan et la console suit `bot_derniere_execution` ; `?sync=1` (banc d'essai) attend le rapport.
+    if (req.query.sync === '1') {
+      const rapport = await executerBotMigration(admin, migration.id, { acteurId: auth.user.id, declencheur: 'manuel' });
+      return res.json(rapport);
+    }
+    const depuis = new Date().toISOString();
+    void executerBotMigration(admin, migration.id, { acteurId: auth.user.id, declencheur: 'manuel' })
+      .catch((err: unknown) => logger.error('[migration-admin] passe du bot en arrière-plan échouée', { error: err instanceof Error ? err.message : String(err), migrationId: migration.id }));
+    return res.status(202).json({ started: true, depuis });
   } catch (err: any) {
     return sendSafeError(res, err, 'Passe du bot impossible.', '[migration-admin]');
   }
@@ -870,6 +963,10 @@ router.post('/migration-admin/migrations/:id/final-import', validate(migrationFi
       .eq('status', 'ready_for_final_import');
     if (statusErr) throw statusErr;
     migration.status = 'importing';
+    // Protection : dès que des données entrent, le bureau est gelé — aucun courriel, SMS ni
+    // automatisation vers ses clients avant « Activer le compte » (voir gel-communications.ts).
+    await gelerCommunications(admin, migration.org_id, migration.id);
+    await logMigrationAudit(admin, { migrationId: migration.id, action: 'communications.gel', actorId: auth.user.id, actorRole: 'platform_admin' });
 
     const { data: batch, error: batchErr } = await admin
       .from('migration_import_batches')
@@ -889,7 +986,7 @@ router.post('/migration-admin/migrations/:id/final-import', validate(migrationFi
 
     void (async () => {
       try {
-        const report = await runFinalImport(admin, migration, batch.id, auth.user.id);
+        const report = await runFinalImport(admin, migration, batch.id, auth.user.id, creerPublieurProgression(admin, batch.id));
         await admin
           .from('migration_import_batches')
           .update({ status: 'completed', totals: report as unknown as Record<string, unknown>, finished_at: new Date().toISOString() })
@@ -958,51 +1055,87 @@ router.post('/migration-admin/migrations/:id/rollback', validate(migrationFinalI
     const admin = getServiceClient();
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
-    if (!['completed', 'completed_with_warnings', 'failed'].includes(migration.status)) {
-      return res.status(409).json({ error: 'Le rollback n\'est possible qu\'après un import final.' });
+    // « rolled_back » reste admis : un import final repris (bouton « Reprendre ») laisse PLUSIEURS
+    // lots finaux, et le premier rollback n'annulait que le plus récent. Constaté le 2026-09-21
+    // (Vision Lavage) : 872 clients et 64 devis du premier lot toujours actifs après « Rollback ».
+    // Le statut ne fait pas foi : après « Reprendre l'import final » (failed → ready_for_final_import)
+    // un lot final complété reste en place alors que le statut ne le dit plus (Vision Lavage,
+    // 2026-09-23 : 853 clients et 630 factures fusionnées à annuler, bouton absent). Seul un
+    // import en cours interdit le rollback.
+    if (['importing', 'post_import_validation'].includes(migration.status)) {
+      return res.status(409).json({ error: 'Un import est en cours — attendez sa fin avant un rollback.' });
     }
     const { data: org } = await admin.from('orgs').select('name').eq('id', migration.org_id).single();
     const confirm = (req.body as { confirm_org_name: string }).confirm_org_name.trim();
     if (confirm !== (org?.name ?? '').trim()) {
       return res.status(400).json({ error: 'Le nom du workspace saisi ne correspond pas.' });
     }
-    const { data: batch } = await admin
+    // Tous les lots finaux encore en place, du plus récent au plus ancien.
+    const { data: batches } = await admin
       .from('migration_import_batches')
       .select('id, status')
       .eq('migration_id', migration.id)
       .eq('kind', 'final')
       .in('status', ['completed', 'failed'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!batch) return res.status(404).json({ error: 'Aucun lot final à annuler.' });
+      .order('created_at', { ascending: false });
+    if (!batches || batches.length === 0) {
+      // Plus aucun lot, mais un rollback antérieur (avant ee89456) a pu laisser des propriétés
+      // orphelines créées par déclencheur : on les nettoie quand même, puis on répond.
+      const orphanProperties = await purgeOrphanProperties(admin, migration.org_id);
+      await logMigrationAudit(admin, { migrationId: migration.id, action: 'import.rollback', actorId: auth.user.id, actorRole: 'platform_admin', target: 'orphans', meta: { orphanProperties } });
+      return res.json({ ok: true, softDeleted: 0, deactivated: 0, restored: 0, pinsPurged: 0, orphanProperties, batches: 0 });
+    }
 
-    const result = await rollbackFinalBatch(admin, batch.id, auth.user.id);
-    // Les soft-deletes du rollback re-déclenchent les triggers d'activité
-    // (AFTER UPDATE, 20260747000000) — constaté à la répétition volumétrique :
-    // 15 000 notifications recréées. Purge ciblée une seconde fois.
-    const noisePurged = await purgeImportActivityNoise(admin, migration, batch.id);
-    if (noisePurged > 0) {
+    const total = { softDeleted: 0, deactivated: 0, restored: 0, pinsPurged: 0, orphanProperties: 0, batches: 0 };
+    for (const batch of batches) {
+      const result = await rollbackFinalBatch(admin, batch.id, auth.user.id);
+      total.softDeleted += result.softDeleted; total.deactivated += result.deactivated; total.restored += result.restored; total.pinsPurged += result.pinsPurged; total.orphanProperties += result.orphanProperties; total.batches += 1;
+      // Les soft-deletes du rollback re-déclenchent les triggers d'activité
+      // (AFTER UPDATE, 20260747000000) — constaté à la répétition volumétrique :
+      // 15 000 notifications recréées. Purge ciblée une seconde fois.
+      const noisePurged = await purgeImportActivityNoise(admin, migration, batch.id);
+      if (noisePurged > 0) {
+        await logMigrationAudit(admin, {
+          migrationId: migration.id,
+          action: 'import.noise_purged',
+          actorRole: 'system',
+          target: `batch:${batch.id}`,
+          meta: { notifications_purged: noisePurged, phase: 'rollback' },
+        });
+      }
       await logMigrationAudit(admin, {
         migrationId: migration.id,
-        action: 'import.noise_purged',
-        actorRole: 'system',
+        action: 'import.rollback',
+        actorId: auth.user.id,
+        actorRole: 'platform_admin',
         target: `batch:${batch.id}`,
-        meta: { notifications_purged: noisePurged, phase: 'rollback' },
+        meta: result as unknown as Record<string, unknown>,
       });
     }
     await admin.from('data_migrations').update({ status: 'rolled_back' }).eq('id', migration.id);
-    await logMigrationAudit(admin, {
-      migrationId: migration.id,
-      action: 'import.rollback',
-      actorId: auth.user.id,
-      actorRole: 'platform_admin',
-      target: `batch:${batch.id}`,
-      meta: result as unknown as Record<string, unknown>,
-    });
-    return res.json({ ok: true, ...result });
+    return res.json({ ok: true, ...total });
   } catch (err: any) {
     return sendSafeError(res, err, 'Rollback impossible.', '[migration-admin]');
+  }
+});
+
+// ── « Activer le compte » : les communications vers les clients importés repartent ──
+router.post('/migration-admin/migrations/:id/activate-account', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    if (['importing', 'post_import_validation'].includes(migration.status)) {
+      return res.status(409).json({ error: 'Un import est en cours — activez le compte une fois l\'import terminé.' });
+    }
+    await activerCommunications(admin, migration.org_id, auth.user.id);
+    await logMigrationAudit(admin, { migrationId: migration.id, action: 'communications.activation', actorId: auth.user.id, actorRole: 'platform_admin' });
+    await touchMigrationActivity(admin, migration.id);
+    return res.json({ ok: true, communications: await etatGel(admin, migration.org_id) });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Activation impossible.', '[migration-admin]');
   }
 });
 

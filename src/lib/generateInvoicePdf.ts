@@ -44,7 +44,11 @@ function L(en: string, fr: string): string { return isFr() ? fr : en; }
 /**
  * Generate and trigger download of a professional invoice PDF.
  */
-export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyInfo | null, taxBreakdown?: PdfTaxLine[] | null): void {
+export function downloadInvoicePdf(
+  detail: InvoiceDetail, company?: PdfCompanyInfo | null, taxBreakdown?: PdfTaxLine[] | null,
+  /** Champs personnalisés cochés « afficher sur le document ». */
+  champsPerso?: Array<{ label: string; valeur: string }> | null,
+): void {
   const { invoice, client, items } = detail;
   const currency = invoice.currency || 'CAD';
   const fmt = (cents: number) => formatMoneyFromCents(cents, currency);
@@ -250,6 +254,28 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   doc.setTextColor(invoice.balance_cents > 0 ? 180 : 80, invoice.balance_cents > 0 ? 40 : 140, invoice.balance_cents > 0 ? 40 : 80);
   doc.text(L('Balance Due', 'Solde dû'), labelsX, y);
   doc.text(fmt(invoice.balance_cents), totalsX, y, { align: 'right' });
+
+  // ── Champs personnalisés (option « afficher sur le document ») ──
+  if (champsPerso && champsPerso.length > 0) {
+    y += 20;
+    if (y > doc.internal.pageSize.getHeight() - 80) {
+      doc.addPage();
+      y = 50;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text(L('DETAILS', 'INFORMATIONS'), marginL, y);
+    y += 14;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(60, 60, 60);
+    for (const c of champsPerso) {
+      const lignes = doc.splitTextToSize(`${c.label} : ${c.valeur}`, contentW);
+      doc.text(lignes, marginL, y);
+      y += lignes.length * 12;
+    }
+  }
 
   // ── Notes ──────────────────────────────────────────────────────
   const invoiceNotes = (invoice as any).notes;

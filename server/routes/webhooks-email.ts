@@ -16,6 +16,15 @@
  * une tolérance de 5 minutes sur l'horodatage. Monté AVANT express.json()
  * (corps brut), comme les webhooks Stripe.
  *
+ * Suivi d'ouverture et de clic (plan courriels pro, 2026-09-17) : Resend
+ * pousse aussi email.opened / email.clicked (suivi activé par domaine chez
+ * eux ; pas de pixel de notre côté). Première ouverture = opened_at, chaque
+ * ouverture incrémente open_count ; idem pour le clic (last_clicked_url).
+ * Loi 25 : JAMAIS de suivi sur les courriels de compte/abonnement que Lume
+ * envoie à ses abonnés — entity_type null ou dans ENTITES_SANS_SUIVI est
+ * ignoré ici, même si Resend nous envoie l'évènement. Idempotence : un
+ * évènement rejoué (même svix-id) ne compte pas deux fois (webhook_receipts).
+ *
  * Env : RESEND_WEBHOOK_SECRET (whsec_…). Sans lui, la route répond 503 —
  * jamais « OK » sur un webhook non vérifié.
  */
@@ -32,6 +41,74 @@ const STATUT_PAR_EVENEMENT: Record<string, 'delivered' | 'delayed' | 'bounced' |
   'email.bounced': 'bounced',
   'email.complained': 'complained',
 };
+
+export type EvenementSuivi = 'opened' | 'clicked';
+const SUIVI_PAR_EVENEMENT: Record<string, EvenementSuivi> = {
+  'email.opened': 'opened',
+  'email.clicked': 'clicked',
+};
+
+/**
+ * Courriels de compte / d'abonnement / d'exploitation de Lume : aucun suivi
+ * d'ouverture (Loi 25). La plupart n'ont pas d'entity_type du tout (null est
+ * refusé aussi) ; cette liste couvre ceux qui en portent un.
+ */
+export const ENTITES_SANS_SUIVI: readonly string[] = [
+  'account', 'user', 'team_member', 'invitation', 'subscription', 'billing',
+  'support', 'support_ticket', 'security', 'alerte_rebonds', 'data_migration', 'report',
+];
+
+export interface SuiviRecu { type: EvenementSuivi; emailId: string; quand: string; url: string | null }
+
+/** Lit un évènement email.opened / email.clicked ; null pour tout le reste. Pur. */
+export function interpreterEvenementSuivi(evenement: any): SuiviRecu | null {
+  const type = SUIVI_PAR_EVENEMENT[String(evenement?.type || '')];
+  const emailId = evenement?.data?.email_id;
+  if (!type || typeof emailId !== 'string' || !emailId) return null;
+  const brut = type === 'clicked' ? evenement?.data?.click?.timestamp : evenement?.created_at;
+  const d = new Date(typeof brut === 'string' ? brut : NaN);
+  const quand = Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+  const lien = evenement?.data?.click?.link;
+  return { type, emailId, quand, url: type === 'clicked' && typeof lien === 'string' && lien ? lien.slice(0, 2000) : null };
+}
+
+/** Ouverture / clic : compteur atomique en base, jamais deux fois pour le même svix-id. */
+async function traiterSuivi(suivi: SuiviRecu, svixId: string | undefined, typeBrut: string, res: express.Response) {
+  const admin = getServiceClient();
+  if (svixId) {
+    const { data: deja, error: e0 } = await admin
+      .from('webhook_receipts')
+      .select('id')
+      .eq('provider', 'resend')
+      .eq('reference', svixId)
+      .eq('outcome', 'counted')
+      .limit(1);
+    if (e0) logger.error('[webhooks/email] lecture webhook_receipts échouée', { error: e0.message });
+    else if (deja?.length) return res.json({ received: true, duplicate: true });
+  }
+
+  const { data, error } = await admin.rpc('email_deliveries_enregistrer_suivi', {
+    p_email_id: suivi.emailId,
+    p_evenement: suivi.type,
+    p_quand: suivi.quand,
+    p_url: suivi.url,
+    p_types_exclus: [...ENTITES_SANS_SUIVI],
+  });
+  if (error) {
+    logger.error('[webhooks/email] suivi non enregistré', { error: error.message, emailId: suivi.emailId, type: suivi.type });
+    return res.status(500).json({ error: 'Update failed.' });
+  }
+  const touchees = Array.isArray(data) ? data.length : 0;
+
+  if (svixId) {
+    const { error: e1 } = await admin.from('webhook_receipts').insert({
+      provider: 'resend', signature_ok: true, event_type: typeBrut, reference: svixId,
+      outcome: 'counted', summary: { email_id: suivi.emailId, updated: touchees },
+    });
+    if (e1) logger.error('[webhooks/email] webhook_receipts non journalisé', { error: e1.message });
+  }
+  return res.json({ received: true, updated: touchees });
+}
 
 export function verifierSignatureSvix(
   headers: { id?: string; timestamp?: string; signature?: string },
@@ -82,6 +159,9 @@ export async function emailWebhookHandler(req: express.Request, res: express.Res
   } catch {
     return res.status(400).json({ error: 'Invalid JSON.' });
   }
+
+  const suivi = interpreterEvenementSuivi(evenement);
+  if (suivi) return traiterSuivi(suivi, req.header('svix-id'), String(evenement.type), res);
 
   const statut = STATUT_PAR_EVENEMENT[String(evenement?.type || '')];
   const emailId = evenement?.data?.email_id;

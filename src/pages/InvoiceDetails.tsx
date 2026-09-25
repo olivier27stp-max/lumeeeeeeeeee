@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import EmailDeliveryBadge from '../components/EmailDeliveryBadge';
+import EmailTrackingLine, { CLE_REQUETE_ENVOIS } from '../components/EmailTrackingLine';
 import {
   ArrowLeft, Eye, EyeOff, Copy, Link2, Check, Download, RefreshCw, Send,
   Pencil, Ban, CopyPlus, CheckCircle2, MoreHorizontal, ReceiptText,
@@ -26,6 +27,8 @@ import ActivityTimeline from '../components/ActivityTimeline';
 import RequestPaymentModal from '../components/RequestPaymentModal';
 import InvoiceRenderer from '../components/invoice/InvoiceRenderer';
 import { buildRenderData } from '../components/invoice/buildRenderData';
+import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
+import { useChampsDocument } from '../components/champs/document';
 
 export default function InvoiceDetails() {
   const { t, language } = useTranslation();
@@ -33,6 +36,8 @@ export default function InvoiceDetails() {
   const queryClient = useQueryClient();
   const params = useParams<{ id: string }>();
   const invoiceId = params.id || '';
+  // Champs personnalisés cochés « afficher sur le document » (aperçu + PDF).
+  const champsDocument = useChampsDocument('invoice', invoiceId, language === 'fr');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [recurringLoading, setRecurringLoading] = useState(false);
@@ -103,6 +108,7 @@ export default function InvoiceDetails() {
     queryClient.invalidateQueries({ queryKey: ['invoiceDetails', invoiceId] });
     queryClient.invalidateQueries({ queryKey: ['invoicesKpis30d'] });
     queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
+    queryClient.invalidateQueries({ queryKey: [CLE_REQUETE_ENVOIS, 'invoice', invoiceId] });
   }
 
   async function handleSendInvoice() {
@@ -238,7 +244,7 @@ export default function InvoiceDetails() {
               className="glass-button inline-flex items-center gap-1.5 text-[12px]"
               onClick={() => {
                 try {
-                  downloadInvoicePdf(detailsQuery.data!, companyQuery.data, appliedTaxesQuery.data || null);
+                  downloadInvoicePdf(detailsQuery.data!, companyQuery.data, appliedTaxesQuery.data || null, champsDocument);
                   toast.success(t.invoiceDetails.pdfDownloaded);
                 } catch {
                   toast.error(t.invoiceDetails.failedToGeneratePdf);
@@ -387,6 +393,8 @@ export default function InvoiceDetails() {
 
         {/* Courriel non livré (rebond capté par le webhook) — audit QA n°8 */}
         {invoice.status !== 'draft' && <EmailDeliveryBadge entityType="invoice" entityId={invoice.id} />}
+        {/* « Envoyé le … · Vu le … · Lien cliqué » — suivi Resend (plan courriels pro) */}
+        {invoice.status !== 'draft' && <EmailTrackingLine entityType="invoice" entityId={invoice.id} />}
 
         {/* View Tracking */}
         {invoice.status !== 'draft' && (
@@ -532,6 +540,9 @@ export default function InvoiceDetails() {
         </div>
       </section>
 
+      {/* Champs personnalisés (v2) */}
+      <CustomFieldsPanel objet="invoice" entityId={invoice.id} fr={language === 'fr'} className="section-card p-4" />
+
       <section className="section-card p-6">
         <h2 className="text-[15px] font-bold text-text-primary">{t.invoiceDetails.lineItems}</h2>
         <div className="mt-4 overflow-x-auto">
@@ -602,7 +613,7 @@ export default function InvoiceDetails() {
         <section className="section-card overflow-hidden">
           <div className="bg-gray-100 p-6">
             <div className="mx-auto max-w-[600px] rounded-xl bg-surface-card p-8 shadow-lg">
-              <InvoiceRenderer data={renderData} />
+              <InvoiceRenderer data={{ ...renderData, champsPerso: champsDocument }} />
             </div>
           </div>
         </section>

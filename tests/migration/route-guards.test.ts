@@ -92,15 +92,53 @@ describe('portail — chaîne de validation complète', () => {
     expect(portalSrc).not.toMatch(/console\.(log|error)\([^)]*\btoken\b/);
   });
 
-  it('téléversement : extensions limitées, sniff du contenu, dédup sha256, limite de taille', () => {
-    const body = routeBody(portalSrc, "'/migration-portal/files', rawParser");
-    expect(body).toContain("['csv', 'pdf']");
+  it('téléversement : extensions limitées, sniff du contenu, dédup sha256, limite de taille (réception partagée)', () => {
+    // La réception vit dans pipeline.ts (receptionnerFichierMigration) : portail ET console y passent.
+    const pipelineSrc = read('server/lib/migration/pipeline.ts');
+    const start = pipelineSrc.indexOf('export async function receptionnerFichierMigration');
+    expect(start).toBeGreaterThan(0);
+    const body = pipelineSrc.slice(start, pipelineSrc.indexOf('return { ok: true, file:', start));
+    expect(body).toContain("['csv', 'pdf', ...EXCEL_EXTENSIONS]");
     expect(body).toContain('unsupported_type');
     expect(body).toContain('looksBinary');
     expect(body).toContain('sniffIsPdf');
+    expect(body).toContain('sniffIsExcel'); // Excel vérifié à sa signature, jamais à l'extension
     expect(body).toContain('sha256');
     expect(body).toContain('MAX_FILE_SIZE_BYTES');
     expect(body).toContain('MAX_FILES_PER_MIGRATION');
+    expect(body).toContain('UPLOAD_ALLOWED_STATUSES');
+    expect(routeBody(portalSrc, "'/migration-portal/files', rawParser")).toContain('receptionnerFichierMigration');
+    expect(routeBody(adminSrc, "'/migration-admin/migrations/:id/files', rawFileParser")).toContain('receptionnerFichierMigration');
+    // la console exige toujours l'admin plateforme avant de recevoir quoi que ce soit
+    expect(routeBody(adminSrc, "'/migration-admin/migrations/:id/files', rawFileParser")).toContain('requirePlatformAdmin');
+  });
+
+  it('formulaire d\'importation : résumé, catégorie de fichier et catégories cochées passent par le jeton + session, et respectent les statuts', () => {
+    for (const needle of ["'/migration-portal/files/:fileId/summary'", "'/migration-portal/files/:fileId/category'", "'/migration-portal/categories'"]) {
+      const body = routeBody(portalSrc, needle);
+      expect(body).toContain('requirePortalAccess');
+    }
+    expect(routeBody(portalSrc, "'/migration-portal/files/:fileId/category'")).toContain('UPLOAD_ALLOWED_STATUSES');
+    expect(routeBody(portalSrc, "'/migration-portal/categories'")).toContain('UPLOAD_ALLOWED_STATUSES');
+    // la catégorie déclarée est validée côté serveur avant tout usage
+    expect(routeBody(portalSrc, "'/migration-portal/files', rawParser")).toContain('estCategorieValide');
+  });
+
+  it('reprise après rollback : le registre du lot annulé ne compte plus et est effacé, le staging repasse à ready', () => {
+    const src = read('server/lib/migration/importer.ts');
+    const final = src.slice(src.indexOf('export async function runFinalImport'), src.indexOf('export async function rollbackFinalBatch'));
+    expect(final).toContain(".neq('status', 'rolled_back')");
+    expect(final).toContain(".in('batch_id', idsLotsEnPlace)");
+    const rollback = src.slice(src.indexOf('export async function rollbackFinalBatch'));
+    expect(rollback).toContain("from('migration_import_records').delete().eq('batch_id', batchId)");
+    expect(rollback).toContain(".in('status', ['imported', 'merged'])");
+    // identifiants déterministes : la réimportation d'une fiche annulée (suppression douce) la ressuscite
+    expect(final).toContain("ignoreDuplicates: false");
+    expect(final).not.toContain("onConflict: 'id', ignoreDuplicates: true");
+    expect(src).toContain('{ ...row, deleted_at: null }');
+    // plusieurs factures Jobber par job : la 2e reste rattachée au client, jamais refusée par l'index unique
+    expect(src.split('detacherFactureSurJobDejaFacture(built.row, jobsFactures)').length - 1).toBe(2); // dry-run + final
+    expect(src).toContain('jobsDejaFactures(admin, migration.org_id)');
   });
 
   it("l'approbation exige la phrase exacte et journalise IP + user-agent", () => {
@@ -143,6 +181,11 @@ describe('montage serveur et surface publique', () => {
   it('aucun bouton d\'import permanent dans le CRM : la route admin est hors navigation', () => {
     const appSrc = read('src/App.tsx');
     expect(appSrc).toContain("path=\"/admin/migrations\"");
+    // La console vit dans le Creator Space (onglet Migrations, gate platformAdminIds) ;
+    // l'ancienne URL redirige.
+    expect(appSrc).toContain("pathname: '/creator-space/migrations'");
+    const creatorSrc = read('src/pages/creator-space/CreatorSpace.tsx');
+    expect(creatorSrc).toContain('<Route path="migrations" element={<AdminMigrations embedded />} />');
     // pas d'entrée de navigation ('id: …migrations…') dans les navSections
     const navSlice = appSrc.slice(appSrc.indexOf('navSections'), appSrc.indexOf('navSections') + 6000);
     expect(navSlice).not.toContain('/admin/migrations');
@@ -328,7 +371,9 @@ describe('audit sections 6-14 — garde-fous ajoutés', () => {
   it('S7 — watchdog zombie branché au boot (10 min, advisory lock) et heartbeat par lot', () => {
     expect(indexSrc).toContain("withAdvisoryLock('migration-recovery'");
     expect(indexSrc).toContain('recoverZombieMigrations');
-    expect(importerSrc2).toContain('progress: { entity, processed: i, total: toInsert.length }');
+    // Heartbeat enrichi (étape + types de données) : même colonne totals.progress, même filtre running.
+    expect(importerSrc2).toContain("etape: `Écriture — ${libelle}`, processed: i, total: toInsert.length");
+    expect(importerSrc2).toContain(".eq('status', 'running')");
   });
 
   it('S10 — l\'effacement DSR purge aussi les traces de migration (staging + previous_values)', () => {
@@ -352,8 +397,8 @@ describe('audit sections 6-14 — garde-fous ajoutés', () => {
     expect(benchSrc).toContain('pins D2D purgés au rollback');
   });
 
-  it('S6 — created_at historique (createdAtPatch) sur client, job, quote et invoice', () => {
-    expect(importerSrc2.split('...createdAtPatch(').length - 1).toBe(4);
+  it('S6 — created_at historique (createdAtPatch) sur client, job, quote, invoice et payment', () => {
+    expect(importerSrc2.split('...createdAtPatch(').length - 1).toBe(5);
   });
 
   it('S6 — le champ fantôme « tags » est retiré du catalogue (aucune promesse non tenue)', () => {

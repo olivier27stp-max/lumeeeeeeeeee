@@ -38,6 +38,50 @@ export interface PublicFormSubmission {
   photos?: string[];
   /** Honeypot anti-bot — toujours vide/undefined pour un humain. */
   website?: string;
+  /**
+   * Attribution marketing, relevée dans l'URL de la page — PAS des champs du
+   * formulaire : le visiteur ne les voit ni ne les saisit. Elles permettent de
+   * dire quelle campagne a amené le lead, et ce qu'elle a rapporté.
+   */
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  utm_content?: string | null;
+  fbclid?: string | null;
+}
+
+/**
+ * Lit les paramètres d'attribution dans l'URL courante.
+ *
+ * Bornés à 256 caractères comme côté serveur, et `null` plutôt que chaîne
+ * vide pour qu'un `?utm_source=` sans valeur ne compte pas comme une source.
+ */
+export function lireAttribution(search: string = typeof window !== 'undefined' ? window.location.search : ''): {
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  fbclid: string | null;
+} {
+  let p: URLSearchParams;
+  try {
+    p = new URLSearchParams(search);
+  } catch {
+    p = new URLSearchParams();
+  }
+  const lire = (cle: string): string | null => {
+    const v = p.get(cle);
+    if (v === null) return null;
+    const t = v.trim();
+    return t === '' ? null : t.slice(0, 256);
+  };
+  return {
+    utm_source: lire('utm_source'),
+    utm_medium: lire('utm_medium'),
+    utm_campaign: lire('utm_campaign'),
+    utm_content: lire('utm_content'),
+    fbclid: lire('fbclid'),
+  };
 }
 
 export async function fetchPublicForm(apiKey: string): Promise<PublicForm> {

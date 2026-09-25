@@ -1,0 +1,23 @@
+{
+  "preset_key": "agreement_signed",
+  "trigger_event": "agreement.signed",
+  "delay_seconds": 0,
+  "planifie": [],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Merci Marie! Votre contrat avec Plomberie Tremblay inc. est signé. Votre copie : \n",
+      "moment": "immediat"
+    },
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Contrat signé",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci Marie,</h2><p>Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps ici :</p><p><a href=\"\"></a></p><p></p><p>À bientôt!<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "immediat"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

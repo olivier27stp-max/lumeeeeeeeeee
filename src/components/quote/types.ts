@@ -8,6 +8,8 @@ export interface QuoteTaxLine {
 }
 
 export interface QuoteRenderData {
+  /** Champs personnalisés à montrer sur le document (option « afficher sur le document »). */
+  champsPerso?: Array<{ label: string; valeur: string }>;
   // Quote
   quote_number: string;
   title: string;

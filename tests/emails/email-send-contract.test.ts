@@ -59,8 +59,13 @@ describe('mailer — le contrat de base dont tout le reste dépend', () => {
     // retrait (exposition CASL).
     const params = routeBody(mailer, 'export interface SendEmailParams', 'export interface SendEmailResult');
     expect(params).toMatch(/headers\?: Record<string, string>/);
-    // Et les en-têtes sont bien transmis au transport.
-    expect(mailer).toContain('...(params.headers ? { headers: params.headers } : {})');
+    /* Et les en-têtes sont bien transmis au transport. Depuis le 2026-09-22
+       ils sont FUSIONNÉS avec `X-SES-CONFIGURATION-SET` au lieu d'être passés
+       tels quels. On vérifie que `params.headers` survit à cette fusion :
+       sinon `List-Unsubscribe` disparaîtrait en silence et les courriels
+       commerciaux repartiraient sans mécanisme de retrait (exposition CASL). */
+    expect(mailer).toContain('...(params.headers ?? {})');
+    expect(mailer).toContain('Object.keys(enTetes).length ? { headers: enTetes }');
   });
 
   it('le transport est Nodemailer/SMTP, pas Resend', () => {
@@ -81,10 +86,16 @@ describe('invariants — à ne casser sous aucun prétexte', () => {
     // délivrabilité de TOUS les tenants, pas seulement celui-là.
     const fn = routeBody(emails, 'export function senderFor', '// ── POST /api/emails/send-invoice');
     expect(fn).toContain("emailFrom.match(/<([^>]+)>/)?.[1] || process.env.SMTP_USER");
-    expect(fn).toContain('from: `${name} <${baseAddr}>`');
     expect(fn).toContain('replyTo: company.company_email || undefined');
     // Le From ne doit jamais être directement l'adresse du tenant.
     expect(fn).not.toMatch(/from:\s*company\.company_email/);
+    // Depuis 2026-09-24 la partie locale porte le nom de l'entreprise
+    // (« coquin-lavage@ » plutôt que « noreply@ ») : c'est le DOMAINE qui doit
+    // rester celui de la plateforme, lui seul est vérifié chez SES.
+    // Le comportement est prouvé dans expediteur-nom-entreprise.test.ts ;
+    // ici on fige l'invariant lui-même.
+    expect(fn).toContain("baseAddr.split('@')[1]");
+    expect(fn).toMatch(/\$\{prefixe\}@\$\{domaine\}/);
   });
 
   it('les 3 helpers partagés restent exportés depuis routes/emails.ts', () => {
@@ -107,10 +118,12 @@ describe('invariants — à ne casser sous aucun prétexte', () => {
     expect(iface).toContain('company_email');
     expect(iface).toContain('company_phone');
 
+    // 2026-09-17 : le courriel de paiement passe par getCompanySettings + le gabarit commun
+    // (server/lib/courriels/gabarit.ts) : le téléphone vient de company_phone, comme la facture.
     const pr = read('server/routes/payment-requests.ts');
-    expect(pr).toMatch(/interface CompanyInfo/);
-    // L'incompatibilité est réelle et doit rester visible tant qu'elle existe.
-    expect(pr).toContain('params.company.phone');
+    expect(pr).toContain('const company = await getCompanySettings(params.orgId);');
+    expect(pr).toContain('marque: marqueDepuis(params.company)');
+    expect(pr).not.toContain('params.company.phone');
   });
 
   it('getCompanySettings n’échoue jamais : un org sans settings retourne {}', () => {

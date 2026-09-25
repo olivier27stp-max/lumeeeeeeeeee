@@ -9,8 +9,34 @@ import { canTransition } from './state-machine';
 import { logMigrationAudit } from './audit';
 import { prepareStaging } from './pipeline';
 import { findDuplicatesForEntity } from './duplicates';
-import { runDryRun } from './importer';
-import type { MigrationRow, TargetEntity, DryRunReport } from './types';
+import { runDryRun, ENTITY_LABELS_FR } from './importer';
+import type { MigrationRow, TargetEntity, DryRunReport, OnProgression } from './types';
+
+/**
+ * Publieur de progression d'un lot : écrit totals.progress sur le lot tant
+ * qu'il est « running » (au plus une fois par `intervalleMs`, sauf changement
+ * d'étape), sans jamais bloquer ni faire échouer l'import. La console relit
+ * la fiche toutes les quelques secondes et affiche la carte « en cours ».
+ */
+export function creerPublieurProgression(admin: SupabaseClient, batchId: string, intervalleMs = 1500): OnProgression {
+  let derniere = 0;
+  let derniereEtape = '';
+  return (p) => {
+    const t = Date.now();
+    if (p.etape === derniereEtape && t - derniere < intervalleMs) return;
+    derniere = t;
+    derniereEtape = p.etape;
+    void Promise.resolve(
+      admin
+        .from('migration_import_batches')
+        .update({ totals: { progress: { ...p, updated_at: new Date().toISOString() } } })
+        .eq('id', batchId)
+        .eq('status', 'running'),
+    ).then(({ error }) => {
+      if (error) console.error('[migration-execution] progression non publiée:', error.message);
+    }).catch((err: unknown) => console.error('[migration-execution] progression non publiée:', err));
+  };
+}
 
 export type ActeurMigration = { id: string | null; role: 'platform_admin' | 'assistant' | 'system' };
 
@@ -56,6 +82,73 @@ export async function approuverAuNomDuClient(admin: SupabaseClient, migration: M
  * (la route l'exécute en arrière-plan ; le bot attend le rapport).
  * Renvoie null si le statut ne permet pas l'import test.
  */
+/** Tables d'existants visées par les candidats de doublons qui portent une suppression douce. */
+const TABLES_AVEC_DELETED_AT = new Set(['clients', 'properties', 'jobs', 'quotes', 'invoices']);
+
+/**
+ * Candidats de doublons périmés — à purger avant chaque détection.
+ *
+ * Constaté le 2026-09-20 (Vision Lavage) : après le rollback de l'ancienne migration, le bot
+ * annonçait encore « 214 doublons à trancher ». Les candidats ne sont jamais recalculés : la
+ * détection n'ajoute que les paires inédites (`seen`), et une fiche existante passée en
+ * suppression douce laisse son candidat `pending` intact — le compte, le dry-run (fusions) et
+ * l'onglet Doublons restent figés sur des fiches disparues.
+ *
+ * - candidats NON tranchés (pending/review) : supprimés, la détection qui suit les recrée si la
+ *   fiche existe toujours ;
+ * - candidats tranchés (merge/skip/create_new) : conservés, sauf si la fiche visée n'existe plus
+ *   (deleted_at) — la ligne redevient alors une création.
+ *
+ * prepareStaging vient de remettre les lignes `duplicate` à `ready`, donc les statuts restent
+ * cohérents après la purge.
+ */
+async function purgerCandidatsDoublonsPerimes(admin: SupabaseClient, migrationId: string): Promise<{ recalcules: number; orphelins: number }> {
+  const supprimer = async (ids: string[]) => {
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await admin.from('migration_duplicate_candidates').delete().in('id', ids.slice(i, i + 200)).eq('migration_id', migrationId);
+      if (error) console.error('[migration-execution] duplicates purge failed:', error.message);
+    }
+  };
+
+  const { data: nonTranches, error: e1 } = await admin
+    .from('migration_duplicate_candidates')
+    .select('id')
+    .eq('migration_id', migrationId)
+    .in('decision', ['pending', 'review'])
+    .limit(20000);
+  if (e1) console.error('[migration-execution] duplicates pending fetch failed:', e1.message);
+  const recalcules = (nonTranches ?? []).map((c: any) => c.id as string);
+  await supprimer(recalcules);
+
+  const { data: tranches, error: e2 } = await admin
+    .from('migration_duplicate_candidates')
+    .select('id, existing_table, existing_id')
+    .eq('migration_id', migrationId)
+    .in('decision', ['merge', 'skip', 'create_new'])
+    .limit(20000);
+  if (e2) console.error('[migration-execution] duplicates decided fetch failed:', e2.message);
+  const parTable = new Map<string, Array<{ id: string; existing_id: string }>>();
+  for (const c of (tranches ?? []) as any[]) {
+    if (!TABLES_AVEC_DELETED_AT.has(c.existing_table)) continue;
+    const liste = parTable.get(c.existing_table) ?? [];
+    liste.push({ id: c.id, existing_id: c.existing_id });
+    parTable.set(c.existing_table, liste);
+  }
+  const orphelins: string[] = [];
+  for (const [table, liste] of parTable) {
+    const vivants = new Set<string>();
+    const ids = Array.from(new Set(liste.map((c) => c.existing_id)));
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error } = await admin.from(table).select('id').in('id', ids.slice(i, i + 200)).is('deleted_at', null);
+      if (error) { console.error(`[migration-execution] duplicates ${table} check failed:`, error.message); ids.slice(i, i + 200).forEach((id) => vivants.add(id)); continue; }
+      for (const r of data ?? []) vivants.add((r as any).id);
+    }
+    for (const c of liste) if (!vivants.has(c.existing_id)) orphelins.push(c.id);
+  }
+  await supprimer(orphelins);
+  return { recalcules: recalcules.length, orphelins: orphelins.length };
+}
+
 export async function lancerImportTest(admin: SupabaseClient, migration: MigrationRow, acteur: ActeurMigration): Promise<{ batchId: string; report: DryRunReport } | null> {
   if (migration.status !== 'ready_for_test') {
     if (!canTransition(migration.status, 'ready_for_test')) return null;
@@ -71,10 +164,17 @@ export async function lancerImportTest(admin: SupabaseClient, migration: Migrati
     .single();
   if (batchErr) throw batchErr;
   await logMigrationAudit(admin, { migrationId: migration.id, action: 'import.test.start', actorId: acteur.id, actorRole: acteur.role, target: `batch:${batch.id}` });
+  const publier = creerPublieurProgression(admin, batch.id);
   try {
+    publier({ etape: 'Préparation des lignes (normalisation des fichiers)', entity: null, processed: 0, total: 0, entites_faites: 0, entites_total: 0 });
     await prepareStaging(admin, migration);
+    publier({ etape: 'Purge des doublons périmés', entity: null, processed: 0, total: 0, entites_faites: 0, entites_total: 0 });
+    const purge = await purgerCandidatsDoublonsPerimes(admin, migration.id);
+    if (purge.recalcules || purge.orphelins) {
+      await logMigrationAudit(admin, { migrationId: migration.id, action: 'import.test.duplicates_purge', actorRole: 'system', target: `batch:${batch.id}`, meta: purge });
+    }
     // Même liste que main (fb3a0342) : les taxes importées sont dédoublonnées contre les taxes actives.
-    const entities: TargetEntity[] = ['tax_config', 'client', 'property', 'billing_property', 'job', 'quote', 'invoice'];
+    const entities: TargetEntity[] = ['tax_config', 'client', 'property', 'billing_property', 'job', 'quote', 'invoice', 'payment'];
     for (const entity of entities) {
       const { data: records } = await admin
         .from('migration_staging_records')
@@ -83,6 +183,7 @@ export async function lancerImportTest(admin: SupabaseClient, migration: Migrati
         .eq('entity_type', entity)
         .in('status', ['ready', 'duplicate'])
         .limit(20000);
+      publier({ etape: `Recherche de doublons — ${ENTITY_LABELS_FR[entity] ?? entity}`, entity, processed: 0, total: records?.length ?? 0, entites_faites: entities.indexOf(entity), entites_total: entities.length });
       if (!records || records.length === 0) continue;
       const matches = await findDuplicatesForEntity(admin, migration.org_id, entity, records as any);
       if (matches.length === 0) continue;
@@ -115,7 +216,7 @@ export async function lancerImportTest(admin: SupabaseClient, migration: Migrati
         }
       }
     }
-    const report = await runDryRun(admin, migration);
+    const report = await runDryRun(admin, migration, publier);
     const { error: doneErr } = await admin
       .from('migration_import_batches')
       .update({ status: 'completed', totals: report as unknown as Record<string, unknown>, finished_at: new Date().toISOString() })

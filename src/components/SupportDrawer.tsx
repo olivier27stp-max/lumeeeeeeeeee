@@ -184,7 +184,7 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
 
             {showForm ? (
               <div className="flex-1 overflow-hidden flex flex-col">
-                <SupportChat compact />
+                <SupportChat compact onNavigate={goTo} />
               </div>
             ) : (
               <>

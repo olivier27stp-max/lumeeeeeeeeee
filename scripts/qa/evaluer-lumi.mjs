@@ -484,11 +484,11 @@ async function testsExecution(H, v, resultats) {
     if (p3.proposition?.tool === 'add_note') {
       const c3 = await decider(H, p3.conversation_id, p3.proposition.tool_use_id, 'confirm');
       // Lumi reformule la note (le marqueur saute souvent) : on cherche par client, sur les dernières minutes.
-      const { data: n } = await admin.from('activity_notes').select('id, entity_id, actor_id').eq('org_id', v.orgId).eq('entity_id', v.clientUnique.id).gte('created_at', new Date(Date.now() - 5 * 60_000).toISOString()).ilike('body', '%matin%');
+      const { data: n } = await admin.from('specific_notes').select('id, entity_id, created_by').eq('org_id', v.orgId).eq('entity_id', v.clientUnique.id).gte('created_at', new Date(Date.now() - 5 * 60_000).toISOString()).ilike('text', '%matin%');
       const f = [];
       if (!n?.length) f.push('la note n\'est pas en base');
-      else { if (n[0].entity_id !== v.clientUnique.id) f.push('la note est sur le mauvais client'); if (n[0].actor_id !== v.userId) f.push('la note n\'est pas signée par l\'utilisateur'); }
-      if (n?.length) await admin.from('activity_notes').delete().in('id', n.map((x) => x.id));
+      else { if (n[0].entity_id !== v.clientUnique.id) f.push('la note est sur le mauvais client'); if (n[0].created_by !== v.userId) f.push('la note n\'est pas signée par l\'utilisateur'); }
+      if (n?.length) await admin.from('specific_notes').delete().in('id', n.map((x) => x.id));
       noter('exec-note-client', p3.texte.slice(0, 60), c3, f.concat(fautesPresentation(c3)));
     } else noter('exec-note-client', 'Ajoute une note…', p3, [`pas de proposition add_note (${p3.proposition?.tool || 'aucune'})`]);
   }
@@ -546,8 +546,11 @@ async function testQuota(H, v, resultats) {
       const r = await demander(H, 'Combien de clients ai-je ?');
       const q2 = await fetch(`${API}/api/lumi/quota`, { headers: H }).then((x) => x.json());
       l.reponse = JSON.stringify(r.erreur || r.texte).slice(0, 200); l.cout_cents = r.cout;
-      // La ligne ai_usage insérée à l'instant compte comme « dernier appel » : le ralenti refuse pendant 60 s.
-      if (r.statut !== 429 || !['ralenti', 'quota_epuise'].includes(r.erreur?.code)) l.fautes.push(`attendu 429 ralenti, reçu ${r.statut} ${JSON.stringify(r.erreur)?.slice(0, 80) || ''}`);
+      // Plafond dur (B4) : jamais de 429 — les étages déterministes répondent encore (ici l'énoncé exact « Combien de
+      // clients ai-je ? », étage 1), sinon le gabarit « en pause jusqu'au 1er ». Dans les deux cas : 0 appel au modèle.
+      const gabaritPause = /en pause jusqu'au|paused until/i.test(r.texte || '');
+      if (r.statut !== 200) l.fautes.push(`attendu 200 (étage déterministe ou gabarit), reçu ${r.statut} ${JSON.stringify(r.erreur)?.slice(0, 80) || ''}`);
+      else if (!(gabaritPause || (r.etage !== null && r.etage <= 5))) l.fautes.push(`attendu un étage sans modèle ou le gabarit de pause, reçu étage ${r.etage}`);
       if (!q2.epuise) l.fautes.push('la jauge ne dit pas « épuisé »');
       if (r.cout > 0) l.fautes.push('un appel au modèle a quand même été facturé');
     }
@@ -638,6 +641,28 @@ const orgId = m.org_id;
 const H = await entetes(session.session, orgId);
 const quota = await fetch(`${API}/api/lumi/quota`, { headers: H }).then((r) => r.json());
 if (!quota.includes_ai || quota.configured === false) throw new Error(`Lumi indisponible : ${JSON.stringify(quota)}`);
+// Garde-fou de coût (incident 2026-09-18 : 39,39 $ en sept jours sur staging).
+// Cette batterie envoie ~2 000 appels ; le modèle est celui du SERVEUR, pas le
+// nôtre. Sur un modèle cher, on refuse de partir plutôt que de découvrir la
+// facture après coup. QA_MODELE=prod pour l'assumer (débogage d'un échec).
+{
+  const modeleServeur = quota.cout?.modele ?? 'inconnu';
+  const cher = /opus|fable|sonnet/.test(modeleServeur);
+  if (cher && process.env.QA_MODELE !== 'prod') {
+    throw new Error(
+      `Le serveur ${API} répond avec « ${modeleServeur} » : cette batterie coûterait cher.\n`
+      + `  → relancer le serveur avec LUMI_MODEL=claude-haiku-4-5-20251001 (palier économe),\n`
+      + `  → ou QA_MODELE=prod npm run qa:lumi pour assumer le coût des modèles de production.`,
+    );
+  }
+  const plafonds = quota.cout?.plafonds_jour ?? [];
+  const lumi = plafonds.find((p) => p.source === 'lumi');
+  if (lumi?.plafond_cents) {
+    console.log(`Coût · modèle ${modeleServeur} · dépense du jour ${(lumi.depense_cents / 100).toFixed(2)} / ${(lumi.plafond_cents / 100).toFixed(2)} $`);
+  } else {
+    console.log(`Coût · modèle ${modeleServeur} · aucun plafond journalier sur ce serveur`);
+  }
+}
 console.log(`Org ${orgId} · plan ${quota.plan_slug} · budget ${(quota.depense_cents / 100).toFixed(2)} / ${(quota.budget_cents / 100).toFixed(2)} $ · semaine ${lundi} → ${dimanche}`);
 
 // La batterie teste la MÉCANIQUE de confirmation (proposition → confirmer/annuler) :

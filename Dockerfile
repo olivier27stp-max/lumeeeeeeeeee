@@ -51,6 +51,15 @@ COPY server ./server
 # l'audit du 2026-09-09 (I3) — déjà couverts par `COPY server`. Seul
 # permissions.ts est encore partagé entre le front et le serveur.
 COPY src/lib/permissions.ts ./src/lib/permissions.ts
+# Les variables des modèles de courriel : la route d'aperçu (POST
+# /api/emails/apercu) les remplace par leurs exemples, pour montrer ce que le
+# client verra plutôt que « Bonjour [client_name] ». Sans cette ligne, l'image
+# démarre et la route plante au premier aperçu.
+COPY src/lib/variablesCourriel.ts ./src/lib/variablesCourriel.ts
+# Le catalogue des automatisations personnalisables : la validation Zod et les
+# routes d'écriture en dérivent les clés acceptées. Sans cette ligne, le
+# serveur ne démarre pas — `validation.ts` l'importe au chargement.
+COPY src/lib/automationCatalogue.ts ./src/lib/automationCatalogue.ts
 # `src/lib/supabaseAdmin.ts` is now a stub that throws if imported from
 # client code (real impl lives at `server/lib/supabaseAdmin.ts` for security
 # — commit c12b767). The stub exists so Railway/BuildKit cache layers that
@@ -60,6 +69,14 @@ COPY src/lib/supabaseAdmin.ts ./src/lib/supabaseAdmin.ts
 # le conteneur crashe au demarrage (Cannot find module) - prod 502 le 2026-09-14.
 # tests/dockerfile-imports-src.test.ts verifie que chaque import src/ du serveur est copie.
 COPY src/pages/marketing/fonctionsData.ts ./src/pages/marketing/fonctionsData.ts
+# Champs personnalisés v2 : types, champs standard, filtres et validation
+# partagés avec customFieldsService (server/lib/champs/). Sans ce dossier, le
+# serveur crashe au chargement (Cannot find module).
+COPY src/lib/champs/types.ts ./src/lib/champs/types.ts
+COPY src/lib/champs/standard.ts ./src/lib/champs/standard.ts
+COPY src/lib/champs/filtres.ts ./src/lib/champs/filtres.ts
+COPY src/lib/champs/valeurs.ts ./src/lib/champs/valeurs.ts
+COPY src/lib/champs/modeles.ts ./src/lib/champs/modeles.ts
 # FAQ du support, lue par l'assistant de support (server/lib/support/ia.ts).
 COPY src/components/supportArticles.ts ./src/components/supportArticles.ts
 

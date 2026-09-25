@@ -190,8 +190,9 @@ export function PlansTeaser({ fr }: { fr: boolean }) {
   const { currency } = useRegion();
   const plans: { stage: Bi; name: string; price: Record<'CAD' | 'USD', number>; d: Bi; feat?: boolean }[] = [
     { stage: { fr: 'Je démarre', en: 'Getting started' }, name: 'Minimum', price: { CAD: 150, USD: 110 }, d: { fr: 'Clients, soumissions, jobs, calendrier, factures, paiements. 3 utilisateurs.', en: 'Clients, quotes, jobs, calendar, invoices, payments. 3 users.' } },
-    { stage: { fr: "J'ai une équipe", en: 'I have a team' }, name: 'Scale', price: { CAD: 340, USD: 250 }, feat: true, d: { fr: 'Tout Minimum, plus SMS, automatisations, feuilles de temps, dispatch, Lumi en texte. 10 utilisateurs.', en: 'Everything in Minimum, plus SMS, automations, timesheets, dispatch, Lumi in text. 10 users.' } },
-    { stage: { fr: 'Ça roule sans moi', en: 'Runs without me' }, name: 'Autopilot', price: { CAD: 495, USD: 360 }, d: { fr: 'Tout Scale, plus Lumi en voix illimité, porte-à-porte, formations, API. 20 utilisateurs.', en: 'Everything in Scale, plus unlimited voice Lumi, door-to-door, courses, API. 20 users.' } },
+    { stage: { fr: "J'ai une équipe", en: 'I have a team' }, name: 'Scale', price: { CAD: 340, USD: 250 }, feat: true, d: { fr: 'Tout Minimum, plus SMS, automatisations, feuilles de temps, dispatch. 10 utilisateurs.', en: 'Everything in Minimum, plus SMS, automations, timesheets and dispatch. 10 users.' } },
+    // Lumi est exclusif à Autopilot depuis le 2026-09-19 : c'est ce qui distingue les deux forfaits.
+    { stage: { fr: 'Ça roule sans moi', en: 'Runs without me' }, name: 'Autopilot', price: { CAD: 495, USD: 360 }, d: { fr: 'Tout Scale, plus Lumi (texte et voix), porte-à-porte, formations, API. 20 utilisateurs.', en: 'Everything in Scale, plus Lumi (text and voice), door-to-door, courses, API. 20 users.' } },
   ];
   return (
     <section className="hs-plans">

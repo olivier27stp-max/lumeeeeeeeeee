@@ -4,8 +4,11 @@ import Stripe from 'stripe';
 import { creerClientStripe } from '../lib/stripe-sdk';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, findUserByEmail, companyOrgIds } from '../lib/supabase';
+import { PLAN_FEATURE_KEYS, isPlatformOverride } from '../lib/platformFeatures';
 import { getUserContext, hasPermission } from '../lib/rbac';
 import { logger } from '../lib/logger';
+import { installerModele } from '../lib/champs/service';
+import { estIndustrieModele } from '../../src/lib/champs/modeles';
 
 const router = Router();
 
@@ -98,7 +101,7 @@ router.get('/billing/current', async (req, res) => {
     // entrees de menu protegees par un requiredPlanFlag (`if (!currentPlan)
     // return false`) : l'utilisateur ne voyait plus que les modules non
     // proteges. Joindre ici rend la resolution du plan atomique.
-    const [subRes, profileRes] = await Promise.all([
+    const [subRes, profileRes, overridesRes] = await Promise.all([
       admin
         .from('subscriptions')
         .select('*, plans:plan_id (*)')
@@ -115,7 +118,19 @@ router.get('/billing/current', async (req, res) => {
         .select('*')
         .eq('org_id', auth.orgId)
         .maybeSingle(),
+      // Overrides plateforme (Creator Space) : une ligne org_features marquée
+      // platform_override prime sur le forfait, dans les deux sens. Renvoyés
+      // ici pour que la résolution plan + override reste un seul appel.
+      admin
+        .from('org_features')
+        .select('feature, enabled, metadata')
+        .eq('org_id', auth.orgId)
+        .in('feature', PLAN_FEATURE_KEYS as string[]),
     ]);
+    const feature_overrides: Record<string, boolean> = {};
+    for (const row of (overridesRes.data ?? []) as Array<{ feature: string; enabled: boolean; metadata: unknown }>) {
+      if (isPlatformOverride(row.metadata)) feature_overrides[row.feature] = !!row.enabled;
+    }
 
     // Any member may know the org's PLAN — it gates whole app areas, and a 403
     // here made the front treat paying orgs as "no subscription" and paywall
@@ -158,10 +173,10 @@ router.get('/billing/current', async (req, res) => {
       // `grace` accompagne la version restreinte : un employé sans droit
       // financier subit la suspension comme les autres, le gate a besoin du
       // verdict pour lui aussi. Il ne révèle ni montant ni moyen de paiement.
-      return res.json({ subscription: redacted, billing_profile: null, restricted: true, grace });
+      return res.json({ subscription: redacted, billing_profile: null, restricted: true, grace, feature_overrides });
     }
 
-    return res.json({ subscription: subRes.data, billing_profile: profileRes.data, grace });
+    return res.json({ subscription: subRes.data, billing_profile: profileRes.data, grace, feature_overrides });
   } catch (err: any) {
     console.error('[billing/current]', err.message);
     return res.status(500).json({ error: 'Internal server error.' });
@@ -218,6 +233,13 @@ router.post('/billing/onboarding', validate(onboardingSchema), async (req, res) 
     if (writeErr) {
       console.error('[billing/onboarding] write failed:', writeErr.message);
       return res.status(500).json({ error: 'Failed to save billing info.' });
+    }
+
+    // Champs personnalisés du métier choisi, posés d'office (prêts quand la
+    // fonction s'active). Jamais bloquant pour l'inscription ; rejouable.
+    if (estIndustrieModele(industry)) {
+      void installerModele(admin, auth.orgId, industry)
+        .catch((e: unknown) => console.warn('[billing/onboarding] custom field templates skipped:', e instanceof Error ? e.message : e));
     }
 
     return res.json({ ok: true });
@@ -574,11 +596,9 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
                 const { data: referrerUser } = await admin.auth.admin.getUserById(referral.referrer_user_id);
                 const referrerEmail = referrerUser?.user?.email;
                 if (referrerEmail) {
-                  await sendEmail({
-                    to: referrerEmail,
-                    subject: '🎁 You earned a free month — your referral subscribed!',
-                    html: `<h2>Your referral just subscribed</h2><p>Great news — someone you referred to Lume CRM just signed up for a paid plan, so <strong>your next month is on us</strong>. We've already extended your billing period by 30 days.</p><p>Keep sharing your link to stack more free months.</p>`,
-                  });
+                  const { courrielMoisGratuit } = await import('../lib/referral-rewards');
+                  const courriel = courrielMoisGratuit({ mode: 'prolongation' });
+                  await sendEmail({ to: referrerEmail, subject: courriel.sujet, html: courriel.html });
                 }
               }
             } catch (err) { console.error('[billing] referrer reward email failed:', err); }
@@ -1461,200 +1481,10 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
   }
 });
 
-// ─── GET /billing/offices — Included offices vs extras billed ──
-// Returns { included, used, extras_charged, extra_price_cents, currency }
-// `used` = real offices of the company (orgs owned by this office's owner) —
-// the same definition create-office enforces its limit against.
-
-router.get('/billing/offices', async (req, res) => {
-  try {
-    const auth = await requireAuthedClient(req, res);
-    if (!auth) return;
-
-    const admin = getServiceClient();
-
-    // Bureaux réels = orgs du company_group ; abonnement cherché sur le groupe
-    // (les bureaux secondaires n'ont pas de ligne subscriptions).
-    const orgIds = await companyOrgIds(admin, auth.orgId);
-
-    const { data: subRow } = await admin
-      .from('subscriptions')
-      .select('id, plan_id, currency, extra_offices')
-      .in('org_id', orgIds)
-      .in('status', ['active', 'trialing'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!subRow) {
-      return res.json({ included: 0, used: 0, extras_charged: 0, extra_price_cents: 0, currency: 'USD' });
-    }
-
-    const { data: plan } = await admin
-      .from('plans')
-      .select('included_offices, extra_office_price_usd, extra_office_price_cad')
-      .eq('id', subRow.plan_id)
-      .maybeSingle();
-
-    const used = Math.max(1, orgIds.length);
-
-    const currency = (subRow.currency || 'CAD').toUpperCase();
-    const extraPrice = currency === 'USD'
-      ? plan?.extra_office_price_usd ?? 0
-      : plan?.extra_office_price_cad ?? 0;
-
-    return res.json({
-      included: plan?.included_offices ?? 0,
-      used,
-      extras_charged: subRow.extra_offices ?? 0,
-      extra_price_cents: extraPrice,
-      currency,
-    });
-  } catch (err: any) {
-    console.error('[billing/offices]', err.message);
-    return res.status(500).json({ error: 'Internal server error.' });
-  }
-});
-
-// ─── POST /billing/offices — Set extra office count (auto-syncs Stripe sub item) ──
-
-const setOfficesSchema = z.object({
-  extra_offices: z.number().int().min(0).max(1000),
-});
-
-router.post('/billing/offices', validate(setOfficesSchema), async (req, res) => {
-  try {
-    if (!stripe) return res.status(500).json({ error: 'Stripe not configured.' });
-
-    const auth = await requireAuthedClient(req, res);
-    if (!auth) return;
-
-    const admin = getServiceClient();
-    const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
-    if (!isAdmin) {
-      return res.status(403).json({ error: 'Only admins or owners can update office counts.' });
-    }
-
-    const { extra_offices } = req.body as { extra_offices: number };
-
-    const { data: subRow } = await admin
-      .from('subscriptions')
-      .select('id, plan_id, currency, interval, stripe_subscription_id, stripe_office_item_id, extra_offices')
-      .in('org_id', await companyOrgIds(admin, auth.orgId))
-      .in('status', ['active', 'trialing'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!subRow) return res.status(404).json({ error: 'No active subscription found.' });
-
-    if (subRow.extra_offices === extra_offices) {
-      return res.json({ message: 'Already at requested office count.', no_change: true });
-    }
-
-    const { data: plan } = await admin
-      .from('plans')
-      .select('name, slug, extra_office_price_usd, extra_office_price_cad')
-      .eq('id', subRow.plan_id)
-      .maybeSingle();
-    if (!plan) return res.status(404).json({ error: 'Plan not found.' });
-
-    const currency = (subRow.currency || 'CAD').toUpperCase();
-    const unitAmount = currency === 'USD'
-      ? plan.extra_office_price_usd
-      : plan.extra_office_price_cad;
-    if (!unitAmount) return res.status(400).json({ error: 'Plan does not support extra offices.' });
-
-    // If no Stripe sub linked, just update DB
-    if (!subRow.stripe_subscription_id) {
-      const { error: errBill1400 } = await admin.from('subscriptions').update({ extra_offices }).eq('id', subRow.id);
-      if (errBill1400) {
-        console.error('[billing:L1400] écriture subscriptions échouée:', errBill1400.message, errBill1400.code || '');
-        return res.status(500).json({ error: 'Failed to update office count.' });
-      }
-      return res.json({ message: 'Offices updated (no Stripe link).', no_stripe: true, extra_offices });
-    }
-
-    // If we already have an office line item on Stripe, just update its quantity
-    if (subRow.stripe_office_item_id && extra_offices > 0) {
-      try {
-        await stripe.subscriptionItems.update(subRow.stripe_office_item_id, {
-          quantity: extra_offices,
-          proration_behavior: 'always_invoice',
-        });
-      } catch (err: any) {
-        console.error('[billing/offices] Stripe office item update failed', err.message);
-        return res.status(502).json({ error: `Stripe update failed: ${err.message}` });
-      }
-
-      const { error: errBill1416 } = await admin.from('subscriptions').update({ extra_offices }).eq('id', subRow.id);
-      if (errBill1416) {
-        console.error('[billing:L1416] écriture subscriptions échouée:', errBill1416.message, errBill1416.code || '');
-        return res.status(500).json({ error: 'Le changement est appliqué côté Stripe mais la synchronisation locale a échoué. Support requis.', code: 'DB_SYNC_FAILED', stripe_applied: true });
-      }
-      return res.json({ message: 'Office quantity updated.', extra_offices });
-    }
-
-    // Remove the office line item if going down to 0
-    if (subRow.stripe_office_item_id && extra_offices === 0) {
-      try {
-        await stripe.subscriptionItems.del(subRow.stripe_office_item_id, {
-          proration_behavior: 'always_invoice',
-        });
-      } catch (err: any) {
-        console.error('[billing/offices] Stripe office item delete failed', err.message);
-        return res.status(502).json({ error: `Stripe delete failed: ${err.message}` });
-      }
-
-      const { error: errBill1431 } = await admin.from('subscriptions').update({
-        extra_offices: 0,
-        stripe_office_item_id: null,
-      }).eq('id', subRow.id);
-      if (errBill1431) {
-        console.error('[billing:L1431] écriture subscriptions échouée:', errBill1431.message, errBill1431.code || '');
-        return res.status(500).json({ error: 'Le changement est appliqué côté Stripe mais la synchronisation locale a échoué. Support requis.', code: 'DB_SYNC_FAILED', stripe_applied: true });
-      }
-      return res.json({ message: 'Extra offices removed.', extra_offices: 0 });
-    }
-
-    // First-time add: create Stripe Product + Price for the office, then attach to sub
-    try {
-      const product = await stripe.products.create({
-        name: `Lume ${plan.name} — Extra office`,
-        metadata: { plan_slug: plan.slug, type: 'extra_office' },
-      });
-      const price = await stripe.prices.create({
-        product: product.id,
-        currency: currency.toLowerCase(),
-        unit_amount: unitAmount,
-        recurring: { interval: subRow.interval === 'yearly' ? 'year' : 'month' },
-      });
-
-      const newItem = await stripe.subscriptionItems.create({
-        subscription: subRow.stripe_subscription_id,
-        price: price.id,
-        quantity: extra_offices,
-        proration_behavior: 'always_invoice',
-      });
-
-      const { error: errBill1458 } = await admin.from('subscriptions').update({
-        extra_offices,
-        stripe_office_item_id: newItem.id,
-      }).eq('id', subRow.id);
-      if (errBill1458) {
-        console.error('[billing:L1458] écriture subscriptions échouée:', errBill1458.message, errBill1458.code || '');
-        return res.status(500).json({ error: 'Le changement est appliqué côté Stripe mais la synchronisation locale a échoué. Support requis.', code: 'DB_SYNC_FAILED', stripe_applied: true });
-      }
-
-      return res.json({ message: 'Extra offices added and billed.', extra_offices });
-    } catch (err: any) {
-      console.error('[billing/offices] Stripe office item create failed', err.message);
-      return res.status(502).json({ error: `Stripe create failed: ${err.message}` });
-    }
-  } catch (err: any) {
-    console.error('[billing/offices POST]', err.message);
-    return res.status(500).json({ error: 'Internal server error.' });
-  }
-});
+// ─── /billing/offices (GET/POST) — retirés le 2026-09-17 ──────────
+// Les bureaux ne sont plus vendus par forfait : 1 bureau par workspace, quota
+// relevé uniquement par la plateforme (Creator Space → Features, org_features
+// 'office_quota'). Voir server/lib/platformFeatures.ts et routes/orgs.ts.
 
 // ─── POST /billing/customer-portal — Open Stripe Customer Portal ──
 // User can manage card, view invoices, download receipts directly on Stripe.

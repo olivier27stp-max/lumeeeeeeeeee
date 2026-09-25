@@ -15,7 +15,21 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
 import { logger } from '../logger';
 import { isSlackConfigured, identiteBot, nomUtilisateurSlack, texteDepuisSlack, lireRepliquesSlack, accuserLivraisonSlack } from '../slack';
-import { ajouterMessage, notifierClientReponse, type Ticket } from './tickets';
+import { ajouterMessage, notifierClientReponse, messagesDuTicket, type Ticket } from './tickets';
+import { texteAApprendre, questionDuTicket, apprendre, accuserApprentissage, dejaAppris } from './savoir';
+
+/**
+ * Un message Slack traité sans être relayé (note interne, 📌 retenu) est
+ * quand même enregistré, comme message « system » portant son ts : le relevé
+ * périodique (toutes les 45 s) ne le revoit plus, donc pas d'accusé répété
+ * dans le fil. Invisible du client (vue() et le transcript filtrent system).
+ * N'avance pas last_message_at : ce n'est pas une activité de la conversation.
+ */
+async function marquerTraiteSlack(admin: SupabaseClient, t: Ticket, ts: string | undefined, quoi: string): Promise<void> {
+  if (!ts) return;
+  const { error } = await admin.from('support_messages').insert({ ticket_id: t.id, org_id: t.org_id, author: 'system', author_name: null, body: quoi, slack_ts: ts });
+  if (error && error.code !== '23505') logger.error('[support/relais] marquage impossible', { ticketId: t.id, error: error.message });
+}
 
 export interface EvenementMessageSlack {
   type: string;
@@ -28,13 +42,46 @@ export interface EvenementMessageSlack {
   thread_ts?: string;
 }
 
-/** Ce message est-il une réponse humaine (ou d'un autre bot) dans un fil de ticket ? Pur, testable. */
-export function estReponseDansUnFil(e: EvenementMessageSlack, bot: { user_id: string; bot_id: string | null }): boolean {
+/**
+ * Note interne : un message du fil qui parle à l'ÉQUIPE, pas au client — il ne
+ * doit jamais lui être relayé (vu le 2026-09-17 : une relance de suivi
+ * « Relance 36h+ — toujours ouvert, pas de réponse produit… À faire : répondre
+ * dans ce fil… puis on close » est partie telle quelle à l'abonné).
+ * Deux façons de marquer une note interne :
+ *  - explicite : commencer par 🔒, « [interne] », « interne : », « note interne », « // » ou « #interne » ;
+ *  - reconnue : les gabarits de suivi (« Relance 36h+ », « À faire : », « puis on close »,
+ *    « pas de réponse produit », « Compte : à enrichir », « Sent using »).
+ * Pur, testable.
+ */
+export function estNoteInterne(texte: string): boolean {
+  const t = texte.trim();
+  if (!t) return false;
+  if (/^(?:🔒|\[interne\]|interne\s*:|note interne\b|\/\/|#interne\b|\[internal\]|internal\s*:|📌|:pushpin:|@?lumi[, ]+retiens)/i.test(t)) return true;
+  if (/^relance\s+\d+\s*[hj]\+?\b/i.test(t)) return true;
+  const marqueurs = [/\bà faire\s*:/i, /\bpuis on close\b/i, /\bon close\b/i, /pas de réponse produit/i, /compte\s*:\s*à enrichir/i, /\bsent using\b/i, /\btoujours ouvert\b.*\b(?:relance|réponse)/i];
+  return marqueurs.filter((m) => m.test(t)).length >= 1 && (/\brelance\b|\bà faire\b|\bclose\b|sent using/i.test(t));
+}
+
+/**
+ * Bots tiers dont les réponses de fil sont relayées au client (agents Grok…),
+ * par leur bot_id Slack, séparés par des virgules : SLACK_BOTS_RELAYES.
+ * Tout autre bot ou workflow Slack (relances de suivi, rappels, intégrations)
+ * parle à l'équipe, jamais au client — c'est un workflow qui a fait fuir une
+ * relance interne le 2026-09-17.
+ */
+export function botsRelayes(env: NodeJS.ProcessEnv = process.env): ReadonlySet<string> {
+  return new Set(String(env.SLACK_BOTS_RELAYES || '').split(',').map((x) => x.trim()).filter(Boolean));
+}
+
+/** Ce message est-il une réponse humaine (ou d'un bot tiers autorisé) dans un fil de ticket ? Pur, testable. */
+export function estReponseDansUnFil(e: EvenementMessageSlack, bot: { user_id: string; bot_id: string | null }, autorises: ReadonlySet<string> = botsRelayes()): boolean {
   if (e.type !== 'message') return false;
   if (!e.thread_ts || !e.ts || e.thread_ts === e.ts) return false; // pas un message de fil, ou le parent lui-même
   if (e.subtype && e.subtype !== 'bot_message' && e.subtype !== 'file_share' && e.subtype !== 'thread_broadcast') return false; // édité, supprimé, joined…
   if (e.user && e.user === bot.user_id) return false;
   if (e.bot_id && bot.bot_id && e.bot_id === bot.bot_id) return false;
+  // Un bot ou un workflow Slack : relayé seulement s'il est nommément autorisé.
+  if (e.bot_id || e.subtype === 'bot_message') { if (!e.bot_id || !autorises.has(e.bot_id)) return false; }
   return !!(e.text && e.text.trim());
 }
 
@@ -58,6 +105,21 @@ export async function relayerReponseSlack(e: EvenementMessageSlack, ticketConnu?
   const auteur = e.user ? await nomUtilisateurSlack(e.user) : 'Support';
   const corps = texteDepuisSlack(e.text || '');
   if (!corps) return 'ignored:empty';
+  // « 📌 … » / « Lumi, retiens : … » : l'équipe apprend quelque chose à Lumi — retenu, jamais envoyé au client.
+  const aApprendre = texteAApprendre(corps);
+  if (aApprendre) {
+    const verdict = await apprendre(admin, { question: questionDuTicket(t, await messagesDuTicket(admin, t.id)), reponse: aApprendre, auteur, ticketId: t.id, channel: e.channel, ts: e.ts });
+    await marquerTraiteSlack(admin, t, e.ts, `slack:retenu:${verdict}`);
+    if (e.channel && e.ts && verdict !== 'deja') await accuserApprentissage(e.channel, e.ts, verdict);
+    return `learned:${verdict}`;
+  }
+  // Une note interne reste dans Slack : marquée 🔒 dans le fil pour que l'équipe voie qu'elle n'est pas partie.
+  if (estNoteInterne(corps)) {
+    logger.info('[support/relais] note interne non relayée', { ticketId: t.id });
+    await marquerTraiteSlack(admin, t, e.ts, 'slack:note-interne');
+    if (e.channel && e.ts) await accuserLivraisonSlack(e.channel, e.ts, false, 'Note interne : pas envoyée au client (commence par 🔒 ou [interne] pour être sûr).');
+    return 'ignored:internal-note';
+  }
   const m = await ajouterMessage(admin, { ticket: t, author: 'agent', body: corps, authorName: auteur, slackTs: e.ts });
   if (!m) return 'ignored:duplicate'; // déjà enregistré (rejeu Slack, ou l'autre chemin)
   await admin.from('support_tickets').update({ status: 'answered' }).eq('id', t.id).neq('status', 'closed');
@@ -96,6 +158,14 @@ export async function releverReponsesSlack(admin: SupabaseClient = getServiceCli
       const deja = new Set((connus || []).map((m: any) => String(m.slack_ts)));
       const repliques = await lireRepliquesSlack(t.slack_channel_id, t.slack_thread_ts);
       for (const r of repliques) {
+        // Réaction 📌 sur une réponse humaine (déjà relayée ou non) : l'équipe veut que Lumi la retienne.
+        if (r.ts && r.text && r.user && r.reactions?.some((x) => x.name === 'pushpin') && !dejaAppris(t.slack_channel_id, r.ts)) {
+          const reponse = texteDepuisSlack(r.text);
+          if (reponse && !texteAApprendre(reponse) && !estNoteInterne(reponse)) {
+            const verdict = await apprendre(admin, { question: questionDuTicket(t, await messagesDuTicket(admin, t.id)), reponse, auteur: await nomUtilisateurSlack(r.user), ticketId: t.id, channel: t.slack_channel_id, ts: r.ts });
+            await accuserApprentissage(t.slack_channel_id, r.ts, verdict);
+          }
+        }
         if (!r.ts || r.ts === t.slack_thread_ts || deja.has(r.ts)) continue;
         const verdict = await relayerReponseSlack({ type: 'message', channel: t.slack_channel_id, subtype: r.subtype, user: r.user, bot_id: r.bot_id, text: r.text, ts: r.ts, thread_ts: t.slack_thread_ts }, t);
         if (verdict === 'relayed') relayes += 1;

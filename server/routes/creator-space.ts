@@ -76,13 +76,12 @@ function safeSubscription(sub: any, plan: any | null) {
     canceled_at: sub.canceled_at,
     created_at: sub.created_at,
     extra_seats: sub.extra_seats ?? 0,
-    extra_offices: sub.extra_offices ?? 0,
-    plan: plan ? { name: plan.name, name_fr: plan.name_fr, slug: plan.slug, seats_included: plan.seats_included, included_offices: plan.included_offices } : null,
+    plan: plan ? { name: plan.name, name_fr: plan.name_fr, slug: plan.slug, seats_included: plan.seats_included } : null,
   };
 }
 
 async function loadPlansById(admin: Admin): Promise<Map<string, any>> {
-  const { data } = await admin.from('plans').select('id, name, name_fr, slug, seats_included, included_offices');
+  const { data } = await admin.from('plans').select('id, name, name_fr, slug, seats_included');
   return new Map((data ?? []).map((p: any) => [p.id, p]));
 }
 
@@ -103,7 +102,10 @@ async function loadOrgDirectory(admin: Admin) {
   return { orgs: rows, displayNameById: new Map<string, string>(rows.map((o: any) => [o.id, o.display_name])) };
 }
 
-async function loadActorNames(admin: Admin, userIds: string[]): Promise<Map<string, string>> {
+/** Exportée pour creator-space-notes.ts : résout les noms des auteurs de
+ *  notes plateforme (les ~2 comptes platformAdminIds — pas de masquage Loi 25
+ *  à leur sujet, contrairement aux acteurs d'un tenant). */
+export async function loadActorNames(admin: Admin, userIds: string[]): Promise<Map<string, string>> {
   const ids = Array.from(new Set(userIds.filter(Boolean)));
   if (!ids.length) return new Map();
   const [{ data: profiles }, { data: members }] = await Promise.all([
@@ -359,13 +361,18 @@ router.get('/creator-space/companies', async (req, res) => {
 
     const [{ orgs }, membershipsResult, subsResult, plansById] = await Promise.all([
       loadOrgDirectory(admin),
-      admin.from('memberships').select('org_id'),
+      admin.from('memberships').select('org_id, user_id'),
       admin.from('subscriptions').select('org_id, plan_id, status, interval, current_period_end').order('created_at', { ascending: false }),
       loadPlansById(admin),
     ]);
 
     const membersByOrg = new Map<string, number>();
-    for (const m of membershipsResult.data ?? []) membersByOrg.set(m.org_id, (membersByOrg.get(m.org_id) || 0) + 1);
+    const userIdsByOrg = new Map<string, Set<string>>();
+    for (const m of membershipsResult.data ?? []) {
+      membersByOrg.set(m.org_id, (membersByOrg.get(m.org_id) || 0) + 1);
+      if (!userIdsByOrg.has(m.org_id)) userIdsByOrg.set(m.org_id, new Set());
+      userIdsByOrg.get(m.org_id)!.add(m.user_id);
+    }
 
     // L'abonnement vit sur UN bureau du groupe : résolution directe, puis via
     // le company_group_id du bureau porteur.
@@ -381,34 +388,65 @@ router.get('/creator-space/companies', async (req, res) => {
     const ownerIds = orgs.map((o: any) => o.created_by).filter(Boolean);
     const ownerNames = await loadActorNames(admin, ownerIds);
 
-    let rows = orgs.map((o: any) => {
-      const sub = subByOrg.get(o.id) ?? (o.company_group_id ? subByGroup.get(o.company_group_id) : null) ?? null;
+    // Un rang par WORKSPACE (company_group ; une org sans groupe forme son
+    // propre workspace), les bureaux (orgs) en sous-couche. Le bureau
+    // « principal » = celui qui porte l'abonnement, sinon le plus ancien : c'est
+    // lui que le panneau ouvre quand on clique le workspace.
+    const officeRow = (o: any) => ({
+      id: o.id,
+      name: o.display_name,
+      org_name: o.name,
+      logo_url: o.logo_url,
+      created_at: o.created_at,
+      owner_id: o.created_by,
+      owner_name: (o.created_by && ownerNames.get(o.created_by)) || null,
+      contact_email: o.contact_email || null,
+      member_count: membersByOrg.get(o.id) || 0,
+      has_subscription: subByOrg.has(o.id),
+    });
+    const officesByGroup = new Map<string, any[]>();
+    for (const o of orgs) {
+      const key = o.company_group_id || `org:${o.id}`;
+      if (!officesByGroup.has(key)) officesByGroup.set(key, []);
+      officesByGroup.get(key)!.push(officeRow(o));
+    }
+
+    let rows = Array.from(officesByGroup.entries()).map(([key, offices]) => {
+      offices.sort((a: any, b: any) => (b.has_subscription ? 1 : 0) - (a.has_subscription ? 1 : 0) || a.created_at.localeCompare(b.created_at));
+      const primary = offices[0];
+      const groupId = key.startsWith('org:') ? null : key;
+      const sub = subByOrg.get(primary.id) ?? (groupId ? subByGroup.get(groupId) : null) ?? null;
       const plan = sub ? plansById.get(sub.plan_id) : null;
+      const users = new Set<string>();
+      for (const o of offices) for (const u of userIdsByOrg.get(o.id) ?? []) users.add(u);
       return {
-        id: o.id,
-        name: o.display_name,
-        org_name: o.name,
-        logo_url: o.logo_url,
-        company_group_id: o.company_group_id,
-        created_at: o.created_at,
-        owner_id: o.created_by,
-        owner_name: (o.created_by && ownerNames.get(o.created_by)) || null,
-        contact_email: o.contact_email || null,
-        member_count: membersByOrg.get(o.id) || 0,
+        id: primary.id,
+        name: primary.name,
+        org_name: primary.org_name,
+        logo_url: primary.logo_url,
+        company_group_id: groupId,
+        created_at: offices.reduce((min: string, o: any) => (o.created_at < min ? o.created_at : min), primary.created_at),
+        owner_id: primary.owner_id,
+        owner_name: primary.owner_name,
+        contact_email: primary.contact_email,
+        member_count: users.size,
         subscription_status: sub?.status ?? null,
         plan_name: plan?.name ?? null,
         plan_slug: plan?.slug ?? null,
+        offices: offices.map((o: any) => ({ id: o.id, name: o.name, org_name: o.org_name, member_count: o.member_count, created_at: o.created_at, is_primary: o.id === primary.id })),
       };
     });
 
     if (q) {
+      const officeMatches = (o: any) =>
+        o.id === q ||
+        o.name.toLowerCase().includes(q) ||
+        o.org_name.toLowerCase().includes(q);
       rows = rows.filter((r: any) =>
-        r.id === q ||
         (r.company_group_id ?? '') === q ||
-        r.name.toLowerCase().includes(q) ||
-        r.org_name.toLowerCase().includes(q) ||
         (r.owner_name ?? '').toLowerCase().includes(q) ||
-        (r.contact_email ?? '').toLowerCase().includes(q));
+        (r.contact_email ?? '').toLowerCase().includes(q) ||
+        r.offices.some(officeMatches));
     }
     rows.sort((a: any, b: any) => a.name.localeCompare(b.name, 'fr'));
 
@@ -452,7 +490,7 @@ router.get('/creator-space/companies/:orgId', async (req, res) => {
       admin.from('orgs').select('id, name, created_at').in('id', ids),
       admin
         .from('subscriptions')
-        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, extra_seats, extra_offices')
+        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, extra_seats')
         .in('org_id', ids)
         .order('created_at', { ascending: false })
         .limit(1),
@@ -559,7 +597,7 @@ router.get('/creator-space/companies/:orgId/billing', async (req, res) => {
       loadPlansById(admin),
       admin
         .from('subscriptions')
-        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, extra_seats, extra_offices')
+        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, extra_seats')
         .in('org_id', ids)
         .order('created_at', { ascending: false }),
       admin

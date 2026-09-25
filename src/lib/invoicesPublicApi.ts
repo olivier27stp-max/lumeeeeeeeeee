@@ -3,6 +3,7 @@
  * Audit QA prod 2026-09-09, n°1 : cette route n'existait pas ; le lien copié
  * depuis la fiche facture tombait sur « Soumission introuvable ».
  */
+import type { SocialLinks } from './socialLinks';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export interface PublicInvoiceCompany {
@@ -17,6 +18,10 @@ export interface PublicInvoiceCompany {
   postal_code: string | null;
   country: string | null;
   brand_color: string | null;
+  /** Langue de l'entreprise : la page s'affiche dans celle-là. */
+  language?: 'fr' | 'en' | null;
+  /** Réseaux sociaux — icônes au pied de la page. */
+  social_links?: SocialLinks | null;
 }
 
 export interface PublicInvoiceItem {
@@ -56,6 +61,8 @@ export interface PublicInvoiceData {
   company: PublicInvoiceCompany | null;
   /** Jeton d'un lien de paiement actif (/pay/:token), ou null. */
   pay_token: string | null;
+  /** Champs personnalisés cochés « afficher sur le document ». */
+  custom_fields?: Array<{ label: string; valeur: string }>;
 }
 
 export async function fetchPublicInvoice(token: string): Promise<PublicInvoiceData> {

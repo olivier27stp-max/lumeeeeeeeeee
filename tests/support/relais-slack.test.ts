@@ -71,7 +71,8 @@ describe('relevé des fils Slack', () => {
     expect(journal.some((j) => j.table === 'support_messages' && j.op === 'insert')).toBe(false);
   });
 
-  it('un autre bot (Grok) dans le fil est relayé ; notre bot et le parent ne le sont pas', async () => {
+  it('un autre bot (Grok) dans le fil est relayé SEULEMENT s il est autorisé (SLACK_BOTS_RELAYES) ; notre bot et le parent ne le sont pas', async () => {
+    process.env.SLACK_BOTS_RELAYES = 'BGROK';
     repliques = [
       { ts: '1.0', user: 'UBOT', bot_id: 'BBOT', text: 'parent' },
       { ts: '4.0', bot_id: 'BGROK', subtype: 'bot_message', text: 'Réponse de Grok' },

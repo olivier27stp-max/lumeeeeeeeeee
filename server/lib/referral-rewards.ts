@@ -16,6 +16,33 @@
 import type Stripe from 'stripe';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './logger';
+import { rendreCourrielLume, montant } from './courriels/gabarit';
+
+/**
+ * Courriel au parrain : « Un mois gratuit : ton filleul vient de s'abonner ».
+ * Pur (aperçu : scripts/qa/courriels-exemples/abonnement.mts). Deux façons de
+ * livrer le mois offert, selon le chemin d'abonnement :
+ *   - `credit` : crédit Stripe sur la prochaine facture (webhook Stripe) ;
+ *   - `prolongation` : période de facturation prolongée de 30 jours (chemin historique).
+ */
+export function courrielMoisGratuit(opts: { mode: 'credit' | 'prolongation'; cents?: number; currency?: string }): { sujet: string; html: string } {
+  const base = (process.env.FRONTEND_URL || 'http://localhost:5173').trim().replace(/\/$/, '');
+  const credit = opts.mode === 'credit' && opts.cents ? montant(opts.cents, (opts.currency || 'CAD').toUpperCase(), 'fr') : null;
+  return {
+    sujet: 'Un mois gratuit : ton filleul vient de s’abonner',
+    html: rendreCourrielLume({
+      langue: 'fr',
+      preheader: 'Une entreprise que tu as recommandée vient de s’abonner. Ton prochain mois est offert.',
+      titre: 'Un mois gratuit pour toi',
+      salutation: 'Bonjour,',
+      intro: 'Bonne nouvelle : une entreprise que tu as recommandée vient de s’abonner à Lume. Ton prochain mois est offert.',
+      montant: credit ? { libelle: 'Crédit appliqué', valeur: credit, sous: 'Déduit automatiquement de ta prochaine facture' } : null,
+      lignes: [{ libelle: 'Récompense', valeur: '1 mois gratuit', fort: true }, { libelle: 'Comment', valeur: opts.mode === 'credit' ? 'Crédit sur ta prochaine facture' : 'Période prolongée de 30 jours' }],
+      bouton: { texte: 'Voir mon forfait', url: `${base}/settings/billing` },
+      note: 'Continue de partager ton lien : chaque nouvel abonné te donne un mois de plus.',
+    }),
+  };
+}
 
 /** One free month, in cents, resolved from the referrer's own active plan + currency. */
 const FALLBACK_REWARD_CENTS = 2900; // Pro monthly USD — used only if the plan lookup fails.
@@ -332,11 +359,8 @@ export async function awardReferrerReward(args: AwardReferrerRewardArgs): Promis
       const { data: referrerUser } = await admin.auth.admin.getUserById(referral.referrer_user_id);
       const referrerEmail = referrerUser?.user?.email;
       if (referrerEmail) {
-        await sendEmail({
-          to: referrerEmail,
-          subject: '🎁 You earned a free month — your referral subscribed!',
-          html: `<h2>Your referral just subscribed</h2><p>Great news — a business you referred to Lume CRM just signed up for a paid plan, so <strong>your next month is on us</strong>. We've applied a one-month credit to your account; it will reduce your next invoice automatically.</p><p>Keep sharing your link to stack more free months.</p>`,
-        });
+        const courriel = courrielMoisGratuit({ mode: 'credit', cents, currency });
+        await sendEmail({ to: referrerEmail, subject: courriel.sujet, html: courriel.html });
       }
     }
   } catch (err) {

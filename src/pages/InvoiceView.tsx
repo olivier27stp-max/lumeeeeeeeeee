@@ -14,9 +14,16 @@ import { CheckCircle, CreditCard, FileText, Printer } from 'lucide-react';
 import { captureClientException } from '../lib/sentry';
 import { versDate } from '../lib/dateSeule';
 import { fetchPublicInvoice, type PublicInvoiceData, type PublicInvoiceCompany } from '../lib/invoicesPublicApi';
+import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
+import { resolveBrand, readableOn } from '../lib/brandColor';
+import PastilleLume from '../components/PastilleLume';
 
-const LUME_LOGO_URL = '/lume-logo.png';
-const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+// Langue de la page : celle de l'ENTREPRISE dès que l'API l'a dite ; en attendant, celle du navigateur.
+// Variable de module lue au rendu, fixée AVANT le setState qui rerend.
+let isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+function suivreLangueEntreprise(langue: string | null | undefined) {
+  if (langue === 'fr' || langue === 'en') isFr = langue === 'fr';
+}
 
 function fmtMoney(cents: number, currency = 'CAD'): string {
   return new Intl.NumberFormat(isFr ? 'fr-CA' : 'en-CA', { style: 'currency', currency }).format((cents || 0) / 100);
@@ -55,6 +62,7 @@ export default function InvoiceView() {
       try {
         const d = await fetchPublicInvoice(token);
         if (annule) return;
+        suivreLangueEntreprise(d.company?.language);
         setData(d);
         setEtat('view');
         document.title = `${isFr ? 'Facture' : 'Invoice'} #${d.invoice.invoice_number}${d.company?.company_name ? ` — ${d.company.company_name}` : ''}`;
@@ -88,12 +96,23 @@ export default function InvoiceView() {
     );
   }
 
-  const { invoice, items, client, company, pay_token } = data;
+  const { invoice, items, client, company, pay_token, custom_fields } = data;
   const cur = invoice.currency || 'CAD';
   const payee = invoice.status === 'paid' || invoice.balance_cents <= 0;
   const companyAddress = buildCompanyAddress(company);
-  const logoUrl = company?.logo_url || LUME_LOGO_URL;
-  const nomCompagnie = company?.company_name || 'Lume';
+  /* La couleur de l'entreprise. Cette page etait la SEULE des quatre pages
+     publiques a ne pas l'appliquer — QuoteView, ContractView et PublicPayment
+     le font toutes. L'API envoyait pourtant `brand_color` : la donnee arrivait
+     et n'etait jamais lue. Une facture, la page qu'un client ouvre le plus,
+     s'affichait en noir et gris quelle que soit la marque. */
+  const brand = resolveBrand(company?.brand_color);
+  // Sans logo d'entreprise, on n'affiche rien : le nom est déjà juste en dessous.
+  // Un repli sur le logo de Lume ferait passer une facture de Coquin lavage
+  // pour une facture de Lume.
+  const logoUrl = company?.logo_url || null;
+  // Jamais « Lume » en repli : une facture sans nom d'entreprise ne doit pas
+  // passer pour une facture de la plateforme.
+  const nomCompagnie = company?.company_name || '';
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -125,12 +144,14 @@ export default function InvoiceView() {
           <div className="px-8 pt-8 pb-6">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <img
-                  src={logoUrl}
-                  alt={nomCompagnie}
-                  className="h-10 max-w-[180px] object-contain mb-3"
-                  onError={(e) => { (e.target as HTMLImageElement).src = LUME_LOGO_URL; }}
-                />
+                {logoUrl && (
+                  <img
+                    src={logoUrl}
+                    alt={nomCompagnie}
+                    className="h-10 max-w-[180px] object-contain mb-3"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
                 <h2 className="text-[14px] font-semibold text-[#111]">{nomCompagnie}</h2>
                 {companyAddress && <p className="text-[12px] text-[#888] mt-0.5">{companyAddress}</p>}
                 <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
@@ -140,7 +161,7 @@ export default function InvoiceView() {
                 </div>
               </div>
               <div className="text-right ml-6">
-                <h1 className="text-[28px] font-bold text-[#111] tracking-tight leading-none">{isFr ? 'FACTURE' : 'INVOICE'}</h1>
+                <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: brand }}>{isFr ? 'FACTURE' : 'INVOICE'}</h1>
                 <p className="text-[13px] text-[#888] mt-1 font-medium">#{invoice.invoice_number}</p>
               </div>
             </div>
@@ -246,6 +267,24 @@ export default function InvoiceView() {
             </div>
           </div>
 
+          {/* ── Champs personnalisés cochés « afficher sur le document » ── */}
+          {custom_fields && custom_fields.length > 0 && (
+            <>
+              <div className="border-t border-[#eee]" />
+              <div className="px-8 py-5">
+                <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">{isFr ? 'Informations' : 'Details'}</p>
+                <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+                  {custom_fields.map((c) => (
+                    <div key={c.label} className="flex justify-between gap-4 text-[13px]">
+                      <dt className="text-[#888]">{c.label}</dt>
+                      <dd className="text-right text-[#333]">{c.valeur}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </>
+          )}
+
           {invoice.notes && (
             <>
               <div className="border-t border-[#eee]" />
@@ -262,7 +301,8 @@ export default function InvoiceView() {
           {!payee && pay_token && (
             <a
               href={`/pay/${pay_token}`}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#111] px-5 py-2.5 text-[14px] font-semibold text-white hover:bg-[#333] transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-[14px] font-semibold transition-opacity hover:opacity-90"
+              style={{ background: brand, color: readableOn(brand) }}
             >
               <CreditCard size={16} />
               {isFr ? `Payer ${fmtMoney(invoice.balance_cents, cur)}` : `Pay ${fmtMoney(invoice.balance_cents, cur)}`}
@@ -283,9 +323,8 @@ export default function InvoiceView() {
           )}
         </div>
 
-        <p className="mt-8 text-center text-[11px] text-[#bbb] no-print">
-          {isFr ? 'Facture générée avec Lume' : 'Invoice generated with Lume'}
-        </p>
+        <ReseauxSociauxPied liens={company?.social_links} className="flex items-center justify-center gap-4 mt-8 no-print" />
+        <PastilleLume className="mt-4 no-print" />
       </div>
     </div>
   );

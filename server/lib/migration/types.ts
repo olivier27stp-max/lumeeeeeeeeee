@@ -70,6 +70,7 @@ export const MIGRATION_CATEGORIES = [
   'services',
   'quotes',
   'jobs',
+  'recurring_jobs',
   'visits',
   'invoices',
   'payments',
@@ -92,8 +93,10 @@ export const IMPORTABLE_CATEGORIES: MigrationCategory[] = [
   'billing_addresses',
   'quotes',
   'jobs',
+  'recurring_jobs',
   'visits',
   'invoices',
+  'payments',
 ];
 
 /** Entités cibles d'une correspondance colonne → champ Lume.
@@ -205,6 +208,23 @@ export interface DryRunReport {
   openIssues: number;
   notes: string[];
 }
+
+/** Progression d'un lot (import test ou final), écrite dans
+ *  migration_import_batches.totals.progress pendant la course, écrasée par le
+ *  rapport à la fin. La console la relit toutes les quelques secondes. */
+export interface ProgressionLot {
+  /** Libellé affiché (« Import test — Soumissions »). */
+  etape: string;
+  entity: TargetEntity | null;
+  /** Lignes faites / lignes de l'étape courante. */
+  processed: number;
+  total: number;
+  /** Types de données faits / à faire. */
+  entites_faites: number;
+  entites_total: number;
+  updated_at: string;
+}
+export type OnProgression = (p: Omit<ProgressionLot, 'updated_at'>) => void;
 
 export interface PostImportValidation {
   outcome: 'passed' | 'passed_with_warnings' | 'review_required' | 'failed';

@@ -68,8 +68,9 @@ describe('deterministicEntityId — idempotence', () => {
 });
 
 describe('ordre d\'import', () => {
-  it('respecte les dépendances (taxes → services → clients → propriétés → adresses de facturation → jobs → soumissions → visites → factures)', () => {
-    expect(IMPORT_ORDER).toEqual(['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice']);
+  it('respecte les dépendances (taxes → services → clients → propriétés → adresses de facturation → jobs → soumissions → visites → factures → paiements)', () => {
+    expect(IMPORT_ORDER).toEqual(['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice', 'payment']);
+    expect(IMPORT_ORDER.indexOf('invoice')).toBeLessThan(IMPORT_ORDER.indexOf('payment'));
     expect(IMPORT_ORDER.indexOf('tax_config')).toBeLessThan(IMPORT_ORDER.indexOf('service'));
     expect(IMPORT_ORDER.indexOf('client')).toBeLessThan(IMPORT_ORDER.indexOf('property'));
     expect(IMPORT_ORDER.indexOf('client')).toBeLessThan(IMPORT_ORDER.indexOf('billing_property'));
@@ -277,7 +278,9 @@ describe('audit S3 — colonnes non mappées rattachées aux notes, statuts inco
     expect(statusRecognized('invoice', 'Payée')).toBe(true);
     expect(statusRecognized('job', 'Zombie-Status-42')).toBe(false);
     expect(statusRecognized('quote', 'bizarre-42')).toBe(false);
-    expect(statusRecognized('client', 'peu importe')).toBe(true); // entité sans statut mappé
+    expect(statusRecognized('client', 'Active')).toBe(true); // statut client désormais interprété (prospect / archivé)
+    expect(statusRecognized('client', 'peu importe')).toBe(false);
+    expect(statusRecognized('tax_config', 'peu importe')).toBe(true); // entité sans statut mappé
   });
 });
 
@@ -513,5 +516,103 @@ describe('quotes.title NOT NULL (leçon E2E round 8)', async () => {
       normalized: { total_cents: 100 }, relations: { client_ref: 'Marc Tremblay' },
     } as any, ctx) as any).row;
     expect(r2.title).toBe('Soumission importée');
+  });
+});
+
+describe('facture — rabais (discount_cents, soustrait avant taxes)', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'org-1' }, createdBy: 'u',
+    clientIdByRef: new Map([['marc tremblay', 'c1']]), propertyIdByRef: new Map(), jobIdByRef: new Map(),
+  } as any;
+  const inv = (extra: Record<string, unknown>) => (buildEntityRow('invoice', {
+    id: 'x', row_number: 1, entity_type: 'invoice', external_id: null, status: 'ready',
+    normalized: { invoice_number: '78', ...extra },
+    relations: { client_ref: 'Marc Tremblay' },
+  } as any, ctx) as any).row;
+
+  it('sans rabais → discount_cents 0, montants inchangés', () => {
+    const row = inv({ subtotal_cents: 10000, tax_cents: 1498, total_cents: 11498 });
+    expect(row.discount_cents).toBe(0);
+    expect(row.subtotal_cents).toBe(10000);
+    expect(row.total_cents).toBe(11498);
+  });
+  it('sous-total brut exporté → conservé tel quel', () => {
+    const row = inv({ subtotal_cents: 10000, discount_cents: 1000, tax_cents: 1348, total_cents: 10348 });
+    expect(row.discount_cents).toBe(1000);
+    expect(row.subtotal_cents).toBe(10000);
+    expect(row.subtotal_cents - row.discount_cents + row.tax_cents).toBe(row.total_cents);
+  });
+  it('sous-total déjà net du rabais → remis brut pour que la facture s\'additionne', () => {
+    const row = inv({ subtotal_cents: 9000, discount_cents: 1000, tax_cents: 1348, total_cents: 10348 });
+    expect(row.subtotal_cents).toBe(10000);
+    expect(row.subtotal_cents - row.discount_cents + row.tax_cents).toBe(row.total_cents);
+  });
+  it('total absent → recalculé sous-total − rabais + taxes', () => {
+    const row = inv({ subtotal_cents: 10000, discount_cents: 1000, tax_cents: 1348 });
+    expect(row.total_cents).toBe(10348);
+  });
+  it('rabais négatif → 0', () => {
+    const row = inv({ subtotal_cents: 10000, discount_cents: -500, tax_cents: 0, total_cents: 10000 });
+    expect(row.discount_cents).toBe(0);
+  });
+});
+
+describe('rattachement client avec repli — id/nom, puis courriel, puis nom complet', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'org-1' }, createdBy: 'u',
+    clientIdByRef: new Map([['j-102', 'c-id'], ['marc@ex.com', 'c-mail'], ['marc tremblay', 'c-name']]),
+    propertyIdByRef: new Map(), jobIdByRef: new Map(),
+  } as any;
+  const quote = (relations: Record<string, string>) => buildEntityRow('quote', {
+    id: 'q', row_number: 1, entity_type: 'quote', external_id: null, status: 'ready',
+    normalized: { quote_number: 'Q-9', total_cents: 100 }, relations,
+  } as any, ctx) as any;
+
+  it('courriel seul → client trouvé', () => {
+    expect(quote({ client_email_ref: 'Marc@Ex.com' }).row.client_id).toBe('c-mail');
+  });
+  it('nom complet seul → client trouvé', () => {
+    expect(quote({ client_name_ref: 'Marc Tremblay' }).row.client_id).toBe('c-name');
+  });
+  it('identifiant prioritaire sur courriel et nom', () => {
+    expect(quote({ client_ref: 'J-102', client_email_ref: 'marc@ex.com', client_name_ref: 'Marc Tremblay' }).row.client_id).toBe('c-id');
+  });
+  it('identifiant inconnu → repli sur le courriel', () => {
+    expect(quote({ client_ref: 'J-999', client_email_ref: 'marc@ex.com' }).row.client_id).toBe('c-mail');
+  });
+  it('aucune clé connue → orphelin', () => {
+    expect(quote({ client_email_ref: 'nobody@ex.com' }).ok).toBe(false);
+  });
+  it('job : client_name affiché prend le repli', () => {
+    const res = buildEntityRow('job', {
+      id: 'j', row_number: 1, entity_type: 'job', external_id: null, status: 'ready',
+      normalized: { job_number: '5', title: 'T' }, relations: { client_email_ref: 'marc@ex.com' },
+    } as any, ctx) as any;
+    expect(res.row.client_id).toBe('c-mail');
+    expect(res.row.client_name).toBe('marc@ex.com');
+  });
+});
+
+describe('rattachement client par téléphone (repli final)', async () => {
+  const { buildEntityRow, refKeysOf } = await import('../../server/lib/migration/importer');
+  it('les clés d\'un client incluent ses 10 derniers chiffres de téléphone', () => {
+    const keys = refKeysOf('client', {
+      id: 'c', row_number: 1, entity_type: 'client', external_id: null, status: 'ready',
+      normalized: { first_name: 'Marc', last_name: 'Tremblay', phone: '(438) 340-0627' }, relations: {},
+    } as any);
+    expect(keys).toContain('tel:4383400627');
+  });
+  it('facture avec téléphone seul → client trouvé, formats différents', () => {
+    const ctx = {
+      migration: { org_id: 'org-1' }, createdBy: 'u',
+      clientIdByRef: new Map([['tel:4383400627', 'c-tel']]), propertyIdByRef: new Map(), jobIdByRef: new Map(),
+    } as any;
+    const inv = buildEntityRow('invoice', {
+      id: 'i', row_number: 1, entity_type: 'invoice', external_id: null, status: 'ready',
+      normalized: { invoice_number: '1', total_cents: 100 }, relations: { client_phone_ref: '+1 438-340-0627' },
+    } as any, ctx) as any;
+    expect(inv.row.client_id).toBe('c-tel');
   });
 });

@@ -1,0 +1,33 @@
+{
+  "preset_key": "deposit_received",
+  "trigger_event": "invoice.paid",
+  "delay_seconds": 0,
+  "planifie": [],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Dépôt bien reçu — merci Marie! Votre place est réservée. — Plomberie Tremblay inc.",
+      "moment": "immediat"
+    },
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Dépôt reçu, merci!",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci Marie!</h2><p>Votre dépôt a bien été reçu et votre place est réservée à l'horaire.</p><p>On vous recontacte avec les détails du rendez-vous.</p><p>À bientôt,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "immediat"
+    },
+    {
+      "canal": "notification",
+      "body": "Dépôt reçu — Marie Tremblay\nLe dépôt de la facture INV-000042 est confirmé. La job peut être planifiée.",
+      "moment": "immediat"
+    },
+    {
+      "canal": "activite",
+      "body": "deposit_confirmed",
+      "moment": "immediat"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

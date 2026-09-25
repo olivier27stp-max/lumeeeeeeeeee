@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { colonnesChampsCsv } from './champsPersoApi';
 import { Lead } from '../types';
 import Papa from 'papaparse';
 import { STAGE_LABEL_MAP, STAGE_DB_MAP, ALL_STAGE_SLUGS, type StageSlug } from './pipelineApi';
@@ -394,3 +395,4 @@ export async function convertLeadToJob(
   if (!response.ok) throw new Error(payload?.error || `Failed to convert lead (${response.status}).`);
   return payload;
 }
+

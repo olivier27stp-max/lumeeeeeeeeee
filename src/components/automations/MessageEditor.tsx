@@ -12,7 +12,7 @@ import { Mail, MessageSquare, Loader2, Check, Eye, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { updateRuleMessage } from '../../lib/automationRulesApi';
-import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
+import { htmlVersTexte, texteVersHtml, remplacerVariables, variablesInconnues, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
 import EmailPreviewEditor from './EmailPreviewEditor';
 
 interface Props {
@@ -47,6 +47,9 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
   const [enregistrement, setEnregistrement] = useState(false);
   const [enregistre, setEnregistre] = useState(false);
   const modifie = texte !== body;
+
+  /** Variables citées que le serveur ne sait pas remplir — elles partiraient vides. */
+  const inconnues = useMemo(() => variablesInconnues(texte), [texte]);
 
   /** Lignes du courriel, variables remplacées — pour l'aperçu compact. */
   const lignesApercu = useMemo(
@@ -149,6 +152,18 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
           </span>
         )}
       </p>
+
+      {/* Une variable que le serveur ne connaît pas est remplacée par du VIDE
+          (`vars[key] ?? ''`) : « Bonjour [prenom], » part en « Bonjour , ».
+          L'aperçu ci-dessous le montre, mais sans nommer le coupable — on le
+          nomme ici, sinon l'utilisateur voit un texte bancal sans comprendre. */}
+      {inconnues.length > 0 && (
+        <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
+          {fr
+            ? `Variable inconnue : ${inconnues.map((v) => `[${v}]`).join(', ')} — sera vide dans le message envoyé.`
+            : `Unknown variable: ${inconnues.map((v) => `[${v}]`).join(', ')} — will be empty in the sent message.`}
+        </p>
+      )}
 
       <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
         <Eye size={10} className="text-text-tertiary" />

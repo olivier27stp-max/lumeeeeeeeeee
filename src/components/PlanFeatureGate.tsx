@@ -22,17 +22,37 @@ interface PlanFeatureGateProps {
 export default function PlanFeatureGate({ flag, fallback, children }: PlanFeatureGateProps) {
   const { language } = useTranslation();
   const fr = language === 'fr';
-  const { hasFeature, loading, currentPlan, requiredPlan } = usePlanFeature(flag);
+  const { hasFeature, loading, currentPlan, requiredPlan, platformBlocked } = usePlanFeature(flag);
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && !hasFeature) {
+    if (!loading && !hasFeature && !platformBlocked) {
       setModalOpen(true);
     }
-  }, [loading, hasFeature]);
+  }, [loading, hasFeature, platformBlocked]);
 
   if (loading) return null;
   if (hasFeature) return <>{children}</>;
+
+  // Bloqué par la plateforme (Creator Space) : proposer un forfait supérieur
+  // serait trompeur — aucun forfait ne lèvera ce blocage.
+  if (platformBlocked) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] p-8">
+        <div className="text-center max-w-md">
+          <div className="w-14 h-14 rounded-full bg-surface-secondary mx-auto mb-4 flex items-center justify-center">
+            <span className="text-2xl">🔒</span>
+          </div>
+          <p className="text-sm font-semibold text-text-primary">{fr ? 'Fonctionnalité désactivée' : 'Feature disabled'}</p>
+          <p className="text-xs text-text-secondary mt-1">
+            {fr
+              ? 'Cette fonctionnalité est désactivée pour votre espace de travail. Contactez le support Lume pour en savoir plus.'
+              : 'This feature is disabled for your workspace. Contact Lume support to learn more.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

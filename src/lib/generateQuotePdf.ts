@@ -32,7 +32,11 @@ function statusLabel(status: string): string {
   return map[status] || status;
 }
 
-export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo | null): void {
+export function downloadQuotePdf(
+  detail: QuoteDetail, company?: PdfCompanyInfo | null,
+  /** Champs personnalisés cochés « afficher sur le document ». */
+  champsPerso?: Array<{ label: string; valeur: string }> | null,
+): void {
   const { quote, client, lead, line_items } = detail;
   const currency = quote.currency || 'CAD';
   const fmt = (cents: number) => formatQuoteMoney(cents, currency);
@@ -342,6 +346,31 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
     doc.text(L('Due upon acceptance', 'Dû à l\'acceptation'), labelsX + 4, y + 14);
 
     y += 36;
+  }
+
+  // ── CHAMPS PERSONNALISÉS (option « afficher sur le document ») ──
+  if (champsPerso && champsPerso.length > 0) {
+    y += 10;
+    if (y > pageH - 80) {
+      doc.addPage();
+      y = 50;
+    }
+    doc.setDrawColor(238, 238, 238);
+    doc.line(marginL, y - 6, pageW - marginR, y - 6);
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...lightGray);
+    doc.text(L('DETAILS', 'INFORMATIONS'), marginL, y);
+    y += 12;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(85, 85, 85);
+    for (const c of champsPerso) {
+      const lignes = doc.splitTextToSize(`${c.label} : ${c.valeur}`, contentW);
+      doc.text(lignes, marginL, y);
+      y += lignes.length * 11;
+    }
   }
 
   // ── NOTES ──

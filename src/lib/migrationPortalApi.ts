@@ -27,10 +27,14 @@ async function portalHeaders(token: string): Promise<Record<string, string>> {
   };
 }
 
+// `cache: 'no-store'` sur chaque appel : Chrome considère une réponse 410 Gone sans
+// Cache-Control comme fraîche pour toujours. Le jeton voyage dans un en-tête, donc
+// GET /session a la même URL pour tous les liens — un 410 « expired » mis en
+// cache était resservi à chaque NOUVEAU lien sans requête réseau (2026-09-19).
 async function portalFetch<T>(token: string, path: string, init?: RequestInit): Promise<T> {
   const headers = await portalHeaders(token);
   if (!headers.Authorization) throw new PortalError('Connexion requise.', 'auth_required', 401);
-  const res = await fetch(`${BASE}/migration-portal${path}`, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } });
+  const res = await fetch(`${BASE}/migration-portal${path}`, { cache: 'no-store', ...init, headers: { ...headers, ...(init?.headers ?? {}) } });
   let body: any = null;
   try {
     body = await res.json();
@@ -45,6 +49,8 @@ async function portalFetch<T>(token: string, path: string, init?: RequestInit): 
 
 export interface PortalFile {
   id: string;
+  /** zone du formulaire où le client a déposé le fichier (fait foi sur la détection) */
+  category_declared?: string | null;
   original_name: string;
   mime_type: string;
   size_bytes: number;
@@ -89,12 +95,39 @@ export function listPortalFiles(token: string): Promise<PortalFile[]> {
   return portalFetch(token, '/files');
 }
 
-export async function uploadPortalFile(token: string, file: File): Promise<PortalFile> {
+export interface PortalFileSummary {
+  entity: string | null;
+  rows: number;
+  unique: number;
+  internal_duplicates: number;
+  invalid: number;
+  invalid_reasons: Array<{ reason: string; count: number }>;
+  needs_review: number;
+  required_missing: string[];
+  identifiers_ok: boolean;
+  identifier_labels: string[];
+}
+
+export function getPortalFileSummary(token: string, fileId: string): Promise<PortalFileSummary> {
+  return portalFetch(token, `/files/${fileId}/summary`);
+}
+
+export function setPortalFileCategory(token: string, fileId: string, category: string): Promise<{ ok: boolean; category_declared: string }> {
+  return portalFetch(token, `/files/${fileId}/category`, { method: 'POST', body: JSON.stringify({ category }) });
+}
+
+export function setPortalCategories(token: string, categories: string[]): Promise<{ ok: boolean; categories: string[] }> {
+  return portalFetch(token, '/categories', { method: 'PATCH', body: JSON.stringify({ categories }) });
+}
+
+export async function uploadPortalFile(token: string, file: File, category?: string | null): Promise<PortalFile> {
   const headers = await portalHeaders(token);
   if (!headers.Authorization) throw new PortalError('Connexion requise.', 'auth_required', 401);
   delete (headers as Record<string, string>)['Content-Type'];
-  const res = await fetch(`${BASE}/migration-portal/files?name=${encodeURIComponent(file.name)}`, {
+  const qs = `name=${encodeURIComponent(file.name)}${category ? `&category=${encodeURIComponent(category)}` : ''}`;
+  const res = await fetch(`${BASE}/migration-portal/files?${qs}`, {
     method: 'POST',
+    cache: 'no-store',
     headers: { ...headers, 'Content-Type': file.type || 'application/octet-stream' },
     body: file,
   });
@@ -199,7 +232,7 @@ export function getPortalPreviewRows(token: string): Promise<{ by_entity: Record
 export async function downloadPortalRejectsCsv(token: string): Promise<string> {
   const headers = await portalHeaders(token);
   if (!headers.Authorization) throw new PortalError('Connexion requise.', 'auth_required', 401);
-  const res = await fetch(`${BASE}/migration-portal/rejects.csv`, { headers });
+  const res = await fetch(`${BASE}/migration-portal/rejects.csv`, { cache: 'no-store', headers });
   if (!res.ok) {
     let body: any = null;
     try { body = await res.json(); } catch { body = null; }

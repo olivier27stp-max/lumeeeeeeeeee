@@ -10,32 +10,38 @@
  * Il est AU COURANT DE TOUT ce qui concerne ce client : le dossier
  * (support/dossier.ts — forfait, réglages, volumes, paiements, migration,
  * demandes passées, actions de Lumi) entre dans le prompt à chaque tour.
- * Il répond à partir (1) de la FAQ, (2) de la doc (search_help), (3) du
- * dossier. Il n'écrit rien dans le compte, sauf démarrer une migration
- * quand le client le demande (start_migration : réversible, auditée) — et
- * TRANSFÈRE à un humain dès que la demande dépasse ce cadre.
+ * Il répond à partir (1) de search_help (la doc, les réponses de la FAQ et
+ * la carte de l'app : boutons exacts de chaque écran), (2) de l'index des
+ * écrans, (3) du dossier. Il n'écrit rien dans le compte, sauf démarrer une
+ * migration quand le client le demande (start_migration : réversible,
+ * auditée) — et TRANSFÈRE à un humain dès que la demande dépasse ce cadre.
  *
  * Coût pour Lume (pas pour l'org) : Sonnet 5, réflexion adaptative à effort
  * bas. La partie stable du prompt est mise en cache (1 h) ; le dossier, qui
- * change par client, vient après.
+ * change par client, vient après. Depuis le 2026-09-17 la carte complète et
+ * les réponses de la FAQ ne sont plus dans le prompt (11 500 → ~3 000
+ * tokens) : à notre volume le cache est presque toujours froid, et c'est la
+ * réécriture du prompt qui coûtait. Le modèle va les chercher par search_help
+ * quand il en a besoin (un « comment faire » = un appel d'outil de plus, sur
+ * un prompt quatre fois plus court).
  */
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
+import { clientAnthropic } from '../lumi/llm';
 import { chercherAide } from '../agent/tools-aide';
 import { ARTICLES } from '../../../src/components/supportArticles';
 import { SYSTEM_PROMPT as CONNAISSANCE_PUBLIQUE } from '../agent/promptVente';
-import { CARTE_APP } from './carte-app';
+import { indexCarteApp } from './carte-app';
 import { coutEnCents } from '../lumi/tarifs';
+import { verifierPlafond, ajouterDepense, compterRefus } from '../lumi/plafond-journalier';
+import { journaliserUsage } from '../lumi/budget';
+import { getServiceClient } from '../supabase';
 import { logger } from '../logger';
 
-export const MODELE_SUPPORT = 'claude-sonnet-5';
+/** Sonnet 5 par défaut ; LUMI_SUPPORT_MODELE permet de mesurer un autre modèle (Haiku) avec scripts/qa/evaluer-support-qualite.mts. */
+export const MODELE_SUPPORT = process.env.LUMI_SUPPORT_MODELE || 'claude-sonnet-5';
 const MAX_ETAPES = 4;
 const MAX_TOKENS = 1024;
 
-let client: Anthropic | null = null;
-function anthropic(): Anthropic {
-  if (!client) client = new Anthropic();
-  return client;
-}
 export function isSupportIAConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   return !!env.ANTHROPIC_API_KEY;
 }
@@ -54,6 +60,16 @@ export interface ContexteSupport {
   dossier?: string | null;
   /** Route de l'app où le client se trouve en écrivant (ex. /jobs/123) : Lumi répond « ici », pas « depuis le menu ». */
   page?: string | null;
+  /** Captures d'écran jointes au message courant (base64), regardées par le modèle. */
+  images?: Array<{ media_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'; data: string }>;
+  /**
+   * L'entreprise à qui imputer la dépense. Absent sur la surface PUBLIQUE :
+   * un visiteur du site n'appartient à aucune org, et il n'y a personne à
+   * facturer — la dépense reste alors hors journal, comme avant.
+   */
+  orgId?: string | null;
+  /** Qui pose la question, quand on le sait. Sert au découpage, jamais à l'identification. */
+  userId?: string | null;
 }
 
 /** Ce que l'assistant peut FAIRE, fourni par la surface (le module ne touche pas à la base lui-même). */
@@ -74,11 +90,12 @@ export interface ReponseSupportIA {
   outils: string[];
 }
 
-function faqTexte(langue: 'fr' | 'en'): string {
-  return ARTICLES.map((a) => `- ${langue === 'fr' ? a.q_fr : a.q_en}\n  ${langue === 'fr' ? a.a_fr : a.a_en}${a.path ? ` (page : ${a.path})` : ''}`).join('\n');
+/** Les SUJETS de la FAQ (les réponses viennent par search_help, qui les indexe). */
+function faqSujets(langue: 'fr' | 'en'): string {
+  return ARTICLES.map((a) => (langue === 'fr' ? a.q_fr : a.q_en)).join(' · ');
 }
 
-/** Partie STABLE du prompt (mise en cache) : identité, règles, FAQ. */
+/** Partie STABLE du prompt (mise en cache) : identité, règles, index des écrans, sujets de la FAQ. */
 function promptStable(langue: 'fr' | 'en', surface: SurfaceSupport, outils: OutilsSupport): string {
   if (surface === 'public') {
     return `${CONNAISSANCE_PUBLIQUE}
@@ -90,13 +107,17 @@ Le widget affiche du TEXTE BRUT : aucun markdown (pas de **gras**, pas de puces,
   }
   return `You are Lumi, the support assistant of Lume CRM, a CRM for small service businesses (plumbers, cleaners, landscapers…) in Québec. You are THE SAME assistant everywhere: in the app's help chat, in the data-migration portal, on the public website — and the same human team is behind you in Slack. The client should never have to repeat themselves.
 
-Answer in ${langue === 'fr' ? 'French (Québec, vouvoiement, plain words)' : 'English (plain words)'}. Be short: 2 to 6 sentences, no headings, no markdown tables. Give the exact path in the app when you explain how to do something (e.g. « Paramètres → Membres »).
+Answer in ${langue === 'fr' ? 'French (Québec, vouvoiement, plain words)' : 'English (plain words)'}. Be short: 2 to 6 sentences, no headings, no markdown tables. Give the exact path in the app when you explain how to do something, with its route in parentheses (e.g. « Paramètres → Membres (/settings/team) ») — the chat turns the route into a link the client can click.
 
 You know this client: their account file (« DOSSIER ») is below. Use it to answer directly what concerns THEIR account — plan, renewal date, whether setup, payments or Google reviews are configured, how many clients/jobs they have, where their data migration stands, what they already asked support, what Lumi (the in-app assistant) did recently. Never guess a fact that is not in the dossier, the FAQ, or a tool result. Never mention or invent another client's data.
 
-You answer from (1) the FAQ below, (2) the APP MAP below (routes and the exact buttons of Lume), (3) what the search_help tool returns, (4) the DOSSIER${outils.statutMigration ? ', (5) get_migration_status' : ''}. Never invent a feature, a price or a setting.
+You answer from (1) what the search_help tool returns — it holds the product documentation, the FAQ answers and the APP MAP (the exact buttons and menus of every screen): call it BEFORE answering any "how do I…" or "where is…" question, with the user's words, (2) the APP MAP index below (which screens exist and their route), (3) the DOSSIER${outils.statutMigration ? ', (4) get_migration_status' : ''}. Never invent a feature, a price, a button or a setting: a path you give must come from search_help or from the index.
 
-HOW-TO QUESTIONS ARE YOURS, NOT THE TEAM'S. A "how do I…" question (delete, edit, archive, find, change, send, set up…) NEVER goes to the team by itself. If the FAQ, the APP MAP or search_help cover it, give the path. If they do not cover it exactly, give the closest path you know from the APP MAP, say in one short clause what you are not sure of, and ask ONE clarifying question if the word is ambiguous (in Lume, « tâches » are to-dos in the Tasks page, « travaux » / « jobs » are the scheduled work). End with: « Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe. » Only if the user then says it did not help, or asks for the team, call transfer_to_human.
+If the client attaches a screenshot, look at it first: say in one short sentence what you see (the screen, the error text if any), then answer from it. When you transfer, put what the screenshot shows in the reason for the team.
+
+Passages titled « Réponse de l'équipe Lume — … » are answers the Lume team gave to other clients and chose to keep: they are the most up-to-date truth (a feature that is coming, a known issue, a workaround). Use them first and say the team confirmed it (« l'équipe a confirmé que … ») — without naming the other client.
+
+HOW-TO QUESTIONS ARE YOURS, NOT THE TEAM'S. A "how do I…" question (delete, edit, archive, find, change, send, set up…) NEVER goes to the team by itself. Call search_help, then give the path it returns. If it does not cover the question exactly, give the closest screen from the APP MAP index, say in one short clause what you are not sure of, and ask ONE clarifying question if the word is ambiguous (in Lume, « tâches » are to-dos in the Tasks page, « travaux » / « jobs » are the scheduled work). When « tâches » comes with a period or a batch (« de la semaine passée », « d'hier », « toutes mes tâches », « de la journée »), the client often means their scheduled jobs: give BOTH paths in two short lines — « Si vous parlez des tâches (à-faire) : … » then « Si vous parlez des jobs planifiées : … » — instead of guessing. End with: « Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe. » Only if the user then says it did not help, or asks for the team, call transfer_to_human.
 ${outils.demarrerMigration ? `
 If the client wants to bring their data from another CRM (Jobber, Housecall Pro, ServiceTitan, GoHighLevel, QuickBooks, spreadsheets…), call start_migration ONCE with the source. It is safe and reversible: it creates the migration in autonomous mode and returns the portal link. Tell the client the ONLY thing they have to do: open the link and drop their export files (CSV/Excel). Everything else (matching columns, duplicates, test import, approval) is done by Lume — they will not be asked questions. If a migration already exists (see DOSSIER), do not start another one: give its status instead.
 ` : ''}
@@ -107,11 +128,10 @@ Call transfer_to_human — after one short sentence telling the user you are pas
 - the user asks the team to DO something in their account for them (import, fix, delete in bulk, reconfigure).
 Do NOT transfer for a how-to question, a question the DOSSIER answers, or a question outside Lume (for those, say kindly that it is outside Lume and stop). A human replies within the delay given below. Never promise anything else on behalf of the team.
 
-APP MAP (routes and exact French labels, verified in the code):
-${CARTE_APP}
+APP MAP index (screens and routes, verified in the code; the exact buttons of each screen come from search_help):
+${indexCarteApp()}
 
-FAQ:
-${faqTexte(langue)}`;
+FAQ topics (search_help returns their answer): ${faqSujets(langue)}`;
 }
 
 /** Partie VARIABLE du prompt : la personne, l'entreprise, le délai, le dossier. */
@@ -129,7 +149,7 @@ function outilsPour(surface: SurfaceSupport, outils: OutilsSupport): Anthropic.M
   const liste: Anthropic.Messages.Tool[] = [
     {
       name: 'search_help',
-      description: 'Searches the Lume product documentation for how-to questions and returns the closest passages with their page. Use it before answering any "how do I…" question that the FAQ does not cover.',
+      description: 'Searches the Lume product documentation, the FAQ answers and the app map (routes, menus and exact buttons of every screen) and returns the closest passages with their page. Call it before answering any "how do I…" or "where is…" question, with the user\'s words.',
       input_schema: { type: 'object', properties: { query: { type: 'string', description: 'The question, in the user\'s words.' } }, required: ['query'] },
     },
   ];
@@ -176,9 +196,13 @@ export async function repondreSupportIA(
   outils: OutilsSupport = {},
 ): Promise<ReponseSupportIA> {
   const surface: SurfaceSupport = contexte.surface ?? 'app';
+  // Les captures du client précèdent son texte dans le dernier message (le modèle les regarde avant de lire).
+  const dernier: Anthropic.Messages.MessageParam = contexte.images?.length
+    ? { role: 'user', content: [...contexte.images.map((i) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: i.media_type, data: i.data } })), { type: 'text' as const, text: message }] }
+    : { role: 'user', content: message };
   const messages: Anthropic.Messages.MessageParam[] = [
     ...historique.slice(-12).map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user', content: message },
+    dernier,
   ];
   const system: Anthropic.Messages.TextBlockParam[] = [
     { type: 'text', text: promptStable(contexte.langue, surface, outils), cache_control: { type: 'ephemeral', ttl: '1h' } },
@@ -193,16 +217,49 @@ export async function repondreSupportIA(
   const appeles: string[] = [];
 
   for (let etape = 0; etape < MAX_ETAPES; etape++) {
-    const reponse = await anthropic().messages.create({
+    // Plafond journalier d'exploitation : on s'arrête net plutôt que de
+    // continuer la boucle d'outils (incident 2026-09-18). Le texte déjà obtenu
+    // est conservé ; sans texte, l'appelant transfère à un humain.
+    if (!verifierPlafond('support').autorise) {
+      compterRefus('support');
+      if (!texte) { transferer = true; motif = 'Plafond de dépense journalier atteint'; }
+      break;
+    }
+    const reponse = await clientAnthropic().messages.create({
       model: MODELE_SUPPORT,
       max_tokens: MAX_TOKENS,
       system,
       tools: definitions,
       messages: [...messages], // copie : le tableau continue d'évoluer pendant la boucle
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'low' },
+      // Réflexion adaptative à effort bas : Claude 4.6+ seulement (Haiku 4.5 répond 400 « adaptive thinking is not supported »).
+      ...(/haiku-4-5|sonnet-4-5|opus-4-5/.test(MODELE_SUPPORT) ? {} : { thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const } }),
     });
-    coutCents += coutEnCents(MODELE_SUPPORT, reponse.usage);
+    const coutAppel = coutEnCents(MODELE_SUPPORT, reponse.usage);
+    coutCents += coutAppel;
+    ajouterDepense('support', coutAppel);
+    // UNE ligne par appel à l'API, pas une par conversation : une boucle
+    // d'outils en fait plusieurs, et c'est justement ce qui coûte.
+    //
+    // `ajouterDepense` ci-dessus n'est qu'un compteur en mémoire, perdu au
+    // redémarrage : sans cette écriture, personne ne savait ce que le support
+    // coûte, ni par client ni au total.
+    //
+    // Fire-and-forget : une panne du journal ne doit JAMAIS empêcher une
+    // réponse au client qui attend.
+    if (contexte.orgId) {
+      void journaliserUsage(getServiceClient(), {
+        orgId: contexte.orgId,
+        userId: contexte.userId ?? null,
+        conversationId: null,
+        model: MODELE_SUPPORT,
+        input_tokens: reponse.usage.input_tokens ?? 0,
+        output_tokens: reponse.usage.output_tokens ?? 0,
+        cache_creation_input_tokens: (reponse.usage as any).cache_creation_input_tokens ?? 0,
+        cache_read_input_tokens: (reponse.usage as any).cache_read_input_tokens ?? 0,
+        cost_cents: coutAppel,
+        source: 'support',
+      }).catch((e: any) => console.error('[support/ia] usage non journalisé :', e?.message || e));
+    }
 
     const blocsTexte = reponse.content.filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text');
     texte = [texte, ...blocsTexte.map((b) => b.text)].filter(Boolean).join('\n').trim();

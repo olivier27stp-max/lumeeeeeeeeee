@@ -2,13 +2,16 @@ import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { getServiceClient } from '../lib/supabase';
-import { twilioClient, twilioAuthToken, Twilio, getTwilioStatusCallbackUrl } from '../lib/config';
+import { twilioClient, twilioAuthToken, twilioAccountSid, Twilio, getTwilioStatusCallbackUrl, getTwilioWebhookBaseUrl } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '../lib/helpers';
 import { validate, messageSendSchema } from '../lib/validation';
 import { logSecurityEvent, sanitizeText, checkAnomalies, extractIP } from '../lib/security';
 import { withDeadLetter } from '../lib/dead-letter';
 import { logger } from '../lib/logger';
+import { estNoteVocale, mediasAudio, transcrireMediaTwilio, messageEchecVocal } from '../lib/sms/note-vocale';
+import { membreParTelephone } from '../lib/sms/identifier-membre';
+import { repondreAuMembre } from '../lib/sms/fil-lumi';
 
 const router = Router();
 
@@ -155,12 +158,8 @@ router.post('/messages/inbound', (req, res) => {
   }
 
   // Validate signature — must use the EXACT URL Twilio called (the one we registered at provisioning time).
-  // PUBLIC_URL is what twilioProvisioning.ts uses when buying the number, so prioritize it.
-  const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL
-    || process.env.PUBLIC_URL
-    || process.env.PUBLIC_BASE_URL
-    || process.env.FRONTEND_URL
-    || resolvePublicBaseUrl(req);
+  // getTwilioWebhookBaseUrl() is also what twilioProvisioning.ts registers when buying a number.
+  const baseUrl = getTwilioWebhookBaseUrl() || resolvePublicBaseUrl(req);
   const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/messages/inbound`;
   const isValid = Twilio.validateRequest(twilioAuthToken, twilioSignature, webhookUrl, req.body || {});
   if (!isValid) {
@@ -177,13 +176,16 @@ router.post('/messages/inbound', (req, res) => {
   }
 
   const { From, Body: rawBody, MessageSid } = req.body || {};
-  if (!From || !rawBody) {
+  // Une note vocale arrive avec un corps VIDE et un fichier audio : la règle
+  // « pas de Body, on jette » les faisait disparaître sans trace.
+  const vocal = estNoteVocale(req.body);
+  if (!From || (!rawBody && !vocal)) {
     console.warn('[SMS Inbound] Missing From or Body');
     return sendTwiml();
   }
 
   // Sanitize inbound SMS content to prevent stored XSS
-  const Body = sanitizeText(rawBody);
+  const Body = sanitizeText(rawBody || '');
 
   // In-memory dedup: reject if we already saw this MessageSid
   if (MessageSid && recentMessageSids.has(MessageSid)) {
@@ -202,7 +204,11 @@ router.post('/messages/inbound', (req, res) => {
   // Must run before saving message so outbound sends are blocked immediately.
   const bodyTrim = (Body || '').trim();
   const stopRegex = /^(stop|arret|arrêt|unsubscribe|cancel|end|quit|désabonner|desabonner)$/i;
-  const startRegex = /^(start|unstop|reprendre|resume|yes|oui)$/i;
+  // « oui » vaut consentement pour un CLIENT. Pour un membre de l'équipe, c'est
+  // la confirmation d'une action proposée par Lumi : la traiter comme un opt-in
+  // lèverait un refus que la personne a peut-être posé exprès.
+  const startRegex = /^(start|unstop|reprendre|resume)$/i;
+  const consentementRegex = /^(yes|oui)$/i;
   if (stopRegex.test(bodyTrim)) {
     (async () => {
       try {
@@ -235,9 +241,24 @@ router.post('/messages/inbound', (req, res) => {
     })();
     return;
   }
-  if (startRegex.test(bodyTrim)) {
+  if (startRegex.test(bodyTrim) || consentementRegex.test(bodyTrim)) {
     (async () => {
       try {
+        if (consentementRegex.test(bodyTrim)) {
+          const To = req.body?.To;
+          const { data: canal } = To ? await serviceClient
+            .from('communication_channels')
+            .select('org_id')
+            .eq('phone_number', normalizeE164(To))
+            .eq('channel_type', 'sms')
+            .eq('status', 'active')
+            .maybeSingle() : { data: null } as any;
+          if (canal?.org_id) {
+            const membre = await membreParTelephone(serviceClient, { telephone: normalizedPhone, orgId: canal.org_id });
+            // C'est l'équipe : Lumi s'en occupe plus bas, pas la LCAP.
+            if (membre) return;
+          }
+        }
         // CASL : un START ne réautorise QUE l'org concernée. Un delete global
         // redonnait le consentement à des entreprises auxquelles la personne
         // n'avait jamais répondu START.
@@ -285,6 +306,31 @@ router.post('/messages/inbound', (req, res) => {
 
   withDeadLetter('sms_inbound', { From, Body: bodyTrim, MessageSid }, async () => {
     try {
+      // ── Note vocale : le corps du message, c'est l'audio ──
+      // Twilio a déjà reçu son accusé de réception (sendTwiml plus haut) :
+      // prendre quelques secondes ici ne provoque aucun réessai de sa part.
+      let texteMessage = bodyTrim;
+      let echecVocal: string | null = null;
+      if (vocal) {
+        const medias = mediasAudio(req.body);
+        const r = await transcrireMediaTwilio(medias[0], {
+          accountSid: twilioAccountSid,
+          authToken: twilioAuthToken,
+          langue: 'fr',
+        });
+        if (r.ok) {
+          texteMessage = r.texte;
+          logger.info('[SMS Inbound] note vocale transcrite', { caracteres: r.texte.length });
+        } else {
+          // On garde une trace du vocal même illisible : sans ça, la
+          // conversation montre un trou et personne ne sait qu'on a été appelé.
+          texteMessage = '[message vocal]';
+          echecVocal = messageEchecVocal(r.raison, 'fr');
+        }
+      }
+      // Tout ce qui suit écrit `Body` : un vocal transcrit s'enregistre et
+      // s'affiche exactement comme un texto écrit.
+      const Body = texteMessage;
       // Build phone variants for flexible matching
       const phoneDigits = normalizedPhone.replace(/\D/g, '');
       const phoneVariants = [normalizedPhone];
@@ -448,6 +494,42 @@ router.post('/messages/inbound', (req, res) => {
 
       // ── From here, we know exactly 1 message was inserted ──
 
+      // ── Lumi par texto ──
+      // Le message vient-il de l'ÉQUIPE ? Alors ce n'est pas un client qui
+      // écrit à l'entreprise : c'est quelqu'un qui parle à son assistant. On
+      // répond avec SES droits. Un échec ici ne casse rien : le message reste
+      // enregistré et visible dans la messagerie, comme avant.
+      let repondaLumi = false;
+      try {
+        const membre = await membreParTelephone(serviceClient, {
+          telephone: normalizedPhone,
+          orgId: effectiveOrgId,
+        });
+        if (membre) {
+          repondaLumi = true;
+          await repondreAuMembre({
+            admin: serviceClient,
+            membre,
+            texte: Body,
+            conversationId: conversation.id,
+            telephone: normalizedPhone,
+          });
+        }
+      } catch (e: any) {
+        console.error('[SMS Inbound] Lumi n’a pas pu répondre:', e?.message || e);
+      }
+
+      // Vocal illisible : on répond, sauf si Lumi vient déjà de le faire. Un
+      // silence se lit comme « il m'a ignoré ».
+      if (echecVocal && !repondaLumi && effectiveOrgId) {
+        try {
+          const from = await getOrgSmsFromNumber(effectiveOrgId);
+          await twilioClient?.messages.create({ to: normalizedPhone, from, body: echecVocal });
+        } catch (e: any) {
+          console.error('[SMS Inbound] réponse « vocal illisible » non envoyée:', e?.message || e);
+        }
+      }
+
       // Update conversation preview text only.
       // NOTE: unread_count, last_message_at and updated_at are already handled atomically
       // by the trg_message_insert trigger on the messages table (see 20260309120000_messaging.sql).
@@ -512,14 +594,10 @@ router.post('/messages/status', async (req, res) => {
     }
     // Meme ordre que /inbound : la signature se valide contre l'URL EXACTE que
     // Twilio a appelee, c.-a-d. celle enregistree a l'achat du numero — et
-    // twilioProvisioning.ts enregistre PUBLIC_URL. L'omettre ici faisait
+    // twilioProvisioning.ts enregistre getTwilioWebhookBaseUrl(). L'omettre ici faisait
     // echouer toutes les signatures, donc aucun accuse de reception n'etait
     // enregistre et les messages restaient bloques a "sent".
-    const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL
-      || process.env.PUBLIC_URL
-      || process.env.PUBLIC_BASE_URL
-      || process.env.FRONTEND_URL
-      || resolvePublicBaseUrl(req);
+    const baseUrl = getTwilioWebhookBaseUrl() || resolvePublicBaseUrl(req);
     const isValid = Twilio.validateRequest(twilioAuthToken, sig, `${baseUrl.replace(/\/$/, '')}/api/messages/status`, req.body || {});
     if (!isValid) {
       logSecurityEvent({
@@ -578,7 +656,7 @@ router.get('/messages/twilio-diagnostic', async (req, res) => {
 
     const checks: Array<{ name: string; ok: boolean; detail: string }> = [];
 
-    const publicUrl = (process.env.PUBLIC_URL || process.env.TWILIO_WEBHOOK_BASE_URL || '').trim().replace(/\/$/, '');
+    const publicUrl = getTwilioWebhookBaseUrl();
     checks.push({
       name: 'PUBLIC_URL set',
       ok: !!publicUrl && /^https?:\/\//.test(publicUrl) && !publicUrl.includes('localhost'),

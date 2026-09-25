@@ -23,6 +23,9 @@ import crypto from 'crypto';
 import { getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { sendEmail, isMailerConfigured, adresseInjoignable } from '../lib/mailer';
+import { getCompanySettings, senderForOrg, marqueDepuis, langueEntreprise } from './emails';
+import { rendreCourrielClient, dateLisible, MOTS } from '../lib/courriels/gabarit';
+import { texteDuCourriel } from '../lib/courriels/modeles';
 import { logger } from '../lib/logger';
 import { sendSmsIfConfigured, applyTemplate, isSmsOptedOut } from '../lib/notificationHelpers';
 import { twilioClient, twilioPhoneNumber } from '../lib/config';
@@ -65,19 +68,68 @@ interface ScheduleEntry {
   template_id?: string | null;
 }
 
-const DEFAULT_EMAIL_SUBJECT = 'Payment reminder — invoice {invoice_number}';
-const DEFAULT_EMAIL_BODY =
-  'Hello {client_name},\n\n' +
-  'This is a friendly reminder that invoice {invoice_number} for {amount_due} ' +
-  'was due on {due_date}.\n\n' +
-  'You can pay securely here: {pay_url}\n\n' +
-  'Thank you,\n{company_name}';
-const DEFAULT_SMS_BODY =
-  'Reminder: invoice {invoice_number} ({amount_due}) was due {due_date}. Pay: {pay_url}';
+/* Textes par défaut du rappel, dans la langue de l'entreprise.
+   Ils étaient en anglais en dur : une entreprise québécoise qui n'avait pas
+   écrit son propre texte relançait ses clients en anglais. Le reste du courriel
+   (titre, bouton, montant) suivait déjà `company_settings.default_language`.
 
-function formatMoney(cents: number, currency = 'CAD') {
+   Le ton suit les maquettes validées : on n'accuse pas. Un client en retard est
+   presque toujours distrait, et la phrase « si c'est déjà réglé, ce message se
+   croise avec votre paiement » évite l'échange vexé qui suit un rappel sec.
+   L'objet ne répète pas le nom de l'entreprise : l'expéditeur l'affiche déjà,
+   et la place gagnée sert à faire tenir le montant avant la coupure. */
+const DEFAUTS = {
+  fr: {
+    sujet: 'Facture {invoice_number} — il reste {amount_due}',
+    corps:
+      'Bonjour {client_name},\n\n' +
+      /* Une phrase d'un seul tenant, pas trois morceaux concaténés : le
+         catalogue doit pouvoir la citer TELLE QUELLE pour pré-remplir
+         l'éditeur (tests/courriels/catalogue-courriels.test.ts vérifie la
+         correspondance au mot près). Coupée en trois, elle obligeait à montrer
+         un fragment illisible au propriétaire. */
+      'Un petit rappel, sans plus : la facture {invoice_number} de {amount_due} était due le {due_date}. Si le paiement est déjà parti, ce message le croise — merci !\n\n' +
+      'Vous pouvez la régler ici : {pay_url}\n\n' +
+      'Un imprévu ? Répondez à ce courriel, on peut étaler le paiement.\n\n' +
+      'Merci,\n{company_name}',
+    sms: 'Rappel : facture {invoice_number} ({amount_due}), due le {due_date}. Régler : {pay_url}',
+  },
+  en: {
+    sujet: 'Invoice {invoice_number} — {amount_due} outstanding',
+    corps:
+      'Hello {client_name},\n\n' +
+      'A gentle reminder: invoice {invoice_number} for {amount_due} was due on {due_date}. If your payment is already on its way, this message crossed it — thank you!\n\n' +
+      'You can pay here: {pay_url}\n\n' +
+      'Something came up? Reply to this email — we can spread the payment.\n\n' +
+      'Thank you,\n{company_name}',
+    sms: 'Reminder: invoice {invoice_number} ({amount_due}) was due {due_date}. Pay: {pay_url}',
+  },
+} as const;
+
+/**
+ * Retire les lignes dont le lien a disparu.
+ *
+ * Quand Stripe Connect n'est pas configuré, `pay_url` est vide : sans ce
+ * nettoyage le client lirait « Vous pouvez la régler ici : » suivi de rien,
+ * et le SMS « Régler : ». La ligne n'a plus de raison d'être.
+ */
+export function nettoyerLiensMorts(texte: string): string {
+  return texte
+    .split('\n')
+    // Une ligne qui finit par « : » après substitution annonçait un lien qui
+    // n'est jamais venu.
+    .filter((ligne) => !/:\s*$/.test(ligne.trimEnd()))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/* Figé sur `en-CA`, il rendait « $1,220.17 » dans un rappel par ailleurs
+   entièrement français — la francisation du fichier avait oublié l'argent.
+   Le même montant repart ensuite dans la carte du gabarit et dans le SMS. */
+function formatMoney(cents: number, currency = 'CAD', langue: 'fr' | 'en' = 'fr') {
   try {
-    return new Intl.NumberFormat('en-CA', { style: 'currency', currency }).format((cents || 0) / 100);
+    return new Intl.NumberFormat(langue === 'fr' ? 'fr-CA' : 'en-CA', { style: 'currency', currency }).format((cents || 0) / 100);
   } catch {
     return `$${((cents || 0) / 100).toFixed(2)}`;
   }
@@ -164,7 +216,9 @@ router.post('/cron/payment-reminders', async (req, res) => {
         .select('company_name, email, phone')
         .eq('org_id', orgId)
         .maybeSingle();
-      const companyName = orgSettings?.company_name || 'Your service provider';
+      // Plus de repli « Your service provider » : une org francophone sans nom
+      // signait son rappel en anglais. Sans nom, on n'en invente pas.
+      const companyName = orgSettings?.company_name || '';
 
       // For each schedule entry, find candidate invoices
       for (const entry of schedule) {
@@ -214,7 +268,12 @@ router.post('/cron/payment-reminders', async (req, res) => {
             const toPhone = (client?.phone || '').trim();
 
             // Build/find pay link (reuses existing pending request when available)
-            let payUrl = `${publicBase}/dashboard`;
+            /* VIDE, pas `/dashboard`. Le repli envoyait le client final vers le
+               tableau de bord du CRM, une page a laquelle il n'a aucun acces.
+               Le bouton etait bien masque, mais la phrase « Vous pouvez la
+               regler ici : {pay_url} » du corps ET le SMS portaient ce lien
+               mort. Vide, `nettoyerLiensMorts` retire la phrase entiere. */
+            let payUrl = '';
             try {
               const pr = await createPaymentRequest({
                 orgId,
@@ -229,12 +288,17 @@ router.post('/cron/payment-reminders', async (req, res) => {
               console.warn('[cron/reminders] payment request create failed:', e?.message);
             }
 
+            const societe = await getCompanySettings(orgId);
+            const langueRappel = langueEntreprise(societe);
             const vars = {
               client_name: clientName,
               company_name: companyName,
               invoice_number: inv.invoice_number || inv.id.slice(0, 8),
-              amount_due: formatMoney(Number(inv.balance_cents || 0), String(inv.currency || 'CAD')),
-              due_date: String(inv.due_date || ''),
+              amount_due: formatMoney(Number(inv.balance_cents || 0), String(inv.currency || 'CAD'), langueRappel),
+              /* Passait la date ISO BRUTE : le client lisait « était due le
+                 2026-04-24 » dans le texte ET dans le SMS, alors que la carte
+                 du même courriel affichait « 24 avril 2026 ». */
+              due_date: dateLisible(inv.due_date, langueRappel),
               pay_url: payUrl,
             };
 
@@ -244,10 +308,50 @@ router.post('/cron/payment-reminders', async (req, res) => {
             // propriétaire a reçu une notification « courriel non livré ».
             const adresseMorte = toEmail ? await adresseInjoignable(orgId, toEmail) : false;
             if (adresseMorte) logger.warn('[reminders] adresse injoignable, relance courriel sautée', { invoiceId: inv.id, email: toEmail });
+
+            /* Les réglages de l'entreprise se lisent UNE fois pour les deux
+               canaux : le courriel et le SMS en ont tous deux besoin, et c'est
+               une requête, pas un cache. Ils portent la langue, dont dépendent
+               désormais les textes par défaut — ils étaient anglais en dur, donc
+               une entreprise québécoise sans texte à elle relançait ses clients
+               en anglais. */
+            const defauts = DEFAUTS[langueRappel];
+
             if ((channel === 'email' || channel === 'both') && toEmail && !adresseMorte && isMailerConfigured()) {
-              const subject = applyTemplate(settings.custom_email_subject || DEFAULT_EMAIL_SUBJECT, vars);
-              const body = applyTemplate(settings.custom_email_body || DEFAULT_EMAIL_BODY, vars);
-              const result = await sendEmail({ to: toEmail, subject, html: bodyToHtml(body), suivi: { orgId, entityType: 'reminder', entityId: inv.id } });
+              /* Trois sources de texte, dans cet ordre :
+                   1. le modèle « invoice_reminder » de la page Modèles ;
+                   2. le texte des réglages de rappel (custom_email_*, historique) ;
+                   3. DEFAUTS[langue].
+                 Le modèle passe en premier : c'est l'écran où une entreprise
+                 écrit désormais ses textes. Les réglages de rappel restent
+                 honorés pour ne rien casser chez celles qui les ont remplis.
+                 Sans ni l'un ni l'autre, le rappel sort mot pour mot comme
+                 aujourd'hui.
+
+                 Quoi qu'il arrive, le montant, le bouton « payer », les numéros
+                 de taxes et le pied restent posés par le gabarit : un rappel ne
+                 peut pas partir sans le moyen de régler la facture. */
+              const modeleOrg = await texteDuCourriel(orgId, 'invoice_reminder', vars, undefined,
+                { invoice: inv.id, client: inv.client_id ?? null });
+              const subject = modeleOrg?.sujet || applyTemplate(settings.custom_email_subject || defauts.sujet, vars);
+              const body = nettoyerLiensMorts(applyTemplate(settings.custom_email_body || defauts.corps, vars));
+              // Le texte du rappel (celui de l'entreprise ou le défaut) dans le gabarit commun, avec le montant en carte et le bouton payer.
+              const html = rendreCourrielClient({
+                langue: langueRappel,
+                marque: marqueDepuis(societe),
+                preheader: `${vars.amount_due} — ${langueRappel === 'fr' ? 'facture' : 'invoice'} ${vars.invoice_number}`,
+                titre: langueRappel === 'fr' ? 'Rappel de paiement' : 'Payment reminder',
+                corpsHtml: modeleOrg?.corpsHtml || bodyToHtml(body),
+                // `vars.due_date` est DÉJÀ lisible : la repasser à dateLisible
+                // la ferait traverser un Date() qui ne sait pas la relire.
+                montant: { libelle: MOTS[langueRappel].montantDu, valeur: vars.amount_due, sous: vars.due_date ? `${MOTS[langueRappel].echeance} : ${vars.due_date}` : null },
+                bouton: payUrl.includes('/pay/') ? { texte: MOTS[langueRappel].payer(vars.amount_due), url: payUrl } : null,
+                note: MOTS[langueRappel].question,
+                // Le texte du rappel porte déjà sa signature (« Merci, {company_name} ») : pas de deuxième.
+                signature: null,
+              });
+              // Envoi de fond : un échec transitoire part dans la file de reprise plutôt que d'être perdu.
+              const result = await sendEmail({ ...(await senderForOrg(orgId, societe)), to: toEmail, subject, html, suivi: { orgId, entityType: 'reminder', entityId: inv.id }, reessayer: true });
               const emailChannel = channel === 'email' ? 'email' : 'both';
               if (channel === 'both') {
                 // For 'both', defer logging until SMS attempted (single row with channel='both').
@@ -290,7 +394,9 @@ router.post('/cron/payment-reminders', async (req, res) => {
               }
             }
             if ((channel === 'sms' || channel === 'both') && toPhone && twilioClient && orgFromNumber) {
-              const smsBody = applyTemplate(settings.custom_sms_body || DEFAULT_SMS_BODY, vars);
+              // Même règle que le courriel : le texte par défaut suit la langue
+              // de l'entreprise, lue une seule fois plus haut.
+              const smsBody = nettoyerLiensMorts(applyTemplate(settings.custom_sms_body || defauts.sms, vars));
               // `sendSmsIfConfigured` ne lève jamais : le try/catch qui entourait
               // cet appel était inatteignable, `smsOk` restait donc toujours à
               // true et un échec Twilio était journalisé comme 'sent'. On lit

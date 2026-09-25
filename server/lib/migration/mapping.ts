@@ -23,6 +23,18 @@ export function normalizeHeader(h: string): string {
 
 // ── Catalogue des champs cibles ──
 
+const ADDRESS_LINE2_DEF: FieldDef = {
+  field: 'address_line2',
+  labelFr: "Complément d'adresse",
+  labelEn: 'Address line 2',
+  types: ['address', 'text'],
+  synonyms: [
+    'street 2', 'street2', 'address 2', 'address2', 'address line 2', 'address line2', 'line 2',
+    'service street 2', 'apt', 'apartment', 'suite', 'unit', 'unit number', 'apt suite',
+    'complement d adresse', 'adresse 2', 'ligne 2', 'appartement', 'app', 'local', 'bureau', 'suite bureau',
+  ],
+};
+
 export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
   // Noms de taxes (tax_configs) : TPS, TVQ, HST… Le taux est un pourcentage
   // (9.975), jamais une fraction — convention de TAX_PRESETS.
@@ -181,6 +193,7 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'adresse', 'rue', 'adresse de facturation', 'adresse postale', 'no civique et rue',
       ],
     },
+    ADDRESS_LINE2_DEF,
     {
       field: 'city',
       labelFr: 'Ville',
@@ -243,6 +256,28 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'statut', 'statut du client', 'etape', 'etat du client', 'type de client', 'customer type',
       ],
     },
+    // Statut d'arrivée : booléens Jobber « Lead (as of …) » / « Archived ».
+    // Un client prospect arrive en 'lead', un client archivé en 'inactive'.
+    {
+      field: 'is_lead',
+      labelFr: 'Prospect (oui/non)',
+      labelEn: 'Is lead (yes/no)',
+      types: ['boolean', 'status', 'text'],
+      synonyms: [
+        'lead', 'is lead', 'lead as of', 'prospect', 'is prospect', 'lead yes no', 'is a lead',
+        'prospect oui non', 'est un prospect', 'est prospect',
+      ],
+    },
+    {
+      field: 'archived',
+      labelFr: 'Archivé (oui/non)',
+      labelEn: 'Archived (yes/no)',
+      types: ['boolean', 'status', 'text'],
+      synonyms: [
+        'archived', 'is archived', 'archive', 'inactive', 'is inactive', 'archived yes no',
+        'archive oui non', 'archivé', 'inactif', 'est archive',
+      ],
+    },
     {
       field: 'external_id',
       labelFr: 'Identifiant externe',
@@ -283,6 +318,7 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'adresse de facturation', 'adresse facturation', 'adresse postale', 'facturer a', 'adresse', 'rue',
       ],
     },
+    ADDRESS_LINE2_DEF,
     {
       field: 'city',
       labelFr: 'Ville',
@@ -324,6 +360,36 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
+      ],
+    },
+    {
       field: 'notes',
       labelFr: 'Notes',
       labelEn: 'Notes',
@@ -345,6 +411,7 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'adresse', 'rue', 'adresse de service', 'adresse de la propriete', 'adresse du site', 'emplacement',
       ],
     },
+    ADDRESS_LINE2_DEF,
     {
       field: 'city',
       labelFr: 'Ville',
@@ -392,6 +459,36 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'customer', 'client', 'customer name', 'client name', 'customer id', 'client id',
         'account', 'parent customer', 'contact', 'contact name',
         'nom du client', 'no client', 'numero de client', 'client associe',
+      ],
+    },
+    {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
       ],
     },
     {
@@ -554,6 +651,36 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
+      ],
+    },
+    {
       field: 'created_date',
       labelFr: 'Date de création',
       labelEn: 'Created date',
@@ -639,6 +766,36 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
+      ],
+    },
+    {
       field: 'property_ref',
       labelFr: 'Propriété associée',
       labelEn: 'Property reference',
@@ -708,6 +865,18 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'end date', 'end', 'completion date', 'completed date', 'finished date', 'close date',
         'date de fin', 'fin', 'date de completion', 'termine le', 'date terminee',
+      ],
+    },
+    {
+      // Plans récurrents : la cadence exportée (« Every 2 weeks », « Monthly ») est conservée telle
+      // quelle dans les notes du job — Lume n'a pas encore de champ de récurrence sur la job.
+      field: 'frequency',
+      labelFr: 'Fréquence (plan récurrent)',
+      labelEn: 'Frequency (recurring plan)',
+      types: ['text'],
+      synonyms: [
+        'frequency', 'schedule', 'repeats', 'repeat', 'recurrence', 'recurring schedule', 'every', 'interval',
+        'frequence', 'fréquence', 'recurrence', 'récurrence', 'cadence', 'periodicite', 'périodicité',
       ],
     },
     {
@@ -819,6 +988,17 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      // Jobber « Visit completed date » : une visite complétée n'est plus « planifiée » dans le calendrier.
+      field: 'completed_date',
+      labelFr: 'Date de complétion',
+      labelEn: 'Completed date',
+      types: ['date', 'datetime', 'text'],
+      synonyms: [
+        'visit completed date', 'completed date', 'completed on', 'done on', 'date completed', 'completion date',
+        'date de completion', 'date de complétion', 'complete le', 'complétée le', 'terminee le', 'terminée le',
+      ],
+    },
+    {
       field: 'assigned_to',
       labelFr: 'Assigné à',
       labelEn: 'Assigned to',
@@ -894,6 +1074,19 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'date de creation', 'cree le', 'creee le', 'date d ajout',
       ],
     },
+    // Date de paiement exportée (« Marked paid date ») : posée sur les factures
+    // soldées seulement — le trigger l'efface tant qu'un solde reste.
+    {
+      field: 'paid_date',
+      labelFr: 'Date de paiement',
+      labelEn: 'Paid date',
+      types: ['date', 'datetime', 'text'],
+      synonyms: [
+        'paid date', 'date paid', 'marked paid date', 'marked paid', 'paid on', 'paid at', 'payment date',
+        'date of payment', 'settled date', 'date de paiement', 'paye le', 'payé le', 'payee le', 'date de reglement',
+        'reglee le', 'réglée le',
+      ],
+    },
     {
       field: 'due_date',
       labelFr: "Date d'échéance",
@@ -935,6 +1128,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'discount',
+      labelFr: 'Rabais',
+      labelEn: 'Discount',
+      types: ['money', 'number', 'text'],
+      synonyms: [
+        'discount', 'discounts', 'discount amount', 'discount total', 'total discount', 'invoice discount',
+        'rabais', 'remise', 'escompte', 'reduction', 'montant du rabais',
+      ],
+    },
+    {
       field: 'paid_amount',
       labelFr: 'Montant payé',
       labelEn: 'Paid amount',
@@ -963,6 +1166,36 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'customer', 'client', 'customer name', 'client name', 'customer id', 'client id', 'contact',
         'bill to', 'nom du client', 'no client', 'numero de client',
+      ],
+    },
+    {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
       ],
     },
     {
@@ -1042,8 +1275,8 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
     },
     {
       field: 'unit_price',
-      labelFr: 'Prix unitaire',
-      labelEn: 'Unit price',
+      labelFr: 'Prix unitaire (avant taxes)',
+      labelEn: 'Unit price (before tax)',
       types: ['money', 'number', 'text'],
       synonyms: [
         'unit price', 'rate', 'price', 'price each', 'each', 'sales price',
@@ -1052,8 +1285,8 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
     },
     {
       field: 'line_total',
-      labelFr: 'Total de la ligne',
-      labelEn: 'Line total',
+      labelFr: 'Total de la ligne (avant taxes)',
+      labelEn: 'Line total (before tax)',
       types: ['money', 'number', 'text'],
       synonyms: [
         'amount', 'total', 'line total', 'line amount', 'extended amount', 'ext amount',
@@ -1134,6 +1367,36 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
+      ],
+    },
+    {
       field: 'reference',
       labelFr: 'Référence',
       labelEn: 'Reference',
@@ -1158,6 +1421,8 @@ export function entityForCategory(cat: MigrationCategory | null): TargetEntity |
     case 'services': return 'service';
     case 'quotes': return 'quote';
     case 'jobs': return 'job';
+    // Plans de service récurrents (export « Recurring jobs ») : des jobs, marqués récurrents au staging.
+    case 'recurring_jobs': return 'job';
     case 'visits': return 'visit';
     case 'invoices': return 'invoice';
     case 'payments': return 'payment';

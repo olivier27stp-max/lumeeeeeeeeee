@@ -110,8 +110,31 @@ router.get('/payroll/current-period', async (req, res) => {
     // Commission heading to this rep for the same window.
     const commission = await getPayrollPreview(sc, auth.orgId, effectiveUserId, period.start, period.end);
 
+    // Mode de paie et taux horaire (fiche Équipe) : un rep payé à l'heure, à
+    // commission ou les deux voit TOUT ce qui s'en vient au même endroit.
+    const [{ data: membre, error: mErr }, aUnPlan] = await Promise.all([
+      sc.from('team_members')
+        .select('id, compensation_mode, hourly_rate_cents, labour_cost_hourly')
+        .eq('org_id', auth.orgId).eq('user_id', effectiveUserId)
+        .neq('status', 'inactive')
+        .limit(1).maybeSingle(),
+      resoudrePlansCommission(sc, auth.orgId),
+    ]);
+    if (mErr) throw new Error(mErr.message);
+    const mode: 'hourly' | 'commission' | 'both' =
+      membre?.compensation_mode === 'commission' || membre?.compensation_mode === 'both' ? membre.compensation_mode : 'hourly';
+    const rateCents = tauxHoraireCents(membre);
+    const pay = {
+      team_member_id: membre?.id ?? null,
+      compensation_mode: mode,
+      hourly_rate_cents: rateCents,
+      gross_cents: Math.round(hours * rateCents),
+      commission_plan_missing: mode !== 'hourly' && !aUnPlan(effectiveUserId),
+    };
+
     res.json({
       period,
+      pay,
       settings: {
         pay_period_type: settings.pay_period_type,
         anchor_date: settings.anchor_date,
@@ -126,6 +149,29 @@ router.get('/payroll/current-period', async (req, res) => {
     return sendSafeError(res, err, 'Failed to load current pay period.', '[payroll]');
   }
 });
+
+// ── Plans de commission : qui en a un ? ─────────────────────
+// Même résolution que le moteur (commission-engine.generateCommissionsForInvoice) :
+// règle assignée au membre (assigned_user_ids), sinon plan par défaut de
+// l'org. Sans l'un ni l'autre, un rep « à commission » ne touche rien, en
+// silence — d'où l'alerte sur la paie et sur la page Commissions.
+async function resoudrePlansCommission(sc: any, orgId: string): Promise<(userId: string) => boolean> {
+  const [{ data: regles, error: rErr }, { data: reglages, error: sErr }] = await Promise.all([
+    sc.from('fs_commission_rules').select('id, assigned_user_ids').eq('org_id', orgId).eq('is_active', true).is('deleted_at', null),
+    sc.from('commission_settings').select('default_rule_id').eq('org_id', orgId).maybeSingle(),
+  ]);
+  if (rErr) throw new Error(rErr.message);
+  if (sErr) throw new Error(sErr.message);
+  const reglesActives = (regles || []) as Array<{ id: string; assigned_user_ids: string[] | null }>;
+  const planParDefaut = !!reglages?.default_rule_id && reglesActives.some((r) => r.id === reglages.default_rule_id);
+  return (userId: string) =>
+    planParDefaut || reglesActives.some((r) => Array.isArray(r.assigned_user_ids) && r.assigned_user_ids.includes(userId));
+}
+
+/** Taux horaire effectif d'un membre (cents) — hourly_rate_cents, repli labour_cost_hourly. */
+function tauxHoraireCents(m: { hourly_rate_cents?: number | null; labour_cost_hourly?: number | null } | null | undefined): number {
+  return Number(m?.hourly_rate_cents) || Math.round(Number(m?.labour_cost_hourly || 0) * 100) || 0;
+}
 
 // ── Shared period computation for summary + export ──────────
 // Builds one row per active team member with a linked user: punched hours,
@@ -148,6 +194,9 @@ type PayrollRow = {
   adjustments_cents: number;
   total_cents: number;
   payment: PayrollPayment | null;
+  /** Mode « commission » ou « horaire + commission » sans plan assigné ni
+   *  plan par défaut : le moteur ne créera JAMAIS de commission pour lui. */
+  commission_plan_missing: boolean;
 };
 
 async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
@@ -157,12 +206,14 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
 
   const { data: members, error: mErr } = await sc
     .from('team_members')
-    .select('user_id, first_name, last_name, role, status, hourly_rate_cents, labour_cost_hourly')
+    .select('user_id, first_name, last_name, role, status, hourly_rate_cents, labour_cost_hourly, compensation_mode')
     .eq('org_id', orgId)
     .not('user_id', 'is', null);
   if (mErr) throw new Error(mErr.message);
   const active = (members || []).filter((m: any) => m.status !== 'inactive');
   const userIds = active.map((m: any) => m.user_id);
+
+  const aUnPlan = await resoudrePlansCommission(sc, orgId);
 
   // Une lecture en échec renverrait `data: null` sans lever : les heures et les
   // commissions tomberaient à zéro et la paie serait sous-évaluée en silence.
@@ -218,9 +269,7 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
   const rows: PayrollRow[] = active.map((m: any) => {
     const myEntries = (entries || []).filter((e: any) => e.employee_id === m.user_id);
     const hours = sumEntryHours(myEntries);
-    const rateCents = Number(m.hourly_rate_cents)
-      || Math.round(Number(m.labour_cost_hourly || 0) * 100)
-      || 0;
+    const rateCents = tauxHoraireCents(m);
     const grossCents = Math.round(hours * rateCents);
     const myComms = (commissions || []).filter((c: any) => c.user_id === m.user_id && c.status !== 'reversed');
     const commissionCents = Math.round(myComms.reduce((s: number, c: any) => s + Number(c.amount || 0), 0) * 100);
@@ -240,6 +289,7 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
       adjustments_cents: adjustmentsCents,
       total_cents: grossCents + commissionCents + adjustmentsCents,
       payment,
+      commission_plan_missing: (m.compensation_mode === 'commission' || m.compensation_mode === 'both') && !aUnPlan(m.user_id),
     };
   });
 

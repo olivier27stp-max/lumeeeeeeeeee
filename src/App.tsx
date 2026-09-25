@@ -68,6 +68,7 @@ const ProfileSettings = React.lazy(() => import('./pages/settings/ProfileSetting
 const BillingSettings = React.lazy(() => import('./pages/settings/BillingSettings'));
 const LocationSettings = React.lazy(() => import('./pages/settings/LocationSettings'));
 const OfficesSettings = React.lazy(() => import('./pages/settings/OfficesSettings'));
+const ChampsPersoSettings = React.lazy(() => import('./pages/settings/ChampsPersoSettings'));
 const OfficeNew = React.lazy(() => import('./pages/OfficeNew'));
 const ArchivesPanel = React.lazy(() => import('./components/ArchivesPanel'));
 const SupportPage = React.lazy(() => import('./components/SupportPage'));
@@ -99,6 +100,9 @@ const InvoiceEdit = React.lazy(() => import('./pages/InvoiceEdit'));
 const Finances = React.lazy(() => import('./pages/Finances'));
 const PaymentSettings = React.lazy(() => import('./pages/PaymentSettings'));
 const Automations = React.lazy(() => import('./pages/Automations'));
+const AutomationBuilderPage = React.lazy(() => import('./pages/AutomationBuilderPage'));
+const AutomationsApercu = React.lazy(() => import('./pages/AutomationsApercu'));
+const AutomationsReglages = React.lazy(() => import('./pages/AutomationsReglages'));
 const CompanySettings = React.lazy(() => import('./pages/CompanySettings'));
 const ManageTeam = React.lazy(() => import('./pages/ManageTeam'));
 const TeamMemberDetails = React.lazy(() => import('./pages/TeamMemberDetails'));
@@ -116,6 +120,7 @@ const ProductsServices = React.lazy(() => import('./pages/ProductsServices'));
 const AppMarketplace = React.lazy(() => import('./pages/AppMarketplace'));
 const SettingsMessaging = React.lazy(() => import('./pages/SettingsMessaging'));
 const SettingsReviews = React.lazy(() => import('./pages/SettingsReviews'));
+const EmailTemplatesSettings = React.lazy(() => import('./pages/settings/EmailTemplatesSettings'));
 const RequestFormSettings = React.lazy(() => import('./pages/RequestFormSettings'));
 const QuotePresets = React.lazy(() => import('./pages/QuotePresets'));
 // Pages porteuses de CARTES (leaflet + mapbox-gl, ~1,9 Mo). Importees
@@ -131,9 +136,12 @@ const Timesheets = React.lazy(() => import('./pages/Timesheets'));
 const Statistiques = React.lazy(() => import('./pages/Statistiques'));
 const QuoteMeasure = React.lazy(() => import('./pages/QuoteMeasure'));
 const QuoteNew = React.lazy(() => import('./pages/QuoteNew'));
-// Console interne des migrations assistées — la page se gate elle-même via
-// GET /api/migration-admin/check (PLATFORM_OWNER_ID) et redirige sinon.
-const AdminMigrations = React.lazy(() => import('./pages/AdminMigrations'));
+// La console des migrations vit dans le Creator Space (onglet Migrations) ;
+// /admin/migrations reste comme redirection (liens des notifications, favoris).
+function AdminMigrationsRedirect() {
+  const location = useLocation();
+  return <Navigate to={{ pathname: '/creator-space/migrations', hash: location.hash }} replace />;
+}
 // Creator Space — espace interne plateforme (platformAdminIds), la page se
 // gate elle-même via GET /api/creator-space/check et redirige sinon.
 const CreatorSpace = React.lazy(() => import('./pages/creator-space/CreatorSpace'));
@@ -174,6 +182,7 @@ const RequestDetails = React.lazy(() => import('./pages/RequestDetails'));
 const Leaderboard = React.lazy(() => import('./pages/Leaderboard'));
 const Commissions = React.lazy(() => import('./pages/Commissions'));
 const D2DPipeline = React.lazy(() => import('./pages/D2DPipeline'));
+const Pipeline = React.lazy(() => import('./pages/Pipeline'));
 const D2DReports = React.lazy(() => import('./pages/D2DReports'));
 // D2DSettingsGeneral (mock non branché) puis D2DSettingsTeams (config terrain)
 // retirées sur demande de Rafba — les équipes restent assignables à
@@ -830,7 +839,13 @@ function CreatorSpaceBar() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const fetching = useIsFetching({ queryKey: ['creator-space'] }) > 0;
+  // Les requêtes du Creator Space ('creator-space', …) et de l'onglet
+  // Migrations ('migration-admin-list', 'migration-admin-detail', …).
+  const isCreatorQuery = (q: { queryKey: readonly unknown[] }) => {
+    const k = String(q.queryKey[0] ?? '');
+    return k.startsWith('creator-space') || k.startsWith('migration-admin');
+  };
+  const fetching = useIsFetching({ predicate: isCreatorQuery }) > 0;
   const inSpace = location.pathname.startsWith('/creator-space');
 
   // Close : ferme la vue interne ouverte (panneau ?org=), sinon revient à
@@ -887,7 +902,7 @@ function CreatorSpaceBar() {
           </button>
           <button
             type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ['creator-space'] })}
+            onClick={() => queryClient.invalidateQueries({ predicate: isCreatorQuery })}
             className={actionCls}
             title="Actualiser les données"
             disabled={fetching}
@@ -962,7 +977,7 @@ function AuthenticatedApp({
   // Current plan — used to hide locked features from sidebar.
   // `planLoading` est indispensable : sans lui, on ne peut pas distinguer
   // « plan pas encore charge » de « plan sans cette feature ».
-  const { currentPlan, loading: planLoading } = useCurrentPlan();
+  const { currentPlan, loading: planLoading, featureOverrides } = useCurrentPlan();
 
   // Sidebar counters: pending quotes + overdue invoices
   const [pendingQuotes, setPendingQuotes] = useState(0);
@@ -1047,6 +1062,9 @@ function AuthenticatedApp({
     // (le PlanFeatureGate de la route reverifie de toute facon), et seul un
     // plan REELLEMENT charge peut masquer une entree.
     if (item.requiredPlanFlag) {
+      // Override plateforme (Creator Space) : prime sur le forfait.
+      const override = featureOverrides[item.requiredPlanFlag];
+      if (override !== undefined) return override;
       if (planLoading || !currentPlan) return true;
       return Boolean((currentPlan as any)[item.requiredPlanFlag]);
     }
@@ -1065,6 +1083,7 @@ function AuthenticatedApp({
       items: [
         { id: 'clients', label: t.nav.clients, icon: Users, path: '/clients', tileColor: 'blue', requiredPermission: 'clients.read' },
         { id: 'requests', label: t.nav.requests, icon: Inbox, path: '/requests', tileColor: 'blue', requiredPermission: 'clients.read' },
+        { id: 'pipeline-ventes', label: language === 'fr' ? 'Pipeline' : 'Pipeline', icon: GitBranch, path: '/ventes', tileColor: 'blue', requiredPermission: 'leads.read', requiredPlanFlag: 'includes_pipeline' },
         { id: 'quotes', label: language === 'fr' ? 'Devis' : 'Quotes', icon: ClipboardList, path: '/quotes', tileColor: 'blue', requiredPermission: 'quotes.read' },
         { id: 'finances', label: t.nav.finances, icon: Wallet, path: '/finances', tileColor: 'blue', requiredPermission: 'financial.view_invoices' },
         { id: 'jobs', label: t.nav.jobs, icon: Briefcase, path: '/jobs', tileColor: 'blue', requiredPermission: 'jobs.read' },
@@ -1091,7 +1110,11 @@ function AuthenticatedApp({
       items: (venteModule.isEnabled || venteModule.loading || venteModule.indetermine)
         ? [
             { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
-            { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
+            // L'ancien board D2D n'est plus proposé dans le menu : le pipeline de
+            // ventes (/ventes) le remplace. La route /pipeline reste servie —
+            // 19 fichiers lisent encore pipeline_deals (Tableau de bord, Clients,
+            // Devis, Classement, Commissions), et un lien déjà partagé doit
+            // continuer de répondre.
             { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports', requiredPlanFlag: 'includes_d2d' },
             { id: 'commissions', label: t.nav.commissions, icon: Wallet, path: '/commissions', tileColor: 'blue', requiredPermission: 'commissions.read', requiredPlanFlag: 'includes_d2d' },
           ]
@@ -1521,7 +1544,7 @@ function AuthenticatedApp({
                         Pour la remettre : restaurer l'element d'origine (MrLumePage est
                         toujours importe) et l'entree de menu 'ai-helper'. */}
                     <Route path="/lume-agent" element={<Navigate to="/day" replace />} />
-                    {/* Lumi — l'assistant IA dans l'app (Claude, outils Lume). Plans Scale et Autopilot. */}
+                    {/* Lumi — l'assistant IA dans l'app (Claude, outils Lume). Forfait Autopilot uniquement (2026-09-19). */}
                     <Route path="/lumi" element={<Gated permission="external_agent.use"><PlanFeatureGate flag="includes_ai"><PageWrapper><LumiPage /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/dashboard" element={<Navigate to="/day" replace />} />
                     <Route path="/day" element={<Gated permission="settings.read"><PageWrapper><CrmWorkspace /></PageWrapper></Gated>} />
@@ -1568,6 +1591,7 @@ function AuthenticatedApp({
                       <Route path="company" element={<Gated permission="settings.update"><CompanySettings /></Gated>} />
                       {/* Bureaux de la compagnie (liste résolue côté serveur, owner/admin) */}
                       <Route path="offices" element={<Gated permission="settings.read"><OfficesSettings /></Gated>} />
+                      <Route path="custom-fields" element={<Gated permission="settings.update"><ChampsPersoSettings /></Gated>} />
                       <Route path="billing" element={<Gated permission="settings.read"><BillingSettings /></Gated>} />
                       <Route path="products" element={<Gated permission="settings.update"><ProductsServices /></Gated>} />
                       <Route path="taxes" element={<Gated permission="settings.update"><TaxSettings /></Gated>} />
@@ -1576,6 +1600,7 @@ function AuthenticatedApp({
                       <Route path="reminders" element={<Navigate to="/settings/payments" replace />} />
                       <Route path="messaging" element={<Gated permission="settings.read"><SettingsMessaging /></Gated>} />
                       <Route path="reviews" element={<Gated permission="settings.update"><SettingsReviews /></Gated>} />
+                      <Route path="email-templates" element={<Gated permission="settings.update"><EmailTemplatesSettings /></Gated>} />
                       <Route path="request-form" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_request_forms"><RequestFormSettings /></PlanFeatureGate></Gated>} />
                       <Route path="team" element={<Gated permission="team.read"><ManageTeam /></Gated>} />
                       <Route path="roles" element={<Gated permission="users.update_role"><SettingsRoles /></Gated>} />
@@ -1615,6 +1640,14 @@ function AuthenticatedApp({
                     <Route path="/courses/new" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_courses"><CourseBuilder /></PlanFeatureGate></Gated>} />
                     <Route path="/courses/:id" element={<Gated permission="settings.read"><PlanFeatureGate flag="includes_courses"><CourseView /></PlanFeatureGate></Gated>} />
                     <Route path="/courses/:id/edit" element={<Gated permission="settings.update"><CourseBuilder /></Gated>} />
+                    {/* AVANT /automations/:id : sans ça, « apercu » et « reglages »
+                        seraient pris pour des identifiants d'automatisation. */}
+                    <Route path="/automations/apercu" element={<Gated permission="automations.read"><PlanFeatureGate flag="includes_automations"><PageWrapper><AutomationsApercu /></PageWrapper></PlanFeatureGate></Gated>} />
+                    <Route path="/automations/reglages" element={<Gated permission="automations.update"><PlanFeatureGate flag="includes_automations"><PageWrapper><AutomationsReglages /></PageWrapper></PlanFeatureGate></Gated>} />
+                    {/* Le builder occupe TOUT l'écran (fixed inset-0) : pas de
+                        PageWrapper, il se pose par-dessus la navigation comme
+                        /quotes/:id/measure. */}
+                    <Route path="/automations/:id" element={<Gated permission="automations.update"><PlanFeatureGate flag="includes_automations"><AutomationBuilderPage /></PlanFeatureGate></Gated>} />
                     <Route path="/automations/hub" element={<Navigate to="/automations" replace />} />
                     <Route path="/automations/builder" element={<Navigate to="/automations" replace />} />
                     <Route path="/company-settings" element={<Navigate to="/settings/company" replace />} />
@@ -1627,6 +1660,10 @@ function AuthenticatedApp({
                     {/* Dashboard page removed for all roles — redirect to Sales Map */}
                     <Route path="/d2d-dashboard" element={<Navigate to="/field-sales" replace />} />
                     <Route path="/pipeline" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></PlanFeatureGate></Gated>} />
+                    {/* Pipeline de ventes (avant-job). Sur /ventes et non /pipeline :
+                        l'ancien board D2D tourne encore avec ses deals, et on ne
+                        bascule l'adresse qu'une fois celui-ci retiré. */}
+                    <Route path="/ventes" element={<Gated permission="leads.read"><PlanFeatureGate flag="includes_pipeline"><PageWrapper><React.Suspense fallback={null}><Pipeline /></React.Suspense></PageWrapper></PlanFeatureGate></Gated>} />
                     {/* Legacy URL — keep old bookmarks/links working */}
                     <Route path="/d2d-pipeline" element={<Navigate to="/pipeline" replace />} />
                     <Route path="/leaderboard" element={<Gated permission="reports.read"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Leaderboard /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />
@@ -1648,10 +1685,10 @@ function AuthenticatedApp({
                         inter-tenants (orgs, utilisateurs, revenus) depuis
                         l'application. L'URL redirige désormais comme toute
                         route inconnue. */}
-                    {/* Console interne des migrations assistées — hors nav,
-                        réservée à PLATFORM_OWNER_ID (guard serveur + gate dans
-                        la page). Périmètre limité aux projets de migration. */}
-                    <Route path="/admin/migrations" element={<React.Suspense fallback={null}><AdminMigrations /></React.Suspense>} />
+                    {/* Console interne des migrations assistées — désormais
+                        l'onglet Migrations du Creator Space ; l'ancienne URL
+                        redirige (hash conservé). Hors nav. */}
+                    <Route path="/admin/migrations" element={<AdminMigrationsRedirect />} />
                     {/* Creator Space — hors nav, réservé à platformAdminIds
                         (guard serveur par-handler + gate dans la page).
                         Lecture seule : vues plateforme inter-compagnies. */}

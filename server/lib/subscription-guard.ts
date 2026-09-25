@@ -82,6 +82,7 @@ export const ROUTES_EXEMPTEES: readonly string[] = [
   '/api/security/',       // csp-report
   '/api/client-errors',   // un client bloqué doit pouvoir signaler une erreur
   '/api/invitations/',    // accepter une invitation précède l'abonnement
+  '/api/workspaces/',     // le workspace se décrit à l'inscription, AVANT le paiement
   '/api/unsubscribe/',    // désinscription courriel (lien dans le message)
   '/api/health',
 ];

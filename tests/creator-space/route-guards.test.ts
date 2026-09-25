@@ -11,6 +11,8 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 
 const routerSrc = read('server/routes/creator-space.ts');
 const auditSrc = read('server/routes/creator-space-audit.ts');
+const featuresSrc = read('server/routes/creator-space-features.ts');
+const notesSrc = read('server/routes/creator-space-notes.ts');
 const indexSrc = read('server/index.ts');
 const appSrc = read('src/App.tsx');
 
@@ -83,12 +85,87 @@ describe('Creator Space — journal d’accès et révélation (creator-space-au
   });
 });
 
+describe('Creator Space — fonctionnalités par workspace (creator-space-features)', () => {
+  it('chaque handler est gardé par requireCreatorSpace et valide orgId + clé', () => {
+    const handlers = featuresSrc.split(/router\.(?:get|post|put|patch|delete)\(/).slice(1);
+    expect(handlers.length).toBe(3);
+    for (const h of handlers) {
+      expect(h).toContain('requireCreatorSpace(req, res)');
+      expect(h).toContain('UUID_RE.test(orgId)');
+    }
+    expect(featuresSrc).toContain('isPlatformFeatureKey(key)');
+    // Quota de bureaux : borné, raison journalisée avant l'écriture.
+    expect(featuresSrc).toContain('quota > MAX_OFFICE_QUOTA');
+    expect(featuresSrc).toContain('creator_space_office_quota');
+  });
+
+  it('toute modification exige une raison journalisée AVANT l’écriture, sinon refus', () => {
+    expect(featuresSrc).toContain('reason.length < 5');
+    expect(featuresSrc).toContain('creator_space_feature_override');
+    expect(featuresSrc).toContain('Journalisation impossible — modification refusée.');
+    const log = featuresSrc.indexOf(".from('security_events').insert(");
+    const write = featuresSrc.indexOf(".from('org_features')\n        .delete()");
+    expect(log).toBeGreaterThan(-1);
+    expect(write).toBeGreaterThan(log);
+  });
+
+  it('seules tables écrites : org_features et security_events ; les lignes posées sont marquées platform_override', () => {
+    const writes = featuresSrc.match(/\.from\('([a-z_]+)'\)\s*\.(insert|update|upsert|delete)\(/g) ?? [];
+    const tables = new Set(writes.map((w) => w.match(/from\('([a-z_]+)'\)/)![1]));
+    expect(tables).toEqual(new Set(['org_features', 'security_events']));
+    expect(featuresSrc).toContain('platform_override: true');
+    // « Hériter » ne supprime que les lignes de la plateforme, jamais une
+    // activation faite par le tenant.
+    expect(featuresSrc).toContain(".eq('metadata->>platform_override', 'true')");
+  });
+
+  it("les bureaux ne sont plus vendus par forfait : la capacité vient du quota plateforme, plus de /billing/offices", () => {
+    const orgsSrc = read('server/routes/orgs.ts');
+    const guard = orgsSrc.slice(orgsSrc.indexOf('async function getOfficeCapacity'), orgsSrc.indexOf('async function callerRole'));
+    expect(guard).toContain('resolveOfficeQuota(');
+    expect(guard).not.toMatch(/included_offices|extra_offices/);
+    const billingSrc = read('server/routes/billing.ts');
+    expect(billingSrc).not.toMatch(/router\.(get|post)\('\/billing\/offices'/);
+  });
+
+  it('le tenant ne peut pas renverser un override plateforme (PUT /api/features)', () => {
+    const tenantSrc = read('server/routes/feature-flags.ts');
+    expect(tenantSrc).toContain('isPlatformOverride(existing?.metadata)');
+    expect(tenantSrc).toContain('platform_locked: true');
+  });
+});
+
+describe('Creator Space — notes internes par workspace (creator-space-notes)', () => {
+  it('chaque handler est gardé par requireCreatorSpace et valide les identifiants', () => {
+    const handlers = notesSrc.split(/router\.(?:get|post|put|patch|delete)\(/).slice(1);
+    expect(handlers.length).toBe(3);
+    for (const h of handlers) {
+      expect(h).toContain('requireCreatorSpace(req, res)');
+      expect(h).toContain('UUID_RE.test(orgId)');
+    }
+  });
+
+  it('une note ne se retire que si author_id = l’appelant (jamais la note d’un autre admin)', () => {
+    const del = notesSrc.slice(notesSrc.indexOf("router.delete("));
+    expect(del).toContain(".eq('author_id', auth.user.id)");
+  });
+
+  it("jamais la table tenant `notes` : seule creator_space_notes est écrite ici", () => {
+    expect(notesSrc).not.toMatch(/\.from\('notes'\)/);
+    const writes = notesSrc.match(/\.from\('([a-z_]+)'\)\s*\.(insert|update|upsert|delete)\(/g) ?? [];
+    const tables = new Set(writes.map((w) => w.match(/from\('([a-z_]+)'\)/)![1]));
+    expect(tables).toEqual(new Set(['creator_space_notes']));
+  });
+});
+
 describe('montage serveur et surface SPA', () => {
   it('le routeur est monté avec rate limiting dédié, le journal d’accès et le routeur audit', () => {
     expect(indexSrc).toContain("app.use('/api/creator-space', creatorSpaceLimiter)");
     expect(indexSrc).toContain("app.use('/api/creator-space', creatorSpaceViewLogger())");
     expect(indexSrc).toContain("app.use('/api', creatorSpaceRouter)");
     expect(indexSrc).toContain("app.use('/api', creatorSpaceAuditRouter)");
+    expect(indexSrc).toContain("app.use('/api', creatorSpaceFeaturesRouter)");
+    expect(indexSrc).toContain("app.use('/api', creatorSpaceNotesRouter)");
   });
 
   it('la route SPA existe, hors nav statique ; le lien sidebar est gaté par la sonde serveur', () => {

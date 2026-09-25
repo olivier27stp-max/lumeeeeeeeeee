@@ -14,8 +14,15 @@ import {
   updatePaymentRequestStatus,
 } from '../lib/stripe-connect';
 import { validate, createPaymentRequestSchema } from '../lib/validation';
+import { getPaymentSettings } from '../lib/payment-settings';
+import { getCompanySettings, senderForOrg, marqueDepuis, langueEntreprise, type CompanyInfo as CompanyInfoCourriel } from './emails';
+import { rendreCourrielClient, montant as montantLisible, MOTS, type Langue } from '../lib/courriels/gabarit';
+import { texteDuCourriel } from '../lib/courriels/modeles';
 
 const router = Router();
+
+const ERREUR_PAIEMENTS_DESACTIVES =
+  'Online invoice payments are disabled in Lume Payments settings. Enable them to send a payment link.';
 
 // ── Helpers ──
 
@@ -70,49 +77,38 @@ async function getClientContact(clientId: string | null, orgId: string) {
   }
 }
 
+/**
+ * Le courriel « paiement demandé » : gabarit commun, aux couleurs de
+ * l'entreprise, dans sa langue.
+ *
+ * `modeleOrg` porte le texte écrit dans Réglages → Modèles de courriel. Il est
+ * résolu par l'appelant, parce que cette fonction est pure et synchrone. Il
+ * remplace notre salutation et notre phrase (il porte les siennes), jamais le
+ * montant, le bouton ni le pied : un client doit toujours pouvoir payer, quoi
+ * que l'entreprise écrive.
+ */
 function buildPaymentEmailHtml(params: {
-  company: CompanyInfo;
-  clientName: string;
-  invoiceNumber: string;
-  amountFormatted: string;
-  paymentUrl: string;
+  company: CompanyInfoCourriel; clientName: string; invoiceNumber: string;
+  amountFormatted: string; paymentUrl: string; langue: Langue;
+  modeleOrg?: { sujet: string; corpsHtml: string } | null;
 }) {
-  const companyName = params.company.company_name || 'LUME';
-  const logoHtml = params.company.company_logo_url
-    ? `<img src="${params.company.company_logo_url}" alt="${companyName}" style="max-height:48px;max-width:200px;" />`
-    : `<span style="font-size:24px;font-weight:700;color:#1a1a2e;letter-spacing:2px;">${companyName}</span>`;
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;">
-<tr><td align="center" style="padding:32px 16px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-<tr><td style="padding:24px 32px;border-bottom:1px solid #e5e7eb;text-align:center;">${logoHtml}</td></tr>
-<tr><td style="padding:32px;">
-  <p style="margin:0 0 16px;font-size:16px;color:#1f2937;">Hi ${params.clientName},</p>
-  <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">
-    A payment of <strong>${params.amountFormatted}</strong> is requested for invoice <strong>${params.invoiceNumber}</strong>.
-  </p>
-  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
-    <tr><td style="background-color:#1f2937;border-radius:6px;padding:14px 32px;">
-      <a href="${params.paymentUrl}" style="color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;display:inline-block;">
-        Pay ${params.amountFormatted}
-      </a>
-    </td></tr>
-  </table>
-  <p style="margin:0;font-size:13px;color:#9ca3af;text-align:center;">
-    Or copy this link: <a href="${params.paymentUrl}" style="color:#374151;word-break:break-all;">${params.paymentUrl}</a>
-  </p>
-</td></tr>
-<tr><td style="padding:20px 32px;background-color:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
-  <p style="margin:0;font-size:12px;color:#9ca3af;">Sent via <strong>LUME</strong>${params.company.company_name ? ` on behalf of ${params.company.company_name}` : ''}</p>
-  ${params.company.phone ? `<p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">${params.company.phone}</p>` : ''}
-</td></tr>
-</table>
-</td></tr></table>
-</body></html>`;
+  const m = MOTS[params.langue];
+  const fr = params.langue === 'fr';
+  const modeleOrg = params.modeleOrg ?? null;
+  return rendreCourrielClient({
+    langue: params.langue,
+    marque: marqueDepuis(params.company),
+    preheader: fr ? `${params.amountFormatted} à payer — facture ${params.invoiceNumber}` : `${params.amountFormatted} due — invoice ${params.invoiceNumber}`,
+    titre: fr ? 'Paiement demandé' : 'Payment requested',
+    salutation: modeleOrg ? null : m.bonjour(params.clientName),
+    intro: modeleOrg ? null : (fr ? 'Ce dépôt réserve votre date à l’horaire. Dès qu’il est reçu, la date est à vous.' : 'This deposit holds your spot in the schedule. As soon as it is received, the date is yours.'),
+    corpsHtml: modeleOrg?.corpsHtml ?? null,
+    montant: { libelle: m.montantDu, valeur: params.amountFormatted, sous: `${m.facture} ${params.invoiceNumber}` },
+    // Meme garde que les routes de document : « /pay/undefined » est pire
+    // qu'une absence de bouton. `public_token` n'etait verifie nulle part.
+    bouton: params.paymentUrl ? { texte: m.payer(params.amountFormatted), url: params.paymentUrl } : null,
+    note: fr ? 'Paiement sécurisé par Stripe. Une question ? Répondez simplement à ce courriel.' : 'Payment secured by Stripe. Questions? Just reply to this email.',
+  });
 }
 
 function normalizeE164(phone: string): string {
@@ -137,13 +133,26 @@ async function sendPaymentEmail(params: {
 }) {
   if (!isMailerConfigured()) return { sent: false, reason: 'SMTP not configured' };
 
-  const company = await getCompanyInfo(params.orgId);
-  const amountFormatted = formatCurrency(params.amountCents, params.currency);
+  const company = await getCompanySettings(params.orgId);
+  const langue = langueEntreprise(company);
+  const amountFormatted = montantLisible(params.amountCents, params.currency, langue);
+
+  // Le texte écrit par l'entreprise dans Réglages → Modèles de courriel.
+  // `null` s'il n'a jamais été écrit : le courriel sort alors comme avant.
+  const modeleOrg = await texteDuCourriel(params.orgId, 'deposit_request', {
+    client_name: params.clientName,
+    company_name: company.company_name || '',
+    invoice_number: params.invoiceNumber,
+    amount_due: amountFormatted,
+    payment_link: params.paymentUrl,
+  });
 
   const result = await sendEmail({
-    from: emailFrom,
+    // Expéditeur au nom de l'entreprise (son domaine s'il est vérifié), réponses vers sa boîte (comme la facture).
+    ...(await senderForOrg(params.orgId, company)),
     to: params.clientEmail,
-    subject: `Payment request — ${amountFormatted} for ${params.invoiceNumber}`,
+    subject: modeleOrg?.sujet
+      || (langue === 'fr' ? `Paiement demandé — ${amountFormatted} — facture ${params.invoiceNumber}` : `Payment requested — ${amountFormatted} — invoice ${params.invoiceNumber}`),
     suivi: { orgId: params.orgId, entityType: 'payment_request', entityId: params.invoiceId ?? null },
     html: buildPaymentEmailHtml({
       company,
@@ -151,6 +160,8 @@ async function sendPaymentEmail(params: {
       invoiceNumber: params.invoiceNumber,
       amountFormatted,
       paymentUrl: params.paymentUrl,
+      langue,
+      modeleOrg,
     }),
   });
 
@@ -191,7 +202,7 @@ async function sendPaymentSms(params: {
   }
 
   const company = await getCompanyInfo(params.orgId);
-  const companyName = company.company_name || 'LUME';
+  const companyName = company.company_name || '';
   const amountFormatted = formatCurrency(params.amountCents, params.currency);
 
   const body = `${companyName}: Payment of ${amountFormatted} requested for invoice ${params.invoiceNumber}. Pay securely here: ${params.paymentUrl}`;
@@ -234,6 +245,12 @@ router.post('/payment-requests/create', validate(createPaymentRequestSchema), as
 
     const balanceCents = Number(invoice.balance_cents || 0);
     if (balanceCents <= 0) return res.status(400).json({ error: 'Invoice has no balance to pay.' });
+
+    // Interrupteur « paiement des factures en ligne » (réglages Lume Payments).
+    const reglages = await getPaymentSettings(orgId);
+    if (!reglages.invoice_payments_enabled) {
+      return res.status(400).json({ error: ERREUR_PAIEMENTS_DESACTIVES, code: 'payments_disabled' });
+    }
 
     // Verify connected account exists and is ready
     const account = await getConnectedAccount(orgId);
@@ -317,6 +334,11 @@ router.post('/payment-requests/resend', async (req, res) => {
 
     const sendVia = String(req.body?.sendVia || 'link_only').toLowerCase();
 
+    const reglages = await getPaymentSettings(orgId);
+    if (!reglages.invoice_payments_enabled) {
+      return res.status(400).json({ error: ERREUR_PAIEMENTS_DESACTIVES, code: 'payments_disabled' });
+    }
+
     const requests = await getPaymentRequestsByInvoice(orgId, invoiceId);
     const active = requests.find((r: any) => r.status === 'sent' || r.status === 'pending');
 
@@ -359,6 +381,18 @@ router.post('/payment-requests/resend', async (req, res) => {
           orgId,
         });
       }
+    }
+
+    /* Le résultat était rangé dans la réponse puis ignoré : la route rendait
+       200 même quand rien n'était parti, et l'interface affichait « Demande
+       envoyée ». Un envoi demandé qui échoue est une erreur, pas un succès
+       accompagné d'un détail. */
+    if (notifications.email && (notifications.email as { sent?: boolean }).sent === false) {
+      return res.status(502).json({
+        error: 'Le courriel n’a pas pu être envoyé.',
+        code: 'email_send_failed',
+        detail: (notifications.email as { reason?: string }).reason,
+      });
     }
 
     return res.json({

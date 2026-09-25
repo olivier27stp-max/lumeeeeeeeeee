@@ -17,6 +17,24 @@ vi.mock('../server/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn()
 
 import { magasinPourTests } from '../server/lib/lumi/magasin';
 import { cleReponse, lireReponse, ecrireReponse, retirerReponse, invaliderOrg, versionOrg, tourCachable, TTL_REPONSE_S } from '../server/lib/lumi/cache-reponses';
+import { lexicalementProche } from '../server/lib/lumi/cache-semantique';
+
+describe('garde lexical du cache sémantique', () => {
+  it('deux questions qui ne diffèrent que par le nom clé ne se servent pas l une l autre', () => {
+    expect(lexicalementProche('Montre-moi mes modèles de facture.', 'montre moi mes modeles de soumission avec les prix')).toBe(false);
+    expect(lexicalementProche('mes modèles de soumission', 'montre moi mes modeles de soumission avec les prix')).toBe(true);
+    expect(lexicalementProche('ai-je des jobs en retard', 'est ce que j ai des jobs en retard')).toBe(true);
+    expect(lexicalementProche('Peux-tu me montrer mes factures impayées ?', 'mes factures impayees')).toBe(true);
+    // Le nom propre ne doit pas suffire : deux actions différentes sur la même personne.
+    expect(lexicalementProche('Enlève la carte enregistrée de Jean-Pierre Gagnon.', 'supprime la carte de jean pierre gagnon du pipeline')).toBe(false);
+    expect(lexicalementProche('Montre-moi les paiements reçus ce mois-ci.', 'combien j ai encaisse ce mois ci')).toBe(false);
+    // Sans énoncé fourni, meilleure() ne filtre pas (appelants anciens).
+    const e = { enonce: 'mes modeles de soumission', vec: [1, 0], texte: 'x', fiches: [], outils: [], version: 0, ts: Date.now() };
+    expect(meilleure([e], [1, 0], null)).not.toBeNull();
+    expect(meilleure([e], [1, 0], null, Infinity, Date.now(), 'mes modèles de facture')).toBeNull();
+    expect(meilleure([e], [1, 0], null, Infinity, Date.now(), 'mes modèles de soumission')).not.toBeNull();
+  });
+});
 import { cleIndex, cosinus, meilleure, chercherSemantique, memoriserSemantique, oublierSemantique, SEUIL_SIMILARITE, embed } from '../server/lib/lumi/cache-semantique';
 
 const lu = (p: string) => readFileSync(resolve(__dirname, '..', ...p.split('/')), 'utf8');
@@ -58,6 +76,15 @@ describe('cache exact (étage 3)', () => {
     expect(tourCachable(base)).toBe(true);
     expect(tourCachable({ ...base, historiqueVide: false })).toBe(false);
     expect(tourCachable({ ...base, proposition: true })).toBe(false);
+    // Écriture exécutée d'office (remember_this, mode argent) : jamais en cache.
+    expect(tourCachable({ ...base, ecritureExecutee: true })).toBe(false);
+    // Un énoncé de mémoire (« retiens que… ») n'est jamais une lecture, quoi qu'ait fait le tour.
+    expect(tourCachable({ ...base, enonce: 'Retiens que je ne travaille jamais le dimanche.' })).toBe(false);
+    expect(tourCachable({ ...base, enonce: 'Oublie ça' })).toBe(false);
+    // Une demande de document non plus (« un rapport des jobs » ≠ « combien de jobs »).
+    expect(tourCachable({ ...base, enonce: "Un rapport des jobs de cette semaine, s'il te plaît." })).toBe(false);
+    expect(tourCachable({ ...base, enonce: 'Sors-moi un PDF de mes retards' })).toBe(false);
+    expect(tourCachable({ ...base, enonce: 'Combien de clients ai-je ?' })).toBe(true);
     expect(tourCachable({ ...base, outils: ['list_jobs', 'create_task'] })).toBe(false);
     expect(tourCachable({ ...base, texte: '  ' })).toBe(false);
     expect(tourCachable({ ...base, resultat: 'erreur' })).toBe(false);
@@ -116,7 +143,7 @@ describe('branchement', () => {
   });
   it('agent public : index partagé seulement (aucun tenant), après les réponses fixes', () => {
     const s = lu('server/routes/sales-chat.ts');
-    expect(s).toContain("chercherSemantique({ genre: 'public' }, vecteur, null)");
+    expect(s).toContain("chercherSemantique({ genre: 'public' }, vecteur, null, dernier)"); // l'énoncé sert au garde lexical
     expect(s).not.toMatch(/genre: 'tenant'/);
     expect(s.indexOf('reponseFixePour(dernier)')).toBeLessThan(s.indexOf("chercherSemantique({ genre: 'public' }"));
   });

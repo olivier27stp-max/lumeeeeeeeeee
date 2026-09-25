@@ -25,6 +25,7 @@ import SpecificNotesInline, { type SpecificNotesInlineHandle } from '../Specific
 import FormPageHost from '../ui/FormPageHost';
 import LeaveFormConfirm from '../ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../../contexts/NavigationGuard';
+import { useChampsCreation } from '../champs/creation';
 
 interface QuoteCreateModalProps {
   isOpen: boolean;
@@ -127,6 +128,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   const [lineEditId, setLineEditId] = useState<string | null>(null);
   const [addedServiceIds, setAddedServiceIds] = useState<Set<string>>(new Set());
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
+  const champsPerso = useChampsCreation('quote', language === 'fr');
 
   // ── Client-view preview ──
   const [showPreview, setShowPreview] = useState(false);
@@ -534,6 +536,9 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
       quoteNumberParam = String(wanted);
     }
 
+    const erreurChamps = champsPerso.valider();
+    if (erreurChamps) { setError(erreurChamps); return; }
+
     setSaving(true);
     try {
       // Resolve lead
@@ -583,6 +588,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
       if (specificNotesRef.current?.hasContent()) {
         await specificNotesRef.current.saveNote('quote', detail.quote.id);
       }
+      await champsPerso.enregistrer(detail.quote.id);
 
       // Quote saved — let the post-save navigation (e.g. to the quote page) through.
       guard.release();
@@ -964,6 +970,8 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
 
             {/* ── Specific Notes (photos, files, etc.) ── */}
             <SpecificNotesInline ref={specificNotesRef} tempEntityType="quote" />
+
+            {champsPerso.bloc}
 
             {/* ── Client message ── */}
             {clientMessageEnabled && (

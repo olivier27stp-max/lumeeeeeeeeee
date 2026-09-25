@@ -14,6 +14,7 @@ import {
   type QuoteLineItemInput, type QuoteSectionInput, type QuoteServicePlan,
 } from '../lib/quotesApi';
 import { getCompanySettings } from '../lib/invoicesApi';
+import { getPaymentSettings } from '../lib/connectApi';
 import { peekNextNumbers } from '../lib/numbersApi';
 import { supabase } from '../lib/supabase';
 import { createLeadScoped } from '../lib/leadsApi';
@@ -31,6 +32,7 @@ import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { STORAGE_BUCKETS, uploadFile } from '../lib/storage';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import { useChampsCreation } from '../components/champs/creation';
 
 /* ── Design (maquette approuvée) : texte noir pur / blanc pur uniquement ── */
 const OUTLINE = 'border-[#e8e8e8] dark:border-white/10';
@@ -144,7 +146,19 @@ export default function QuoteNew() {
   // ── Contact ──
   const [contactMode, setContactMode] = useState<'new' | 'existing'>('existing');
   const [clients, setClients] = useState<Array<{ id: string; label: string }>>([]);
-  const [clientId, setClientId] = useState('');
+  /**
+   * Le client peut venir de l'URL : « Créer un devis » depuis la fiche d'un
+   * deal, la page Client ou le board arrive ici avec `?clientId=…`.
+   *
+   * Sans cette lecture, le bouton envoyait bien vers cet écran mais le
+   * paramètre était IGNORÉ : le vendeur devait rechercher à la main un client
+   * qu'il venait pourtant de désigner. `client` est accepté aussi, parce que
+   * c'est la forme qu'utilisaient les actions rapides du board.
+   */
+  const [clientId, setClientId] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    return p.get('clientId') ?? p.get('client') ?? '';
+  });
   const [clientSearch, setClientSearch] = useState('');
   const [clientListOpen, setClientListOpen] = useState(false);
   const [clientHighlight, setClientHighlight] = useState(-1);
@@ -211,6 +225,17 @@ export default function QuoteNew() {
   const [depositValue, setDepositValue] = useState('');
   const [requirePaymentMethod, setRequirePaymentMethod] = useState(false);
 
+  // Valeur par défaut « carte au dossier exigée » (Réglages → Lume Payments).
+  // Appliquée une seule fois au chargement ; l'utilisateur reste libre de
+  // décocher. Échec silencieux acceptable : c'est un pré-remplissage.
+  useEffect(() => {
+    let actif = true;
+    getPaymentSettings()
+      .then((s) => { if (actif && s.require_payment_method_default) setRequirePaymentMethod(true); })
+      .catch((err: any) => console.warn('[QuoteNew] réglages Lume Payments non lus :', err?.message));
+    return () => { actif = false; };
+  }, []);
+
   // ── Divers ──
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,6 +244,7 @@ export default function QuoteNew() {
   const [showPreview, setShowPreview] = useState(false);
   const [companySettings, setCompanySettings] = useState<any>(null);
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
+  const champsPerso = useChampsCreation('quote', language === 'fr');
 
   // ── Init ──
   useEffect(() => {
@@ -624,6 +650,9 @@ export default function QuoteNew() {
       quoteNumberParam = String(wanted);
     }
 
+    const erreurChamps = champsPerso.valider();
+    if (erreurChamps) { setError(erreurChamps); return; }
+
     setSaving(true);
     try {
       let leadId: string | null = null;
@@ -672,6 +701,7 @@ export default function QuoteNew() {
       if (specificNotesRef.current?.hasContent()) {
         await specificNotesRef.current.saveNote('quote', detail.quote.id);
       }
+      await champsPerso.enregistrer(detail.quote.id);
 
       guard.release();
       navigate(`/quotes/${detail.quote.id}`);
@@ -1242,6 +1272,7 @@ export default function QuoteNew() {
             <div className="mt-3">
               <SpecificNotesInline ref={specificNotesRef} tempEntityType="quote" />
             </div>
+            {champsPerso.bloc && <div className="mt-4">{champsPerso.bloc}</div>}
           </div>
 
           {error && (

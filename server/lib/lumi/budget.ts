@@ -5,12 +5,27 @@
  * /billing/current, puis plans.ai_monthly_budget_cents. La dépense du mois
  * vient de ai_usage (fonction lumi_depense_du_mois, mois civil de Montréal).
  *
- * Refus AVANT l'appel au modèle si le budget est atteint : un tour refusé ne
- * coûte rien. Un tour qui fait dépasser d'un cent passe — c'est le suivant
- * qui est refusé, on ne coupe pas une réponse en cours.
+ * Plafond DUR (audit Lumi B4, 2026-09-16) : avant chaque appel au modèle, le
+ * coût maximal est RÉSERVÉ atomiquement (RPC reserve_ai_budget, verrou par
+ * groupe d'entreprises), puis RÉGLÉ au coût réel (settle_ai_budget). Cinquante
+ * tours lancés en même temps ne dépassent plus le plafond. Si les RPC manquent
+ * (migration pas encore appliquée), on retombe sur l'ancien comportement
+ * (vérification avant, journal après) avec un avertissement, une seule fois.
+ *
+ * Échelle de dégradation (jamais de blocage du CRM) :
+ *  - < 70 %   normal    : modèle normal, effort medium ;
+ *  - ≥ 70 %   econome   : Haiku, effort bas, historique réduit à 3 tours ;
+ *  - ≥ 90 %   restreint : idem + au plus 2 étapes d'outils par tour ;
+ *  - ≥ 100 %  epuise    : plus aucun appel au modèle ; les raccourcis (étages
+ *               0-2) et les caches (3-4) répondent encore ; sinon message
+ *               gabarit « en pause jusqu'au 1er ». Le propriétaire est alerté.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { companyOrgIds } from '../supabase';
+import { coutEnCents } from './tarifs';
+import { reglesCout } from './regles-cout';
+
+export type Palier = 'normal' | 'econome' | 'restreint' | 'epuise';
 
 export interface EtatBudget {
   plan_slug: string | null;
@@ -19,43 +34,102 @@ export interface EtatBudget {
   depense_cents: number;
   reste_cents: number;
   epuise: boolean;
-  /**
-   * Palier de consommation du mois, invisible pour le client :
-   * - normal   : sous 60 % du plafond ;
-   * - econome  : 60 % et plus → modèle moins cher, réflexion réduite (coût par tour divisé par ~2) ;
-   * - ralenti  : plafond atteint → Lumi répond encore, mais une fois par minute, jusqu'au 1er.
-   * Le client n'est jamais « à sec » ; le plafond en dollars reste un garde-fou interne.
-   */
-  palier: 'normal' | 'econome' | 'ralenti';
+  /** Réservations en cours (appels en vol) : comptées dans le palier, pas dans depense_cents. */
+  reserve_cents: number;
+  /** Garde-fou journalier (règle stricte) : dépense depuis minuit (Montréal) et sa borne (part du plafond mensuel). */
+  depense_jour_cents: number;
+  plafond_jour_cents: number;
+  /** Palier de consommation du mois (voir l'en-tête). Le plafond en dollars est un garde-fou interne. */
+  palier: Palier;
 }
 
-/** Part du plafond à partir de laquelle on passe en mode économe. */
-export const SEUIL_ECONOME = 0.6;
-/** En mode ralenti : un tour par org toutes les N secondes. */
-export const INTERVALLE_RALENTI_S = 60;
+/** Parts du plafond où la pente change (mandat §5.5 : 70 / 90 / 100 %). */
+export const SEUIL_ECONOME = 0.7;
+export const SEUIL_RESTREINT = 0.9;
 
-export function palierBudget(budget_cents: number, depense_cents: number): EtatBudget['palier'] {
+export function palierBudget(budget_cents: number, depense_cents: number): Palier {
   if (budget_cents <= 0) return 'normal';
-  if (depense_cents >= budget_cents) return 'ralenti';
+  if (depense_cents >= budget_cents) return 'epuise';
+  if (depense_cents >= budget_cents * SEUIL_RESTREINT) return 'restreint';
   if (depense_cents >= budget_cents * SEUIL_ECONOME) return 'econome';
   return 'normal';
 }
 
-/** Modèle et effort de réflexion selon le palier : la pente économe joue avant tout refus. */
-export function reglagesPourPalier(palier: EtatBudget['palier'], modeleNormal: string): { model: string; effort: 'low' | 'medium' } {
-  return palier === 'normal' ? { model: modeleNormal, effort: 'medium' } : { model: 'claude-haiku-4-5', effort: 'low' };
+export interface ReglagesPalier {
+  model: string;
+  effort: 'low' | 'medium';
+  /** Messages d'historique renvoyés au modèle (60 = fenêtre normale ; 6 ≈ 3 tours). */
+  historique_messages: number;
+  /** Étapes d'outils par tour (8 = normal). */
+  max_etapes: number;
+  /** false au palier epuise : aucun appel au modèle. */
+  modele_autorise: boolean;
+}
+
+/** Réglages imposés par le palier : la pente joue avant tout refus. */
+export function reglagesPourPalier(palier: Palier, modeleNormal: string): ReglagesPalier {
+  switch (palier) {
+    case 'normal': return { model: modeleNormal, effort: reglesCout().effort_defaut, historique_messages: 60, max_etapes: 8, modele_autorise: true };
+    case 'econome': return { model: 'claude-haiku-4-5', effort: 'low', historique_messages: 6, max_etapes: 8, modele_autorise: true };
+    case 'restreint': return { model: 'claude-haiku-4-5', effort: 'low', historique_messages: 6, max_etapes: 2, modele_autorise: true };
+    case 'epuise': return { model: 'claude-haiku-4-5', effort: 'low', historique_messages: 6, max_etapes: 0, modele_autorise: false };
+  }
+}
+
+/** Date de remise à zéro (1er du mois suivant, Montréal), pour le message « en pause jusqu'au … ». */
+export function dateRemiseAZero(langue: 'fr' | 'en', maintenant = new Date()): string {
+  const [an, mois] = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Montreal', year: 'numeric', month: '2-digit' }).format(maintenant).split('-').map(Number);
+  const premier = new Date(Date.UTC(mois === 12 ? an + 1 : an, mois === 12 ? 0 : mois, 1, 12));
+  return langue === 'fr'
+    ? `1er ${new Intl.DateTimeFormat('fr-CA', { month: 'long', timeZone: 'UTC' }).format(premier)}`
+    : new Intl.DateTimeFormat('en-CA', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(premier);
+}
+
+/** Message gabarit servi au palier epuise quand aucun étage déterministe n'a répondu (0 token). */
+export function messagePause(langue: 'fr' | 'en', maintenant = new Date()): string {
+  return langue === 'fr'
+    ? `Ton assistant IA avancé est en pause jusqu'au ${dateRemiseAZero('fr', maintenant)}. Les actions rapides marchent toujours.`
+    : `Your advanced AI assistant is paused until ${dateRemiseAZero('en', maintenant)}. Quick actions still work.`;
 }
 
 /**
- * En mode ralenti : secondes à attendre avant le prochain tour (0 = on peut
- * répondre). Lu sur le dernier appel journalisé de l'org.
+ * Coût maximal d'un appel, réservé avant de l'envoyer : toute l'entrée au
+ * tarif plein (comme si rien n'était en cache) + la sortie au plafond
+ * max_tokens. Volontairement pessimiste : le règlement rend la différence.
  */
-export async function attenteRalenti(admin: SupabaseClient, orgId: string): Promise<number> {
-  const orgIds = await companyOrgIds(admin, orgId);
-  const { data } = await admin.from('ai_usage').select('created_at').in('org_id', orgIds).order('created_at', { ascending: false }).limit(1).maybeSingle();
-  if (!data?.created_at) return 0;
-  const ecoule = (Date.now() - new Date(data.created_at).getTime()) / 1000;
-  return Math.max(0, Math.ceil(INTERVALLE_RALENTI_S - ecoule));
+export function estimationCoutAppel(model: string, caracteresEntree: number, maxTokensSortie: number, tokensOutils = 3_000): number {
+  const tokensEntree = Math.ceil(caracteresEntree / 3.5) + tokensOutils;
+  return coutEnCents(model, { input_tokens: tokensEntree, output_tokens: maxTokensSortie, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 });
+}
+
+export interface Reservation { id: string | null; statut: 'ok' | 'econome' | 'restreint' | 'capped' | 'plan_sans_lumi' | 'indisponible' }
+
+let rpcManquanteSignalee = false;
+function rpcManquante(error: { code?: string; message?: string } | null): boolean {
+  const m = `${error?.code ?? ''} ${error?.message ?? ''}`;
+  return /PGRST202|42883|Could not find the function|does not exist/i.test(m);
+}
+
+/** Réserve `cents` sur le budget du mois (atomique côté base). RPC absente → 'indisponible' (ancien comportement). */
+export async function reserverBudget(admin: SupabaseClient, orgId: string, cents: number, proactif = false): Promise<Reservation> {
+  const { data, error } = await admin.rpc('reserve_ai_budget', { p_org: orgId, p_cents: Math.round(cents * 10_000) / 10_000, p_proactive: proactif });
+  if (error) {
+    if (rpcManquante(error)) {
+      if (!rpcManquanteSignalee) { rpcManquanteSignalee = true; console.warn('[lumi] reserve_ai_budget absente : appliquer la migration 20260916120000_lumi_budget_reservations.sql'); }
+      return { id: null, statut: 'indisponible' };
+    }
+    throw new Error(`reserve_ai_budget: ${error.message}`);
+  }
+  const r = (data ?? {}) as { status?: string; reservation_id?: string | null };
+  const statut = (['ok', 'econome', 'restreint', 'capped', 'plan_sans_lumi'] as const).find((s) => s === r.status) ?? 'ok';
+  return { id: r.reservation_id ?? null, statut };
+}
+
+/** Règle une réservation au coût réel (idempotent ; sans id, rien à faire). */
+export async function reglerBudget(admin: SupabaseClient, reservationId: string | null, coutCents: number): Promise<void> {
+  if (!reservationId) return;
+  const { error } = await admin.rpc('settle_ai_budget', { p_reservation: reservationId, p_cost: Math.round(coutCents * 10_000) / 10_000 });
+  if (error && !rpcManquante(error)) console.error('[lumi] settle_ai_budget :', error.message);
 }
 
 export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<EtatBudget> {
@@ -83,15 +157,44 @@ export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<
       depense += Number(data ?? 0);
     }
   }
-  const reste = Math.max(0, budget - depense);
+  // Réservations en vol (appels en cours) : comptées dans le palier pour que
+  // deux tours simultanés voient le même plafond. Table absente → 0.
+  let reserve = 0;
+  if (includes) {
+    try {
+      const periode = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Montreal', year: 'numeric', month: '2-digit' }).format(new Date());
+      const { data } = await admin.from('ai_usage_monthly').select('reserved_cents').in('org_id', orgIds).eq('period', periode);
+      for (const l of (data ?? []) as Array<{ reserved_cents: number | string }>) reserve += Number(l.reserved_cents ?? 0);
+    } catch { reserve = 0; }
+  }
+  // Garde-fou journalier : ≥ part_budget_par_jour du plafond mensuel brûlée
+  // depuis minuit → palier restreint jusqu'à demain (un script ne vide plus le
+  // mois en un jour). Table/colonne absentes ou erreur → 0 (jamais bloquant).
+  let depenseJour = 0;
+  const plafondJour = budget > 0 ? Math.round(budget * reglesCout().part_budget_par_jour * 100) / 100 : 0;
+  if (includes && budget > 0) {
+    try {
+      const jour = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Montreal', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const minuit = new Date(`${jour}T00:00:00-04:00`); // heure avancée ; l'écart d'une heure l'hiver est sans conséquence (borne, pas facture)
+      const { data } = await admin.from('ai_usage').select('cost_cents').in('org_id', orgIds).gte('created_at', minuit.toISOString());
+      for (const l of (data ?? []) as Array<{ cost_cents: number | string }>) depenseJour += Number(l.cost_cents ?? 0);
+    } catch { depenseJour = 0; }
+  }
+  const engage = depense + reserve;
+  const reste = Math.max(0, budget - engage);
+  const palierMois: Palier = includes ? palierBudget(budget, engage) : 'normal';
+  const palier: Palier = palierMois === 'epuise' ? 'epuise' : (plafondJour > 0 && depenseJour >= plafondJour ? 'restreint' : palierMois);
   return {
     plan_slug: plan?.slug ?? null,
     includes_ai: includes,
     budget_cents: budget,
     depense_cents: Math.round(depense * 100) / 100,
+    reserve_cents: Math.round(reserve * 100) / 100,
+    depense_jour_cents: Math.round(depenseJour * 100) / 100,
+    plafond_jour_cents: plafondJour,
     reste_cents: Math.round(reste * 100) / 100,
-    epuise: includes && depense >= budget,
-    palier: includes ? palierBudget(budget, depense) : 'normal',
+    epuise: includes && engage >= budget,
+    palier,
   };
 }
 
@@ -104,9 +207,10 @@ export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<
 export async function alerterSiSeuilFranchi(admin: SupabaseClient, orgId: string, budget: EtatBudget, envoyer: (sujet: string, texte: string) => Promise<void>): Promise<void> {
   if (budget.palier === 'normal') return;
   const mois = new Date().toISOString().slice(0, 7);
+  // Une alerte par palier franchi et par mois (économe, restreint, épuisé).
   const { data: deja } = await admin.from('security_events')
     .select('id').eq('org_id', orgId).eq('event_type', 'lumi_budget_econome')
-    .contains('details', { mois }).limit(1).maybeSingle();
+    .contains('details', { mois, palier: budget.palier }).limit(1).maybeSingle();
   if (deja) return;
   const { error } = await admin.from('security_events').insert({
     org_id: orgId, event_type: 'lumi_budget_econome', severity: 'info', source: 'system',
@@ -118,20 +222,28 @@ export async function alerterSiSeuilFranchi(admin: SupabaseClient, orgId: string
   await envoyer(
     `Lumi · ${org?.name ?? orgId} a dépensé ${dollars(budget.depense_cents)} ce mois-ci (${budget.plan_slug ?? 'plan ?'})`,
     `L'entreprise ${org?.name ?? orgId} a atteint ${dollars(budget.depense_cents)} d'inférence Lumi sur un plafond de ${dollars(budget.budget_cents)} (${budget.plan_slug ?? '?'}).\n`
-    + `Elle passe en mode économe (modèle moins cher). À ${dollars(budget.budget_cents)}, Lumi répondra une fois par minute jusqu'au 1er.\n`
+    + (budget.palier === 'epuise'
+      ? `Le plafond est atteint : plus aucun appel au modèle jusqu'au 1er (les actions rapides et les caches répondent encore).\n`
+      : `Elle passe en mode ${budget.palier === 'restreint' ? 'restreint (Haiku, 2 étapes par tour)' : 'économe (modèle moins cher)'}. À ${dollars(budget.budget_cents)}, Lumi se met en pause jusqu'au 1er.\n`)
     + `Regarde si c'est un usage réel (proposer Autopilot / un supplément) ou un abus (script, boucle).`,
   ).catch((e: any) => console.error('[lumi] alerte budget non envoyée :', e?.message || e));
 }
 
+/** D'où vient la dépense — la colonne `source` de `ai_usage`. */
+export type SourceUsage = 'lumi' | 'support' | 'migration' | 'briefing' | 'routeur' | 'cache';
+
 export async function journaliserUsage(admin: SupabaseClient, ligne: {
-  orgId: string; userId: string; conversationId: string | null; model: string;
+  orgId: string; userId: string | null; conversationId: string | null; model: string;
   input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number; cost_cents: number;
+  /** Absent = `lumi` : c'était le seul écrivain avant que le support soit branché. */
+  source?: SourceUsage;
 }): Promise<void> {
   const { error } = await admin.from('ai_usage').insert({
     org_id: ligne.orgId,
     user_id: ligne.userId,
     conversation_id: ligne.conversationId,
     model: ligne.model,
+    source: ligne.source ?? 'lumi',
     input_tokens: ligne.input_tokens,
     output_tokens: ligne.output_tokens,
     cache_creation_input_tokens: ligne.cache_creation_input_tokens,

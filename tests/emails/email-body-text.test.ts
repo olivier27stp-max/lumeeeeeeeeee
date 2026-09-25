@@ -159,9 +159,38 @@ describe('éditeur — plus de HTML à l’écran', () => {
     expect(apercu).toContain('texteVersHtml(');
   });
 
-  it('le HTML n’est reconstruit qu’à l’enregistrement', () => {
-    // L'utilisateur ne doit jamais le voir.
-    expect(apercu).toContain("updateRuleMessage(ruleId, 'send_email', texteVersHtml(blocsEnTexte(blocs)), objet)");
+  it('le HTML n’est reconstruit qu’à l’enregistrement et pour l’aperçu, jamais pendant la frappe', () => {
+    /* La règle protégée : l'utilisateur ne voit JAMAIS de HTML, et on ne le
+       reconstruit pas à chaque touche.
+
+       Ce test comptait les appels à `texteVersHtml` et exigeait exactement 1.
+       Le critère est devenu trop grossier le 2026-09-23 : l'onglet « Aperçu
+       réel » en fait un second, pour envoyer le corps au serveur qui rend le
+       vrai gabarit. C'est un usage légitime — et refuser un aperçu fidèle pour
+       satisfaire un compteur aurait inversé la fin et les moyens.
+
+       On a d'abord exigé 2, puis l'envoi d'essai en a ajouté un troisième :
+       un compteur ne distingue pas une violation d'un ajout légitime, et le
+       corriger à chaque fois n'apprend rien. On vérifie donc les usages
+       nommément, et surtout ce que la règle voulait dire : aucune
+       reconstruction dans le chemin de la FRAPPE. */
+    expect(apercu).toContain('const corpsHtml = texteVersHtml(blocsEnTexte(blocs));');
+    // Sans citer les arguments : ajouter `typeCourriel` à l'appel n'est pas
+    // une violation de la règle, et un test qui casse là-dessus ne protège
+    // plus rien — il coûte juste une correction de plus.
+    expect(apercu).toMatch(/apercuCourriel\(texteVersHtml\(blocsEnTexte\(blocs\)\)/);
+    expect(apercu).toMatch(/envoyerEssaiCourriel\(texteVersHtml\(blocsEnTexte\(blocs\)\)/);
+
+    // Le cœur de la règle : rien ne reconstruit le HTML à la frappe.
+    const majBloc = apercu.slice(apercu.indexOf('const majBloc'), apercu.indexOf('const supprimerBloc'));
+    expect(majBloc).not.toContain('texteVersHtml');
+  });
+
+  it('l’éditeur sert aussi aux modèles de courriel, pas qu’aux automatisations', () => {
+    // Depuis la page Modèles de courriel, la destination est injectée : un
+    // second éditeur aurait divergé du premier au premier correctif.
+    expect(apercu).toContain('enregistrerTexte');
+    expect(apercu).toContain("updateRuleMessage(ruleId, 'send_email', corpsHtml, objet)");
   });
 
   it('le courriel s’édite bloc par bloc, pas dans un champ unique', () => {
@@ -290,10 +319,31 @@ describe('aperçu — le courriel s’affiche habillé, comme une facture', () =
   });
 
   it('les colonnes lues existent bien dans company_settings', () => {
-    // `logo_url` et `phone` — pas `company_logo_url` ni `company_phone`, qui
-    // sont les noms côté serveur après transformation.
+    // `logo_url`, `phone` et `email` — pas `company_logo_url` ni
+    // `company_phone`, qui sont les noms côté serveur après transformation.
+    // Avec PostgREST, une seule colonne inexistante fait échouer TOUTE la
+    // requête, et supabase-js ne lève pas : l'aperçu perdrait son logo et son
+    // pied sans un mot d'erreur.
     const fn = api.slice(api.indexOf('export async function getCompanyBranding'));
-    expect(fn).toContain("select('company_name, logo_url, phone')");
+    expect(fn).toContain("select('company_name, logo_url, phone, email')");
+  });
+
+  it('le pied de l’aperçu montre ce que le serveur envoie vraiment', () => {
+    // Il affichait « Envoyé via LUME pour {entreprise} » — formule retirée du
+    // gabarit le 2026-09-17 parce qu'elle vole la marque du client. L'aperçu
+    // la gardait, donc le propriétaire jugeait son courriel sur une image
+    // fausse.
+    // On vise le JSX rendu, pas les commentaires : l'un d'eux cite justement
+    // l'ancienne formule pour expliquer pourquoi elle a disparu.
+    const rendu = ed.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    expect(rendu).not.toContain('Envoyé via');
+    expect(rendu).not.toContain('on behalf of');
+    expect(rendu).toContain("fr ? 'Envoyé avec' : 'Sent with'");
+  });
+
+  it('l’aperçu pose le courriel sur le ciel du gabarit, pas sur du blanc', () => {
+    // #e6f0ff : la couleur de fond de rendreCourrielClient.
+    expect(ed).toContain('#e6f0ff');
   });
 });
 
@@ -357,5 +407,29 @@ describe('éditeur — utilisable sur téléphone', () => {
   it('les marges se réduisent sur petit écran', () => {
     expect(ed).toContain('p-3 sm:p-5');
     expect(ed).toContain('p-0 sm:p-4');
+  });
+});
+
+describe('aperçu — les deux syntaxes de variable', () => {
+  it('résout [cle] ET {cle}', () => {
+    // Les automatisations écrivent [cle], les modèles de courriel {cle}.
+    // `applyTemplate` côté serveur accepte déjà les deux ; un aperçu qui n'en
+    // montrait qu'une laissait croire que l'autre était cassée.
+    expect(remplacerVariables('Facture [invoice_number]')).toBe('Facture FAC-1042');
+    expect(remplacerVariables('Facture {invoice_number}')).toBe('Facture FAC-1042');
+  });
+
+  it('les variables des modèles ont toutes un exemple', () => {
+    // Sans exemple, le propriétaire voit « {invoice_amount} » en toutes
+    // lettres dans son propre aperçu et croit la variable cassée.
+    for (const cle of ['invoice_amount', 'amount_due', 'due_date', 'payment_link',
+      'pay_url', 'quote_amount', 'quote_link', 'valid_until', 'contract_number']) {
+      expect(remplacerVariables(`{${cle}}`), `sans exemple : ${cle}`).not.toBe(`{${cle}}`);
+    }
+  });
+
+  it('une variable inconnue reste visible dans les deux syntaxes', () => {
+    expect(remplacerVariables('{inventee}')).toBe('{inventee}');
+    expect(remplacerVariables('[inventee]')).toBe('[inventee]');
   });
 });

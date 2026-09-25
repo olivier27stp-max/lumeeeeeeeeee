@@ -9,18 +9,27 @@
 
 import crypto from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { localToUtcIso, normalizeAddressKey } from './normalize';
+import { localToUtcIso, normalizeAddressKey, normalizeDigits } from './normalize';
 import { sanitizeCellForDisplay } from './masks';
 import type {
   DryRunReport,
   EntityCounts,
   MigrationRow,
+  OnProgression,
   PostImportValidation,
   TargetEntity,
 } from './types';
 
 // Taxes en premier : les services (taxable) et les documents s'y réfèrent.
-export const IMPORT_ORDER: TargetEntity[] = ['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice'];
+/** Libellés FR des entités pour la progression affichée dans la console. */
+export const ENTITY_LABELS_FR: Record<string, string> = {
+  tax_config: 'Taxes', service: 'Produits et services', client: 'Clients', property: 'Propriétés',
+  billing_property: 'Adresses de facturation', job: 'Jobs', quote: 'Soumissions', visit: 'Visites',
+  invoice: 'Factures', line_item: 'Lignes', payment: 'Paiements',
+};
+const PROGRESSION_PAS = 250; // lignes entre deux publications de progression
+
+export const IMPORT_ORDER: TargetEntity[] = ['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice', 'payment'];
 
 /** Table active cible. `property` et `billing_property` partagent `properties`
  *  (kind = 'service' | 'billing') : toute mesure « par table » doit donc
@@ -35,6 +44,7 @@ export const TABLE_BY_ENTITY: Record<string, string> = {
   quote: 'quotes',
   visit: 'schedule_events',
   invoice: 'invoices',
+  payment: 'payments',
 };
 
 const CATEGORY_BY_ENTITY: Record<string, string> = {
@@ -47,6 +57,7 @@ const CATEGORY_BY_ENTITY: Record<string, string> = {
   quote: 'quotes',
   visit: 'visits',
   invoice: 'invoices',
+  payment: 'payments',
 };
 
 const CHUNK = 200;
@@ -107,6 +118,31 @@ function num(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+/** Rue + complément (« app. 4 », « local 200 ») sur une seule ligne : les
+ *  tables n'ont pas de 2e ligne d'adresse. Un complément qui répète la ville
+ *  (export Jobber où « Street 2 » porte la ville) ou déjà contenu dans la rue
+ *  est ignoré. Jamais utilisé pour une clé (address seule reste la clé). */
+export function composeAddress(n: Record<string, unknown>): string {
+  const address = safeStr(n.address);
+  const line2 = safeStr(n.address_line2);
+  if (!line2) return address;
+  if (!address) return line2;
+  const city = safeStr(n.city);
+  if (city && refKey(line2) === refKey(city)) return address;
+  if (refKey(address).includes(refKey(line2))) return address;
+  return `${address}, ${line2}`;
+}
+
+// Contrainte prod clients_status_check : active | lead | inactive.
+// 'inactive' = archivage manuel (le trigger des jobs ne le recalcule jamais) ;
+// 'lead' = prospect (repassé 'active' par le trigger dès qu'une job existe).
+export function clientStatusOf(n: Record<string, unknown>): 'active' | 'lead' | 'inactive' {
+  const status = str(n.status).toLowerCase();
+  if (n.archived === true || /(archiv|inactiv|closed|ferm)/.test(status)) return 'inactive';
+  if (n.is_lead === true || /(lead|prospect)/.test(status)) return 'lead';
+  return 'active';
+}
+
 function refKey(v: string): string {
   return v.trim().toLowerCase();
 }
@@ -114,6 +150,37 @@ function refKey(v: string): string {
 function fullNameOf(n: Record<string, unknown>): string {
   const name = `${str(n.first_name)} ${str(n.last_name)}`.trim() || str(n.company) || str(n.full_name);
   return refKey(name);
+}
+
+/**
+ * Forme relâchée d'un nom pour le rattachement : sans accents, sans ponctuation, article
+ * initial ou final retiré (« Fabricants de Boyaux Ltée (Les) » ≡ « Les Fabricants de Boyaux
+ * Ltée »). Jamais utilisée pour la dédup, seulement pour retrouver un dossier.
+ */
+export function looseNameKey(v: string): string {
+  let k = v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  k = k.replace(/\((les|le|la|l')\)\s*$/i, '').replace(/^(les|le|la)\s+|^l'\s*/i, '');
+  k = k.replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  return k;
+}
+
+/**
+ * Toutes les clés de nom sous lesquelles un client peut être désigné par ses documents :
+ * « Prénom Nom », raison sociale, nom affiché — chacune en forme exacte et relâchée. Un client
+ * Jobber « entreprise avec contact » est désigné par sa raison sociale dans les rapports
+ * (Client Name), alors que fullNameOf ne donnait que « Prénom Nom » : 35 propriétés orphelines
+ * chez Vision Lavage (2026-09-22) pour des noms pourtant présents une seule fois.
+ */
+export function nameKeysOf(n: { first_name?: unknown; last_name?: unknown; company?: unknown; full_name?: unknown }): string[] {
+  const raw = [`${str(n.first_name)} ${str(n.last_name)}`.trim(), str(n.company), str(n.full_name)].filter(Boolean);
+  const keys: string[] = [];
+  for (const v of raw) {
+    const exact = refKey(v);
+    const loose = looseNameKey(v);
+    if (exact) keys.push(exact);
+    if (loose && loose !== exact) keys.push(loose);
+  }
+  return Array.from(new Set(keys));
 }
 
 async function loadStaging(admin: SupabaseClient, migrationId: string, entity: TargetEntity, statuses: string[]): Promise<StagingRow[]> {
@@ -171,8 +238,84 @@ async function loadDuplicateDecisions(admin: SupabaseClient, migrationId: string
   return map;
 }
 
+/** Clés de rattachement d'un client DÉJÀ dans le CRM (courriel, nom complet,
+ *  téléphone) : mêmes clés que refKeysOf('client'), pour qu'un fichier de jobs,
+ *  visites ou factures importé APRÈS les clients (migration complémentaire, ou
+ *  CRM déjà rempli) retrouve ses clients au lieu de tout rejeter en orphelins. */
+export function existingClientRefKeys(c: { email?: string | null; first_name?: string | null; last_name?: string | null; company?: string | null; phone?: string | null }): string[] {
+  const keys: string[] = [];
+  const email = refKey(str(c.email));
+  if (email) keys.push(email);
+  keys.push(...nameKeysOf({ first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '' }));
+  const phone = phoneKey(str(c.phone));
+  if (phone) keys.push(phone);
+  return Array.from(new Set(keys));
+}
+
+/** Amorce clientIdByRef / jobIdByRef avec les dossiers actifs du bureau. Une clé
+ *  portée par deux dossiers distincts (homonymes) est retirée : jamais devinée.
+ *  Les dossiers importés dans la même passe passent ensuite par registerRefs,
+ *  qui garde la clé si elle pointe déjà vers le même id (fusion) et la retire sinon. */
+async function seedExistingRefs(admin: SupabaseClient, orgId: string, ctx: BuildContext): Promise<void> {
+  const seed = (map: Map<string, string>, key: string, id: string, ambiguous: Set<string>) => {
+    if (!key || ambiguous.has(key)) return;
+    const existing = map.get(key);
+    if (existing === undefined) map.set(key, id);
+    else if (existing !== id) { map.delete(key); ambiguous.add(key); }
+  };
+  const ambiguousClients = new Set<string>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('clients')
+      .select('id, email, first_name, last_name, company, phone, address')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) { console.error('[migration-importer] existing clients seed failed:', error.message); break; }
+    if (!data || data.length === 0) break;
+    for (const c of data as { id: string; email: string | null; first_name: string | null; last_name: string | null; company: string | null; phone: string | null; address: string | null }[]) {
+      for (const k of existingClientRefKeys(c)) seed(ctx.clientIdByRef, k, c.id, ambiguousClients);
+      if (c.address) registerNameAddress(ctx, { first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '' }, c.address, c.id);
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
+  const ambiguousJobs = new Set<string>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('jobs')
+      .select('id, job_number')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) { console.error('[migration-importer] existing jobs seed failed:', error.message); break; }
+    if (!data || data.length === 0) break;
+    for (const j of data as { id: string; job_number: number | string | null }[]) {
+      const k = j.job_number === null || j.job_number === undefined ? '' : refKey(String(j.job_number));
+      seed(ctx.jobIdByRef, k, j.id, ambiguousJobs);
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
+  // Factures actives : les paiements importés s'y rattachent par numéro.
+  const invoiceMap = ctx.invoiceIdByRef ?? (ctx.invoiceIdByRef = new Map());
+  const ambiguousInvoices = new Set<string>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('invoices')
+      .select('id, invoice_number')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) { console.error('[migration-importer] existing invoices seed failed:', error.message); break; }
+    if (!data || data.length === 0) break;
+    for (const inv of data as { id: string; invoice_number: string | null }[]) {
+      seed(invoiceMap, refKey(String(inv.invoice_number ?? '')), inv.id, ambiguousInvoices);
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
+}
+
 /** Clés de référence sous lesquelles une ligne peut être retrouvée par ses enfants. */
-function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
+export function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   const n = rec.normalized ?? {};
   const r = rec.relations ?? {};
   const keys: string[] = [];
@@ -184,8 +327,11 @@ function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   if (r.external_id) push(r.external_id);
   if (entity === 'client') {
     push(str(n.email));
-    const name = fullNameOf(n);
-    if (name) keys.push(name);
+    keys.push(...nameKeysOf(n));
+    // Téléphone (10 derniers chiffres) : clé de rattachement pour les documents
+    // qui ne portent que le numéro du client. Partagé par 2 clients → retiré.
+    const phone = phoneKey(str(n.phone));
+    if (phone) keys.push(phone);
   } else if (entity === 'property') {
     const addr = normalizeAddressKey(str(n.address));
     if (addr) keys.push(addr);
@@ -197,6 +343,60 @@ function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
     push(str(n.invoice_number));
   }
   return Array.from(new Set(keys));
+}
+
+/** Enregistre `${nom}|${adresse}` → client (toutes les variantes de nom). Deux dossiers distincts
+ *  sur la même paire → clé retirée (jamais devinée). */
+function registerNameAddress(ctx: BuildContext, n: Record<string, unknown>, address: string, clientId: string): void {
+  const addr = normalizeAddressKey(address);
+  if (!addr) return;
+  const map = ctx.clientIdByNameAddress ?? (ctx.clientIdByNameAddress = new Map());
+  for (const name of nameKeysOf(n)) {
+    const key = `${name}|${addr}`;
+    const existing = map.get(key);
+    if (existing === undefined) map.set(key, clientId);
+    else if (existing !== clientId) map.delete(key);
+  }
+}
+
+/** Homonymes : le nom seul est ambigu, mais nom + adresse du document (propriété, job…) ne l'est
+ *  presque jamais. 34 propriétés et des jobs/factures orphelins chez Vision Lavage (2026-09-22). */
+function resolveClientByNameAddress(ctx: BuildContext, r: Record<string, string>, address: string): string | null {
+  const map = ctx.clientIdByNameAddress;
+  if (!map) return null;
+  const addr = normalizeAddressKey(address);
+  if (!addr) return null;
+  for (const raw of [r.client_name_ref, r.client_ref]) {
+    if (!raw) continue;
+    for (const name of [refKey(raw), looseNameKey(raw)]) {
+      const hit = map.get(`${name}|${addr}`);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/** Rattachement client avec repli : identifiant/nom (client_ref) → courriel → nom complet → téléphone.
+ *  Chaque clé passe par le même index (id externe, courriel, nom complet des
+ *  clients importés) ; une clé ambiguë (homonymes) y est absente → orphelin. */
+function resolveClientId(ctx: BuildContext, r: Record<string, string>, n: Record<string, unknown> = {}): string | null {
+  const address = str(n.address) || str(r.property_ref) || str(r.property_address_ref);
+  return lookupRef(ctx.clientIdByRef, r.client_ref, looseNameKey)
+    ?? lookupRef(ctx.clientIdByRef, r.client_email_ref)
+    ?? lookupRef(ctx.clientIdByRef, r.client_name_ref, looseNameKey)
+    ?? lookupRef(ctx.clientIdByRef, r.client_phone_ref, phoneKey)
+    ?? (address ? resolveClientByNameAddress(ctx, r, address) : null);
+}
+
+/** Clé téléphone : 10 derniers chiffres, préfixée pour ne jamais croiser un id externe numérique. */
+function phoneKey(v: string): string {
+  const digits = normalizeDigits(v);
+  return digits.length >= 7 ? `tel:${digits.slice(-10)}` : '';
+}
+
+/** Valeur brute de référence client (affichage / clé de doublon interne). */
+function clientRefValue(r: Record<string, string>): string {
+  return str(r.client_ref) || str(r.client_email_ref) || str(r.client_name_ref) || str(r.client_phone_ref);
 }
 
 function lookupRef(map: Map<string, string>, raw: string | undefined, extra?: (v: string) => string): string | null {
@@ -230,9 +430,15 @@ function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
     if (email) keys.push(`e:${email}`);
     const phone = str(n.phone_digits);
     if (phone.length >= 7) keys.push(`t:${phone.slice(-10)}`);
-    const name = fullNameOf(n);
+    // Export Jobber « Clients » : UNE LIGNE PAR PROPRIÉTÉ, et l'identifiant est
+    // `clientId_propertyId`. Même préfixe = même client (Les Arpents Verts ×3, Louise
+    // Parenteau ×4…) : sans cette clé, un client sans courriel ni téléphone ressortait
+    // en « homonyme » de lui-même et tous ses documents devenaient orphelins (2026-09-22).
+    const ext = str(n.external_id) || str(rec.external_id);
+    const jobber = /^(\d{5,})_(\d{5,})$/.exec(ext);
+    if (jobber) keys.push(`jc:${jobber[1]}`);
     const addr = normalizeAddressKey(str(n.address));
-    if (name && addr) keys.push(`na:${name}|${addr}`);
+    if (addr) for (const name of nameKeysOf(n)) keys.push(`na:${name}|${addr}`);
   } else if (entity === 'property') {
     const addr = normalizeAddressKey(str(n.address));
     if (addr) keys.push(`a:${addr}`);
@@ -240,7 +446,7 @@ function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
     // Une seule adresse de facturation active par client (index unique) : deux
     // lignes pour le même client = même dossier, la première gagne. Deux
     // clients facturés à la même adresse restent DISTINCTS (pas de clé adresse).
-    const client = refKey(str((rec.relations ?? {}).client_ref));
+    const client = refKey(clientRefValue((rec.relations ?? {}) as Record<string, string>));
     if (client) keys.push(`bc:${client}`);
   } else if (entity === 'job') {
     const num = refKey(str(n.job_number));
@@ -254,6 +460,13 @@ function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   } else if (entity === 'service') {
     const name = refKey(str(n.name));
     if (name) keys.push(`s:${name}`);
+  } else if (entity === 'payment') {
+    // Même identifiant de paiement, sinon même facture + montant + date.
+    const ext = refKey(str(n.external_id) || str((rec.relations ?? {}).external_id) || str(rec.external_id));
+    if (ext) keys.push(`pe:${ext}`);
+    const inv = refKey(str((rec.relations ?? {}).invoice_ref));
+    const amount = typeof n.amount_cents === 'number' ? n.amount_cents : null;
+    if (inv && amount !== null) keys.push(`pay:${inv}|${amount}|${str(n.date).slice(0, 10)}`);
   } else if (entity === 'tax_config') {
     // Même nom + même région = même taxe (« TPS » du Québec ≠ « TPS » de l'Ontario).
     const name = refKey(str(n.name));
@@ -284,8 +497,7 @@ export function planIntraDedupe(entity: TargetEntity, rows: StagingRow[]): Intra
 
     // homonymes : même nom complet porté par deux dossiers DISTINCTS
     if (entity === 'client') {
-      const name = fullNameOf(rec.normalized ?? {});
-      if (name) {
+      for (const name of nameKeysOf(rec.normalized ?? {})) {
         const owner = nameOwner.get(name);
         if (owner && owner !== rec.id) ambiguousKeys.add(name);
         else nameOwner.set(name, rec.id);
@@ -339,8 +551,9 @@ function mapVisitStatus(source: string): string {
 // dry-run (audit S3 : une valeur inconnue tombait sur le défaut en silence).
 const BENIGN_DEFAULT_RE = /(sched|plan|book|open|activ|new|nouveau|upcoming|venir|pending|attente|confirm)/;
 const RECOGNIZED_STATUS_RES: Partial<Record<TargetEntity, RegExp[]>> = {
+  client: [/(lead|prospect)/, /(archiv|inactiv|closed|ferm)/, /(activ|client|customer|current)/],
   job: [/(complet|done|closed|term|ferm|finish)/, /(cancel|annul)/, /(progress|en cours)/, /draft|brouillon/, BENIGN_DEFAULT_RE],
-  invoice: [/(paid|pay[ée]e?)/, /partial/, /draft|brouillon/, /(sent|envoy|due|overdue|retard|unpaid|impay)/, BENIGN_DEFAULT_RE],
+  invoice: [/(paid|pay[ée]e?)/, /partial/, /draft|brouillon/, /(sent|envoy|due|overdue|retard|unpaid|impay|await|open|pending)/, BENIGN_DEFAULT_RE],
   quote: [/(convert)/, /(approv|accept|won|sign)/, /(chang|revis)/, /(sent|await|open|pending|envoy)/, /(archiv|declin|lost|refus|expir|cancel|annul)/, /draft|brouillon/],
   visit: [/(complet|done|term)/, /(cancel|annul)/, BENIGN_DEFAULT_RE],
 };
@@ -380,8 +593,12 @@ export interface BuildContext {
   migration: MigrationRow;
   createdBy: string;
   clientIdByRef: Map<string, string>;
+  /** `${nom relâché}|${adresse normalisée}` → client : départage les homonymes par l'adresse. */
+  clientIdByNameAddress?: Map<string, string>;
   propertyIdByRef: Map<string, string>;
   jobIdByRef: Map<string, string>;
+  /** numéro de facture → invoice id (existantes + importées dans la passe) : rattachement des paiements. */
+  invoiceIdByRef?: Map<string, string>;
   /** refKey(nom source) → user_id Lume (migration_staff_mappings). Absent/null = non assigné. */
   staffIdBySource?: Map<string, string>;
 }
@@ -391,7 +608,7 @@ export interface BuildContext {
 // narrowe pas l'union via `!built.ok` et l'accès à `reason` serait rejeté.
 type BuildResult =
   | { ok: true; row: Record<string, unknown>; reason?: undefined }
-  | { ok: false; row?: undefined; reason: 'orphan' | 'invalid' };
+  | { ok: false; row?: undefined; reason: 'orphan' | 'invalid'; detail?: string };
 
 /** Construit la rangée à insérer dans la table active. Exportée pour les tests
  *  (pure) : les contraintes NOT NULL de prod y sont encodées. */
@@ -402,9 +619,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'tax_config') {
     const name = safeStr(n.name).slice(0, 60);
-    if (!name) return { ok: false, reason: 'invalid' };
+    if (!name) return { ok: false, reason: 'invalid', detail: 'nom de taxe manquant' };
     const rate = num(n.rate);
-    if (rate === null || rate < 0 || rate > 100) return { ok: false, reason: 'invalid' };
+    if (rate === null || rate < 0 || rate > 100) return { ok: false, reason: 'invalid', detail: 'taux de taxe invalide (0–100)' };
     const region = safeStr(n.region).toUpperCase().slice(0, 12);
     const country = safeStr(n.country).toUpperCase().slice(0, 2);
     const sortOrder = num(n.sort_order);
@@ -427,14 +644,16 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'service') {
     const name = safeStr(n.name);
-    if (!name) return { ok: false, reason: 'invalid' };
+    if (!name) return { ok: false, reason: 'invalid', detail: 'nom de service manquant' };
     return {
       ok: true,
       row: {
         org_id: orgId,
         name,
         description: safeStr(n.description) || null,
-        default_price_cents: num(n.price_cents),
+        // predefined_services.default_price_cents est NOT NULL en prod : un
+        // rapport d'utilisation sans prix (Jobber « Products & Services ») → 0.
+        default_price_cents: num(n.price_cents) ?? 0,
         is_active: true,
       },
     };
@@ -442,7 +661,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'client') {
     const hasIdentity = str(n.first_name) || str(n.last_name) || str(n.company) || str(n.full_name) || str(n.email);
-    if (!hasIdentity) return { ok: false, reason: 'invalid' };
+    if (!hasIdentity) return { ok: false, reason: 'invalid', detail: 'client sans nom, entreprise, courriel ni téléphone' };
     return {
       ok: true,
       row: {
@@ -452,13 +671,14 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         company: safeStr(n.company) || null,
         email: str(n.email) || null,
         phone: str(n.phone) || null,
-        address: safeStr(n.address) || null,
+        address: composeAddress(n) || null,
         city: safeStr(n.city) || null,
         province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
         notes: joinNotes(safeStr(n.notes), unmappedNotesBlock(n)),
         lead_source: safeStr(n.lead_source) || null,
-        status: 'active',
+        // Prospect / archivé : d'après « Lead », « Archived » ou un statut texte.
+        status: clientStatusOf(n),
         created_by: ctx.createdBy,
         // date d'origine préservée (fidélité historique) — clé ABSENTE sinon,
         // pour laisser agir le DEFAULT now() (jamais de null explicite)
@@ -468,20 +688,27 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'property') {
-    const address = str(n.address);
-    if (!address) return { ok: false, reason: 'invalid' };
-    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
-    if (!clientId) return { ok: false, reason: 'orphan' };
+    // Ligne de totaux que Jobber ajoute au bas de « Client Properties » : pas une propriété.
+    if (/^report totals?:?$/i.test(str(r.client_name_ref) || str(r.client_ref))) {
+      return { ok: false, reason: 'orphan', detail: 'ligne de totaux du rapport Jobber (ignorée)' };
+    }
+    // Rue absente mais « Property Name » qui est une adresse (« 1400 Rue Marini ») : on la prend.
+    const address = str(n.address) || (/^\d+[\s-]/.test(str(n.name)) ? str(n.name) : '');
+    if (!address) return { ok: false, reason: 'invalid', detail: 'adresse manquante' };
+    const clientId = resolveClientId(ctx, r, n);
+    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     return {
       ok: true,
       row: {
         org_id: orgId,
         client_id: clientId,
-        address: safeStr(n.address),
+        address: composeAddress({ ...n, address }),
         city: safeStr(n.city) || null,
         province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
-        name: safeStr(n.name) || null,
+        // properties.name est NOT NULL en prod : sans « Property Name », l'adresse
+        // sert de nom (c'est ce qu'un utilisateur taperait).
+        name: safeStr(n.name) || safeStr(n.address),
         kind: 'service',
         is_primary: false,
         created_by: ctx.createdBy,
@@ -491,9 +718,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'billing_property') {
     const address = str(n.address);
-    if (!address) return { ok: false, reason: 'invalid' };
-    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
-    if (!clientId) return { ok: false, reason: 'orphan' };
+    if (!address) return { ok: false, reason: 'invalid', detail: 'adresse de facturation manquante' };
+    const clientId = resolveClientId(ctx, r, n);
+    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     // Le trigger trg_properties_billing_mirror (20260915000000) reflète cette
     // ligne dans clients.billing_address et passe billing_same_as_service à
     // false : le client est facturé à cette adresse dès l'import.
@@ -502,7 +729,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       row: {
         org_id: orgId,
         client_id: clientId,
-        address: safeStr(n.address),
+        address: composeAddress(n),
         city: safeStr(n.city) || null,
         province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
@@ -516,8 +743,8 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'job') {
-    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
-    if (!clientId) return { ok: false, reason: 'orphan' };
+    const clientId = resolveClientId(ctx, r, n);
+    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     const propertyId = r.property_ref
       ? lookupRef(ctx.propertyIdByRef, r.property_ref, (v) => normalizeAddressKey(v))
       : null;
@@ -531,13 +758,22 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       row: {
         org_id: orgId,
         client_id: clientId,
-        client_name: safeStr(r.client_ref) || null, // colonne héritée affichée par le calendrier
+        client_name: safeStr(clientRefValue(r)) || null, // colonne héritée affichée par le calendrier
         property_id: propertyId,
         title,
         description: safeStr(n.description) || null,
-        notes: joinNotes(safeStr(n.notes), unmappedNotesBlock(n)),
+        notes: joinNotes(joinNotes(safeStr(n.notes), str(n.frequency) ? `Fréquence du plan : ${safeStr(n.frequency)}` : '') ?? '', unmappedNotesBlock(n)),
         job_number: str(n.job_number) || null,
-        status: mapJobStatus(str(n.status)),
+        // Plan de service récurrent (fichier déposé sous « Plans récurrents ») : job_type = recurring,
+        // la cadence exportée reste lisible dans les notes.
+        job_type: str(n.job_type) === 'recurring' ? 'recurring' : 'one_off',
+        // Sans colonne de statut (export « One-off jobs » Jobber), une date de fermeture fait foi :
+        // 858 jobs terminés arrivaient « planifiés » chez Vision Lavage (2026-09-24).
+        status: str(n.status) ? mapJobStatus(str(n.status)) : (str(n.end_date) ? 'completed' : 'scheduled'),
+        // contrainte jobs_dates_coherentes : end_at jamais avant le début planifié (Jobber ferme
+        // parfois un job avant sa date prévue) — completed_at, lui, est toujours posé
+        ...(str(n.end_date) ? { completed_at: `${str(n.end_date)}T17:00:00` } : {}),
+        ...(str(n.end_date) && (!startAt || `${str(n.end_date)}T17:00:00` >= startAt) ? { end_at: `${str(n.end_date)}T17:00:00` } : {}),
         total_cents: totalCents,
         subtotal_cents: num(n.subtotal_cents) ?? totalCents,
         sale_date: str(n.sale_date) || str(n.created_date) || null,
@@ -556,13 +792,18 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'quote') {
-    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
-    if (!clientId) return { ok: false, reason: 'orphan' };
+    const clientId = resolveClientId(ctx, r, n);
+    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
     const subtotal = num(n.subtotal_cents);
     const tax = num(n.tax_cents);
     let total = num(n.total_cents);
     if (total === null && subtotal !== null) total = subtotal + (tax ?? 0);
+    // Contrainte prod quotes_total_non_negatif : un total négatif dans l'export
+    // (rabais supérieur au sous-total, avoir) est ramené à 0, l'original gardé
+    // dans les notes plutôt que de perdre la soumission à l'INSERT.
+    const noteMontant = total !== null && total < 0 ? `Total exporté négatif (${(total / 100).toFixed(2)}) ramené à 0 à l'import.` : '';
+    if (total !== null && total < 0) total = 0;
     return {
       ok: true,
       row: {
@@ -577,7 +818,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         tax_cents: tax ?? 0,
         total_cents: total ?? 0,
         valid_until: str(n.valid_until) || null,
-        notes: safeStr(n.notes) || null,
+        notes: joinNotes(safeStr(n.notes), noteMontant),
         created_by: ctx.createdBy,
         ...createdAtPatch(str(n.created_date)),
       },
@@ -586,9 +827,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'visit') {
     const jobId = lookupRef(ctx.jobIdByRef, r.job_ref);
-    if (!jobId) return { ok: false, reason: 'orphan' };
+    if (!jobId) return { ok: false, reason: 'orphan', detail: 'job introuvable (numéro absent ou ambigu)' };
     const startAt = str(n.start_at);
-    if (!startAt) return { ok: false, reason: 'invalid' };
+    if (!startAt) return { ok: false, reason: 'invalid', detail: 'date de début manquante' };
     let endAt = str(n.end_at);
     if (!endAt || endAt <= startAt) {
       // convention « pas d'heure précise » : 00:00 → 23:59, sinon +1 h
@@ -611,7 +852,8 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         end_at: endUtc,
         start_time: startUtc,
         end_time: endUtc,
-        status: mapVisitStatus(str(n.status)),
+        // « Visit completed date » renseignée = visite complétée, même sans colonne de statut.
+        status: str(n.status) ? mapVisitStatus(str(n.status)) : (str(n.completed_date) ? 'completed' : 'scheduled'),
         notes: safeStr(n.notes) || null,
         timezone: 'America/Toronto', // aligné sur DEFAULT_TIMEZONE de scheduleApi
         assigned_user: ctx.staffIdBySource?.get(refKey(str(n.assigned_to))) ?? null,
@@ -621,14 +863,27 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'invoice') {
-    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
-    if (!clientId) return { ok: false, reason: 'orphan' };
+    const clientId = resolveClientId(ctx, r, n);
+    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
-    const subtotal = num(n.subtotal_cents);
+    let subtotal = num(n.subtotal_cents);
     const tax = num(n.tax_cents);
+    // Rabais : convention Lume = total = sous-total − rabais + taxes (soustrait
+    // avant taxes). Un rabais négatif ou absent vaut 0.
+    const discount = Math.max(0, num(n.discount_cents) ?? 0);
     let total = num(n.total_cents);
-    if (total === null && subtotal !== null) total = subtotal + (tax ?? 0);
-    if (total === null) return { ok: false, reason: 'invalid' };
+    if (total === null && subtotal !== null) total = subtotal - discount + (tax ?? 0);
+    if (total === null) return { ok: false, reason: 'invalid', detail: 'total manquant' };
+    // Contrainte prod invoices_total_non_negatif : même règle que les soumissions.
+    const noteMontant = total < 0 ? `Total exporté négatif (${(total / 100).toFixed(2)}) ramené à 0 à l'import.` : '';
+    if (total < 0) total = 0;
+    if (discount > 0 && subtotal !== null && total !== null) {
+      // Certains CRM exportent un sous-total déjà net du rabais : on le remet
+      // brut pour que Sous-total − Rabais + Taxes = Total sur la facture Lume.
+      const gross = subtotal - discount + (tax ?? 0);
+      const net = subtotal + (tax ?? 0);
+      if (gross !== total && net === total) subtotal = subtotal + discount;
+    }
     const paid = num(n.paid_amount_cents);
     const balance = num(n.balance_cents);
     let status: string;
@@ -651,14 +906,18 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         status,
         issued_at: str(n.issued_date) ? `${str(n.issued_date)}T12:00:00` : null,
         due_date: str(n.due_date) || null,
-        subtotal_cents: subtotal ?? total,
+        subtotal_cents: subtotal ?? (total + discount - (tax ?? 0)),
+        discount_cents: discount,
         tax_cents: tax ?? 0,
         total_cents: total,
         paid_cents: paidCents,
         balance_cents: Math.max(0, total - paidCents),
-        notes: safeStr(n.notes) || null,
+        notes: joinNotes(safeStr(n.notes), noteMontant),
         // Vendeur mappé ; sinon null → le CRM affiche celui de la job liée.
         salesperson_id: ctx.staffIdBySource?.get(refKey(str(n.salesperson))) ?? null,
+        // Date de paiement exportée : le trigger ne pose now() que si paid_at
+        // est null et l'efface tant qu'un solde reste — donc factures soldées seulement.
+        ...(status === 'paid' && str(n.paid_date) ? { paid_at: `${str(n.paid_date)}T12:00:00` } : {}),
         created_by: ctx.createdBy,
         // created_at = date de création exportée, sinon repli sur la date
         // d'émission : les rapports « par date de création » restent vrais
@@ -668,7 +927,44 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     };
   }
 
-  return { ok: false, reason: 'invalid' };
+  if (entity === 'payment') {
+    const invoiceId = r.invoice_ref ? lookupRef(ctx.invoiceIdByRef ?? new Map(), r.invoice_ref) : null;
+    const clientId = resolveClientId(ctx, r, n);
+    if (!invoiceId && !clientId) return { ok: false, reason: 'orphan', detail: 'facture et client introuvables (référence absente ou ambiguë)' };
+    const amount = num(n.amount_cents);
+    if (amount === null || amount <= 0) return { ok: false, reason: 'invalid', detail: 'montant manquant ou nul' };
+    const date = str(n.date);
+    return {
+      ok: true,
+      row: {
+        org_id: orgId,
+        client_id: clientId,
+        invoice_id: invoiceId,
+        amount_cents: amount,
+        currency: 'CAD',
+        method: mapPaymentMethod(str(n.method)),
+        status: 'succeeded',
+        provider: 'manual',
+        // payment_date NOT NULL default now() : clé absente si la date manque (jamais null explicite)
+        ...(date ? { payment_date: `${date}T12:00:00`, paid_at: `${date}T12:00:00` } : {}),
+        created_by: ctx.createdBy,
+        ...createdAtPatch(date),
+      },
+    };
+  }
+
+  return { ok: false, reason: 'invalid', detail: 'entité non prise en charge' };
+}
+
+// Modes de paiement Lume (payments.method) : card | cash | cheque | e-transfer | other.
+export function mapPaymentMethod(source: string): string {
+  const s = source.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (!s) return 'other';
+  if (/(interac|e-?transfer|virement|transfer|wire|eft|ach)/.test(s)) return 'e-transfer';
+  if (/(card|carte|visa|master|amex|credit|debit|stripe|square|paypal)/.test(s)) return 'card';
+  if (/(cash|comptant|espece|argent)/.test(s)) return 'cash';
+  if (/(cheque|check|chq)/.test(s)) return 'cheque';
+  return 'other';
 }
 
 function emptyCounts(): EntityCounts {
@@ -704,7 +1000,7 @@ async function loadStaffMap(admin: SupabaseClient, migrationId: string): Promise
 // ---------------------------------------------------------------------------
 // Dry-run — aucune écriture dans les tables actives
 
-export async function runDryRun(admin: SupabaseClient, migration: MigrationRow): Promise<DryRunReport> {
+export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, onProgression?: OnProgression): Promise<DryRunReport> {
   const decisions = await loadDuplicateDecisions(admin, migration.id);
   const staffIdBySource = await loadStaffMap(admin, migration.id);
   const entities = entitiesForMigration(migration);
@@ -721,10 +1017,16 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
     propertyIdByRef: new Map(),
     jobIdByRef: new Map(),
   };
+  await seedExistingRefs(admin, migration.org_id, ctx);
+  const jobsFactures = await jobsDejaFactures(admin, migration.org_id);
 
   let intraMerged = 0;
   const allAmbiguousKeys: string[] = [];
   const unknownStatuses = new Map<string, number>(); // `${entity}:${valeur}` → occurrences
+  // Lignes rejetées par le dry-run, avec leur motif : marquées dans le staging à la fin pour que
+  // l'onglet Rejets et le CSV les montrent. Avant, « 7 erreurs bloquantes » n'était qu'un compteur,
+  // invisible partout (2026-09-21). prepareStaging remet ces statuts à ready au prochain import.
+  const rejets: Array<{ id: string; status: 'error' | 'orphan'; error: string }> = [];
   for (const entity of entities) {
     const counts = emptyCounts();
     byEntity[entity] = counts;
@@ -737,14 +1039,20 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
       .eq('status', 'error');
     counts.errors = errCount ?? 0;
     sourceRows += rows.length + counts.errors;
+    const etapeEntite = { etape: `Import test — ${ENTITY_LABELS_FR[entity] ?? entity}`, entity, total: rows.length, entites_faites: entities.indexOf(entity), entites_total: entities.length };
+    onProgression?.({ ...etapeEntite, processed: 0 });
+    let lignesFaites = 0;
 
     const intra = planIntraDedupe(entity, rows);
     for (const k of intra.ambiguousKeys) allAmbiguousKeys.push(`${entity}:${k}`);
     const targetByStagingId = new Map<string, string>();
     const mapByEntity =
-      entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
+      entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef
+        : entity === 'invoice' ? (ctx.invoiceIdByRef ?? (ctx.invoiceIdByRef = new Map())) : null;
 
     for (const rec of rows) {
+      lignesFaites += 1;
+      if (lignesFaites % PROGRESSION_PAS === 0) onProgression?.({ ...etapeEntite, processed: lignesFaites });
       const decision = decisions.get(rec.id);
       const sourceStatus = str((rec.normalized ?? {}).status);
       if (sourceStatus && !statusRecognized(entity, sourceStatus)) {
@@ -754,6 +1062,7 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
       const registerRefs = (targetId: string) => {
         targetByStagingId.set(rec.id, targetId);
         if (!mapByEntity) return;
+        if (entity === 'client') registerNameAddress(ctx, rec.normalized ?? {}, str((rec.normalized ?? {}).address), targetId);
         for (const key of refKeysOf(entity, rec)) {
           if (entity === 'client' && intra.ambiguousKeys.has(key)) continue; // homonymes : jamais devinés
           const existing = mapByEntity.get(key);
@@ -795,11 +1104,14 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
         if (built.reason === 'orphan') {
           orphans += 1;
           counts.ignored += 1;
+          rejets.push({ id: rec.id, status: 'orphan', error: `orphelin — ${built.detail ?? 'relation introuvable'}` });
         } else {
           counts.errors += 1;
+          rejets.push({ id: rec.id, status: 'error', error: `invalide — ${built.detail ?? 'valeur manquante'}` });
         }
         continue;
       }
+      if (entity === 'invoice') detacherFactureSurJobDejaFacture(built.row, jobsFactures);
       counts.wouldCreate += 1;
       registerRefs(deterministicEntityId(migration.id, rec.id, TABLE_BY_ENTITY[entity]));
       if (entity === 'invoice') {
@@ -809,8 +1121,9 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
     }
 
     if (counts.wouldMerge > 0) notes.push(`${counts.wouldMerge} ${entity}(s) seront fusionnés (doublons internes ou dossiers existants).`);
-    if (counts.errors > 0) notes.push(`${counts.errors} ligne(s) ${entity} en erreur (valeurs invalides) — voir les problèmes.`);
+    if (counts.errors > 0) notes.push(`${counts.errors} ligne(s) ${entity} en erreur (valeurs invalides) — voir l'onglet Rejets.`);
   }
+  await marquerRejetsDryRun(admin, migration.id, rejets);
 
   if (intraMerged > 0) notes.push(`${intraMerged} doublon(s) interne(s) aux fichiers fusionnés automatiquement (mêmes courriel/téléphone/numéro).`);
   if (allAmbiguousKeys.length > 0) {
@@ -869,6 +1182,21 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
       if (statusIssueErr) console.error('[migration-importer] unknown status issue insert failed:', statusIssueErr.message);
     }
   }
+
+  // Avertissements des passes précédentes dont le cas a disparu : fermés d'eux-mêmes. Avant, chaque
+  // import test en laissait une couche de plus (12 « problèmes » ouverts pour 4 cas réels, 2026-09-22).
+  const { count: colonnesAVerifier } = await admin
+    .from('migration_field_mappings')
+    .select('id', { count: 'exact', head: true })
+    .eq('migration_id', migration.id)
+    .eq('status', 'needs_review');
+  await fermerAvertissementsPerimes(admin, migration.id, {
+    ambiguous_relation: allAmbiguousKeys.length > 0,
+    unknown_status: unknownStatuses.size > 0,
+    // « Colonne ambiguë » naît à l'analyse ; une fois toutes les correspondances tranchées
+    // (77 encore ouvertes après coup chez Vision Lavage), il n'a plus lieu d'être.
+    ambiguous_column: (colonnesAVerifier ?? 0) > 0,
+  });
 
   const dupCounts = { pending: 0, merge: 0, createNew: 0, skip: 0, review: 0 };
   for (const d of decisions.values()) {
@@ -1024,6 +1352,42 @@ async function enrichMergedClients(
   return out;
 }
 
+/** Ferme les avertissements ouverts d'un type dont le cas n'est plus constaté par ce dry-run. */
+async function fermerAvertissementsPerimes(admin: SupabaseClient, migrationId: string, encorePresents: Record<string, boolean>): Promise<void> {
+  for (const [type, present] of Object.entries(encorePresents)) {
+    if (present) continue;
+    const { error } = await admin
+      .from('migration_issues')
+      .update({ resolved_at: new Date().toISOString(), resolution: 'plus constaté au dernier import test' })
+      .eq('migration_id', migrationId)
+      .eq('type', type)
+      .is('resolved_at', null);
+    if (error) console.error('[migration-importer] stale issue close failed:', error.message);
+  }
+}
+
+/** Marque les lignes rejetées par le dry-run (statut + motif), groupées par motif pour limiter les requêtes. */
+async function marquerRejetsDryRun(admin: SupabaseClient, migrationId: string, rejets: Array<{ id: string; status: 'error' | 'orphan'; error: string }>): Promise<void> {
+  const groupes = new Map<string, string[]>();
+  for (const r of rejets) {
+    const k = `${r.status}\u0000${r.error}`;
+    const arr = groupes.get(k) ?? [];
+    arr.push(r.id);
+    groupes.set(k, arr);
+  }
+  for (const [k, ids] of groupes) {
+    const [status, error] = k.split('\u0000');
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const { error: err } = await admin
+        .from('migration_staging_records')
+        .update({ status, error })
+        .eq('migration_id', migrationId)
+        .in('id', ids.slice(i, i + CHUNK));
+      if (err) console.error('[migration-importer] dry-run reject mark failed:', err.message);
+    }
+  }
+}
+
 async function setStagingStatus(admin: SupabaseClient, migrationId: string, ids: string[], status: string): Promise<void> {
   for (let i = 0; i < ids.length; i += CHUNK) {
     const { error } = await admin
@@ -1040,18 +1404,30 @@ export async function runFinalImport(
   migration: MigrationRow,
   batchId: string,
   actorId: string,
+  onProgression?: OnProgression,
 ): Promise<DryRunReport> {
   const decisions = await loadDuplicateDecisions(admin, migration.id);
   const staffIdBySource = await loadStaffMap(admin, migration.id);
   const entities = entitiesForMigration(migration);
 
-  // Reprise : ce qui a déjà été importé pour cette migration.
+  // Reprise : ce qui a déjà été importé pour cette migration — par un lot ENCORE EN PLACE.
+  // Les enregistrements d'un lot annulé (rollback) ne comptent plus : le 2026-09-23, 3 439
+  // enregistrements du lot annulé faisaient croire que tout était déjà importé, et l'import
+  // final « réussissait » en 5 s sans rien créer (review_required → failed).
+  const { data: lotsEnPlace } = await admin
+    .from('migration_import_batches')
+    .select('id')
+    .eq('migration_id', migration.id)
+    .eq('kind', 'final')
+    .neq('status', 'rolled_back');
+  const idsLotsEnPlace = (lotsEnPlace ?? []).map((b: { id: string }) => b.id);
   const already = new Map<string, { entity_id: string; action: string; entity_table: string }>();
-  for (let offset = 0; ; offset += STAGING_PAGE) {
+  for (let offset = 0; idsLotsEnPlace.length > 0; offset += STAGING_PAGE) {
     const { data, error } = await admin
       .from('migration_import_records')
       .select('staging_record_id, entity_id, action, entity_table')
       .eq('migration_id', migration.id)
+      .in('batch_id', idsLotsEnPlace)
       .range(offset, offset + STAGING_PAGE - 1);
     if (error) {
       console.error('[migration-importer] import_records fetch failed:', error.message);
@@ -1072,6 +1448,12 @@ export async function runFinalImport(
     jobIdByRef: new Map(),
     staffIdBySource,
   };
+  await seedExistingRefs(admin, migration.org_id, ctx);
+  const jobsFactures = await jobsDejaFactures(admin, migration.org_id);
+  // Clients qui reçoivent une job ou une facture dans cette passe : un client
+  // facturé n'est pas un prospect (règle Lume « client sans job = prospect »,
+  // mais l'export peut ne pas contenir les jobs).
+  const clientsAActiver = new Set<string>();
 
   const byEntity: Partial<Record<TargetEntity, EntityCounts>> = {};
   const notes: string[] = [];
@@ -1085,6 +1467,10 @@ export async function runFinalImport(
     byEntity[entity] = counts;
     const rows = await loadStaging(admin, migration.id, entity, ['ready', 'duplicate', 'orphan', 'imported', 'merged']);
     sourceRows += rows.length;
+    const libelle = ENTITY_LABELS_FR[entity] ?? entity;
+    const etapeEntite = { entity, total: rows.length, entites_faites: entities.indexOf(entity), entites_total: entities.length };
+    onProgression?.({ ...etapeEntite, etape: `Préparation — ${libelle}`, processed: 0 });
+    let lignesFaites = 0;
 
     const toInsert: { rec: StagingRow; row: Record<string, unknown>; id: string }[] = [];
     const importRecords: ImportRecordRow[] = [];
@@ -1098,11 +1484,13 @@ export async function runFinalImport(
     const targetByStagingId = new Map<string, string>();
     const siblings: StagingRow[] = [];
     const mapByEntity =
-      entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
+      entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef
+        : entity === 'invoice' ? (ctx.invoiceIdByRef ?? (ctx.invoiceIdByRef = new Map())) : null;
 
     const registerRefs = (rec: StagingRow, targetId: string) => {
       targetByStagingId.set(rec.id, targetId);
       if (!mapByEntity) return;
+      if (entity === 'client') registerNameAddress(ctx, rec.normalized ?? {}, str((rec.normalized ?? {}).address), targetId);
       for (const key of refKeysOf(entity, rec)) {
         if (entity === 'client' && intra.ambiguousKeys.has(key)) continue; // homonymes : jamais devinés
         const existing = mapByEntity.get(key);
@@ -1112,6 +1500,8 @@ export async function runFinalImport(
     };
 
     for (const rec of rows) {
+      lignesFaites += 1;
+      if (lignesFaites % PROGRESSION_PAS === 0) onProgression?.({ ...etapeEntite, etape: `Préparation — ${libelle}`, processed: lignesFaites });
       // Reprise : déjà traité lors d'un passage précédent.
       const prior = already.get(`${rec.id}|${table}`);
       if (prior) {
@@ -1165,6 +1555,7 @@ export async function runFinalImport(
         }
         continue;
       }
+      if (entity === 'invoice') detacherFactureSurJobDejaFacture(built.row, jobsFactures);
       const id = deterministicEntityId(migration.id, rec.id, table);
       targetByStagingId.set(rec.id, id);
       toInsert.push({ rec, row: { id, ...built.row }, id });
@@ -1180,18 +1571,28 @@ export async function runFinalImport(
       // Écrasé par le rapport final à la complétion.
       const { error: hbErr } = await admin
         .from('migration_import_batches')
-        .update({ totals: { progress: { entity, processed: i, total: toInsert.length } } })
+        .update({ totals: { progress: { ...etapeEntite, etape: `Écriture — ${libelle}`, processed: i, total: toInsert.length, updated_at: new Date().toISOString() } } })
         .eq('id', batchId)
         .eq('status', 'running');
       if (hbErr) console.error('[migration-importer] heartbeat failed:', hbErr.message);
       const chunk = toInsert.slice(i, i + CHUNK);
-      const { error } = await admin.from(table).upsert(chunk.map((c) => c.row), { onConflict: 'id', ignoreDuplicates: true });
+      // defaultToNull:false — sans lui, PostgREST envoie NULL pour toute clé absente
+      // d'une rangée du lot (ex. created_at préservé sur certaines lignes seulement)
+      // et viole les NOT NULL : le lot entier retombait en retry ligne par ligne.
+      // Identifiants déterministes : une ligne déjà importée puis annulée (rollback = suppression
+      // douce) existe encore avec le même id. Ignorer le conflit la laissait « supprimée » et
+      // l'import « réussissait » avec un bureau vide (Vision Lavage, 2026-09-23). Les lignes qui
+      // arrivent ici ne sont jamais des fiches actives (le registre les a déjà écartées) : on
+      // écrase donc, et on ressuscite.
+      const rangs = chunk.map((c) => ressusciter(table, c.row));
+      const { error } = await admin.from(table).upsert(rangs, { onConflict: 'id', ignoreDuplicates: false, defaultToNull: false });
       if (!error) {
         for (const c of chunk) {
           counts.wouldCreate += 1;
           importedIds.push(c.rec.id);
           importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: c.rec.id, entity_table: table, entity_id: c.id, action: 'created' });
           registerRefs(c.rec, c.id);
+          if ((entity === 'job' || entity === 'invoice') && typeof c.row.client_id === 'string') clientsAActiver.add(c.row.client_id);
           if (entity === 'invoice') {
             const total = num(c.row.total_cents);
             if (total !== null) revenueCents += total;
@@ -1201,13 +1602,13 @@ export async function runFinalImport(
       }
       console.error(`[migration-importer] chunk upsert failed on ${table}, retry per row:`, error.message);
       for (const c of chunk) {
-        const { error: rowErr } = await admin.from(table).upsert([c.row], { onConflict: 'id', ignoreDuplicates: true });
+        const { error: rowErr } = await admin.from(table).upsert([ressusciter(table, c.row)], { onConflict: 'id', ignoreDuplicates: false, defaultToNull: false });
         if (rowErr) {
           counts.errors += 1;
           errorIds.push(c.rec.id);
           const { error: markErr } = await admin
             .from('migration_staging_records')
-            .update({ status: 'error', error: `import_failed:${rowErr.code ?? 'unknown'}` })
+            .update({ status: 'error', error: `import_failed:${rowErr.code ?? 'unknown'} — ${String(rowErr.message ?? '').slice(0, 140)}` })
             .eq('id', c.rec.id);
           if (markErr) console.error('[migration-importer] staging error mark failed:', markErr.message);
         } else {
@@ -1215,6 +1616,7 @@ export async function runFinalImport(
           importedIds.push(c.rec.id);
           importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: c.rec.id, entity_table: table, entity_id: c.id, action: 'created' });
           registerRefs(c.rec, c.id);
+          if ((entity === 'job' || entity === 'invoice') && typeof c.row.client_id === 'string') clientsAActiver.add(c.row.client_id);
           if (entity === 'invoice') {
             const total = num(c.row.total_cents);
             if (total !== null) revenueCents += total;
@@ -1266,6 +1668,24 @@ export async function runFinalImport(
   }
 
   if (orphans > 0) notes.push(`${orphans} ligne(s) exclues faute de relation (dossiers orphelins).`);
+
+  // Prospect → actif pour les clients qui ont reçu une job ou une facture.
+  // 'inactive' (archivé) n'est jamais touché ; le trigger des jobs ne rétrograde
+  // un client qu'à un événement job, donc l'activation par facture tient.
+  const aActiver = Array.from(clientsAActiver);
+  let actives = 0;
+  for (let i = 0; i < aActiver.length; i += CHUNK) {
+    const { data, error } = await admin
+      .from('clients')
+      .update({ status: 'active' })
+      .eq('org_id', migration.org_id)
+      .eq('status', 'lead')
+      .in('id', aActiver.slice(i, i + CHUNK))
+      .select('id');
+    if (error) console.error('[migration-importer] client activation failed:', error.message);
+    else actives += (data ?? []).length;
+  }
+  if (actives > 0) notes.push(`${actives} client(s) passés de prospect à actif (job ou facture importée).`);
 
   const totals = {
     sourceRows,
@@ -1440,11 +1860,98 @@ async function purgeAutoPinsForClients(admin: SupabaseClient, orgId: string, cli
   return purged;
 }
 
+/**
+ * Propriétés dont le client est en suppression douce : suppression douce aussi.
+ *
+ * L'insertion d'un client avec adresse crée sa propriété de service par déclencheur DB, hors du
+ * registre d'import : un rollback qui retire les clients laissait ces propriétés actives. Constaté
+ * le 2026-09-21 (Vision Lavage) : 22 propriétés orphelines → 104 « doublons » d'adresse à chaque
+ * import test. Scopé à l'org ; ne touche jamais une propriété dont le client est actif.
+ */
+export async function purgeOrphanProperties(admin: SupabaseClient, orgId: string): Promise<number> {
+  const PAGE = 1000;
+  const candidates: Array<{ id: string; client_id: string }> = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await admin
+      .from('properties')
+      .select('id, client_id')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .not('client_id', 'is', null)
+      .order('id', { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) { console.error('[migration-importer] orphan properties fetch failed:', error.message); return 0; }
+    if (!data || data.length === 0) break;
+    candidates.push(...(data as Array<{ id: string; client_id: string }>));
+    if (data.length < PAGE) break;
+  }
+  if (candidates.length === 0) return 0;
+  const clientIds = Array.from(new Set(candidates.map((c) => c.client_id)));
+  const deletedClients = new Set<string>();
+  for (let i = 0; i < clientIds.length; i += CHUNK) {
+    const { data, error } = await admin.from('clients').select('id').in('id', clientIds.slice(i, i + CHUNK)).not('deleted_at', 'is', null);
+    if (error) { console.error('[migration-importer] orphan properties clients check failed:', error.message); return 0; }
+    for (const c of data ?? []) deletedClients.add((c as { id: string }).id);
+  }
+  const orphans = candidates.filter((c) => deletedClients.has(c.client_id)).map((c) => c.id);
+  let purged = 0;
+  for (let i = 0; i < orphans.length; i += CHUNK) {
+    const chunk = orphans.slice(i, i + CHUNK);
+    const { data, error } = await admin.from('properties').update({ deleted_at: new Date().toISOString() }).in('id', chunk).eq('org_id', orgId).is('deleted_at', null).select('id');
+    if (error) { console.error('[migration-importer] orphan properties purge failed:', error.message); continue; }
+    purged += data?.length ?? 0;
+  }
+  return purged;
+}
+
+/** Jobs qui ont déjà une facture active dans le bureau (index unique invoices_org_job_unique_active_idx :
+ *  UNE facture active par job). */
+async function jobsDejaFactures(admin: SupabaseClient, orgId: string): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('invoices')
+      .select('job_id')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .not('job_id', 'is', null)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) { console.error('[migration-importer] invoiced jobs fetch failed:', error.message); break; }
+    if (!data || data.length === 0) break;
+    for (const r of data as { job_id: string | null }[]) if (r.job_id) out.add(r.job_id);
+    if (data.length < STAGING_PAGE) break;
+  }
+  return out;
+}
+
+/**
+ * Jobber accepte plusieurs factures par job ; Lume n'en rattache qu'une (index unique). La première
+ * garde le lien, les suivantes restent rattachées au client seulement, avec la raison dans leurs
+ * notes — au lieu d'être refusées par la base (9 factures rejetées « 23505 », Vision Lavage,
+ * 2026-09-24). Mute la rangée ; le jeu suit les jobs déjà liés (existants + cette passe).
+ */
+function detacherFactureSurJobDejaFacture(row: Record<string, unknown>, jobsFactures: Set<string>): void {
+  const jobId = typeof row.job_id === 'string' ? row.job_id : null;
+  if (!jobId) return;
+  if (jobsFactures.has(jobId)) {
+    row.job_id = null;
+    row.notes = joinNotes(String(row.notes ?? ''), 'Job déjà facturé par une autre facture importée : celle-ci est rattachée au client seulement (Lume : une facture par job).');
+    return;
+  }
+  jobsFactures.add(jobId);
+}
+
+/** Tables à suppression douce : une reprise après rollback doit remettre deleted_at à null. */
+const TABLES_SUPPRESSION_DOUCE = new Set(['clients', 'properties', 'jobs', 'quotes', 'invoices', 'schedule_events', 'payments']);
+function ressusciter(table: string, row: Record<string, unknown>): Record<string, unknown> {
+  return TABLES_SUPPRESSION_DOUCE.has(table) ? { ...row, deleted_at: null } : row;
+}
+
 export async function rollbackFinalBatch(
   admin: SupabaseClient,
   batchId: string,
   actorId: string,
-): Promise<{ softDeleted: number; deactivated: number; restored: number; pinsPurged: number }> {
+): Promise<{ softDeleted: number; deactivated: number; restored: number; pinsPurged: number; orphanProperties: number }> {
   let softDeleted = 0;
   let deactivated = 0;
   let restored = 0;
@@ -1537,7 +2044,24 @@ export async function rollbackFinalBatch(
     .eq('id', batchId);
   if (batchErr) console.error('[migration-importer] batch rollback mark failed:', batchErr.message);
 
-  return { softDeleted, deactivated, restored, pinsPurged };
+  // Propriétés créées par déclencheur pour les clients qu'on vient de retirer (hors registre).
+  const orphanProperties = orgId ? await purgeOrphanProperties(admin, orgId) : 0;
+
+  // Le lot annulé ne doit plus peser sur la reprise : son registre est effacé (le lot lui-même
+  // reste, avec ses totaux, comme trace), et les lignes de staging repassent à « ready » pour
+  // être réimportées telles quelles au prochain import final.
+  const { error: regErr } = await admin.from('migration_import_records').delete().eq('batch_id', batchId);
+  if (regErr) console.error('[migration-importer] rollback registry purge failed:', regErr.message);
+  if (batchRow?.migration_id) {
+    const { error: stErr } = await admin
+      .from('migration_staging_records')
+      .update({ status: 'ready' })
+      .eq('migration_id', batchRow.migration_id)
+      .in('status', ['imported', 'merged']);
+    if (stErr) console.error('[migration-importer] rollback staging reset failed:', stErr.message);
+  }
+
+  return { softDeleted, deactivated, restored, pinsPurged, orphanProperties };
 }
 
 // ---------------------------------------------------------------------------

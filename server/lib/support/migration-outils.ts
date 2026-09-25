@@ -55,12 +55,12 @@ export async function demarrerMigrationPour(admin: SupabaseClient, p: { orgId: s
   await logMigrationAudit(admin, { migrationId: mig.id, action: 'invitation.generate', actorId: p.userId, actorRole: 'client', meta: { ttl_hours: DEFAULT_INVITE_TTL_HOURS, via: 'support_assistant' } });
   const lien = `${getBaseUrl()}/migration/invite/${token}`;
   // L'admin Lume sait qu'une migration démarre (jamais le jeton : seul le client le reçoit).
-  const detail = `${p.companyName} démarre une migration depuis ${source} via l'assistant de support (mode autonome). Console : /admin/migrations#${mig.id}`;
+  const detail = `${p.companyName} démarre une migration depuis ${source} via l'assistant de support (mode autonome). Console : /creator-space/migrations#${mig.id}`;
   const cibles = new Set<string>([...platformAdminIds, ...(adminAssigne ? [adminAssigne] : [])]);
   for (const userId of cibles) {
     const { data: membre } = await admin.from('memberships').select('org_id').eq('user_id', userId).eq('status', 'active').order('created_at', { ascending: true }).limit(1).maybeSingle();
     if (!membre?.org_id) continue;
-    const { error: eN } = await admin.from('notifications').insert({ org_id: membre.org_id, user_id: userId, type: 'migration_bot', category: 'migration', title: 'Nouvelle migration démarrée par un client', body: detail.slice(0, 180), link: `/admin/migrations#${mig.id}`, icon: 'nouvelle' });
+    const { error: eN } = await admin.from('notifications').insert({ org_id: membre.org_id, user_id: userId, type: 'migration_bot', category: 'migration', title: 'Nouvelle migration démarrée par un client', body: detail.slice(0, 180), link: `/creator-space/migrations#${mig.id}`, icon: 'nouvelle' });
     if (eN) logger.error('[support/migration] notification admin impossible', { error: eN.message, migrationId: mig.id });
   }
   if (isSlackConfigured()) {

@@ -43,8 +43,18 @@ describe('la page Tâches ne boucle plus', () => {
 
 describe('le même piège n\'est pas ailleurs', () => {
   it('Payments protège son tableau par useMemo', () => {
+    // Ce test exigeait une ÉCRITURE précise (`useMemo(() => …data?.rows`).
+    // Payments est passé à la pagination infinie : `rows` agrège maintenant
+    // plusieurs pages en dédoublonnant. Le code est toujours protégé — mieux
+    // qu'avant — mais la forme a changé, et le test tombait sur main.
+    //
+    // On vérifie donc ce qui compte : `rows` naît d'un `useMemo`, et aucun
+    // `useEffect` ne le prend en dépendance (c'est ça qui boucle).
     const src = lire('src/pages/Payments.tsx');
-    expect(src).toMatch(/const rows = useMemo\(\(\) => paymentsQuery\.data\?\.rows \|\| \[\]/);
+    expect(src).toMatch(/const rows = useMemo\(/);
+
+    const effets = src.match(/useEffect\([\s\S]{0,400}?\}, \[[^\]]*rows[^\]]*\]\)/g) || [];
+    expect(effets).toEqual([]);
   });
 
   it('Quotes n\'utilise rows que dans un useMemo, jamais dans un useEffect', () => {

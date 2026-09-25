@@ -9,7 +9,9 @@ import { useCompany } from '../contexts/CompanyContext';
 import {
   getCommissionRules,
   assignMemberToRule,
+  getCommissionSettings,
 } from '../lib/commissionsApi';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { fetchTeamList, type OrgMember } from '../lib/invitationsApi';
 import type { FsCommissionRule } from '../types';
 import PersonalCommissionView from '../components/commissions/PersonalCommissionView';
@@ -72,7 +74,8 @@ export default function Commissions() {
             <p className="text-xs text-text-tertiary">{isFr ? 'Vos ventes conclues, commissions gagnées et prochains versements' : 'Your closes, commission earnings and next payouts'}</p>
           </div>
         </div>
-        <PayrollSummaryCard metric="deals" />
+        {/* Suit le mode de paie de la fiche Équipe : à l'heure, à commission ou les deux. */}
+        <PayrollSummaryCard />
         {/* Scope explicitement au self: un rep ne voit QUE ses commissions.
             Sans userId, un owner en preview (Dev Role Switcher → rep) verrait
             tout, car le serveur applique son vrai rôle. Passer son propre id
@@ -195,7 +198,7 @@ function AdminCommissionsLayout() {
 
       {tab === 'my' && (
         <div className="space-y-6">
-          <PayrollSummaryCard metric="deals" />
+          <PayrollSummaryCard canManagePlans />
           <PersonalCommissionView
             title={isFr ? 'Mes commissions' : 'My commissions'}
             subtitle={isFr ? 'Vos propres commissions, le cas échéant' : 'Your own commissions, if any'}
@@ -371,13 +374,32 @@ function RatesPanel() {
   const [rules, setRules] = useState<FsCommissionRule[]>([]);
   const [busy, setBusy] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  // Fiche Équipe (mode de paie + taux horaire) : la même source que la page
+  // Paie, pour que « à l'heure », « à commission » et « les deux » se lisent
+  // au même endroit que le plan.
+  const [paieParUser, setPaieParUser] = useState<Record<string, { id: string; mode: 'hourly' | 'commission' | 'both'; rate_cents: number }>>({});
+  const [defaultRuleId, setDefaultRuleId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setBusy(true);
     try {
-      const [team, rulesData] = await Promise.all([fetchTeamList(), getCommissionRules()]);
+      const [team, rulesData, reglages, orgId] = await Promise.all([fetchTeamList(), getCommissionRules(), getCommissionSettings().catch(() => null), getCurrentOrgIdOrThrow()]);
       setMembers(team.members.filter((m) => m.status === 'active'));
       setRules(rulesData.filter((r) => r.is_active && !r.deleted_at));
+      setDefaultRuleId(reglages?.default_rule_id ?? null);
+      const { data: tm, error: tmErr } = await supabase
+        .from('team_members')
+        .select('id, user_id, compensation_mode, hourly_rate_cents, labour_cost_hourly')
+        .eq('org_id', orgId)
+        .neq('status', 'inactive')
+        .not('user_id', 'is', null);
+      if (tmErr) throw tmErr;
+      const map: typeof paieParUser = {};
+      for (const r of (tm || []) as Array<{ id: string; user_id: string; compensation_mode: string | null; hourly_rate_cents: number | null; labour_cost_hourly: number | null }>) {
+        const mode = r.compensation_mode === 'commission' || r.compensation_mode === 'both' ? r.compensation_mode : 'hourly';
+        map[r.user_id] = { id: r.id, mode, rate_cents: Number(r.hourly_rate_cents) || Math.round(Number(r.labour_cost_hourly || 0) * 100) || 0 };
+      }
+      setPaieParUser(map);
     } catch (err) {
       console.error('Failed to load rates:', err);
     } finally {
@@ -440,6 +462,8 @@ function RatesPanel() {
               <tr className="border-b border-border-subtle">
                 <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{isFr ? 'Membre' : 'Member'}</th>
                 <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{isFr ? 'Rôle' : 'Role'}</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{isFr ? 'Mode de paie' : 'Pay mode'}</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{isFr ? 'Taux horaire' : 'Hourly rate'}</th>
                 <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{isFr ? 'Plan appliqué' : 'Applied plan'}</th>
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{isFr ? 'Taux effectif' : 'Effective rate'}</th>
               </tr>
@@ -448,6 +472,11 @@ function RatesPanel() {
               {members.map((m) => {
                 const plan = planForUser(m.user_id);
                 const isSaving = savingId === m.user_id;
+                const paie = paieParUser[m.user_id];
+                const mode = paie?.mode ?? 'hourly';
+                const modeLabel = mode === 'hourly' ? (isFr ? 'À l’heure' : 'Hourly') : mode === 'commission' ? 'Commission' : (isFr ? 'Horaire + commission' : 'Hourly + commission');
+                const planParDefautValide = !!defaultRuleId && rules.some((r) => r.id === defaultRuleId);
+                const sansPlan = mode !== 'hourly' && !plan && !planParDefautValide;
                 return (
                   <tr key={m.user_id} className="border-b border-border-subtle last:border-b-0">
                     <td className="px-5 py-2.5 text-sm font-medium">
@@ -456,7 +485,24 @@ function RatesPanel() {
                       </Link>
                     </td>
                     <td className="px-5 py-2.5 text-sm text-text-muted capitalize">{m.role}</td>
+                    <td className="px-5 py-2.5 text-sm">
+                      {paie ? (
+                        <Link to={`/settings/team/${paie.id}`} className="text-text-primary hover:underline" title={isFr ? 'Modifier dans la fiche Équipe' : 'Edit on the team member page'}>
+                          {modeLabel}
+                        </Link>
+                      ) : <span className="text-text-muted">—</span>}
+                    </td>
+                    <td className="px-5 py-2.5 text-right text-sm tabular-nums text-text-primary">
+                      {mode === 'commission' ? <span className="text-text-muted">—</span> : paie && paie.rate_cents > 0
+                        ? `${(paie.rate_cents / 100).toLocaleString(isFr ? 'fr-CA' : 'en-CA', { minimumFractionDigits: 2 })} $/h`
+                        : <span className="text-amber-700 dark:text-amber-300">0 $/h</span>}
+                    </td>
                     <td className="px-5 py-2.5">
+                      {sansPlan && (
+                        <p className="mb-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                          {isFr ? 'Aucun plan : aucune commission ne sera calculée' : 'No plan: no commission will be calculated'}
+                        </p>
+                      )}
                       <div className="flex items-center gap-2">
                         <select
                           value={plan?.id ?? ''}
@@ -475,13 +521,19 @@ function RatesPanel() {
                       </div>
                     </td>
                     <td className="px-5 py-2.5 text-right text-sm font-semibold text-text-primary tabular-nums">
-                      {planRateLabel(plan, isFr)}
+                      {plan
+                        ? planRateLabel(plan, isFr)
+                        : planParDefautValide
+                          ? `${planRateLabel(rules.find((r) => r.id === defaultRuleId), isFr)} ${isFr ? '(par défaut)' : '(default)'}`
+                          : mode === 'hourly'
+                            ? <span className="font-normal text-text-muted">{isFr ? 'Aucune commission' : 'No commission'}</span>
+                            : <span className="text-amber-700 dark:text-amber-300">{isFr ? 'Aucun plan' : 'No plan'}</span>}
                     </td>
                   </tr>
                 );
               })}
               {members.length === 0 && (
-                <tr><td colSpan={4} className="px-5 py-8 text-center text-sm text-text-muted">{isFr ? 'Aucun membre.' : 'No members.'}</td></tr>
+                <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-text-muted">{isFr ? 'Aucun membre.' : 'No members.'}</td></tr>
               )}
             </tbody>
           </table>

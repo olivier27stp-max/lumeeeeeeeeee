@@ -8,7 +8,7 @@
  *  - "inline"  → compact section for embedding inside forms (QuoteCreateModal)
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Plus, Trash2, Pencil, X, Upload, FileText, Film, Image as ImageIcon,
   Download, ChevronDown, ChevronUp, Paperclip, Eye,
@@ -97,6 +97,24 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
   const [formFiles, setFormFiles] = useState<SpecificNoteFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const sortId = useId();
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+
+  /**
+   * Les notes triées. `created_at` est la seule date fiable : une note
+   * modifiée garde sa place dans l'histoire, sinon corriger une faute la
+   * ferait remonter en tête comme si elle venait d'être écrite.
+   */
+  const sortedNotes = useMemo(() => {
+    const copie = [...notes];
+    copie.sort((a, b) => {
+      const da = a.created_at ?? '';
+      const db = b.created_at ?? '';
+      return sortOrder === 'newest' ? db.localeCompare(da) : da.localeCompare(db);
+    });
+    return copie;
+  }, [notes, sortOrder]);
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -626,9 +644,33 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
           <p className="text-[11px] text-text-muted mt-1">{fr ? 'Ajoutez des photos, vidéos, documents ou notes textuelles.' : 'Add photos, videos, documents or text notes.'}</p>
         </div>
       ) : (
-        <AnimatePresence mode="popLayout">
-          {notes.map(renderNoteCard)}
-        </AnimatePresence>
+        <>
+          {/*
+            Trier les notes. Les plus récentes d'abord par défaut : une note
+            de visite d'hier compte plus qu'une de l'an dernier. L'inverse
+            sert quand on veut relire une histoire depuis son début.
+            Un seul élément : pas de sélecteur, il n'y aurait rien à trier.
+          */}
+          {notes.length > 1 && (
+            <div className="flex items-center justify-end gap-2 pb-2">
+              <label htmlFor={sortId} className="text-[11px] text-text-tertiary">
+                {fr ? 'Trier' : 'Sort'}
+              </label>
+              <select
+                id={sortId}
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as 'newest' | 'oldest')}
+                className="input-field max-w-[150px] text-[12px]"
+              >
+                <option value="newest">{fr ? 'Plus récentes' : 'Newest first'}</option>
+                <option value="oldest">{fr ? 'Plus anciennes' : 'Oldest first'}</option>
+              </select>
+            </div>
+          )}
+          <AnimatePresence mode="popLayout">
+            {sortedNotes.map(renderNoteCard)}
+          </AnimatePresence>
+        </>
       )}
 
       {/* Hidden file inputs */}

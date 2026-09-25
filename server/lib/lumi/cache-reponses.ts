@@ -45,8 +45,26 @@ export { versionOrg, invaliderOrg } from './version-org';
 import { versionOrg } from './version-org';
 
 /** Un tour est-il cachable ? Lecture seule, texte, pas de proposition, premier message. */
-export function tourCachable(t: { historiqueVide: boolean; texte: string; outils: string[]; proposition: boolean; resultat: string }): boolean {
-  if (!t.historiqueVide || t.proposition || t.resultat !== 'ok') return false;
+/**
+ * Énoncés jamais servis ni mémorisés par les caches (étages 3-4) :
+ *  - retenir/oublier : une écriture, quoi qu'ait fait le tour ;
+ *  - rapport/PDF/document : « un rapport des jobs de cette semaine » ressemblait
+ *    à « combien de jobs cette semaine » (cos ≥ 0,92) et recevait la liste au
+ *    lieu du document (batterie du 2026-09-16).
+ */
+export const ENONCE_MEMOIRE = /^\s*(retiens|retiens-toi|souviens-toi|note que|oublie|n'oublie pas|remember|forget)\b/i;
+export const ENONCE_DOCUMENT = /\b(rapport|report|pdf|document|imprime|imprimer|print)\b/i;
+export function enonceCachable(enonce: string | null | undefined): boolean {
+  if (!enonce) return true;
+  return !ENONCE_MEMOIRE.test(enonce) && !ENONCE_DOCUMENT.test(enonce);
+}
+
+export function tourCachable(t: { historiqueVide: boolean; texte: string; outils: string[]; proposition: boolean; resultat: string; ecritureExecutee?: boolean; enonce?: string | null }): boolean {
+  // Une écriture exécutée d'office (anodine, ou mode « argent ») n'apparaît ni
+  // dans `outils` ni comme proposition : sans ce garde, « C'est noté » était
+  // mis en cache et rejoué sans rien écrire (audit du 2026-09-16, A5).
+  if (!t.historiqueVide || t.proposition || t.resultat !== 'ok' || t.ecritureExecutee) return false;
+  if (!enonceCachable(t.enonce)) return false;
   if (!t.texte.trim()) return false;
   return t.outils.every((o) => TOOLS_BY_NAME[o]?.kind === 'read');
 }

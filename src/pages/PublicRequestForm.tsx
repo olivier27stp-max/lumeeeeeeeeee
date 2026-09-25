@@ -1,7 +1,7 @@
 import { useEffect, useId, useState, useCallback } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, ImagePlus, X } from 'lucide-react';
 import { useTranslation } from '../i18n';
-import { fetchPublicForm, submitPublicForm, uploadPublicFormPhoto, type PublicForm, type PublicFormSubmission } from '../lib/publicFormApi';
+import { fetchPublicForm, lireAttribution, submitPublicForm, uploadPublicFormPhoto, type PublicForm, type PublicFormSubmission } from '../lib/publicFormApi';
 import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 import type { FormField } from '../types';
 
@@ -138,6 +138,10 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
       notes: notes.trim() || null,
       photos: photos.filter((p) => p.url).map((p) => p.url as string),
       website: website || undefined, // honeypot (vide pour un humain)
+      // Attribution relevée dans l'URL au moment de l'envoi. Aucun champ du
+      // formulaire n'est touché : les publicités pointent simplement vers
+      // cette page avec leurs paramètres habituels.
+      ...lireAttribution(),
     };
 
     setSubmitting(true);

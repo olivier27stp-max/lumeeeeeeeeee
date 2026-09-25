@@ -13,12 +13,16 @@ import Overview from './Overview';
 import Logs from './Logs';
 import Engagement from './Engagement';
 import Companies from './Companies';
+// Console des migrations assistées (mode embarqué : le gate du Creator Space
+// suffit, même liste platformAdminIds que /api/migration-admin/check).
+import AdminMigrations from '../AdminMigrations';
 
 const NAV_ITEMS = [
   { to: '/creator-space', label: 'Overview', end: true },
   { to: '/creator-space/logs', label: 'Logs', end: false },
   { to: '/creator-space/engagement', label: 'Company Engagement', end: false },
   { to: '/creator-space/companies', label: 'Companies', end: false },
+  { to: '/creator-space/migrations', label: 'Migrations', end: false },
 ];
 
 export default function CreatorSpace() {
@@ -50,6 +54,7 @@ export default function CreatorSpace() {
             <Route path="logs" element={<Logs />} />
             <Route path="engagement" element={<Engagement />} />
             <Route path="companies" element={<Companies />} />
+            <Route path="migrations" element={<AdminMigrations embedded />} />
             <Route path="*" element={<Navigate to="/creator-space" replace />} />
           </Routes>
         </div>

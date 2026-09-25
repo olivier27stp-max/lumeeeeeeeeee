@@ -40,6 +40,41 @@ export const twilioClient = envelopperTwilio(
 );
 
 /**
+ * Client réservé à l'ACHAT de numéros (IncomingPhoneNumbers / AvailablePhoneNumbers).
+ *
+ * Si `TWILIO_PROVISIONING_API_KEY_SID` + `_SECRET` sont définis, on s'authentifie
+ * avec cette clé Restricted (droits « Phone Numbers » seulement) sur le compte
+ * `TWILIO_ACCOUNT_SID` — le jeton principal n'est alors plus utilisé pour acheter.
+ * Sinon, repli sur le client principal (comportement historique).
+ * Jamais la clé d'un sous-compte : la clé doit appartenir au compte parent.
+ */
+const provisioningKeySid = process.env.TWILIO_PROVISIONING_API_KEY_SID || '';
+const provisioningKeySecret = process.env.TWILIO_PROVISIONING_API_KEY_SECRET || '';
+export const twilioProvisioningClient =
+  provisioningKeySid.startsWith('SK') && provisioningKeySecret && twilioAccountSid.startsWith('AC')
+    ? Twilio(provisioningKeySid, provisioningKeySecret, { accountSid: twilioAccountSid, timeout: 20_000 })
+    : twilioClient;
+
+/**
+ * Base publique des webhooks Twilio, sans « / » final ('' si rien n'est défini).
+ *
+ * SOURCE UNIQUE : la validation de signature (`routes/messages.ts`) calcule
+ * l'URL dans cet ordre-ci, donc l'URL enregistrée à l'achat d'un numéro DOIT
+ * sortir de la même fonction. L'achat lisait `PUBLIC_URL` en premier : si les
+ * deux variables différaient, chaque nouveau numéro aurait reçu un webhook
+ * dont la signature était ensuite rejetée — textos entrants perdus en silence.
+ */
+export function getTwilioWebhookBaseUrl(): string {
+  return (
+    process.env.TWILIO_WEBHOOK_BASE_URL
+    || process.env.PUBLIC_URL
+    || process.env.PUBLIC_BASE_URL
+    || process.env.FRONTEND_URL
+    || ''
+  ).trim().replace(/\/$/, '');
+}
+
+/**
  * URL du callback de statut Twilio, à passer à CHAQUE `messages.create`.
  *
  * Sans ce paramètre par message, Twilio ne renvoie jamais l'accusé de
@@ -58,13 +93,7 @@ export const twilioClient = envelopperTwilio(
  * on n'envoie alors pas de callback plutôt qu'une URL relative invalide.
  */
 export function getTwilioStatusCallbackUrl(): string | undefined {
-  const base = (
-    process.env.TWILIO_WEBHOOK_BASE_URL
-    || process.env.PUBLIC_URL
-    || process.env.PUBLIC_BASE_URL
-    || process.env.FRONTEND_URL
-    || ''
-  ).trim().replace(/\/$/, '');
+  const base = getTwilioWebhookBaseUrl();
 
   if (!base || !/^https?:\/\//.test(base)) return undefined;
   // Twilio ne peut pas joindre une machine locale : inutile d'annoncer une URL

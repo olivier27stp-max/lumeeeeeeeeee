@@ -156,8 +156,17 @@ export async function findDuplicatesForEntity(
     // Même table, jamais mélangées : une adresse de service et une adresse de
     // facturation identiques sont deux dossiers légitimes.
     const wantedKind = entity === 'billing_property' ? 'billing' : 'service';
-    const existing = (await fetchAll<{ id: string; address: string | null; kind: string | null }>(admin, 'properties', 'id, address, kind', orgId))
+    const all = (await fetchAll<{ id: string; address: string | null; kind: string | null; client_id: string | null }>(admin, 'properties', 'id, address, kind, client_id', orgId))
       .filter((p) => (p.kind ?? 'service') === wantedKind);
+    // Une propriété dont le client est en suppression douce n'est plus une fiche vivante : elle ne
+    // doit pas faire ressortir des doublons d'adresse (22 orphelines → 104 candidats, 2026-09-21).
+    const clientIds = Array.from(new Set(all.map((p) => p.client_id).filter((x): x is string => !!x)));
+    const deletedClients = new Set<string>();
+    for (let i = 0; i < clientIds.length; i += 200) {
+      const { data } = await admin.from('clients').select('id').in('id', clientIds.slice(i, i + 200)).not('deleted_at', 'is', null);
+      for (const c of data ?? []) deletedClients.add((c as { id: string }).id);
+    }
+    const existing = all.filter((p) => !p.client_id || !deletedClients.has(p.client_id));
     const byAddress = new Map<string, string>();
     for (const p of existing) {
       const key = normalizeAddressKey(p.address ?? '');
@@ -261,6 +270,33 @@ export async function findDuplicatesForEntity(
         matchReasons: sameTotal ? ['invoice_number', 'total'] : ['invoice_number'],
         score: sameTotal ? 95 : 85,
       });
+    }
+    return matches;
+  }
+
+  if (entity === 'payment') {
+    // Même facture (par numéro), même montant, même jour = même paiement déjà encaissé.
+    const invoices = await fetchAll<{ id: string; invoice_number: string | null }>(admin, 'invoices', 'id, invoice_number', orgId);
+    const invoiceByNumber = new Map<string, string>();
+    for (const inv of invoices) {
+      const num = (inv.invoice_number ?? '').trim();
+      if (num && !invoiceByNumber.has(num)) invoiceByNumber.set(num, inv.id);
+    }
+    const existing = await fetchAll<{ id: string; invoice_id: string | null; amount_cents: number | null; payment_date: string | null }>(
+      admin, 'payments', 'id, invoice_id, amount_cents, payment_date', orgId,
+    );
+    const byKey = new Map<string, string>();
+    for (const p of existing) {
+      if (!p.invoice_id || p.amount_cents === null) continue;
+      byKey.set(`${p.invoice_id}|${p.amount_cents}|${(p.payment_date ?? '').slice(0, 10)}`, p.id);
+    }
+    for (const r of records) {
+      const n = r.normalized ?? {};
+      const invoiceId = invoiceByNumber.get(str((r.relations ?? {}).invoice_ref).trim());
+      const amount = typeof n.amount_cents === 'number' ? n.amount_cents : null;
+      if (!invoiceId || amount === null) continue;
+      const hit = byKey.get(`${invoiceId}|${amount}|${str(n.date).slice(0, 10)}`);
+      if (hit) matches.push({ stagingRecordId: r.id, existingTable: 'payments', existingId: hit, matchReasons: ['invoice_number', 'amount', 'date'], score: 95 });
     }
     return matches;
   }

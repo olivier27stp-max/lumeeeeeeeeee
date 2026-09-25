@@ -10,7 +10,9 @@ import { sendEmail, isMailerConfigured } from '../mailer';
 import { emailFrom, supportEmail } from '../config';
 import { resolvePublicBaseUrl } from '../helpers';
 import { isSlackConfigured, canalSupport, envoyerMessageSlack, echapperSlack } from '../slack';
+import { liensPieces, pieceJointeSlack, LIEN_EQUIPE_S, type Piece } from './captures';
 import { logger } from '../logger';
+import { rendreCourrielLume, echapper, type LigneDetail } from '../courriels/gabarit';
 
 // Forfaits prioritaires (« Support prioritaire » sur la page des prix).
 const PRIORITY_PLANS = new Set(['pro', 'autopilot', 'enterprise']);
@@ -55,6 +57,10 @@ export interface MessageTicket {
   author_name: string | null;
   body: string;
   created_at: string;
+  /** 👍 / 👎 du client sur une réponse de Lumi. */
+  avis?: 'bon' | 'mauvais' | null;
+  /** Captures jointes par le client (bucket support-captures). */
+  pieces?: Piece[] | null;
 }
 
 export interface ContexteOrg {
@@ -161,17 +167,18 @@ export async function ticketDe(admin: SupabaseClient, ticketId: string, orgId: s
 }
 
 export async function messagesDuTicket(admin: SupabaseClient, ticketId: string): Promise<MessageTicket[]> {
-  const { data, error } = await admin.from('support_messages').select('id, ticket_id, author, author_name, body, created_at').eq('ticket_id', ticketId).order('created_at', { ascending: true }).limit(200);
+  const { data, error } = await admin.from('support_messages').select('id, ticket_id, author, author_name, body, created_at, avis, pieces').eq('ticket_id', ticketId).order('created_at', { ascending: true }).limit(200);
   if (error) throw new Error(`support_messages select : ${error.message}`);
   return (data || []) as MessageTicket[];
 }
 
 export async function ajouterMessage(admin: SupabaseClient, p: {
-  ticket: Pick<Ticket, 'id' | 'org_id'>; author: MessageTicket['author']; body: string; authorName?: string | null; slackTs?: string | null;
+  ticket: Pick<Ticket, 'id' | 'org_id'>; author: MessageTicket['author']; body: string; authorName?: string | null; slackTs?: string | null; pieces?: Piece[];
 }): Promise<MessageTicket | null> {
   const { data, error } = await admin.from('support_messages').insert({
     ticket_id: p.ticket.id, org_id: p.ticket.org_id, author: p.author, author_name: p.authorName || null, body: p.body.slice(0, 10_000), slack_ts: p.slackTs || null,
-  }).select('id, ticket_id, author, author_name, body, created_at').maybeSingle();
+    ...(p.pieces?.length ? { pieces: p.pieces } : {}),
+  }).select('id, ticket_id, author, author_name, body, created_at, pieces').maybeSingle();
   if (error) {
     // Doublon Slack (même ts) : le webhook a été rejoué, on ignore.
     if (error.code === '23505') return null;
@@ -199,7 +206,7 @@ function enTeteSlack(t: Ticket, ctx: ContexteOrg, motif: string): { text: string
     blocks: [
       { type: 'header', text: { type: 'plain_text', text: `${t.priority === 'priority' ? '🚨 ' : '💬 '}${t.subject.slice(0, 140)}`, emoji: true } },
       { type: 'section', fields: champs.map((f) => ({ type: 'mrkdwn', text: f })) },
-      { type: 'context', elements: [{ type: 'mrkdwn', text: `Motif : ${echapperSlack(motif)} · *Répondez dans ce fil* : le client lit la réponse dans l’app et par courriel.` }] },
+      { type: 'context', elements: [{ type: 'mrkdwn', text: `Motif : ${echapperSlack(motif)} · *Répondez dans ce fil* : le client lit la réponse dans l’app et par courriel. 📌 devant une réponse (ou en réaction) = Lumi la retient pour les prochains clients ; 🔒 devant une note = elle reste ici.` }] },
     ],
   };
 }
@@ -213,9 +220,10 @@ function libelleAuteur(m: MessageTicket): string {
  * de ≤ 3 500 caractères pour Slack. Rafba veut la lire en entier dans le
  * canal du client — c'est ce qui lui manquait avec l'extrait.
  */
-export function transcriptSlackComplet(messages: MessageTicket[], tailleMax = 3500): string[] {
+export function transcriptSlackComplet(messages: MessageTicket[], tailleMax = 3500, liens: Map<string, string> = new Map()): string[] {
   const visibles = messages.filter((m) => m.author !== 'system');
-  const lignes = visibles.map((m) => `*${echapperSlack(libelleAuteur(m))}* — ${echapperSlack(m.body)}`);
+  // Les captures du client : « 📎 <lien signé|nom> » sous son message (liens = chemin → url, signés par l'appelant).
+  const lignes = visibles.map((m) => `*${echapperSlack(libelleAuteur(m))}* — ${echapperSlack(m.body)}${pieceJointeSlack((m.pieces || []).filter((p) => liens.has(p.chemin)).map((p) => ({ nom: p.nom, url: liens.get(p.chemin)! })))}`);
   const morceaux: string[] = [];
   let courant = '';
   for (const l of lignes) {
@@ -242,34 +250,45 @@ export function transcriptTexte(t: Ticket, messages: MessageTicket[]): string {
   return [...entete, ...corps].join('\n');
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+/** Texte libre (message du client, réponse d'un humain) → HTML sûr, sauts de ligne conservés. */
+function texteHtml(s: string): string {
+  return echapper(s).replace(/\r?\n/g, '<br/>');
 }
 
-/** Repli sans Slack : le courriel d'avant, avec le transcript. */
+/** Les lignes d'en-tête d'un courriel interne (escalade, relais) : qui écrit, d'où, sur quel forfait. */
+function lignesTicket(t: Ticket, ctx: ContexteOrg, motif?: string): LigneDetail[] {
+  return [
+    { libelle: 'Entreprise', valeur: t.company_name || ctx.companyName || '—', fort: true },
+    { libelle: 'Personne', valeur: `${t.user_name || ctx.userName || ''}${t.user_email ? ` <${t.user_email}>` : ''}`.trim() || '—' },
+    { libelle: 'Forfait', valeur: `${ctx.planLabel}${t.priority === 'priority' ? ' · prioritaire' : ''}` },
+    { libelle: 'Réponse attendue', valeur: slaTexte(t.sla_key || '2d', 'fr') },
+    ...(t.category ? [{ libelle: 'Catégorie', valeur: t.category }] : []),
+    ...(motif ? [{ libelle: 'Motif', valeur: motif }] : []),
+    { libelle: 'Ticket', valeur: t.id },
+  ];
+}
+
+/** La conversation, message par message, pour un courriel interne. */
+function conversationHtml(messages: MessageTicket[]): string {
+  return messages.filter((m) => m.author !== 'system').map((m) => {
+    const qui = m.author === 'user' ? (m.author_name || 'Client') : m.author === 'ai' ? 'Assistant' : (m.author_name || 'Support');
+    return `<p style="margin:0 0 12px;"><strong>${echapper(qui)}</strong><br/>${texteHtml(m.body)}</p>`;
+  }).join('');
+}
+
+/** Repli sans Slack : la même escalade, par courriel au support (gabarit Lume, sans signature : alerte interne). */
 async function escaladerParCourriel(t: Ticket, ctx: ContexteOrg, messages: MessageTicket[], motif: string): Promise<boolean> {
   if (!isMailerConfigured()) return false;
   const priorityTag = t.priority === 'priority' ? 'PRIORITY' : 'Normal';
-  const lignes = messages.map((m) => `<p style="margin:0 0 10px;"><strong>${escapeHtml(m.author === 'user' ? (m.author_name || 'Client') : m.author === 'ai' ? 'Assistant' : (m.author_name || 'Support'))}</strong><br/><span style="white-space:pre-wrap;">${escapeHtml(m.body)}</span></p>`).join('');
-  const html = `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;max-width:640px;margin:0 auto;color:#1a1a2e;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-        <tr><td style="background:${t.priority === 'priority' ? '#1a1a2e' : '#6b7280'};color:#fff;padding:14px 20px;font-weight:700;font-size:14px;">${priorityTag} SUPPORT REQUEST · ${escapeHtml(ctx.planLabel)} plan</td></tr>
-        <tr><td style="padding:20px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;line-height:1.6;">
-            <tr><td style="color:#6b7280;width:120px;">Company</td><td style="font-weight:600;">${escapeHtml(t.company_name || '')}</td></tr>
-            <tr><td style="color:#6b7280;">From</td><td>${escapeHtml(t.user_name || '')}${t.user_email ? ` &lt;${escapeHtml(t.user_email)}&gt;` : ''}</td></tr>
-            <tr><td style="color:#6b7280;">Target reply</td><td>${escapeHtml(slaTexte(t.sla_key || '2d', 'en'))}</td></tr>
-            <tr><td style="color:#6b7280;">Reason</td><td>${escapeHtml(motif)}</td></tr>
-            <tr><td style="color:#6b7280;">Ticket</td><td style="font-family:monospace;font-size:11px;color:#9ca3af;">${t.id}</td></tr>
-          </table>
-          <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />
-          <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${escapeHtml(t.subject)}</div>
-          <div style="font-size:13px;line-height:1.7;">${lignes}</div>
-        </td></tr>
-      </table>
-      <p style="font-size:11px;color:#9ca3af;margin-top:12px;">Reply to this email to respond directly to the customer.</p>
-    </div>`;
+  const html = rendreCourrielLume({
+    langue: 'fr',
+    preheader: `${t.company_name || ctx.companyName} · ${ctx.planLabel} — ${t.subject}`,
+    titre: t.priority === 'priority' ? 'Demande de support prioritaire' : 'Demande de support',
+    intro: `Un client attend un humain. Répondre à ce courriel répond directement au client.`,
+    lignes: lignesTicket(t, ctx, motif),
+    corpsHtml: `<p style="margin:0 0 12px;font-weight:700;">${echapper(t.subject)}</p>${conversationHtml(messages)}`,
+    signature: null,
+  });
   const r = await sendEmail({ from: emailFrom, to: supportEmail, replyTo: t.user_email || undefined, subject: `[${priorityTag} · ${ctx.planLabel}] ${t.subject}`, html });
   return r.sent;
 }
@@ -302,7 +321,9 @@ export async function escaladerTicket(admin: SupabaseClient, ticket: Ticket, ctx
       // Dans le canal du client, la conversation se lit au premier niveau, en
       // entier ; dans #support (repli), elle reste sous l'en-tête, dans le fil.
       const dansLeFil = canalEntreprise ? {} : { thread_ts: parent.ts };
-      for (const morceau of transcriptSlackComplet(messages)) {
+      const liens = new Map<string, string>();
+      for (const m of messages) for (const l of await liensPieces(admin, m.pieces, LIEN_EQUIPE_S)) { const p = (m.pieces || []).find((x) => x.nom === l.nom); if (p) liens.set(p.chemin, l.url); }
+      for (const morceau of transcriptSlackComplet(messages, 3500, liens)) {
         await envoyerMessageSlack({ channel: parent.channel, ...dansLeFil, text: morceau });
       }
       // Export .txt de la même conversation (scope files:write ; sinon on s'en passe).
@@ -349,7 +370,16 @@ export async function relayerMessageClient(admin: SupabaseClient, ticket: Ticket
     }
   }
   if (isMailerConfigured() && auteur === 'client') {
-    await sendEmail({ from: emailFrom, to: supportEmail, replyTo: ticket.user_email || undefined, subject: `Re: [${ticket.priority === 'priority' ? 'PRIORITY' : 'Normal'} · ${ctx.planLabel}] ${ticket.subject}`, html: `<p style="white-space:pre-wrap;font-family:sans-serif;">${escapeHtml(body)}</p>` });
+    const html = rendreCourrielLume({
+      langue: 'fr',
+      preheader: `${ticket.user_name || 'Client'} — ${body.slice(0, 120)}`,
+      titre: 'Nouveau message du client',
+      intro: `${ticket.user_name || 'Le client'} a écrit dans la conversation « ${ticket.subject} ». Répondre à ce courriel répond directement au client.`,
+      lignes: lignesTicket(ticket, ctx),
+      corpsHtml: `<p style="margin:0;"><strong>${echapper(ticket.user_name || 'Client')}</strong><br/>${texteHtml(body)}</p>`,
+      signature: null,
+    });
+    await sendEmail({ from: emailFrom, to: supportEmail, replyTo: ticket.user_email || undefined, subject: `Re: [${ticket.priority === 'priority' ? 'PRIORITY' : 'Normal'} · ${ctx.planLabel}] ${ticket.subject}`, html });
   }
 }
 
@@ -385,15 +415,23 @@ export async function notifierClientReponse(admin: SupabaseClient, ticket: Ticke
     let base = '';
     try { base = resolvePublicBaseUrl(); } catch { base = ''; }
     const lien = base ? `${base}/support?ticket=${ticket.id}` : '';
+    const prenom = (ticket.user_name || '').trim().split(/\s+/)[0] || '';
     await sendEmail({
       from: emailFrom, to: ticket.user_email, replyTo: supportEmail,
       subject: `Re: ${ticket.subject}`,
-      html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a2e;font-size:14px;line-height:1.6;">
-        <p><strong>${escapeHtml(auteur)}</strong> (support Lume) :</p>
-        <p style="white-space:pre-wrap;">${escapeHtml(body)}</p>
-        ${lien ? `<p><a href="${lien}">Répondre dans Lume</a></p>` : ''}
-        <p style="font-size:12px;color:#9ca3af;">Vous pouvez aussi répondre à ce courriel.</p>
-      </div>`,
+      html: rendreCourrielLume({
+        langue,
+        preheader: body.slice(0, 140),
+        titre: langue === 'fr' ? 'Réponse du support' : 'Support replied',
+        salutation: prenom ? (langue === 'fr' ? `Bonjour ${prenom},` : `Hi ${prenom},`) : null,
+        intro: langue === 'fr' ? `${auteur}, du support Lume, te répond au sujet de « ${ticket.subject} » :` : `${auteur} from Lume support replied about "${ticket.subject}":`,
+        corpsHtml: `<p style="margin:0;padding:14px 16px;background:#f9fafb;border-left:3px solid #111827;border-radius:6px;">${texteHtml(body)}</p>`,
+        bouton: lien ? { texte: langue === 'fr' ? 'Répondre dans Lume' : 'Reply in Lume', url: lien } : null,
+        note: langue === 'fr' ? 'Tu peux aussi répondre directement à ce courriel.' : 'You can also reply directly to this email.',
+        supportEmail,
+      }),
+      // Envoi de fond (réponse relayée depuis Slack) : un échec transitoire part dans la file de reprise.
+      reessayer: true,
     });
   }
 }

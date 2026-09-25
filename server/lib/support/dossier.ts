@@ -93,7 +93,7 @@ export async function dossierClient(admin: Admin, orgId: string, userId: string 
     rebonds, migration, tickets, actionsLumi, nonLues,
   ] = await Promise.all([
     sur(admin.from('orgs').select('name, created_at, employee_count').eq('id', orgId).maybeSingle(), 'org'),
-    sur(admin.from('subscriptions').select('status, plan_id, interval, current_period_end, cancel_at_period_end, plans(name, slug)').eq('org_id', orgId).order('created_at', { ascending: false }).limit(1).maybeSingle(), 'abonnement'),
+    sur(admin.from('subscriptions').select('status, plan_id, interval, current_period_end, cancel_at_period_end, plans!subscriptions_plan_id_fkey(name, slug)').eq('org_id', orgId).order('created_at', { ascending: false }).limit(1).maybeSingle(), 'abonnement'),
     sur(admin.from('company_settings').select('setup_completed, timezone, default_language, industry, city, google_review_url, review_enabled').eq('org_id', orgId).maybeSingle(), 'réglages'),
     sur(admin.from('memberships').select('role').eq('org_id', orgId).eq('status', 'active'), 'membres'),
     compter(admin.from('team_members').select('id', { count: 'exact', head: true }).eq('org_id', orgId), 'équipe'),

@@ -1,0 +1,27 @@
+{
+  "tenant": "Grok Audit (TEST)",
+  "login": "success",
+  "baseline_usage": "$0.20 / $80.00",
+  "final_usage": "$0.27 / $80.00",
+  "tokens": {"found": false, "in": null, "out": null, "total": null, "model": null},
+  "ui_paths_checked": [
+    "Lumi visible usage bar",
+    "Lumi message footer and response metadata/reflection details",
+    "Lumi conversation history",
+    "Paramètres > Forfait & facturation",
+    "Paramètres > API & MCP"
+  ],
+  "questions": [
+    {"id":"Q1","category":"preset","question":"C'est quoi qui est inclus dans le preset nettoyage ?","usage_before":"$0.20 / $80.00","usage_after":"$0.24 / $80.00","delta":"$0.04","latency_seconds":3,"answer_chars_approx":322,"answer":"Je n’ai pas de préréglage nommé « nettoyage » dans le catalogue — les seuls services enregistrés sont : tonte de gazon (50,00 $), taille de haies (8,00 $) et plantation de fleurs annuelles (5,00 $), qui sont ensuite passés au paiement paysager. Peux-tu préciser à quoi tu fais référence (un job en particulier, un devis) ?"},
+    {"id":"Q2","category":"preset","question":"Est-ce que je peux modifier mon preset ? Jusqu'où ?","usage_before":"$0.24 / $80.00","usage_after":"$0.25 / $80.00","delta":"$0.01","latency_seconds":3,"answer_chars_approx":362,"answer":"Oui, tu peux modifier tes services prégréglés (nom, description, prix) — c'est justement fait pour ça, voir la page « Soumissions — Modèles et préréglages ». Par contre je n'ai pas plus de détails sur les limites précises (ex. catégories disponibles) ; si tu veux, je peux te montrer comment créer ou ajuster un service directement via un devis pour voir l'effet."},
+    {"id":"Q3","category":"billing","question":"Mon paiement a échoué, je fais quoi ?","usage_before":"$0.25 / $80.00","usage_after":"$0.26 / $80.00","delta":"$0.01","latency_seconds":2,"answer_chars_approx":141,"answer":"Tu veux dire le paiement d’un client (via le lien en ligne) ou ton propre abonnement à Lume qui a été refusé ? Dis-moi lequel et je te guide."},
+    {"id":"Q4","category":"parcours","question":"Comment je crée un client puis une soumission ?","usage_before":"$0.26 / $80.00","usage_after":"$0.26 / $80.00","delta":"$0.00","latency_seconds":4,"answer_chars_approx":378,"answer":"Selon la page « Clients et demandes », tu crées la fiche client une seule fois, puis elle te suit sur toute la chaîne : soumission, job, facture et reçu. Concrètement, dis-moi le nom du client (et ses coordonnées) et je peux te créer sa fiche puis bâtir la soumission avec les services voulus tout de suite — juste besoin du nom, des services/prix, et du titre de la soumission."},
+    {"id":"Q5","category":"autre","question":"Est-ce que Lumi peut me bâtir une config CRM custom genre HubSpot ?","usage_before":"$0.26 / $80.00","usage_after":"$0.27 / $80.00","delta":"$0.01","latency_seconds":null,"answer_chars_approx":400,"answer":"Non, je ne peux pas bâtir de configuration CRM sur mesure façon HubSpot — Lume est un outil déjà structuré (clients, jobs, devis, factures, horaire) et mon rôle est de t'aider à l'utiliser efficacement, pas de le reconfigurer en profondeur. Si tu as un besoin précis (automatiser une relance, un formulaire de demande, un rapport particulier), dis-moi lequel et je regarde ce qui existe déjà pour ça."},
+    {"id":"Q6","category":"offline","question":"Qu'est-ce qui marche sans réseau ?","usage_before":"$0.27 / $80.00","usage_after":"$0.27 / $80.00","delta":"$0.00","latency_seconds":2,"answer_chars_approx":192,"answer":"Selon la page « Calendrier et dispatch », ta route et la job du jour restent visibles même sans réseau — les changements que tu fais se synchronisent automatiquement dès que le réseau revient."}
+  ],
+  "notes": [
+    "Q2 usage bar first remained at $0.24 after completion, then showed $0.25 before Q3; recorded the later reconciled reading.",
+    "No token count, model name, or token-related tooltip/label was visible in the checked product UI."
+  ],
+  "screenshots": ["before-q1.png", "after-q1.png", "after-q6.png"]
+}

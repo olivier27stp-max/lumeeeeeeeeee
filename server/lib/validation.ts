@@ -1,5 +1,18 @@
 import { z, ZodSchema, ZodError } from 'zod';
 import type { Request, Response, NextFunction } from 'express';
+// Le catalogue des automatisations personnalisables vit sous src/ : c'est le
+// sens de partage autorisé (server/ importe src/, jamais l'inverse — voir
+// tests/frontiere-serveur-client.test.ts), déjà utilisé pour permissions.ts.
+import {
+  CLES_DECLENCHEURS,
+  CLES_ACTIONS,
+  trouverAction,
+  DELAI_MAX_SECONDES,
+  DELAI_NEGATIF_MAX_SECONDES,
+  ACTIONS_MAX,
+} from '../../src/lib/automationCatalogue';
+import { problemesDuGraphe, type Etape } from './automationSequences';
+import { INDUSTRIES_MODELES } from '../../src/lib/champs/modeles';
 
 // ─── Middleware factory ───────────────────────────────────────────────────────
 
@@ -26,6 +39,9 @@ export function validate<T extends ZodSchema>(schema: T) {
 // ─── Reusable pieces ──────────────────────────────────────────────────────────
 
 const optionalString = z.string().trim().optional().nullable();
+// Valeur d'attribution lue dans l'URL, jamais saisie par un humain : bornée,
+// pour qu'une URL forgée ne se transforme pas en champ de texte libre.
+const attributionString = z.string().trim().max(256).optional().nullable();
 const optionalOrgId = z.string().uuid().optional().nullable();
 
 // ─── Password policy (server-side enforcement) ───────────────────────────────
@@ -205,6 +221,23 @@ export const createConnectedAccountSchema = z.object({
   country: z.string().length(2).optional().default('CA'),
 });
 
+// Réglages Lume Payments — booléens seulement, clés inconnues refusées.
+export const paymentSettingsPatchSchema = z.object({
+  orgId: optionalOrgId,
+  quote_payments_enabled: z.boolean().optional(),
+  invoice_payments_enabled: z.boolean().optional(),
+  tips_enabled: z.boolean().optional(),
+  wallets_enabled: z.boolean().optional(),
+  require_payment_method_default: z.boolean().optional(),
+  notify_owner_email: z.boolean().optional(),
+}).strict();
+
+// Pourboire choisi par le payeur sur la page publique (entier en cents ;
+// le plafond réel — solde et 1 000 $ — est appliqué côté route).
+export const publicTipSchema = z.object({
+  tip_cents: z.number().int().min(0).max(100_000),
+});
+
 export const createPaymentRequestSchema = z.object({
   invoiceId: z.string().trim().min(1, 'Missing invoiceId.'),
   orgId: optionalOrgId,
@@ -247,12 +280,19 @@ export const supportChatSchema = z.object({
   origine: z.enum(['texte', 'suggestion']).optional(),
   /** Route courante de l'app (ex. /jobs/123) — chemin seulement, jamais de query. */
   page: z.string().trim().max(200).regex(/^\/[A-Za-z0-9/_-]*$/).optional(),
+  /** Chemins de captures déjà téléversées (POST /support/captures), vérifiés sous l'org côté serveur. */
+  captures: z.array(z.object({ chemin: z.string().max(200), nom: z.string().max(120).optional() })).max(3).optional(),
 });
 export const supportMessageSchema = z.object({
   message: z.string().trim().min(1, 'Write a message.').max(5000),
+  captures: z.array(z.object({ chemin: z.string().max(200), nom: z.string().max(120).optional() })).max(3).optional(),
 });
 export const supportEscalateSchema = z.object({
   reason: z.string().trim().max(300).optional(),
+});
+/** 👍 / 👎 du client sur une réponse de Lumi. */
+export const supportAvisSchema = z.object({
+  avis: z.enum(['bon', 'mauvais']),
 });
 
 // ─── Invoice Templates ──────────────────────────────────────────────────────
@@ -274,17 +314,40 @@ export const invoiceTemplateSchema = z.object({
 
 // ─── Email Templates ─────────────────────────────────────────────────────────
 
+/**
+ * Les types de courriel personnalisables — MÊME LISTE que le CHECK de
+ * `email_templates.type` (migration 20260918100000_modeles_courriel.sql).
+ *
+ * Elle était figée sur 5 valeurs alors que la base en acceptait déjà 10 : le
+ * CRUD refusait donc en 400 des types parfaitement valides en base. Les deux
+ * listes doivent bouger ENSEMBLE — sinon, soit l'API refuse ce que la base
+ * accepte, soit elle laisse passer ce que la base rejettera en 23514.
+ */
+export const TYPES_MODELE_COURRIEL = [
+  'invoice_sent', 'invoice_reminder', 'invoice_paid', 'invoice_overdue',
+  'payment_receipt', 'payment_failed', 'payment_request',
+  'deposit_request', 'deposit_received',
+  'quote_sent', 'quote_reminder', 'quote_accepted', 'quote_declined', 'quote_expiring',
+  'job_confirmation', 'job_reminder', 'job_completed', 'job_rescheduled', 'job_cancelled',
+  'appointment_reminder', 'appointment_confirmation',
+  'contract_sent', 'contract_signed', 'contract_reminder',
+  'lead_ack', 'lead_followup', 'lead_nurture',
+  'client_welcome', 'client_anniversary', 'seasonal_reminder', 'cross_sell',
+  'review_request', 'referral_request',
+  'form_submission', 'generic',
+] as const;
+
 export const emailTemplateSchema = z.object({
   name: z.string().trim().min(1, 'name is required.'),
-  type: z.enum(
-    ['invoice_sent', 'invoice_reminder', 'quote_sent', 'review_request', 'generic'],
-    { error: 'type must be one of: invoice_sent, invoice_reminder, quote_sent, review_request, generic.' },
-  ),
+  type: z.enum(TYPES_MODELE_COURRIEL, { error: 'type is not a supported email template type.' }),
   subject: z.string().trim().min(1, 'subject is required.'),
   body: z.string().min(1, 'body is required.'),
   variables: z.any().optional(),
   is_active: z.boolean().optional(),
   is_default: z.boolean().optional(),
+  // 'import' = HTML collé par l'entreprise : assaini puis posé dans `corpsHtml`
+  // du gabarit, jamais en remplacement du courriel entier.
+  source: z.enum(['editeur', 'import']).optional(),
 });
 
 // ─── Communications ──────────────────────────────────────────────────────────
@@ -354,6 +417,8 @@ const formFieldSchema = z.object({
   required: z.boolean(),
   options: z.array(z.string()).optional(),
   section: z.enum(['service_details', 'final_notes']),
+  // La réponse remplit ce champ personnalisé (opportunité ou client) — v2.
+  cf_field_id: z.string().uuid().nullable().optional(),
 });
 
 export const upsertRequestFormSchema = z.object({
@@ -397,6 +462,15 @@ export const publicFormSubmissionSchema = z.object({
   // qui remplit tous les champs le remplira aussi → soumission rejetée
   // silencieusement (voir la route). Toujours vide pour un vrai visiteur.
   website: optionalString,
+  // Attribution marketing. Ce ne sont PAS des champs du formulaire : la page
+  // publique les relève dans son URL et les joint à l'envoi. Tous optionnels,
+  // pour qu'un formulaire intégré ailleurs (ou un vieux cache) continue de
+  // fonctionner sans eux.
+  utm_source: attributionString,
+  utm_medium: attributionString,
+  utm_campaign: attributionString,
+  utm_content: attributionString,
+  fbclid: attributionString,
 });
 
 // ─── AI / Agent ─────────────────────────────────────────────────
@@ -414,12 +488,15 @@ export const aiChatSchema = z.object({
 
 // ─── Goals ──────────────────────────────────────────────────────
 
+// Aligné sur ce que la route lit réellement (metric, target_value, period, start_date, end_date) —
+// l'ancien schéma exigeait title/metric_type, que la route ignorait : tout POST était refusé (audit 2026-09-16).
 export const createGoalSchema = z.object({
-  title: z.string().trim().min(1, 'title is required.'),
-  target_value: z.number().min(0).max(999_999_999),
-  metric_type: z.string().trim().min(1, 'metric_type is required.'),
-  period: z.string().trim().optional(),
-}).passthrough();
+  metric: z.enum(['revenue', 'jobs', 'leads']),
+  target_value: z.number().min(0).max(999_999_999_999),
+  period: z.enum(['weekly', 'monthly', 'quarterly', 'yearly']).optional(),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'start_date must be YYYY-MM-DD.'),
+  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'end_date must be YYYY-MM-DD.'),
+}).strict();
 
 // ─── Feature Flags ──────────────────────────────────────────────
 
@@ -516,9 +593,10 @@ export const idRequiredSchema = z.object({
 // ─── Migration assistée (console interne + portail temporaire) ───────────
 
 const migrationCategoryEnum = z.enum([
-  'taxes', 'clients', 'properties', 'billing_addresses', 'services', 'quotes', 'jobs', 'visits',
+  'taxes', 'clients', 'properties', 'billing_addresses', 'services', 'quotes', 'jobs', 'recurring_jobs', 'visits',
   'invoices', 'payments', 'notes', 'attachments', 'team_members', 'custom_fields',
 ]);
+export { migrationCategoryEnum };
 
 const migrationSourceCrmEnum = z.enum([
   'jobber', 'housecall_pro', 'servicetitan', 'gohighlevel', 'quickbooks', 'other', 'custom_files',
@@ -624,6 +702,16 @@ export const migrationPortalAnswerSchema = z.object({
   answer: z.string().trim().min(1).max(4000),
 });
 
+/** Formulaire « Importer vos données » : catégories cochées par le client. */
+export const migrationPortalCategoriesSchema = z.object({
+  categories: z.array(migrationCategoryEnum).min(1).max(16),
+});
+
+/** Réaffectation d'un fichier à une catégorie (le client corrige la détection). */
+export const migrationPortalFileCategorySchema = z.object({
+  category: migrationCategoryEnum,
+});
+
 export const migrationStaffMapSchema = z.object({
   mappings: z.array(z.object({
     source: z.string().trim().min(1).max(120),
@@ -638,3 +726,416 @@ export const migrationTemplateSaveSchema = z.object({
 export const migrationTemplateApplySchema = z.object({
   template_id: z.string().uuid(),
 });
+
+// ─── Domaine d'envoi propre à l'entreprise (POST /api/sending-domain) ────────
+
+export const sendingDomainSchema = z.object({
+  // La validation stricte (minuscules, ASCII, domaines réservés) vit dans
+  // server/lib/courriels/domaines.ts (validerDomaine) ; ici on borne la taille.
+  domain: z.string().trim().min(3, 'Domain is required.').max(253, 'Domain is too long.'),
+});
+
+// ─── Automatisations personnalisées (POST/PATCH /api/automations/rules) ─────
+//
+// Jusqu'ici la table `automation_rules` n'était remplie que par le seeder :
+// aucune entrée utilisateur n'y arrivait, donc aucun schéma. Maintenant que
+// l'interface permet de créer ses propres automatisations, tout ce qui vient
+// du navigateur passe par ici.
+//
+// Le catalogue (`src/lib/automationCatalogue.ts`) est la source de vérité des
+// clés acceptées : un déclencheur ou une action hors catalogue est refusé, et
+// on ne peut donc pas enregistrer une règle que le moteur ne saurait pas
+// exécuter — ou pire, qu'il exécuterait de travers.
+
+const cleDeclencheur = z.enum(
+  CLES_DECLENCHEURS as [string, ...string[]],
+  { message: 'Unknown trigger.' },
+);
+
+/**
+ * Une action, validée CONTRE SON PROPRE type : les champs obligatoires de
+ * `send_email` (objet + message) ne sont pas ceux de `create_task`.
+ *
+ * `config` est volontairement fermé (`strict`) : une clé inconnue est
+ * refusée plutôt qu'ignorée. C'est ce qui empêche de réintroduire par la
+ * bande un `to` — le destinataire imposé (`DESTINATAIRE_IMPOSE` dans
+ * server/lib/actions/index.ts) est une garde de sécurité, pas une
+ * préférence.
+ */
+const actionAutomatisation = z
+  .object({
+    type: z.enum(CLES_ACTIONS as [string, ...string[]], { message: 'Unknown action.' }),
+    config: z
+      .object({
+        body: z.string().trim().max(10000).optional(),
+        subject: z.string().trim().max(200).optional(),
+        title: z.string().trim().max(200).optional(),
+        // update_custom_field
+        field_id: z.string().uuid().optional(),
+        value: z.string().max(5000).optional(),
+      })
+      // `strict` : une clé inconnue est refusée, pas ignorée.
+      .strict(),
+  })
+  .superRefine((action, ctx) => {
+    const modele = trouverAction(action.type);
+    if (!modele) return;
+    for (const champ of modele.champs) {
+      const valeur = (action.config as Record<string, unknown>)[champ.cle];
+      if (champ.obligatoire && (typeof valeur !== 'string' || valeur.length === 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['config', champ.cle],
+          message: `« ${modele.fr} » : le champ « ${champ.fr} » est obligatoire.`,
+        });
+      }
+      if (typeof valeur === 'string' && valeur.length > champ.max) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['config', champ.cle],
+          message: `« ${champ.fr} » dépasse ${champ.max} caractères.`,
+        });
+      }
+    }
+    // Un champ rempli qui n'appartient pas à cette action : refusé plutôt
+    // qu'ignoré, sinon l'utilisateur croit avoir écrit un objet de courriel
+    // sur un texto et ne comprend pas pourquoi il disparaît.
+    const attendus = new Set(modele.champs.map((c) => c.cle));
+    for (const cle of Object.keys(action.config)) {
+      if (!attendus.has(cle as 'body' | 'subject' | 'title' | 'field_id' | 'value')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['config', cle],
+          message: `« ${modele.fr} » n'utilise pas le champ « ${cle} ».`,
+        });
+      }
+    }
+  });
+
+/**
+ * Les conditions, en objet plat comparé aux métadonnées de l'événement.
+ *
+ * Seuls les 4 opérateurs que `evaluateConditions` connaît sont acceptés.
+ * Un opérateur inconnu ne se contente pas d'être ignoré côté moteur : il
+ * fait échouer la règle ENTIÈRE, en silence (automationEngine.ts). Le
+ * refuser à l'enregistrement est la seule façon d'éviter une automatisation
+ * qui ne part jamais sans que personne sache pourquoi.
+ */
+/** Une condition sur un champ personnalisé (moteur partagé src/lib/champs/filtres.ts). */
+export const conditionChampSchema = z.object({
+  field_id: z.string().uuid(),
+  op: z.enum(['is', 'is_not', 'contains', 'not_contains', 'eq', 'neq', 'gt', 'lt', 'between', 'any_of', 'none_of',
+    'today', 'yesterday', 'in_last', 'more_than_ago', 'less_than_ago', 'before', 'after', 'is_empty', 'is_not_empty']),
+  value: z.union([z.string().max(500), z.number().finite(), z.array(z.string().max(100)).max(100)]).nullable().optional(),
+  value2: z.union([z.string().max(500), z.number().finite()]).nullable().optional(),
+  n: z.number().int().min(0).max(3650).optional(),
+  unit: z.enum(['days', 'weeks', 'months']).optional(),
+}).strict();
+
+const valeurCondition = z.union([z.string().max(200), z.number(), z.boolean()]);
+const conditionsAutomatisation = z
+  .record(
+    z.string().trim().min(1).max(64),
+    z.union([
+      valeurCondition,
+      z
+        .object({
+          eq: valeurCondition.optional(),
+          neq: valeurCondition.optional(),
+          in: z.array(valeurCondition).min(1).max(50).optional(),
+          not_in: z.array(valeurCondition).min(1).max(50).optional(),
+        })
+        .strict()
+        .refine((o) => Object.keys(o).length > 0, 'Empty condition.'),
+      // Clé réservée `champs_perso` : conditions sur les champs personnalisés.
+      z.array(conditionChampSchema).min(1).max(10),
+    ]),
+  )
+  .refine((c) => Object.keys(c).length <= 10, 'Too many conditions (10 max).')
+  .refine(
+    (c) => Object.entries(c).every(([k, v]) => Array.isArray(v) === (k === 'champs_perso')),
+    'Une liste de conditions ne va que sous « champs_perso ».',
+  );
+
+/**
+ * Une ÉTAPE de séquence.
+ *
+ * Quatre formes, distinguées par `type`. Un `discriminatedUnion` plutôt qu'un
+ * `union` : le message d'erreur nomme alors la forme attendue (« une étape
+ * “attendre” a besoin d'un délai ») au lieu d'énumérer les quatre.
+ */
+const ID_ETAPE = z.string().trim().min(1).max(40).regex(/^[a-zA-Z0-9_-]+$/, 'Invalid step id.');
+
+const etapeSequence = z.discriminatedUnion('type', [
+  z.object({
+    id: ID_ETAPE,
+    type: z.literal('action'),
+    action: actionAutomatisation,
+    suivant: ID_ETAPE.nullable().optional(),
+  }),
+  z.object({
+    id: ID_ETAPE,
+    type: z.literal('attendre'),
+    delai_secondes: z
+      .number()
+      .int()
+      .min(0, 'A wait cannot be negative.')
+      .max(DELAI_MAX_SECONDES, 'Cannot wait more than a year.'),
+    suivant: ID_ETAPE.nullable().optional(),
+  }),
+  z.object({
+    id: ID_ETAPE,
+    type: z.literal('si'),
+    conditions: conditionsAutomatisation,
+    alors: ID_ETAPE.nullable().optional(),
+    sinon: ID_ETAPE.nullable().optional(),
+  }),
+  z.object({
+    id: ID_ETAPE,
+    type: z.literal('arreter'),
+  }),
+]);
+
+/**
+ * La séquence entière.
+ *
+ * `problemesDuGraphe` fait le travail que Zod ne peut pas faire : vérifier
+ * que les renvois pointent vers des étapes qui existent et surtout qu'il
+ * n'y a PAS DE BOUCLE. Un graphe accepte ce qu'un tableau interdit —
+ * `e1 → e2 → e1` enverrait des messages jusqu'à la fin des temps. Le refuser
+ * ici est la première des trois protections (les deux autres bornent le
+ * parcours à l'exécution).
+ */
+const ETAPES_MAX = 20;
+
+export const sequenceEtapes = z
+  .array(etapeSequence)
+  .min(1, 'A sequence needs at least one step.')
+  .max(ETAPES_MAX, `A sequence carries at most ${ETAPES_MAX} steps.`)
+  .superRefine((steps, ctx) => {
+    for (const probleme of problemesDuGraphe(steps as unknown as Etape[])) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: probleme });
+    }
+  });
+
+/**
+ * Les réglages d'une automatisation.
+ *
+ * Absent ou `null` = les défauts du moteur, qui sont bons : fenêtre
+ * 8 h-20 h, arrêt quand la facture est payée ou le devis accepté, une seule
+ * inscription par entité. On ne demande à personne de les configurer pour
+ * que ça marche — c'est justement ce qui distingue Lume de GoHighLevel, où
+ * ces réglages dorment dans un onglet que personne n'ouvre.
+ */
+export const automationSettingsSchema = z
+  .object({
+    /** Le même client peut-il repasser dans le parcours ? */
+    reentree: z.boolean().optional(),
+    /** Sortir du parcours dès que le client répond. */
+    arret_sur_reponse: z.boolean().optional(),
+    /**
+     * Heures pendant lesquelles un message peut partir, en heure locale.
+     * Bornées à 0-23 et `debut < fin` : une fenêtre inversée ne laisserait
+     * jamais rien passer, et le moteur attendrait pour toujours.
+     */
+    fenetre: z
+      .object({
+        debut: z.number().int().min(0).max(23),
+        fin: z.number().int().min(1).max(24),
+      })
+      .refine((f) => f.debut < f.fin, 'The window must start before it ends.')
+      .optional(),
+    /** Lundi au vendredi seulement. */
+    jours_ouvrables: z.boolean().optional(),
+    /** Les messages automatiques ne remontent pas en non-lus. */
+    marquer_lu: z.boolean().optional(),
+  })
+  .strict();
+
+const corpsAutomatisation = z.object({
+  name: z.string().trim().min(1, 'Name is required.').max(120),
+  description: z.string().trim().max(500).optional().nullable(),
+  trigger_event: cleDeclencheur,
+  conditions: conditionsAutomatisation.optional().default({}),
+  // Borné des deux côtés : un délai négatif signifie « avant la date de
+  // référence » et n'a de sens que pour un rendez-vous — la route le vérifie
+  // contre le catalogue, qui sait quels déclencheurs portent une date future.
+  delay_seconds: z
+    .number()
+    .int('The delay must be a whole number of seconds.')
+    .min(-DELAI_NEGATIF_MAX_SECONDES, 'Cannot send more than 30 days before.')
+    .max(DELAI_MAX_SECONDES, 'Cannot wait more than a year.'),
+  // Le plafond de 5 vaut pour une règle SIMPLE, où les actions partent
+  // ensemble : au-delà, le client reçoit une rafale. Dans une séquence elles
+  // sont réparties dans le temps, et `actions` n'y est qu'un reflet des
+  // étapes (le moteur lit `steps`). Le vrai plafond y est celui des étapes,
+  // vérifié par `sequenceEtapes`. La borne haute reste, pour qu'un corps
+  // forgé ne puisse pas envoyer une liste sans fin.
+  actions: z
+    .array(actionAutomatisation)
+    .min(1, 'Add at least one action.')
+    .max(20, 'Too many actions.'),
+  is_active: z.boolean().optional().default(false),
+  /**
+   * Séquence. Absente = règle simple, pilotée par `delay_seconds` + `actions`
+   * comme avant. Les deux formes coexistent : les 35 préréglages restent
+   * simples et ne sont pas convertis.
+   */
+  /**
+   * Séquence. Absente ou `null` = règle simple, pilotée par `delay_seconds`
+   * + `actions` comme avant.
+   *
+   * Un TABLEAU VIDE est accepté et vaut `null` : c'est l'état d'une
+   * automatisation qu'on vient de créer et dont le parcours n'est pas encore
+   * dessiné. Le refuser faisait échouer l'enregistrement automatique du
+   * builder à chaque frappe, et le travail se perdait en silence.
+   */
+  settings: automationSettingsSchema.nullable().optional(),
+  steps: z
+    .union([sequenceEtapes, z.array(z.never()).max(0)])
+    .nullable()
+    .optional()
+    .transform((v) => (Array.isArray(v) && v.length === 0 ? null : v)),
+});
+
+/**
+ * Le plafond d'actions dépend de la forme.
+ *
+ * Sans séquence, 5 au plus : elles partent TOUTES en même temps, et davantage
+ * ferait une rafale chez le client. Dans une séquence elles sont réparties
+ * dans le temps et `actions` n'est qu'un reflet des étapes — le vrai plafond
+ * y est celui des étapes.
+ *
+ * Écrit comme un raffinement SÉPARÉ : `.partial()` (utilisé juste en dessous
+ * pour la modification) refuse un objet qui porte déjà un raffinement.
+ */
+const plafondActions = (corps: { steps?: unknown; actions?: unknown[] }, ctx: z.RefinementCtx) => {
+  if (!corps.steps && Array.isArray(corps.actions) && corps.actions.length > ACTIONS_MAX) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['actions'],
+      message: `An automation carries at most ${ACTIONS_MAX} actions.`,
+    });
+  }
+};
+
+export const automationRuleCreateSchema = corpsAutomatisation.superRefine(plafondActions);
+
+/**
+ * La modification accepte un sous-ensemble, mais jamais un objet vide.
+ *
+ * Le refus regarde le corps REÇU, pas le résultat du parsing : `conditions` et
+ * `is_active` portent un `.default()`, donc après parsing l'objet contient
+ * toujours ces deux clés et ne serait jamais « vide ». Un PATCH sans rien
+ * passerait alors, écraserait les conditions existantes par `{}` et
+ * remettrait la règle en pause — sans que personne ne l'ait demandé.
+ */
+export const automationRuleUpdateSchema = z
+  .record(z.string(), z.unknown())
+  .refine((o) => Object.keys(o).length > 0, 'Nothing to update.')
+  .pipe(corpsAutomatisation.partial().superRefine(plafondActions));
+
+// ─── Champs personnalisés v2 (server/routes/custom-fields.ts) ───
+// `nullable()` partout où le client peut envoyer null (règle du projet).
+
+const objetChamp = z.enum(['client', 'deal', 'job', 'quote', 'invoice'], { message: 'Objet inconnu.' });
+const typeChamp = z.enum(
+  ['single_line', 'multi_line', 'number', 'monetary', 'phone', 'email', 'date', 'dropdown_single', 'dropdown_multi'],
+  { message: 'Type de champ inconnu.' },
+);
+const optionChamp = z.object({
+  id: z.string().uuid().optional(),
+  label: z.string().trim().min(1, 'Une option ne peut pas être vide.').max(100),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Couleur #RRGGBB attendue.').nullable().optional(),
+}).strict();
+const configChamp = z.object({
+  decimals: z.number().int().min(0).max(6).nullable().optional(),
+  min: z.number().finite().nullable().optional(),
+  max: z.number().finite().nullable().optional(),
+  currency: z.string().regex(/^[A-Za-z]{3}$/, 'Devise ISO à 3 lettres.').optional(),
+  include_time: z.boolean().optional(),
+  show_on_documents: z.boolean().optional(),
+}).strict();
+const baseChamp = {
+  label: z.string().trim().min(1, 'Le nom du champ est obligatoire.').max(100),
+  field_type: typeChamp,
+  key: z.string().trim().regex(/^[a-z][a-z0-9_]{0,49}$/, 'Clé : lettres minuscules, chiffres et _ (commence par une lettre).').optional(),
+  placeholder: z.string().trim().max(200).nullable().optional(),
+  help_text: z.string().trim().max(200).nullable().optional(),
+  is_required: z.boolean().optional(),
+  is_searchable: z.boolean().optional(),
+  config: configChamp.optional(),
+  options: z.array(optionChamp).max(200).optional(),
+};
+
+export const champCreerSchema = z.object({
+  ...baseChamp,
+  object_type: objetChamp,
+  folder_id: z.string().uuid().nullable().optional(),
+}).strict();
+
+export const modeleInstallerSchema = z.object({
+  industry: z.enum(INDUSTRIES_MODELES),
+  ids: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,49}$/)).max(50).optional(),
+  language: z.enum(['fr', 'en']).optional(),
+}).strict();
+
+export const champModifierSchema = z.object({
+  label: baseChamp.label.optional(),
+  field_type: typeChamp.optional(),
+  placeholder: baseChamp.placeholder,
+  help_text: baseChamp.help_text,
+  is_required: z.boolean().optional(),
+  folder_id: z.string().uuid().nullable().optional(),
+  position: z.number().int().min(0).max(100000).optional(),
+  config: configChamp.optional(),
+  options: baseChamp.options,
+}).strict().refine((o) => Object.keys(o).length > 0, 'Rien à modifier.');
+
+export const champPurgerSchema = z.object({
+  valeurs_confirmees: z.number().int().min(0),
+}).strict();
+
+export const dossierCreerSchema = z.object({
+  object_type: objetChamp,
+  name: z.string().trim().min(1, 'Le nom du dossier est obligatoire.').max(100),
+  fields: z.array(z.object(baseChamp).strict()).max(50).default([]),
+}).strict();
+
+export const dossierModifierSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  position: z.number().int().min(0).max(100000).optional(),
+}).strict();
+
+export const champsCherchablesSchema = z.object({
+  object_type: objetChamp,
+  field_ids: z.array(z.string().uuid()).max(500),
+}).strict();
+
+export const champUniqueSchema = z.object({
+  field_id: z.string().uuid(),
+  unique: z.boolean(),
+}).strict();
+
+const valeurChamp = z.union([
+  z.string().max(5000), z.number().finite(), z.array(z.string().uuid()).max(100), z.null(),
+]);
+export const valeursEcrireSchema = z.object({
+  values: z.array(z.object({
+    field_id: z.string().uuid(),
+    value: valeurChamp,
+    version: z.number().int().min(1).nullable().optional(),
+  }).strict()).min(1).max(100),
+}).strict();
+
+
+
+export const champsFiltrerSchema = z.object({
+  object_type: objetChamp,
+  conditions: z.array(conditionChampSchema).min(1).max(25),
+  ids: z.array(z.string().uuid()).max(20000).nullable().optional(),
+}).strict();
+
+export const cartesPipelineSchema = z.object({
+  field_ids: z.array(z.string().uuid()).max(6, 'Six champs au plus sur une carte.'),
+}).strict();

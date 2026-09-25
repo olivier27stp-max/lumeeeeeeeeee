@@ -4,8 +4,11 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { executerMajChamp } from '../champs/automatisations';
+import { variablesChamps } from '../champs/service';
 import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
 import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
+import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegale } from '../consentement/base-legale';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -41,6 +44,37 @@ function champLocalise(config: Record<string, any>, champ: string, langue?: 'fr'
   }
   return config[champ] || '';
 }
+
+/**
+ * DESTINATAIRE_IMPOSE (F18, 2026-09-23) — pourquoi `config.to` n'est plus lu.
+ * ──────────────────────────────────────────────────────────────────────────
+ * Une action d'automatisation acceptait `config.to` : un courriel ou un numéro
+ * écrit dans la règle, qui remplaçait le destinataire réel. Le message partait
+ * donc ailleurs, AVEC les données du client dedans — `[client_name]`,
+ * `[invoice_total]`, l'adresse. Un chemin d'exfiltration ouvert à quiconque
+ * peut modifier une règle.
+ *
+ * Mesuré avant de le retirer : aucun champ dans l'interface pour le saisir,
+ * aucun preset qui l'utilise, et ZÉRO usage sur 671 règles réelles (210 en
+ * production, 461 en staging). Personne ne perd rien.
+ *
+ * Le destinataire vient désormais toujours de l'entité concernée
+ * (`vars.client_email` / `vars.client_phone`), et de nulle part ailleurs.
+ * Si un jour il faut prévenir quelqu'un d'autre que le client — le patron,
+ * par exemple — ça passera par une action dédiée avec sa propre garde, pas
+ * par un champ libre.
+ */
+
+/**
+ * Le fuseau dans lequel un client lit ses messages. Identique à `QUIET_TZ`
+ * dans `automationEngine.ts` (la fenêtre 8h–20h) : les deux décrivent la même
+ * chose — l'heure locale de l'entreprise et de ses clients, au Québec.
+ *
+ * Une date sans fuseau explicite prend celui du SERVEUR, et Railway tourne en
+ * UTC : c'est ainsi qu'un rendez-vous de 9 h devenait « 13 h 00 » dans le
+ * message envoyé au client.
+ */
+const FUSEAU_CLIENT = 'America/Toronto';
 
 /**
  * Plafond anti-spam : nombre max de messages COMMERCIAUX d'automatisation
@@ -96,6 +130,188 @@ async function depassePlafondFrequence(
   }
 }
 
+/**
+ * Consentement pour un message COMMERCIAL (F7 de l'audit automatisations).
+ * ─────────────────────────────────────────────────────────────────────
+ * Au Canada, un message électronique commercial exige le consentement du
+ * destinataire (LCAP ; loi 25 au Québec pour les renseignements personnels).
+ * Un message TRANSACTIONNEL — confirmation de rendez-vous, reçu, rappel de
+ * visite attendue — n'est pas visé : il répond à une demande du client.
+ *
+ * Le moteur distinguait déjà les deux (`ctx.commercial`, posé par le worker
+ * des tâches différées) et plafonnait la fréquence des commerciaux, mais ne
+ * vérifiait JAMAIS le consentement lui-même. Les presets `cross_sell_30d`,
+ * `seasonal_reminder_6m` et `lost_lead_reengagement` partaient donc à tout le
+ * monde, avec `"conditions": {}`.
+ *
+ * Les colonnes existaient déjà sur `clients` (`email_consent_at`,
+ * `sms_consent_at`, `email_opt_out_at`) mais n'étaient lues nulle part :
+ * aucune migration n'est nécessaire, seulement s'en servir.
+ *
+ * ── Élargi le 2026-09-23 : le TACITE compte aussi ──
+ * La première version n'acceptait que le consentement EXPRÈS. Or la LCAP en
+ * reconnaît deux, et le tacite découle de la relation elle-même : 2 ans après
+ * un contrat ou une facture, 6 mois après une demande de prix. Mesuré en
+ * production : sur 30 clients joignables, 19 avaient une relation d'affaires
+ * de moins de 2 ans — donc le droit d'être contactés — et tous étaient
+ * bloqués. Le verrou était juste, mais plus strict que la loi, et comme
+ * aucun écran ne permettait de saisir un exprès, la fonctionnalité était
+ * inutilisable.
+ *
+ * Règle appliquée, dans cet ordre :
+ *  - un retrait explicite (`email_opt_out_at`) bloque, même transactionnel
+ *    pour le courriel — c'est le sens d'un désabonnement, et aucune base
+ *    légale ne survit à un retrait ;
+ *  - un transactionnel passe sans consentement (il est attendu) ;
+ *  - un commercial exige une base : exprès (`*_consent_at`) ou tacite
+ *    (calculé depuis les jobs, factures et devis du client) ;
+ *  - sans base, on bloque.
+ *
+ * Le verdict PORTE la base retenue : le CRTC met la charge de la preuve sur
+ * l'expéditeur, donc savoir qu'on avait le droit ne suffit pas — il faut
+ * pouvoir dire pourquoi. L'appelant la journalise dans `consents`.
+ *
+ * En cas d'erreur, on BLOQUE — à l'inverse du plafond de fréquence. Un
+ * message de trop est un désagrément ; un envoi sans consentement est une
+ * infraction. Le doute doit coûter un message perdu, pas une plainte.
+ */
+export type VerdictConsentement =
+  | { autorise: true; base?: BaseLegale; clientId?: string }
+  | { autorise: false; motif: string };
+
+/**
+ * Les dates qui peuvent fonder un tacite, pour un client donné.
+ *
+ * Trois requêtes courtes, faites SEULEMENT si aucun exprès n'a été trouvé :
+ * le cas fréquent (exprès présent, ou destinataire inconnu) ne les paie pas.
+ */
+async function ancragesDuClient(ctx: ActionContext, clientId: string): Promise<AncragesTacite> {
+  const recent = async (table: 'jobs' | 'invoices' | 'quotes') => {
+    const { data, error } = await ctx.supabase
+      .from(table)
+      .select('id, created_at')
+      .eq('org_id', ctx.orgId)
+      .eq('client_id', clientId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    // Une erreur ici doit remonter : la traiter comme « pas d'ancrage »
+    // transformerait une panne en refus silencieux, et l'appelant ne saurait
+    // pas distinguer « pas de droit » de « on n'a pas pu vérifier ».
+    if (error) throw new Error(`${table}: ${error.message}`);
+    return data ? { id: String(data.id), date: String(data.created_at) } : null;
+  };
+  const [dernierJob, derniereFacture, dernierDevis] = await Promise.all([
+    recent('jobs'), recent('invoices'), recent('quotes'),
+  ]);
+  return { dernierJob, derniereFacture, dernierDevis };
+}
+
+async function consentementCommercial(
+  ctx: ActionContext,
+  canal: 'sms' | 'email',
+  destinataire: string,
+): Promise<VerdictConsentement> {
+  // Le client n'est identifiable que par son adresse/numéro : sans
+  // destinataire, l'appelant a déjà échoué avant nous.
+  if (!destinataire) return { autorise: true };
+
+  /**
+   * Un SMS TRANSACTIONNEL n'a rien à vérifier ici : le consentement ne
+   * concerne que le commercial, et le retrait (STOP) est déjà contrôlé par
+   * `sms_opt_outs` avant cet appel. On lisait pourtant `clients` à chaque
+   * confirmation de rendez-vous pour finir par un `{ autorise: true }` —
+   * une requête par envoi, pour rien.
+   *
+   * Le courriel transactionnel, lui, continue de passer par la lecture :
+   * `email_opt_out_at` bloque TOUT courriel, y compris transactionnel, et
+   * c'est cette colonne qu'il faut aller chercher.
+   */
+  if (!ctx.commercial && canal === 'sms') return { autorise: true };
+
+  try {
+    const colonne = canal === 'email' ? 'email' : 'phone';
+    const valeur = canal === 'email' ? destinataire.trim().toLowerCase() : normalizeE164(destinataire);
+    const { data, error } = await ctx.supabase
+      .from('clients')
+      .select('id, email_consent_at, sms_consent_at, email_opt_out_at')
+      .eq('org_id', ctx.orgId)
+      .eq(colonne, valeur)
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+
+    // Destinataire hors du carnet de clients (prospect saisi à la main,
+    // adresse d'essai) : pas de commercial vers quelqu'un qu'on ne connaît pas.
+    if (!data) {
+      return ctx.commercial
+        ? { autorise: false, motif: 'destinataire inconnu du carnet de clients — pas de consentement vérifiable' }
+        : { autorise: true };
+    }
+
+    // Un désabonnement vaut pour tout courriel, y compris transactionnel.
+    if (canal === 'email' && data.email_opt_out_at) {
+      return { autorise: false, motif: 'le client s\'est désabonné des courriels' };
+    }
+    if (!ctx.commercial) return { autorise: true };
+
+    const clientId = String(data.id);
+    const consenti = canal === 'email' ? data.email_consent_at : data.sms_consent_at;
+    // L'exprès d'abord : il ne coûte aucune requête et prime sur le tacite.
+    if (consenti) {
+      const base = baseLegalePour(consenti, {});
+      if (base) return { autorise: true, base, clientId };
+    }
+
+    // Pas d'exprès : la relation elle-même peut suffire.
+    const base = baseLegalePour(null, await ancragesDuClient(ctx, clientId));
+    if (base) return { autorise: true, base, clientId };
+
+    return {
+      autorise: false,
+      motif: `aucune base légale ${canal === 'email' ? 'courriel' : 'SMS'} : ni consentement enregistré, ni relation d'affaires de moins de 2 ans, ni demande de moins de 6 mois`,
+    };
+  } catch (e: any) {
+    console.error(`[actions] consentement indéterminable (${canal}, org ${ctx.orgId}):`, e?.message || e);
+    // Doute = on ne part pas. Voir l'en-tête : l'inverse du plafond de fréquence.
+    return ctx.commercial
+      ? { autorise: false, motif: 'consentement invérifiable (erreur technique) — envoi commercial suspendu' }
+      : { autorise: true };
+  }
+}
+
+/**
+ * Consigne la base légale dans `consents` — le registre probant.
+ *
+ * Ne lève jamais et ne bloque jamais l'envoi : le message est déjà autorisé,
+ * et perdre une ligne de journal ne doit pas coûter une communication
+ * légitime. Un échec est journalisé pour être vu.
+ */
+async function journaliserBaseLegale(
+  ctx: ActionContext,
+  canal: 'sms' | 'email',
+  clientId: string | null,
+  base: BaseLegale | undefined,
+): Promise<void> {
+  if (!base || !clientId) return;
+  try {
+    const { error } = await ctx.supabase.rpc('record_consent', {
+      p_subject_type: 'client',
+      p_subject_id: clientId,
+      p_purpose: canal === 'email' ? 'email-marketing' : 'sms-marketing',
+      p_granted: true,
+      p_method: methodePourJournal(base),
+      p_doc_version: base.type === 'tacite' ? base.reference : null,
+      p_org_id: ctx.orgId,
+    });
+    if (error) throw new Error(error.message);
+  } catch (e: any) {
+    console.error(`[actions] journal de consentement non écrit (${canal}, org ${ctx.orgId}):`, e?.message || e);
+  }
+}
+
 export interface ActionResult {
   success: boolean;
   data?: any;
@@ -109,8 +325,10 @@ export type ActionType =
   | 'send_notification'
   | 'create_task'
   | 'update_status'
+  | 'move_deal_stage'
   | 'request_review'
-  | 'log_activity';
+  | 'log_activity'
+  | 'update_custom_field';
 
 // ── Template variable resolution ─────────────────────────────
 
@@ -139,6 +357,7 @@ export function resolveTemplate(
 async function resolveContractVars(
   supabase: SupabaseClient,
   jobId: string,
+  orgId: string,
 ): Promise<{ contract_link: string; contract_line: string; contract_html: string }> {
   const vide = { contract_link: '', contract_line: '', contract_html: '' };
   if (!jobId) return vide;
@@ -154,6 +373,7 @@ async function resolveContractVars(
     .from('job_agreements')
     .select('view_token, status, require_signature')
     .eq('job_id', jobId)
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -182,6 +402,7 @@ async function resolveContractVars(
 async function resolveSignedContractVars(
   supabase: SupabaseClient,
   jobId: string,
+  orgId: string,
 ): Promise<{ signed_contract_link: string; deposit_amount: string; deposit_line: string }> {
   const vide = { signed_contract_link: '', deposit_amount: '', deposit_line: '' };
   if (!jobId) return vide;
@@ -197,6 +418,7 @@ async function resolveSignedContractVars(
     .from('job_agreements')
     .select('view_token, status, snapshot')
     .eq('job_id', jobId)
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -209,6 +431,7 @@ async function resolveSignedContractVars(
     .from('jobs')
     .select('deposit_status, currency')
     .eq('id', jobId)
+    .eq('org_id', orgId)
     .maybeSingle();
 
   const terms = (acc.snapshot as { payment_terms?: { deposit_required?: boolean; deposit_cents?: number } } | null)?.payment_terms;
@@ -239,9 +462,22 @@ export async function resolveEntityVariables(
   // Fetch company settings
   const { data: company } = await supabase
     .from('company_settings')
-    .select('company_name, phone, google_review_url, facebook_review_url')
+    .select('company_name, phone, google_review_url, facebook_review_url, default_language')
     .eq('org_id', orgId)
     .maybeSingle();
+
+  /**
+   * Les montants suivent la LANGUE DE L'ENTREPRISE, pas une locale figée.
+   * `en-CA` rend « $1,626.90 » et `fr-CA` « 1 626,90 $ » : pour une entreprise
+   * québécoise, la première forme est un montant américain dans un courriel
+   * français. Les rappels de facture l'aggravaient en concaténant à la main
+   * (`$${(cents/100).toFixed(2)}` → « $1626.90 », sans même le séparateur de
+   * milliers) — visible par le client, sur cinq presets.
+   */
+  const locale = (company?.default_language === 'en' ? 'en-CA' : 'fr-CA');
+  const argent = (cents: number | null | undefined, devise = 'CAD') =>
+    new Intl.NumberFormat(locale, { style: 'currency', currency: devise || 'CAD' })
+      .format(Number(cents ?? 0) / 100);
 
   if (company) {
     vars.company_name = company.company_name || '';
@@ -279,11 +515,40 @@ export async function resolveEntityVariables(
     vars.client_phone = c.phone || '';
   };
 
+  // Un deal du pipeline de ventes. Sans ce bloc, une automatisation d'étape
+  // enverrait « Bonjour  » : le moteur ne saurait pas remonter au client.
+  if (entityType === 'deal') {
+    const { data: deal } = await supabase
+      .from('deals')
+      .select(`
+        id, source, stage_entered_at, created_at,
+        client:clients!deals_client_same_org(first_name, last_name, email, phone, company),
+        etape:pipeline_stages!deals_stage_same_org(name_fr, name_en, kind)
+      `)
+      .eq('id', entityId)
+      .maybeSingle() as any;
+    if (deal) {
+      if (deal.client) setClientVars(deal.client);
+      vars.deal_stage = deal.etape?.name_fr || '';
+      vars.deal_stage_en = deal.etape?.name_en || '';
+      vars.deal_source = deal.source || '';
+      // Depuis combien de jours le deal dort dans son étape : c'est la
+      // variable d'une relance (« ça fait 5 jours… »).
+      if (deal.stage_entered_at) {
+        const jours = Math.floor(
+          (Date.now() - new Date(deal.stage_entered_at).getTime()) / 86_400_000,
+        );
+        vars.deal_jours_dans_etape = String(Math.max(0, jours));
+      }
+    }
+  }
+
   if (entityType === 'lead') {
     const { data: lead } = await supabase
       .from('clients')
       .select('first_name, last_name, email, phone, company, title, client_id:id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (lead) {
       setClientVars(lead);
@@ -295,6 +560,7 @@ export async function resolveEntityVariables(
       .from('clients')
       .select('first_name, last_name, email, phone, company')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (client) {
       setClientVars(client);
@@ -322,10 +588,7 @@ export async function resolveEntityVariables(
       .maybeSingle();
     if (quote) {
       vars.quote_number = quote.quote_number || '';
-      vars.quote_total = quote.total_cents
-        ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' })
-            .format(Number(quote.total_cents) / 100)
-        : '$0.00';
+      vars.quote_total = argent(quote.total_cents, quote.currency || 'CAD');
       vars.quote_valid_until = quote.valid_until || '';
 
       // `quotes` porte DEUX liens vers `clients` : `client_id` (client
@@ -337,13 +600,14 @@ export async function resolveEntityVariables(
           .from('clients')
           .select('first_name, last_name, email, phone, company')
           .eq('id', contactId)
+          .eq('org_id', orgId)
           .maybeSingle();
         if (c) {
           setClientVars(c);
         }
       }
       if (quote.job_id) {
-        const { data: j } = await supabase.from('jobs').select('title').eq('id', quote.job_id).maybeSingle();
+        const { data: j } = await supabase.from('jobs').select('title').eq('id', quote.job_id).eq('org_id', orgId).maybeSingle();
         if (j) vars.job_name = j.title || '';
       }
     }
@@ -354,17 +618,18 @@ export async function resolveEntityVariables(
       .from('jobs')
       .select('title, client_id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (job) {
       vars.job_name = job.title || '';
       if (job.client_id) {
-        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', job.client_id).maybeSingle();
+        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', job.client_id).eq('org_id', orgId).maybeSingle();
         if (c) {
           setClientVars(c);
         }
       }
-      Object.assign(vars, await resolveContractVars(supabase, entityId));
-      Object.assign(vars, await resolveSignedContractVars(supabase, entityId));
+      Object.assign(vars, await resolveContractVars(supabase, entityId, orgId));
+      Object.assign(vars, await resolveSignedContractVars(supabase, entityId, orgId));
     }
   }
 
@@ -373,19 +638,20 @@ export async function resolveEntityVariables(
       .from('invoices')
       .select('invoice_number, due_date, total_cents, client_id, job_id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (inv) {
       vars.invoice_number = inv.invoice_number || '';
       vars.invoice_due_date = inv.due_date || '';
-      vars.invoice_total = inv.total_cents ? `$${(inv.total_cents / 100).toFixed(2)}` : '$0.00';
+      vars.invoice_total = argent(inv.total_cents);
       if (inv.client_id) {
-        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', inv.client_id).maybeSingle();
+        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
         if (c) {
           setClientVars(c);
         }
       }
       if (inv.job_id) {
-        const { data: j } = await supabase.from('jobs').select('title').eq('id', inv.job_id).maybeSingle();
+        const { data: j } = await supabase.from('jobs').select('title').eq('id', inv.job_id).eq('org_id', orgId).maybeSingle();
         if (j) vars.job_name = j.title || '';
       }
     }
@@ -403,13 +669,24 @@ export async function resolveEntityVariables(
         )
       `)
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle() as any;
     if (evt) {
       const startField = evt.start_at || evt.start_time;
       if (startField) {
         const d = new Date(startField);
-        vars.appointment_date = d.toLocaleDateString('fr-CA');
-        vars.appointment_time = d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+        /**
+         * Le fuseau est OBLIGATOIRE ici. Sans lui, `toLocale*` prend celui du
+         * SERVEUR — et Railway tourne en UTC, sans `TZ` défini.
+         *
+         * Mesuré : un rendez-vous de 9 h à Montréal était annoncé au client
+         * « 13 h 00 », et un rendez-vous de 22 h le 13 septembre était annoncé
+         * « le 14 ». Toutes les confirmations et tous les rappels portaient
+         * donc la mauvaise heure, et parfois le mauvais jour — invisible en
+         * développement (machine à l'heure locale), systématique en production.
+         */
+        vars.appointment_date = d.toLocaleDateString('fr-CA', { timeZone: FUSEAU_CLIENT });
+        vars.appointment_time = d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', timeZone: FUSEAU_CLIENT });
       }
       vars.appointment_title = evt.job?.title || '';
       // `jobs.property_address` a pour DEFAULT '-' : sans ce filtre, le client
@@ -424,10 +701,41 @@ export async function resolveEntityVariables(
         vars.client_name = evt.job.client_name;
         vars.client_first_name = evt.job.client_name.split(' ')[0] || '';
       }
-      if (evt.job_id) Object.assign(vars, await resolveContractVars(supabase, evt.job_id));
+      if (evt.job_id) Object.assign(vars, await resolveContractVars(supabase, evt.job_id, orgId));
     }
   }
 
+
+  /**
+   * Champs personnalisés : {client_cf_<clé>}, {deal_cf_<clé>}, {job_cf_<clé>},
+   * {quote_cf_<clé>}, {invoice_cf_<clé>} — formatés (montant, date) dans la
+   * langue de l'entreprise. On relit les liens de l'entité (client, job,
+   * devis) pour qu'une automatisation sur une facture puisse citer un champ
+   * du client. Un échec ici n'empêche jamais le message de partir : les
+   * variables manquantes deviennent vides, comme toute variable inconnue.
+   */
+  try {
+    const refs: Partial<Record<'client' | 'deal' | 'job' | 'quote' | 'invoice', string | null>> = {};
+    if (entityType === 'client' || entityType === 'lead') refs.client = entityId;
+    const liens: Record<string, { table: string; colonnes: string; objet: 'deal' | 'job' | 'quote' | 'invoice' }> = {
+      deal: { table: 'deals', colonnes: 'client_id, job_id, quote_id', objet: 'deal' },
+      job: { table: 'jobs', colonnes: 'client_id', objet: 'job' },
+      quote: { table: 'quotes', colonnes: 'client_id, lead_id, job_id', objet: 'quote' },
+      invoice: { table: 'invoices', colonnes: 'client_id, job_id', objet: 'invoice' },
+    };
+    const lien = liens[entityType];
+    if (lien) {
+      refs[lien.objet] = entityId;
+      const { data: l } = await supabase.from(lien.table).select(lien.colonnes).eq('id', entityId).eq('org_id', orgId).maybeSingle();
+      const r = (l ?? {}) as unknown as Record<string, string | null>;
+      refs.client = r.client_id ?? r.lead_id ?? null;
+      if (r.job_id) refs.job = r.job_id;
+      if (r.quote_id) refs.quote = r.quote_id;
+    }
+    Object.assign(vars, await variablesChamps(supabase, orgId, refs, company?.default_language === 'en' ? 'en' : 'fr'));
+  } catch (err) {
+    console.error('[resolveEntityVariables] champs personnalisés illisibles :', err instanceof Error ? err.message : err);
+  }
   return vars;
 }
 
@@ -438,7 +746,10 @@ export async function executeSendEmail(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  const to = config.to ? resolveTemplate(config.to, vars) : vars.client_email;
+  // Le destinataire vient TOUJOURS de l'entité, jamais de la règle.
+  // Voir `DESTINATAIRE_IMPOSE` plus haut : `config.to` permettait d'envoyer les
+  // données d'un client (nom, montants, adresse) vers une adresse arbitraire.
+  const to = vars.client_email;
   if (!to) return { success: false, error: 'No recipient email' };
 
   const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
@@ -470,29 +781,68 @@ export async function executeSendEmail(
       return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails` };
     }
 
+    // Consentement (F7) : le retrait ci-dessus traite ceux qui se sont
+    // désabonnés ; ici on vérifie qu'une base légale existe — un consentement
+    // exprès, ou la relation d'affaires elle-même (LCAP).
+    const consentement = await consentementCommercial(ctx, 'email', to);
+    if (!consentement.autorise) {
+      return { success: false, error: `Consentement manquant pour ${to} : ${consentement.motif}` };
+    }
+    // La preuve, pas seulement l'autorisation : le CRTC demande à l'expéditeur
+    // de démontrer POURQUOI il avait le droit. N'échoue jamais l'envoi.
+    if (ctx.commercial) void journaliserBaseLegale(ctx, 'email', consentement.clientId ?? null, consentement.base);
+
     // Plafond anti-spam, tous canaux confondus par destinataire.
     if (await depassePlafondFrequence(ctx, 'email', to)) {
       return { success: false, error: `Frequency cap reached for ${to} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
     }
 
-    const { getCompanySettings, buildEmailLayout, senderFor } = await import('../../routes/emails');
+    const { getCompanySettings, buildEmailLayout, senderForOrg, langueEntreprise } = await import('../../routes/emails');
+    const { boutonPourEntite } = await import('../courriels/bouton-automatisation');
     const company = await getCompanySettings(ctx.orgId);
     const unsubUrl = await getUnsubscribeUrl(ctx.supabase, ctx.orgId, to);
+
+    /* Le bouton vers la page publique de l'entité concernée.
+       Les 26 relances automatiques partaient sans aucun bouton : toutes
+       demandaient de « répondre à ce courriel ». Une relance de soumission
+       sans bouton « Accepter » oblige le client à écrire un message au lieu de
+       cliquer une fois, et la plupart n'écrivent jamais.
+       `null` dès que le lien ne serait pas sûr (entité sans page publique,
+       jeton absent) : le courriel part alors comme avant. */
+    const langueRelance = langueEntreprise(company);
+    const bouton = await boutonPourEntite(
+      ctx.supabase,
+      ctx.orgId,
+      ctx.entityType,
+      ctx.entityId,
+      langueRelance,
+    );
 
     // Lien visible en pied de page + en-têtes standards : Gmail et Outlook
     // affichent alors leur bouton natif « Se désabonner », ce qui améliore
     // aussi nettement la délivrabilité.
     const pied = unsubUrl
       ? `<p style="margin:24px 0 0;font-size:12px;color:#9ca3af;text-align:center;">
-           <a href="${unsubUrl}" style="color:#9ca3af;text-decoration:underline;">Se désabonner de ces communications</a>
+           <a href="${unsubUrl}" style="color:#9ca3af;text-decoration:underline;">${langueRelance === 'fr' ? 'Se désabonner de ces communications' : 'Unsubscribe from these emails'}</a>
          </p>`
       : '';
 
     const result = await sendEmail({
-      ...senderFor(company),
+      // `senderForOrg` : sans lui, une entreprise ayant fait vérifier SON
+      // domaine voyait quand même ses relances partir de @lumecrm.net.
+      ...(await senderForOrg(ctx.orgId, company)),
       to,
       subject,
-      html: buildEmailLayout(company, body + pied),
+      html: buildEmailLayout(company, body + pied, bouton),
+      /* Sans `suivi`, la ligne `email_deliveries` part sans entity_type, et la
+         fonction de suivi en base REFUSE alors d'enregistrer l'ouverture
+         (`and d.entity_type is not null`, exclusion Loi 25 des courriels de
+         compte). Les relances automatiques — rappels de rendez-vous, factures
+         en retard, demandes d'avis — étaient donc les seuls courriels vraiment
+         commerciaux de Lume, et les seuls dont on ignorait s'ils étaient lus.
+         Les trois valeurs étaient déjà là, servant à `activity_log` juste en
+         dessous. */
+      suivi: { orgId: ctx.orgId, entityType: ctx.entityType, entityId: ctx.entityId },
       ...(unsubUrl
         ? {
             headers: {
@@ -535,7 +885,9 @@ export async function executeSendSms(
 ): Promise<ActionResult> {
   if (!ctx.twilio) return { success: false, error: 'Twilio not configured' };
 
-  const to = config.to ? resolveTemplate(config.to, vars) : vars.client_phone;
+  // Même règle que pour le courriel : le numéro vient de l'entité, pas de la
+  // règle. Voir `DESTINATAIRE_IMPOSE`.
+  const to = vars.client_phone;
   if (!to) return { success: false, error: 'No recipient phone' };
 
   // CASL compliance — manual sends already blocked opted-out recipients, but
@@ -550,6 +902,15 @@ export async function executeSendSms(
   if (optOut) {
     return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)` };
   }
+
+  // Consentement (F7) : le STOP ci-dessus traite le retrait ; ici on vérifie
+  // qu'une base légale existe — exprès, ou la relation d'affaires (LCAP).
+  const consentementSms = await consentementCommercial(ctx, 'sms', to);
+  if (!consentementSms.autorise) {
+    return { success: false, error: `Consentement manquant pour ${optOutPhone} : ${consentementSms.motif}` };
+  }
+  // Même raison que pour le courriel : la base retenue doit être démontrable.
+  if (ctx.commercial) void journaliserBaseLegale(ctx, 'sms', consentementSms.clientId ?? null, consentementSms.base);
 
   // Plafond anti-spam : pas plus de N messages commerciaux / client / 24h.
   if (await depassePlafondFrequence(ctx, 'sms', to)) {
@@ -576,6 +937,12 @@ export async function executeSendSms(
     };
   }
 
+  {
+    const { destinataireGele, journaliserBlocage, MESSAGE_GEL } = await import('../migration/gel-communications');
+    const { getServiceClient } = await import('../supabase');
+    const orgGelee = await destinataireGele(getServiceClient(), { phone: to }, ctx.orgId);
+    if (orgGelee) { journaliserBlocage('sms', orgGelee, to, 'automatisation'); return { success: false, error: MESSAGE_GEL }; }
+  }
   try {
     const { getTwilioStatusCallbackUrl } = await import('../config');
     const statusCallback = getTwilioStatusCallbackUrl();
@@ -681,6 +1048,7 @@ export async function executeCreateTask(
         .from('schedule_events')
         .select('job_id')
         .eq('id', ctx.entityId)
+        .eq('org_id', ctx.orgId)
         .maybeSingle();
       if (evt?.job_id) {
         lienType = 'job';
@@ -790,6 +1158,7 @@ export async function executeRequestReview(
       .from('jobs')
       .select('client_id')
       .eq('id', ctx.entityId)
+      .eq('org_id', ctx.orgId)
       .maybeSingle();
     clientId = job?.client_id || null;
   } else if (ctx.entityType === 'invoice') {
@@ -797,6 +1166,7 @@ export async function executeRequestReview(
       .from('invoices')
       .select('client_id, job_id')
       .eq('id', ctx.entityId)
+      .eq('org_id', ctx.orgId)
       .maybeSingle();
     clientId = inv?.client_id || null;
     jobId = inv?.job_id || null;
@@ -905,8 +1275,26 @@ export async function executeRequestReview(
     status: sent ? 'sent' : 'failed',
     sent_at: sent ? new Date().toISOString() : null,
   });
+  /**
+   * DEMI-ÉTAT : le message est parti, mais sa trace n'a pas été écrite.
+   *
+   * `review_requests` est ce que lit l'anti-doublon de 7 jours (plus haut
+   * dans cette fonction). Sans cette ligne, le prochain passage ne verra
+   * aucun envoi récent et redemandera un avis au même client — qui l'a déjà
+   * reçu. Rapporter « réussi » ferait fermer la tâche et perdrait
+   * l'information.
+   *
+   * On rapporte donc l'échec : la reprise renverra peut-être un message de
+   * trop, mais avec sa trace cette fois. Un doublon visible vaut mieux qu'un
+   * doublon invisible qui se répétera à chaque exécution.
+   */
   if (trackError) {
     console.error(`[actions/request_review] review_requests insert failed (org ${ctx.orgId}, client ${clientId || 'n/a'}):`, trackError.message);
+    return {
+      success: false,
+      error: `Demande d'avis envoyée mais son suivi n'a pas été enregistré (${trackError.message}) — l'anti-doublon ne la verra pas`,
+      data: { token, surveyUrl, emailSent: emailResult.success, smsSent: smsResult.success },
+    };
   }
 
   // 11. Log activity
@@ -964,6 +1352,89 @@ export async function executeLogActivity(
 
 // ── Master executor ─────────────────────────────────────────
 
+
+/**
+ * Déplacer un deal vers une étape du pipeline.
+ *
+ * C'est l'action qui manquait pour qu'une automatisation agisse SUR le
+ * pipeline, et pas seulement à partir de lui : « sans nouvelle depuis 14
+ * jours → remettre en Relance », « devis accepté → passer en Gagné ».
+ *
+ * Trois garde-fous, tous nécessaires :
+ *
+ *  1. l'étape visée doit appartenir au MÊME pipeline que le deal. Sans cette
+ *     vérification, une règle mal configurée expédierait le deal dans le
+ *     pipeline d'à côté, où il disparaîtrait du tableau de son équipe ;
+ *  2. une étape archivée est refusée : on n'envoie pas un deal dans une
+ *     colonne que plus personne ne regarde ;
+ *  3. déplacer vers l'étape où le deal se trouve DÉJÀ ne réécrit rien. Le
+ *     trigger remettrait `stage_entered_at` à maintenant, ce qui effacerait
+ *     l'ancienneté — et une règle « sans activité depuis 7 jours » qui se
+ *     redéclenche remettrait éternellement le compteur à zéro.
+ *
+ * Le déplacement passe par un UPDATE ordinaire : les triggers de `deals`
+ * s'occupent de l'horodatage, de l'historique et des événements. Une
+ * automatisation produit donc exactement le même résultat qu'un
+ * glisser-déposer à l'écran.
+ */
+export async function executeMoveDealStage(
+  config: { stage_id: string },
+  _vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  if (ctx.entityType !== 'deal') {
+    return { success: false, error: `move_deal_stage ne s'applique qu'à un deal (reçu : ${ctx.entityType}).` };
+  }
+  if (!config?.stage_id) {
+    return { success: false, error: 'move_deal_stage : stage_id manquant.' };
+  }
+
+  const { data: deal, error: dealErr } = await ctx.supabase
+    .from('deals')
+    .select('id, pipeline_id, stage_id')
+    .eq('id', ctx.entityId)
+    .eq('org_id', ctx.orgId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (dealErr) return { success: false, error: dealErr.message };
+  if (!deal) return { success: false, error: 'Deal introuvable dans cette organisation.' };
+
+  if (deal.stage_id === config.stage_id) {
+    // Pas une erreur : la règle a déjà produit son effet.
+    return { success: true, data: { deja_dans_l_etape: true, stage_id: config.stage_id } };
+  }
+
+  const { data: etape, error: etapeErr } = await ctx.supabase
+    .from('pipeline_stages')
+    .select('id, pipeline_id, archived_at, name_fr')
+    .eq('id', config.stage_id)
+    .eq('org_id', ctx.orgId)
+    .maybeSingle();
+
+  if (etapeErr) return { success: false, error: etapeErr.message };
+  if (!etape) return { success: false, error: 'Étape introuvable dans cette organisation.' };
+  if (etape.pipeline_id !== deal.pipeline_id) {
+    return { success: false, error: "L'étape visée appartient à un autre pipeline." };
+  }
+  if (etape.archived_at) {
+    return { success: false, error: `L'étape « ${etape.name_fr} » est archivée.` };
+  }
+
+  const { data, error } = await ctx.supabase
+    .from('deals')
+    .update({ stage_id: config.stage_id })
+    .eq('id', ctx.entityId)
+    .eq('org_id', ctx.orgId)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) {
+    return { success: false, error: "Aucun deal touché — l'écriture a été refusée." };
+  }
+  return { success: true, data: { stage_id: config.stage_id, etape: etape.name_fr } };
+}
+
 export async function executeAction(
   actionType: ActionType,
   config: Record<string, any>,
@@ -984,10 +1455,16 @@ export async function executeAction(
       return executeCreateTask(config as any, vars, ctx);
     case 'update_status':
       return executeUpdateStatus(config as any, vars, ctx);
+    case 'move_deal_stage':
+      return executeMoveDealStage(config as any, vars, ctx);
     case 'request_review':
       return executeRequestReview(config, vars, ctx);
     case 'log_activity':
       return executeLogActivity(config as any, vars, ctx);
+    // Champs personnalisés : seulement l'entité de l'événement, seulement un
+    // champ de son objet (server/lib/champs/automatisations.ts).
+    case 'update_custom_field':
+      return executerMajChamp(ctx.supabase, ctx, config);
     default:
       return { success: false, error: `Unknown action type: ${actionType}` };
   }

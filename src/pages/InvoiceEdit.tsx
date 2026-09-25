@@ -32,6 +32,8 @@ import { resolveTaxes, calculateTaxes, type TaxConfig } from '../lib/taxApi';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { listSalespeople } from '../lib/jobsApi';
+import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
+import { useChampsDocument } from '../components/champs/document';
 
 // ── Line item form ──
 interface LineForm {
@@ -75,6 +77,8 @@ export default function InvoiceEdit() {
   const [sending, setSending] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [draftId, setDraftId] = useState<string | null>(isNew ? null : invoiceId);
+  // Champs personnalisés cochés « afficher sur le document » (aperçu).
+  const champsDocument = useChampsDocument('invoice', draftId, language === 'fr');
 
   // Form state
   const [clientId, setClientId] = useState(prefillClientId || '');
@@ -810,6 +814,9 @@ export default function InvoiceEdit() {
               </div>
             </div>
 
+            {/* Champs personnalisés (v2) — le brouillon existe déjà : enregistrement en place. */}
+            <CustomFieldsPanel objet="invoice" entityId={draftId} fr={language === 'fr'} />
+
             {/* Invoice uses fixed layout — no template picker */}
           </div>
         </div>
@@ -818,7 +825,7 @@ export default function InvoiceEdit() {
         {showPreview && (
           <div className="w-[45%] overflow-y-auto border-l border-border bg-gray-100 p-6">
             <div className="mx-auto max-w-[600px] rounded-xl bg-surface-card p-8 shadow-lg">
-              <InvoiceRenderer data={previewData} />
+              <InvoiceRenderer data={{ ...previewData, champsPerso: champsDocument }} />
             </div>
           </div>
         )}

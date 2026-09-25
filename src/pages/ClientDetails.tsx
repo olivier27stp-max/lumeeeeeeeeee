@@ -40,6 +40,7 @@ import { exportClientData, eraseClient } from '../lib/consentApi';
 import type { ClientRecord } from '../lib/clientsApi';
 import { BillingAddressSection } from '../components/BillingAddressSection';
 import ClientCardOnFile from '../components/ClientCardOnFile';
+import ClientConsentement from '../components/ClientConsentement';
 import PropertiesSection from '../components/PropertiesSection';
 import EventsPanel from '../components/events/EventsPanel';
 import { supabase } from '../lib/supabase';
@@ -58,6 +59,7 @@ import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
 import SpecificNotes from '../components/SpecificNotes';
 import { getQuoteById, formatQuoteMoney, type QuoteDetail, type Quote } from '../lib/quotesApi';
+import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface JobRecord {
@@ -1170,6 +1172,9 @@ export default function ClientDetails() {
           {/* Events / activity center */}
           <EventsPanel entityType="client" entityId={id!} />
 
+          {/* Champs personnalisés (v2) — rien ne s'affiche sans champ défini. */}
+          <CustomFieldsPanel objet="client" entityId={id} fr={isFr} className="section-card p-4" />
+
           {/* Notes Section */}
           <div className="section-card">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
@@ -1238,6 +1243,13 @@ export default function ClientDetails() {
               </button>
             </div>
           )}
+
+          {/* Consentement commercial (LCAP / loi 25) — exprès saisi ici, tacite calculé */}
+          <ClientConsentement
+            client={client}
+            fr={isFr}
+            onChange={(champs) => setClient((prev) => (prev ? { ...prev, ...champs } : prev))}
+          />
 
           {/* Payment on file — carte sauvegardée avec consentement (Loi 25) */}
           <ClientCardOnFile clientId={client.id} fr={isFr} />

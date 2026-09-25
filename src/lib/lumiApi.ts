@@ -99,10 +99,21 @@ export interface RapportLumi {
   sections: SectionRapportLumi[];
 }
 
+/** Tokens et coût d'une réponse (somme des appels au modèle du tour), ou d'une conversation. */
+export interface UsageLumi {
+  model: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cost_cents: number;
+  appels: number;
+}
+
 export interface MessageLumi {
   role: 'user' | 'assistant';
   text: string;
   tools: string[];
+  usage?: UsageLumi;
   proposal?: PropositionLumi;
   report?: RapportLumi;
   fiches?: FicheLumi[];
@@ -122,7 +133,7 @@ export type EvenementFlux =
   | { type: 'fiches'; fiches: FicheLumi[] }
   | { type: 'executed'; tool_use_id: string; ok: boolean; fiche: FicheLumi | null; auto?: boolean }
   | { type: 'report'; tool_use_id: string; rapport: RapportLumi }
-  | { type: 'usage'; model: string; cost_cents: number }
+  | { type: 'usage'; model: string; cost_cents: number; usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }
   | { type: 'done'; conversation_id: string; cost_cents: number; budget: BudgetLumi; proposal: { tool_use_id: string; tool: string; args: Record<string, unknown> } | null }
   | { type: 'error'; message: string };
 
@@ -262,7 +273,7 @@ export async function listerConversationsLumi(): Promise<ConversationLumi[]> {
   return (await res.json()).conversations ?? [];
 }
 
-export async function chargerConversationLumi(id: string): Promise<{ conversation: ConversationLumi; messages: MessageLumi[] }> {
+export async function chargerConversationLumi(id: string): Promise<{ conversation: ConversationLumi; messages: MessageLumi[]; usage?: UsageLumi }> {
   const res = await fetch(`${API_BASE}/api/lumi/conversations/${encodeURIComponent(id)}`, { headers: await authHeaders() });
   if (!res.ok) throw new ErreurLumi(`http_${res.status}`, 'conversation');
   return res.json();

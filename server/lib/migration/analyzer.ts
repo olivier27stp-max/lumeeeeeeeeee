@@ -395,7 +395,10 @@ const FILENAME_PATTERNS: [RegExp, MigrationCategory][] = [
   [/invoice|facture/, 'invoices'],
   [/payment|paiement/, 'payments'],
   [/quote|estimate|soumission|devis/, 'quotes'],
-  [/\bjobs?\b|work orders?|travaux/, 'jobs'],
+  // « Recurring jobs » (Jobber) avant jobs : plans de service récurrents
+  [/recurr|recurrent|recurrente|plans? de service/, 'recurring_jobs'],
+  // « one offs.csv », « one-off jobs » : export Jobber des jobs ponctuels
+  [/\bjobs?\b|work orders?|travaux|one ?offs?\b/, 'jobs'],
   [/visit|appointment|schedule|rendez/, 'visits'],
   [/\bproducts?\b|\bservices?\b|\bitems?\b|catalog/, 'services'],
   [/\bteam\b|employee|employes?\b|\busers?\b|staff|technician|technicien/, 'team_members'],
@@ -416,8 +419,13 @@ export function detectCategory(fileName: string, headers: string[]): MigrationCa
   if (has(/tax name|tax code|nom de (la )?taxe|code de taxe/) && has(/\brate\b|percent|taux|pourcentage/)) return 'taxes';
   // payments avant invoices : un export de paiements référence des factures
   if (has(/payment method|payment date|mode de paiement|date de paiement/)) return 'payments';
+  // Un export de JOBS Jobber liste ses factures dans « Invoice #s » : le numéro de job prime.
+  // Le 2026-09-22, « one offs.csv » (859 jobs) est parti en factures et 630 ont été fusionnées
+  // avec des factures au même numéro.
+  if (has(/job (number|no|num|#)|work order|numero de job|no de job/)) {
+    return has(/frequency|frequence|repeat|recurr|schedule interval|cadence/) ? 'recurring_jobs' : 'jobs';
+  }
   if (has(/invoice (number|no|num|#)|numero de facture|no de facture/)) return 'invoices';
-  if (has(/job (number|no|num|#)|work order|numero de job|no de job/)) return 'jobs';
   if (has(/quote (number|no|#)|estimate (number|no|#)|numero de (soumission|devis)/)) return 'quotes';
   if ((has(/start time|heure de debut/) && has(/end time|heure de fin/)) || has(/appointment|rendez vous/)) {
     return 'visits';

@@ -1,0 +1,44 @@
+{
+  "preset_key": "client_anniversary",
+  "trigger_event": "job.completed",
+  "delay_seconds": 31536000,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2027-09-13T15:00:00.000Z",
+      "execution_key": "regle-client_anniversary:aaaaaaaa-0000-4000-8000-000000000002:0"
+    },
+    {
+      "action": "send_sms",
+      "execute_at": "2027-09-13T15:00:00.000Z",
+      "execution_key": "regle-client_anniversary:aaaaaaaa-0000-4000-8000-000000000002:1"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2027-09-13T15:00:00.000Z",
+      "execution_key": "regle-client_anniversary:aaaaaaaa-0000-4000-8000-000000000002:2"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Déjà un an!",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Ça fait déjà un an qu'on a fait des travaux chez vous — merci encore pour votre confiance!</p><p>Si c'est le temps d'une retouche ou d'un entretien, répondez à ce courriel et on vous prépare une soumission.</p><p>Au plaisir,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Déjà un an! Merci pour votre confiance, Marie. Besoin d'une retouche? Plomberie Tremblay inc. est là. Répondez STOP pour vous désabonner.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "anniversary_sent",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

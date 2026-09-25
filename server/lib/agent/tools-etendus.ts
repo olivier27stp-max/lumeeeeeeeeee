@@ -23,6 +23,7 @@
 
 import crypto from 'crypto';
 import { getServiceClient, companyOrgIds } from '../supabase';
+import { generateCommissionsForInvoice } from '../field-sales/commission-engine';
 import { invaliderOrg } from '../lumi/version-org';
 import { logSecurityEvent } from '../security';
 import { twilioClient, getTwilioStatusCallbackUrl } from '../config';
@@ -95,7 +96,7 @@ function qtePositive(v: any): number {
  * `String(undefined)` = "undefined" inséré en base (donnée corrompue
  * silencieuse). On refuse proprement à la place. Renvoie la valeur nettoyée.
  */
-function champRequis(v: any, nomLisible: string): string {
+export function champRequis(v: any, nomLisible: string): string {
   const s = v == null ? '' : String(v).trim();
   if (!s) throw new Error(`${nomLisible} est requis — précise-le et réessaie.`);
   return s;
@@ -255,7 +256,7 @@ function messageHumainErreur(e: any, contexte?: string): string {
     : 'L\'action n\'a pas fonctionné côté Lume. Dis-le simplement et propose de réessayer.';
 }
 
-async function executerIdempotent(
+export async function executerIdempotent(
   ctx: ToolContext,
   outil: string,
   args: Record<string, any>,
@@ -370,10 +371,16 @@ export const STATUT_ROLE: Record<string, string> = {
   sales_rep: 'représentant', technician: 'technicien', manager: 'gestionnaire',
 };
 export const STATUT_LEAD: Record<string, string> = {
+  // Étapes canoniques du pipeline (leadsApi.ts) d'abord — « new_prospect » sortait brut en « new prospect ».
+  new_prospect: 'nouveau prospect', no_response: 'sans réponse', quote_sent: 'devis envoyé',
   new: 'nouveau', contacted: 'contacté', qualified: 'qualifié',
   proposal: 'proposition envoyée', won: 'gagné', closed_won: 'gagné',
   lost: 'perdu', closed_lost: 'perdu', unqualified: 'non qualifié',
 };
+/** Clé d'un souvenir (remember_this / forget_note) : minuscule, tirets, 80 caractères. */
+export function cleSouvenir(brut: string): string {
+  return String(brut).toLowerCase().replace(/[^a-z0-9à-ÿ-]+/g, '-').slice(0, 80);
+}
 export const STATUT_CLIENT: Record<string, string> = {
   active: 'client actif', inactive: 'inactif', lead: 'prospect',
   prospect: 'prospect', archived: 'archivé',
@@ -519,7 +526,8 @@ const getTeam: AgentTool = {
   declaration: {
     name: 'get_team',
     description:
-      'List the team members: name, email, role, status. Returns the member needed to assign a job.',
+      'List the team members: name, email, role, status. Returns the member needed to assign a job. '
+      + 'Invite, change role, suspend, reactivate, teams, hourly rate → invite_member, update_member_role, remove_member, reactivate_member, *_team, set_hourly_rate.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -549,7 +557,8 @@ const getTimesheets: AgentTool = {
     name: 'get_timesheets',
     description:
       'Hours worked per employee over a date range (default: last 7 days). '
-      + 'Computed from punch-in/punch-out entries, breaks deducted — the same math as the Timesheets screen.',
+      + 'Computed from punch-in/punch-out entries, breaks deducted — the same math as the Timesheets screen. '
+      + 'Clock in/out, breaks, approval, payroll → punch_in, punch_out, start_break, end_break, approve_timesheet, add_payroll_adjustment, mark_payroll_period_paid.',
     parameters: {
       type: 'object',
       properties: {
@@ -725,7 +734,7 @@ const listServices: AgentTool = {
     description:
       'The org’s catalog of predefined services/products with their usual price. Use it BEFORE creating a '
       + 'job/quote/invoice so prices and labels match what the business normally charges — « add 2 window '
-      + 'cleanings at the usual rate ».',
+      + 'cleanings at the usual rate ». Add or change a catalog item → create_service, update_service, archive_service. Taxes → get_tax_config, setup_taxes.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -744,6 +753,7 @@ const listServices: AgentTool = {
     return {
       count: data?.length || 0,
       services: (data || []).map((s: any) => ({
+        service_id: s.id, // pour update_service / archive_service (la batterie : « je ne retrouve pas d'identifiant »)
         nom: s.name,
         description: s.description || null,
         prix_cents: Math.round(Number(s.default_price_cents) || 0),
@@ -758,10 +768,11 @@ const listCourses: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_courses',
-    description: 'List the training courses of the org: title, category, status.',
-    parameters: { type: 'object', properties: {} },
+    description: 'List the training courses of the org: title, category, status, course_id (for update_course, publish_course, assign_course). '
+      + 'With with_lessons: true, also the modules and lessons of each course with their ids (for update_course_lesson, create_course_lesson).',
+    parameters: { type: 'object', properties: { with_lessons: { type: 'boolean', description: 'Include modules and lessons (default false).' } } },
   },
-  handler: async (_args, ctx) => {
+  handler: async (args, ctx) => {
     const { data, error } = await ctx.client
       .from('courses')
       .select('id, title, category, status, created_at')
@@ -771,12 +782,30 @@ const listCourses: AgentTool = {
       .limit(30);
     if (error) return erreurOutil('courses', error);
     const ETAT: Record<string, string> = { draft: 'brouillon', published: 'publié', archived: 'archivé' };
+    const cours = (data || []).map((c: any) => ({
+      course_id: c.id,
+      title: c.title,
+      categorie: c.category,
+      statut: ETAT[c.status] || c.status,
+    }));
+    if (!args?.with_lessons || !cours.length) return { count: cours.length, courses: cours };
+    // Modules et leçons (RLS par cours ; pas d'org_id sur ces tables : filtrées par les cours de l'org ci-dessus).
+    const { data: modules, error: em } = await ctx.client
+      .from('course_modules').select('id, course_id, title, sort_order').in('course_id', cours.map((c) => c.course_id)).order('sort_order');
+    if (em) return erreurOutil('course_modules', em);
+    const { data: lecons, error: el } = (modules || []).length
+      ? await ctx.client.from('course_lessons').select('id, module_id, title, content_type, duration_min, sort_order').in('module_id', (modules || []).map((m: any) => m.id)).order('sort_order')
+      : { data: [] as any[], error: null };
+    if (el) return erreurOutil('course_lessons', el);
     return {
-      count: data?.length || 0,
-      courses: (data || []).map((c: any) => ({
-        title: c.title,
-        categorie: c.category,
-        statut: ETAT[c.status] || c.status,
+      count: cours.length,
+      courses: cours.map((c) => ({
+        ...c,
+        modules: (modules || []).filter((m: any) => m.course_id === c.course_id).map((m: any) => ({
+          module_id: m.id,
+          titre: m.title,
+          lecons: (lecons || []).filter((l: any) => l.module_id === m.id).map((l: any) => ({ lesson_id: l.id, titre: l.title, type: l.content_type, duree_min: l.duration_min })),
+        })),
       })),
     };
   },
@@ -786,7 +815,7 @@ const listAutomations: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_automations',
-    description: 'List the automation rules: name, trigger event, active or not.',
+    description: 'List the automation rules: name, trigger event, active or not. To pause/enable one, change its message text or language → toggle_automation_rule, update_automation_message, update_automation_sms_body, set_automation_language.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -810,7 +839,7 @@ const getAutomationHealth: AgentTool = {
       'Why automations did or did not send lately. Reads the recent execution log and reports how many '
       + 'messages went out vs failed, WITH the reason for each failure (client has no phone/email, no '
       + 'sender number set up, texting not configured…). Use for « why aren’t my automations sending », '
-      + '« are my reminders going out ».',
+      + '« are my reminders going out ». To pause or fix a rule → toggle_automation_rule, update_automation_message.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -1638,6 +1667,11 @@ async function envoyerUnSms(
     throw e;
   }
 
+  {
+    const { destinataireGele, journaliserBlocage, MESSAGE_GEL } = await import('../migration/gel-communications');
+    const orgGelee = await destinataireGele(admin, { phone: telephone }, ctx.orgId);
+    if (orgGelee) { journaliserBlocage('sms', orgGelee, telephone, 'agent'); throw new Error(MESSAGE_GEL); }
+  }
   const conversation = await findOrCreateConversation(admin, ctx.orgId, telephone, clientId || undefined, clientNom || undefined);
   const statusCallback = getTwilioStatusCallbackUrl();
   const twilioMessage = await twilioClient.messages.create({
@@ -1676,7 +1710,8 @@ const createClientTool: AgentTool = {
     name: 'create_client',
     description:
       'Create a client in the CRM. Duplicates are detected and merged by the same rule as the app. '
-      + 'If several existing clients share the name the user gave, ask which one BEFORE creating.',
+      + 'If several existing clients share the name the user gave, ask which one BEFORE creating. '
+      + 'A prospect who has not bought yet → create_lead (update_lead, update_lead_status, convert_lead_to_job). Delete → delete_client. Addresses → *_property.',
     parameters: {
       type: 'object',
       properties: {
@@ -1792,7 +1827,7 @@ async function signalerEvenement(ctx: ToolContext, chemin: string, corps: Record
  * handlers d'envoi le convertissent en EffetPartiel pour NE PAS retenter (donc
  * ne jamais dupliquer un envoi au client).
  */
-class AppelInterneIncertain extends Error {
+export class AppelInterneIncertain extends Error {
   constructor(public cause: string) {
     super(cause);
     this.name = 'AppelInterneIncertain';
@@ -1817,7 +1852,7 @@ function envoiIncertain(quoi: string): EffetPartiel {
 /** Délai au-delà duquel un appel interne est abandonné (ms). */
 const TIMEOUT_APPEL_INTERNE_MS = Number(process.env.MCP_INTERNAL_TIMEOUT_MS) || 20_000;
 
-async function appelInterne(
+export async function appelInterne(
   ctx: ToolContext,
   chemin: string,
   corps: Record<string, any>,
@@ -1956,7 +1991,7 @@ const getMorningBriefing: AgentTool = {
 
     const [impayesR, jobsR, tachesR, demandesR, nonLusR] = await Promise.all([
       ctx.client.from('invoices')
-        .select('client_id, balance_cents, total_cents, due_date, status', { count: 'exact' })
+        .select('id, client_id, balance_cents, total_cents, due_date, status', { count: 'exact' })
         .eq('org_id', ctx.orgId).is('deleted_at', null)
         .in('status', ['sent', 'partial', 'overdue']).lt('due_date', aujourdHui)
         .order('due_date', { ascending: true }).limit(5),
@@ -2006,6 +2041,9 @@ const getMorningBriefing: AgentTool = {
         total_cents: (impayesR.data || []).reduce((s2: number, f: any) =>
           s2 + (f.balance_cents != null ? Number(f.balance_cents) : Number(f.total_cents) || 0), 0),
         worst: (impayesR.data || []).map((f: any) => ({
+          // L'id sert au lien cliquable du briefing : « Sophie Bouchard »
+          // ouvre SA facture, au lieu d'obliger à la chercher.
+          id: f.id,
           client: noms.get(f.client_id) || 'client supprimé',
           balance_cents: f.balance_cents != null ? f.balance_cents : f.total_cents,
           due_date: f.due_date,
@@ -2073,8 +2111,7 @@ const rememberThis: AgentTool = {
       // (server/routes/org-knowledge.ts) : la fiche est visible et
       // modifiable dans l'application, pas enfermée chez l'agent.
       const admin = getServiceClient();
-      const cle = champRequis(args.key, 'La clé du souvenir')
-        .toLowerCase().replace(/[^a-z0-9à-ÿ-]+/g, '-').slice(0, 80);
+      const cle = cleSouvenir(champRequis(args.key, 'La clé du souvenir'));
       const { error } = await admin
         .from('org_knowledge')
         .upsert({
@@ -2101,7 +2138,9 @@ const forgetNote: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'forget_note', args, async () => {
       const admin = getServiceClient();
-      const cle = champRequis(args.key, 'La clé de la note').toLowerCase().slice(0, 80);
+      // Même normalisation que remember_this : « exec_test » y devient « exec-test »
+      // et forget_note ne le retrouvait pas (batterie d'exécution du 2026-09-17).
+      const cle = cleSouvenir(champRequis(args.key, 'La clé de la note'));
       const { data, error } = await admin.from('org_knowledge')
         .update({ is_active: false })
         .eq('org_id', ctx.orgId).eq('category', 'assistant').eq('key', cle)
@@ -2196,7 +2235,8 @@ const sendQuoteTool: AgentTool = {
     description:
       "Email a quote to its client — IT ACTUALLY SENDS through the app's own engine (share link, "
       + 'templates, tracking). ALWAYS show the user which quote goes to whom and get their explicit OK '
-      + 'first. Get quote ids from the quotes list.',
+      + 'first. Get quote ids from the quotes list. By text message → send_quote_sms. Edit, duplicate, convert to '
+      + 'invoice, presets/templates → update_quote, duplicate_quote, convert_quote_to_invoice, *_quote_preset, *_quote_template.',
     parameters: {
       type: 'object',
       properties: {
@@ -2790,7 +2830,8 @@ const markInvoicePaidTool: AgentTool = {
       'Mark an invoice as fully PAID — records a full manual payment (cash, e-transfer, cheque…) and '
       + 'stops payment reminders, exactly like "Mark as paid" in Lume. Use for money received OUTSIDE '
       + 'Stripe/PayPal. This does NOT charge anyone. Get the invoice id from the invoices list or '
-      + 'the overdue payments list. ALWAYS confirm the invoice and amount with the user first.',
+      + 'the overdue payments list. ALWAYS confirm the invoice and amount with the user first. '
+      + 'PARTIAL amount → search and use record_invoice_payment. Cancel/void, edit, duplicate → void_invoice, update_invoice, duplicate_invoice.',
     parameters: {
       type: 'object',
       properties: {
@@ -2841,10 +2882,25 @@ const markInvoicePaidTool: AgentTool = {
       const { data: apres } = await admin
         .from('invoices').select('invoice_number, balance_cents, status')
         .eq('id', invoiceId).maybeSingle();
+
+      // Facture soldée → commissions du rep. Stripe les génère par webhook et
+      // le bouton « Marquer payée » de l'app via generate-for-invoice ; Lumi
+      // les oubliait : un paiement enregistré par l'assistant ne payait
+      // jamais le vendeur. « no_rule » = aucun plan configuré → on le dit.
+      let avertCommission: string | null = null;
+      if (apres?.status === 'paid') {
+        try {
+          const res = await generateCommissionsForInvoice(admin, ctx.orgId, invoiceId);
+          if (res.skipped === 'no_rule') avertCommission = 'Aucune commission créée : le vendeur n’a pas de plan de commission (Réglages → Commissions).';
+        } catch (err: any) {
+          console.error(`[commissions] génération après paiement Lumi échouée (org ${ctx.orgId}, facture ${invoiceId}):`, err?.message);
+        }
+      }
       const avertEvt = await signalerEvenement(ctx, '/automations/events/invoice-paid', { invoiceId, clientId: inv.client_id || undefined });
+      const warning = [avertEvt, avertCommission].filter(Boolean).join(' ');
       return {
         paid: true,
-        ...(avertEvt ? { warning: avertEvt } : {}),
+        ...(warning ? { warning } : {}),
         invoice: {
           invoice_number: apres?.invoice_number || inv.invoice_number,
           statut: traduireStatut(apres?.status, STATUT_FACTURE),
@@ -2878,22 +2934,24 @@ const addNoteTool: AgentTool = {
     executerIdempotent(ctx, 'add_note', args, async () => {
       const type = String(args.entity_type);
       if (!['client', 'job'].includes(type)) throw new Error("entity_type : 'client' ou 'job'.");
-      // Même insertion que la route activity-notes : la note porte l'auteur
-      // réel (actor_id) — le fil d'activité de l'app dit QUI a écrit quoi.
-      const admin = getServiceClient();
-      const { data, error } = await admin
-        .from('activity_notes')
+      // L'onglet Notes de la fiche (specific_notes), là où list_notes, update_note
+      // et delete_note lisent — la note écrite dans activity_notes (fil d'activité)
+      // était invisible dans l'onglet (batterie d'exécution du 2026-09-17).
+      // Même insertion que src/lib/specificNotesApi.ts, à l'identité (RLS).
+      const { data, error } = await ctx.client
+        .from('specific_notes')
         .insert({
           org_id: ctx.orgId,
           entity_type: type,
           entity_id: champRequis(args.entity_id, "L'élément à annoter"),
-          body: champRequis(args.note, 'La note').slice(0, 4000),
-          actor_id: ctx.userId,
+          text: champRequis(args.note, 'La note').slice(0, 4000),
+          files: [],
+          created_by: ctx.userId,
         })
         .select('id, created_at')
         .single();
       if (error) throw error;
-      return { added: true, at: data.created_at };
+      return { added: true, note_id: data.id, at: data.created_at };
     }),
 };
 
@@ -2985,7 +3043,8 @@ const updateJobTool: AgentTool = {
     description:
       "Edit a job completely: title, description, type, address (re-geocoded for the map), and/or "
       + 'REPLACE its line items (amounts and taxes recomputed by the app\u2019s own calculator). '
-      + 'Only provided fields change. To move dates, reschedule the visit.',
+      + 'Only provided fields change. To move dates, reschedule the visit. Delete, recurrence, checklists, tags, '
+      + 'contracts, billing milestones → delete_job, create_recurrence_rule, *_job_checklist, set_job_tags, create_job_agreement, save_job_billing_milestones.',
     parameters: {
       type: 'object',
       properties: {

@@ -13,6 +13,15 @@ import {
   resolveEntityVariables,
 } from './actions';
 import { logger } from './logger';
+import { conditionsChampsOk, CLE_CONDITIONS_CHAMPS } from './champs/automatisations';
+import {
+  type Etape,
+  planifierEtape,
+  trouverEtape,
+  etapeSuivante,
+  premiereEtape,
+} from './automationSequences';
+import { automatisationsActivesAvecTrace } from './automations-interrupteur';
 
 interface AutomationRule {
   id: string;
@@ -22,7 +31,43 @@ interface AutomationRule {
   conditions: Record<string, any>;
   delay_seconds: number;
   actions: Array<{ type: ActionType; config: Record<string, any> }>;
+  /**
+   * Graphe d'étapes d'une SÉQUENCE. `null` sur une règle simple, qui continue
+   * d'être pilotée par `delay_seconds` + `actions` exactement comme avant.
+   */
+  steps?: Etape[] | null;
+  /**
+   * Réglages propres à cette règle. `null` = les défauts du moteur, qui sont
+   * bons : fenêtre 8h-20h, arrêt sur changement d'état. Personne n'a besoin
+   * d'y toucher pour que ça marche.
+   */
+  settings?: ReglagesRegle | null;
   is_active: boolean;
+  /** Portée pipeline (déclencheurs `deal.*`). `null` = toutes les étapes. */
+  pipeline_id?: string | null;
+  stage_id?: string | null;
+}
+
+/**
+ * Une règle du pipeline s'applique-t-elle à CET événement ?
+ *
+ * `automation_rules` porte `pipeline_id` et `stage_id` depuis la migration
+ * 20260923100100, mais le moteur ne les regardait pas : il ne filtrait que
+ * sur l'organisation et le type d'événement. Une règle attachée à l'étape
+ * « Contacté » se déclenchait donc à l'entrée dans N'IMPORTE quelle étape —
+ * le choix d'étape dans l'interface n'aurait servi à rien.
+ *
+ * Une règle sans étape reste volontairement large : c'est la façon d'écrire
+ * « à chaque changement d'étape, quelle qu'elle soit ». Et un événement qui
+ * ne porte pas l'étape dans ses métadonnées passe : mieux vaut exécuter la
+ * règle que de perdre l'action sans trace.
+ */
+export function regleViseCetEvenement(rule: AutomationRule, event: CRMEvent): boolean {
+  if (!event.type.startsWith('deal.')) return true;
+  const m = event.metadata ?? {};
+  if (rule.pipeline_id && m.pipeline_id && rule.pipeline_id !== m.pipeline_id) return false;
+  if (rule.stage_id && m.stage_id && rule.stage_id !== m.stage_id) return false;
+  return true;
 }
 
 interface EngineConfig {
@@ -66,6 +111,9 @@ function evaluateConditions(
 
   // Simple condition matching against event metadata
   for (const [key, expected] of Object.entries(conditions)) {
+    // Champs personnalisés : jugés à part, sur les valeurs actuelles
+    // (conditionsChampsOk, asynchrone) — pas contre les métadonnées.
+    if (key === CLE_CONDITIONS_CHAMPS) continue;
     const actual = event.metadata[key];
 
     // Support operators
@@ -124,9 +172,73 @@ function localHour(d: Date): number {
   );
 }
 
+export interface ReglagesRegle {
+  reentree?: boolean;
+  arret_sur_reponse?: boolean;
+  fenetre?: { debut: number; fin: number };
+  jours_ouvrables?: boolean;
+  marquer_lu?: boolean;
+}
+
 export function isQuietHours(d: Date = new Date()): boolean {
   const h = localHour(d);
   return h < SEND_START_HOUR || h >= SEND_END_HOUR;
+}
+
+/**
+ * Hors de la fenêtre d'envoi de CETTE règle.
+ *
+ * Sans réglage, c'est la fenêtre commune (8 h-20 h) : le comportement d'une
+ * automatisation qui n'a jamais été touchée ne change pas d'un iota.
+ *
+ * `jours_ouvrables` s'ajoute à l'heure : un message prêt le samedi attend
+ * lundi matin. Utile pour les relances commerciales, pas pour un rappel de
+ * rendez-vous — d'où le réglage par automatisation plutôt que global.
+ */
+export function horsFenetre(reglages: ReglagesRegle | null | undefined, d: Date = new Date()): boolean {
+  const debut = reglages?.fenetre?.debut ?? SEND_START_HOUR;
+  const fin = reglages?.fenetre?.fin ?? SEND_END_HOUR;
+  const h = localHour(d);
+  if (h < debut || h >= fin) return true;
+
+  if (reglages?.jours_ouvrables) {
+    // `getDay()` lit le fuseau du SERVEUR ; on passe par Intl pour rester
+    // sur l'heure du Québec, comme le reste de la fenêtre.
+    const jour = new Intl.DateTimeFormat('en-CA', { timeZone: QUIET_TZ, weekday: 'short' }).format(d);
+    if (jour === 'Sat' || jour === 'Sun') return true;
+  }
+  return false;
+}
+
+/** Décalage UTC (en minutes) du fuseau local à cet instant — +/- selon l'heure avancée. */
+function decalageLocalMin(t: number): number {
+  const d = new Date(t);
+  // Une date formatée dans le fuseau cible, relue comme si elle était UTC :
+  // l'écart avec l'instant d'origine EST le décalage.
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: QUIET_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(d).reduce<Record<string, string>>((a, x) => (a[x.type] = x.value, a), {});
+  const commeUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+  return Math.round((commeUtc - d.getTime()) / 60000);
+}
+
+/**
+ * Cale un rappel sur l'HEURE LOCALE voulue, même à cheval sur un changement
+ * d'heure.
+ *
+ * Un « rappel 7 jours avant » se calcule en 604 800 secondes absolues. Si le
+ * retour à l'heure normale tombe entre les deux, l'heure locale glisse d'une
+ * heure : un rendez-vous à 10 h donnait un rappel à 11 h. Mesuré sur le cas
+ * réel du 1er novembre 2026.
+ *
+ * On compare le décalage UTC aux deux instants et on rattrape la différence.
+ * Rien à faire le reste de l'année : les deux décalages sont égaux, la
+ * correction vaut zéro.
+ */
+function corrigerChangementDHeure(reference: number, cible: number): number {
+  const ecart = decalageLocalMin(reference) - decalageLocalMin(cible);
+  return ecart === 0 ? cible : cible + ecart * 60000;
 }
 
 /**
@@ -153,11 +265,14 @@ function shouldRespectQuietHours(actionType: string, delaySeconds: number): bool
 }
 
 /** Next moment inside the send window, stepping 30 min (DST-safe, no tz lib). */
-export function nextSendTime(from: Date = new Date()): Date {
+export function nextSendTime(from: Date = new Date(), reglages?: ReglagesRegle | null): Date {
   const next = new Date(from);
-  for (let i = 0; i < 48; i++) {
+  // 48 pas de 30 min = 24 h. Avec `jours_ouvrables`, un message prêt le
+  // samedi doit pouvoir attendre jusqu'à lundi : on va jusqu'à 3 jours.
+  const pasMax = reglages?.jours_ouvrables ? 144 : 48;
+  for (let i = 0; i < pasMax; i++) {
     next.setTime(next.getTime() + 30 * 60 * 1000);
-    if (!isQuietHours(next)) return next;
+    if (!horsFenetre(reglages, next)) return next;
   }
   return from;
 }
@@ -210,7 +325,7 @@ async function executeRuleActions(
     // Reporte à la prochaine fenêtre d'envoi les actions déclenchées en heures
     // calmes. Une règle immédiate (délai 0) porte une confirmation attendue :
     // seuls ses SMS sont reportés, jamais ses courriels.
-    if (shouldRespectQuietHours(action.type, rule.delay_seconds) && isQuietHours()) {
+    if (shouldRespectQuietHours(action.type, rule.delay_seconds) && horsFenetre(rule.settings)) {
       // supabase-js ne lève jamais : l'erreur (dont le doublon 23505) arrive
       // dans la réponse, pas dans un catch.
       const { error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
@@ -219,7 +334,7 @@ async function executeRuleActions(
         entity_type: event.entityType,
         entity_id: event.entityId,
         action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
-        execute_at: nextSendTime().toISOString(),
+        execute_at: nextSendTime(new Date(), rule.settings).toISOString(),
         status: 'pending',
         execution_key: executionKey,
       });
@@ -321,6 +436,7 @@ async function resolveExecuteAt(
       .from('schedule_events')
       .select('start_at, start_time')
       .eq('id', event.entityId)
+      .eq('org_id', event.orgId)
       .maybeSingle();
 
     // Une erreur de lecture ne doit pas être confondue avec « pas de date » :
@@ -334,7 +450,9 @@ async function resolveExecuteAt(
     const startField = evt?.start_at || evt?.start_time;
     if (startField) {
       const eventTime = new Date(startField).getTime();
-      const executeAt = new Date(eventTime + rule.delay_seconds * 1000);
+      const executeAt = new Date(
+        corrigerChangementDHeure(eventTime, eventTime + rule.delay_seconds * 1000),
+      );
       const retard = Date.now() - executeAt.getTime();
 
       if (retard > RETARD_TOLERE_MS) {
@@ -412,15 +530,28 @@ function delayToSeconds(value: number, unit: string): number {
 
 async function handleEvent(event: CRMEvent) {
   if (!engineConfig) return;
+  // Interrupteur d'arrêt (F6) : avant TOUTE lecture. L'événement est
+  // simplement ignoré — rien n'est planifié, rien n'est journalisé comme
+  // échec. Ce qui était déjà en file y reste.
+  if (!automatisationsActivesAvecTrace()) return;
 
   try {
     // ── 1. Match automation_rules (legacy system) ──
+    // L'ordre est EXPLICITE : sans `order by`, PostgreSQL n'en garantit aucun.
+    // Deux règles sur le même événement — « confirmer » puis « prévenir
+    // l'équipe » — pouvaient s'exécuter dans un ordre différent d'un appel à
+    // l'autre, et un bug qui n'apparaît qu'une fois sur deux est le plus long
+    // à diagnostiquer. `created_at` d'abord (la plus ancienne règle en
+    // premier), `id` pour départager deux règles créées dans la même
+    // milliseconde — un seeder en insère plusieurs d'un coup.
     const { data: rules, error } = await engineConfig.supabase
       .from('automation_rules')
       .select('*')
       .eq('org_id', event.orgId)
       .eq('trigger_event', event.type)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     if (error) {
       console.error('[automationEngine] failed to fetch rules:', error.message);
@@ -428,7 +559,43 @@ async function handleEvent(event: CRMEvent) {
 
     if (rules && rules.length > 0) {
       for (const rule of rules as AutomationRule[]) {
+        /**
+         * Chaque règle est isolée. Sans ce try, une seule règle qui lève —
+         * une lecture qui explose, un gabarit malformé — sortait de la boucle
+         * par le catch global et TOUTES les règles suivantes du même
+         * événement étaient sautées, sans trace individuelle. Une règle
+         * cassée dans une org pouvait ainsi faire taire ses confirmations de
+         * rendez-vous, et rien ne disait laquelle.
+         */
+        try {
+        if (!regleViseCetEvenement(rule, event)) continue;
         if (!evaluateConditions(rule.conditions, event)) continue;
+        if (!(await conditionsChampsOk(engineConfig.supabase, event.orgId, event.entityType, event.entityId,
+          rule.conditions?.[CLE_CONDITIONS_CHAMPS]))) continue;
+        // Une SÉQUENCE se parcourt étape par étape : on ne planifie que la
+        // première, chacune ouvrant la suivante une fois faite. Rien n'est
+        // planifié d'avance, pour qu'une branche « si » soit évaluée sur
+        // l'état du devis AU MOMENT où on y arrive, pas sur celui d'il y a
+        // trois jours.
+        if (Array.isArray(rule.steps) && rule.steps.length > 0) {
+          const debut = premiereEtape(rule.steps);
+          if (debut) {
+            await planifierEtape(
+              {
+                supabase: engineConfig.supabase,
+                orgId: event.orgId,
+                ruleId: rule.id,
+                entityType: event.entityType,
+                entityId: event.entityId,
+                contexte: event.metadata ?? {},
+                franchies: 0,
+              },
+              rule.steps,
+              debut.id,
+            );
+          }
+          continue;
+        }
         if (rule.delay_seconds !== 0) {
           await scheduleDelayedActions(rule, event, engineConfig);
         } else if (event.metadata?.suppress_immediate) {
@@ -441,6 +608,14 @@ async function handleEvent(event: CRMEvent) {
           logger.info(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
         } else {
           await executeRuleActions(rule, event, engineConfig);
+        }
+        } catch (err: any) {
+          // On nomme la règle fautive : « une automatisation a planté » sans
+          // dire laquelle n'aide personne à la réparer.
+          console.error(
+            `[automationEngine] règle "${rule.name}" (${rule.id}) a échoué sur ${event.type} — les autres règles continuent :`,
+            err?.message || err,
+          );
         }
       }
     }
@@ -466,6 +641,46 @@ async function handleEvent(event: CRMEvent) {
 const MAX_TASK_ATTEMPTS = 4;
 
 /**
+ * Délai maximal accordé à UNE action avant de la considérer perdue.
+ *
+ * Le tick traite les tâches en série : sans limite, un fournisseur qui ne
+ * répond pas (Twilio ou SMTP muet, connexion à moitié ouverte) suspend la
+ * boucle entière — aucune autre tâche de la file n'est traitée, pour
+ * personne, tant qu'il n'a pas rendu la main. Une seule org en panne gelait
+ * ainsi les automatisations de toutes les autres.
+ *
+ * 5 s : un envoi normal prend moins d'une seconde ; au-delà de cinq, il
+ * n'est plus « lent », il est perdu. L'échec est transitoire au sens de
+ * `isTransientFailure`, donc la tâche repart en reprise (5 min, 30 min, 2 h)
+ * plutôt que d'être abandonnée — rien n'est jeté.
+ */
+const DELAI_MAX_ACTION_MS = 5_000;
+
+/**
+ * La promesse, ou un échec au bout de `delaiMs`.
+ *
+ * Le travail sous-jacent n'est PAS annulé — on ne peut pas rappeler un appel
+ * HTTP déjà parti. On cesse seulement de l'attendre : c'est exactement ce
+ * qu'il faut, puisque le but est de libérer le tick, pas de garantir que
+ * rien n'est parti (la reprise et l'idempotence s'en chargent).
+ */
+async function avecDelaiMax<T>(promesse: Promise<T>, delaiMs: number, message: string): Promise<T> {
+  let minuterie: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promesse,
+      new Promise<never>((_, rejeter) => {
+        minuterie = setTimeout(() => rejeter(new Error(message)), delaiMs);
+      }),
+    ]);
+  } finally {
+    // Sans ce nettoyage, la minuterie garde le processus éveillé jusqu'à son
+    // terme — 20 s de retard à chaque arrêt du serveur.
+    if (minuterie) clearTimeout(minuterie);
+  }
+}
+
+/**
  * Un échec est-il réessayable ?
  *
  * Distinction volontaire : une panne SMTP passagère mérite une reprise, un
@@ -481,6 +696,12 @@ function isTransientFailure(error?: string | null): boolean {
     'plan does not include',  // forfait insuffisant
     'are disabled',           // fonctionnalité désactivée dans les réglages
     'frequency cap',          // plafond atteint : le retenter donnerait le même refus
+    // Consentement manquant (LCAP) : rien ne changera dans les 2 h qui
+    // suivent — la base légale se saisit à la main sur la fiche du client.
+    // Réessayer quatre fois ne fait que retarder la notification qui
+    // apprendra à l'entrepreneur qu'il doit agir.
+    'consentement',
+    'consent',
   ];
   const lower = error.toLowerCase();
   return !definitifs.some((d) => lower.includes(d));
@@ -498,6 +719,55 @@ function isTransientFailure(error?: string | null): boolean {
  * Reprise à délai croissant (5 min, 30 min, 2 h) pour laisser le temps à un
  * service externe de se rétablir sans marteler la file.
  */
+/**
+ * Prévient l'entreprise qu'un message automatique n'est JAMAIS parti.
+ *
+ * Sans ça, un échec définitif ne laissait qu'une ligne dans les journaux du
+ * serveur : le client ne recevait pas sa confirmation, et l'entrepreneur ne
+ * l'apprenait jamais — ni le jour même, ni plus tard. C'est le pire des
+ * silences, parce qu'il donne l'illusion que tout fonctionne.
+ *
+ * Ne lève jamais : une notification perdue ne doit pas empêcher de marquer la
+ * tâche comme terminée, sinon elle resterait `running` pour toujours.
+ */
+async function prevenirEchecDefinitif(
+  supabase: SupabaseClient,
+  task: { id: string; org_id: string; action_config?: { type?: string } | null; automation_rules?: { name?: string } | null },
+  motif: string | null | undefined,
+): Promise<void> {
+  try {
+    const nom = task.automation_rules?.name || 'Automatisation';
+    const canal = task.action_config?.type === 'send_sms' ? 'texto'
+      : task.action_config?.type === 'send_email' ? 'courriel'
+      : 'message';
+    /**
+     * Le motif est TRADUIT, jamais l'erreur brute : « No recipient phone » ne
+     * dit rien à un entrepreneur, « ce client n'a pas de numéro » lui dit quoi
+     * faire. Une cause inconnue reste affichée telle quelle plutôt que
+     * masquée — mieux vaut un message technique qu'un silence.
+     */
+    const brut = (motif || '').toLowerCase();
+    const cause = brut.includes('no recipient phone') ? 'ce client n\'a pas de numéro de téléphone'
+      : brut.includes('no recipient email') ? 'ce client n\'a pas d\'adresse courriel'
+      : brut.includes('opted out') ? 'ce client s\'est désabonné'
+      : brut.includes('not configured') ? 'l\'envoi n\'est pas configuré dans les réglages'
+      : brut.includes('frequency cap') ? 'la limite de messages pour ce client est atteinte'
+      : brut.includes('consentement') ? 'le consentement de ce client n\'est pas enregistré'
+      : (motif || 'cause inconnue');
+
+    const { error } = await supabase.from('notifications').insert({
+      org_id: task.org_id,
+      type: 'automation_failed',
+      title: `Échec d'envoi — ${nom}`,
+      body: `Le ${canal} n'est pas parti et ne partira pas : ${cause}.`,
+      reference_id: task.id,
+    });
+    if (error) throw new Error(error.message);
+  } catch (e: any) {
+    console.error(`[automationEngine] notification d'échec non créée (tâche ${task.id}) :`, e?.message || e);
+  }
+}
+
 function nextStateAfterFailure(
   attempts: number,
   error?: string | null,
@@ -569,6 +839,10 @@ async function recupererTachesFigees(supabase: SupabaseClient): Promise<void> {
 
 export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!engineConfig) return;
+  // Interrupteur d'arrêt (F6) : AVANT la récupération des tâches figées.
+  // Remettre des tâches en file serait déjà y toucher, et l'arrêt doit
+  // laisser la file exactement dans l'état où il l'a trouvée.
+  if (!automatisationsActivesAvecTrace()) return;
 
   // Avant tout : libérer ce qu'un arrêt brutal aurait laissé coincé.
   await recupererTachesFigees(supabase);
@@ -584,7 +858,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // (org_id, automation_rule_id) qui porte l'isolation multi-tenant).
     // PostgREST répondait PGRST201 et AUCUNE tâche d'automatisation planifiée
     // n'était plus exécutée.
-    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, conditions)')
+    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, conditions, steps, settings)')
     .eq('status', 'pending')
     .lte('execute_at', now)
     .order('execute_at', { ascending: true })
@@ -604,10 +878,42 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // Les deux canaux sont concernés — auparavant seuls les SMS l'étaient, et
     // un courriel de relance pouvait partir à 3h du matin.
     const taskType = task.action_config?.type;
-    if ((taskType === 'send_sms' || taskType === 'send_email') && isQuietHours()) {
+    const reglagesRegle = (task.automation_rules?.settings ?? null) as ReglagesRegle | null;
+    if ((taskType === 'send_sms' || taskType === 'send_email') && horsFenetre(reglagesRegle)) {
+      const prochaine = nextSendTime(new Date(), reglagesRegle);
+
+      /**
+       * Un rappel « X h avant » que le report ferait tomber APRÈS son objet
+       * n'a plus rien à rappeler : on l'annule au lieu de l'envoyer en retard.
+       *
+       * Le cas : rendez-vous à 7 h, rappel « 2 h avant » donc à 5 h — en
+       * pleine plage calme. Repoussé à 8 h, il arrivait UNE HEURE APRÈS le
+       * rendez-vous, avec un texte du genre « votre rendez-vous est dans
+       * 2 heures » alors que le technicien était déjà passé. Pire qu'un
+       * silence : le client doute de ce qu'il a lu.
+       */
+      const reference = task.action_config?.event_metadata?.start_time
+        ?? task.action_config?.event_metadata?.start_at;
+      const momentPrevu = reference ? new Date(String(reference)).getTime() : NaN;
+      if (Number.isFinite(momentPrevu) && prochaine.getTime() > momentPrevu) {
+        const { error: cancelError } = await supabase
+          .from('automation_scheduled_tasks')
+          // `execute_at` est conservé tel quel : il dit QUAND le rappel aurait
+          // dû partir, ce qu'on veut encore savoir en relisant une tâche
+          // annulée. L'écraser avec la fenêtre reportée raconterait l'inverse.
+          .update({ status: 'cancelled', completed_at: new Date().toISOString(), execute_at: task.execute_at, last_error: 'rappel périmé : la fenêtre d\'envoi tombe après le rendez-vous' })
+          .eq('id', task.id);
+        if (cancelError) {
+          console.error(`[automationEngine] failed to cancel stale reminder ${task.id}:`, cancelError.message);
+        } else {
+          logger.info(`[automationEngine] rappel annulé — la prochaine fenêtre d'envoi (${prochaine.toISOString()}) tombe après le rendez-vous`);
+        }
+        continue;
+      }
+
       const { error: pushError } = await supabase
         .from('automation_scheduled_tasks')
-        .update({ execute_at: nextSendTime().toISOString() })
+        .update({ execute_at: prochaine.toISOString() })
         .eq('id', task.id);
       if (pushError) {
         console.error(`[automationEngine] failed to push task ${task.id} out of quiet hours:`, pushError.message);
@@ -652,7 +958,11 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         supabase,
         task.entity_type,
         task.entity_id,
+        // L'org de la TÂCHE, jamais celle de l'entité lue : c'est ce qui
+        // empêche une tâche d'une org de conclure sur les données d'une autre.
+        task.org_id,
         actionConfig.trigger_event,
+        actionConfig.event_metadata,
       );
 
       if (shouldStop) {
@@ -664,6 +974,55 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
           console.error(`[automationEngine] failed to cancel scheduled task ${task.id}:`, cancelError.message);
         }
         continue;
+      }
+
+      // ── Séquence : une étape « si » ne s'exécute pas, elle décide ──
+      //
+      // Elle est traitée AVANT toute exécution : il n'y a rien à envoyer, il
+      // y a une branche à choisir. Et elle est évaluée MAINTENANT, contre
+      // l'état actuel de l'entité — c'est tout l'intérêt de ne rien planifier
+      // d'avance : « si le devis est toujours sans réponse » se juge au
+      // moment où on y arrive, pas trois jours plus tôt.
+      const etapesRegle = (task.automation_rules?.steps ?? null) as Etape[] | null;
+      if (task.step_id && Array.isArray(etapesRegle)) {
+        const etape = trouverEtape(etapesRegle, task.step_id);
+        if (etape && etape.type === 'si') {
+          const contexte = (task.sequence_context ?? {}) as Record<string, unknown>;
+          // On réutilise l'évaluateur des règles simples : mêmes opérateurs,
+          // même sémantique. Deux moteurs de conditions divergeraient.
+          const verdict = evaluateConditions(etape.conditions as Record<string, any>, {
+            type: actionConfig.trigger_event,
+            orgId: task.org_id,
+            entityType: task.entity_type,
+            entityId: task.entity_id,
+            metadata: await metadonneesFraiches(supabase, task, contexte),
+          } as CRMEvent)
+            && await conditionsChampsOk(supabase, task.org_id, task.entity_type, task.entity_id,
+              (etape.conditions as Record<string, unknown> | undefined)?.[CLE_CONDITIONS_CHAMPS]);
+
+          await planifierEtape(
+            {
+              supabase,
+              orgId: task.org_id,
+              ruleId: task.automation_rule_id,
+              entityType: task.entity_type,
+              entityId: task.entity_id,
+              contexte,
+              franchies: Number(contexte.franchies ?? 0),
+            },
+            etapesRegle,
+            etapeSuivante(etape, verdict),
+          );
+
+          await supabase
+            .from('automation_scheduled_tasks')
+            .update({ status: 'completed', completed_at: new Date().toISOString() })
+            .eq('id', task.id);
+          logger.info(`[sequences] branche « ${verdict ? 'alors' : 'sinon' } » suivie`, {
+            rule_id: task.automation_rule_id, step_id: task.step_id,
+          });
+          continue;
+        }
       }
 
       const vars = await resolveEntityVariables(
@@ -688,7 +1047,11 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
       };
 
       const startTime = Date.now();
-      const result = await executeAction(actionType, config, vars, ctx);
+      const result = await avecDelaiMax(
+        executeAction(actionType, config, vars, ctx),
+        DELAI_MAX_ACTION_MS,
+        `${actionType} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
+      );
       const durationMs = Date.now() - startTime;
 
       // Log execution
@@ -723,6 +1086,37 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
             : nextStateAfterFailure(task.attempts, result.error),
         )
         .eq('id', task.id);
+      // ── Séquence : l'étape est faite, on ouvre la suivante ──
+      //
+      // Seulement sur SUCCÈS : une étape échouée sera reprise (backoff), et
+      // enchaîner tout de suite ferait partir la suite alors que le message
+      // précédent n'est jamais parti. Après épuisement des reprises, la
+      // séquence s'arrête là — c'est voulu : mieux vaut une séquence
+      // interrompue qu'une séquence qui saute une étape en silence.
+      if (result.success && task.step_id && Array.isArray(etapesRegle)) {
+        const etape = trouverEtape(etapesRegle, task.step_id);
+        if (etape) {
+          const contexte = (task.sequence_context ?? {}) as Record<string, unknown>;
+          await planifierEtape(
+            {
+              supabase,
+              orgId: task.org_id,
+              ruleId: task.automation_rule_id,
+              entityType: task.entity_type,
+              entityId: task.entity_id,
+              contexte,
+              franchies: Number(contexte.franchies ?? 0),
+            },
+            etapesRegle,
+            etapeSuivante(etape),
+          );
+        }
+      }
+
+      // Abandon définitif : l'entreprise doit l'apprendre.
+      if (!result.success && nextStateAfterFailure(task.attempts, result.error).status === 'failed') {
+        await prevenirEchecDefinitif(supabase, task, result.error);
+      }
       if (statusError) {
         // La tâche resterait 'running' pour toujours : personne ne la reprend.
         console.error(`[automationEngine] failed to close scheduled task ${task.id}:`, statusError.message);
@@ -733,6 +1127,9 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         .from('automation_scheduled_tasks')
         .update(nextStateAfterFailure(task.attempts, err.message))
         .eq('id', task.id);
+      if (nextStateAfterFailure(task.attempts, err.message).status === 'failed') {
+        await prevenirEchecDefinitif(supabase, task, err?.message);
+      }
       if (statusError) {
         console.error(`[automationEngine] failed to mark task ${task.id} as failed:`, statusError.message);
       }
@@ -758,11 +1155,67 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
  * Règle appliquée partout maintenant : une erreur de LECTURE ne conclut rien.
  * On laisse la tâche en place ; le tick suivant réessaiera.
  */
+/**
+ * Les métadonnées à jour de l'entité, pour évaluer une branche « si ».
+ *
+ * C'EST LE CŒUR DE L'INTÉRÊT D'UNE SÉQUENCE. Les métadonnées de l'événement
+ * déclencheur décrivent le devis tel qu'il était le jour de l'envoi. Trois
+ * jours plus tard, « si le devis est toujours sans réponse » doit se juger
+ * sur son état ACTUEL — sinon la branche répondrait toujours la même chose
+ * et ne servirait à rien.
+ *
+ * On part du contexte d'origine et on écrase ce qui a pu changer. Une lecture
+ * qui échoue n'est pas silencieuse : on garde l'ancien contexte et on le dit,
+ * plutôt que de décider sur du vide.
+ */
+async function metadonneesFraiches(
+  supabase: SupabaseClient,
+  task: { entity_type: string; entity_id: string; org_id: string },
+  contexte: Record<string, unknown>,
+): Promise<Record<string, any>> {
+  const base: Record<string, any> = { ...contexte };
+
+  /** Table et colonnes à relire selon le type d'entité. */
+  const source: Record<string, { table: string; colonnes: string }> = {
+    quote: { table: 'quotes', colonnes: 'status, total_cents' },
+    invoice: { table: 'invoices', colonnes: 'status, total_cents, balance_cents' },
+    job: { table: 'jobs', colonnes: 'status' },
+    lead: { table: 'leads_active', colonnes: 'status, lead_status' },
+    appointment: { table: 'schedule_events', colonnes: 'status' },
+  };
+
+  const cible = source[task.entity_type];
+  if (!cible) return base;
+
+  const { data, error } = await supabase
+    .from(cible.table)
+    .select(cible.colonnes)
+    .eq('id', task.entity_id)
+    .eq('org_id', task.org_id)
+    .maybeSingle();
+
+  if (error) {
+    // Ne pas confondre « je ne sais pas » et « rien n'a changé » : on décide
+    // sur le contexte d'origine, mais la trace dit pourquoi.
+    logger.error('[sequences] état actuel illisible — branche évaluée sur le contexte d’origine', {
+      entity_type: task.entity_type, entity_id: task.entity_id, message: error.message,
+    });
+    return base;
+  }
+  if (!data) return base;
+
+  // `data` est typé `unknown` par PostgREST quand les colonnes sont choisies
+  // dynamiquement : la forme est garantie par `source` juste au-dessus.
+  return { ...base, ...(data as unknown as Record<string, unknown>) };
+}
+
 async function checkStopConditions(
   supabase: SupabaseClient,
   entityType: string,
   entityId: string,
+  orgId: string,
   triggerEvent?: string,
+  eventMetadata?: Record<string, unknown> | null,
 ): Promise<boolean> {
   /** Journalise et signale qu'aucune conclusion ne peut être tirée. */
   const illisible = (table: string, message: string): boolean => {
@@ -779,6 +1232,7 @@ async function checkStopConditions(
       .from('invoices')
       .select('status, client_id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('invoices', error.message);
@@ -787,7 +1241,7 @@ async function checkStopConditions(
     // Check if client is archived/deleted
     if (inv.client_id) {
       const { data: cl, error: clErr } = await supabase
-        .from('clients').select('deleted_at').eq('id', inv.client_id).maybeSingle();
+        .from('clients').select('deleted_at').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
       if (clErr) return illisible('clients', clErr.message);
       if (cl?.deleted_at) return true;
     }
@@ -799,6 +1253,7 @@ async function checkStopConditions(
       .from('invoices')
       .select('status')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('invoices', error.message);
@@ -812,6 +1267,7 @@ async function checkStopConditions(
       .from('schedule_events')
       .select('status, deleted_at')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('schedule_events', error.message);
@@ -827,6 +1283,7 @@ async function checkStopConditions(
       .from('quotes')
       .select('status, deleted_at')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('quotes', error.message);
@@ -841,6 +1298,7 @@ async function checkStopConditions(
       .from('clients')
       .select('status, lead_status, deleted_at')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('clients', error.message);
@@ -848,7 +1306,25 @@ async function checkStopConditions(
     if (lead.deleted_at) return true;
     // Stop once it's no longer an open lead (promoted/won/lost) or funnel-closed.
     if (lead.status !== 'lead') return true;
-    if (['lost', 'closed', 'converted', 'closed_won', 'closed_lost'].includes(lead.lead_status)) return true;
+
+    /**
+     * Exception : une relance de lead PERDU (`lost_lead_reengagement`, 90 jours
+     * après le passage à « perdu ») s'annulait elle-même — la tâche était
+     * planifiée parce que le lead venait d'être marqué perdu, puis supprimée
+     * parce que le lead ÉTAIT perdu. Le preset n'a jamais pu s'exécuter une
+     * seule fois depuis sa création.
+     *
+     * On n'assouplit la règle que pour ce cas précis : le déclencheur était un
+     * passage à « perdu ». Les autres presets gardent la garde intacte — une
+     * relance de soumission doit bien s'arrêter quand le lead devient perdu.
+     */
+    const relanceDeLeadPerdu =
+      triggerEvent === 'lead.status_changed' &&
+      (eventMetadata as { new_status?: unknown } | null)?.new_status === 'lost';
+    const arretsLead = relanceDeLeadPerdu
+      ? ['closed', 'converted', 'closed_won']
+      : ['lost', 'closed', 'converted', 'closed_won', 'closed_lost'];
+    if (arretsLead.includes(lead.lead_status)) return true;
   }
 
   return false;

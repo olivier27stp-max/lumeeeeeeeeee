@@ -8,7 +8,6 @@
 
 import { Router } from 'express';
 import express from 'express';
-import crypto from 'crypto';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { buildSupabaseWithAuth, getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
@@ -18,25 +17,25 @@ import {
   migrationPortalApprovalSchema,
   migrationPortalMappingSchema,
   migrationPortalAnswerSchema,
+  migrationPortalCategoriesSchema,
+  migrationPortalFileCategorySchema,
   migrationMessageSchema,
 } from '../lib/validation';
 import { hashToken, isValidTokenFormat, randomSleep, checkInvitationUsable } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
 import { repondreDansLePortail } from '../lib/support/portail';
-import { analyzeMigrationFile, MIGRATION_BUCKET } from '../lib/migration/pipeline';
+import { analyzeMigrationFile, MIGRATION_BUCKET, receptionnerFichierMigration, categoriesDeclareesParFichier, estCategorieValide } from '../lib/migration/pipeline';
+import { resumerFichier } from '../lib/migration/resume-fichier';
 import { getCrmConfig } from '../lib/migration/instructions';
 import { FIELD_CATALOG } from '../lib/migration/mapping';
 import {
   CLIENT_MAPPING_EDIT_STATUSES,
   IMPORTABLE_CATEGORIES,
-  MAX_FILES_PER_MIGRATION,
-  MAX_FILE_SIZE_BYTES,
   MAX_INVITE_FAILED_ATTEMPTS,
   UPLOAD_ALLOWED_STATUSES,
   type MigrationRow,
   type TargetEntity,
 } from '../lib/migration/types';
-import { looksBinary, sniffIsPdf } from '../lib/migration/analyzer';
 import { buildRejectsCsv } from '../lib/migration/rejects';
 import { maskNormalizedRecord } from '../lib/migration/masks';
 import { IMPORT_ORDER } from '../lib/migration/importer';
@@ -221,6 +220,8 @@ router.get('/migration-portal/session', async (req, res) => {
 
     const counts: Record<string, number> = {};
     for (const r of (staged.data ?? []) as { entity_type: string }[]) counts[r.entity_type] = (counts[r.entity_type] ?? 0) + 1;
+    const declarees = await categoriesDeclareesParFichier(admin, migration.id);
+    const fichiers = (files.data ?? []).map((f: any) => ({ ...f, category_declared: declarees[f.id] ?? null }));
 
     await logMigrationAudit(admin, { migrationId: migration.id, action: 'portal.view', actorId: ctx.user.id, actorRole: 'client' });
     await touchMigrationActivity(admin, migration.id);
@@ -236,7 +237,7 @@ router.get('/migration-portal/session', async (req, res) => {
       read_only: ctx.readOnly,
       can_upload: !ctx.readOnly && UPLOAD_ALLOWED_STATUSES.includes(migration.status),
       can_edit_mappings: !ctx.readOnly && CLIENT_MAPPING_EDIT_STATUSES.includes(migration.status),
-      files: files.data ?? [],
+      files: fichiers,
       detected_counts: counts,
       open_questions: issues.count ?? 0,
       latest_approval: approval.data ?? null,
@@ -262,113 +263,22 @@ router.get('/migration-portal/instructions', async (req, res) => {
 // ── Téléversement (CSV de données, PDF d'archive) ───────────────────────
 const rawParser = express.raw({ type: () => true, limit: '26mb' });
 
-function sanitizeFileName(name: string): string {
-  const base = name.split(/[\\/]/).pop() ?? 'fichier';
-  return base.replace(/[^\w.\-()\s]/g, '_').slice(0, 80) || 'fichier';
-}
-
 router.post('/migration-portal/files', rawParser, async (req, res) => {
   try {
     const ctx = await requirePortalAccess(req, res);
     if (!ctx) return;
     const { admin, migration, user } = ctx;
 
-    if (ctx.readOnly || !UPLOAD_ALLOWED_STATUSES.includes(migration.status)) {
+    if (ctx.readOnly) {
       return res.status(409).json({ error: 'Le téléversement n\'est plus permis à cette étape.', code: 'upload_closed' });
     }
-
     const rawName = typeof req.query.name === 'string' ? req.query.name : '';
-    const name = sanitizeFileName(rawName);
-    const ext = (name.split('.').pop() ?? '').toLowerCase();
-    if (!['csv', 'pdf'].includes(ext)) {
-      return res.status(415).json({
-        error: 'Format non pris en charge. Utilisez des fichiers CSV (données) ou PDF (archive). XLSX/ZIP ne sont pas acceptés en v1.',
-        code: 'unsupported_type',
-      });
-    }
+    const rawCategory = typeof req.query.category === 'string' ? req.query.category : '';
+    if (rawCategory && !estCategorieValide(rawCategory)) return res.status(400).json({ error: 'Catégorie inconnue.', code: 'bad_category' });
     const buf: Buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-    if (buf.length === 0) return res.status(400).json({ error: 'Fichier vide.', code: 'empty' });
-    if (buf.length > MAX_FILE_SIZE_BYTES) {
-      return res.status(413).json({ error: 'Fichier trop volumineux (max 25 Mo).', code: 'too_large' });
-    }
-
-    // Vérification du contenu réel (jamais l'extension seule).
-    const kind = ext === 'pdf' ? 'archive' : 'data';
-    if (kind === 'archive' && !sniffIsPdf(buf)) {
-      return res.status(415).json({ error: 'Ce fichier n\'est pas un PDF valide.', code: 'not_pdf' });
-    }
-    if (kind === 'data' && looksBinary(buf)) {
-      return res.status(415).json({ error: 'Ce fichier ne semble pas être un CSV texte valide.', code: 'binary' });
-    }
-
-    const { count: fileCount } = await admin
-      .from('migration_files')
-      .select('id', { count: 'exact', head: true })
-      .eq('migration_id', migration.id)
-      .is('deleted_at', null);
-    if ((fileCount ?? 0) >= MAX_FILES_PER_MIGRATION) {
-      return res.status(409).json({ error: `Limite de ${MAX_FILES_PER_MIGRATION} fichiers atteinte.`, code: 'too_many_files' });
-    }
-
-    const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
-    const { data: dup } = await admin
-      .from('migration_files')
-      .select('id, original_name')
-      .eq('migration_id', migration.id)
-      .eq('sha256', sha256)
-      .is('deleted_at', null)
-      .maybeSingle();
-    if (dup) {
-      return res.status(409).json({ error: `Ce fichier a déjà été téléversé (${dup.original_name}).`, code: 'duplicate_file' });
-    }
-
-    const fileId = crypto.randomUUID();
-    const storagePath = `${migration.org_id}/${migration.id}/${fileId}/${name}`;
-    const mime = kind === 'archive' ? 'application/pdf' : 'text/csv';
-    const { error: upErr } = await admin.storage.from(MIGRATION_BUCKET).upload(storagePath, buf, { contentType: mime, upsert: false });
-    if (upErr) throw upErr;
-
-    const { data: fileRow, error: insErr } = await admin
-      .from('migration_files')
-      .insert({
-        id: fileId,
-        migration_id: migration.id,
-        storage_path: storagePath,
-        original_name: name,
-        mime_type: mime,
-        size_bytes: buf.length,
-        sha256,
-        kind,
-        uploaded_by: user.id,
-      })
-      .select('id, original_name, mime_type, size_bytes, kind, security_status, parse_status, created_at')
-      .single();
-    if (insErr) throw insErr;
-
-    if (migration.status === 'waiting_for_files') {
-      const { error } = await admin
-        .from('data_migrations')
-        .update({ status: 'files_uploaded' })
-        .eq('id', migration.id)
-        .eq('status', 'waiting_for_files');
-      if (error) console.error('[migration-portal] upload transition failed:', error.message);
-      else migration.status = 'files_uploaded';
-    }
-
-    await logMigrationAudit(admin, {
-      migrationId: migration.id,
-      action: 'file.upload',
-      actorId: user.id,
-      actorRole: 'client',
-      target: `file:${fileId}`,
-      meta: { name, size_bytes: buf.length, kind },
-    });
-    await touchMigrationActivity(admin, migration.id);
-
-    // Analyse asynchrone — la progression vit dans migration_files.parse_status.
-    void analyzeMigrationFile(admin, migration, fileId).catch((err) => console.error('[migration-portal] analyze failed:', err));
-
-    return res.status(201).json(fileRow);
+    const r = await receptionnerFichierMigration(admin, migration, { buf, name: rawName, uploadedBy: user.id, actorRole: 'client', categoryDeclared: rawCategory ? (rawCategory as any) : null });
+    if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code });
+    return res.status(201).json({ ...r.file, category_declared: rawCategory || null });
   } catch (err: any) {
     return sendSafeError(res, err, 'Téléversement impossible.', '[migration-portal]');
   }
@@ -385,9 +295,64 @@ router.get('/migration-portal/files', async (req, res) => {
       .is('deleted_at', null)
       .order('created_at');
     if (error) throw error;
-    return res.json(data ?? []);
+    const declarees = await categoriesDeclareesParFichier(ctx.admin, ctx.migration.id);
+    return res.json((data ?? []).map((f: any) => ({ ...f, category_declared: declarees[f.id] ?? null })));
   } catch (err: any) {
     return sendSafeError(res, err, 'Liste des fichiers indisponible.', '[migration-portal]');
+  }
+});
+
+// ── Résumé d'un fichier analysé (éléments uniques, doublons internes, lignes à corriger) ──
+router.get('/migration-portal/files/:fileId/summary', async (req, res) => {
+  try {
+    const ctx = await requirePortalAccess(req, res);
+    if (!ctx) return;
+    const resume = await resumerFichier(ctx.admin, ctx.migration.id, req.params.fileId);
+    if (!resume) return res.status(404).json({ error: 'Fichier introuvable.' });
+    return res.json(resume);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Résumé indisponible.', '[migration-portal]');
+  }
+});
+
+// ── Le client corrige la catégorie d'un fichier (désaccord avec la détection) → ré-analyse ──
+router.post('/migration-portal/files/:fileId/category', validate(migrationPortalFileCategorySchema), async (req, res) => {
+  try {
+    const ctx = await requirePortalAccess(req, res);
+    if (!ctx) return;
+    const { admin, migration, user } = ctx;
+    if (ctx.readOnly || !UPLOAD_ALLOWED_STATUSES.includes(migration.status)) {
+      return res.status(409).json({ error: 'La modification n\'est plus permise à cette étape.', code: 'locked' });
+    }
+    const { data: file } = await admin.from('migration_files').select('id, kind').eq('id', req.params.fileId).eq('migration_id', migration.id).is('deleted_at', null).maybeSingle();
+    if (!file) return res.status(404).json({ error: 'Fichier introuvable.' });
+    if (file.kind !== 'data') return res.status(409).json({ error: 'Une archive PDF n\'a pas de catégorie de données.', code: 'archive' });
+    const category = (req.body as { category: string }).category as any;
+    await logMigrationAudit(admin, { migrationId: migration.id, action: 'file.category', actorId: user.id, actorRole: 'client', target: `file:${file.id}`, meta: { category_declared: category } });
+    void analyzeMigrationFile(admin, migration, file.id, { categoryDeclared: category }).catch((err) => console.error('[migration-portal] reanalyze failed:', err));
+    return res.status(202).json({ ok: true, category_declared: category });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Changement de catégorie impossible.', '[migration-portal]');
+  }
+});
+
+// ── Catégories cochées dans le formulaire « Importer vos données » ──
+router.patch('/migration-portal/categories', validate(migrationPortalCategoriesSchema), async (req, res) => {
+  try {
+    const ctx = await requirePortalAccess(req, res);
+    if (!ctx) return;
+    const { admin, migration, user } = ctx;
+    if (ctx.readOnly || !UPLOAD_ALLOWED_STATUSES.includes(migration.status)) {
+      return res.status(409).json({ error: 'Les catégories ne se modifient plus à cette étape.', code: 'locked' });
+    }
+    const categories = Array.from(new Set((req.body as { categories: string[] }).categories));
+    const { error } = await admin.from('data_migrations').update({ categories }).eq('id', migration.id);
+    if (error) throw error;
+    await logMigrationAudit(admin, { migrationId: migration.id, action: 'categories.update', actorId: user.id, actorRole: 'client', meta: { categories } });
+    await touchMigrationActivity(admin, migration.id);
+    return res.json({ ok: true, categories });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Mise à jour des catégories impossible.', '[migration-portal]');
   }
 });
 

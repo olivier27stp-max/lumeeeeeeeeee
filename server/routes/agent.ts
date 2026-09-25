@@ -13,6 +13,8 @@ import { journaliserTrace, usageGemini } from '../lib/lumi/traces';
 import { sendSafeError } from '../lib/error-handler';
 import { validate, agentTranscribeSchema } from '../lib/validation';
 import { isGeminiConfigured } from '../lib/agent/gemini';
+import { verifierPlafond, compterRefus, ajouterAppel, ajouterDepense } from '../lib/lumi/plafond-journalier';
+import { coutEnCents } from '../lib/lumi/tarifs';
 import { transcribeAudioAvecUsage, type TranscribeMimeType } from '../lib/agent/transcribe';
 
 const router = Router();
@@ -29,13 +31,36 @@ router.post('/agent/transcribe', validate(agentTranscribeSchema), async (req, re
     const authed = await requireAuthedClient(req, res);
     if (!authed) return;
     const { audio, mimeType, language } = req.body as { audio: string; mimeType: TranscribeMimeType; language?: 'fr' | 'en' };
+    // La dictée a sa PROPRE source (« voix ») : avant, elle puisait dans le
+    // plafond de « lumi » et une journée chargée en dictées aurait coupé le
+    // chat, alors que ce sont deux usages distincts.
+    // Bornée en DOLLARS comme les autres depuis que les tarifs Gemini sont
+    // relevés (TARIFS), et en volume par-dessus — 60 s d'audio maximum par
+    // appel, donc le nombre d'appels reste une borne utile contre une boucle.
+    if (!verifierPlafond('voix').autorise) {
+      compterRefus('voix');
+      return res.status(429).json({ error: 'Daily transcription cap reached.', code: 'plafond_jour' });
+    }
     const debut = Date.now();
+    // Compté à l'envoi : c'est le volume, pas le montant, qui borne cette source.
+    ajouterAppel('voix');
     const r = await transcribeAudioAvecUsage({ base64: audio, mimeType, language: language ?? 'fr' });
+    // Coût réel de la dictée : `usageGemini` ramène les compteurs Gemini à la
+    // même forme que ceux d'Anthropic, `coutEnCents` applique le tarif relevé.
+    const u = usageGemini(r.usage);
+    const coutGemini = u
+      ? coutEnCents(r.model, { input_tokens: u.input_tokens, output_tokens: u.output_tokens, cache_read_input_tokens: u.cache_lu, cache_creation_input_tokens: 0 })
+      : null;
+    if (coutGemini) ajouterDepense('voix', coutGemini);
     // Trace (lumi_traces) : la dictée coûte un appel Gemini avant le tour Lumi.
     // org/user = contexte serveur ; le texte transcrit n'est pas stocké ici.
     void journaliserTrace(getServiceClient(), {
       orgId: authed.orgId, userId: authed.user.id, canal: 'transcription', origine: 'voix',
-      resultat: 'ok', model: r.model, usage: usageGemini(r.usage), costCents: null, dureeMs: Date.now() - debut,
+      // Chiffrée depuis le 2026-09-22 : les tarifs Gemini sont dans TARIFS
+      // (relevés sur ai.google.dev). Une dictée de 60 s coûte ~0,94 ¢ sur
+      // 2.5-pro — moins qu'un tour Lumi à cache chaude (2,06 ¢).
+      resultat: 'ok', model: r.model, usage: usageGemini(r.usage),
+      costCents: coutGemini, dureeMs: Date.now() - debut,
     });
     res.json({ text: r.text });
   } catch (err) {

@@ -3,19 +3,25 @@ import { creerClientStripe } from '../lib/stripe-sdk';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { documentTaxLines } from '../lib/taxResolve';
-import { emailFrom, twilioClient, getBaseUrl, getTwilioStatusCallbackUrl } from '../lib/config';
+import { twilioClient, getBaseUrl, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { eventBus } from '../lib/eventBus';
 import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe } from '../lib/stripe-connect';
+import { getPaymentSettings } from '../lib/payment-settings';
 import { decryptSecret } from '../lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
 import { resolveQuoteRecipients, insertTargetedNotifications } from '../lib/notificationHelpers';
 import { getCompanyBranding } from '../lib/companyBranding';
+import { senderForOrg, marqueDepuis, langueEntreprise, getCompanySettings } from './emails';
+import { rendreCourrielClient, MOTS, montant as montantLisible, dateLisible, echapper } from '../lib/courriels/gabarit';
+import { texteDuCourriel } from '../lib/courriels/modeles';
+import { lireLiensSociaux } from '../lib/socialLinks';
 import { estEchue } from '../lib/date-seule';
+import { champsPourDocument } from '../lib/champs/service';
 
 const router = Router();
 
@@ -307,58 +313,92 @@ router.post('/quotes/send-email', async (req, res) => {
 
     if (!isMailerConfigured()) return res.status(503).json({ error: 'SMTP not configured.' });
 
-    // Get company info with branding
-    const { data: company } = await admin
-      .from('company_settings')
-      .select('company_name, phone, email, logo_url')
-      .eq('org_id', quote.org_id)
-      .maybeSingle();
+    /* `getCompanySettings` plutot qu'un select maison. L'ancien lisait quatre
+       colonnes et OMETTAIT `default_language`, que `langueEntreprise` reclame
+       juste en dessous. Le cast `as never` faisait taire TypeScript : cette
+       route envoyait donc TOUJOURS en francais, alors que /emails/send-quote,
+       meme document, respectait la langue.
 
-    const companyName = company?.company_name || 'Our Company';
-    const companyLogo = company?.logo_url || null;
-    const companyPhone = company?.phone || null;
-    const companyEmail = company?.email || null;
+       Elle perdait aussi la couleur de marque, l'adresse, le site, les reseaux
+       et les numeros de taxes. */
+    const company = await getCompanySettings(quote.org_id);
+
+    const langue = langueEntreprise(company);
+    const m = MOTS[langue];
+    const companyName = company.company_name || '';
+    const companyPhone = company.company_phone || null;
+    const companyEmail = company.company_email || null;
     const baseUrl = resolvePublicBaseUrl(req);
-    const quoteUrl = `${baseUrl}/quote/${quote.view_token}`;
-    const totalFormatted = new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' }).format(quote.total_cents / 100);
+    // Comme partout ailleurs : pas de jeton, pas de bouton. Un lien
+    // `/quote/undefined` est pire que pas de lien du tout.
+    const quoteUrl = quote.view_token ? `${baseUrl}/quote/${quote.view_token}` : null;
+    const totalFormatted = montantLisible(quote.total_cents || 0, quote.currency || 'CAD', langue);
+    const validite = dateLisible(quote.valid_until, langue);
 
-    // Use custom email body/subject or default template
-    const finalSubject = emailSubject
-      ? emailSubject.replace(/\{\{quote_number\}\}/g, quote.quote_number).replace(/\{\{total\}\}/g, totalFormatted).replace(/\{\{company\}\}/g, companyName)
-      : `Quote #${quote.quote_number} from ${companyName} — ${totalFormatted}`;
+    /* Cette route composait son propre HTML : anglais en dur, montants
+       « $1,220.17 », date « April 24, 2026 », bouton noir #111, sans logo,
+       sans pied, sans numéros de taxes et sans la couleur de l'entreprise.
+       C'était le seul courriel du produit à ne pas passer par le gabarit
+       commun — un client québécois recevait sa soumission en anglais au
+       format américain. Elle suit maintenant `/emails/send-quote`. */
+    const modeleOrg = await texteDuCourriel(auth.orgId, 'quote_sent', {
+      client_name: recipientName,
+      company_name: companyName,
+      quote_number: quote.quote_number,
+      quote_amount: totalFormatted,
+      valid_until: validite,
+      quote_link: quoteUrl || '',
+    }, undefined,
+    // Champs personnalisés citables : {quote_cf_…} et {client_cf_…}.
+    { quote: quote.id, client: quote.client_id ?? quote.lead_id ?? null });
 
-    const customBody = emailBody
-      ? emailBody.replace(/\{\{client_name\}\}/g, recipientName).replace(/\{\{quote_number\}\}/g, quote.quote_number).replace(/\{\{total\}\}/g, totalFormatted).replace(/\{\{company\}\}/g, companyName).replace(/\{\{valid_until\}\}/g, quote.valid_until || 'N/A').replace(/\n/g, '<br/>')
+    // Le texte saisi à l'envoi (modale « Envoyer ») prime sur le modèle
+    // enregistré : c'est un choix explicite de l'utilisateur, ici et maintenant.
+    const corpsSaisi = emailBody
+      ? echapper(emailBody)
+          .replace(/\{\{client_name\}\}/g, echapper(recipientName))
+          .replace(/\{\{quote_number\}\}/g, echapper(quote.quote_number))
+          .replace(/\{\{total\}\}/g, echapper(totalFormatted))
+          .replace(/\{\{company\}\}/g, echapper(companyName))
+          .replace(/\{\{valid_until\}\}/g, echapper(validite || ''))
+          .replace(/\n/g, '<br/>')
       : null;
+    const corpsHtml = corpsSaisi ?? modeleOrg?.corpsHtml ?? null;
 
-    const logoBlock = companyLogo
-      ? `<div style="margin-bottom:24px;"><img src="${companyLogo}" alt="${companyName}" style="max-height:48px;max-width:180px;object-fit:contain;" /></div>`
-      : `<div style="margin-bottom:24px;"><img src="${baseUrl}/lume-logo.png" alt="Lume" style="max-height:40px;object-fit:contain;" /></div>`;
+    const finalSubject = emailSubject
+      ? emailSubject
+          .replace(/\{\{quote_number\}\}/g, quote.quote_number)
+          .replace(/\{\{total\}\}/g, totalFormatted)
+          .replace(/\{\{company\}\}/g, companyName)
+      : (modeleOrg?.sujet
+        || `${m.soumission} ${quote.quote_number} — ${totalFormatted}${companyName ? ` — ${companyName}` : ''}`);
 
-    const depositBlock = quote.deposit_required && quote.deposit_value > 0
-      ? `<tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Deposit Required</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#111;text-align:right;font-weight:600;font-size:13px;">${quote.deposit_type === 'percentage' ? `${quote.deposit_value}%` : new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' }).format(quote.deposit_value)}</td></tr>`
-      : '';
+    const depot = quote.deposit_required && quote.deposit_value > 0
+      ? (langue === 'fr' ? 'Dépôt demandé' : 'Deposit required')
+      : null;
+    const depotValeur = quote.deposit_type === 'percentage'
+      ? `${quote.deposit_value} %`
+      : montantLisible(Math.round(Number(quote.deposit_value) * 100), quote.currency || 'CAD', langue);
 
-    const emailHtml = `
-      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:32px 20px;">
-        ${logoBlock}
-        ${customBody ? `<div style="color:#333;font-size:14px;line-height:1.6;">${customBody}</div>` : `
-        <h2 style="color:#111;font-size:18px;font-weight:600;margin:0 0 8px;">Hello ${recipientName},</h2>
-        <p style="color:#666;font-size:14px;margin:0 0 24px;">${companyName} has prepared a quote for you.</p>
-        <table style="width:100%;border-collapse:collapse;margin:0 0 24px;">
-          <tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Quote #</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#111;text-align:right;font-weight:600;font-size:13px;">${quote.quote_number}</td></tr>
-          <tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Amount</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#111;text-align:right;font-weight:700;font-size:15px;">${totalFormatted}</td></tr>
-          ${quote.valid_until ? `<tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Valid Until</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#333;text-align:right;font-size:13px;">${new Date(quote.valid_until).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td></tr>` : ''}
-          ${depositBlock}
-        </table>
-        `}
-        <p style="text-align:center;margin:28px 0;">
-          <a href="${quoteUrl}" style="display:inline-block;background:#111;color:#fff;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;letter-spacing:0.01em;">View Quote</a>
-        </p>
-        <p style="color:#888;font-size:13px;margin:24px 0 4px;">Thank you,<br/><strong style="color:#333;">${companyName}</strong></p>
-        ${companyPhone || companyEmail ? `<p style="color:#aaa;font-size:12px;margin:0;">${[companyPhone, companyEmail].filter(Boolean).join(' | ')}</p>` : ''}
-      </div>
-    `;
+    const emailHtml = rendreCourrielClient({
+      langue,
+      marque: marqueDepuis(company),
+      preheader: `${m.soumission} ${quote.quote_number} — ${totalFormatted}`,
+      titre: langue === 'fr' ? `Votre soumission ${quote.quote_number}` : `Your quote ${quote.quote_number}`,
+      salutation: corpsHtml ? null : m.bonjour(recipientName),
+      intro: corpsHtml ? null : (langue === 'fr'
+        ? 'Voici notre proposition pour vos travaux. Le détail est ci-dessous ; approuvez-la quand vous êtes prêt.'
+        : 'Here is our proposal for your work. The details are below — approve it when you are ready.'),
+      corpsHtml,
+      montant: { libelle: m.montantTotal, valeur: totalFormatted, sous: validite ? `${m.valideJusquau} ${validite}` : null },
+      lignes: [
+        { libelle: m.numero, valeur: quote.quote_number },
+        ...(validite ? [{ libelle: m.valideJusquau, valeur: validite }] : []),
+        ...(depot ? [{ libelle: depot, valeur: depotValeur }] : []),
+      ],
+      bouton: quoteUrl ? { texte: m.voirSoumission, url: quoteUrl } : null,
+      note: m.question,
+    });
 
     // Le résultat DOIT être lu : `sendEmail` ne lève jamais, donc un appel nu
     // laissait passer tous les effets de bord ci-dessous alors qu'aucun
@@ -366,8 +406,16 @@ router.post('/quotes/send-email', async (req, res) => {
     // en dur, deal poussé dans le pipeline, relances automatiques déclenchées,
     // et une réponse HTTP 200 affirmant l'envoi. Le client n'avait rien reçu,
     // l'org voyait « envoyé » partout.
+    // L'envoi de devis était le seul à poster depuis `noreply@lumecrm.net` :
+    // le client d'une entreprise recevait sa soumission de la part de Lume.
+    // `senderForOrg` n'échoue jamais — sans domaine vérifié, il rend
+    // l'expéditeur de la plateforme, comme avant.
     const emailResult = await sendEmail({
-      from: emailFrom,
+      ...(await senderForOrg(auth.orgId, {
+        company_name: companyName,
+        company_email: companyEmail,
+        company_phone: companyPhone,
+      })),
       to: recipientEmail,
       subject: finalSubject,
       html: emailHtml,
@@ -774,7 +822,7 @@ router.get('/quotes/public/:token', async (req, res) => {
     const companyData = await getCompanyBranding(
       admin,
       quote.org_id,
-      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color',
+      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color, social_links',
     );
 
     // Line items
@@ -859,9 +907,20 @@ router.get('/quotes/public/:token', async (req, res) => {
     }
 
     // Ventilation TPS / TVQ… (applied_taxes, sinon taxes résolues pour le client).
-    const taxLines = await documentTaxLines(admin, 'quote', quote);
+    const [taxLines, reglagesPaiement, champsDocument] = await Promise.all([
+      documentTaxLines(admin, 'quote', quote),
+      getPaymentSettings(quote.org_id),
+      // Champs personnalisés cochés « afficher sur le document ».
+      champsPourDocument(admin, quote.org_id, 'quote', quote.id),
+    ]);
 
     return res.json({
+      // La page publique n'affiche le paiement du dépôt en ligne que si
+      // l'entreprise l'a laissé actif ; le serveur refuse de toute façon.
+      payments: {
+        quote_payments_enabled: reglagesPaiement.quote_payments_enabled,
+        wallets_enabled: reglagesPaiement.wallets_enabled,
+      },
       quote: {
         id: quote.id, quote_number: quote.quote_number, title: quote.title, status: quote.status,
         valid_until: quote.valid_until, created_at: quote.created_at,
@@ -878,6 +937,7 @@ router.get('/quotes/public/:token', async (req, res) => {
         quote_type: quoteType, service_plan: servicePlan,
       },
       images,
+      custom_fields: champsDocument,
       company: {
         company_name: companyData?.company_name || 'Business',
         // Toujours le logo d'entreprise (Réglages → Détails de l'entreprise).
@@ -888,6 +948,7 @@ router.get('/quotes/public/:token', async (req, res) => {
         country: companyData?.country || null,
         // Accent des documents client. null = encre noire, le défaut.
         brand_color: companyData?.brand_color || null,
+        social_links: lireLiensSociaux(companyData?.social_links),
       },
       client, lead,
       items: (items || []).map((i: any) => ({
@@ -1112,6 +1173,12 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
       return res.status(400).json({ error: 'No deposit payment required.' });
     }
 
+    // Interrupteur « paiement des devis en ligne » (réglages Lume Payments).
+    const reglagesPaiement = await getPaymentSettings(quote.org_id);
+    if (!reglagesPaiement.quote_payments_enabled) {
+      return res.status(403).json({ error: 'Online deposit payments are currently disabled for this business.' });
+    }
+
     // Calculate deposit amount (server-side, never trust client)
     let depositCents = Number(quote.deposit_cents || 0);
     if (depositCents <= 0) {
@@ -1205,10 +1272,13 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
 
       const Stripe = (await import('stripe')).default;
       const orgStripe = creerClientStripe(decryptedSecret);
+      // Même politique que le chemin Connect (voir createDestinationPaymentIntent) :
+      // Stripe choisit les moyens, ce qui rend Apple Pay / Google Pay possibles,
+      // sans aucun moyen qui redirigerait le payeur hors de notre page.
       const intent = await orgStripe.paymentIntents.create({
         amount: depositCents,
         currency,
-        payment_method_types: ['card'],
+        automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
         metadata: paymentMetadata,
       }, {
         idempotencyKey: depositIdempotencyKey,
@@ -1595,6 +1665,14 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
       balance_cents: effectiveTotal,
       notes: quote.notes,
     }).eq('id', invoiceId).eq('org_id', auth.orgId);
+
+    // Champs personnalisés : ceux du devis suivent sur la facture (même clé,
+    // même type — devis → job et job → facture passent par des triggers ;
+    // ici aucun lien en base ne le permet). Jamais bloquant.
+    const { error: cfErr } = await admin.rpc('cf_copier_valeurs', {
+      p_org: auth.orgId, p_de: 'quote', p_de_id: quoteId, p_vers: 'invoice', p_vers_id: invoiceId,
+    });
+    if (cfErr) console.warn('[quotes/convert-to-invoice] custom fields copy skipped:', cfErr.message);
 
     // (Le devis a déjà été marqué « converted » atomiquement en tête de route,
     // avant la création de la facture — voir la garde anti-doublon plus haut.)

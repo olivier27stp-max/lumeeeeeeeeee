@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, X } from 'lucide-react';
+import InfiniteScrollSentinel from '../components/InfiniteScrollSentinel';
 import StatusBadge from '../components/ui/status-badge';
 import { statusDotColor } from '../components/ui/StatusBadge';
 import FilterPill from '../components/ui/FilterPill';
@@ -22,6 +23,10 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
+import { useChampsListe, useValeursPage, CelluleChamps } from '../components/champs/liste';
+import { correspondancesImport, ecrireValeurs } from '../lib/champsPersoApi';
+import { valeurDepuisTexte } from '../lib/champs/valeurs';
+import { messageChamps } from '../lib/champs/messages';
 
 type ClientSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc';
 
@@ -91,7 +96,10 @@ export default function Clients() {
   const [items, setItems] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
+  const pageSize = 20;
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Total côté serveur (sans le filtre de statut client-side) → pilote « il reste des pages ».
+  const [serverTotal, setServerTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState('All');
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<ClientSort>('recent');
@@ -162,9 +170,14 @@ export default function Clients() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  // Champs personnalisés : filtre côté base + colonne (drapeau custom_fields_v2).
+  const champsListe = useChampsListe('client', language === 'fr');
+  const valeursChamps = useValeursPage('client', items.map((c) => c.id as string), champsListe.colonnes.length > 0);
+  useEffect(() => { setPage(1); }, [champsListe.cle]);
+
   useEffect(() => {
-    void loadClients();
-  }, [page, pageSize, statusFilter, sortBy, debouncedSearch]);
+    void loadClients(page > 1 ? 'append' : 'refresh');
+  }, [page, statusFilter, sortBy, debouncedSearch, champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for command palette create event
   useEffect(() => {
@@ -286,19 +299,21 @@ export default function Clients() {
     }
   }
 
-  async function loadClients() {
-    setLoading(true);
+  // Liste infinie : 'append' ajoute la page courante sous les lignes déjà
+  // affichées ; 'refresh' recharge d'un coup toutes les pages déjà chargées.
+  async function loadClients(mode: 'append' | 'refresh' = 'refresh') {
+    const append = mode === 'append' && page > 1;
+    if (append) setLoadingMore(true); else setLoading(true);
     setError(null);
     void loadStatusCounts();
     try {
-      // Fetch without status filter first if we need to compute statuses
-      const fetchStatus = statusFilter !== 'All' ? undefined : undefined;
       const res = await listClients({
-        page,
-        pageSize,
+        page: append ? page : 1,
+        pageSize: append ? pageSize : pageSize * Math.max(1, page),
         status: 'All',
         q: debouncedSearch,
         sort: sortBy,
+        champs: champsListe.filtre,
       });
 
       // Statut dérivé des jobs : un client avec ≥1 job (non supprimé) est
@@ -382,12 +397,18 @@ export default function Clients() {
         ? enriched
         : enriched.filter(c => c.status === statusFilter);
 
-      setItems(filtered);
-      setTotal(statusFilter === 'All' ? res.total : filtered.length);
+      setItems(prev => {
+        if (!append) return filtered;
+        const seen = new Set(prev.map(c => c.id));
+        return [...prev, ...filtered.filter(c => !seen.has(c.id))];
+      });
+      setServerTotal(res.total);
+      if (statusFilter === 'All') setTotal(res.total);
+      else setTotal(prev => (append ? prev + filtered.length : filtered.length));
     } catch (err: any) {
       setError(err?.message || t.clients.failedCreate);
     } finally {
-      setLoading(false);
+      if (append) setLoadingMore(false); else setLoading(false);
     }
   }
 
@@ -400,7 +421,7 @@ export default function Clients() {
     }
   }
 
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const hasMore = !loading && page * pageSize < serverTotal;
 
   const onSaveSelected = async () => {
     if (!selected) return;
@@ -469,6 +490,9 @@ export default function Clients() {
         const phoneIdx = headers.indexOf('phone');
         const addressIdx = headers.indexOf('address');
         const companyIdx = headers.indexOf('company');
+        // Colonnes nommées comme un champ personnalisé client (libellé, clé ou variable).
+        const colonnesChamps = await correspondancesImport(['client'], lines[0].split(',').map((h) => h.trim().replace(/"/g, '')),
+          [fnIdx, lnIdx, emailIdx, phoneIdx, addressIdx, companyIdx].filter((x) => x >= 0));
         let imported = 0;
         const failures: Array<{ line: number; reason: string }> = [];
         const pending = toast.loading(
@@ -480,7 +504,7 @@ export default function Clients() {
           const lastName = cols[lnIdx] || '';
           if (!firstName && !lastName) continue;
           try {
-            await createClient({
+            const cree = await createClient({
               first_name: firstName,
               last_name: lastName,
               email: emailIdx >= 0 ? cols[emailIdx] || undefined : undefined,
@@ -489,6 +513,14 @@ export default function Clients() {
               company: companyIdx >= 0 ? cols[companyIdx] || undefined : undefined,
             });
             imported++;
+            const valeurs = colonnesChamps
+              .map(({ index, champ }) => ({ field_id: champ.id, value: valeurDepuisTexte(champ, cols[index] ?? '') }))
+              .filter((v) => v.value !== null);
+            if (valeurs.length && cree?.id) {
+              const refus = (await ecrireValeurs('client', cree.id, valeurs)).filter((r) => !r.ok);
+              // Le client est créé ; une valeur refusée est signalée comme un échec de ligne.
+              for (const r of refus) failures.push({ line: i + 1, reason: r.erreur || messageChamps('champ personnalisé refusé') });
+            }
           } catch (rowErr: any) {
             failures.push({ line: i + 1, reason: rowErr?.message || 'unknown' });
           }
@@ -594,6 +626,8 @@ export default function Clients() {
           }))}
         />
 
+        {champsListe.bouton}
+
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
           aria-label={fr ? 'Rechercher clients' : 'Search clients'}
           placeholder={fr ? 'Rechercher clients...' : 'Search clients...'}
@@ -603,13 +637,14 @@ export default function Clients() {
 
       {/* ── TABLE ── */}
       <div className="border border-[var(--color-outline)] rounded-md bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '1.4fr 1.6fr 1.3fr 200px 130px' }} onMouseLeave={() => setHoveredId(null)}>
+        <div className="grid" style={{ gridTemplateColumns: `1.4fr 1.6fr 1.3fr 200px 130px${champsListe.colonnes.length ? ' 1.4fr' : ''}` }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Nom' : 'Name'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Adresse' : 'Address'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Étiquettes' : 'Tags'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Statut' : 'Status'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Dernière activité' : 'Last activity'}</div>
+          {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Champs' : 'Fields'}</div>}
 
           {/* LOADING */}
           {loading && Array.from({ length: 10 }).map((_, i) => (
@@ -619,12 +654,13 @@ export default function Clients() {
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-28 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-14 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
+              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>}
             </React.Fragment>
           ))}
 
           {/* EMPTY */}
           {!loading && displayItems.length === 0 && (
-            <div className="col-span-5 py-20 text-center text-[14px] text-[var(--color-text-tertiary)]">{t.clients.noClientsFound}</div>
+            <div className="py-20 text-center text-[14px] text-[var(--color-text-tertiary)]" style={{ gridColumn: '1 / -1' }}>{t.clients.noClientsFound}</div>
           )}
 
           {/* ROWS */}
@@ -677,27 +713,33 @@ export default function Clients() {
                 </div>
                 <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}><Badge status={item.status} /></div>
                 <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}><span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span></div>
+                {champsListe.colonnes.length > 0 && (
+                  <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}>
+                    <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[item.id]} fr={fr} fuseau={champsListe.fuseau} />
+                  </div>
+                )}
               </React.Fragment>
             );
           })}
         </div>
+        {/* Liste infinie — charge la page suivante dans le même tableau */}
+        {!loading && (displayItems.length > 0 || hasMore) && (
+          <InfiniteScrollSentinel
+            hasMore={hasMore}
+            loading={loadingMore}
+            onLoadMore={() => setPage(p => p + 1)}
+            loaded={statusFilter === 'All' ? items.length : undefined}
+            total={statusFilter === 'All' ? total : undefined}
+            className="border-t border-[var(--color-outline)]/30"
+          />
+        )}
       </div>
 
-      {/* ── FOOTER: selection count + pagination ── */}
+      {/* ── FOOTER: selection count ── */}
       <div className="flex items-center justify-between mt-3">
         <span className="text-[14px] text-[var(--color-text-secondary)]">
           {total} {fr ? (total === 1 ? 'client' : 'clients') : (total === 1 ? 'client' : 'clients')}
         </span>
-        <div className="flex items-center gap-2">
-          <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
-            className="h-9 px-4 bg-surface-card border border-[var(--color-outline)] rounded-md text-[14px] text-[var(--color-text-primary)] font-normal disabled:opacity-40 disabled:cursor-default hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer">
-            {fr ? 'Précédent' : 'Previous'}
-          </button>
-          <button disabled={page >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))}
-            className="h-9 px-4 bg-surface-card border border-[var(--color-outline)] rounded-md text-[14px] text-[var(--color-text-primary)] font-normal disabled:opacity-40 disabled:cursor-default hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer">
-            {fr ? 'Suivant' : 'Next'}
-          </button>
-        </div>
       </div>
 
       {/* Detail drawer */}

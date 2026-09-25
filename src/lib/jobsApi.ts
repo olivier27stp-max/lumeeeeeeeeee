@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { colonnesChampsCsv } from './champsPersoApi';
 import { commissionEnArrierePlan, projectCommissionForJob, voidCommissionForJob } from './commissionsApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { Job } from '../types';
@@ -13,6 +14,7 @@ import {
 } from './automationEventsApi';
 import { invalidateScheduleCache } from './scheduleApi';
 import { syncEntityPin } from './fieldSalesApi';
+import type { FiltreListe } from './champs/filtresListe';
 
 export type JobSort = 'client' | 'job_number' | 'schedule' | 'status' | 'total';
 export type JobSortDirection = 'asc' | 'desc';
@@ -28,6 +30,8 @@ export interface JobsQuery {
   sortDirection?: JobSortDirection;
   page?: number;
   pageSize?: number;
+  /** Conditions de champs personnalisés, compilées (jointures PostgREST). */
+  champs?: FiltreListe;
 }
 
 export interface JobsResult {
@@ -434,9 +438,11 @@ export async function getJobs(query: JobsQuery): Promise<JobsResult> {
 
   // count 'estimated' : exact sous un seuil, estimé (stats Postgres) au-dessus.
   // 'exact' scannait toute la table filtrée sous RLS à CHAQUE page (O(n)/page).
-  let request = supabase.from('jobs_active').select('*', { count: 'estimated' }).range(rangeFrom, rangeTo);
+  let request = supabase.from('jobs_active').select(`*${query.champs?.select ?? ''}`, { count: 'estimated' }).range(rangeFrom, rangeTo);
   request = applyTableFilters(request, query);
-  request = request.order(SORT_MAP[sort], { ascending: sortDirection === 'asc', nullsFirst: true });
+  if (query.champs) request = query.champs.appliquer(request);
+  // Non planifiés (NULL) en tête en ordre croissant (comportement historique), en queue en décroissant → inversion réelle.
+  request = request.order(SORT_MAP[sort], { ascending: sortDirection === 'asc', nullsFirst: sortDirection === 'asc' });
   request = request.order('created_at', { ascending: false });
 
   const { data, error, count } = await request;
@@ -1282,6 +1288,49 @@ export async function listSalespeople(): Promise<SalespersonOption[]> {
   for (const profile of profiles || []) labels.set(profile.id, profile.full_name || `User ${profile.id.slice(0, 6)}`);
 
   return ids.map((id) => ({ id, label: labels.get(id) || `User ${id.slice(0, 6)}` }));
+}
+
+export async function exportJobsCsv(query: Omit<JobsQuery, 'page' | 'pageSize'>): Promise<string> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  // Projection explicite (au lieu de select('*')) : on ne charge que les
+  // colonnes réellement lues par mapJob, pas les colonnes/JSON lourds inutiles.
+  // Réduit le poids transféré et parsé pour un export de 2000 lignes.
+  const COLONNES_EXPORT =
+    'id,org_id,client_id,client_name,lead_id,job_number,title,job_type,property_address,' +
+    'scheduled_at,end_at,sale_date,created_at,updated_at,derived_status,status,currency,' +
+    'total_cents,subtotal_cents,tax_cents,total_amount,subtotal,total,tax_total,tax_lines,' +
+    'salesperson_id,team_id,tag_ids,latitude,longitude,notes,invoice_url,' +
+    // Champs supplémentaires lus par mapJob (gardés pour ne pas altérer son
+    // résultat) : dépôt, géocodage, drapeaux facturation, pièces jointes.
+    'attachments,billing_split,deposit_cents,deposit_required,deposit_type,deposit_value,' +
+    'geocode_status,geocoded_at,require_payment_method,requires_invoicing,show_on_leaderboard';
+  // Le filtre « Champs » de la liste s'applique aussi à l'export.
+  const projection: string = `${COLONNES_EXPORT}${query.champs?.select ?? ''}`;
+  let request = supabase.from('jobs_active').select(projection).eq('org_id', orgId).order('created_at', { ascending: false }).limit(2000);
+  request = applyTableFilters(request, query);
+  if (query.champs) request = query.champs.appliquer(request);
+  const { data, error } = await request;
+  if (error) throw error;
+
+  const rows = (data || []).map((row: any) => mapJob(row));
+  // Champs personnalisés des jobs, en fin de ligne (vide si la fonction est coupée).
+  const champs = await colonnesChampsCsv('job', rows.map((j) => j.id), true);
+  const headers = ['Client', 'Job number', 'Title', 'Property', 'Schedule', 'Status', 'Total', ...champs.entetes];
+  const lines = rows.map((job) => {
+    const total = (job.total_cents / 100).toFixed(2);
+    const values = [
+      job.client_name || '-',
+      job.job_number,
+      job.title,
+      job.property_address || '',
+      job.scheduled_at || '',
+      job.status,
+      `${total} ${job.currency || 'CAD'}`,
+      ...champs.valeurs(job.id),
+    ];
+    return values.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',');
+  });
+  return [headers.join(','), ...lines].join('\n');
 }
 
 export interface JobLineItem {

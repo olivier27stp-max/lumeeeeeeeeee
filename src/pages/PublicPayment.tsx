@@ -5,8 +5,11 @@ import { CheckCircle2, AlertTriangle, CreditCard, Loader2, Lock, ShieldCheck } f
 import { loadStripe } from '@stripe/stripe-js/pure';
 import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { fetchPublicPaymentData, createPublicPaymentIntent } from '../lib/connectApi';
+import { fetchPublicPaymentData, createPublicPaymentIntent, setPublicTip } from '../lib/connectApi';
 import type { PublicPaymentData, CreatePublicPaymentIntentResponse } from '../lib/connectApi';
+import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
+import PastilleLume from '../components/PastilleLume';
+import RangeeLogos from '../components/payments/LogosPaiement';
 
 /**
  * Les erreurs du serveur sont en anglais uniquement. Sur une page que le
@@ -22,12 +25,23 @@ function messageLisible(brut: unknown, isFr: boolean, repli: string): string {
   if (m.includes('expired')) return 'Ce lien de paiement a expiré.';
   if (m.includes('invalid')) return 'Ce lien de paiement est invalide.';
   if (m.includes('already paid') || m.includes('already been paid')) return 'Cette facture a déjà été payée.';
+  // « This business is not yet ready to accept payments » (503) : l'entreprise
+  // n'a pas fini sa configuration Stripe. Le repli parlait d'un « échec du
+  // chargement », donc d'une panne — le client croyait le site brisé et
+  // partait, au lieu de comprendre qu'il doit payer autrement.
+  if (m.includes('not yet ready to accept payments')) return 'Le paiement en ligne n’est pas encore activé par cette entreprise. Communiquez avec elle pour régler cette facture.';
   if (m.includes('network') || m.includes('failed to fetch')) return 'Connexion impossible. Vérifiez votre accès à Internet.';
   return repli;
 }
 
 // ── Language detection (public page — no auth context) ──
-const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+// Langue de la page : celle de l'ENTREPRISE dès que l'API l'a dite (un client d'une entreprise
+// francophone voit du français même sur un navigateur anglais) ; en attendant, celle du navigateur.
+// Variable de module lue au rendu : `suivreLangueEntreprise` la fixe AVANT le setState qui rerend.
+let isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+function suivreLangueEntreprise(langue: string | null | undefined) {
+  if (langue === 'fr' || langue === 'en') isFr = langue === 'fr';
+}
 
 function formatMoney(cents: number, currency = 'CAD') {
   return new Intl.NumberFormat(isFr ? 'fr-CA' : 'en-US', {
@@ -57,10 +71,12 @@ export default function PublicPayment() {
     async function load() {
       try {
         const data = await fetchPublicPaymentData(token!);
+        suivreLangueEntreprise(data.business?.language);
         setPaymentData(data);
 
-        // If already paid, don't load Stripe
-        if (data.status === 'paid') {
+        // If already paid, or online payments switched off by the business,
+        // don't load Stripe
+        if (data.status === 'paid' || data.status === 'disabled') {
           setLoading(false);
           return;
         }
@@ -116,6 +132,30 @@ export default function PublicPayment() {
           <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-100">{isFr ? 'Paiement complété' : 'Payment Complete'}</h2>
           <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
             {isFr ? 'Cette facture a déjà été payée. Merci !' : 'This invoice has already been paid. Thank you!'}
+          </p>
+          {paymentData.amount_cents > 0 && (
+            <p className="mt-3 text-lg font-semibold text-neutral-700 dark:text-neutral-200">
+              {formatMoney(paymentData.amount_cents, paymentData.currency)}
+            </p>
+          )}
+        </div>
+      </PublicPageShell>
+    );
+  }
+
+  // ── Online payments switched off by the business ──
+  if (paymentData?.status === 'disabled') {
+    return (
+      <PublicPageShell business={paymentData.business}>
+        <div className="text-center py-12">
+          <AlertTriangle size={36} className="mx-auto text-amber-500 mb-3" />
+          <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">
+            {isFr ? 'Paiement en ligne indisponible' : 'Online payment unavailable'}
+          </h2>
+          <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+            {isFr
+              ? `${paymentData.business?.name || 'Cette entreprise'} n’accepte pas le paiement en ligne pour le moment. Contactez-la pour régler votre facture.`
+              : `${paymentData.business?.name || 'This business'} is not accepting online payments right now. Please contact them to settle your invoice.`}
           </p>
           {paymentData.amount_cents > 0 && (
             <p className="mt-3 text-lg font-semibold text-neutral-700 dark:text-neutral-200">
@@ -211,6 +251,8 @@ export default function PublicPayment() {
           publicToken={token!}
           businessName={paymentData.business?.name || null}
           brand={resolveBrand(paymentData.business?.brand_color)}
+          tipsEnabled={paymentData.options?.tips_enabled === true}
+          walletsEnabled={paymentData.options?.wallets_enabled !== false}
         />
       </Elements>
     </PublicPageShell>
@@ -219,18 +261,58 @@ export default function PublicPayment() {
 
 // ── Stripe Checkout Form ──
 
-function CheckoutForm({ amountCents, currency, publicToken, businessName, brand }: {
+const CHOIX_POURBOIRE_PCT = [0, 10, 15, 20] as const;
+
+function CheckoutForm({ amountCents, currency, publicToken, businessName, brand, tipsEnabled = false, walletsEnabled = true }: {
   amountCents: number;
   currency: string;
   publicToken: string;
   businessName?: string | null;
   brand: string;
+  tipsEnabled?: boolean;
+  walletsEnabled?: boolean;
 }) {
   const stripe = useStripe();
   const elements = useElements();
+  const tipInputId = React.useId();
   const [processing, setProcessing] = useState(false);
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Pourboire : le serveur recalcule le PaymentIntent (solde + pourboire) et
+  // c'est SON total qui est affiché ; le client n'envoie qu'un entier borné.
+  const [tipCents, setTipCents] = useState(0);
+  const [tipPct, setTipPct] = useState<number | 'custom'>(0);
+  const [tipCustom, setTipCustom] = useState('');
+  const [tipBusy, setTipBusy] = useState(false);
+  const totalCents = amountCents + tipCents;
+
+  async function appliquerPourboire(cents: number) {
+    if (!elements) return;
+    setTipBusy(true);
+    setError(null);
+    try {
+      const r = await setPublicTip(publicToken, cents);
+      setTipCents(r.tip_cents);
+      // Le Payment Element relit le montant du PaymentIntent.
+      await elements.fetchUpdates();
+    } catch (err: any) {
+      setError(messageLisible(err?.message, isFr, isFr ? 'Impossible d’ajouter le pourboire.' : 'Could not apply the tip.'));
+    } finally {
+      setTipBusy(false);
+    }
+  }
+
+  function choisirPct(pct: number) {
+    setTipPct(pct);
+    setTipCustom('');
+    void appliquerPourboire(Math.round(amountCents * pct / 100));
+  }
+
+  function appliquerCustom() {
+    const dollars = Number(String(tipCustom).replace(',', '.'));
+    if (!Number.isFinite(dollars) || dollars < 0) return;
+    void appliquerPourboire(Math.round(dollars * 100));
+  }
   // Loi 25 : consentement explicite, jamais pré-coché. Le choix est poussé au
   // serveur (le PaymentIntent n'enregistre la carte que si save = true).
   const [saveCard, setSaveCard] = useState(false);
@@ -290,7 +372,8 @@ function CheckoutForm({ amountCents, currency, publicToken, businessName, brand 
         <CheckCircle2 size={48} className="mx-auto text-green-500 mb-4" />
         <h3 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">{isFr ? 'Paiement réussi !' : 'Payment Successful!'}</h3>
         <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-          {isFr ? `Merci pour votre paiement de ${formatMoney(amountCents, currency)}.` : `Thank you for your payment of ${formatMoney(amountCents, currency)}.`}
+          {isFr ? `Merci pour votre paiement de ${formatMoney(totalCents, currency)}.` : `Thank you for your payment of ${formatMoney(totalCents, currency)}.`}
+          {tipCents > 0 && (isFr ? ` Merci aussi pour le pourboire de ${formatMoney(tipCents, currency)} !` : ` Thank you as well for the ${formatMoney(tipCents, currency)} tip!`)}
         </p>
       </div>
     );
@@ -298,7 +381,78 @@ function CheckoutForm({ amountCents, currency, publicToken, businessName, brand 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
+      {tipsEnabled && (
+        <fieldset className="rounded-lg border border-neutral-200 dark:border-neutral-700 p-3">
+          <legend className="px-1 text-xs font-semibold text-neutral-700 dark:text-neutral-200">
+            {isFr ? 'Ajouter un pourboire (facultatif)' : 'Add a tip (optional)'}
+          </legend>
+          <div className="mt-1 grid grid-cols-5 gap-2">
+            {CHOIX_POURBOIRE_PCT.map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                disabled={tipBusy || processing}
+                aria-pressed={tipPct === pct}
+                onClick={() => choisirPct(pct)}
+                className={`rounded-md border px-2 py-2 text-xs font-medium transition-colors disabled:opacity-50 ${
+                  tipPct === pct
+                    ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
+                    : 'border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-700'
+                }`}
+              >
+                {pct === 0 ? (isFr ? 'Aucun' : 'None') : `${pct} %`}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={tipBusy || processing}
+              aria-pressed={tipPct === 'custom'}
+              onClick={() => setTipPct('custom')}
+              className={`rounded-md border px-2 py-2 text-xs font-medium transition-colors disabled:opacity-50 ${
+                tipPct === 'custom'
+                  ? 'border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
+                  : 'border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-700'
+              }`}
+            >
+              {isFr ? 'Autre' : 'Other'}
+            </button>
+          </div>
+          {tipPct === 'custom' && (
+            <div className="mt-2 flex items-center gap-2">
+              <label htmlFor={tipInputId} className="text-xs text-neutral-600 dark:text-neutral-300">
+                {isFr ? 'Montant ($)' : 'Amount ($)'}
+              </label>
+              <input
+                id={tipInputId}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                value={tipCustom}
+                onChange={(e) => setTipCustom(e.target.value)}
+                onBlur={appliquerCustom}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); appliquerCustom(); } }}
+                className="w-28 rounded-md border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm text-neutral-800 dark:text-neutral-100"
+              />
+              <button
+                type="button"
+                disabled={tipBusy || processing}
+                onClick={appliquerCustom}
+                className="rounded-md border border-neutral-200 dark:border-neutral-600 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-700 disabled:opacity-50"
+              >
+                {isFr ? 'Appliquer' : 'Apply'}
+              </button>
+            </div>
+          )}
+          {tipCents > 0 && (
+            <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+              {isFr ? 'Pourboire' : 'Tip'} : {formatMoney(tipCents, currency)} · {isFr ? 'Total' : 'Total'} : <span className="font-semibold text-neutral-800 dark:text-neutral-100">{formatMoney(totalCents, currency)}</span>
+            </p>
+          )}
+        </fieldset>
+      )}
+
+      <PaymentElement options={{ wallets: { applePay: walletsEnabled ? 'auto' : 'never', googlePay: walletsEnabled ? 'auto' : 'never' } }} />
 
       {/* Consentement explicite (Loi 25) : opt-in, finalité claire, retrait possible. */}
       <label className="flex items-start gap-2.5 cursor-pointer select-none rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 p-3">
@@ -326,7 +480,7 @@ function CheckoutForm({ amountCents, currency, publicToken, businessName, brand 
 
       <button
         type="submit"
-        disabled={!stripe || processing}
+        disabled={!stripe || processing || tipBusy}
         style={{ background: brand, color: readableOn(brand) }}
         className="w-full rounded-lg py-3 px-4 font-semibold text-sm
                    hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed
@@ -340,7 +494,7 @@ function CheckoutForm({ amountCents, currency, publicToken, businessName, brand 
         ) : (
           <>
             <Lock size={16} />
-            {isFr ? 'Payer' : 'Pay'} {formatMoney(amountCents, currency)}
+            {isFr ? 'Payer' : 'Pay'} {formatMoney(totalCents, currency)}
           </>
         )}
       </button>
@@ -349,6 +503,7 @@ function CheckoutForm({ amountCents, currency, publicToken, businessName, brand 
         <ShieldCheck size={12} />
         <span>{isFr ? 'Sécurisé par Stripe. Vos informations de carte sont chiffrées.' : 'Secured by Stripe. Your card details are encrypted.'}</span>
       </div>
+      <RangeeLogos wallets={walletsEnabled} className="justify-center" />
     </form>
   );
 }
@@ -357,7 +512,7 @@ function CheckoutForm({ amountCents, currency, publicToken, businessName, brand 
 
 function PublicPageShell({ children, business }: {
   children: React.ReactNode;
-  business?: { name: string | null; logo_url: string | null; email: string | null; phone: string | null; brand_color?: string | null } | null;
+  business?: PublicPaymentData['business'];
 }) {
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 flex flex-col">
@@ -387,7 +542,8 @@ function PublicPageShell({ children, business }: {
       {/* Footer */}
       <footer className="border-t border-neutral-200 dark:border-neutral-700 bg-surface-card dark:bg-neutral-800 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between text-xs text-neutral-400">
-          <span>{isFr ? 'Propulsé par Lume' : 'Powered by Lume'}</span>
+          <PastilleLume />
+          <ReseauxSociauxPied liens={business?.social_links} className="flex items-center gap-3" />
           {business?.email && <a href={`mailto:${business.email}`} className="hover:underline">{business.email}</a>}
         </div>
       </footer>

@@ -11,7 +11,8 @@ import {
   Trash2, Eye, FileText, Clock, AlertCircle,
   X,
 } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import InfiniteScrollSentinel from '../components/InfiniteScrollSentinel';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
@@ -37,7 +38,7 @@ import {
   deleteInvoice,
 } from '../lib/invoicesApi';
 import { cn, formatDate } from '../lib/utils';
-import { exportReportToFile } from '../lib/reportsApi';
+import { exportToCsv } from '../lib/exportCsv';
 import { useTranslation } from '../i18n';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { supabase } from '../lib/supabase';
@@ -45,6 +46,8 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
 import { versDate } from '../lib/dateSeule';
+import { useChampsListe, useIdsFiltresChamps, useValeursPage, CelluleChamps } from '../components/champs/liste';
+import { colonnesChampsCsv } from '../lib/champsPersoApi';
 // InvoiceTemplate type removed — no more invoice template system
 
 const PAGE_SIZE = 20;
@@ -64,10 +67,6 @@ function parseSort(raw: string | null): InvoiceSortKey {
   ];
   if (raw && allowed.includes(raw as InvoiceSortKey)) return raw as InvoiceSortKey;
   return 'due_date_desc';
-}
-function parsePage(raw: string | null) {
-  const v = Number(raw || '1');
-  return Number.isFinite(v) ? Math.max(1, Math.trunc(v)) : 1;
 }
 // ─── Period options for the status total boxes ─────────────────
 
@@ -111,7 +110,6 @@ const DEFAULT_INVOICE_SUBJECT_EN = 'For services rendered';
 // Grid template + empty-state col span for the Facturation table.
 // Columns: checkbox | Client | Invoice # | Due date | Subject | Status | Total | Balance | actions
 const INVOICE_GRID_COLUMNS = '40px 1.4fr 110px 120px 120px 1.4fr 200px 120px 120px 44px';
-const INVOICE_GRID_COL_COUNT = 10;
 
 export default function Invoices({ embedded = false, onTotalChange }: { embedded?: boolean; onTotalChange?: (total: number | null) => void } = {}) {
   const { t, language } = useTranslation();
@@ -130,7 +128,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
 
   const status = parseStatus(searchParams.get('status'));
   const sort = parseSort(searchParams.get('sort'));
-  const page = parsePage(searchParams.get('page'));
   const q = (searchParams.get('q') || '').trim();
   const salesperson = (searchParams.get('sp') || 'All').trim() || 'All';
 
@@ -184,13 +181,30 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     };
   }, [statsQuery.data, boxPeriods]);
 
-  const invoicesQuery = useQuery({
-    queryKey: ['invoicesTable', status, sort, page, q, salesperson],
-    queryFn: () => listInvoices({
-      status, range: 'all', sort, page, q,
+  // Champs personnalisés : la liste passe par une RPC → le filtre calcule
+  // d'abord les ids (cf_filtrer), puis les lui passe (p_ids). Colonne en plus.
+  const champsListe = useChampsListe('invoice', fr);
+  const idsChamps = useIdsFiltresChamps('invoice', champsListe.conditions);
+  // Nouveau filtre de champs → page 1 (pas au chargement : un lien vers la page 3 reste valable).
+  const cleChampsVue = useRef(champsListe.cle);
+  useEffect(() => {
+    if (cleChampsVue.current === champsListe.cle) return;
+    cleChampsVue.current = champsListe.cle;
+    updateParams((next) => { next.delete('page'); });
+  }, [champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Liste infinie : chaque page s'ajoute sous les précédentes dans le même tableau.
+  const invoicesQuery = useInfiniteQuery({
+    queryKey: ['invoicesTable', status, sort, q, salesperson, champsListe.cle, idsChamps.ids?.length ?? -1],
+    queryFn: ({ pageParam }) => listInvoices({
+      status, range: 'all', sort, page: pageParam, q,
       pageSize: PAGE_SIZE,
       salespersonId: salesperson,
+      ids: idsChamps.ids,
     }),
+    initialPageParam: 1,
+    getNextPageParam: (last, all) => (all.length * PAGE_SIZE < (last?.total || 0) ? all.length + 1 : undefined),
+    // Tant que les ids du filtre de champs ne sont pas connus, on n'affiche pas une liste non filtrée.
+    enabled: idsChamps.pret,
   });
 
   const salespeopleQuery = useQuery({
@@ -199,9 +213,17 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     staleTime: 300_000,
   });
 
-  const rows = invoicesQuery.data?.rows || [];
-  const total = invoicesQuery.data?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rows = useMemo(() => {
+    const seen = new Set<string>();
+    const out: InvoiceRow[] = [];
+    for (const p of invoicesQuery.data?.pages || []) {
+      for (const r of p.rows || []) { if (!seen.has(r.id)) { seen.add(r.id); out.push(r); } }
+    }
+    return out;
+  }, [invoicesQuery.data]);
+  const valeursChamps = useValeursPage('invoice', rows.map((r) => r.id), champsListe.colonnes.length > 0);
+  const loadedPages = invoicesQuery.data?.pages || [];
+  const total = loadedPages.length ? (loadedPages[loadedPages.length - 1]?.total || 0) : 0;
 
   // When embedded, our own title is hidden — report the total to the parent
   // shell (Finances) so it can show the count next to its page title.
@@ -309,12 +331,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     });
   }
 
-  function goToPage(p: number) {
-    updateParams((next) => {
-      if (p <= 1) next.delete('page'); else next.set('page', String(p));
-    });
-  }
-
   // ─── Selection helpers ─────────────────────────────────────
 
   const allSel = rows.length > 0 && selectedIds.size === rows.length;
@@ -334,20 +350,38 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
 
   const handleExportCsv = async () => {
     try {
-      // Même logique que Réglages → Rapports → Factures : le serveur applique
-      // les filtres courants et renvoie TOUTES les lignes (plafond explicite).
-      const rows = await exportReportToFile('invoices', {
-        lang: fr ? 'fr' : 'en',
-        filters: {
-          status: status === 'all' ? '' : status,
-          salesperson: salesperson === 'All' ? '' : salesperson,
-          q: q || '',
-        },
+      const exportParams: Record<string, unknown> = {
+        p_status: status === 'all' ? 'all' : status,
+        p_range: 'all', p_sort: 'due_date_desc',
+        p_limit: 10000, p_offset: 0, p_q: q || null, p_from: null, p_to: null, p_org: null,
+      };
+      if (salesperson !== 'All') exportParams.p_salesperson = salesperson;
+      // Le filtre « Champs » de la liste s'applique aussi à l'export.
+      if (idsChamps.ids) exportParams.p_ids = idsChamps.ids;
+      const { data, error: fetchErr } = await supabase.rpc('rpc_list_invoices', exportParams);
+      if (fetchErr) throw fetchErr;
+      const champsCsv = await colonnesChampsCsv('invoice', (data || []).map((inv: any) => String(inv.id)), fr);
+      const csvRows = (data || []).map((inv: any) => {
+        const email = clientMap[inv.client_id]?.email || '';
+        return [
+          inv.invoice_number || '',
+          inv.client_name || '',
+          email,
+          inv.status || '',
+          formatMoneyFromCents(inv.total_cents || 0),
+          inv.created_at ? new Date(inv.created_at).toLocaleDateString(fr ? 'fr-CA' : 'en-CA') : '',
+          inv.due_date ? versDate(inv.due_date).toLocaleDateString(fr ? 'fr-CA' : 'en-CA') : '',
+          ...champsCsv.valeurs(String(inv.id)),
+        ];
       });
-      toast.success(fr ? `Export CSV terminé (${rows} lignes)` : `CSV exported (${rows} rows)`);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '';
-      toast.error(message || (fr ? 'Échec de l\'export' : 'Export failed'));
+      exportToCsv(
+        `factures-${new Date().toISOString().slice(0, 10)}.csv`,
+        ['#', 'Client', 'Email', fr ? 'Statut' : 'Status', fr ? 'Montant' : 'Amount', fr ? 'Créée' : 'Created', fr ? 'Échéance' : 'Due Date', ...champsCsv.entetes],
+        csvRows,
+      );
+      toast.success(fr ? 'Export CSV terminé' : 'CSV exported');
+    } catch (err: any) {
+      toast.error(err?.message || (fr ? 'Échec de l\'export' : 'Export failed'));
     }
   };
 
@@ -539,6 +573,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
             ...(salespeopleQuery.data || []).map((p) => ({ value: p.id, label: p.label })),
           ]}
         />
+        {champsListe.bouton}
         <form onSubmit={applySearch} className="relative">
           <input
             value={searchInput}
@@ -564,7 +599,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
         <>
           {/* ── TABLE (CSS Grid — identical pattern to Jobs & Clients) ── */}
           <div className="border border-outline rounded-md overflow-x-auto bg-white dark:bg-[#0e0e11]">
-            <div className="grid min-w-[980px]" style={{ gridTemplateColumns: INVOICE_GRID_COLUMNS }} onMouseLeave={() => setHoveredId(null)}>
+            <div className="grid min-w-[980px]" style={{ gridTemplateColumns: champsListe.colonnes.length ? INVOICE_GRID_COLUMNS.replace(/ 44px$/, ' 1.4fr 44px') : INVOICE_GRID_COLUMNS }} onMouseLeave={() => setHoveredId(null)}>
               {/* HEADER */}
               <div className="py-3 pl-4 border-b border-outline flex items-center">
                 <input type="checkbox" checked={allSel} onChange={toggleAll} aria-label={fr ? 'Tout sélectionner' : 'Select all'} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
@@ -593,6 +628,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('balance')} className="inline-flex items-center gap-1">{fr ? 'Solde' : 'Balance'} {IconSort}</button>
               </div>
+              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">{fr ? 'Champs' : 'Fields'}</div>}
               <div className="py-3 border-b border-outline" />
 
               {/* LOADING */}
@@ -607,13 +643,14 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
+                  {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>}
                   <div className="py-3 border-b border-outline/30" />
                 </React.Fragment>
               ))}
 
               {/* EMPTY STATE */}
               {!invoicesQuery.isLoading && rows.length === 0 && (
-                <div style={{ gridColumn: `span ${INVOICE_GRID_COL_COUNT}` }} className="py-20">
+                <div style={{ gridColumn: '1 / -1' }} className="py-20">
                   <div className="flex flex-col items-center justify-center text-center">
                     <div className="w-12 h-12 rounded-xl bg-surface-secondary flex items-center justify-center mb-4">
                       <FileText size={22} className="text-text-muted/60" />
@@ -710,6 +747,11 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                         {row.balance_cents === 0 ? formatMoneyFromCents(0) : formatMoneyFromCents(row.balance_cents)}
                       </span>
                     </div>
+                    {champsListe.colonnes.length > 0 && (
+                      <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="presentation" tabIndex={-1} onClick={click} onMouseEnter={hover}>
+                        <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[row.id]} fr={fr} fuseau={champsListe.fuseau} />
+                      </div>
+                    )}
                     {/* Actions */}
                     <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onMouseEnter={hover}>
                       <button
@@ -752,6 +794,17 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                 );
               })}
             </div>
+            {/* Liste infinie — charge la page suivante dans le même tableau */}
+            {!invoicesQuery.isLoading && rows.length > 0 && (
+              <InfiniteScrollSentinel
+                hasMore={Boolean(invoicesQuery.hasNextPage)}
+                loading={invoicesQuery.isFetchingNextPage}
+                onLoadMore={() => { if (!invoicesQuery.isFetchingNextPage) void invoicesQuery.fetchNextPage(); }}
+                loaded={rows.length}
+                total={total}
+                className="border-t border-outline/30"
+              />
+            )}
           </div>
 
           {/* ── FOOTER (Jobs/Clients pattern) ── */}
@@ -759,19 +812,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
             <span className="text-[14px] text-text-secondary">
               {t.common.rowsSelected.replace('{selected}', String(selectedIds.size)).replace('{total}', String(total))}
             </span>
-            <div className="flex items-center gap-2">
-              <button disabled={page <= 1} onClick={() => goToPage(page - 1)}
-                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
-                {t.common.previous}
-              </button>
-              {totalPages > 1 && (
-                <span className="text-[13px] text-text-muted tabular-nums px-2">{page} / {totalPages}</span>
-              )}
-              <button disabled={page >= totalPages} onClick={() => goToPage(page + 1)}
-                className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[14px] text-text-primary font-normal disabled:opacity-40 disabled:cursor-default hover:bg-surface-secondary transition-colors cursor-pointer">
-                {t.common.next}
-              </button>
-            </div>
           </div>
         </>
       )}

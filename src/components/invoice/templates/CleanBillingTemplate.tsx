@@ -141,6 +141,21 @@ export default function CleanBillingTemplate({ data }: { data: InvoiceRenderData
           </div>
         </div>
 
+        {/* ── Champs personnalisés cochés « afficher sur le document » ── */}
+        {data.champsPerso && data.champsPerso.length > 0 && (
+          <div className="mt-8 border-t border-[#f3f4f6] pt-5">
+            <p className="text-[10px] font-medium uppercase tracking-widest text-[#9ca3af] mb-1.5">{language === 'fr' ? 'Informations' : 'Details'}</p>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-1">
+              {data.champsPerso.map((c) => (
+                <div key={c.label} className="flex justify-between gap-3 text-[11px]">
+                  <dt className="text-[#9ca3af]">{c.label}</dt>
+                  <dd className="text-right text-[#374151]">{c.valeur}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+
         {/* ── Notes ── */}
         {data.notes && (
           <div className="mt-8 border-t border-[#f3f4f6] pt-5">

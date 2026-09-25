@@ -19,6 +19,9 @@ import { contexteOrg, slaTexte } from '../../server/lib/support/tickets';
 const url = process.env.VITE_SUPABASE_URL!;
 const ref = process.env.SUPABASE_PROJECT_REF!;
 if (!url.includes(ref) || ref === 'bbzcuzqfgsdvjsymfwmr') throw new Error('QA sur staging seulement');
+// Jamais de Slack depuis la QA : .env.local porte les vraies clés Slack, et start_migration a déjà envoyé une notification « Vision Lavage démarre une migration » au vrai canal (2026-09-17).
+delete process.env.SLACK_BOT_TOKEN;
+delete process.env.SLACK_SIGNING_SECRET;
 const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
 const email = process.env.QA_COMPTE || 'willhebert30@gmail.com';
 const { data: lien, error: eLien } = await admin.auth.admin.generateLink({ type: 'magiclink', email });

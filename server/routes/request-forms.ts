@@ -6,7 +6,9 @@ import { validate, upsertRequestFormSchema, publicFormSubmissionSchema, updateFo
 import { ensureClientForLead } from '../lib/leadClientSync';
 import { upsertLeadPinForClient } from '../lib/fieldPinSync';
 import { eventBus } from '../lib/eventBus';
+import { appliquerReponsesFormulaire, type QuestionFormulaire } from '../lib/champs/formulaires';
 import { sendEmail } from '../lib/mailer';
+import { rendreCourrielLume } from '../lib/courriels/gabarit';
 
 const router = Router();
 
@@ -304,7 +306,10 @@ router.get('/public/form/:apiKey', async (req, res) => {
         description: form.description,
         success_message: form.success_message,
         enabled: form.enabled,
-        custom_fields: form.custom_fields,
+        // Le lien vers un champ personnalisé est interne : le visiteur n'en a rien à faire.
+        custom_fields: Array.isArray(form.custom_fields)
+          ? form.custom_fields.map(({ cf_field_id: _lien, ...q }: Record<string, unknown>) => q)
+          : form.custom_fields,
         logo_url: logoUrl,
       },
     });
@@ -681,16 +686,33 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
           const subj = actorLang === 'fr'
             ? `Nouvelle demande de ${fullName}`
             : `New request from ${fullName}`;
-          const intro = actorLang === 'fr'
-            ? 'Vous avez reçu une nouvelle demande via votre formulaire public.'
-            : 'You received a new request through your public request form.';
-          const view = actorLang === 'fr' ? 'Voir dans Lume' : 'View in Lume';
           const appUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+          // Voix Lume (c'est Lume qui prévient l'exploitant) : gabarit commun, tutoiement.
+          const fr = actorLang === 'fr';
+          const lignes = [
+            { libelle: fr ? 'Nom' : 'Name', valeur: fullName, fort: true },
+            ...(body.company ? [{ libelle: fr ? 'Entreprise' : 'Company', valeur: String(body.company) }] : []),
+            { libelle: fr ? 'Courriel' : 'Email', valeur: body.email },
+            { libelle: fr ? 'Téléphone' : 'Phone', valeur: body.phone },
+            ...(address ? [{ libelle: fr ? 'Adresse' : 'Address', valeur: address }] : []),
+          ];
           await sendEmail({
             to: actorEmail,
             subject: subj,
-            html: `<p>${intro}</p><p><strong>${fullName}</strong><br/>${contactLine || ''}</p>` +
-              (appUrl ? `<p><a href="${appUrl}/requests">${view}</a></p>` : ''),
+            html: rendreCourrielLume({
+              langue: actorLang,
+              preheader: `${fullName} — ${contactLine || ''}`.trim(),
+              titre: fr ? 'Nouvelle demande reçue' : 'New request received',
+              intro: fr
+                ? `${fullName} vient de remplir ton formulaire public. La demande est déjà dans Lume.`
+                : `${fullName} just filled out your public form. The request is already in Lume.`,
+              lignes,
+              corpsHtml: body.notes
+                ? `<p style="margin:0 0 6px;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:#6b7280;font-weight:600;">Message</p><p style="margin:0;padding:14px 16px;background:#f9fafb;border-left:3px solid #111827;border-radius:6px;">${escapeHtml(String(body.notes)).replace(/\r?\n/g, '<br/>')}</p>`
+                : null,
+              bouton: appUrl ? { texte: fr ? 'Voir la demande' : 'View request', url: `${appUrl}/requests` } : null,
+              signature: null,
+            }),
           });
         }
       } catch (e: any) {
@@ -717,13 +739,15 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     step = 'visitor-ack';
     if (body.email) {
       try {
-        const { getCompanySettings, buildEmailLayout, senderFor } = await import('./emails');
+        const { getCompanySettings, buildEmailLayout, senderForOrg, langueEntreprise } = await import('./emails');
         const company = await getCompanySettings(orgId);
         const companyName = company.company_name || 'notre équipe';
 
-        // Langue du visiteur inconnue (aucune colonne de langue sur les
-        // destinataires externes) : on suit celle de l'org, défaut fr.
-        const lang = actorLang;
+        /* La langue de l'ENTREPRISE, pas celle du membre qui a cree le
+           formulaire. `actorLang` lit `org_members.language` : un formulaire
+           cree par un employe anglophone envoyait des accuses en anglais aux
+           visiteurs d'une org francophone. */
+        const lang = langueEntreprise(company);
         const subject = lang === 'fr'
           ? `Nous avons bien reçu votre demande — ${companyName}`
           : `We received your request — ${companyName}`;
@@ -751,7 +775,9 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
                on your side.</p>`;
 
         const ack = await sendEmail({
-          ...senderFor(company),
+          // `senderForOrg` : sans lui, une entreprise ayant fait vérifier SON
+      // domaine voyait quand même ses relances partir de @lumecrm.net.
+      ...(await senderForOrg(orgId, company)),
           to: body.email,
           subject,
           html: buildEmailLayout(company, bodyHtml),
@@ -762,6 +788,64 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
       } catch (e: any) {
         console.error('[public/form] accusé de réception échoué:', e?.message);
       }
+    }
+
+    // 4c. Nouveau pipeline de ventes — en parallèle de l'ancien chemin.
+    //
+    // `ingest_lead` fait tout en une transaction : contact, rapprochement,
+    // deal dans la première étape ouverte, attribution marketing. L'ancien
+    // chemin ci-dessus continue d'alimenter `pipeline_deals` tant que le
+    // board D2D n'est pas retiré — les deux coexistent volontairement.
+    //
+    // NON BLOQUANT : un échec ici ne doit pas faire perdre la soumission au
+    // visiteur, qui a déjà son client, son deal et sa notification. On
+    // journalise pour que le trou se voie, plutôt que de renvoyer une erreur
+    // à quelqu'un dont la demande est bel et bien enregistrée.
+    step = 'pipeline-ventes';
+    try {
+      const { data: ingest, error: ingestErr } = await admin.rpc('ingest_lead', {
+        p_org_id: orgId,
+        p_source: 'form_web',
+        // Idempotence : rejouer la même soumission ne crée pas de doublon.
+        p_external_id: submission?.id ? String(submission.id) : null,
+        p_first_name: body.first_name,
+        p_last_name: body.last_name,
+        p_company: body.company || null,
+        p_email: body.email || null,
+        p_phone: body.phone || null,
+        p_address: address || null,
+        p_notes: clientNotes,
+        p_utm_source: body.utm_source || null,
+        p_utm_medium: body.utm_medium || null,
+        p_utm_campaign: body.utm_campaign || null,
+        p_utm_content: body.utm_content || null,
+        p_fbclid: body.fbclid || null,
+        p_payload: { form_id: form.id, custom_responses: submissionResponses },
+        p_created_by: actorId,
+      });
+      if (ingestErr) {
+        console.error('[public/form] pipeline de ventes — ingestion refusée:', ingestErr.message);
+      } else {
+        console.info('[public/form] pipeline de ventes', {
+          dealId: ingest?.deal_id, cree: ingest?.cree, fusionne: ingest?.fusionne, raison: ingest?.raison,
+        });
+        // Questions liées à un champ personnalisé (cf_field_id) : la réponse
+        // remplit le champ sur l'opportunité ou sur son client. Le client du
+        // deal fait foi (ingest_lead a pu rapprocher un contact existant).
+        const questions = Array.isArray(form.custom_fields) ? form.custom_fields as QuestionFormulaire[] : [];
+        if (ingest?.deal_id && questions.some((q) => q.cf_field_id)) {
+          try {
+            const { data: d } = await admin.from('deals').select('client_id').eq('id', ingest.deal_id).eq('org_id', orgId).maybeSingle();
+            const r = await appliquerReponsesFormulaire(admin, orgId, questions, submissionResponses,
+              { dealId: String(ingest.deal_id), clientId: (d?.client_id as string | undefined) ?? String(clientId) });
+            console.info('[public/form] champs personnalisés', r);
+          } catch (e: any) {
+            console.error('[public/form] champs personnalisés — écriture échouée:', e?.message);
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error('[public/form] pipeline de ventes — ingestion échouée:', e?.message);
     }
 
     // 5. Emit event for automations
