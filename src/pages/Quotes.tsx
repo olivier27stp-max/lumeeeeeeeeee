@@ -336,15 +336,17 @@ export default function Quotes() {
           aria-label={fr ? 'Rechercher devis' : 'Search quotes'}
           className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
         <QuoteFilterDropdown
-          label={fr ? 'Montant' : 'Amount'}
-          value={sort === 'total_asc' ? 'total_asc' : sort === 'total_desc' ? 'total_desc' : 'all'}
+          label={fr ? 'Trier' : 'Sort'}
+          value={sort}
           onChange={(v) => {
-            if (v === 'total_asc') setSort('total_asc');
-            else if (v === 'total_desc') setSort('total_desc');
+            // `oldest` et `recent` vivaient deja dans QuoteSort et dans le tri
+            // (voir `sorted`) : il n'existait aucun controle pour les choisir.
+            if (v === 'total_asc' || v === 'total_desc' || v === 'oldest') setSort(v as QuoteSort);
             else setSort('recent');
           }}
           options={[
-            { value: 'all', label: fr ? 'Tous' : 'Default' },
+            { value: 'recent', label: fr ? 'La plus récente' : 'Newest first' },
+            { value: 'oldest', label: fr ? 'La plus ancienne' : 'Oldest first' },
             { value: 'total_asc', label: fr ? 'Croissant' : 'Low to High' },
             { value: 'total_desc', label: fr ? 'Décroissant' : 'High to Low' },
           ]}

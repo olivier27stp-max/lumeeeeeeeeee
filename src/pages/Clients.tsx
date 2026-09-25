@@ -654,6 +654,19 @@ export default function Clients() {
           }))}
         />
 
+        {/* Tri par date d'ajout. `oldest` etait deja porte par ClientSort et
+            applique par clientsApi (order created_at ascending) — il manquait
+            seulement le controle pour le choisir. */}
+        <FilterPill
+          label={fr ? 'Trier' : 'Sort'}
+          value={sortBy === 'oldest' ? 'oldest' : 'recent'}
+          onChange={(v) => { setSortBy(v === 'oldest' ? 'oldest' : 'recent'); setPage(1); }}
+          options={[
+            { value: 'recent', label: fr ? 'Le plus récent' : 'Newest first' },
+            { value: 'oldest', label: fr ? 'Le plus ancien' : 'Oldest first' },
+          ]}
+        />
+
         {champsListe.bouton}
 
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
