@@ -220,6 +220,7 @@ declare
   v_id uuid;
   v_src uuid;
   v_groupe uuid;
+  v_numero text;
 begin
   if p_client is null then return null; end if;
 
@@ -230,15 +231,25 @@ begin
    order by t.fait_le desc limit 1;
   if v_id is not null then return v_id; end if;
 
+  -- Le client garde son numéro s'il est libre dans le bureau cible (plan §2.2).
+  perform pg_advisory_xact_lock(hashtextextended(p_cible::text || ':client', 0));
+  select case when c.client_number is not null and not exists (
+           select 1 from public.clients x
+            where x.org_id = p_cible and x.deleted_at is null
+              and nullif(regexp_replace(x.client_number, '\D', '', 'g'), '') = nullif(regexp_replace(c.client_number, '\D', '', 'g'), ''))
+         then c.client_number end
+    into v_numero
+    from public.clients c where c.id = p_client;
+
   insert into public.clients (
-    org_id, first_name, last_name, company, email, phone, address, status, notes,
+    client_number, org_id, first_name, last_name, company, email, phone, address, status, notes,
     city, province, postal_code, country, street_number, street_name, latitude, longitude, place_id,
     display_as_company, billing_same_as_service, billing_address, lead_status, source, lead_source,
     title, value, description, phones, email_label, tags, tax_exempt,
     sms_consent_at, email_consent_at, email_opt_out_at, email_opt_out_reason,
     assigned_to, created_by
   )
-  select p_cible, c.first_name, c.last_name, c.company, c.email, c.phone, c.address, c.status, c.notes,
+  select v_numero, p_cible, c.first_name, c.last_name, c.company, c.email, c.phone, c.address, c.status, c.notes,
          c.city, c.province, c.postal_code, c.country, c.street_number, c.street_name, c.latitude, c.longitude, c.place_id,
          c.display_as_company, c.billing_same_as_service, c.billing_address, c.lead_status, c.source, c.lead_source,
          c.title, c.value, c.description, c.phones, c.email_label, c.tags, c.tax_exempt,
@@ -5408,8 +5419,10 @@ declare
   v_org uuid;
   v_id  uuid;
 begin
-  v_org := (select org_id from public.memberships where user_id = auth.uid() limit 1);
-  if v_org is null then raise exception 'No organization context'; end if;
+  v_org := public.current_org_id();
+  if v_org is null or not public.has_org_membership(auth.uid(), v_org) then
+    raise exception 'No organization context';
+  end if;
   if not public.has_org_admin_role(auth.uid(), v_org) then
     raise exception 'Only org admin/owner can declare incidents';
   end if;

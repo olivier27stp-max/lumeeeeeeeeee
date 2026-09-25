@@ -21,6 +21,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../logger';
 import { creerIdentite, lireIdentite, supprimerIdentite } from './ses-identites';
+import { companyOrgIds } from '../supabase';
 
 const TABLE = 'org_sending_domains';
 export const PARTIE_LOCALE_DEFAUT = 'facturation';
@@ -197,6 +198,23 @@ async function domaineVerifieDe(admin: SupabaseClient, orgId: string): Promise<{
       logger.warn('[domaines] lecture du domaine vérifié échouée, expéditeur plateforme', { orgId, error: error.message });
     } else if (data?.domain) {
       valeur = { domain: String(data.domain), from_local_part: String(data.from_local_part || PARTIE_LOCALE_DEFAUT) };
+    } else {
+      // Domaine d'ENTREPRISE (plan multi-bureaux, Q5) : un domaine vérifié une
+      // fois sert tous les bureaux ; le nom affiché reste celui du bureau.
+      const groupe = await companyOrgIds(admin, orgId);
+      if (groupe.length > 1) {
+        const { data: frere } = await admin
+          .from(TABLE)
+          .select('domain, from_local_part')
+          .in('org_id', groupe.filter((o) => o !== orgId))
+          .eq('status', 'verified')
+          .order('verified_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (frere?.domain) {
+          valeur = { domain: String(frere.domain), from_local_part: String(frere.from_local_part || PARTIE_LOCALE_DEFAUT) };
+        }
+      }
     }
   } catch (err: any) {
     logger.warn('[domaines] lecture du domaine vérifié échouée, expéditeur plateforme', { orgId, error: err?.message || String(err) });

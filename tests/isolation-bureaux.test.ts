@@ -124,6 +124,7 @@ describe('4. companyOrgIds (groupe) uniquement pour le catalogue et les droits',
     'server/routes/orgs.ts',                        // liste/quota/accès des bureaux
     'server/routes/feature-flags.ts',               // un module s'active pour toute l'entreprise (bureaux gérés par l'appelant)
     'server/lib/support/canaux-slack.ts',           // un canal Slack de support par entreprise (service Lume, jamais montré au client)
+    'server/lib/courriels/domaines.ts',             // domaine d'envoi vérifié une fois pour toute l'entreprise (nom affiché = bureau)
     'server/routes/invitations.ts',                 // sièges du plan
     'server/routes/creator-space-features.ts',      // plateforme (admins Lume seulement)
     'server/routes/creator-space-notes.ts',         // plateforme (admins Lume seulement)
