@@ -38,11 +38,28 @@ describe('carte de l’app du support', () => {
     const manquantes = [...routesApp(), ...routesParametres()].filter((p) => !CARTE_APP.includes(base(p)) && !CARTE_APP.includes(p));
     expect(manquantes, `écrans absents de carte-app.ts : ${manquantes.join(', ')}`).toEqual([]);
   });
-  it('reste un texte borné : la carte est indexée par search_help (plus dans le prompt depuis #412), seul son index entre dans le prompt', () => {
-    // 25 000 depuis les champs personnalisés v2 (2026-09-26) : la carte n'est plus dans le prompt,
-    // seul son index y entre (borné juste en dessous) — l'agrandir ne coûte rien par tour.
-    expect(CARTE_APP.length).toBeLessThan(25_000);
-    expect(indexCarteApp().length).toBeLessThan(4_000);
+  it('l’INDEX reste borné — c’est lui qui entre dans le prompt', () => {
+    /*
+     * Depuis #412, la carte n'est plus dans le prompt : `search_help`
+     * l'indexe, et seul l'INDEX y entre. Le coût par tour dépend donc de
+     * l'index, pas de la carte.
+     *
+     * Le plafond de la carte était resté posé sur la mauvaise grandeur.
+     * Relevé au fil de l'eau (20 k → 24 k → 25 k), il touchait
+     * 24 991/25 000 le 2026-09-25 : NEUF caractères de marge. La
+     * prochaine page ajoutée à l'app aurait fait échouer la CI sur un
+     * test du SUPPORT, sans rapport visible avec le changement — une
+     * session de débogage pour rien.
+     *
+     * La carte garde une borne large, comme garde-fou contre un collage
+     * accidentel ; la vraie contrainte vit sur l'index.
+     */
+    expect(indexCarteApp().length,
+      'l’index entre dans le prompt à chaque tour : le garder court coûte de l’argent')
+      .toBeLessThan(4_000);
+    expect(CARTE_APP.length,
+      'garde-fou large : au-delà, c’est qu’on a collé autre chose que la carte')
+      .toBeLessThan(60_000);
     expect(CARTE_APP).toContain('/tasks');
   });
 });
