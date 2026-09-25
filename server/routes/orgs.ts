@@ -69,6 +69,22 @@ export async function getOfficeCapacity(admin: ReturnType<typeof getServiceClien
   return resolveOfficeQuota(rows);
 }
 
+/**
+ * Le bureau de BASE d'une entreprise : celui qui porte l'abonnement, sinon le
+ * plus ancien bureau ouvert. C'est la référence des réglages d'un nouveau bureau.
+ */
+export async function bureauDeBase(admin: ReturnType<typeof getServiceClient>, officeIds: string[]): Promise<string | null> {
+  if (officeIds.length === 0) return null;
+  const { data: abo } = await admin.from('subscriptions').select('org_id')
+    .in('org_id', officeIds).in('status', ['active', 'trialing', 'past_due'])
+    .order('created_at', { ascending: true }).limit(1).maybeSingle();
+  if (abo?.org_id) return String(abo.org_id);
+  const { data: ancien } = await admin.from('orgs').select('id')
+    .in('id', officeIds).is('archived_at', null)
+    .order('created_at', { ascending: true }).limit(1).maybeSingle();
+  return ancien?.id ? String(ancien.id) : null;
+}
+
 async function callerRole(admin: ReturnType<typeof getServiceClient>, userId: string, orgId: string): Promise<string | null> {
   const { data } = await admin
     .from('memberships')
@@ -349,11 +365,25 @@ router.post('/orgs/create-office', validate(createOfficeSchema), async (req, res
       console.warn('[orgs/create-office] ensureAutomationPresets:', seedErr?.message);
     }
 
-    // Héritage des réglages cochés depuis le bureau actif (best-effort).
+    // Héritage des réglages cochés depuis le BUREAU DE BASE de l'entreprise
+    // (règle de Rafba, 2026-09-25 : « toujours se fier au bureau de base ») —
+    // pas depuis le bureau affiché. Vision Lavage, créé avant ce formulaire,
+    // était resté sans taxes. Best-effort.
+    const bureauBase = await bureauDeBase(admin, officeIds) ?? auth.orgId;
     let inherited = null;
     if (inherit.branding || inherit.taxes || inherit.email_templates || inherit.tags_sources) {
-      inherited = await copyOfficeSettings(admin, auth.orgId, newOrg.id, auth.user.id, inherit);
+      inherited = await copyOfficeSettings(admin, bureauBase, newOrg.id, auth.user.id, inherit);
       for (const w of inherited.warnings) console.warn('[orgs/create-office] inherit:', w);
+    }
+
+    // La marque commune de l'entreprise, si elle est définie, est suivie d'office
+    // (le trigger recopie logo et couleur ; décochable dans Réglages → Bureaux).
+    if (currentOrg?.company_group_id) {
+      const { data: marque } = await admin.from('company_groups').select('logo_url, brand_color').eq('id', currentOrg.company_group_id).maybeSingle();
+      if (marque?.logo_url || marque?.brand_color) {
+        const { error: mqErr } = await admin.from('company_settings').update({ suit_marque_entreprise: true }).eq('org_id', newOrg.id);
+        if (mqErr) console.warn('[orgs/create-office] marque commune:', mqErr.message);
+      }
     }
 
     // Accès immédiat pour des admins du bureau actif (les autres propriétaires

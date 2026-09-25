@@ -90,6 +90,9 @@ export default function OfficeNew() {
   }, []);
 
   const isOwner = currentRole === 'owner';
+  // Bureau de BASE (principal, sinon le plus ancien) : la référence des réglages
+  // copiés — le serveur fait le même choix (bureauDeBase, routes/orgs.ts).
+  const nomBase = listing?.offices.find((o) => !o.archived)?.name || sourceName;
   const atLimit = !!listing && !listing.can_create;
   const canSubmit = isOwner && !atLimit && !loadingMeta && !saving;
 
@@ -306,7 +309,7 @@ export default function OfficeNew() {
           {/* Héritage */}
           <section className="space-y-4">
             <SectionTitle
-              title={fr ? `Hériter de « ${sourceName} »` : `Inherit from “${sourceName}”`}
+              title={fr ? `Hériter du bureau de base « ${nomBase} »` : `Inherit from the base office “${nomBase}”`}
               optional={fr ? 'facultatif' : 'optional'}
             />
             <div className="space-y-3">
