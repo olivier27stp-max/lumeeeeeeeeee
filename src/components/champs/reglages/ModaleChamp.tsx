@@ -8,7 +8,8 @@
  */
 import { useEffect, useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, Copy, GripVertical, Loader2, Plus, Trash2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, Copy, GripVertical, Loader2, MapPin, Plus, Trash2 } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core';
@@ -19,7 +20,7 @@ import { CSS } from '@dnd-kit/utilities';
 import Modal from '../../ui/Modal';
 import { cn } from '../../../lib/utils';
 import {
-  creerChamp, modifierChamp, type ChampPerso, type DossierChamp, type EntreeOption, type ObjetChamp, type TypeChamp,
+  creerChamp, listerChamps, modifierChamp, type ChampPerso, type DossierChamp, type EntreeOption, type ObjetChamp, type TypeChamp,
 } from '../../../lib/champsPersoApi';
 import { OBJETS, TYPES_CHAMP, LIBELLES_OBJET, LIBELLES_TYPE, conversionPermise, variableModele, type ConfigChamp } from '../../../lib/champs/types';
 import { slugCle } from '../../../lib/champs/valeurs';
@@ -75,6 +76,39 @@ function LigneOption({ o, fr, onChange, onRetirer, idBase }: {
     </div>
   );
 }
+
+/** La fenêtre de création que l'aperçu imite, et ses champs de base (grisés). */
+const FENETRE: Record<ObjetChamp, { fr: string; en: string; base: { fr: string; en: string }[] }> = {
+  client: { fr: 'Nouveau client', en: 'New client', base: [{ fr: 'Prénom', en: 'First name' }, { fr: 'Nom', en: 'Last name' }, { fr: 'Téléphone', en: 'Phone' }, { fr: 'Courriel', en: 'Email' }] },
+  deal: { fr: 'Nouvelle carte du pipeline', en: 'New pipeline card', base: [{ fr: 'Titre', en: 'Title' }, { fr: 'Client', en: 'Client' }, { fr: 'Étape', en: 'Stage' }] },
+  job: { fr: 'Nouveau job', en: 'New job', base: [{ fr: 'Titre du job', en: 'Job title' }, { fr: 'Client', en: 'Client' }, { fr: 'Date et heure', en: 'Date and time' }, { fr: 'Équipe', en: 'Team' }] },
+  quote: { fr: 'Nouvelle soumission', en: 'New quote', base: [{ fr: 'Client', en: 'Client' }, { fr: 'Titre', en: 'Title' }, { fr: 'Produits et services', en: 'Products & services' }] },
+  invoice: { fr: 'Nouvelle facture', en: 'New invoice', base: [{ fr: 'Client', en: 'Client' }, { fr: 'Échéance', en: 'Due date' }, { fr: 'Produits et services', en: 'Products & services' }] },
+};
+
+/** Où un champ apparaît, selon l'objet — pour qu'on sache, AVANT de le créer, où il va se retrouver. */
+const OU_IL_APPARAIT: Record<ObjetChamp, { fr: string[]; en: string[] }> = {
+  client: {
+    fr: ['Fiche du client, section « Champs personnalisés »', 'Fenêtre « Nouveau client »', 'Liste Clients : bouton « Champs » (filtrer, afficher en colonne)', 'Import CSV et formulaire de demande (s’il y est relié)'],
+    en: ['Client record, “Custom fields” section', '“New client” window', 'Clients list: “Fields” button (filter, show as column)', 'CSV import and request form (if linked)'],
+  },
+  deal: {
+    fr: ['Fiche d’une carte du pipeline', 'Fenêtre de création d’une carte', 'Sur les cartes elles-mêmes si tu le choisis dans l’onglet Pipeline de cette page'],
+    en: ['A pipeline card’s record', 'New card window', 'On the cards themselves if you pick it in this page’s Pipeline tab'],
+  },
+  job: {
+    fr: ['Fiche du job, section « Champs personnalisés »', 'Fenêtre « Nouveau job »', 'Liste Jobs : bouton « Champs »'],
+    en: ['Job record, “Custom fields” section', '“New job” window', 'Jobs list: “Fields” button'],
+  },
+  quote: {
+    fr: ['Fiche de la soumission', 'Création d’une soumission', 'Liste Devis : bouton « Champs »', 'Sur la soumission du client (PDF et page en ligne) si « Afficher sur » est coché'],
+    en: ['Quote record', 'Quote creation', 'Quotes list: “Fields” button', 'On the client’s quote (PDF and online page) if “Show on” is checked'],
+  },
+  invoice: {
+    fr: ['Fiche de la facture', 'Création d’une facture', 'Liste Factures : bouton « Champs »', 'Sur la facture du client (PDF et page en ligne) si « Afficher sur » est coché'],
+    en: ['Invoice record', 'Invoice creation', 'Invoices list: “Fields” button', 'On the client’s invoice (PDF and online page) if “Show on” is checked'],
+  },
+};
 
 export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetDefaut, dossiers: tousDossiers, champ, dossierInitial, fr }: Props) {
   const ids = useId();
@@ -161,6 +195,22 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
       liste.findIndex((o) => o._cle === e.active.id), liste.findIndex((o) => o._cle === e.over!.id)));
   };
 
+  // Les autres champs du même objet et du même dossier, pour montrer où le champ se place.
+  const { data: existants } = useQuery({
+    queryKey: ['champs-perso', objet],
+    queryFn: () => listerChamps(objet),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const { avant, apres } = useMemo(() => {
+    const freres = (existants?.fields ?? [])
+      .filter((c) => !c.archived_at && (c.folder_id ?? '') === dossier && c.id !== champ?.id)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    if (!champ) return { avant: freres, apres: [] as typeof freres };
+    const i = freres.findIndex((c) => (c.position ?? 0) > (champ.position ?? 0));
+    return i < 0 ? { avant: freres, apres: [] as typeof freres } : { avant: freres.slice(0, i), apres: freres.slice(i) };
+  }, [existants, dossier, champ]);
+
   const champApercu = {
     label: label || (fr ? 'Nom du champ' : 'Field name'), field_type: type, config, placeholder: placeholder || null,
     options: options.filter((o) => o.label.trim()).map((o, i) => ({ id: o.id ?? o._cle, label: o.label, color: o.color ?? null, position: i, archived_at: null })),
@@ -244,6 +294,21 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
               </div>
             </div>
 
+            {/* Où il apparaîtra — suit l'objet choisi. */}
+            <div className="rounded-lg border border-outline-subtle bg-surface-secondary/40 px-3 py-2.5 text-[12px] text-text-secondary">
+              <p className="mb-1 flex items-center gap-1.5 font-semibold text-text-primary">
+                <MapPin size={12} aria-hidden />{fr ? 'Où il apparaîtra' : 'Where it will appear'}
+              </p>
+              <ul className="list-disc space-y-0.5 pl-5">
+                {(fr ? OU_IL_APPARAIT[objet].fr : OU_IL_APPARAIT[objet].en).map((t) => <li key={t}>{t}</li>)}
+              </ul>
+              <p className="mt-1.5 text-text-tertiary">
+                {fr
+                  ? `Placé à la fin ${dossier ? 'de son dossier' : 'des champs sans dossier'} ; « … » → Monter / Descendre pour changer l’ordre.`
+                  : `Placed last ${dossier ? 'in its folder' : 'among fields without a folder'}; “…” → Move up / down to reorder.`}
+              </p>
+            </div>
+
             <div>
               <label htmlFor={`${ids}-label`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Nom du champ' : 'Field name'} *</label>
               <input id={`${ids}-label`} value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)}
@@ -252,8 +317,13 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
 
             <div>
               <label htmlFor={`${ids}-cle`} className="mb-1 block text-[12px] font-medium text-text-secondary">
-                {fr ? 'Clé' : 'Key'} <span className="font-normal text-text-tertiary">— {fr ? 'utilisée dans les modèles et automatisations' : 'used in templates and automations'}</span>
+                {fr ? 'Nom technique' : 'Technical name'} <span className="font-normal text-text-tertiary">— {fr ? 'automatique, tu n’as pas à y toucher' : 'automatic, no need to touch it'}</span>
               </label>
+              <p className="mb-1.5 text-[11px] text-text-tertiary">
+                {fr
+                  ? 'Se remplit tout seul à partir du nom. Il sert à glisser la valeur du champ dans un courriel, un texto ou une automatisation, en écrivant la variable ci-dessous.'
+                  : 'Filled in automatically from the name. It lets you insert the field’s value into an email, a text or an automation, using the variable below.'}
+              </p>
               {edition ? (
                 <div className="flex items-center gap-2">
                   <code className="rounded bg-surface-secondary px-2 py-1 text-[12px] text-text-secondary">{variable}</code>
@@ -279,8 +349,10 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label htmlFor={`${ids}-ph`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Texte indicatif' : 'Placeholder text'}</label>
-                <input id={`${ids}-ph`} value={placeholder} maxLength={200} onChange={(e) => setPlaceholder(e.target.value)} className="glass-input h-9 w-full text-[13px]" />
+                <label htmlFor={`${ids}-ph`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Exemple dans la case (optionnel)' : 'Example in the box (optional)'}</label>
+                <input id={`${ids}-ph`} value={placeholder} maxLength={200} onChange={(e) => setPlaceholder(e.target.value)}
+                  placeholder={fr ? 'Ex. : 2 500 pi²' : 'e.g. 2,500 sq ft'} className="glass-input h-9 w-full text-[13px]" />
+                <p className="mt-1 text-[11px] text-text-tertiary">{fr ? 'Texte gris affiché dans la case tant qu’elle est vide, pour guider. Il n’est pas enregistré.' : 'Grey text shown in the empty box as a hint. It is not saved.'}</p>
               </div>
               <div className="flex items-end">
                 <label htmlFor={`${ids}-req`} className="flex items-center gap-2 text-[13px] text-text-primary">
@@ -291,7 +363,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
             </div>
 
             <div>
-              <label htmlFor={`${ids}-aide`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Description' : 'Description'}</label>
+              <label htmlFor={`${ids}-aide`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Aide sous le champ (optionnel)' : 'Help below the field (optional)'}</label>
               <textarea id={`${ids}-aide`} rows={2} value={aide} maxLength={200} onChange={(e) => setAide(e.target.value)}
                 placeholder={fr ? 'Une phrase pour expliquer ce champ' : 'A short description to explain this field'} className="glass-input w-full py-2 text-[13px]" />
               <p className="mt-0.5 text-right text-[11px] text-text-tertiary">{aide.length} / 200</p>
@@ -366,12 +438,41 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
 
           {/* Aperçu en direct */}
           <aside aria-label={fr ? 'Aperçu en direct' : 'Live preview'} className="rounded-xl border border-outline-subtle bg-surface-secondary/50 p-4">
-            <p className="mb-3 text-[12px] font-semibold text-text-secondary">{fr ? 'Aperçu en direct' : 'Live preview'}</p>
-            <label htmlFor={`${ids}-apercu`} className="mb-1 block text-[12px] font-medium text-text-primary">
-              {champApercu.label}{obligatoire && <span className="text-red-500" aria-hidden> *</span>}
-            </label>
-            <ChampSaisie id={`${ids}-apercu`} champ={champApercu} valeur={apercu} fr={fr} onValider={setApercu} />
-            {aide && <p className="mt-1 text-[11px] text-text-tertiary">{aide}</p>}
+            <p className="mb-3 text-[12px] font-semibold text-text-secondary">
+              {fr ? `Aperçu dans la fenêtre « ${FENETRE[objet].fr} »` : `Preview in the “${FENETRE[objet].en}” window`}
+            </p>
+            <div className="overflow-hidden rounded-lg border border-outline bg-surface shadow-sm">
+              <div className="border-b border-outline px-3 py-2 text-[13px] font-semibold text-text-primary">{fr ? FENETRE[objet].fr : FENETRE[objet].en}</div>
+              <div className="space-y-2.5 p-3">
+                {FENETRE[objet].base.map((c) => (
+                  <div key={c.fr} className="opacity-50" aria-hidden>
+                    <p className="mb-1 text-[11px] font-medium text-text-secondary">{fr ? c.fr : c.en}</p>
+                    <div className="h-7 rounded-md border border-outline-subtle bg-surface-secondary" />
+                  </div>
+                ))}
+                <p className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">{fr ? 'Champs personnalisés' : 'Custom fields'}</p>
+                {avant.map((c) => (
+                  <div key={c.id} className="opacity-50" aria-hidden>
+                    <p className="mb-1 text-[11px] font-medium text-text-secondary">{c.label}</p>
+                    <div className="h-7 rounded-md border border-outline-subtle bg-surface-secondary" />
+                  </div>
+                ))}
+                <div className="rounded-md p-2 ring-2 ring-primary/60">
+                  <label htmlFor={`${ids}-apercu`} className="mb-1 block text-[12px] font-medium text-text-primary">
+                    {champApercu.label}{obligatoire && <span className="text-red-500" aria-hidden> *</span>}
+                  </label>
+                  <ChampSaisie id={`${ids}-apercu`} champ={champApercu} valeur={apercu} fr={fr} onValider={setApercu} />
+                  {aide && <p className="mt-1 text-[11px] text-text-tertiary">{aide}</p>}
+                </div>
+                {apres.map((c) => (
+                  <div key={c.id} className="opacity-50" aria-hidden>
+                    <p className="mb-1 text-[11px] font-medium text-text-secondary">{c.label}</p>
+                    <div className="h-7 rounded-md border border-outline-subtle bg-surface-secondary" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-text-tertiary">{fr ? 'Ton champ est encadré, à la place qu’il aura.' : 'Your field is outlined, where it will sit.'}</p>
           </aside>
         </div>
       )}
