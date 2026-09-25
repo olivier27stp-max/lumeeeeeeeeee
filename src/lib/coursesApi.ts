@@ -150,6 +150,11 @@ export async function duplicateCourse(id: string): Promise<Course> {
   return apiFetch<Course>(`/api/courses/${id}/duplicate`, { method: 'POST' });
 }
 
+/** Formation d'entreprise : recopiée dans les autres bureaux ouverts (propriétaire). */
+export async function copyCourseToOffices(id: string): Promise<{ copies: number; sautes: number }> {
+  return apiFetch<{ copies: number; sautes: number }>(`/api/courses/${id}/copy-to-offices`, { method: 'POST' });
+}
+
 // ── Modules CRUD ──
 
 export async function createModule(courseId: string, title: string): Promise<CourseModule> {

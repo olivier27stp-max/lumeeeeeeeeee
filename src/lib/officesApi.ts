@@ -288,3 +288,12 @@ export async function suivreMarqueEntreprise(orgId: string, suit: boolean): Prom
     .eq('org_id', orgId);
   if (error) throw new Error(error.message);
 }
+
+// ── Rôles d'entreprise (Réglages → Rôles & Permissions) ─────────────
+
+/** Le propriétaire applique les rôles du bureau actif à tous les autres bureaux ouverts. */
+export async function appliquerRolesATousLesBureaux(): Promise<{ bureaux: number; roles: number; membres: number }> {
+  const res = await fetch(`${API_BASE}/roles/apply-to-offices`, { method: 'POST', headers: await authHeaders() });
+  if (!res.ok) await throwApiError(res, 'Failed to apply roles to offices.');
+  return res.json();
+}

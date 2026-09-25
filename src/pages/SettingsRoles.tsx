@@ -12,6 +12,10 @@ import PermissionGate from '../components/PermissionGate';
 import { useCompany } from '../contexts/CompanyContext';
 import { supabase } from '../lib/supabase';
 import { applyCascade } from '../lib/permissionsCascade';
+import { appliquerRolesATousLesBureaux } from '../lib/officesApi';
+import { confirmer } from '../components/ui/ConfirmDialog';
+import { captureClientException } from '../lib/sentry';
+import { toast } from 'sonner';
 
 // ── Persistence (via server so memberships get propagated) ───────
 async function loadRoleOverrides(): Promise<Partial<Record<TeamRole, PermissionsMap>>> {
@@ -52,7 +56,31 @@ export default function SettingsRoles() {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const id = useId();
-  const { currentOrgId } = useCompany();
+  const { currentOrgId, currentRole, companies } = useCompany();
+  // Rôles d'ENTREPRISE : le propriétaire applique ces rôles à tous ses bureaux.
+  const peutAppliquerPartout = currentRole === 'owner' && companies.length > 1;
+  const [application, setApplication] = useState(false);
+  const appliquerPartout = async () => {
+    const ok = await confirmer({
+      title: fr ? 'Appliquer ces rôles à tous les bureaux ?' : 'Apply these roles to every office?',
+      message: fr
+        ? 'Les permissions des rôles Admin, Représentant et Technicien de ce bureau remplacent celles des autres bureaux ouverts, et sont appliquées à leurs membres (sauf les permissions personnalisées d’une personne). Chaque bureau pourra ensuite ajuster les siennes.'
+        : 'This office’s Admin, Sales rep and Technician permissions replace those of the other open offices and are applied to their members (except per-person custom permissions). Each office can adjust its own afterwards.',
+      confirmLabel: fr ? 'Appliquer partout' : 'Apply everywhere',
+    });
+    if (!ok) return;
+    setApplication(true);
+    try {
+      const r = await appliquerRolesATousLesBureaux();
+      toast.success(fr
+        ? `Rôles appliqués à ${r.bureaux} autre(s) bureau(x) — ${r.membres} membre(s) mis à jour.`
+        : `Roles applied to ${r.bureaux} other office(s) — ${r.membres} member(s) updated.`);
+    } catch (e: any) {
+      console.error('[SettingsRoles] appliquer partout', e);
+      captureClientException(e);
+      toast.error(e?.message || (fr ? 'Application impossible.' : 'Could not apply.'));
+    } finally { setApplication(false); }
+  };
 
   const [selectedRole, setSelectedRole] = useState<TeamRole>('sales_rep');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -168,6 +196,13 @@ export default function SettingsRoles() {
             </div>
           </div>
           <div className="flex items-center gap-2 text-[11px] h-6">
+            {peutAppliquerPartout && (
+              <button type="button" onClick={() => void appliquerPartout()} disabled={application || loading}
+                className="glass-button text-[12px] h-8 inline-flex items-center gap-1.5 disabled:opacity-50">
+                {application && <Loader2 size={12} className="animate-spin" />}
+                {fr ? 'Appliquer ces rôles à tous les bureaux' : 'Apply these roles to every office'}
+              </button>
+            )}
             {loading && <Loader2 size={14} className="animate-spin text-text-tertiary" />}
             {saving && !loading && <Loader2 size={14} className="animate-spin text-text-tertiary" />}
             {saveStatus === 'saved' && (
