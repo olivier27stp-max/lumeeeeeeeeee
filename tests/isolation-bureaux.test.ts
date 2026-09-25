@@ -127,6 +127,24 @@ describe('4. companyOrgIds (groupe) uniquement pour le catalogue et les droits',
   });
 });
 
+describe('4b. Aucune lecture d’un autre bureau depuis le navigateur', () => {
+  it("aucun .neq('org_id') dans src/ (la météo lisait les bureaux frères)", () => {
+    const fautifs = SRC.filter((f) => /\.neq\(\s*['"]org_id['"]/.test(lire(f)));
+    expect(fautifs).toEqual([]);
+  });
+  it(".in('org_id', …) réservé au catalogue partagé et aux noms de bureaux du sélecteur", () => {
+    const autorises = new Set(['src/lib/servicesApi.ts', 'src/contexts/CompanyContext.tsx']);
+    const fautifs = SRC.filter((f) => !autorises.has(f) && /\.in\(\s*['"]org_id['"]/.test(lire(f)));
+    expect(fautifs).toEqual([]);
+  });
+  it('la route /payments/providers/status vérifie l’appartenance au bureau demandé', () => {
+    const s = lire('server/routes/payments.ts');
+    const i = s.indexOf("router.get('/payments/providers/status'");
+    expect(i).toBeGreaterThan(0);
+    expect(s.slice(i, i + 900)).toMatch(/isOrgMember\(auth\.client, auth\.user\.id, requestedOrgId\)/);
+  });
+});
+
 describe('5. Défense en base : policy RESTRICTIVE « bureau_actif »', () => {
   const sql = lire('supabase/migrations/20260927120000_bureau_actif_via_en_tete.sql');
   it('lit l’en-tête x-org-id exposé par PostgREST, sans jamais lever d’erreur', () => {

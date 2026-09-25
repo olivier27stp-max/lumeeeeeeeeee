@@ -1425,6 +1425,11 @@ router.get('/payments/providers/status', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const requestedOrgId = parseOrgId(req.query.orgId) || auth.orgId;
+    // Même garde que /payments/settings : jamais les réglages d'un bureau dont on n'est pas membre.
+    const member = await isOrgMember(auth.client, auth.user.id, requestedOrgId);
+    if (!member) {
+      return res.status(403).json({ error: 'You are not a member of this organization.' });
+    }
     const settings = await getPaymentProviderSettings(auth.client, requestedOrgId);
     const baseUrl = resolvePublicBaseUrl(req);
 

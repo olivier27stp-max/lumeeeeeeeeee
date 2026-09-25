@@ -22,7 +22,7 @@
 -- Hors périmètre, volontairement (le sélecteur doit pouvoir lister les bureaux
 -- et le catalogue reste partagé) : memberships, orgs, company_settings,
 -- org_billing_settings, subscriptions, org_features, billing_profiles,
--- predefined_services (has_company_membership), invitations, org_knowledge.
+-- predefined_services (has_company_membership) et le journal de facturation.
 -- Sans en-tête (app mobile, realtime, service_role) : comportement inchangé.
 -- ═══════════════════════════════════════════════════════════════════════════
 
@@ -143,7 +143,7 @@ declare
   v_expr text;
   v_exclues text[] := array[
     'memberships', 'orgs', 'company_settings', 'org_billing_settings', 'subscriptions',
-    'org_features', 'billing_profiles', 'predefined_services', 'invitations', 'org_knowledge',
+    'org_features', 'billing_profiles', 'predefined_services',
     'processed_checkout_sessions', 'billing_receipt_log'
   ];
 begin

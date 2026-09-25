@@ -154,7 +154,7 @@ async function getOrgLocation(): Promise<ResolvedLocation | null> {
     userId = user?.id || null;
   } catch { /* pas de session — on retombe sur l'entreprise */ }
 
-  // ── 1 + 2 : bureau actif ──
+  // ── Bureau actif seulement : profil de l'usager, puis adresse de l'entreprise ──
   let profile: ProfileRow | null = null;
   if (userId) {
     try {
@@ -177,57 +177,12 @@ async function getOrgLocation(): Promise<ResolvedLocation | null> {
     .limit(1)
     .maybeSingle();
 
-  const own = await resolveLocation(profile, (settings as SettingsRow | null) || null);
-  if (own) return own;
-
-  // ── 3 : repli sur les autres bureaux de la compagnie ──
-  return resolveFromSiblingOffices(orgId, userId);
+  // Aucun repli sur les autres bureaux : isolation stricte entre bureaux (2026-09-24).
+  // Sans adresse sur le bureau actif, le bandeau météo reste vide plutôt que de lire
+  // company_settings ou team_members d'un bureau frère.
+  return resolveLocation(profile, (settings as SettingsRow | null) || null);
 }
 
-async function resolveFromSiblingOffices(orgId: string, userId: string | null): Promise<ResolvedLocation | null> {
-  let siblingSettings: SettingsRow[] = [];
-  try {
-    const { data } = await supabase
-      .from('company_settings')
-      .select(SETTINGS_COLS)
-      .neq('org_id', orgId)
-      .limit(50);
-    siblingSettings = (data as SettingsRow[] | null) || [];
-  } catch { /* aucun bureau frère lisible */ }
-  const settingsByOrg = new Map<string, SettingsRow>(
-    siblingSettings.filter((s) => s.org_id).map((s) => [s.org_id as string, s]),
-  );
-
-  // 3a. Ville de profil de l'usager dans un autre bureau (coords d'abord).
-  if (userId) {
-    try {
-      const { data } = await supabase
-        .from('team_members')
-        .select(PROFILE_COLS)
-        .eq('user_id', userId)
-        .neq('org_id', orgId)
-        .not('city', 'is', null)
-        .limit(50);
-      const profiles = ((data as ProfileRow[] | null) || []).filter((p) => String(p.city || '').trim());
-      profiles.sort((a, b) => Number(hasCoords(b)) - Number(hasCoords(a)));
-      for (const p of profiles) {
-        const loc = await resolveLocation(p, (p.org_id && settingsByOrg.get(p.org_id)) || null);
-        if (loc) return loc;
-      }
-    } catch { /* pas de fiche ailleurs */ }
-  }
-
-  // 3b. Adresse d'un bureau frère (coords d'abord, puis ville, puis rue).
-  const candidates = siblingSettings.filter(
-    (s) => hasCoords(s) || String(s.city || '').trim() || String(s.street1 || '').trim(),
-  );
-  candidates.sort((a, b) => Number(hasCoords(b)) - Number(hasCoords(a)));
-  for (const s of candidates) {
-    const loc = await resolveLocation(null, s);
-    if (loc) return loc;
-  }
-  return null;
-}
 
 /**
  * Fetch the hourly forecast for the org's city. Returns the current hour plus
