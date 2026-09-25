@@ -1,7 +1,7 @@
 // Achat = client dédié (clé Restricted `TWILIO_PROVISIONING_API_KEY_*` si
 // définie, sinon le client principal) — voir config.ts.
 import { twilioProvisioningClient as twilioClient, getTwilioWebhookBaseUrl } from './config';
-import { getServiceClient } from './supabase';
+import { companyOrgIds, getServiceClient } from './supabase';
 import { logger } from './logger';
 
 /**
@@ -549,10 +549,13 @@ export async function orgPlanIncludesSms(orgId: string): Promise<boolean> {
   // `scheduled_plan_id` does), so a PostgREST embed like `plans(includes_sms)`
   // silently resolves to null and would deny every paying org. Read the ids and
   // resolve the plans in a second query instead.
+  // Le forfait vit sur UN bureau du groupe (comme pour le paywall) : un bureau
+  // frère (ex. Vision Lavage) se voyait refuser les SMS « forfait sans SMS ».
+  const bureaux = await companyOrgIds(serviceClient, orgId);
   const { data: subs, error: subErr } = await serviceClient
     .from('subscriptions')
     .select('plan_id')
-    .eq('org_id', orgId)
+    .in('org_id', bureaux)
     .in('status', ['active', 'trialing']);
 
   if (subErr) {

@@ -7,9 +7,15 @@ import { setSentryRequestOrg } from './sentry';
 
 let adminClientCache: SupabaseClient | null = null;
 
-export function buildSupabaseWithAuth(authorizationHeader: string) {
+/**
+ * Client à l'identité de l'utilisateur. `bureau` : le bureau actif, transmis à
+ * PostgREST dans l'en-tête `x-lume-org` que lit current_org_id() — sans lui,
+ * les RPC qui s'en servent (création de job, de facture…) retombaient sur le
+ * PLUS ANCIEN bureau de l'utilisateur, pas sur celui qu'il a sélectionné.
+ */
+export function buildSupabaseWithAuth(authorizationHeader: string, bureau?: string | null) {
   return createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authorizationHeader } },
+    global: { headers: { Authorization: authorizationHeader, ...(bureau ? { 'x-lume-org': bureau } : {}) } },
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
@@ -172,7 +178,8 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
   // l'alerte Sentry ne dit pas chez quel client ça a planté. No-op sans DSN.
   setSentryRequestOrg(orgId, user.id);
 
-  return { client, orgId, user };
+  // Le client rendu porte le bureau résolu : current_org_id() côté base = le bureau de la requête.
+  return { client: buildSupabaseWithAuth(authorizationHeader, orgId), orgId, user };
 }
 
 export async function isOrgMember(client: SupabaseClient, userId: string, orgId: string) {
