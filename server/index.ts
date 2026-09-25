@@ -33,6 +33,7 @@ import paymentsRouter, { stripeWebhookHandler } from './routes/payments';
 import { emailWebhookHandler } from './routes/webhooks-email';
 import { sesWebhookHandler } from './routes/webhooks-ses';
 import { slackWebhookHandler } from './routes/webhooks-slack';
+import webhooksEntrantsRouter from './routes/webhooks-entrants';
 import messagesRouter from './routes/messages';
 import quotesRouter, { quoteRedirectRouter } from './routes/quotes';
 import invoicesPublicRouter from './routes/invoices-public';
@@ -356,6 +357,15 @@ app.post('/api/webhooks/email', express.raw({ type: 'application/json', limit: '
 app.post('/api/webhooks/ses', express.raw({ type: ['application/json', 'text/plain'], limit: '1mb' }), sesWebhookHandler);
 // Slack (support humain) : signature sur le corps brut, comme les deux précédents.
 app.post('/api/webhooks/slack', express.raw({ type: 'application/json', limit: '1mb' }), slackWebhookHandler);
+
+/*
+ * Webhooks ENTRANTS des clients (formulaire de site, Zapier, Facebook
+ * Leads). Monté ICI, avant `express.json()`, parce que la route lit le
+ * corps en brut : elle refuse sur la TAILLE avant de payer l'analyse, et
+ * rend un message clair sur un JSON invalide plutôt que l'erreur
+ * générique du middleware.
+ */
+app.use('/api', webhooksEntrantsRouter);
 
 // ── Global body parsing (after stripe webhook raw route) ──
 // L'audio du micro (POST /api/agent/transcribe) arrive en base64 : jusqu'à

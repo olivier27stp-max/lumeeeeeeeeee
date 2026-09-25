@@ -88,6 +88,15 @@ export type CRMEventType =
    * écriture : une date se corrige, un client se supprime, et une règle
    * peut être créée après la saisie. Un balayage voit l'état réel du jour.
    */
+  /**
+   * Un service EXTÉRIEUR a appelé le webhook entrant de l'entreprise
+   * (formulaire du site, Zapier, Facebook Leads, fournisseur d'appels).
+   *
+   * `metadata.corps` porte le JSON reçu tel quel : les conditions d'une
+   * automatisation peuvent s'en servir (`corps.source = "facebook"`).
+   * `entityId` est l'id du webhook — il n'y a pas d'entité CRM derrière.
+   */
+  | 'webhook.received'
   | 'date.reached';
 
 export interface CRMEvent {
@@ -139,6 +148,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'task.completed': 'task_completed',
   'note.added': 'note_added',
   'date.reached': 'date_reached',
+  'webhook.received': 'webhook_received',
 };
 
 // ── Bus singleton ───────────────────────────────────────────────

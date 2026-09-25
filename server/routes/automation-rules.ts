@@ -602,4 +602,105 @@ router.post('/automations/rules/:id/copier-bureaux', validate(automationCopieBur
   }
 });
 
+// ── Webhooks entrants ───────────────────────────
+
+/*
+ * L'adresse que l'entreprise donne à un service extérieur (formulaire de
+ * son site, Zapier, Facebook Leads). La Réception elle-même est publique
+ * et vit dans `routes/webhooks-entrants.ts` ; ici, c'est la GESTION, qui
+ * demande d'être connecté et d'avoir le droit sur les automatisations.
+ *
+ * On passe par le client de l'utilisateur, jamais service_role : la RLS
+ * reste la garde de fond, comme pour les règles.
+ */
+
+router.get('/automations/webhooks', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const { data, error } = await auth.client
+    .from('automation_webhooks')
+    .select('id, name, api_key, enabled, created_at')
+    .eq('org_id', auth.orgId)
+    .is('deleted_at', null)
+    .order('created_at');
+
+  if (error) {
+    logger.error('[automation-rules] webhooks illisibles', { message: error.message });
+    return res.status(500).json({ error: 'Impossible de lire vos adresses d’appel.' });
+  }
+  return res.json({ webhooks: data ?? [] });
+});
+
+router.post('/automations/webhooks', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const nom = typeof req.body?.name === 'string' && req.body.name.trim()
+    ? req.body.name.trim().slice(0, 80)
+    : 'Webhook';
+
+  // `api_key` n'est PAS fourni : la base la génère (32 octets aléatoires).
+  // Laisser le client proposer sa clé permettrait d'en choisir une faible.
+  const { data, error } = await auth.client
+    .from('automation_webhooks')
+    .insert({ org_id: auth.orgId, created_by: auth.user.id, name: nom })
+    .select('id, name, api_key, enabled, created_at')
+    .single();
+
+  if (error) {
+    if (error.code === '42501') {
+      return res.status(403).json({ error: 'Votre rôle ne permet pas de créer une adresse d’appel.' });
+    }
+    logger.error('[automation-rules] création webhook échouée', { message: error.message, code: error.code });
+    return res.status(500).json({ error: 'Impossible de créer l’adresse d’appel.' });
+  }
+  return res.status(201).json(data);
+});
+
+router.patch('/automations/webhooks/:id', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const patch: Record<string, unknown> = {};
+  if (typeof req.body?.enabled === 'boolean') patch.enabled = req.body.enabled;
+  if (typeof req.body?.name === 'string' && req.body.name.trim()) patch.name = req.body.name.trim().slice(0, 80);
+  if (!Object.keys(patch).length) return res.status(400).json({ error: 'Rien à modifier.' });
+
+  const { data, error } = await auth.client
+    .from('automation_webhooks')
+    .update(patch)
+    .eq('id', req.params.id)
+    .eq('org_id', auth.orgId)
+    .is('deleted_at', null)
+    .select('id, name, api_key, enabled, created_at')
+    .maybeSingle();
+
+  if (error) {
+    logger.error('[automation-rules] modification webhook échouée', { message: error.message });
+    return res.status(500).json({ error: 'Impossible de modifier l’adresse d’appel.' });
+  }
+  if (!data) return res.status(404).json({ error: 'Adresse d’appel introuvable.' });
+  return res.json(data);
+});
+
+router.delete('/automations/webhooks/:id', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  // Effacement DOUX, comme partout : le journal des appels reçus garde son
+  // sens, et une suppression par erreur reste réparable.
+  const { error } = await auth.client
+    .from('automation_webhooks')
+    .update({ deleted_at: new Date().toISOString(), enabled: false })
+    .eq('id', req.params.id)
+    .eq('org_id', auth.orgId);
+
+  if (error) {
+    logger.error('[automation-rules] suppression webhook échouée', { message: error.message });
+    return res.status(500).json({ error: 'Impossible de supprimer l’adresse d’appel.' });
+  }
+  return res.json({ ok: true });
+});
+
 export default router;

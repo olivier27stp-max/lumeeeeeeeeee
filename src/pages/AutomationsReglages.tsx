@@ -19,6 +19,7 @@ import { Settings, Loader2, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import PermissionGate from '../components/PermissionGate';
+import AdressesDAppel from '../components/automations/AdressesDAppel';
 import { getAutomationLanguage } from '../lib/automationRulesApi';
 
 /** Une carte de réglage, avec son titre, son explication et son contenu. */
@@ -181,6 +182,15 @@ export default function AutomationsReglages() {
             </Carte>
 
             {/* Lumi */}
+            <Carte
+              titre={fr ? 'Adresses d’appel' : 'Incoming addresses'}
+              aide={fr
+                ? 'Laisser un service extérieur déclencher vos automatisations : le formulaire de votre site, Zapier, Facebook Leads (webhook). Créez une adresse, collez-la chez votre fournisseur, puis construisez une automatisation qui part de « Appel reçu de l’extérieur ».'
+                : 'Let an outside service trigger your automations: your website form, Zapier, Facebook Leads (webhook). Create an address, paste it at your provider, then build an automation starting from “Incoming webhook”.'}
+            >
+              <AdressesDAppel fr={fr} />
+            </Carte>
+
             <Carte
               titre={fr ? 'Lumi' : 'Workflow AI'}
               aide={fr
