@@ -137,6 +137,7 @@ const PLANS: Plan[] = [
       // déjà prête, consultable en tout temps pour maîtriser le CRM.
       { en: 'SOPs & training videos included', fr: 'Procédures (SOP) et vidéos de formation incluses' },
       { en: 'Dispatch map & live GPS', fr: 'Répartition sur carte et GPS en direct' },
+      { en: '2 offices included', fr: '2 bureaux inclus' },
       { en: 'Advanced roles, multi-team & availability', fr: 'Rôles avancés, multi-équipes et disponibilités' },
       { en: 'API, marketplace & premium support', fr: 'API, marketplace et soutien prioritaire' },
       { en: 'Free onboarding', fr: 'Intégration gratuite' },
@@ -203,6 +204,10 @@ const COMPARISON: CompareGroup[] = [
       { label: { en: 'Integrations marketplace', fr: 'Marketplace d\'intégrations' }, cells: [false, false, true] },
       { label: { en: 'Advanced roles & permissions', fr: 'Rôles et permissions avancés' }, cells: [false, false, true] },
       { label: { en: 'Multi-team management', fr: 'Gestion multi-équipes' }, cells: [false, false, true] },
+      // Le quota vient de BUREAUX_PAR_FORFAIT (server/lib/platformFeatures.ts) :
+      // 1 pour Minimum et Scale, 2 pour Autopilot. La plateforme peut en accorder
+      // davantage a un cas particulier, ce que cette grille n'annonce pas.
+      { label: { en: 'Offices included', fr: 'Bureaux inclus' }, cells: [{ en: '1', fr: '1' }, { en: '1', fr: '1' }, { en: '2', fr: '2' }] },
       { label: { en: 'Team availability management', fr: 'Gestion des disponibilités' }, cells: [false, false, true] },
     ],
   },
