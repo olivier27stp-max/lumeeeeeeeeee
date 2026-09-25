@@ -661,6 +661,18 @@ type BuildResult =
 
 /** Construit la rangée à insérer dans la table active. Exportée pour les tests
  *  (pure) : les contraintes NOT NULL de prod y sont encodées. */
+/** Jobber liste plusieurs assignés (« A and B », « A, B ») : premier nom reconnu dans l'équipe. */
+function resoudreAssigne(ctx: BuildContext, brut: string): string | null {
+  if (!brut || !ctx.staffIdBySource) return null;
+  const direct = ctx.staffIdBySource.get(refKey(brut));
+  if (direct) return direct;
+  for (const nom of brut.split(/\s+(?:and|et|&)\s+|\s*[,;]\s*/i)) {
+    const id = ctx.staffIdBySource.get(refKey(nom.trim()));
+    if (id) return id;
+  }
+  return null;
+}
+
 export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: BuildContext): BuildResult {
   const n = rec.normalized ?? {};
   const r = rec.relations ?? {};
@@ -905,7 +917,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         status: str(n.status) ? mapVisitStatus(str(n.status)) : (str(n.completed_date) ? 'completed' : 'scheduled'),
         notes: safeStr(n.notes) || null,
         timezone: 'America/Toronto', // aligné sur DEFAULT_TIMEZONE de scheduleApi
-        assigned_user: ctx.staffIdBySource?.get(refKey(str(n.assigned_to))) ?? null,
+        assigned_user: resoudreAssigne(ctx, str(n.assigned_to)),
         created_by: ctx.createdBy,
       },
     };

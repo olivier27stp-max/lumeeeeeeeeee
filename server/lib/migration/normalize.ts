@@ -167,16 +167,32 @@ export function parseDateFlexible(v: string, convention: DateConvention = 'mdy')
  * → ISO datetime. Date seule → 'T00:00:00' (convention « pas d'heure précise »
  * gérée en aval). Heures 'h:mm AM/PM' et 'HH:mm' supportées.
  */
+/** « 1:00PM - 2:30PM » → ['1:00PM', '2:30PM'] ; « 9:00 » → ['9:00', ''] ; « 0:00 » (durée) → ['', '']. */
+export function decouperPlageHoraire(v: string): [string, string] {
+  const s = (v || '').trim();
+  if (!s) return ['', ''];
+  const m = s.match(/^(\d{1,2}:\d{2}\s*(?:[AaPp][Mm])?)\s*[-–—]\s*(\d{1,2}:\d{2}\s*(?:[AaPp][Mm])?)$/);
+  if (m) return [m[1].trim(), m[2].trim()];
+  return [s, ''];
+}
+
 export function parseDateTimeFlexible(v: string, convention: DateConvention = 'mdy'): string | null {
   if (typeof v !== 'string') return null;
   const s = v.trim();
   if (!s) return null;
 
-  const iso = s.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  // « 2025-09-08 1:00PM » : la date ISO peut être suivie d'une heure 12 h (plage Jobber
+  // recomposée) — sans lire AM/PM, 1:00PM devenait 01:00.
+  const iso = s.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?/);
   if (iso) {
     const date = parseDateFlexible(iso[1], convention);
     if (!date) return null;
-    return `${date}T${pad2(Number(iso[2]))}:${iso[3]}:${iso[4] ?? '00'}`;
+    let h = Number(iso[2]);
+    const ampm = (iso[5] ?? '').toLowerCase();
+    if (ampm === 'pm' && h < 12) h += 12;
+    if (ampm === 'am' && h === 12) h = 0;
+    if (h > 23 || Number(iso[3]) > 59) return null;
+    return `${date}T${pad2(h)}:${iso[3]}:${iso[4] ?? '00'}`;
   }
 
   const withTime = s.match(/^(.*?)\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?$/);
@@ -589,11 +605,24 @@ export function normalizeRow(
     }
   }
 
-  // Visite : date + heures séparées → start_at/end_at.
+  // Visite : date + heures séparées → start_at/end_at. Jobber exporte une plage
+  // dans une seule colonne « Times » (« 1:00PM - 2:30PM ») : on la découpe, sinon
+  // toutes les visites tombaient à minuit (convention « pas d'heure précise »).
   if (entity === 'visit' && !normalized.start_at && typeof normalized.date === 'string') {
     const base = normalized.date as string;
-    const start = typeof row['start_time'] === 'string' ? row['start_time'] : '';
+    // Les valeurs mappées vivent dans `normalized` (clé = champ cible), pas dans `row`
+    // (clé = en-tête du fichier) : l'ancien `row['start_time']` ne trouvait jamais rien.
+    const brutStart = typeof normalized.start_time === 'string' ? normalized.start_time.trim() : '';
+    const brutEnd = typeof normalized.end_time === 'string' ? normalized.end_time.trim() : '';
+    const [start, finPlage] = decouperPlageHoraire(brutStart);
+    const end = brutEnd || finPlage;
     normalized.start_at = start ? parseDateTimeFlexible(`${base} ${start}`) ?? `${base}T00:00:00` : `${base}T00:00:00`;
+    if (end && !normalized.end_at) {
+      const endAt = parseDateTimeFlexible(`${base} ${end}`);
+      if (endAt) normalized.end_at = endAt;
+    }
+    if (start) normalized.start_time = start;
+    if (end) normalized.end_time = end;
   }
 
   if (Object.keys(unmapped).length > 0) normalized._unmapped = unmapped;
