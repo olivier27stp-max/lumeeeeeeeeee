@@ -5,7 +5,8 @@ db-diff.py — Compare le schéma Supabase PROD vs STAGING et rapporte toute dé
 Usage:  python3 scripts/db-diff.py        (ou: npm run db:diff)
 
 Prérequis: Docker démarré, et dans .env.local :
-  SUPABASE_DB_PASSWORD=...        (mot de passe Postgres, identique prod/staging)
+  SUPABASE_DB_PASSWORD=...        (mot de passe Postgres PROD)
+  SUPABASE_DB_URL=...             (connexion STAGING : son mot de passe diffère de la prod)
 
 Sort avec code 0 si identique, 1 si dérive détectée.
 Aucun delta assumé : les deux bases doivent être STRICTEMENT identiques (staging
@@ -35,13 +36,34 @@ IGNORED_DEFAULT_ACL = {
 }
 
 
-def env_password():
-    with open(os.path.join(ROOT, ".env.local")) as f:
+def env_value(name):
+    with open(os.path.join(ROOT, ".env.local"), encoding="utf-8") as f:
         for line in f:
-            if line.startswith("SUPABASE_DB_PASSWORD="):
+            if line.startswith(name + "="):
                 return line.split("=", 1)[1].strip().strip('"')
-    print("ERREUR: SUPABASE_DB_PASSWORD manquant dans .env.local", file=sys.stderr)
-    sys.exit(2)
+    return None
+
+
+def env_password():
+    """Mot de passe PROD (SUPABASE_DB_PASSWORD)."""
+    v = env_value("SUPABASE_DB_PASSWORD")
+    if not v:
+        print("ERREUR: SUPABASE_DB_PASSWORD manquant dans .env.local", file=sys.stderr)
+        sys.exit(2)
+    return v
+
+
+def env_password_staging(defaut):
+    """Les mots de passe prod et staging DIFFÈRENT (depuis le 2026-09-25) : celui du
+    staging vient de SUPABASE_DB_URL (chaîne de connexion staging), sinon
+    SUPABASE_DB_PASSWORD_STAGING, sinon le mot de passe prod (ancien comportement)."""
+    url = env_value("SUPABASE_DB_URL")
+    if url and STAGING["ref"] in url:
+        from urllib.parse import urlsplit, unquote
+        mdp = urlsplit(url).password
+        if mdp:
+            return unquote(mdp)
+    return env_value("SUPABASE_DB_PASSWORD_STAGING") or defaut
 
 
 def dump(target, password, out_path):
@@ -93,7 +115,7 @@ def main():
         print("Dump de la prod…")
         dump(PROD, password, p_path)
         print("Dump du staging…")
-        dump(STAGING, password, s_path)
+        dump(STAGING, env_password_staging(password), s_path)
         prod, stag = parse(p_path), parse(s_path)
 
     only_prod = sorted(set(prod) - set(stag))
