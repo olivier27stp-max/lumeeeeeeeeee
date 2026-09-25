@@ -25,14 +25,14 @@ const matrice = {
 };
 
 const getOfficeAccess = vi.fn(async () => matrice);
-const setOfficeAccess = vi.fn(async () => undefined);
-const confirmer = vi.fn(async () => true);
+const setOfficeAccess = vi.fn(async (..._args: unknown[]) => undefined);
+const confirmer = vi.fn(async (_options?: unknown) => true);
 
 vi.mock('../src/lib/officesApi', () => ({
   getOfficeAccess: () => getOfficeAccess(),
-  setOfficeAccess: (...a: unknown[]) => setOfficeAccess(...(a as [])),
+  setOfficeAccess: (...a: unknown[]) => setOfficeAccess(...a),
 }));
-vi.mock('../src/components/ui/ConfirmDialog', () => ({ confirmer: (o: unknown) => confirmer(o as never) }));
+vi.mock('../src/components/ui/ConfirmDialog', () => ({ confirmer: (o: unknown) => confirmer(o) }));
 vi.mock('../src/i18n', () => ({ useTranslation: () => ({ language: 'fr', t: {} }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
