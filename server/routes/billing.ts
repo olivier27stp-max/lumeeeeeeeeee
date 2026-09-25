@@ -1625,6 +1625,14 @@ router.post('/billing/create-checkout-session', async (req, res) => {
 
     if (!email) return res.status(400).json({ error: 'Email is required.' });
 
+    // Cette page ne vend que le mensuel et l'annuel. Toute autre valeur
+    // (ex. ?interval=quarterly) tombait en silence sur le prix MENSUEL : le
+    // client croyait acheter autre chose. Le trimestriel se vend par lien de
+    // paiement Stripe (webhook : metaDepuisPrixPaye). Absent = mensuel, comme avant.
+    if (interval != null && interval !== 'monthly' && interval !== 'yearly') {
+      return res.status(400).json({ error: 'Interval not offered on this page.', code: 'INTERVAL_NOT_OFFERED' });
+    }
+
     // ── Plan annuel en 3 versements ──
     // Un prix Stripe récurrent « tous les 4 mois » au tiers du prix annuel.
     // Le client s'engage pour 12 mois (3 versements) : l'engagement est suivi

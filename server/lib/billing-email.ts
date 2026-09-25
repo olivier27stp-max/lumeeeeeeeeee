@@ -12,6 +12,7 @@ import { sendEmail, isMailerConfigured } from './mailer';
 import { renderPaymentReceiptEmail, sujetRecuAbonnement, type ReceiptTemplateData } from './email-templates/payment-receipt';
 import { montant, dateLisible } from './courriels/gabarit';
 import { logger } from './logger';
+import { intervalleLu, libelleFacturation, prixCatalogue, type IntervalleAbonnement } from './abonnement-intervalle';
 
 export interface SendReceiptParams {
   orgId: string;
@@ -19,7 +20,7 @@ export interface SendReceiptParams {
   recipientEmail: string;
   companyName: string;
   planName: string;
-  interval: 'monthly' | 'yearly';
+  interval: IntervalleAbonnement;
   amountCents: number;
   currency: string;
   taxes: number | null; // cents
@@ -87,7 +88,7 @@ export async function sendPaymentReceipt(params: SendReceiptParams): Promise<{
     const templateData: ReceiptTemplateData = {
       companyName: params.companyName || 'ton entreprise',
       planName: params.planName,
-      billingPeriod: params.interval === 'yearly' ? 'Annuel' : 'Mensuel',
+      billingPeriod: libelleFacturation(intervalleLu(params.interval)),
       amountPaid: montant(subtotal, devise, 'fr'),
       currency: devise,
       taxes: params.taxes ? montant(params.taxes, devise, 'fr') : null,
@@ -189,7 +190,7 @@ export async function resendPaymentReceipt(subscriptionId: string): Promise<{
     recipientEmail: email,
     companyName: bp?.company_name || '',
     planName: sub.plans?.name || 'Unknown',
-    interval: sub.interval || 'monthly',
+    interval: intervalleLu(sub.interval),
     // Un abonnement posé à la main (amount_cents = 0) enverrait un reçu à
     // 0 $ (audit QA 2026-09-09, P2) : on retombe sur le prix du plan.
     amountCents: sub.amount_cents || prixDuPlan(sub.plans, sub.interval, sub.currency) || 0,
@@ -240,10 +241,5 @@ async function insertReceiptLog(
 
 /** Prix catalogue du plan pour l'intervalle et la devise de l'abonnement, en cents. */
 export function prixDuPlan(plan: any, interval: string | null | undefined, currency: string | null | undefined): number {
-  if (!plan) return 0;
-  const annuel = (interval || 'monthly') === 'yearly';
-  const usd = String(currency || 'CAD').toUpperCase() === 'USD';
-  const cle = `${annuel ? 'yearly' : 'monthly'}_price_${usd ? 'usd' : 'cad'}`;
-  const v = Number(plan[cle]);
-  return Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
+  return prixCatalogue(plan, intervalleLu(interval), currency);
 }

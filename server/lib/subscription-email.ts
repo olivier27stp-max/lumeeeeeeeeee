@@ -22,6 +22,7 @@ import { getServiceClient } from './supabase';
 import { sendEmail, isMailerConfigured } from './mailer';
 import { emailFrom, supportEmail } from './config';
 import { rendreCourrielLume, echapper, montant, dateLisible, type LigneDetail } from './courriels/gabarit';
+import { intervalleLu, libellePeriode, type IntervalleAbonnement } from './abonnement-intervalle';
 
 /** Un courriel prêt à partir : le sujet et le HTML naissent au même endroit. */
 export interface CourrielPret { sujet: string; html: string }
@@ -165,10 +166,10 @@ export function courrielForfaitModifie(params: {
   planName: string;
   amountCents: number;
   currency: string;
-  interval: 'monthly' | 'yearly';
+  interval: IntervalleAbonnement;
   periodEnd: string | null;
 }): CourrielPret {
-  const periode = params.interval === 'yearly' ? 'an' : 'mois';
+  const periode = libellePeriode(intervalleLu(params.interval));
   const prochain = formatDate(params.periodEnd);
   const prix = `${formatMoney(params.amountCents, params.currency)} / ${periode}`;
   const lignes: LigneDetail[] = [
@@ -200,7 +201,7 @@ export async function sendPlanChangedEmail(params: {
   planName: string;
   amountCents: number;
   currency: string;
-  interval: 'monthly' | 'yearly';
+  interval: IntervalleAbonnement;
   periodEnd: string | null;
 }): Promise<{ sent: boolean; skipped: boolean; error?: string }> {
   const courriel = courrielForfaitModifie(params);

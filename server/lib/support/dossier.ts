@@ -11,6 +11,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../logger';
+import { intervalleLu, libelleFacturation } from '../abonnement-intervalle';
 
 export const STATUTS_MIGRATION_EN_MOTS: Record<string, string> = {
   draft: 'créée, en attente de votre lien de portail',
@@ -119,7 +120,7 @@ export async function dossierClient(admin: Admin, orgId: string, userId: string 
   const s = sub as { status?: string; interval?: string | null; current_period_end?: string | null; cancel_at_period_end?: boolean | null; plans?: { name?: string; slug?: string } | Array<{ name?: string; slug?: string }> | null } | null;
   if (s) {
     const plan = Array.isArray(s.plans) ? s.plans[0] : s.plans;
-    L.push(`Abonnement : forfait ${plan?.name ?? plan?.slug ?? '?'}, statut ${s.status ?? '?'}${s.interval ? `, ${s.interval === 'yearly' || s.interval === 'annual' ? 'annuel' : 'mensuel'}` : ''}${s.current_period_end ? `, période en cours jusqu'au ${dateCourte(s.current_period_end)}` : ''}${s.cancel_at_period_end ? ' — ANNULATION prévue à la fin de la période' : ''}.`);
+    L.push(`Abonnement : forfait ${plan?.name ?? plan?.slug ?? '?'}, statut ${s.status ?? '?'}${s.interval ? `, ${libelleFacturation(intervalleLu(s.interval)).toLowerCase()}` : ''}${s.current_period_end ? `, période en cours jusqu'au ${dateCourte(s.current_period_end)}` : ''}${s.cancel_at_period_end ? ' — ANNULATION prévue à la fin de la période' : ''}.`);
   } else L.push('Abonnement : aucun abonnement trouvé (compte sans forfait actif).');
   const r = reglages as { setup_completed?: boolean | null; timezone?: string | null; default_language?: string | null; industry?: string | null; city?: string | null; google_review_url?: string | null; review_enabled?: boolean | null } | null;
   if (r) L.push(`Réglages : configuration initiale ${r.setup_completed ? 'terminée' : 'PAS terminée'}${r.industry ? `, industrie ${r.industry}` : ''}${r.city ? `, ${r.city}` : ''}${r.timezone ? `, fuseau ${r.timezone}` : ''}, langue ${r.default_language ?? 'fr'} ; avis Google ${r.google_review_url ? 'configurés' : 'non configurés'}${r.review_enabled === false ? ' (désactivés)' : ''}.`);
