@@ -86,6 +86,50 @@ export const OFFICE_QUOTA_KEY = 'office_quota';
 export const DEFAULT_OFFICE_QUOTA = 1;
 export const MAX_OFFICE_QUOTA = 50;
 
+/**
+ * Bureaux inclus dans chaque forfait.
+ *
+ * Les bureaux avaient été retirés des forfaits (migration 20260917000000) :
+ * tout le monde à 1, et seule la plateforme pouvait en accorder plus. En
+ * pratique Autopilot, qui vend la « gestion multi-équipes », butait sur un
+ * seul bureau — il a fallu poser des lignes `org_features` à la main pour
+ * deux organisations le 2026-09-25. Autopilot en inclut donc 2.
+ *
+ * Ce n'est PAS le retour de l'ancien système : la plateforme garde le dernier
+ * mot (voir `quotaEffectifBureaux`), et un forfait ne fait qu'établir un
+ * plancher.
+ */
+export const BUREAUX_PAR_FORFAIT: Readonly<Record<string, number>> = {
+  starter: 1,
+  pro: 1,
+  autopilot: 2,
+};
+
+/** Bureaux inclus par le forfait d'une organisation. 1 si le forfait est inconnu. */
+export function quotaBureauxDuForfait(plan: { slug?: string | null } | null | undefined): number {
+  const slug = plan?.slug;
+  if (typeof slug !== 'string') return DEFAULT_OFFICE_QUOTA;
+  const n = BUREAUX_PAR_FORFAIT[slug];
+  return Number.isInteger(n) && n > 0 ? Math.min(n, MAX_OFFICE_QUOTA) : DEFAULT_OFFICE_QUOTA;
+}
+
+/**
+ * Le quota qui fait foi : le PLUS GRAND entre le forfait et ce que la
+ * plateforme a accordé.
+ *
+ * Prendre le plus grand, et non le quota du forfait seul, est délibéré :
+ * deux organisations ont déjà un quota plateforme de 2, dont une sans aucun
+ * abonnement. Aligner sur le forfait leur retirerait un bureau déjà créé —
+ * on ne retire jamais une capacité en service. Inversement, une exception
+ * accordée à un cas particulier continue de l'emporter sur son forfait.
+ */
+export function quotaEffectifBureaux(
+  plan: { slug?: string | null } | null | undefined,
+  rowsOrgFeatures: Array<{ feature: string; enabled?: boolean; metadata: unknown }> | null | undefined,
+): number {
+  return Math.max(quotaBureauxDuForfait(plan), resolveOfficeQuota(rowsOrgFeatures));
+}
+
 /** Quota effectif d'une compagnie à partir de ses lignes org_features
  *  (n'importe quel bureau du groupe) : le plus grand quota plateforme, sinon 1. */
 export function resolveOfficeQuota(rows: Array<{ feature: string; enabled?: boolean; metadata: unknown }> | null | undefined): number {

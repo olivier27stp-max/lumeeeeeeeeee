@@ -120,10 +120,14 @@ describe('Creator Space — fonctionnalités par workspace (creator-space-featur
     expect(featuresSrc).toContain(".eq('metadata->>platform_override', 'true')");
   });
 
-  it("les bureaux ne sont plus vendus par forfait : la capacité vient du quota plateforme, plus de /billing/offices", () => {
+  it("les bureaux ne s'achètent pas à l'unité : le forfait fait plancher, la plateforme a le dernier mot", () => {
+    // Le forfait est redevenu un PLANCHER le 2026-09-25 (Autopilot en inclut
+    // 2 : il vend la gestion multi-équipes et butait sur un seul bureau).
+    // Ce qui reste interdit, et que ce test protège : revendre des bureaux à
+    // l'unité (included_offices / extra_offices) et rouvrir /billing/offices.
     const orgsSrc = read('server/routes/orgs.ts');
     const guard = orgsSrc.slice(orgsSrc.indexOf('async function getOfficeCapacity'), orgsSrc.indexOf('async function callerRole'));
-    expect(guard).toContain('resolveOfficeQuota(');
+    expect(guard).toContain('quotaEffectifBureaux(');
     expect(guard).not.toMatch(/included_offices|extra_offices/);
     const billingSrc = read('server/routes/billing.ts');
     expect(billingSrc).not.toMatch(/router\.(get|post)\('\/billing\/offices'/);
