@@ -21,8 +21,14 @@ describe('useModuleAccess', () => {
   });
 });
 
-describe('page Champs personnalisés', () => {
-  it('un état inconnu n’affiche jamais « pas encore activée »', () => {
-    expect(lire('src/pages/settings/ChampsPersoSettings.tsx')).toContain('if (chargeDrapeau || indetermine) return null;');
+describe('champs personnalisés : actifs par défaut', () => {
+  it('seule une ligne enabled=false les cache (pas une lecture ratée, pas une ligne absente)', () => {
+    expect(lire('src/hooks/useModuleAccess.ts')).toContain("desactiveExplicitement: !!flag && flag.enabled === false && (flag.metadata as { absent?: boolean })?.absent !== true");
+    expect(lire('src/hooks/useChampsPersoActifs.ts')).toContain('return { isEnabled: !desactiveExplicitement };');
   });
+  it.each(['src/pages/settings/ChampsPersoSettings.tsx', 'src/pages/settings/SettingsLayout.tsx', 'src/components/champs/creation.tsx', 'src/components/champs/CustomFieldsPanel.tsx'])(
+    '%s passe par useChampsPersoActifs', (f) => {
+      expect(lire(f)).toContain('useChampsPersoActifs()');
+      expect(lire(f)).not.toContain("useModuleAccess('custom_fields_v2')");
+    });
 });
