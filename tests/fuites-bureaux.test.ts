@@ -34,7 +34,6 @@ describe('M1 — chaque onglet agit sur SON bureau', () => {
     'src/lib/orgApi.ts',            // bureauActifSync lui-même (repli de démarrage)
     'src/lib/supabase.ts',          // repli de démarrage de l'en-tête x-lume-org
     'src/contexts/CompanyContext.tsx', // restauration au chargement
-    'src/lib/officesApi.ts',        // TEMPORAIRE : converti dans la PR P1 de la session multi-bureaux
   ]);
   it('aucun autre fichier ne relit lume-active-org pour choisir le bureau', () => {
     const racine = resolve(__dirname, '..');
