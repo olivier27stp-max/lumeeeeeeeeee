@@ -1,5 +1,7 @@
 /**
- * Un canal Slack par entreprise cliente.
+ * Un canal Slack par entreprise cliente — par ENTREPRISE, pas par bureau :
+ * les bureaux d'une même entreprise (company_group) partagent leur canal
+ * (plan multi-bureaux, Q17). Chaque ticket garde le nom de son bureau.
  *
  * À la première escalade d'une entreprise, le bot crée `#client-<entreprise>`,
  * y invite les membres de #support, et y poste l'en-tête du ticket avec la
@@ -24,6 +26,7 @@ import {
   archiverCanalSlack, desarchiverCanalSlack, accuserLivraisonSlack,
 } from '../slack';
 import { ajouterMessage, type Ticket } from './tickets';
+import { companyOrgIds } from '../supabase';
 
 export interface CanalClient { org_id: string; channel_id: string; channel_name: string; last_seen_ts: string | null; archived_at?: string | null }
 
@@ -41,7 +44,13 @@ export function nomCanalPour(companyName: string): string {
 
 export async function canalClientExistant(admin: SupabaseClient, orgId: string): Promise<CanalClient | null> {
   const { data } = await admin.from('support_slack_channels').select('org_id, channel_id, channel_name, last_seen_ts, archived_at').eq('org_id', orgId).maybeSingle();
-  return (data as CanalClient) || null;
+  if (data) return data as CanalClient;
+  // Un bureau frère a peut-être déjà le canal de l'entreprise : on le réutilise.
+  const groupe = await companyOrgIds(admin, orgId);
+  if (groupe.length <= 1) return null;
+  const { data: frere } = await admin.from('support_slack_channels').select('org_id, channel_id, channel_name, last_seen_ts, archived_at')
+    .in('org_id', groupe).order('created_at', { ascending: true }).limit(1).maybeSingle();
+  return (frere as CanalClient) || null;
 }
 
 /** Un canal archivé (client inactif) revient dans la barre latérale dès qu'on doit y écrire. */
@@ -118,7 +127,8 @@ export async function archiverCanauxInactifs(admin: SupabaseClient, jours: numbe
   for (const c of (canaux || []) as CanalClient[]) {
     try {
       // Vivant = un ticket non fermé, ou n'importe quel message depuis moins de N jours.
-      const { data: vivant } = await admin.from('support_tickets').select('id').eq('org_id', c.org_id)
+      const groupe = await companyOrgIds(admin, c.org_id); // tous les bureaux de l'entreprise
+      const { data: vivant } = await admin.from('support_tickets').select('id').in('org_id', groupe)
         .or(`status.in.(ai,open,answered),last_message_at.gte.${limite}`).limit(1).maybeSingle();
       if (vivant) continue;
       await archiverCanalSlack(c.channel_id);
@@ -138,13 +148,16 @@ export async function archiverCanauxInactifs(admin: SupabaseClient, jours: numbe
  * (message proactif de l'équipe), adressé au dernier demandeur connu.
  */
 export async function ticketPourMessageCanal(admin: SupabaseClient, orgId: string, premiereLigne: string): Promise<Ticket | null> {
-  const { data: ouvert } = await admin.from('support_tickets').select('*').eq('org_id', orgId).in('status', ['open', 'answered']).order('last_message_at', { ascending: false }).limit(1).maybeSingle();
+  // Le canal est celui de l'ENTREPRISE : le dernier ticket ouvert de n'importe
+  // lequel de ses bureaux ; un ticket proactif part au bureau du dernier ticket.
+  const groupe = await companyOrgIds(admin, orgId);
+  const { data: ouvert } = await admin.from('support_tickets').select('*').in('org_id', groupe).in('status', ['open', 'answered']).order('last_message_at', { ascending: false }).limit(1).maybeSingle();
   if (ouvert) return ouvert as Ticket;
-  const { data: dernier } = await admin.from('support_tickets').select('*').eq('org_id', orgId).order('last_message_at', { ascending: false }).limit(1).maybeSingle();
+  const { data: dernier } = await admin.from('support_tickets').select('*').in('org_id', groupe).order('last_message_at', { ascending: false }).limit(1).maybeSingle();
   if (!dernier) return null; // jamais de ticket : on ne sait pas à qui écrire
   const d = dernier as Ticket;
   const { data: neuf, error } = await admin.from('support_tickets').insert({
-    org_id: orgId, user_id: d.user_id, subject: premiereLigne.slice(0, 120) || 'Message de l’équipe Lume', priority: d.priority, plan_slug: d.plan_slug, sla_key: d.sla_key,
+    org_id: d.org_id, user_id: d.user_id, subject: premiereLigne.slice(0, 120) || 'Message de l’équipe Lume', priority: d.priority, plan_slug: d.plan_slug, sla_key: d.sla_key,
     status: 'answered', company_name: d.company_name, user_email: d.user_email, user_name: d.user_name,
     slack_channel_id: d.slack_channel_id, escalated_at: new Date().toISOString(), escalation_reason: 'Message proactif de l’équipe (Slack)', source: 'app',
   }).select('*').single();

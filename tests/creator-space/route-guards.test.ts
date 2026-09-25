@@ -131,7 +131,11 @@ describe('Creator Space — fonctionnalités par workspace (creator-space-featur
 
   it('le tenant ne peut pas renverser un override plateforme (PUT /api/features)', () => {
     const tenantSrc = read('server/routes/feature-flags.ts');
-    expect(tenantSrc).toContain('isPlatformOverride(existing?.metadata)');
+    // Depuis le module d'entreprise : chaque bureau verrouillé est exclu, et
+    // le bureau affiché verrouillé refuse la requête entière.
+    expect(tenantSrc).toContain('isPlatformOverride(r.metadata)');
+    expect(tenantSrc).toContain('verrouilles.has(auth.orgId)');
+    expect(tenantSrc).toContain('.filter((org) => !verrouilles.has(org))');
     expect(tenantSrc).toContain('platform_locked: true');
   });
 });

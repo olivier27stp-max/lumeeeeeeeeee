@@ -12,8 +12,11 @@ const journal: Array<{ table: string; op: string; valeur?: unknown; filtres: unk
 let mappings: any[] = [];
 let ticketsOuverts: any[] = [];
 let derniersTickets: any[] = [];
+/** Entreprises à plusieurs bureaux : bureau → tous les bureaux de son entreprise. */
+let groupes: Record<string, string[]> = {};
 vi.mock('../../server/lib/supabase', () => ({
   getServiceClient: () => client,
+  companyOrgIds: async (_admin: unknown, org: string) => groupes[org] ?? [org],
 }));
 const client: any = {
   from: (table: string) => {
@@ -29,6 +32,7 @@ const client: any = {
     const reponse = () => {
       if (table === 'support_slack_channels' && req.op === 'select') {
         const org = (req.filtres as Array<[string, unknown]>).find(([c]) => c === 'org_id')?.[1];
+        if (Array.isArray(org)) return mappings.find((m) => org.includes(m.org_id)) || null;
         return org ? mappings.find((m) => m.org_id === org) || null : mappings;
       }
       if (table === 'support_slack_channels' && req.op === 'insert') { mappings.push(req.valeur); return req.valeur; }
@@ -67,7 +71,7 @@ vi.mock('../../server/lib/helpers', () => ({ resolvePublicBaseUrl: () => 'https:
 
 import { nomCanalPour, canalClient, ticketPourMessageCanal, messagesCanauxClients, archiverCanauxInactifs, joursAvantArchivage } from '../../server/lib/support/canaux-slack';
 
-beforeEach(() => { journal.length = 0; mappings = []; ticketsOuverts = []; derniersTickets = []; slack.crees = []; slack.invites = []; slack.sujets = []; slack.postes = []; slack.historique = []; slack.archives = []; slack.desarchives = []; });
+beforeEach(() => { journal.length = 0; mappings = []; groupes = {}; ticketsOuverts = []; derniersTickets = []; slack.crees = []; slack.invites = []; slack.sujets = []; slack.postes = []; slack.historique = []; slack.archives = []; slack.desarchives = []; });
 
 describe('archivage des canaux inactifs', () => {
   it('sans demande vivante depuis 7 jours → archivé et marqué ; avec une demande vivante → gardé', async () => {
@@ -83,7 +87,7 @@ describe('archivage des canaux inactifs', () => {
       if (table === 'support_tickets') {
         const req = journal.at(-1)!;
         o.or = () => o;
-        o.maybeSingle = async () => ({ data: req.filtres.some(([c, v]: any) => c === 'org_id' && v === 'org-actif') ? { id: 'vivant' } : null, error: null });
+        o.maybeSingle = async () => ({ data: req.filtres.some(([c, v]: any) => c === 'org_id' && (v === 'org-actif' || (Array.isArray(v) && v.includes('org-actif')))) ? { id: 'vivant' } : null, error: null });
       }
       return o;
     };
@@ -136,6 +140,15 @@ describe('canalClient', () => {
     expect(c.channel_id).toBe('C1');
     expect(slack.crees).toEqual([]);
   });
+
+  it('un bureau frère réutilise le canal de son ENTREPRISE, rien de recréé', async () => {
+    groupes = { orgQuebec: ['orgSherbrooke', 'orgQuebec'], orgSherbrooke: ['orgSherbrooke', 'orgQuebec'] };
+    mappings = [{ org_id: 'orgSherbrooke', channel_id: 'C_ENT', channel_name: 'client-lavage', last_seen_ts: null }];
+    const c = await canalClient(client, 'orgQuebec', 'Lavage Québec', 'Pro');
+    expect(c.channel_id).toBe('C_ENT');
+    expect(slack.crees).toEqual([]);
+    expect(mappings).toHaveLength(1);
+  });
 });
 
 describe('ticketPourMessageCanal', () => {
@@ -147,6 +160,14 @@ describe('ticketPourMessageCanal', () => {
     derniersTickets = [{ id: 't-vieux', org_id: 'org1', status: 'closed', user_id: 'u1', user_email: 'm@x.test', user_name: 'Marie', priority: 'normal', plan_slug: 'pro', sla_key: '1d', company_name: 'X', slack_channel_id: 'C1' }];
     const t = await ticketPourMessageCanal(client, 'org1', 'Bonjour Marie, petite question');
     expect(t).toMatchObject({ id: 'neuf', user_id: 'u1', status: 'answered', subject: 'Bonjour Marie, petite question', escalation_reason: 'Message proactif de l’équipe (Slack)' });
+  });
+  it('cherche le ticket dans TOUS les bureaux de l’entreprise ; un ticket proactif part au bureau du dernier ticket', async () => {
+    groupes = { orgSherbrooke: ['orgSherbrooke', 'orgQuebec'] };
+    derniersTickets = [{ id: 't-q', org_id: 'orgQuebec', status: 'closed', user_id: 'u2', priority: 'normal', company_name: 'Lavage Québec' }];
+    const t = await ticketPourMessageCanal(client, 'orgSherbrooke', 'Suivi');
+    const lectures = journal.filter((r) => r.table === 'support_tickets' && r.op === 'select');
+    expect(lectures.every((r) => (r.filtres as any[]).some(([c, v]) => c === 'org_id' && Array.isArray(v) && v.length === 2))).toBe(true);
+    expect(t).toMatchObject({ org_id: 'orgQuebec', user_id: 'u2' });
   });
   it('jamais de ticket → null (on ne sait pas à qui écrire)', async () => {
     expect(await ticketPourMessageCanal(client, 'org-inconnue', 'x')).toBeNull();
