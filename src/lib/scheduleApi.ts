@@ -28,6 +28,15 @@ export interface ScheduleJobRef {
   total_cents?: number | null;
   job_number?: string | null;
   tag_ids?: string[] | null;
+  /**
+   * Une facture VIVANTE existe déjà pour cette job.
+   *
+   * Sert au filtre « À facturer » du calendrier, qui retenait jusqu'ici
+   * TOUTE job terminée sans regarder si elle était déjà facturée : 647
+   * visites affichées en production pour 31 qui restaient vraiment à
+   * facturer — 95 % de bruit, donc un filtre qu'on cesse d'ouvrir.
+   */
+  deja_facturee?: boolean;
 }
 
 export interface ScheduleEventRecord {
@@ -127,6 +136,9 @@ function mapScheduleRow(row: any): ScheduleEventRecord {
           total_cents: row.job.total_cents == null ? null : Number(row.job.total_cents),
           job_number: row.job.job_number == null ? null : String(row.job.job_number),
           tag_ids: Array.isArray(row.job.tag_ids) ? row.job.tag_ids : null,
+          // Le mapper recopie champ par champ : sans cette ligne, le drapeau
+          // se perdrait entre la requête et l'écran.
+          deja_facturee: row.job.deja_facturee === true,
         }
       : null,
   };
@@ -196,6 +208,19 @@ export async function listScheduleEventsRange(params: {
       .in('id', jobIds);
     for (const j of jobs || []) {
       jobMap[j.id] = j;
+    }
+
+    // Quelles de ces jobs sont déjà facturées ? Une seule requête pour tout
+    // le lot : interroger facture par facture ferait une requête par visite
+    // affichée, et le calendrier en montre des centaines.
+    const { data: facturees } = await supabase
+      .from('invoices')
+      .select('job_id')
+      .in('job_id', jobIds)
+      .is('deleted_at', null);
+    const avecFacture = new Set((facturees || []).map((f: any) => f.job_id));
+    for (const id of Object.keys(jobMap)) {
+      jobMap[id].deja_facturee = avecFacture.has(id);
     }
   }
 

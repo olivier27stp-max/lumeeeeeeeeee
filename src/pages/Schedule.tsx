@@ -98,7 +98,22 @@ function computeOverlaps(events: ScheduleEventRecord[]) {
 type QF = 'all' | 'ending_30' | 'requires_invoicing' | 'needs_attention';
 const ns = (v: string | null | undefined) => String(v || '').trim().toLowerCase().replace(/\s+/g, '_');
 const isEnd30 = (e: ScheduleEventRecord, now: Date) => { const s = ns(e.job?.status || e.status); if (s === 'completed' || s === 'cancelled' || s === 'canceled') return false; const d = new Date(e.end_at); return !isNaN(d.getTime()) && d >= now && d <= addDays(now, 30); };
-const reqInv = (e: ScheduleEventRecord) => ns(e.job?.status || e.status) === 'completed';
+/**
+ * « À facturer » : une job TERMINÉE qui n'a pas encore de facture.
+ *
+ * Le second test manquait. Le filtre retenait toute job terminée, facturée
+ * ou non : 647 visites affichées en production pour 31 qui restaient
+ * vraiment à facturer — 95 % de bruit. Un filtre qui ment à ce point, on
+ * cesse de l'ouvrir, et les 11 599 $ de travail non facturé restent
+ * invisibles.
+ *
+ * `deja_facturee` est calculé côté données (une requête pour tout le lot).
+ * Absent — une vieille réponse en cache — il vaut `false` : on montre la
+ * visite plutôt que de la cacher. Mieux vaut une ligne en trop qu'une
+ * facture oubliée.
+ */
+const reqInv = (e: ScheduleEventRecord) =>
+  ns(e.job?.status || e.status) === 'completed' && e.job?.deja_facturee !== true;
 const needsAtt = (e: ScheduleEventRecord) => { const s = ns(e.job?.status || e.status); return s === 'blocked' || s === 'late' || s === 'action_required' || (!e.team_id && !e.job?.team_id) || !e.start_at || !e.end_at; };
 
 /* ════════════════════════════════════════════════════════════════
