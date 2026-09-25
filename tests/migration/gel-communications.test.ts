@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { cacheDelete } from '../../server/lib/cache';
+const viderCaches = () => { cacheDelete('gel-communications:orgs'); cacheDelete('gel-communications:contacts'); };
 import { destinataireGele, FEATURE_GEL } from '../../server/lib/migration/gel-communications';
 
 const root = resolve(__dirname, '../..');
@@ -15,7 +16,7 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 function fauxAdmin(gelees: string[], clients: Array<{ org_id: string; email: string | null; phone: string | null }>) {
   const chaine = (rows: any[]) => {
     const q: any = { rows };
-    for (const m of ['select', 'eq', 'is', 'in', 'limit', 'or', 'ilike']) q[m] = vi.fn(() => q);
+    for (const m of ['select', 'eq', 'is', 'in', 'limit', 'or', 'ilike', 'range', 'not']) q[m] = vi.fn(() => q);
     q.then = (res: any) => Promise.resolve({ data: rows, error: null }).then(res);
     return q;
   };
@@ -30,24 +31,24 @@ function fauxAdmin(gelees: string[], clients: Array<{ org_id: string; email: str
 
 describe('destinataireGele', () => {
   it('sans bureau gelé : rien n\'est bloqué et la table clients n\'est même pas lue', async () => {
-    cacheDelete('gel-communications:orgs');
+    viderCaches();
     const admin = fauxAdmin([], []);
     expect(await destinataireGele(admin, { email: 'a@b.ca' })).toBeNull();
     expect(admin.from).toHaveBeenCalledTimes(1); // org_features seulement
   });
   it('client d\'un bureau gelé : bloqué par courriel (insensible à la casse) et par téléphone (10 derniers chiffres)', async () => {
-    cacheDelete('gel-communications:orgs');
+    viderCaches();
     const admin = fauxAdmin(['org-gelee'], [{ org_id: 'org-gelee', email: 'Denise@Ex.ca', phone: '(819) 555-0101' }]);
     expect(await destinataireGele(admin, { email: 'denise@ex.ca' })).toBe('org-gelee');
     expect(await destinataireGele(admin, { phone: '+1 819-555-0101' })).toBe('org-gelee');
   });
   it('un destinataire qui n\'est pas client du bureau gelé (ex. le personnel) passe', async () => {
-    cacheDelete('gel-communications:orgs');
+    viderCaches();
     const admin = fauxAdmin(['org-gelee'], [{ org_id: 'org-gelee', email: 'client@ex.ca', phone: null }]);
     expect(await destinataireGele(admin, { email: 'employe@vision-lavage.ca' })).toBeNull();
   });
   it('un bureau connu et NON gelé n\'est jamais vérifié plus loin', async () => {
-    cacheDelete('gel-communications:orgs');
+    viderCaches();
     const admin = fauxAdmin(['autre-org'], [{ org_id: 'autre-org', email: 'x@y.ca', phone: null }]);
     expect(await destinataireGele(admin, { email: 'x@y.ca' }, 'org-libre')).toBeNull();
   });

@@ -49,6 +49,7 @@ export async function gelerCommunications(admin: SupabaseClient, orgId: string, 
     .upsert({ org_id: orgId, feature: FEATURE_GEL, enabled: true, metadata: { migration_id: migrationId, gele_le: new Date().toISOString(), active_le: null, active_par: null }, updated_at: new Date().toISOString() }, { onConflict: 'org_id,feature' });
   if (error) console.error('[gel-communications] gel impossible :', error.message);
   cacheDelete(CLE_CACHE);
+  cacheDelete(CLE_CACHE_CONTACTS);
 }
 
 /** « Activer le compte » : les communications repartent. */
@@ -59,31 +60,80 @@ export async function activerCommunications(admin: SupabaseClient, orgId: string
     .upsert({ org_id: orgId, feature: FEATURE_GEL, enabled: false, metadata: { migration_id: actuel.migration_id, gele_le: actuel.gele_le, active_le: new Date().toISOString(), active_par: activePar }, updated_at: new Date().toISOString() }, { onConflict: 'org_id,feature' });
   if (error) throw error;
   cacheDelete(CLE_CACHE);
+  cacheDelete(CLE_CACHE_CONTACTS);
 }
 
 export interface Destinataire { email?: string | null; phone?: string | null }
 
+interface ContactsOrg { emails: Set<string>; phones: Set<string> }
+const CLE_CACHE_CONTACTS = 'gel-communications:contacts';
+
+/** Derniers 10 chiffres de chaque numéro d'une cellule (« +1 (514) 555-1234 », « 514…;438… »). */
+function clesTelephone(brut: string | null | undefined): string[] {
+  return String(brut ?? '')
+    .split(/[;,/|]+/)
+    .map((x) => normalizeDigits(x).slice(-10))
+    .filter((d) => d.length >= 7);
+}
+
+/**
+ * Contacts (courriels et téléphones normalisés) des clients de chaque bureau gelé, en mémoire
+ * 20 s. Comparer en base avec `ilike '%5551234'` ratait un numéro stocké « (514) 555-1234 »
+ * ou « 514-555-1234 » — un tiers des fiches de Vision Lavage (2026-09-25) : la garde laissait
+ * passer les SMS automatisés vers ces clients pendant le gel. Ici, tout est normalisé des
+ * deux côtés (chiffres seuls, courriel en minuscules), y compris les numéros secondaires.
+ */
+async function contactsGeles(admin: SupabaseClient, gelees: Set<string>): Promise<Map<string, ContactsOrg>> {
+  return cached(CLE_CACHE_CONTACTS, TTL_S, async () => {
+    const index = new Map<string, ContactsOrg>();
+    for (const org of gelees) index.set(org, { emails: new Set(), phones: new Set() });
+    const orgs = Array.from(gelees);
+    const PAGE = 1000;
+    for (let from = 0; from < 50000; from += PAGE) {
+      type Ligne = { org_id: string; email: string | null; phone: string | null; phones?: unknown };
+      let res: { data: Ligne[] | null; error: { message: string } | null } = await admin.from('clients').select('org_id, email, phone, phones').in('org_id', orgs).is('deleted_at', null).range(from, from + PAGE - 1);
+      // Colonne `phones` (numéros secondaires) absente sur certains déploiements : on retombe sur `phone` seul.
+      if (res.error) res = await admin.from('clients').select('org_id, email, phone').in('org_id', orgs).is('deleted_at', null).range(from, from + PAGE - 1);
+      if (res.error) { console.error('[gel-communications] lecture des contacts impossible :', res.error.message); break; }
+      const rows: Ligne[] = res.data ?? [];
+      for (const c of rows) {
+        const cible = index.get(c.org_id);
+        if (!cible) continue;
+        const email = (c.email ?? '').trim().toLowerCase();
+        if (email) cible.emails.add(email);
+        for (const k of clesTelephone(c.phone)) cible.phones.add(k);
+        const secondaires = Array.isArray(c.phones) ? c.phones : [];
+        for (const p of secondaires) {
+          const valeur = typeof p === 'string' ? p : (p && typeof p === 'object' && 'number' in p ? String((p as { number?: unknown }).number ?? '') : '');
+          for (const k of clesTelephone(valeur)) cible.phones.add(k);
+        }
+      }
+      if (rows.length < PAGE) break;
+    }
+    return index;
+  });
+}
+
 /**
  * Le destinataire est-il un client d'un bureau gelé ? Renvoie l'org gelée, sinon null.
- * Coût nul tant qu'aucun bureau n'est gelé (cas normal) ; sinon une requête légère sur clients.
+ * Coût nul tant qu'aucun bureau n'est gelé (cas normal) ; sinon une lecture des contacts
+ * du bureau gelé, mise en cache 20 s.
  */
 export async function destinataireGele(admin: SupabaseClient, d: Destinataire, orgIdConnu?: string | null): Promise<string | null> {
   const gelees = await orgsGelees(admin);
   if (gelees.size === 0) return null;
-  const email = (d.email ?? '').trim().toLowerCase();
-  const digits = normalizeDigits(d.phone ?? '').slice(-10);
-  if (!email && digits.length < 7) return null;
-  // Un bureau connu et gelé : on vérifie que le destinataire est bien un de ses clients (pas le personnel).
-  const cibles = orgIdConnu && gelees.has(orgIdConnu) ? [orgIdConnu] : Array.from(gelees);
+  // Un bureau connu et NON gelé : jamais vérifié plus loin (le personnel, un autre bureau).
   if (orgIdConnu && !gelees.has(orgIdConnu)) return null;
-  let q = admin.from('clients').select('org_id, email, phone').in('org_id', cibles).is('deleted_at', null).limit(20);
-  q = email && digits.length >= 7 ? q.or(`email.ilike.${email},phone.ilike.%${digits.slice(-7)}`) : email ? q.ilike('email', email) : q.ilike('phone', `%${digits.slice(-7)}`);
-  const { data, error } = await q;
-  if (error) { console.error('[gel-communications] vérification impossible :', error.message); return null; }
-  for (const c of (data ?? []) as Array<{ org_id: string; email: string | null; phone: string | null }>) {
-    const okEmail = email && (c.email ?? '').trim().toLowerCase() === email;
-    const okPhone = digits.length >= 7 && normalizeDigits(c.phone ?? '').slice(-10) === digits;
-    if (okEmail || okPhone) return c.org_id;
+  const email = (d.email ?? '').trim().toLowerCase();
+  const telephones = clesTelephone(d.phone);
+  if (!email && telephones.length === 0) return null;
+  const index = await contactsGeles(admin, gelees);
+  const cibles = orgIdConnu ? [orgIdConnu] : Array.from(gelees);
+  for (const org of cibles) {
+    const contacts = index.get(org);
+    if (!contacts) continue;
+    if (email && contacts.emails.has(email)) return org;
+    if (telephones.some((t) => contacts.phones.has(t))) return org;
   }
   return null;
 }
