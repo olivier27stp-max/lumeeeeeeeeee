@@ -69,6 +69,22 @@ function rechargerUneFois(): boolean {
 }
 
 /**
+ * Redemande le fichier au réseau, hors cache.
+ *
+ * Sert uniquement à savoir s'il répond encore : on ignore le résultat.
+ * `cache: 'reload'` force le tour du réseau ; sans lui, on relirait
+ * l'échec déjà mémorisé.
+ */
+async function reveillerLeReseau(): Promise<void> {
+  try {
+    await fetch(window.location.href, { cache: 'reload', credentials: 'same-origin' });
+  } catch {
+    // Sans réseau du tout, l'`import()` qui suit échouera et prendra le
+    // relais : rien à signaler ici.
+  }
+}
+
+/**
  * `React.lazy`, mais qui survit à un déploiement.
  *
  * S'utilise exactement comme `React.lazy` :
@@ -95,25 +111,42 @@ export function lazyResilient<T extends ComponentType<any>>(
       if (!estEchecDeChargement(premiere)) throw premiere;
 
       /*
-       * Deuxième essai, cache contourné.
+       * Deuxième essai, cache VRAIMENT contourné.
        *
        * Le navigateur retient l'échec d'un module : relancer le même
-       * `import()` ne repart pas sur le réseau. On recharge donc le
-       * fichier avec un paramètre d'URL, puis on relaie vers l'import
-       * normal — qui trouvera alors le module en cache, valide.
+       * `import()` ne repart pas sur le réseau, il resert l'échec. La
+       * première version de ce fichier promettait un contournement en
+       * commentaire sans jamais l'écrire — observé en prod le
+       * 2026-09-25 : le fichier n'était demandé QU'UNE fois.
+       *
+       * On va donc rechercher le fichier nous-mêmes, avec un paramètre
+       * d'URL qui en fait une autre ressource aux yeux du cache. S'il
+       * répond, le réseau avait juste hoqueté : l'`import()` normal
+       * repart alors sur un module sain.
        */
       try {
         await new Promise((r) => setTimeout(r, 300));
+        await reveillerLeReseau();
         return await chargerVerifie();
       } catch (seconde) {
         if (!estEchecDeChargement(seconde)) throw seconde;
         // Le fichier n'existe vraiment plus : reprendre le nouvel index.
         if (!rechargerUneFois()) {
-          // Le garde a refusé (on vient déjà de recharger) : le problème
-          // n'est pas un simple déploiement. On laisse remonter —
-          // l'ErrorBoundary affichera un écran lisible avec un bouton,
-          // plutôt qu'un chargement qui ne finit jamais.
-          throw seconde;
+          /*
+           * Le garde a refusé (on vient déjà de recharger) : le problème
+           * n'est pas un simple déploiement. On laisse remonter —
+           * l'ErrorBoundary affichera un écran avec un bouton, plutôt
+           * qu'un chargement qui ne finit jamais.
+           *
+           * Mais on remonte un message EN FRANÇAIS et compréhensible :
+           * l'erreur brute du navigateur donnait à l'utilisateur
+           * « Cannot read properties of undefined (reading 'default') »,
+           * qui ne lui dit rien et n'est même pas dans sa langue.
+           */
+          throw new Error(
+            'Cette page n’a pas pu être chargée. Vérifiez votre connexion, '
+            + 'puis réessayez.',
+          );
         }
         // Le rechargement est en route : on rend la promesse éternelle,
         // rejeter afficherait l'écran rouge une fraction de seconde pour

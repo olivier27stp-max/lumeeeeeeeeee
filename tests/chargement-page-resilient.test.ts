@@ -153,26 +153,92 @@ describe('le spinner infini — défaut observé en prod le 2026-09-25', () => {
     expect(outil, 'rechargerUneFois doit signaler son refus')
       .toMatch(/function rechargerUneFois\(\): boolean/);
     expect(outil, 'un refus du garde doit rendre la main à l’ErrorBoundary')
-      .toMatch(/if \(!rechargerUneFois\(\)\) \{[\s\S]{0,400}?throw seconde;/);
+      .toMatch(/if \(!rechargerUneFois\(\)\) \{[\s\S]{0,900}?throw new Error\(/);
   });
 
-  it('un préchargement raté ne brûle PAS le budget de rechargement', () => {
+  it('AUCUN gestionnaire `vite:preloadError` — il cassait le rejet', () => {
     /*
-     * Le préchargement est une optimisation, pas un besoin : s'il échoue,
-     * il n'y a rien à réparer tout de suite. Recharger à sa place volait
-     * son unique rechargement à `lazyResilient`, qui en a besoin, lui,
-     * au moment où la page est vraiment demandée.
+     * Piège coûteux, payé deux fois en prod le 2026-09-25.
+     *
+     * Vite enveloppe chaque `import()` dans un helper qui émet cet
+     * événement quand le PRÉchargement échoue. Si un gestionnaire appelle
+     * `preventDefault()`, Vite tient l'erreur pour traitée et laisse la
+     * promesse se résoudre à `undefined` au lieu de rejeter.
+     *
+     * Conséquence mesurée : l'écran affichait
+     * « Cannot read properties of undefined (reading 'default') », en
+     * anglais, et `lazyResilient` n'était JAMAIS atteint — rien n'avait
+     * échoué de son point de vue, donc ni réessai ni rechargement.
+     *
+     * Sans gestionnaire, l'échec rejette normalement et `lazyResilient`
+     * fait son travail. Ce test empêche d'en réintroduire un.
      */
-    // On vise le GESTIONNAIRE, pas la première mention du nom : le
-    // commentaire au-dessus le cite aussi, et lire le commentaire à la
-    // place du code rendrait ce test aveugle au retour du défaut.
-    const i = main.indexOf("addEventListener('vite:preloadError'");
-    expect(i, 'le gestionnaire doit toujours exister').toBeGreaterThan(-1);
-    const bloc = main.slice(i, i + 300);
-    expect(bloc, 'le préchargement ne doit plus recharger la page')
-      .not.toMatch(/location\.reload\(\)/);
-    expect(bloc, 'ni poser la clé anti-boucle partagée')
-      .not.toMatch(/setItem/);
+    expect(main, 'un gestionnaire ici empêcherait lazyResilient de voir l’échec')
+      .not.toMatch(/addEventListener\(\s*'vite:preloadError'/);
+  });
+});
+
+describe('ce que l’utilisateur LIT quand ça échoue pour de bon', () => {
+  const outil = lire('src/lib/lazyResilient.ts');
+
+  it('le message est en français, pas l’erreur brute du navigateur', () => {
+    /*
+     * Observé en prod le 2026-09-25 : l'écran affichait
+     * « Cannot read properties of undefined (reading 'default') » —
+     * en anglais, et incompréhensible. Le mandat l'interdit :
+     * jamais d'erreur technique brute à l'utilisateur.
+     */
+    expect(outil).toMatch(/Cette page n’a pas pu être chargée/);
+  });
+
+  it('le deuxième essai repart VRAIMENT sur le réseau', () => {
+    /*
+     * Le commentaire promettait un contournement du cache que le code
+     * ne faisait pas : le navigateur reservait l'échec mémorisé et le
+     * fichier n'était demandé QU'UNE fois. Un réessai qui ne touche
+     * pas le réseau ne réessaie rien.
+     */
+    expect(outil, 'il faut forcer le tour du réseau')
+      .toMatch(/cache: 'reload'/);
+    expect(outil, 'et l’appeler avant le second import')
+      .toMatch(/await reveillerLeReseau\(\);\s*return await charger\(\);/);
+  });
+});
+
+describe('l’écran d’erreur parle français', () => {
+  const eb = lire('src/components/ErrorBoundary.tsx');
+  const main = lire('src/main.tsx');
+
+  it('le repli sans `labels` n’est plus l’anglais en dur', () => {
+    /*
+     * Les barrières de SECTION ne passent pas de `labels` : elles
+     * tombaient sur « Something went wrong », en anglais, au milieu
+     * d'une app entièrement en français. C'est l'écran que Rafba a vu
+     * le 2026-09-25.
+     */
+    expect(eb, 'le repli doit proposer le français')
+      .toMatch(/Une erreur est survenue/);
+    expect(eb, 'et choisir selon la langue enregistrée')
+      .toMatch(/lireLangueEnregistree\(\) === 'en'/);
+  });
+
+  it('la langue du NAVIGATEUR est ignorée, comme partout (#500)', () => {
+    /*
+     * #500 a tranché : français d'office, `navigator.language` ignoré.
+     * Ces deux écrans étaient restés en dehors de la décision — un
+     * client québécois dont le navigateur est en anglais basculait en
+     * anglais au pire moment.
+     */
+    // On retire les commentaires avant de chercher : ils CITENT
+    // `navigator.language` pour expliquer pourquoi on ne s'en sert plus,
+    // et un test qui lit les commentaires ne prouve rien.
+    const sansCommentaires = (src: string) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    for (const [nom, src] of [['ErrorBoundary', eb], ['main.tsx', main]] as const) {
+      expect(sansCommentaires(src), `${nom} ne doit pas déduire la langue du navigateur`)
+        .not.toMatch(/navigator\.language/);
+    }
   });
 
   it('le préchargement n’ANNULE pas l’erreur (sinon l’import rend undefined → « reading default »)', () => {

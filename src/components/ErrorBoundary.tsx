@@ -19,6 +19,20 @@ interface State {
   url?: string | null;
 }
 
+/**
+ * La langue choisie, ou le français à défaut (#500 : la langue du
+ * navigateur est délibérément ignorée). Une classe React ne peut pas
+ * consommer le contexte i18n, et cette barrière sert aussi au-dessus de
+ * `LanguageProvider`.
+ */
+function lireLangueEnregistree(): string {
+  try {
+    return localStorage.getItem('lume-language') || 'fr';
+  } catch {
+    return 'fr';
+  }
+}
+
 class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null, url: null };
 
@@ -73,11 +87,27 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      const title = this.props.labels?.title || 'Something went wrong';
+      /*
+       * Repli quand aucun `labels` n'est fourni — le cas des barrières de
+       * section, qui n'en passent pas. Il était en ANGLAIS en dur : un
+       * client québécois lisait « Something went wrong » au milieu d'une
+       * app entièrement en français. Observé en prod le 2026-09-25.
+       *
+       * Le français est la langue par défaut de Lume (#500) : le repli
+       * doit l'être aussi. Cette classe ne peut pas appeler `t()` — elle
+       * sert aussi au-dessus de `LanguageProvider` — d'où la lecture
+       * directe du choix enregistré.
+       */
+      const enAnglais = lireLangueEnregistree() === 'en';
+      const title = this.props.labels?.title
+        || (enAnglais ? 'Something went wrong' : 'Une erreur est survenue');
       const description =
-        this.props.labels?.description ||
-        'An unexpected error occurred while rendering this section.';
-      const tryAgain = this.props.labels?.tryAgain || 'Try Again';
+        this.props.labels?.description
+        || (enAnglais
+          ? 'An unexpected error occurred while rendering this section.'
+          : 'Une erreur inattendue s’est produite lors du rendu de cette section.');
+      const tryAgain = this.props.labels?.tryAgain
+        || (enAnglais ? 'Try Again' : 'Réessayer');
 
       return (
         <div className="flex items-center justify-center py-20 px-6">
