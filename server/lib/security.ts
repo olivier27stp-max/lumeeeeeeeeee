@@ -886,12 +886,26 @@ export function applySecurityMiddleware(app: any) {
   //    b) Par IP : le filet contre les inondations anonymes ou multi-comptes,
   //       relevé à un niveau qu'un bureau n'atteint pas par simple usage
   //       (150 requêtes par 3 s ≈ 20 chargements simultanés).
+  //    RELEVÉ LE 2026-09-25 : `burstMax: 40` bloquait la simple NAVIGATION.
+  //    À 7-8 appels par page, cinq changements de page en trois secondes
+  //    suffisaient — et on repartait pour soixante secondes de « Too many
+  //    requests » sur TOUTE l'application. C'est le rythme normal de
+  //    quelqu'un qui cherche quelque chose en cliquant dans le menu.
+  //
+  //    120 laisse passer quinze pages en trois secondes : au-delà, ce n'est
+  //    plus un humain qui clique. Le plafond de la fenêtre longue (400/min)
+  //    ne bouge PAS : c'est lui qui arrête un vrai martèlement, et il
+  //    correspond encore à cinquante chargements par minute.
+  //
+  //    Le blocage passe aussi de 60 à 20 secondes : une rafale brève ne
+  //    mérite pas une minute d'app morte, et la fenêtre longue reste là pour
+  //    ceux qui insistent.
   app.use(slidingRateLimit({
     windowMs: 60_000,
     max: 400,
-    burstMax: 40,
+    burstMax: 120,
     burstWindowMs: 3_000,
-    blockDurationMs: 60_000,
+    blockDurationMs: 20_000,
     keyFn: (req) => userKey(req),
     onBlock: (key, req) => {
       // Seule une clé anonyme est une IP ; on ne met jamais un identifiant
