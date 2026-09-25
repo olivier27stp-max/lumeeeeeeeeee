@@ -1165,6 +1165,30 @@ end $_$;
 
 
 --
+-- Name: appliquer_marque_entreprise_bureau(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.appliquer_marque_entreprise_bureau() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  g record;
+begin
+  if not new.suit_marque_entreprise then return new; end if;
+  if tg_op = 'UPDATE' and old.suit_marque_entreprise then return new; end if;
+  select cg.logo_url, cg.brand_color into g
+    from public.company_groups cg
+    join public.orgs o on o.company_group_id = cg.id
+   where o.id = new.org_id;
+  if g.logo_url is not null then new.logo_url := g.logo_url; end if;
+  if g.brand_color is not null then new.brand_color := g.brand_color; end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: appliquer_prefixe_document(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7918,6 +7942,72 @@ COMMENT ON FUNCTION public.export_user_data(p_user_id uuid) IS 'Loi 25 art. 27 /
 
 
 --
+-- Name: fermer_bureau(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fermer_bureau(p_org uuid, p_raison text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_groupe uuid;
+  v_membres uuid[];
+  v_regles uuid[];
+  v_recurrences uuid[];
+  v_factures uuid[];
+  v_rapports uuid[];
+  v_rappels boolean;
+  v_taches int;
+  v_details jsonb;
+begin
+  if v_uid is null or not public.has_org_role(v_uid, p_org, array['owner']) then
+    raise exception 'Seul un propriétaire peut fermer un bureau.' using errcode = '42501';
+  end if;
+  select company_group_id into v_groupe from public.orgs where id = p_org and archived_at is null and deleted_at is null;
+  if v_groupe is null then
+    raise exception 'Bureau introuvable ou déjà fermé.' using errcode = 'P0002';
+  end if;
+  if not exists (select 1 from public.orgs where company_group_id = v_groupe and id <> p_org and archived_at is null and deleted_at is null) then
+    raise exception 'C''est le dernier bureau actif de l''entreprise : il ne peut pas être fermé.' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.subscriptions where org_id = p_org and status in ('active', 'trialing', 'past_due')) then
+    raise exception 'Ce bureau porte l''abonnement de l''entreprise : contactez le support Lume pour le déplacer avant de le fermer.' using errcode = '22023';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('fermeture:' || p_org::text, 0));
+
+  select coalesce(array_agg(user_id), '{}') into v_membres from public.memberships
+   where org_id = p_org and role <> 'owner' and coalesce(status, 'active') = 'active';
+  update public.memberships set status = 'suspended' where org_id = p_org and user_id = any(v_membres);
+
+  select coalesce(array_agg(id), '{}') into v_regles from public.automation_rules where org_id = p_org and is_active;
+  update public.automation_rules set is_active = false where id = any(v_regles);
+  update public.automation_scheduled_tasks set status = 'cancelled' where org_id = p_org and status = 'pending';
+  get diagnostics v_taches = row_count;
+
+  select coalesce(array_agg(id), '{}') into v_recurrences from public.job_recurrence_rules where org_id = p_org and is_active;
+  update public.job_recurrence_rules set is_active = false where id = any(v_recurrences);
+  select coalesce(array_agg(id), '{}') into v_factures from public.recurring_invoice_schedules where org_id = p_org and is_active;
+  update public.recurring_invoice_schedules set is_active = false where id = any(v_factures);
+  select coalesce(array_agg(id), '{}') into v_rapports from public.scheduled_reports where org_id = p_org and enabled;
+  update public.scheduled_reports set enabled = false where id = any(v_rapports);
+  select coalesce(bool_or(enabled), false) into v_rappels from public.reminder_settings where org_id = p_org;
+  update public.reminder_settings set enabled = false where org_id = p_org and enabled;
+
+  v_details := jsonb_build_object(
+    'membres', to_jsonb(v_membres), 'regles', to_jsonb(v_regles), 'recurrences', to_jsonb(v_recurrences),
+    'factures_recurrentes', to_jsonb(v_factures), 'rapports', to_jsonb(v_rapports), 'rappels', v_rappels,
+    'taches_annulees', v_taches, 'raison', p_raison, 'ferme_le', now());
+  update public.orgs set archived_at = now(), archived_by = v_uid, fermeture_details = v_details where id = p_org;
+
+  return jsonb_build_object('membres_suspendus', cardinality(v_membres), 'automatisations', cardinality(v_regles),
+    'taches_annulees', v_taches, 'recurrences', cardinality(v_recurrences) + cardinality(v_factures));
+end;
+$$;
+
+
+--
 -- Name: field_compute_house_score(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -12123,6 +12213,36 @@ end; $$;
 
 
 --
+-- Name: propager_marque_entreprise(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.propager_marque_entreprise() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+begin
+  if new.logo_url is not distinct from old.logo_url and new.brand_color is not distinct from old.brand_color then
+    return new;
+  end if;
+  update public.company_settings cs
+     set logo_url = new.logo_url,
+         brand_color = new.brand_color,
+         updated_at = now()
+    from public.orgs o
+   where o.id = cs.org_id
+     and o.company_group_id = new.id
+     and cs.suit_marque_entreprise;
+  update public.orgs o
+     set logo_url = new.logo_url
+   where o.company_group_id = new.id
+     and exists (select 1 from public.company_settings cs where cs.org_id = o.id and cs.suit_marque_entreprise);
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+
+--
 -- Name: propager_proprietaires_bureaux(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -13054,6 +13174,50 @@ CREATE FUNCTION public.reverse_invoice_payment(p_invoice_id uuid, p_org_id uuid,
     updated_at = now()
   WHERE id = p_invoice_id AND org_id = p_org_id
   RETURNING id, paid_cents, balance_cents, status;
+$$;
+
+
+--
+-- Name: rouvrir_bureau(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.rouvrir_bureau(p_org uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  d jsonb;
+  v_membres int;
+begin
+  if v_uid is null or not public.has_org_role(v_uid, p_org, array['owner']) then
+    raise exception 'Seul un propriétaire peut rouvrir un bureau.' using errcode = '42501';
+  end if;
+  select fermeture_details into d from public.orgs where id = p_org and archived_at is not null;
+  if not found then
+    raise exception 'Ce bureau n''est pas fermé.' using errcode = '22023';
+  end if;
+  d := coalesce(d, '{}'::jsonb);
+
+  update public.memberships set status = 'active'
+   where org_id = p_org and status = 'suspended'
+     and user_id in (select (jsonb_array_elements_text(coalesce(d->'membres', '[]')))::uuid);
+  get diagnostics v_membres = row_count;
+  update public.automation_rules set is_active = true
+   where org_id = p_org and id in (select (jsonb_array_elements_text(coalesce(d->'regles', '[]')))::uuid);
+  update public.job_recurrence_rules set is_active = true
+   where org_id = p_org and id in (select (jsonb_array_elements_text(coalesce(d->'recurrences', '[]')))::uuid);
+  update public.recurring_invoice_schedules set is_active = true
+   where org_id = p_org and id in (select (jsonb_array_elements_text(coalesce(d->'factures_recurrentes', '[]')))::uuid);
+  update public.scheduled_reports set enabled = true
+   where org_id = p_org and id in (select (jsonb_array_elements_text(coalesce(d->'rapports', '[]')))::uuid);
+  if coalesce((d->>'rappels')::boolean, false) then
+    update public.reminder_settings set enabled = true where org_id = p_org;
+  end if;
+
+  update public.orgs set archived_at = null, archived_by = null, fermeture_details = null where id = p_org;
+  return jsonb_build_object('membres_reactives', v_membres);
+end;
 $$;
 
 
@@ -19730,7 +19894,11 @@ COMMENT ON TABLE public.communication_settings IS '[Messaging] Communication pre
 CREATE TABLE public.company_groups (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    logo_url text,
+    brand_color text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT company_groups_brand_color_format CHECK (((brand_color IS NULL) OR (brand_color ~ '^#[0-9a-fA-F]{6}$'::text)))
 );
 
 ALTER TABLE ONLY public.company_groups FORCE ROW LEVEL SECURITY;
@@ -19741,6 +19909,20 @@ ALTER TABLE ONLY public.company_groups FORCE ROW LEVEL SECURITY;
 --
 
 COMMENT ON TABLE public.company_groups IS 'Entreprise : regroupe les bureaux (orgs.company_group_id). Propriétaire des éléments d''entreprise.';
+
+
+--
+-- Name: COLUMN company_groups.logo_url; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.company_groups.logo_url IS 'Logo commun de l''entreprise, recopié dans les bureaux qui suivent la marque.';
+
+
+--
+-- Name: COLUMN company_groups.brand_color; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.company_groups.brand_color IS 'Couleur commune (#rrggbb), recopiée dans les bureaux qui suivent la marque.';
 
 
 --
@@ -19830,6 +20012,7 @@ CREATE TABLE public.company_settings (
     review_thank_you_message text,
     social_links jsonb DEFAULT '{}'::jsonb NOT NULL,
     prefixe_documents text,
+    suit_marque_entreprise boolean DEFAULT false NOT NULL,
     CONSTRAINT company_settings_brand_color_hex CHECK (((brand_color IS NULL) OR (brand_color ~ '^#[0-9A-Fa-f]{6}$'::text))),
     CONSTRAINT company_settings_city_len CHECK ((length(city) <= 200)),
     CONSTRAINT company_settings_company_name_len CHECK ((length(company_name) <= 200)),
@@ -19972,6 +20155,13 @@ COMMENT ON COLUMN public.company_settings.prefixe_documents IS 'Préfixe des num
 
 
 --
+-- Name: COLUMN company_settings.suit_marque_entreprise; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.company_settings.suit_marque_entreprise IS 'Vrai : ce bureau affiche le logo et la couleur de l''entreprise (company_groups), recopiés automatiquement.';
+
+
+--
 -- Name: connected_accounts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -20085,6 +20275,8 @@ CREATE TABLE public.conversations (
     status text DEFAULT 'active'::text,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
+    assigned_to uuid,
+    assigned_at timestamp with time zone,
     CONSTRAINT conversations_status_check CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))
 );
 
@@ -20096,6 +20288,13 @@ ALTER TABLE ONLY public.conversations FORCE ROW LEVEL SECURITY;
 --
 
 COMMENT ON TABLE public.conversations IS '[E] Comms — Message threads';
+
+
+--
+-- Name: COLUMN conversations.assigned_to; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.conversations.assigned_to IS 'Personne assignée (membre du bureau de la conversation) ; null = non assignée.';
 
 
 --
@@ -20244,7 +20443,10 @@ CREATE TABLE public.orgs (
     employee_count text,
     logo_url text,
     company_group_id uuid NOT NULL,
-    deleted_at timestamp with time zone
+    deleted_at timestamp with time zone,
+    archived_at timestamp with time zone,
+    archived_by uuid,
+    fermeture_details jsonb
 );
 
 ALTER TABLE ONLY public.orgs FORCE ROW LEVEL SECURITY;
@@ -20262,6 +20464,20 @@ COMMENT ON TABLE public.orgs IS '[A] Auth — Organizations';
 --
 
 COMMENT ON COLUMN public.orgs.deleted_at IS 'Effacement logique. Non nul = org retirée des listes et des comptages. orgs ne peut pas être supprimée physiquement (audit append-only + traces de sécurité) — voir la migration 20260807200000.';
+
+
+--
+-- Name: COLUMN orgs.archived_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.orgs.archived_at IS 'Bureau fermé (archivé) : masqué du sélecteur, données conservées. Voir fermer_bureau / rouvrir_bureau.';
+
+
+--
+-- Name: COLUMN orgs.fermeture_details; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.orgs.fermeture_details IS 'Ce que fermer_bureau a désactivé (pour que rouvrir_bureau le remette exactement).';
 
 
 --
@@ -25429,6 +25645,30 @@ COMMENT ON TABLE public.predefined_services IS '[Jobs] Catalogue produits/servic
 
 
 --
+-- Name: predefined_services_bureau; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.predefined_services_bureau (
+    service_id uuid NOT NULL,
+    org_id uuid NOT NULL,
+    prix_cents integer,
+    offert boolean DEFAULT true NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT predefined_services_bureau_prix_cents_check CHECK (((prix_cents IS NULL) OR (prix_cents >= 0)))
+);
+
+ALTER TABLE ONLY public.predefined_services_bureau FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: TABLE predefined_services_bureau; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.predefined_services_bureau IS 'Réglage local d''un service du catalogue d''entreprise dans UN bureau : prix propre (nul = prix de l''entreprise) et disponibilité.';
+
+
+--
 -- Name: processed_checkout_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -30148,6 +30388,14 @@ ALTER TABLE ONLY public.plans
 
 
 --
+-- Name: predefined_services_bureau predefined_services_bureau_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.predefined_services_bureau
+    ADD CONSTRAINT predefined_services_bureau_pkey PRIMARY KEY (service_id, org_id);
+
+
+--
 -- Name: predefined_services predefined_services_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -31019,6 +31267,13 @@ CREATE INDEX connected_accounts_org_id_idx ON public.connected_accounts USING bt
 --
 
 CREATE UNIQUE INDEX connected_accounts_org_id_uq ON public.connected_accounts USING btree (org_id) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: conversations_assigned_to_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX conversations_assigned_to_idx ON public.conversations USING btree (org_id, assigned_to) WHERE (assigned_to IS NOT NULL);
 
 
 --
@@ -35292,6 +35547,13 @@ COMMENT ON INDEX public.pipeline_stages_position_unique IS 'Unicité de position
 
 
 --
+-- Name: predefined_services_bureau_org_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX predefined_services_bureau_org_idx ON public.predefined_services_bureau USING btree (org_id);
+
+
+--
 -- Name: push_tokens_org_user_token_uq; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -36598,6 +36860,20 @@ CREATE TRIGGER trg_comm_messages_updated BEFORE UPDATE ON public.communication_m
 --
 
 CREATE TRIGGER trg_comm_settings_updated BEFORE UPDATE ON public.communication_settings FOR EACH ROW EXECUTE FUNCTION public.update_comm_updated_at();
+
+
+--
+-- Name: company_groups trg_company_groups_propager_marque; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_company_groups_propager_marque BEFORE UPDATE OF logo_url, brand_color ON public.company_groups FOR EACH ROW EXECUTE FUNCTION public.propager_marque_entreprise();
+
+
+--
+-- Name: company_settings trg_company_settings_suit_marque; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_company_settings_suit_marque BEFORE INSERT OR UPDATE OF suit_marque_entreprise ON public.company_settings FOR EACH ROW EXECUTE FUNCTION public.appliquer_marque_entreprise_bureau();
 
 
 --
@@ -38082,6 +38358,14 @@ ALTER TABLE ONLY public.consents
 
 ALTER TABLE ONLY public.contacts
     ADD CONSTRAINT contacts_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: conversations conversations_assigned_to_membre; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversations
+    ADD CONSTRAINT conversations_assigned_to_membre FOREIGN KEY (assigned_to, org_id) REFERENCES public.memberships(user_id, org_id) ON DELETE SET NULL (assigned_to);
 
 
 --
@@ -40930,6 +41214,22 @@ ALTER TABLE ONLY public.pipeline_vues
 
 ALTER TABLE ONLY public.pipelines_ventes
     ADD CONSTRAINT pipelines_ventes_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: predefined_services_bureau predefined_services_bureau_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.predefined_services_bureau
+    ADD CONSTRAINT predefined_services_bureau_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: predefined_services_bureau predefined_services_bureau_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.predefined_services_bureau
+    ADD CONSTRAINT predefined_services_bureau_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.predefined_services(id) ON DELETE CASCADE;
 
 
 --
@@ -43981,6 +44281,13 @@ CREATE POLICY bureau_actif ON public.pipeline_vues AS RESTRICTIVE TO authenticat
 --
 
 CREATE POLICY bureau_actif ON public.pipelines_ventes AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
+
+
+--
+-- Name: predefined_services_bureau bureau_actif; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY bureau_actif ON public.predefined_services_bureau AS RESTRICTIVE TO authenticated USING (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande)))) WITH CHECK (((( SELECT public.bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT public.bureau_actif_demande() AS bureau_actif_demande))));
 
 
 --
@@ -48651,6 +48958,26 @@ CREATE POLICY pop_org ON public.proof_of_presence USING ((org_id IN ( SELECT mem
 ALTER TABLE public.predefined_services ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: predefined_services_bureau; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.predefined_services_bureau ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: predefined_services_bureau predefined_services_bureau_ecriture; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY predefined_services_bureau_ecriture ON public.predefined_services_bureau TO authenticated USING (public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id)) WITH CHECK (public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id));
+
+
+--
+-- Name: predefined_services_bureau predefined_services_bureau_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY predefined_services_bureau_select ON public.predefined_services_bureau FOR SELECT TO authenticated USING (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
+
+
+--
 -- Name: predefined_services predefined_services_delete_company; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -50840,6 +51167,14 @@ GRANT ALL ON FUNCTION public.anonymize_lead(p_lead_id uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.anonymize_old_soft_deleted_clients(p_days integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.anonymize_old_soft_deleted_clients(p_days integer) TO service_role;
+
+
+--
+-- Name: FUNCTION appliquer_marque_entreprise_bureau(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.appliquer_marque_entreprise_bureau() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.appliquer_marque_entreprise_bureau() TO service_role;
 
 
 --
@@ -53130,6 +53465,15 @@ GRANT ALL ON FUNCTION public.export_user_data(p_user_id uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION fermer_bureau(p_org uuid, p_raison text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.fermer_bureau(p_org uuid, p_raison text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.fermer_bureau(p_org uuid, p_raison text) TO authenticated;
+GRANT ALL ON FUNCTION public.fermer_bureau(p_org uuid, p_raison text) TO service_role;
+
+
+--
 -- Name: FUNCTION field_compute_house_score(p_house_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -54077,6 +54421,14 @@ GRANT ALL ON FUNCTION public.prevent_paid_invoice_edit() TO service_role;
 
 
 --
+-- Name: FUNCTION propager_marque_entreprise(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.propager_marque_entreprise() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.propager_marque_entreprise() TO service_role;
+
+
+--
 -- Name: FUNCTION propager_proprietaires_bureaux(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -54320,6 +54672,15 @@ GRANT ALL ON FUNCTION public.restore_lead(p_org_id uuid, p_lead_id uuid) TO serv
 
 REVOKE ALL ON FUNCTION public.reverse_invoice_payment(p_invoice_id uuid, p_org_id uuid, p_amount_cents integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.reverse_invoice_payment(p_invoice_id uuid, p_org_id uuid, p_amount_cents integer) TO service_role;
+
+
+--
+-- Name: FUNCTION rouvrir_bureau(p_org uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.rouvrir_bureau(p_org uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.rouvrir_bureau(p_org uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.rouvrir_bureau(p_org uuid) TO service_role;
 
 
 --
@@ -55634,6 +55995,20 @@ GRANT SELECT ON TABLE public.company_groups TO authenticated;
 --
 
 GRANT UPDATE(name) ON TABLE public.company_groups TO authenticated;
+
+
+--
+-- Name: COLUMN company_groups.logo_url; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT UPDATE(logo_url) ON TABLE public.company_groups TO authenticated;
+
+
+--
+-- Name: COLUMN company_groups.brand_color; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT UPDATE(brand_color) ON TABLE public.company_groups TO authenticated;
 
 
 --
@@ -57003,6 +57378,14 @@ GRANT ALL ON TABLE public.plans TO service_role;
 GRANT ALL ON TABLE public.predefined_services TO anon;
 GRANT ALL ON TABLE public.predefined_services TO authenticated;
 GRANT ALL ON TABLE public.predefined_services TO service_role;
+
+
+--
+-- Name: TABLE predefined_services_bureau; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.predefined_services_bureau TO authenticated;
+GRANT ALL ON TABLE public.predefined_services_bureau TO service_role;
 
 
 --

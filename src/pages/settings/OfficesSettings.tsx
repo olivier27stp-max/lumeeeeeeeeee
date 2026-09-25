@@ -31,7 +31,7 @@ export default function OfficesSettings() {
   // Incrémenté après un changement d'accès : recharge les compteurs de membres.
   const [version, setVersion] = useState(0);
   // Liste STABLE des bureaux (un tableau recréé à chaque rendu relancerait le chargement de la carte en boucle).
-  const bureauxIds = useMemo(() => (data?.offices ?? []).map((o) => o.id), [data]);
+  const bureaux = useMemo(() => data?.offices ?? [], [data]);
 
   useEffect(() => {
     let active = true;
@@ -242,7 +242,7 @@ export default function OfficesSettings() {
         <OfficeAccessGrid onChanged={() => setVersion((v) => v + 1)} />
       )}
 
-      {isOwner && data.offices.length > 1 && <MarqueEntrepriseCard bureauxIds={bureauxIds} />}
+      {isOwner && data.offices.length > 1 && <MarqueEntrepriseCard offices={bureaux} onChanged={() => setVersion((v) => v + 1)} />}
 
       <p className="text-[12px] text-text-tertiary">
         {fr

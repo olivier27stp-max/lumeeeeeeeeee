@@ -16,9 +16,10 @@ import {
   getMarqueEntreprise,
   suivreMarqueEntreprise,
   type MarqueEntreprise,
+  type OfficeSummary,
 } from '../../lib/officesApi';
 
-export default function MarqueEntrepriseCard({ bureauxIds }: { bureauxIds: string[] }) {
+export default function MarqueEntrepriseCard({ offices, onChanged }: { offices: OfficeSummary[]; onChanged: () => void }) {
   const { current } = useCompany();
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -29,12 +30,12 @@ export default function MarqueEntrepriseCard({ bureauxIds }: { bureauxIds: strin
   const charger = useCallback(async () => {
     if (!current) return;
     try {
-      setData(await getMarqueEntreprise(current.orgId, bureauxIds));
+      setData(await getMarqueEntreprise(current.orgId, offices));
     } catch (e) {
       console.error('[MarqueEntrepriseCard] chargement', e);
       captureClientException(e);
     }
-  }, [current, bureauxIds]);
+  }, [current, offices]);
   useEffect(() => { void charger(); }, [charger]);
 
   if (!current || !data) return null;
@@ -47,7 +48,7 @@ export default function MarqueEntrepriseCard({ bureauxIds }: { bureauxIds: strin
     try {
       await definirMarqueEntreprise(data.company_group_id, bureauActuel.logo_url, bureauActuel.brand_color);
       toast.success(fr ? 'Marque commune mise à jour.' : 'Company brand updated.');
-      await charger();
+      onChanged();
     } catch (e: any) {
       console.error('[MarqueEntrepriseCard] définir', e);
       captureClientException(e);
@@ -59,7 +60,7 @@ export default function MarqueEntrepriseCard({ bureauxIds }: { bureauxIds: strin
     setEnCours(orgId);
     try {
       await suivreMarqueEntreprise(orgId, suit);
-      await charger();
+      onChanged();
     } catch (e: any) {
       console.error('[MarqueEntrepriseCard] suivre', e);
       captureClientException(e);

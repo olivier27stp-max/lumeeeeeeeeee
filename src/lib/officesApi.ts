@@ -56,6 +56,10 @@ export interface OfficeSummary {
   is_current: boolean;
   /** Bureau fermé (archivé) : masqué du sélecteur, données conservées. */
   archived?: boolean;
+  /** Marque du bureau (lue côté serveur : le navigateur ne lit jamais un autre bureau). */
+  logo_url?: string | null;
+  brand_color?: string | null;
+  suit_marque_entreprise?: boolean;
 }
 
 export interface OfficesListing {
@@ -223,6 +227,7 @@ export async function rouvrirBureau(orgId: string): Promise<{ membres_reactives:
   const { data, error } = await supabase.rpc('rouvrir_bureau', { p_org: orgId });
   if (error) throw new Error(error.message);
   return data as { membres_reactives: number };
+}
 
 // ── Marque commune de l'entreprise (Réglages → Bureaux) ─────────────
 // Le logo et la couleur communs vivent dans company_groups ; un bureau qui
@@ -249,21 +254,22 @@ async function groupeDuBureau(orgId: string): Promise<string> {
   return data.company_group_id as string;
 }
 
-export async function getMarqueEntreprise(orgId: string, bureauxIds: string[]): Promise<MarqueEntreprise> {
+/** Marque commune + marque de chaque bureau (celle-ci vient de listOffices, résolue côté serveur). */
+export async function getMarqueEntreprise(orgId: string, offices: OfficeSummary[]): Promise<MarqueEntreprise> {
   const groupe = await groupeDuBureau(orgId);
-  const [{ data: g, error: eG }, { data: cs, error: eCs }] = await Promise.all([
-    supabase.from('company_groups').select('logo_url, brand_color').eq('id', groupe).single(),
-    supabase.from('company_settings')
-      .select('org_id, company_name, logo_url, brand_color, suit_marque_entreprise')
-      .in('org_id', bureauxIds),
-  ]);
-  if (eG) throw new Error(eG.message);
-  if (eCs) throw new Error(eCs.message);
+  const { data: g, error } = await supabase.from('company_groups').select('logo_url, brand_color').eq('id', groupe).single();
+  if (error) throw new Error(error.message);
   return {
     company_group_id: groupe,
     logo_url: g?.logo_url ?? null,
     brand_color: g?.brand_color ?? null,
-    bureaux: (cs || []) as MarqueBureau[],
+    bureaux: offices.filter((o) => !o.archived).map((o) => ({
+      org_id: o.id,
+      company_name: o.name,
+      logo_url: o.logo_url ?? null,
+      brand_color: o.brand_color ?? null,
+      suit_marque_entreprise: !!o.suit_marque_entreprise,
+    })),
   };
 }
 

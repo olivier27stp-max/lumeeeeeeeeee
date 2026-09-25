@@ -140,7 +140,7 @@ router.get('/orgs/offices', async (req, res) => {
     const officeIds = await companyOrgIds(admin, auth.orgId);
     const [orgsRes, settingsRes, membersRes, subsRes, myMemRes] = await Promise.all([
       admin.from('orgs').select('id, name, created_at, archived_at').in('id', officeIds),
-      admin.from('company_settings').select('org_id, company_name, phone, street1, city, province').in('org_id', officeIds),
+      admin.from('company_settings').select('org_id, company_name, phone, street1, city, province, logo_url, brand_color, suit_marque_entreprise').in('org_id', officeIds),
       admin.from('memberships').select('org_id').in('org_id', officeIds).eq('status', 'active'),
       admin.from('subscriptions').select('org_id').in('org_id', officeIds).in('status', ['active', 'trialing']),
       admin.from('memberships').select('org_id').eq('user_id', auth.user.id).in('org_id', officeIds).eq('status', 'active'),
@@ -172,6 +172,9 @@ router.get('/orgs/offices', async (req, res) => {
           is_member: myOrgIds.has(String(o.id)),
           is_current: String(o.id) === auth.orgId,
           archived: !!o.archived_at,
+          logo_url: s.logo_url || null,
+          brand_color: s.brand_color || null,
+          suit_marque_entreprise: s.suit_marque_entreprise === true,
         };
       })
       .sort((a: any, b: any) => {
