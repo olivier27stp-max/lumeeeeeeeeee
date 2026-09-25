@@ -65,8 +65,9 @@ export function planGrants(plan: Record<string, any> | null, key: string): boole
   switch (key) {
     case 'includes_automations':
     case 'includes_timesheets':
-    case 'includes_request_forms':
       return slug !== 'starter';
+    case 'includes_request_forms':
+      return true; // tous les forfaits depuis le 2026-09-25 (décision Rafba)
     case 'includes_marketplace':
     case 'includes_advanced_roles':
       return slug === 'autopilot';

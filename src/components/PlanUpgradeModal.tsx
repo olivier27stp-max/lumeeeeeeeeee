@@ -158,13 +158,11 @@ const FEATURE_META: Record<PlanFeatureFlag, {
       'Marketplace integrations & webhooks',
       'QuickBooks, Mailchimp & more',
       'Sync data across your stack',
-      'Custom request forms',
     ],
     benefitsFr: [
       'Intégrations Marketplace et webhooks',
       'QuickBooks, Mailchimp et plus',
       'Synchronisez vos données entre vos outils',
-      'Formulaires de demande personnalisés',
     ],
     gradient: 'from-emerald-600 via-teal-600 to-cyan-700',
   },
