@@ -1632,6 +1632,17 @@ export default function PipelineBoard({
   // alors que ce sont les filtres qui ne laissent rien passer.
   const filtreTropSerre = filtres_.length === 0 && deals.length > 0;
 
+  /**
+   * Ce pipeline n'a AUCUN deal, alors qu'un autre pipeline existe.
+   *
+   * Le board affichait alors des colonnes vides, sans un mot. On croyait
+   * ses deals perdus — alors qu'ils vivaient simplement dans un autre
+   * pipeline, celui qu'on ne regardait pas. Le navigateur mémorise le
+   * dernier pipeline consulté : ouvrir un pipeline de test une seule fois
+   * suffisait à vider le board pour de bon.
+   */
+  const pipelineVide = deals.length === 0 && !chargement && pipelines.length > 1;
+
   return (
     <div>
       <BarreOutils
@@ -1847,7 +1858,42 @@ export default function PipelineBoard({
         </p>
       )}
 
-      {filtreTropSerre ? (
+      {pipelineVide ? (
+        <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
+          <p className="mt-1.5 text-[15px] font-semibold text-text-primary">
+            {fr ? 'Ce pipeline est vide' : 'This pipeline is empty'}
+          </p>
+          <p className="max-w-[44ch] text-[12.5px] leading-relaxed text-text-tertiary">
+            {fr
+              ? 'Tes deals sont peut-être dans un autre pipeline — le board rouvre toujours le dernier que tu as consulté.'
+              : 'Your deals may sit in another pipeline — the board always reopens the last one you viewed.'}
+          </p>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {/*
+              Le pipeline par défaut d'abord : c'est là que tous les nouveaux
+              deals atterrissent, donc le premier endroit où regarder.
+            */}
+            {pipelines
+              .filter((p) => p.id !== pipelineActif)
+              .slice(0, 3)
+              .map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onChangerPipeline(p.id)}
+                  className={CLASSE_BOUTON}
+                >
+                  {fr ? `Voir « ${p.name} »` : `View “${p.name}”`}
+                  {p.is_default && (
+                    <span className="ml-1 text-[10.5px] text-text-muted">
+                      {fr ? '(par défaut)' : '(default)'}
+                    </span>
+                  )}
+                </button>
+              ))}
+          </div>
+        </div>
+      ) : filtreTropSerre ? (
         <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
           <p className="mt-1.5 text-[15px] font-semibold text-text-primary">
             {fr ? 'Aucun deal ne correspond aux filtres' : 'No deal matches the filters'}
