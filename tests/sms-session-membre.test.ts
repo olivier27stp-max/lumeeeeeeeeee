@@ -51,7 +51,7 @@ describe('contrat du module', () => {
     // fonctions gardées. On est plus restreint, jamais plus permissif — et
     // Lumi peut quand même répondre aux questions simples.
     const mod = await import('../server/lib/sms/session-membre');
-    const r = await mod.clientPourMembre('pas-un-uuid');
+    const r = await mod.clientPourMembre('pas-un-uuid', '00000000-0000-4000-8000-000000000001');
     expect(r.client).toBeTruthy();
     expect(r.accessToken).toBeUndefined();
   });

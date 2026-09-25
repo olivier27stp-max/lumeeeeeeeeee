@@ -488,9 +488,12 @@ export interface UserSession {
   accessToken: string;
 }
 
-function clientPourJeton(accessToken: string): SupabaseClient {
+function clientPourJeton(accessToken: string, bureau: string | null): SupabaseClient {
+  // `x-lume-org` = le bureau choisi au consentement. Sans lui, les fonctions
+  // qui lisent current_org_id() écrivaient dans le PLUS ANCIEN bureau de
+  // l'utilisateur (fuite H1, 2026-09-25) ; bureau_actif limite aussi les lectures.
   return createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    global: { headers: { Authorization: `Bearer ${accessToken}`, ...(bureau ? { 'x-lume-org': bureau } : {}) } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
@@ -564,10 +567,11 @@ export async function buildUserScopedClient(tokenId: string): Promise<UserSessio
   const db = getServiceClient();
   const { data } = await db
     .from('oauth_tokens')
-    .select('supabase_refresh_token_chiffre, supabase_access_token_chiffre, supabase_access_expire_a')
+    .select('org_id, supabase_refresh_token_chiffre, supabase_access_token_chiffre, supabase_access_expire_a')
     .eq('id', tokenId)
     .maybeSingle();
   if (!data?.supabase_refresh_token_chiffre) return null;
+  const bureau: string | null = data.org_id ?? null;
 
   // ── Chemin rapide : le jeton d'ACCÈS en cache est encore valide ──
   // Aucun rafraîchissement, donc aucune rotation : le parallélisme est
@@ -576,7 +580,7 @@ export async function buildUserScopedClient(tokenId: string): Promise<UserSessio
       && new Date(data.supabase_access_expire_a).getTime() > Date.now() + 60_000) {
     try {
       const accessToken = dechiffrerSession(data.supabase_access_token_chiffre);
-      return { client: clientPourJeton(accessToken), accessToken };
+      return { client: clientPourJeton(accessToken, bureau), accessToken };
     } catch { /* cache illisible : on retombe sur le rafraîchissement */ }
   }
 
@@ -617,7 +621,7 @@ export async function buildUserScopedClient(tokenId: string): Promise<UserSessio
         console.error('[oauth] restockage de la session impossible :', e?.message || e);
       }
 
-      return { client: clientPourJeton(accessToken), accessToken };
+      return { client: clientPourJeton(accessToken, bureau), accessToken };
     } catch (e: any) {
       console.error('[oauth] session utilisateur injouable :', e?.message || e);
       return null;

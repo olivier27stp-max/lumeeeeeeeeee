@@ -1,11 +1,12 @@
 import { supabase } from './supabase';
+import { bureauActifSync } from './orgApi';
 
 const API_BASE = '/api';
 
 async function authHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
   let activeOrg = '';
-  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
+  try { activeOrg = bureauActifSync() || ''; } catch {}
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${session?.access_token || ''}`,

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { deviceTokenHeader } from './deviceToken';
+import { bureauActifSync } from './orgApi';
 
 const API_BASE = '/api';
 
@@ -8,7 +9,7 @@ async function authHeaders() {
   // Office actif sélectionné — le serveur scope dessus si l'utilisateur en est
   // membre (cf. requireAuthedClient).
   let activeOrg = '';
-  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
+  try { activeOrg = bureauActifSync() || ''; } catch {}
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${session?.access_token || ''}`,

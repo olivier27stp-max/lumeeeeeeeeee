@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import * as tus from 'tus-js-client';
+import { bureauActifSync } from './orgApi';
 
 export const STORAGE_BUCKETS = {
   COMPANY_LOGOS: 'company-logos',
@@ -33,7 +34,7 @@ export async function uploadViaServer(
   const token = session?.access_token;
   if (!token) throw new Error('Not authenticated');
   let activeOrg = '';
-  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
+  try { activeOrg = bureauActifSync() || ''; } catch {}
 
   const upsertParam = options.upsert ? '&upsert=true' : '';
   const res = await fetch(`/api/storage/upload?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}${upsertParam}`, {

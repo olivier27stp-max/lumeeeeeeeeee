@@ -4,6 +4,7 @@
  * leaderboardApi : Bearer + x-org-id.
  */
 import { supabase } from './supabase';
+import { bureauActifSync } from './orgApi';
 
 export type StatutDomaineEnvoi = 'pending' | 'verified' | 'failed';
 
@@ -40,7 +41,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   const token = data.session?.access_token;
   if (!token) throw new Error('Not authenticated');
   let activeOrg = '';
-  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch { /* stockage indisponible : le serveur retombe sur l'org courante */ }
+  try { activeOrg = bureauActifSync() || ''; } catch { /* stockage indisponible : le serveur retombe sur l'org courante */ }
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'x-org-id': activeOrg };
 }
 

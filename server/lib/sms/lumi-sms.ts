@@ -81,7 +81,7 @@ export interface ContexteSms {
 async function clientDesOutils(ctx: ContexteSms): Promise<{ client: SupabaseClient; accessToken?: string }> {
   try {
     const { clientPourMembre } = await import('./session-membre');
-    return await clientPourMembre(ctx.userId);
+    return await clientPourMembre(ctx.userId, ctx.orgId);
   } catch (e: any) {
     logger.error('[sms/lumi] session du membre indisponible — outils à identité limités', { error: e?.message || String(e) });
     return { client: ctx.admin };

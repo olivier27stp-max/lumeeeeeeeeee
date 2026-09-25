@@ -19,6 +19,7 @@ import { Building2, Check, Loader2, ShieldCheck, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from '../i18n';
 import { CompanyContext } from '../contexts/CompanyContext';
+import { bureauActifSync } from '../lib/orgApi';
 
 interface ClientInfo {
   client_id: string;
@@ -106,7 +107,7 @@ export default function OAuthConsent() {
           // travaille. Le serveur vérifie l'appartenance (anti-IDOR).
           ...((): Record<string, string> => {
             try {
-              const bureau = localStorage.getItem('lume-active-org');
+              const bureau = bureauActifSync();
               return bureau ? { 'x-org-id': bureau } : {};
             } catch { return {}; }
           })(),

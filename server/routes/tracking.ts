@@ -113,15 +113,19 @@ router.post('/tracking/stop', validate(stopSessionSchema), async (req, res) => {
     // L'arrêt DOIT être fiable : une session restée « active » continue
     // d'accepter les points GPS du membre alors qu'il croit avoir coupé le
     // suivi. On répond 500 pour que le client rejoue l'arrêt (idempotent).
-    const { error: stopErr } = await admin
+    // Bureau DE LA SESSION, pas le bureau affiché : un membre de deux bureaux
+    // qui a changé de bureau en cours de tournée (fuite M2, 2026-09-25).
+    const { data: sessionArretee, error: stopErr } = await admin
       .from('tracking_sessions')
       .update({ status: reason || 'stopped', ended_at: now })
       .eq('id', sessionId)
-      .eq('user_id', auth.user.id);
+      .eq('user_id', auth.user.id)
+      .select('org_id')
+      .maybeSingle();
     if (stopErr) throw stopErr;
 
     const { error: evtErr } = await admin.from('tracking_events').insert({
-      org_id: auth.orgId,
+      org_id: sessionArretee?.org_id ?? auth.orgId,
       session_id: sessionId,
       user_id: auth.user.id,
       event_type: reason === 'stopped' ? 'session_stop' : 'session_expired',
@@ -134,7 +138,8 @@ router.post('/tracking/stop', validate(stopSessionSchema), async (req, res) => {
     const { error: offlineErr } = await admin
       .from('tracking_live_locations')
       .update({ tracking_status: 'offline', session_id: null })
-      .eq('user_id', auth.user.id);
+      .eq('user_id', auth.user.id)
+      .eq('session_id', sessionId);
     if (offlineErr) throw offlineErr;
 
     return res.json({ ok: true });
@@ -166,11 +171,18 @@ router.post('/tracking/point', validate(recordPointSchema), async (req, res) => 
       .eq('status', 'active')
       .maybeSingle();
     if (!session) return res.status(404).json({ error: 'No active session found.' });
+    // Le point appartient au bureau de la session de terrain, pas au bureau
+    // affiché à l'écran (fuite M2) ; le consentement se vérifie là aussi.
+    const bureauSession: string = session.org_id;
+    if (bureauSession !== auth.orgId) {
+      const refus = await checkLocationTrackingAllowed(admin, bureauSession, auth.user.id);
+      if (refus) return res.status(403).json(refus);
+    }
 
     // Insert point — même contrat que /points-batch : un point perdu est un
     // trou dans le trajet, le client doit pouvoir le rejouer.
     const { error: pointErr } = await admin.from('tracking_points').insert({
-      org_id: auth.orgId,
+      org_id: bureauSession,
       session_id: sessionId,
       user_id: auth.user.id,
       team_id: session.team_id,
@@ -196,7 +208,7 @@ router.post('/tracking/point', validate(recordPointSchema), async (req, res) => 
     // (cela dupliquerait le point), mais la carte reste figée sans ce log.
     const { error: liveErr } = await admin.from('tracking_live_locations').upsert({
       user_id: auth.user.id,
-      org_id: auth.orgId,
+      org_id: bureauSession,
       session_id: sessionId,
       team_id: session.team_id,
       latitude, longitude,
@@ -236,9 +248,16 @@ router.post('/tracking/points-batch', validate(batchPointsSchema), async (req, r
       .eq('status', 'active')
       .maybeSingle();
     if (!session) return res.status(404).json({ error: 'No active session found.' });
+    // Le point appartient au bureau de la session de terrain, pas au bureau
+    // affiché à l'écran (fuite M2) ; le consentement se vérifie là aussi.
+    const bureauSession: string = session.org_id;
+    if (bureauSession !== auth.orgId) {
+      const refus = await checkLocationTrackingAllowed(admin, bureauSession, auth.user.id);
+      if (refus) return res.status(403).json(refus);
+    }
 
     const rows = points.map((p: any) => ({
-      org_id: auth.orgId,
+      org_id: bureauSession,
       session_id: sessionId,
       user_id: auth.user.id,
       team_id: session.team_id,
@@ -267,7 +286,7 @@ router.post('/tracking/points-batch', validate(batchPointsSchema), async (req, r
     // journalise sans échouer, sinon le client rejouerait tout le lot.
     const { error: liveErr } = await admin.from('tracking_live_locations').upsert({
       user_id: auth.user.id,
-      org_id: auth.orgId,
+      org_id: bureauSession,
       session_id: sessionId,
       team_id: session.team_id,
       latitude: latest.latitude,
@@ -377,8 +396,21 @@ router.post('/tracking/event', async (req, res) => {
 
     // Écrire l'événement est le seul objet de cette route : un échec avalé
     // renverrait ok:true pour un journal vide.
+    // Avec une session : l'événement suit le bureau de CETTE session, et seulement
+    // si elle appartient au membre (fuite M2 — avant, n'importe quel id était accepté).
+    let bureau = auth.orgId;
+    if (sessionId) {
+      const { data: sess } = await admin
+        .from('tracking_sessions')
+        .select('org_id')
+        .eq('id', sessionId)
+        .eq('user_id', auth.user.id)
+        .maybeSingle();
+      if (!sess) return res.status(404).json({ error: 'No session found.' });
+      bureau = sess.org_id;
+    }
     const { error } = await admin.from('tracking_events').insert({
-      org_id: auth.orgId,
+      org_id: bureau,
       session_id: sessionId || null,
       user_id: auth.user.id,
       event_type: eventType,

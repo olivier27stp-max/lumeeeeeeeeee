@@ -98,13 +98,19 @@ export async function jetonPourMembre(userId: string): Promise<string | null> {
  * gardées, donc on est plus restreint, jamais plus permissif. Lumi répondra
  * aux questions simples et dira honnêtement qu'il n'a pas pu pour le reste.
  */
-export async function clientPourMembre(userId: string): Promise<{ client: SupabaseClient; accessToken?: string }> {
+export async function clientPourMembre(
+  userId: string,
+  bureau: string,
+): Promise<{ client: SupabaseClient; accessToken?: string }> {
   const token = await jetonPourMembre(userId);
   if (!token) return { client: getServiceClient() };
   return {
+    // `x-lume-org` = le bureau qui possède le numéro texté. Sans lui, les
+    // fonctions qui lisent current_org_id() (création de job, de soumission)
+    // écrivaient dans le PLUS ANCIEN bureau du membre (fuite H1, 2026-09-25).
     client: createClient(supabaseUrl, supabaseAnonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: { Authorization: `Bearer ${token}` } },
+      global: { headers: { Authorization: `Bearer ${token}`, 'x-lume-org': bureau } },
     }),
     accessToken: token,
   };

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { bureauActifSync } from './orgApi';
 
 /**
  * Org-wide live-location master switch + per-user tracking consent (Loi 25).
@@ -59,7 +60,7 @@ export async function setMyLocationConsent(userId: string, consent: boolean): Pr
 async function apiHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
   let activeOrg = '';
-  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
+  try { activeOrg = bureauActifSync() || ''; } catch {}
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${session?.access_token || ''}`,
