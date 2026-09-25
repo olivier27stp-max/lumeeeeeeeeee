@@ -42,6 +42,11 @@ async function portalFetch<T>(token: string, path: string, init?: RequestInit): 
     body = null;
   }
   if (!res.ok) {
+    // 429 du limiteur : jamais le JSON brut en anglais à l'écran ; code dédié pour un message clair.
+    if (res.status === 429) {
+      const s = Number(body?.retryAfter) || 60;
+      throw new PortalError(`Trop de demandes en peu de temps. Réessayez dans ${s} s.`, 'rate_limited', 429);
+    }
     throw new PortalError(body?.error ?? `HTTP ${res.status}`, body?.code ?? 'error', res.status);
   }
   return body as T;

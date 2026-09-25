@@ -918,8 +918,11 @@ app.use('/api', creatorSpaceNotesRouter);
 app.use('/api', creatorSpaceBillingRouter);
 const migrationPortalLimiter = rateLimit({ windowMs: 60_000, max: 120, keyFn: (req) => `migportal:${userKey(req)}` });
 app.use('/api/migration-portal', migrationPortalLimiter);
-// Anti force-brute sur la résolution du jeton : limite serrée par IP (Redis si dispo).
-app.use('/api/migration-portal/session', redisRateLimit({ preset: 'auth', keyFn: (req) => `migtoken:${req.ip}` }));
+// Anti force-brute sur la résolution du jeton : limite par IP (Redis si dispo). « standard » (30/min)
+// et non « auth » (10/min) : le portail rappelle /session à chaque geste (dépôt de fichier, réponse,
+// correction) et un client actif atteignait 429 en travaillant normalement (2026-09-25). Le vrai
+// verrou anti-forçage est ailleurs : 20 échecs sur un jeton = invitation verrouillée (tokens.ts).
+app.use('/api/migration-portal/session', redisRateLimit({ preset: 'standard', keyFn: (req) => `migtoken:${req.ip}` }));
 app.use('/api', migrationPortalRouter);
 
 // CSP violation reports — public endpoint, tight limit to prevent log flooding

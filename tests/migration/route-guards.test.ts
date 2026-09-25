@@ -163,7 +163,8 @@ describe('montage serveur et surface publique', () => {
     expect(indexSrc).toContain("app.use('/api', migrationAdminRouter)");
     expect(indexSrc).toContain("app.use('/api/migration-portal', migrationPortalLimiter)");
     expect(indexSrc).toContain("app.use('/api', migrationPortalRouter)");
-    expect(indexSrc).toMatch(/migration-portal\/session.*preset: 'auth'/s);
+    // « standard » (30/min/IP), pas « auth » (10/min) : un client actif atteignait 429 en travaillant (2026-09-25).
+    expect(indexSrc).toMatch(/migration-portal\/session.*preset: 'standard'/s);
   });
 
   it('le nettoyage quotidien est branché (advisory lock + capture)', () => {

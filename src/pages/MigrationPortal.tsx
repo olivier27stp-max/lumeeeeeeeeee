@@ -116,6 +116,10 @@ const DENIAL_MESSAGES: Record<string, { fr: string; en: string }> = {
     en: 'Too many attempts. Contact the Lume team.',
   },
   closed: { fr: 'Cette migration est déjà terminée.', en: 'This migration is already completed.' },
+  rate_limited: {
+    fr: 'Trop de demandes en peu de temps. Attendez une minute, puis rechargez la page.',
+    en: 'Too many requests in a short time. Wait a minute, then reload the page.',
+  },
   forbidden: {
     fr: 'Vous n\'avez pas l\'autorisation d\'accéder à cette migration.',
     en: 'You are not authorized to access this migration.',
