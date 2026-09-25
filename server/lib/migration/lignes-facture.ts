@@ -17,7 +17,11 @@ export interface LigneImportee {
   description: string;
   qty: number;
   unit_price_cents: number;
+  /** Note affichée sous la ligne (job_line_items.description) : dit quand un prix est réparti, jamais silencieux. */
+  note?: string;
 }
+
+export const NOTE_PRIX_REPARTI = 'Prix réparti à parts égales : l’export Jobber ne donne pas le prix par service.';
 
 export const LIBELLE_MONTANT_IMPORTE = 'Montant importé';
 
@@ -159,8 +163,10 @@ export async function creerLignesDevisImportees(
 // montraient que le total (Vision Lavage, 2026-09-24, 896 jobs sans lignes).
 //
 // Règle : (1) si le texte porte les montants (format facture) et somme au sous-total,
-// lignes réelles ; (2) sinon UNE ligne dont le nom est la liste des services, au
-// sous-total — rien d'inventé, le total ne bouge pas ; (3) sans texte, « Montant importé ».
+// lignes réelles ; (2) sinon UNE ligne PAR SERVICE (« Nettoyage des fenêtres intérieures »
+// et « … extérieures » sont deux produits distincts du catalogue — demande d'Olivier,
+// 2026-09-25), le sous-total réparti à parts égales avec une note qui le dit, le reste
+// des cents sur la dernière ; le total ne bouge pas ; (3) sans texte, « Montant importé ».
 // Puis, à l'import des factures, une facture du job dont les lignes réelles somment au
 // sous-total du job REMPLACE cette ligne de repli par ses vraies lignes (prix unitaires).
 
@@ -178,7 +184,14 @@ export function lignesPourJob(texte: string, sousTotalCents: number): LigneImpor
   if (lues && lues.reduce((s, l) => s + l.totalCents, 0) === sousTotalCents) return lignesPourFacture(texte, sousTotalCents);
   const noms = nomsServices(texte);
   if (noms.length === 0) return sousTotalCents > 0 ? [{ description: LIBELLE_MONTANT_IMPORTE, qty: 1, unit_price_cents: sousTotalCents }] : [];
-  return [{ description: noms.join(', ').slice(0, 500), qty: 1, unit_price_cents: Math.max(0, sousTotalCents) }];
+  const total = Math.max(0, sousTotalCents);
+  if (noms.length === 1) return [{ description: noms[0].slice(0, 500), qty: 1, unit_price_cents: total }];
+  const part = Math.floor(total / noms.length);
+  return noms.map((nom, i) => ({
+    description: nom.slice(0, 500), qty: 1,
+    unit_price_cents: i === noms.length - 1 ? total - part * (noms.length - 1) : part,
+    note: NOTE_PRIX_REPARTI,
+  }));
 }
 
 /**
@@ -195,6 +208,7 @@ export async function creerLignesJobsImportees(
   const rangeesDe = (j: { id: string; lignes: LigneImportee[] }) => j.lignes.map((l, k) => ({
     org_id: orgId, job_id: j.id, name: l.description.slice(0, 500), qty: l.qty, unit_price_cents: l.unit_price_cents,
     total_cents: Math.round(l.qty * l.unit_price_cents), included: true, created_by: createdBy,
+    ...(l.note ? { description: l.note } : {}),
     // created_at décalé de k ms : l'app trie les lignes par created_at, sans ça l'ordre est perdu.
     created_at: new Date(Date.now() + k).toISOString(),
   }));
@@ -237,17 +251,23 @@ export async function raffinerLignesJobsDepuisFactures(
     const lot = ids.slice(i, i + 200);
     const [{ data: jobsRows, error: eJobs }, { data: lignesRows, error: eLignes }] = await Promise.all([
       admin.from('jobs').select('id, subtotal_cents').in('id', lot),
-      admin.from('job_line_items').select('id, job_id').in('job_id', lot).is('deleted_at', null),
+      admin.from('job_line_items').select('id, job_id, description').in('job_id', lot).is('deleted_at', null),
     ]);
     if (eJobs || eLignes) { console.error('[migration-importer] raffinement lignes de job : lecture impossible', (eJobs ?? eLignes)?.message); continue; }
     const lignesParJob = new Map<string, string[]>();
-    for (const l of (lignesRows ?? []) as { id: string; job_id: string }[]) lignesParJob.set(l.job_id, [...(lignesParJob.get(l.job_id) ?? []), l.id]);
+    const notesParLigne = new Map<string, string | null>();
+    for (const l of (lignesRows ?? []) as { id: string; job_id: string; description: string | null }[]) {
+      lignesParJob.set(l.job_id, [...(lignesParJob.get(l.job_id) ?? []), l.id]);
+      notesParLigne.set(l.id, l.description);
+    }
     for (const j of (jobsRows ?? []) as { id: string; subtotal_cents: number | null }[]) {
       const lignes = parJob.get(j.id) ?? [];
       const somme = lignes.reduce((s, l) => s + Math.round(l.qty * l.unit_price_cents), 0);
       const actuelles = lignesParJob.get(j.id) ?? [];
-      if (somme !== Number(j.subtotal_cents ?? 0) || actuelles.length > 1) continue;
-      if (actuelles.length === 1) {
+      // Remplaçables : la ligne unique de repli, ou les lignes « prix réparti » (notées comme telles).
+      const remplacables = actuelles.length <= 1 || actuelles.every((id) => notesParLigne.get(id) === NOTE_PRIX_REPARTI);
+      if (somme !== Number(j.subtotal_cents ?? 0) || !remplacables) continue;
+      if (actuelles.length >= 1) {
         const { error: eDel } = await admin.from('job_line_items').update({ deleted_at: new Date().toISOString() }).in('id', actuelles);
         if (eDel) { console.error('[migration-importer] ligne de repli non retirée', j.id, eDel.message); continue; }
       }

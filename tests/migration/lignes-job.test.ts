@@ -3,7 +3,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { nomsServices, lignesPourJob, LIBELLE_MONTANT_IMPORTE } from '../../server/lib/migration/lignes-facture';
+import { nomsServices, lignesPourJob, LIBELLE_MONTANT_IMPORTE, NOTE_PRIX_REPARTI } from '../../server/lib/migration/lignes-facture';
+import { FIELD_CATALOG, normalizeHeader } from '../../server/lib/migration/mapping';
 import { nomAffichageClient, nomClientPourJob, type BuildContext } from '../../server/lib/migration/importer';
 
 const lu = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -18,9 +19,11 @@ describe('nomsServices', () => {
 });
 
 describe('lignesPourJob', () => {
-  it('sans montants : UNE ligne nommée par la liste des services, au sous-total — rien d\'inventé', () => {
-    expect(lignesPourJob('Nettoyage des fenêtres extérieures, Nettoyage des fenêtres intérieures', 33000)).toEqual([
-      { description: 'Nettoyage des fenêtres extérieures, Nettoyage des fenêtres intérieures', qty: 1, unit_price_cents: 33000 },
+  it('sans montants : une ligne PAR service, sous-total réparti à parts égales, note explicite, reste sur la dernière', () => {
+    expect(lignesPourJob('Nettoyage des fenêtres extérieures, Nettoyage des fenêtres intérieures, Gazebo', 10000)).toEqual([
+      { description: 'Nettoyage des fenêtres extérieures', qty: 1, unit_price_cents: 3333, note: NOTE_PRIX_REPARTI },
+      { description: 'Nettoyage des fenêtres intérieures', qty: 1, unit_price_cents: 3333, note: NOTE_PRIX_REPARTI },
+      { description: 'Gazebo', qty: 1, unit_price_cents: 3334, note: NOTE_PRIX_REPARTI },
     ]);
     expect(lignesPourJob("Nettoyage d'entrée de cour", 23000)).toEqual([{ description: "Nettoyage d'entrée de cour", qty: 1, unit_price_cents: 23000 }]);
   });
@@ -31,7 +34,10 @@ describe('lignesPourJob', () => {
     ]);
   });
   it('avec montants qui ne somment PAS au sous-total : une ligne nommée au sous-total, jamais les montants faux', () => {
-    expect(lignesPourJob('A (1, $100.00), B (1, $100.00)', 25000)).toEqual([{ description: 'A, B', qty: 1, unit_price_cents: 25000 }]);
+    expect(lignesPourJob('A (1, $100.00), B (1, $100.00)', 25000)).toEqual([
+      { description: 'A', qty: 1, unit_price_cents: 12500, note: NOTE_PRIX_REPARTI },
+      { description: 'B', qty: 1, unit_price_cents: 12500, note: NOTE_PRIX_REPARTI },
+    ]);
   });
   it('sans texte : « Montant importé » si sous-total > 0, sinon rien', () => {
     expect(lignesPourJob('', 5000)).toEqual([{ description: LIBELLE_MONTANT_IMPORTE, qty: 1, unit_price_cents: 5000 }]);
@@ -72,5 +78,19 @@ describe('câblage dans l\'importeur', () => {
     expect(sql).toContain("bool_and(f.description <> 'Montant importé')");
     expect(sql).toContain("insert into public.job_line_items (org_id, job_id, name, qty, unit_price_cents, total_cents, included, created_by, created_at)");
     expect(sql).toContain("j.client_name ~ '@'");
+  });
+});
+
+describe('heures des visites Jobber', () => {
+  it('la colonne « Times » (plage « 8:30AM - 2:00PM ») est reconnue comme heure de début — sinon 913 visites sans heure', () => {
+    const def = FIELD_CATALOG.visit.find((f) => f.field === 'start_time')!;
+    for (const h of ['Times', 'Visit times', 'Plage horaire', 'Horaire']) expect(def.synonyms, h).toContain(normalizeHeader(h));
+  });
+  it('le SQL de rattrapage lit Date + Times en heure locale America/Toronto et ne touche que les visites « sans heure »', () => {
+    const sql = lu('supabase/migrations/20260926140000_visites_importees_heures_et_lignes_distinctes.sql');
+    expect(sql).toContain("(e.start_at at time zone 'America/Toronto')::time = time '00:00'");
+    expect(sql).toContain("'YYYY-MM-DD HH12:MIAM'");
+    expect(sql).toContain("at time zone 'America/Toronto' as debut");
+    expect(sql).toContain("regexp_split_to_table(c.name, ', ')");
   });
 });

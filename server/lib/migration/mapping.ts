@@ -984,7 +984,11 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       types: ['text', 'datetime', 'number'],
       synonyms: [
         'start time', 'arrival time', 'appointment time', 'time',
-        'heure de debut', 'heure d arrivee', 'heure',
+        // Jobber « Visits » : UNE colonne « Times » porte la plage « 8:30AM - 2:00PM » ;
+        // normalize.ts la découpe en début/fin. Non reconnue, 913 visites de Vision
+        // Lavage tombaient à « pas d'heure précise » (2026-09-25).
+        'times', 'visit times', 'time range', 'schedule', 'scheduled time',
+        'heure de debut', 'heure d arrivee', 'heure', 'heures', 'plage horaire', 'horaire',
       ],
     },
     {
