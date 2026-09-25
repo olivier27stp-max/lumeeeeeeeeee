@@ -74,7 +74,7 @@ export default function CheckoutSetup({
   email: string;
   planName?: string;
   amountCents?: number;
-  interval?: 'monthly' | 'yearly';
+  interval?: 'monthly' | 'quarterly' | 'yearly';
   currency?: string;
 }) {
   const id = useId();
@@ -96,9 +96,13 @@ export default function CheckoutSetup({
 
   const region = ALL_REGIONS[taxKey];
   const cur = (currency || 'CAD').toUpperCase();
-  const intervalLabel = interval === 'yearly' ? (isFr ? 'Renouvellement annuel' : 'Annual renewal') : (isFr ? 'Renouvellement mensuel' : 'Monthly renewal');
+  const intervalLabel = interval === 'yearly' ? (isFr ? 'Renouvellement annuel' : 'Annual renewal')
+    : interval === 'quarterly' ? (isFr ? 'Renouvellement aux 3 mois' : 'Renews every 3 months')
+    : (isFr ? 'Renouvellement mensuel' : 'Monthly renewal');
   const amountLabel = amountCents != null ? money(amountCents, cur, isFr) : '';
-  const perLabel = interval === 'yearly' ? (isFr ? `${cur} / an` : `${cur} / yr`) : (isFr ? `${cur} / mois` : `${cur} / mo`);
+  const perLabel = interval === 'yearly' ? (isFr ? `${cur} / an` : `${cur} / yr`)
+    : interval === 'quarterly' ? (isFr ? `${cur} / 3 mois` : `${cur} / 3 mo`)
+    : (isFr ? `${cur} / mois` : `${cur} / mo`);
 
   async function handleSubmit() {
     setError('');

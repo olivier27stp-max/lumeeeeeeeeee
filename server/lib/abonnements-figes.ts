@@ -38,6 +38,8 @@ import { logSecurityEvent } from './security';
 const JOURS_AVANT_ALERTE = 2;
 
 const JOUR_MS = 86_400_000;
+const REPRISES_CACHE_SCHEMA = 3;
+const DELAI_REPRISE_MS = 15_000;
 
 export interface ResultatAbonnementsFiges {
   examines: number;
@@ -56,12 +58,22 @@ export async function detecterAbonnementsFiges(
 
   const limite = new Date(Date.now() - JOURS_AVANT_ALERTE * JOUR_MS).toISOString();
 
-  const { data: abos, error } = await admin
+  const lire = () => admin
     .from('subscriptions')
     .select('id, org_id, status, current_period_end, stripe_subscription_id, plan_id')
     .eq('status', 'active')
     .not('current_period_end', 'is', null)
     .lt('current_period_end', limite);
+
+  // PGRST002 = PostgREST recharge son cache de schéma (juste après une
+  // migration). Le cron part 45 s après le démarrage — souvent un déploiement
+  // qui suit une migration — et ne repasse que 24 h plus tard : sans reprise,
+  // une journée de surveillance sautait (Sentry, 2026-09-25 22:56 UTC).
+  let { data: abos, error } = await lire();
+  for (let essai = 1; error?.code === 'PGRST002' && essai <= REPRISES_CACHE_SCHEMA; essai++) {
+    await new Promise((r) => setTimeout(r, DELAI_REPRISE_MS));
+    ({ data: abos, error } = await lire());
+  }
 
   // supabase-js ne lève jamais : sans ce test, une erreur de lecture passerait
   // pour « aucun abonnement figé » et le cron se tairait pour toujours.
