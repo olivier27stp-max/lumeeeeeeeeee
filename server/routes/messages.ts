@@ -14,6 +14,7 @@ import { eventBus } from '../lib/eventBus';
 import { estNoteVocale, mediasAudio, transcrireMediaTwilio, messageEchecVocal } from '../lib/sms/note-vocale';
 import { membreParTelephone } from '../lib/sms/identifier-membre';
 import { repondreAuMembre } from '../lib/sms/fil-lumi';
+import { bureauxDeLaBoite, conversationsDesBureaux } from '../lib/boite-unifiee';
 
 const router = Router();
 
@@ -112,6 +113,60 @@ router.post('/messages/send', validate(messageSendSchema), async (req, res) => {
     return res.json(message);
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to send SMS.', '[messages/send]');
+  }
+});
+
+// GET /api/messages/inbox — boîte unifiée : les conversations de chaque bureau
+// où la personne a messages.read (même entreprise), chacune avec son bureau.
+router.get('/messages/inbox', async (req, res) => {
+  try {
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    const offices = await bureauxDeLaBoite(authed.user.id, authed.orgId);
+    const conversations = await conversationsDesBureaux(req.header('authorization') as string, offices);
+    return res.json({ offices, conversations });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to load conversations.', '[messages/inbox]');
+  }
+});
+
+// Fil d'une conversation et « lu » : le navigateur envoie x-org-id = le bureau
+// de LA CONVERSATION ; requireAuthedClient vérifie l'adhésion, la table des
+// routes vérifie messages.read dans ce bureau, et la lecture passe par la RLS.
+const CONVERSATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+router.get('/messages/conversations/:id/messages', async (req, res) => {
+  try {
+    if (!CONVERSATION_ID.test(req.params.id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    const { data, error } = await authed.client
+      .from('messages')
+      .select('*')
+      .eq('org_id', authed.orgId)
+      .eq('conversation_id', req.params.id)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return res.json(data || []);
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to load messages.', '[messages/conversation]');
+  }
+});
+
+router.post('/messages/conversations/:id/read', async (req, res) => {
+  try {
+    if (!CONVERSATION_ID.test(req.params.id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    const { error } = await authed.client
+      .from('conversations')
+      .update({ unread_count: 0 })
+      .eq('id', req.params.id)
+      .eq('org_id', authed.orgId);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to mark conversation read.', '[messages/read]');
   }
 });
 
