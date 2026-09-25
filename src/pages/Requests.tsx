@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check, ImageIcon, Archive, ChevronRight } from 'lucide-react';
+import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check, ImageIcon, Archive, ChevronRight, Settings } from 'lucide-react';
 import { useTranslation } from '../i18n';
-import { fetchFormSubmissions, fetchRequestForm } from '../lib/requestFormsApi';
+import { fetchFormSubmissions, fetchRequestForms } from '../lib/requestFormsApi';
 import { SignedImg } from '../components/ui/SignedMedia';
 import type { FormSubmission, RequestForm } from '../types';
 
@@ -33,6 +33,9 @@ export default function Requests() {
 
   const [submissions, setSubmissions] = useState<FormSubmission[]>([]);
   const [form, setForm] = useState<RequestForm | null>(null);
+  // Tous les formulaires : leurs libellés servent à nommer les réponses,
+  // et chacun a son propre lien public à partager.
+  const [formulaires, setFormulaires] = useState<RequestForm[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -43,12 +46,13 @@ export default function Requests() {
     setError(null);
     try {
       // Form config is best-effort — never block the submissions list on it
-      const [data, formCfg] = await Promise.all([
+      const [data, liste] = await Promise.all([
         fetchFormSubmissions(),
-        fetchRequestForm().catch(() => null),
+        fetchRequestForms().catch(() => [] as RequestForm[]),
       ]);
       setSubmissions(data);
-      setForm(formCfg);
+      setFormulaires(liste);
+      setForm(liste[0] ?? null);
     } catch (err: any) {
       setError(err.message || (fr ? 'Impossible de charger les demandes.' : 'Unable to load requests.'));
     } finally {
@@ -71,8 +75,20 @@ export default function Requests() {
       year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     });
 
-  /** Map a custom_responses key to its human label using the form config. */
-  const labelFor = (key: string) => form?.custom_fields?.find((f) => f.id === key)?.label || key;
+  /**
+   * Le libellé humain d'une réponse.
+   *
+   * On cherche dans TOUS les formulaires, pas seulement le premier : une
+   * demande venue du formulaire « publicités » affichait sinon la clé brute
+   * (`champ_3f2a…`) parce que son libellé vit dans un autre formulaire.
+   */
+  const labelFor = (key: string) => {
+    for (const f of formulaires.length ? formulaires : (form ? [form] : [])) {
+      const trouve = f.custom_fields?.find((c) => c.id === key)?.label;
+      if (trouve) return trouve;
+    }
+    return key;
+  };
 
   const archivedCount = useMemo(() => submissions.filter((s) => s.archived_at).length, [submissions]);
   const visible = useMemo(
@@ -102,6 +118,17 @@ export default function Requests() {
           >
             <RefreshCw className="h-3.5 w-3.5" /> {fr ? 'Actualiser' : 'Refresh'}
           </button>
+          {/* Les formulaires se règlent dans les Paramètres, mais c'est ICI
+              qu'on se demande « d'où viennent ces demandes ? » et « comment
+              j'en fais un pour mes publicités ? ». Le lien n'existait que
+              dans les états vides : une fois la première demande reçue, plus
+              rien ne menait au réglage. */}
+          <Link
+            to="/settings/request-form"
+            className="flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-elevated"
+          >
+            <Settings className="h-3.5 w-3.5" /> {fr ? 'Mes formulaires' : 'My forms'}
+          </Link>
         </div>
       </div>
 
@@ -125,6 +152,13 @@ export default function Requests() {
                 {fr
                   ? 'Les demandes apparaîtront ici dès qu’un prospect remplira votre formulaire. Partagez ce lien ou intégrez-le à votre site :'
                   : 'Requests will appear here as soon as a prospect fills out your form. Share this link or embed it on your site:'}
+                {/* Avec plusieurs formulaires, un lien nu ne dit pas lequel
+                    on s'apprête à partager. */}
+                {formulaires.length > 1 && form && (
+                  <span className="mt-1 block font-semibold text-text-secondary">
+                    {form.title}
+                  </span>
+                )}
               </p>
               <div className="mt-3 flex w-full max-w-md items-center gap-2">
                 <code className="flex-1 truncate rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-left text-[11px] font-mono text-text-secondary">
