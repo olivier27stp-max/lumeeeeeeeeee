@@ -42,7 +42,9 @@ if [ -z "$dernier" ]; then
   exit 1
 fi
 
-age_s=$(( $(date +%s) - $(stat -f %m "$dernier" 2>/dev/null || stat -c %Y "$dernier") ))
+# GNU (Linux, Git Bash) d'abord : là, « stat -f » existe mais décrit le système de
+# fichiers et casse le calcul. Repli macOS ensuite.
+age_s=$(( $(date +%s) - $(stat -c %Y "$dernier" 2>/dev/null || stat -f %m "$dernier") ))
 age_h=$(( age_s / 3600 ))
 taille=$(du -h "$dernier" | cut -f1)
 nb=$(ls -1 "$DEST"/prod-*.dump 2>/dev/null | wc -l | tr -d ' ')
