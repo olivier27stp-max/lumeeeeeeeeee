@@ -706,6 +706,10 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   if (entity === 'service') {
     const name = safeStr(n.name);
     if (!name) return { ok: false, reason: 'invalid', detail: 'nom de service manquant' };
+    // Ligne de totaux que Jobber ajoute au bas de « Products & Services » : elle est
+    // entrée telle quelle dans le catalogue de Vision Lavage (2026-09-24) — même
+    // garde que les propriétés.
+    if (/^report totals?:?$/i.test(name)) return { ok: false, reason: 'orphan', detail: 'ligne de totaux du rapport Jobber (ignorée)' };
     return {
       ok: true,
       row: {

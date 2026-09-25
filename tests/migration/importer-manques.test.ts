@@ -79,3 +79,17 @@ describe('buildEntityRow — facture : date de paiement', () => {
     expect(res.row).not.toHaveProperty('paid_at');
   });
 });
+
+// 2026-09-24 : « Report totals: » (dernière ligne du rapport Jobber Products & Services)
+// était importée comme un service du catalogue de Vision Lavage.
+describe('ligne de totaux Jobber dans un fichier de services', () => {
+  it('« Report totals: » n\'entre jamais dans le catalogue', () => {
+    const ctx: BuildContext = { migration: { org_id: 'o' } as any, createdBy: 'u', clientIdByRef: new Map(), propertyIdByRef: new Map(), jobIdByRef: new Map() };
+    const rec = (name: string) => ({ id: 's', row_number: 12, entity_type: 'service', external_id: null, normalized: { name }, relations: {}, status: 'ready' } as StagingRow);
+    const totaux = buildEntityRow('service', rec('Report totals:'), ctx);
+    expect(totaux.ok).toBe(false);
+    if (!totaux.ok) expect(totaux.detail).toMatch(/totaux du rapport Jobber/);
+    expect(buildEntityRow('service', rec('Report Total'), ctx).ok).toBe(false);
+    expect(buildEntityRow('service', rec('Lavage à pression'), ctx).ok).toBe(true);
+  });
+});
