@@ -380,6 +380,34 @@ describe('planIntraDedupe — doublons internes et homonymes (précision)', asyn
     expect(plan.siblingOf.get('b')).toBe('a');
     expect(plan.siblingOf.has('c')).toBe(false);
   });
+
+  it('visites : même job + même début → fusionnées ; autre heure ou autre job → distinctes', () => {
+    const v = (id: string, job_ref: string, start_at: string) => ({ id, row_number: 1, entity_type: 'visit', external_id: null, status: 'ready', normalized: { start_at }, relations: { job_ref } } as any);
+    const plan = planIntraDedupe('visit', [
+      v('a', '1001', '2026-10-01T09:00:00'),
+      v('b', '1001', '2026-10-01T09:00:00'),
+      v('c', '1001', '2026-10-01T13:00:00'),
+      v('d', '1002', '2026-10-01T09:00:00'),
+      v('e', '', '2026-10-01T09:00:00'),
+    ]);
+    expect(plan.siblingOf.get('b')).toBe('a');
+    expect(plan.siblingOf.has('c')).toBe(false);
+    expect(plan.siblingOf.has('d')).toBe(false);
+    expect(plan.siblingOf.has('e')).toBe(false); // sans job : jamais devinée
+  });
+});
+
+describe('visitDedupKey — une visite déjà dans le CRM est reconnue quel que soit le format d\'horodatage', async () => {
+  const { visitDedupKey } = await import('../../server/lib/migration/importer');
+  it('même instant en Z et en +00:00 → même clé', () => {
+    expect(visitDedupKey('job-1', '2026-10-01T13:00:00Z')).toBe(visitDedupKey('job-1', '2026-10-01T13:00:00+00:00'));
+    expect(visitDedupKey('job-1', '2026-10-01T13:00:00Z')).not.toBe(visitDedupKey('job-2', '2026-10-01T13:00:00Z'));
+    expect(visitDedupKey('job-1', '2026-10-01T13:00:00Z')).not.toBe(visitDedupKey('job-1', '2026-10-01T14:00:00Z'));
+  });
+  it('job ou date manquants → null', () => {
+    expect(visitDedupKey('', '2026-10-01T13:00:00Z')).toBeNull();
+    expect(visitDedupKey('job-1', 'n/a')).toBeNull();
+  });
 });
 
 describe('facture — le solde source fait foi (précision au cent)', async () => {

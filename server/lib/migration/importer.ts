@@ -313,6 +313,24 @@ async function seedExistingRefs(admin: SupabaseClient, orgId: string, ctx: Build
     }
     if (data.length < STAGING_PAGE) break;
   }
+  // Visites actives : une visite du même job au même instant existe déjà → ignorée
+  // à l'import (2e migration sur un bureau vivant, fichier « Visits » repris).
+  const visitMap = ctx.visitIdByKey ?? (ctx.visitIdByKey = new Map());
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('visits')
+      .select('id, job_id, start_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) { console.error('[migration-importer] existing visits seed failed:', error.message); break; }
+    if (!data || data.length === 0) break;
+    for (const v of data as { id: string; job_id: string | null; start_at: string | null }[]) {
+      const k = visitDedupKey(v.job_id ?? '', v.start_at ?? '');
+      if (k && !visitMap.has(k)) visitMap.set(k, v.id);
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
 }
 
 /** Clés de référence sous lesquelles une ligne peut être retrouvée par ses enfants. */
@@ -468,6 +486,13 @@ function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
     const inv = refKey(str((rec.relations ?? {}).invoice_ref));
     const amount = typeof n.amount_cents === 'number' ? n.amount_cents : null;
     if (inv && amount !== null) keys.push(`pay:${inv}|${amount}|${str(n.date).slice(0, 10)}`);
+  } else if (entity === 'visit') {
+    // Même job + même début = même visite (un export « Visits » repris deux
+    // fois, ou une visite listée par ligne de service). Deux visites du même
+    // job à des heures différentes restent DISTINCTES.
+    const job = refKey(str((rec.relations ?? {}).job_ref));
+    const start = str(n.start_at);
+    if (job && start) keys.push(`v:${job}|${start}`);
   } else if (entity === 'tax_config') {
     // Même nom + même région = même taxe (« TPS » du Québec ≠ « TPS » de l'Ontario).
     const name = refKey(str(n.name));
@@ -602,6 +627,16 @@ export interface BuildContext {
   invoiceIdByRef?: Map<string, string>;
   /** refKey(nom source) → user_id Lume (migration_staff_mappings). Absent/null = non assigné. */
   staffIdBySource?: Map<string, string>;
+  /** visitDedupKey(job_id, start_at) → visit id déjà dans le CRM : une visite
+   *  réimportée (2e migration, fichier repris) n'est jamais créée en double. */
+  visitIdByKey?: Map<string, string>;
+}
+
+/** Clé d'unicité d'une visite dans le CRM : job + instant de début (UTC, à la seconde). */
+export function visitDedupKey(jobId: string, startAt: string): string | null {
+  const t = new Date(startAt).getTime();
+  if (!jobId || Number.isNaN(t)) return null;
+  return `${jobId}|${Math.floor(t / 1000)}`;
 }
 
 // NB: `reason` est déclaré sur les deux branches (undefined côté succès) car le
@@ -1046,6 +1081,7 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
 
     const intra = planIntraDedupe(entity, rows);
     for (const k of intra.ambiguousKeys) allAmbiguousKeys.push(`${entity}:${k}`);
+    let visitesDejaPresentes = 0;
     const targetByStagingId = new Map<string, string>();
     const mapByEntity =
       entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef
@@ -1113,6 +1149,16 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
         continue;
       }
       if (entity === 'invoice') detacherFactureSurJobDejaFacture(built.row, jobsFactures);
+      if (entity === 'visit') {
+        const k = visitDedupKey(str(built.row.job_id), str(built.row.start_at));
+        const dejaLa = k ? ctx.visitIdByKey?.get(k) : undefined;
+        if (dejaLa) {
+          counts.ignored += 1;
+          visitesDejaPresentes += 1;
+          registerRefs(dejaLa);
+          continue;
+        }
+      }
       counts.wouldCreate += 1;
       registerRefs(deterministicEntityId(migration.id, rec.id, TABLE_BY_ENTITY[entity]));
       if (entity === 'invoice') {
@@ -1121,6 +1167,7 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
       }
     }
 
+    if (visitesDejaPresentes > 0) notes.push(`${visitesDejaPresentes} visite(s) déjà présentes dans le CRM (même job, même début) seront ignorées.`);
     if (counts.wouldMerge > 0) notes.push(`${counts.wouldMerge} ${entity}(s) seront fusionnés (doublons internes ou dossiers existants).`);
     if (counts.errors > 0) notes.push(`${counts.errors} ligne(s) ${entity} en erreur (valeurs invalides) — voir l'onglet Rejets.`);
   }
@@ -1484,6 +1531,7 @@ export async function runFinalImport(
     const intra = planIntraDedupe(entity, rows);
     const targetByStagingId = new Map<string, string>();
     const siblings: StagingRow[] = [];
+    let visitesDejaPresentes = 0;
     const mapByEntity =
       entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef
         : entity === 'invoice' ? (ctx.invoiceIdByRef ?? (ctx.invoiceIdByRef = new Map())) : null;
@@ -1557,6 +1605,19 @@ export async function runFinalImport(
         continue;
       }
       if (entity === 'invoice') detacherFactureSurJobDejaFacture(built.row, jobsFactures);
+      if (entity === 'visit') {
+        // Déjà dans le CRM (même job, même début) : jamais recréée, rattachée à l'existante.
+        const k = visitDedupKey(str(built.row.job_id), str(built.row.start_at));
+        const dejaLa = k ? ctx.visitIdByKey?.get(k) : undefined;
+        if (dejaLa) {
+          counts.ignored += 1;
+          visitesDejaPresentes += 1;
+          ignoredIds.push(rec.id);
+          importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: rec.id, entity_table: table, entity_id: dejaLa, action: 'skipped' });
+          registerRefs(rec, dejaLa);
+          continue;
+        }
+      }
       const id = deterministicEntityId(migration.id, rec.id, table);
       targetByStagingId.set(rec.id, id);
       toInsert.push({ rec, row: { id, ...built.row }, id });
@@ -1683,6 +1744,7 @@ export async function runFinalImport(
     await setStagingStatus(admin, migration.id, ignoredIds, 'ignored');
     await setStagingStatus(admin, migration.id, orphanIds, 'orphan');
 
+    if (visitesDejaPresentes > 0) notes.push(`${visitesDejaPresentes} visite(s) déjà présentes dans le CRM (même job, même début) ignorées.`);
     if (counts.wouldMerge > 0) notes.push(`${counts.wouldMerge} ${entity}(s) fusionnés avec des dossiers existants.`);
     if (counts.errors > 0) notes.push(`${counts.errors} ligne(s) ${entity} rejetées à l'import — voir le staging.`);
   }
