@@ -1299,13 +1299,24 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
     adresse: (x.address as string) ?? null,
   }));
 
+  // Un BROUILLON n'est pas une dette : il n'a jamais été envoyé, donc le
+  // client ne doit rien et ne sait même pas qu'il existe. Les compter dans
+  // « Doit » gonflait le solde de 5 823 $ en production, répartis sur 14
+  // brouillons — de l'argent jamais réclamé, affiché comme réclamé.
+  //
+  // Une facture ANNULÉE (`void`) porte déjà un solde à zéro en base : elle
+  // n'a jamais faussé le total, on la laisse donc passer telle quelle.
+  const facturesReclamees = (facturesR.data ?? []).filter(
+    (f: Record<string, unknown>) => (f.status as string) !== 'draft',
+  );
+
   return {
     jobs, devis, factures, transactions, proprietes, messages,
     // `paid_cents` et `balance_cents` sont tenus par la base : on les somme,
-    // on ne les recalcule pas. Une facture annulée porte un solde à zéro.
-    paye_cents: (facturesR.data ?? []).reduce(
+    // on ne les recalcule pas.
+    paye_cents: facturesReclamees.reduce(
       (s: number, f: Record<string, unknown>) => s + ((f.paid_cents as number) ?? 0), 0),
-    du_cents: (facturesR.data ?? []).reduce(
+    du_cents: facturesReclamees.reduce(
       (s: number, f: Record<string, unknown>) => s + ((f.balance_cents as number) ?? 0), 0),
   };
 }
