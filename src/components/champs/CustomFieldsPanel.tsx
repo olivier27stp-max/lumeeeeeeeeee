@@ -15,7 +15,7 @@ import { useId, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { ecrireValeurs, lireValeurs, type ObjetChamp, type ValeurChamp } from '../../lib/champsPersoApi';
 import ChampSaisie from './ChampSaisie';
 import { messageChamps } from '../../lib/champs/messages';
@@ -33,7 +33,7 @@ interface Props {
 }
 
 export default function CustomFieldsPanel({ objet, entityId, fr, titre, className, lectureSeule }: Props) {
-  const { isEnabled } = useModuleAccess('custom_fields_v2');
+  const { isEnabled } = useChampsPersoActifs();
   const qc = useQueryClient();
   const idBase = useId();
   const cleRequete = ['champs-perso-valeurs', objet, entityId];

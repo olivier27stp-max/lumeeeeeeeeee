@@ -29,7 +29,7 @@ import { motion } from 'motion/react';
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
-import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 
 // ─── Settings navigation (persistent sidebar) ─────────────────────
 // Organized by user intent: Mon compte / Entreprise / Ventes & paiements /
@@ -51,7 +51,7 @@ export function useSettingsNav(): NavGroup[] {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
   // Champs personnalisés v2 : visibles seulement quand le drapeau est actif.
-  const { isEnabled: champsV2 } = useModuleAccess('custom_fields_v2');
+  const { isEnabled: champsV2 } = useChampsPersoActifs();
 
   return [
     {

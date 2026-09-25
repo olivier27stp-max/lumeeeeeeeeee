@@ -5,12 +5,12 @@
  */
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { listerChamps } from '../../lib/champsPersoApi';
 import type { ChampPerso } from '../../lib/champs/types';
 
 export function useChampsPourFormulaire(): ChampPerso[] {
-  const { isEnabled } = useModuleAccess('custom_fields_v2');
+  const { isEnabled } = useChampsPersoActifs();
   const { data } = useQuery({
     queryKey: ['champs-perso', 'formulaire'],
     queryFn: () => listerChamps(),

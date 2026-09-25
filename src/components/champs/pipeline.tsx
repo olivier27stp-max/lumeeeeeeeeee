@@ -13,7 +13,7 @@
  */
 import { useId, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import {
   filtrerParChamps, lireCartesPipeline, listerChamps, lireValeursLot,
   type ChampPerso, type Condition, type ValeurEnregistree,
@@ -28,7 +28,7 @@ const AUCUN_ID: string[] = [];
 const AUCUNE_VALEUR: Valeurs = {};
 
 export function useChampsPipeline(pipelineId: string | null, dealIds: string[]) {
-  const { isEnabled } = useModuleAccess('custom_fields_v2');
+  const { isEnabled } = useChampsPersoActifs();
   const { data: liste } = useQuery({
     queryKey: ['champs-perso', 'deal'],
     queryFn: () => listerChamps('deal'),
