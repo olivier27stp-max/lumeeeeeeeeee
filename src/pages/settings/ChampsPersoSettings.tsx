@@ -56,7 +56,7 @@ export default function ChampsPersoSettings() {
   const fr = language === 'fr';
   const ids = useId();
   const qc = useQueryClient();
-  const { isEnabled, loading: chargeDrapeau } = useModuleAccess('custom_fields_v2');
+  const { isEnabled, loading: chargeDrapeau, indetermine } = useModuleAccess('custom_fields_v2');
 
   const [onglet, setOnglet] = useState<Onglet>('tous');
   const [vue, setVue] = useState<'champs' | 'dossiers'>('champs');
@@ -177,7 +177,8 @@ export default function ChampsPersoSettings() {
     }
   };
 
-  if (chargeDrapeau) return null;
+  // État inconnu (bureau pas encore choisi, réseau) : on attend, on n'affirme pas « pas activée ».
+  if (chargeDrapeau || indetermine) return null;
   if (!isEnabled) {
     return (
       <div className="max-w-2xl">
