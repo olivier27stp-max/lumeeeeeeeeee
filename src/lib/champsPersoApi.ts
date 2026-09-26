@@ -44,6 +44,20 @@ export async function televerserFichierChamp(fichier: File): Promise<string> {
   return chemin;
 }
 
+/**
+ * Retire du bucket un fichier qui n'est plus référencé.
+ *
+ * Appelé APRÈS l'écriture réussie de la nouvelle valeur : si l'écriture échoue,
+ * la fiche pointe encore sur l'ancien fichier et il doit rester. L'échec de la
+ * suppression n'est jamais remonté à l'utilisateur — la valeur, elle, est
+ * enregistrée ; le fichier resté derrière sera ramassé par le ménage du serveur.
+ */
+export async function supprimerFichierChamp(chemin: string | null | undefined): Promise<void> {
+  if (!chemin) return;
+  const { error } = await supabase.storage.from(BUCKET_FICHIERS_CHAMPS).remove([chemin]);
+  if (error) console.warn('[champs] fichier non supprimé du bucket', chemin, error.message);
+}
+
 /** Lien temporaire (5 min) pour ouvrir un fichier de champ. */
 export async function lienFichierChamp(chemin: string): Promise<string> {
   const { data, error } = await supabase.storage.from(BUCKET_FICHIERS_CHAMPS).createSignedUrl(chemin, 300);

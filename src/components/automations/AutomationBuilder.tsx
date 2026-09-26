@@ -622,7 +622,8 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
                       const champ = modele.champs.find((c) => c.type === 'zone');
                       if (!champ) return;
                       const actuel = (action.config as Record<string, string | undefined>)[champ.cle] ?? '';
-                      majAction(i, { config: { ...action.config, [champ.cle]: `${actuel}[${variable}]` } });
+                      // La variable arrive déjà écrite ({{client.cle}}) : pas de crochets par-dessus.
+                      majAction(i, { config: { ...action.config, [champ.cle]: `${actuel}${variable}` } });
                     }} />
                   </div>
                 )}
@@ -853,7 +854,7 @@ function EditeurEtape({
               </button>
             ))}
             <BoutonsVariablesChamps champs={champsPerso} fr={fr} onInserer={(variable) =>
-              onChange({ ...etape, action: { ...etape.action, config: { ...etape.action.config, body: `${etape.action.config.body ?? ''}[${variable}]` } } })} />
+              onChange({ ...etape, action: { ...etape.action, config: { ...etape.action.config, body: `${etape.action.config.body ?? ''}${variable}` } } })} />
           </div>
         </div>
       )}

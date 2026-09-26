@@ -4,7 +4,7 @@
  *   · useChampsTous : tous les champs (drapeau `custom_fields_v2` requis) ;
  *   · SelecteurChamp : choisir un champ (déclencheur « champ modifié »,
  *     action « mettre à jour un champ ») ;
- *   · BoutonsVariablesChamps : insérer [client_cf_superficie]… ;
+ *   · BoutonsVariablesChamps : insérer {{client.superficie}}… ;
  *   · ConditionsChampsEtape : conditions `champs_perso` d'une étape « si ».
  * Coupé par le drapeau, rien de tout ça ne s'affiche.
  */
@@ -12,7 +12,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { listerChamps } from '../../lib/champsPersoApi';
-import { LIBELLES_OBJET, OBJETS, variableModele, type ChampPerso, type ObjetChamp } from '../../lib/champs/types';
+import { LIBELLES_OBJET, OBJETS, variableAffichee, variableModele, type ChampPerso, type ObjetChamp } from '../../lib/champs/types';
 import type { Condition } from '../../lib/champs/filtres';
 import EditeurConditions from './EditeurConditions';
 
@@ -73,8 +73,8 @@ export function BoutonsVariablesChamps({ champs, fr, onInserer }: { champs: Cham
       {champs.map((c) => (
         <button
           key={c.id} type="button"
-          onClick={() => onInserer(variableModele(c.object_type, c.key))}
-          title={`[${variableModele(c.object_type, c.key)}]`}
+          onClick={() => onInserer(variableAffichee(c.object_type, c.key))}
+          title={variableAffichee(c.object_type, c.key)}
           className="rounded-md border border-dashed border-border px-2 py-1 text-[11px] text-text-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {(fr ? LIBELLES_OBJET[c.object_type].fr : LIBELLES_OBJET[c.object_type].en)} · {c.label}
@@ -117,13 +117,16 @@ export function ConditionsChampsEtape({ conditions, onChange, champs, objet, fr 
  */
 export function variablesChampsPourCourriel(
   typeCourriel: string | undefined, champs: ChampPerso[],
-): Array<{ cle: string; fr: string; en: string }> {
+): Array<{ cle: string; fr: string; en: string; jeton: string }> {
   const objets: ObjetChamp[] = !typeCourriel
     ? OBJETS.filter((o) => o !== 'property')
     : typeCourriel === 'invoice_sent' || typeCourriel === 'invoice_reminder' ? ['client', 'invoice']
     : typeCourriel === 'quote_sent' ? ['client', 'quote'] : [];
   return champs.filter((c) => objets.includes(c.object_type)).map((c) => ({
     cle: variableModele(c.object_type, c.key),
+    // Ce qu'on écrit dans le courriel : le format GoHighLevel. `cle` reste le
+    // nom interne, celui que le serveur résout et que la détection compare.
+    jeton: variableAffichee(c.object_type, c.key),
     fr: `${LIBELLES_OBJET[c.object_type].fr} · ${c.label}`,
     en: `${LIBELLES_OBJET[c.object_type].en} · ${c.label}`,
   }));

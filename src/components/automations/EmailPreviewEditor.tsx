@@ -208,8 +208,8 @@ export default function EmailPreviewEditor({
   const champsPerso = useChampsTous();
   const variables = useMemo(() => [
     ...(typeCourriel
-      ? variablesPour(typeCourriel).map((v) => ({ cle: v.cle, fr: v.fr, en: v.en }))
-      : VARIABLES_PROPOSEES),
+      ? variablesPour(typeCourriel).map((v) => ({ cle: v.cle, fr: v.fr, en: v.en, jeton: undefined as string | undefined }))
+      : VARIABLES_PROPOSEES.map((v) => ({ ...v, jeton: undefined as string | undefined }))),
     // Champs personnalisés (v2) que le serveur remplit pour ce poste.
     ...variablesChampsPourCourriel(typeCourriel, champsPerso),
   ], [typeCourriel, champsPerso]);
@@ -233,7 +233,17 @@ export default function EmailPreviewEditor({
   const inconnues = useMemo(() => {
     const connues = new Set(variables.map((v) => v.cle));
     const vues = new Set<string>();
-    const texte = `${objet} ${blocsEnTexte(blocs)}`;
+    /* {{client.cle}} — le format GoHighLevel des champs personnalisés. On le
+       traite avant les crochets : `{{client.x}}` passerait sinon pour la clé
+       bancale `{client.x`. Champ connu → rien à dire ; inconnu → signalé tel
+       qu'écrit, pour que l'auteur voie exactement ce qu'il a tapé. */
+    const texte = `${objet} ${blocsEnTexte(blocs)}`.replace(
+      /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g,
+      (entier, obj: string, cle: string) => {
+        if (!connues.has(`${obj}_cf_${cle}`)) vues.add(entier);
+        return ' ';
+      },
+    );
     // La clé peut contenir n'importe quoi sauf le crochet fermant : c'est
     // ainsi qu'on attrape `[client-name]` et `[montant_dû]`, que le serveur
     // ne reconnaîtrait pas.
@@ -344,16 +354,19 @@ export default function EmailPreviewEditor({
   const ajouterBloc = (type: Bloc['type']) =>
     setBlocs((bs) => [...bs, { id: compteurId++, type, texte: '' }]);
 
-  const insererVariable = (cle: string) => {
+  const insererVariable = (cle: string, jeton?: string) => {
+    // Un champ personnalisé apporte son écriture complète ({{client.cle}}) ;
+    // les variables classiques prennent les crochets historiques.
+    const ecriture = jeton ?? `[${cle}]`;
     // L'objet décide de l'ouverture : il doit pouvoir porter le montant ou le
     // numéro, pas seulement le corps.
     if (cibleObjet) {
-      setObjet((o) => `${o}[${cle}]`);
+      setObjet((o) => `${o}${ecriture}`);
       return;
     }
     const cible = actif ?? blocs[blocs.length - 1]?.id;
     if (cible === undefined) return;
-    setBlocs((bs) => bs.map((b) => (b.id === cible ? { ...b, texte: `${b.texte}[${cle}]` } : b)));
+    setBlocs((bs) => bs.map((b) => (b.id === cible ? { ...b, texte: `${b.texte}${ecriture}` } : b)));
   };
 
   const enregistrer = async () => {
@@ -640,8 +653,8 @@ export default function EmailPreviewEditor({
             {variables.map((v) => (
               <button
                 key={v.cle}
-                title={`[${v.cle}]`}
-                onClick={() => insererVariable(v.cle)}
+                title={v.jeton ?? `[${v.cle}]`}
+                onClick={() => insererVariable(v.cle, v.jeton)}
                 className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-surface-tertiary text-text-secondary hover:bg-surface-tertiary/70 transition-colors"
               >
                 <Plus size={9} /> {fr ? v.fr : v.en}

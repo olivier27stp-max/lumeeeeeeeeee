@@ -721,6 +721,19 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
       console.error('[scheduler] quote expiry check failed:', err.message);
     }
 
+    // Ménage du bucket des champs « Fichier », une fois par jour : ce que ni le
+    // remplacement ni le retrait depuis une fiche n'ont pu nettoyer (création
+    // abandonnée, fiche supprimée). Volontairement rare et plafonné.
+    try {
+      if (Date.now() - dernierMenageFichiers > 86_400_000) {
+        dernierMenageFichiers = Date.now();
+        const { menageFichiersChamps } = await import('./champs/menageFichiers');
+        await menageFichiersChamps(supabase);
+      }
+    } catch (err: any) {
+      console.error('[scheduler] ménage des fichiers de champs échoué:', err.message);
+    }
+
     // Auto-archive expired quotes older than 30 days
     try {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
@@ -783,6 +796,8 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
 // ---------------------------------------------------------------------------
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
+/** Dernier ménage du bucket des champs « Fichier » (une fois par jour). */
+let dernierMenageFichiers = 0;
 
 export function startScheduler(
   supabaseUrl: string,
