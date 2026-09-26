@@ -73,9 +73,9 @@ vi.mock('../src/i18n', () => ({ useTranslation: () => ({ language: 'fr', t: {} }
 import DealDrawer from '../src/components/pipeline/DealDrawer';
 
 const ETAPES = [
-  { id: 'e1', pipeline_id: 'p1', name_fr: 'Nouveau lead', name_en: 'New lead', guidance_fr: '', guidance_en: '', position: 1, kind: 'open' as const, probability: null, show_in_reports: true, archived_at: null },
-  { id: 'e2', pipeline_id: 'p1', name_fr: 'Gagné', name_en: 'Won', guidance_fr: '', guidance_en: '', position: 2, kind: 'won' as const, probability: null, show_in_reports: true, archived_at: null },
-  { id: 'e3', pipeline_id: 'p1', name_fr: 'Perdu', name_en: 'Lost', guidance_fr: '', guidance_en: '', position: 3, kind: 'lost' as const, probability: null, show_in_reports: true, archived_at: null },
+  { id: 'e1', pipeline_id: 'p1', name_fr: 'Nouveau lead', name_en: 'New lead', guidance_fr: '', guidance_en: '', position: 1, kind: 'open' as const, probability: null, show_in_reports: true, show_in_pie: true, archived_at: null },
+  { id: 'e2', pipeline_id: 'p1', name_fr: 'Gagné', name_en: 'Won', guidance_fr: '', guidance_en: '', position: 2, kind: 'won' as const, probability: null, show_in_reports: true, show_in_pie: true, archived_at: null },
+  { id: 'e3', pipeline_id: 'p1', name_fr: 'Perdu', name_en: 'Lost', guidance_fr: '', guidance_en: '', position: 3, kind: 'lost' as const, probability: null, show_in_reports: true, show_in_pie: true, archived_at: null },
 ];
 
 function faireDeal(over: Record<string, unknown> = {}) {

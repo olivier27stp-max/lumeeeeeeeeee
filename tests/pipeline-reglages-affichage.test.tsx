@@ -63,7 +63,13 @@ describe('réglages d affichage — une bascule n écrit que son champ', () => {
 
 // ── Les gardes qui lisent les VRAIS fichiers ────────────────
 describe('les fichiers réels portent bien le correctif', () => {
-  const ecran = () => fs.readFileSync('src/components/pipeline/PipelineReglages.tsx', 'utf8');
+  // Depuis la refonte « façon GHL » (2026-09-25), les réglages vivent dans
+  // la page détail, le modal et leurs pièces communes.
+  const ecran = () => [
+    'src/components/pipeline/ghl/PipelineDetail.tsx',
+    'src/components/pipeline/ghl/PipelineModal.tsx',
+    'src/components/pipeline/ghl/ReglagesCommuns.tsx',
+  ].map((f) => fs.readFileSync(f, 'utf8')).join(' ');
 
   it('l écran appelle definirAffichagePipeline', () => {
     expect(ecran()).toContain('definirAffichagePipeline');

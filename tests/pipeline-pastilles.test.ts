@@ -13,8 +13,8 @@ import { pastilles, type Deal, type PipelineStage } from '../src/lib/pipelineVen
 const MAINTENANT = new Date('2026-09-24T12:00:00Z');
 
 const ETAPES: PipelineStage[] = [
-  { id: 'e1', pipeline_id: 'p1', name_fr: 'Nouveau', name_en: 'New', guidance_fr: '', guidance_en: '', position: 1, kind: 'open', probability: null, show_in_reports: true, archived_at: null },
-  { id: 'e2', pipeline_id: 'p1', name_fr: 'Gagné', name_en: 'Won', guidance_fr: '', guidance_en: '', position: 2, kind: 'won', probability: null, show_in_reports: true, archived_at: null },
+  { id: 'e1', pipeline_id: 'p1', name_fr: 'Nouveau', name_en: 'New', guidance_fr: '', guidance_en: '', position: 1, kind: 'open', probability: null, show_in_reports: true, show_in_pie: true, archived_at: null },
+  { id: 'e2', pipeline_id: 'p1', name_fr: 'Gagné', name_en: 'Won', guidance_fr: '', guidance_en: '', position: 2, kind: 'won', probability: null, show_in_reports: true, show_in_pie: true, archived_at: null },
 ];
 
 /** Un deal contacté, assigné, actif aujourd'hui : aucun signal. */

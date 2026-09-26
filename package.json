@@ -43,6 +43,7 @@
     "qa:explorer": "node --env-file=.env.local scripts/qa/explorer.mjs",
     "qa:audit-base": "node --env-file=.env.local scripts/qa/audit-base.mjs",
     "qa:formulaires": "node --env-file=.env.local scripts/qa/formulaires.mjs",
+    "qa:pipelines-ghl": "node --env-file=.env.local scripts/qa/verifier-pipelines-ghl.mjs",
     "qa:roles": "node --env-file=.env.local scripts/qa/roles.mjs",
     "qa:fuite": "node --env-file=.env.local scripts/qa/fuite-entre-organisations.mjs",
     "qa:isolation-bureaux": "node --env-file=.env.local scripts/qa/isolation-bureaux.mjs",
