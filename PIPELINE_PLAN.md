@@ -1,9 +1,19 @@
 # PIPELINE_PLAN.md — Pipeline de ventes (avant-job)
 
-> **Statut : PHASES 0 à 3 livrées — appliquées en PRODUCTION, PR #478 ouverte.**
-> Reste : Phase 4 (ingestion), 5 (branchement UI), 6 (statistiques), 7 (tests CI).
-> Audit en lecture seule du 2026-09-23 contre `origin/main` (15a719ee).
-> Aucune écriture en base, aucune migration, aucun commit.
+> **Statut : PHASES 0 à 7 LIVRÉES.** Mise à jour du 2026-09-26 contre
+> `origin/main` (b5133e25). **Reste ouverte : la seule Phase 3b** (retrait de
+> l'ancien `pipeline_deals`) — voir §7.
+>
+> L'en-tête précédent annonçait « reste les phases 4 à 7 » : c'était vrai le
+> 2026-09-23, ça ne l'est plus. Les phases 4 à 7 ont été livrées les 24 et 25
+> septembre : 39 migrations `pipeline`/`deal` depuis le 20260923,
+> `src/pages/Pipeline.tsx`, et 20 fichiers de tests `tests/pipeline-*`.
+> Ce décalage est précisément la dérive contre laquelle CLAUDE.md met en garde :
+> un document qui ne correspond plus à la prod envoie la session suivante
+> reconstruire l'existant.
+>
+> Le corps du document reste l'audit en lecture seule du 2026-09-23 : ses
+> constats (§0 à §6) valaient à cette date et n'ont pas été réécrits.
 > Ce fichier est le plan d'origine **réécrit contre le code réel**. Les écarts
 > sont signalés en clair : rien n'a été corrigé en silence.
 
@@ -314,17 +324,37 @@ Inchangées dans l'esprit ; corrigées sur les faits. **STOP + rapport après ch
   tout drop. Le drop de `pipeline_deals` n'est possible qu'après avoir traité
   ses 5 triggers externes, ses 2 crons, ses 2 vues, ses 14 fonctions et ses
   3 écrivains.
-- **Phase 4 — Ingestion.** `ingest_lead()` unique. Capture UTM/fbclid (tout à bâtir).
+- **Phase 4 — Ingestion.** ✅ **LIVRÉE.** `ingest_lead()` existe
+  (`20260923120000_pipeline_ingestion.sql`, étendue par
+  `20260925190000_plusieurs_formulaires_par_pipeline.sql` et
+  `20260925230000_pipelines_facon_ghl.sql`) ; UTM/fbclid capturés dès le schéma
+  d'origine. Référence d'origine ci-dessous :
+- **Phase 4 (référence d'origine).** `ingest_lead()` unique. Capture UTM/fbclid (tout à bâtir).
   Dédup selon Q4. Normalisation E.164 à l'écriture.
-- **Phase 5 — Branchement.** Historique à chaque transition. Émission des événements
+- **Phase 5 — Branchement.** ✅ **LIVRÉE.** Idempotence du chemin immédiat
+  traitée (`20260923180000_idempotence_actions_immediates.sql`), création de deal
+  unifiée (`20260923210000_pipeline_creer_deal.sql`,
+  `20260925210000_deal_depuis_client_ou_devis.sql`). Référence d'origine :
+- **Phase 5 (référence d'origine).** Historique à chaque transition. Émission des événements
   selon Q6. Idempotence à ajouter sur le chemin immédiat. Outils Lumi/MCP mis à jour
   (les 3 écrivains actuels à unifier).
-- **Phase 6 — Statistiques + Ventes.** RPC par bloc, **SECURITY INVOKER**, `org_id`
+- **Phase 6 — Statistiques + Ventes.** ✅ **LIVRÉE**, et l'exigence INVOKER a été
+  tenue : `20260923130000_pipeline_statistiques.sql` définit `pipeline_kpis`,
+  `pipeline_par_source`, `pipeline_entonnoir`, `pipeline_vitesse`,
+  `pipeline_a_traiter`, `pipeline_tendance`, `pipeline_cohortes` — **les 7 en
+  `security invoker`**, donc sans imiter les 13 `rpc_insights_*` DEFINER.
+  Prévisions ajoutées ensuite (`20260924130000_pipeline_forecast.sql`).
+  Référence d'origine :
+- **Phase 6 (référence d'origine).** RPC par bloc, **SECURITY INVOKER**, `org_id`
   dérivé de la session. Attention : les 13 RPC `rpc_insights_*` existants sont
   tous **SECURITY DEFINER** — le plan impose INVOKER, donc on ne les imite pas
   sur ce point, c'est délibéré et plus sûr.
-- **Phase 7 — Tests CI bloquants.** Y compris : renommer une étape ne change aucun
-  comportement ; les 3 chemins vers Gagné ; concordance Ventes ↔ Statistiques.
+- **Phase 7 — Tests CI bloquants.** ✅ **LIVRÉE.** 20 fichiers `tests/pipeline-*`
+  (glisser-déposer, board vide/vues/filtres, fiche deal, gagné-déplacé,
+  prévisions, attribution, import/export CSV, portée des règles, écrans GHL…),
+  tous dans la suite bloquante `npm run test`. Référence d'origine : renommer une
+  étape ne change aucun comportement ; les 3 chemins vers Gagné ; concordance
+  Ventes ↔ Statistiques.
 
 ---
 
@@ -339,4 +369,4 @@ Inchangées dans l'esprit ; corrigées sur les faits. **STOP + rapport après ch
 | Aucune idempotence sur le chemin `delay_seconds = 0` | moyen | Le plan l'exige (Phase 7) |
 | RLS `automation_rules` : tout membre peut écrire une règle via PostgREST (le garde-fou est purement UI) | moyen | Signalé, hors scope — à confirmer si on veut le corriger au passage |
 | Zéro test e2e du formulaire public | moyen | À couvrir en Phase 7 |
-| Une seule main à la fois sur le schéma (règle CLAUDE.md) | — | Vérifier qu'aucune autre session ne touche la DB avant la Phase 2 |
+| Une seule main à la fois sur le schéma (règle CLAUDE.md) | — | Toujours valable. Ne pas nommer ici la PR du moment : c'est ce genre de ligne qui périme le document. Avant tout chantier schéma, vérifier l'occupation réelle de la voie — une PR ouverte dont la description exige des migrations en prod — plutôt que de se fier à ce fichier |
