@@ -29,7 +29,6 @@ import { logger } from '../logger';
 import { champsDuModele, estIndustrieModele, type IndustrieModele } from '../../../src/lib/champs/modeles';
 
 /** Drapeau de fonctionnalité (table org_features) — l'UI v2 et ses points d'entrée. */
-export const DRAPEAU_CHAMPS_V2 = 'custom_fields_v2';
 
 export class ErreurChamps extends Error {
   constructor(message: string, public status = 400, public details?: unknown) {
@@ -60,18 +59,6 @@ function traduireErreur(error: { code?: string; message?: string; details?: stri
 
 export function estObjet(x: unknown): x is ObjetChamp {
   return typeof x === 'string' && (OBJETS as readonly string[]).includes(x);
-}
-
-// ─── Drapeau ─────────────────────────────────────────────────────
-
-export async function champsV2Actifs(db: SupabaseClient, orgId: string): Promise<boolean> {
-  const { data, error } = await db.from('org_features').select('enabled')
-    .eq('org_id', orgId).eq('feature', DRAPEAU_CHAMPS_V2).maybeSingle();
-  if (error) {
-    logger.error('[champs] lecture du drapeau', { message: error.message });
-    return false;
-  }
-  return data?.enabled === true;
 }
 
 // ─── Lecture des définitions ─────────────────────────────────────
@@ -560,7 +547,6 @@ export async function champsPourDocument(
   db: SupabaseClient, orgId: string, objet: 'quote' | 'invoice', entite: string,
 ): Promise<ChampDocument[]> {
   try {
-    if (!(await champsV2Actifs(db, orgId))) return [];
     const { champs } = await listerChamps(db, orgId, { objet });
     const visibles = champs.filter((c) => c.config.show_on_documents);
     if (visibles.length === 0) return [];

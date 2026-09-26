@@ -484,7 +484,7 @@ async function copierModeles(
         }
         const { data: insChamps, error: eChamps } = await admin.from('custom_fields')
           .insert(champs.map((c) => ({
-            ...clonerLigne(c, targetOrgId, createdBy, ['legacy_column_id']),
+            ...clonerLigne(c, targetOrgId, createdBy),
             folder_id: c.folder_id ? dossierIds.get(String(c.folder_id)) ?? null : null,
           })))
           .select('id');

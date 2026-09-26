@@ -7,9 +7,8 @@
  * pas la page »). On ne le cache plus que si une ligne dit explicitement
  * enabled=false pour ce bureau.
  */
-import { useModuleAccess } from './useModuleAccess';
-
+// 2026-09-25 : le drapeau `custom_fields_v2` est retiré — les champs
+// personnalisés font partie de Lume pour toutes les entreprises.
 export function useChampsPersoActifs(): { isEnabled: boolean } {
-  const { desactiveExplicitement } = useModuleAccess('custom_fields_v2');
-  return { isEnabled: !desactiveExplicitement };
+  return { isEnabled: true };
 }

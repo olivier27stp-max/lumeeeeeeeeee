@@ -24,7 +24,8 @@ describe('useModuleAccess', () => {
 describe('champs personnalisés : actifs par défaut', () => {
   it('seule une ligne enabled=false les cache (pas une lecture ratée, pas une ligne absente)', () => {
     expect(lire('src/hooks/useModuleAccess.ts')).toContain("desactiveExplicitement: !!flag && flag.enabled === false && (flag.metadata as { absent?: boolean })?.absent !== true");
-    expect(lire('src/hooks/useChampsPersoActifs.ts')).toContain('return { isEnabled: !desactiveExplicitement };');
+    // Drapeau retiré (2026-09-25) : toujours actifs.
+    expect(lire('src/hooks/useChampsPersoActifs.ts')).toContain('return { isEnabled: true };');
   });
   it.each(['src/pages/settings/ChampsPersoSettings.tsx', 'src/pages/settings/SettingsLayout.tsx', 'src/components/champs/creation.tsx', 'src/components/champs/CustomFieldsPanel.tsx'])(
     '%s passe par useChampsPersoActifs', (f) => {
