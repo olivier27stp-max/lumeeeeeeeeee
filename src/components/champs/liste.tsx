@@ -12,8 +12,15 @@
  * d'affichage, pas une donnée). Coupé par le drapeau : rien ne s'affiche.
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { SlidersHorizontal } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { GripVertical, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { usePermissions } from '../../hooks/usePermissions';
+import ModaleChamp from './reglages/ModaleChamp';
 import { cn } from '../../lib/utils';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { filtrerParChamps, lireFuseau, lireValeursLot, listerChamps } from '../../lib/champsPersoApi';
@@ -72,6 +79,7 @@ export function useChampsListe(objet: ObjetChamp, fr: boolean) {
 
   const bouton = !isEnabled || champs.length === 0 ? null : (
     <BoutonChampsListe
+      objet={objet} dossiers={data?.folders ?? []}
       champs={champs} conditions={conditions} onConditions={setConditions}
       colonnes={colonnesIds} onColonnes={choisirColonnes} erreur={erreur} fr={fr}
     />
@@ -133,7 +141,25 @@ export function CelluleChamps({ champs, valeurs, fr, fuseau }: {
   );
 }
 
-function BoutonChampsListe({ champs, conditions, onConditions, colonnes, onColonnes, erreur, fr }: {
+/** Une colonne affichée : poignée ⋮⋮ pour l'ordre, case pour la retirer. */
+function ColonneAffichee({ champ, fr, onRetirer }: { champ: ChampPerso; fr: boolean; onRetirer: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: champ.id });
+  return (
+    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="flex items-center gap-2 rounded-md px-1 py-1 hover:bg-surface-secondary">
+      <button type="button" {...attributes} {...listeners} aria-label={fr ? `Déplacer ${champ.label}` : `Move ${champ.label}`}
+        className="cursor-grab rounded p-0.5 text-text-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+        <GripVertical size={14} aria-hidden />
+      </button>
+      <input type="checkbox" checked onChange={onRetirer} className="h-4 w-4 accent-primary"
+        aria-label={fr ? `Retirer la colonne ${champ.label}` : `Remove column ${champ.label}`} />
+      <span className="truncate text-[13px] text-text-primary">{champ.label}</span>
+    </li>
+  );
+}
+
+function BoutonChampsListe({ objet, dossiers, champs, conditions, onConditions, colonnes, onColonnes, erreur, fr }: {
+  objet: ObjetChamp; dossiers: import('../../lib/champs/types').DossierChamp[];
   champs: ChampPerso[]; conditions: Condition[]; onConditions: (c: Condition[]) => void;
   colonnes: string[]; onColonnes: (ids: string[]) => void; erreur: string | null; fr: boolean;
 }) {
@@ -149,6 +175,20 @@ function BoutonChampsListe({ champs, conditions, onConditions, colonnes, onColon
     return () => { document.removeEventListener('mousedown', fermer); document.removeEventListener('keydown', echap); };
   }, [ouvert]);
   const actives = conditions.filter(conditionComplete).length;
+  const [recherche, setRecherche] = useState('');
+  const [creation, setCreation] = useState(false);
+  const qc = useQueryClient();
+  const { role } = usePermissions();
+  const peutCreer = role === 'owner' || role === 'admin';
+  const q = recherche.trim().toLowerCase();
+  const parId = new Map(champs.map((c) => [c.id, c]));
+  const affichees = colonnes.filter((id) => parId.has(id));
+  const disponibles = champs.filter((c) => !colonnes.includes(c.id) && (!q || c.label.toLowerCase().includes(q)));
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const surDrag = (e: DragEndEvent) => {
+    if (!e.over || e.active.id === e.over.id) return;
+    onColonnes(arrayMove(affichees, affichees.indexOf(String(e.active.id)), affichees.indexOf(String(e.over.id))));
+  };
   return (
     <div className="relative" ref={ref}>
       <button type="button" aria-haspopup="dialog" aria-expanded={ouvert} onClick={() => setOuvert((o) => !o)}
@@ -166,24 +206,58 @@ function BoutonChampsListe({ champs, conditions, onConditions, colonnes, onColon
             <EditeurConditions champs={champs} conditions={conditions} onChange={onConditions} fr={fr} />
             {erreur && <p role="alert" className="mt-2 text-[12px] text-red-600">{erreur}</p>}
           </div>
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
-              {fr ? `Afficher dans la liste (${MAX_COLONNES} au plus)` : `Show in the list (up to ${MAX_COLONNES})`}
-            </p>
-            <ul className="grid grid-cols-2 gap-1">
-              {champs.map((c) => (
-                <li key={c.id}>
-                  <label htmlFor={`${ids}-${c.id}`} className="flex items-center gap-2 text-[13px] text-text-primary">
-                    <input id={`${ids}-${c.id}`} type="checkbox" className="h-4 w-4 accent-primary" checked={colonnes.includes(c.id)}
-                      disabled={!colonnes.includes(c.id) && colonnes.length >= MAX_COLONNES}
-                      onChange={(e) => onColonnes(e.target.checked ? [...colonnes, c.id] : colonnes.filter((x) => x !== c.id))} />
-                    <span className="truncate">{c.label}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
+                {fr ? `Colonnes affichées (${affichees.length} sur ${MAX_COLONNES})` : `Columns shown (${affichees.length} of ${MAX_COLONNES})`}
+              </p>
+              {affichees.length === 0 ? (
+                <p className="text-[12px] text-text-tertiary">{fr ? 'Aucune. Coche un champ à droite.' : 'None. Check a field on the right.'}</p>
+              ) : (
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={surDrag}>
+                  <SortableContext items={affichees} strategy={verticalListSortingStrategy}>
+                    <ul>
+                      {affichees.map((id) => <ColonneAffichee key={id} champ={parId.get(id)!} fr={fr} onRetirer={() => onColonnes(affichees.filter((x) => x !== id))} />)}
+                    </ul>
+                  </SortableContext>
+                </DndContext>
+              )}
+              <p className="mt-1.5 text-[11px] text-text-tertiary">{fr ? 'Glisse ⋮⋮ pour l’ordre. Réglage à toi seulement.' : 'Drag ⋮⋮ to reorder. Your own setting.'}</p>
+            </div>
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">{fr ? 'Ajouter des colonnes' : 'Add columns'}</p>
+              <div className="relative mb-1.5">
+                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden />
+                <input id={`${ids}-recherche`} value={recherche} onChange={(e) => setRecherche(e.target.value)}
+                  aria-label={fr ? 'Chercher un champ' : 'Search fields'} placeholder={fr ? 'Chercher un champ' : 'Search fields'}
+                  className="glass-input h-8 w-full pl-7 text-[12px]" />
+              </div>
+              <ul className="max-h-48 space-y-0.5 overflow-y-auto">
+                {disponibles.map((c) => (
+                  <li key={c.id}>
+                    <label htmlFor={`${ids}-${c.id}`} className="flex items-center gap-2 rounded-md px-1 py-1 text-[13px] text-text-primary hover:bg-surface-secondary">
+                      <input id={`${ids}-${c.id}`} type="checkbox" className="h-4 w-4 accent-primary" checked={false}
+                        disabled={affichees.length >= MAX_COLONNES}
+                        onChange={() => onColonnes([...affichees, c.id])} />
+                      <span className="truncate">{c.label}</span>
+                    </label>
+                  </li>
+                ))}
+                {disponibles.length === 0 && <li className="text-[12px] text-text-tertiary">{fr ? 'Aucun autre champ.' : 'No other field.'}</li>}
+              </ul>
+              {peutCreer && (
+                <button type="button" onClick={() => setCreation(true)}
+                  className="mt-2 inline-flex items-center gap-1 rounded text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                  <Plus size={12} aria-hidden />{fr ? 'Créer un champ' : 'Create a field'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
+      )}
+      {creation && (
+        <ModaleChamp open onClose={() => setCreation(false)} objet={objet} dossiers={dossiers} fr={fr}
+          onEnregistre={() => { void qc.invalidateQueries({ queryKey: ['champs-perso', objet] }); setCreation(false); }} />
       )}
     </div>
   );
