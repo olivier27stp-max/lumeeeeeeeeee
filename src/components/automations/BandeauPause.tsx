@@ -23,8 +23,19 @@ import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
 import { lireEtatPause, basculerPause } from '../../lib/automationWebhooksApi';
 
-export default function BandeauPause({ fr }: { fr: boolean }) {
-  const [enPause, setEnPause] = useState<boolean | null>(null);
+export default function BandeauPause({
+  fr,
+  onChange,
+}: {
+  fr: boolean;
+  /** Prévient la page, pour que chaque ligne affiche « En pause » (P2-9). */
+  onChange?: (enPause: boolean) => void;
+}) {
+  const [enPause, setEnPauseLocal] = useState<boolean | null>(null);
+  const setEnPause = (v: boolean | null) => {
+    setEnPauseLocal(v);
+    if (v !== null) onChange?.(v);
+  };
   const [occupe, setOccupe] = useState(false);
 
   useEffect(() => {

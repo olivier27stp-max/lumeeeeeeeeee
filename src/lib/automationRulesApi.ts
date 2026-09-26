@@ -253,3 +253,29 @@ export async function setAutomationLanguage(lang: 'fr' | 'en'): Promise<void> {
     .eq('org_id', orgId);
   if (error) throw new Error(error.message);
 }
+
+/**
+ * Les demandes d'avis sont-elles ACTIVÉES pour ce bureau ?
+ *
+ * `company_settings.review_enabled` vaut FAUX par défaut, alors que le
+ * préréglage « Demander un avis » est actif par défaut. Mesuré en prod le
+ * 2026-09-25 : 6 entreprises sur 7 avaient une règle d'avis « Publiée »
+ * qui échouait à CHAQUE exécution, sans que rien ne le montre.
+ *
+ * `null` = inconnu (lecture impossible) : l'appelant n'affiche alors rien,
+ * plutôt qu'un avertissement peut-être faux.
+ */
+export async function avisActives(): Promise<boolean | null> {
+  const orgId = await getCurrentOrgId();
+  if (!orgId) return null;
+  const { data, error } = await supabase
+    .from('company_settings')
+    .select('review_enabled')
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (error) {
+    console.error('[automatisations] réglage des avis illisible', error.message);
+    return null;
+  }
+  return data?.review_enabled === true;
+}
