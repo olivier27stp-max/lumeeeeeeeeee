@@ -123,10 +123,22 @@ router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, 
   if (brut.length > TAILLE_MAX) {
     motifRefus = 'corps trop volumineux';
   } else if (brut.length > 0) {
-    try {
-      corps = JSON.parse(brut.toString('utf8'));
-    } catch {
-      motifRefus = 'corps illisible : JSON attendu';
+    const texte = brut.toString('utf8');
+    const type = String(req.headers['content-type'] ?? '').toLowerCase();
+    /*
+     * JSON OU formulaire. Zapier envoie par défaut en `form-urlencoded`,
+     * un formulaire HTML de site aussi : n'accepter que le JSON faisait
+     * échouer ces intégrations avec leurs réglages par défaut. Les deux
+     * formes produisent le même objet à plat, filtrable pareil.
+     */
+    if (type.includes('application/x-www-form-urlencoded')) {
+      corps = Object.fromEntries(new URLSearchParams(texte));
+    } else {
+      try {
+        corps = JSON.parse(texte);
+      } catch {
+        motifRefus = 'corps illisible : JSON ou formulaire attendu';
+      }
     }
   }
 
