@@ -29,8 +29,8 @@
 --    SMS) chez les clients concernés. L'historique d'étapes, lui, s'écrit.
 --
 -- ADDITIF : colonnes ajoutées avec défaut, type de `probability` élargi
--- (entier → numeric(5,2), sans perte), fonctions nouvelles ou retouchées.
--- Aucune ligne supprimée.
+-- (entier → numeric(5,2), sans perte), fonctions nouvelles ou retouchées,
+-- probabilités VIDES remplies (jamais écrasées). Aucune ligne supprimée.
 --
 -- ROLLBACK (dans l'ordre) :
 --   drop function if exists public.pipeline_enregistrer(uuid, text, text, boolean, jsonb);
@@ -1554,6 +1554,34 @@ end;
 $fn$;
 revoke all on function public.pipeline_definir_defaut(uuid) from public, anon;
 grant execute on function public.pipeline_definir_defaut(uuid) to authenticated;
+
+-- ── Probabilités des pipelines EXISTANTS (demande de Rafba, 2026-09-25) ──
+-- Seules les cases VIDES sont remplies, comme GHL à la création : une étape
+-- ouverte reçoit rang × 100 / (nb d'étapes ouvertes + 1) — 4 étapes →
+-- 20 / 40 / 60 / 80. Gagné = 100, Perdu = 0. Une probabilité déjà saisie
+-- n'est JAMAIS écrasée. Le rang compte toutes les étapes ouvertes actives,
+-- saisies ou non, pour que la progression reste croissante.
+-- Mesuré au 2026-09-25 : prod 40 étapes ouvertes vides sur 47 (10 pipelines),
+-- 5 Gagné et 5 Perdu vides.
+-- ROLLBACK : aucune trace « avant » n'existe (c'était NULL) ; pour revenir,
+-- remettre à NULL les étapes dont la valeur égale exactement la formule.
+with rangs as (
+  select s.id, s.kind,
+         row_number() over (partition by s.pipeline_id, s.kind order by s.position) as rang,
+         count(*)     over (partition by s.pipeline_id, s.kind)                    as nb
+  from public.pipeline_stages s
+  where s.archived_at is null
+)
+update public.pipeline_stages s
+set probability = case r.kind
+      when 'won'  then 100
+      when 'lost' then 0
+      else round(r.rang * 100.0 / (r.nb + 1), 2)
+    end,
+    updated_at = now()
+from rangs r
+where s.id = r.id
+  and s.probability is null;
 
 -- Resynchroniser le défaut une première fois (positions posées plus haut).
 select public.pipeline_resynchroniser_defaut(o.org_id)

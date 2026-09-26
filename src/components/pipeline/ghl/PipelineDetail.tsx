@@ -177,7 +177,7 @@ function LigneEtape({ e, fr, nbDeals, glissable, sauver, onSupprimer }: {
         style={{ transform: CSS.Transform.toString(transform), transition }}
         className={`border-b border-border-subtle ${isDragging ? 'relative z-10 bg-surface-card opacity-80 shadow' : 'odd:bg-surface-secondary/30'}`}
       >
-        <td className="w-10 px-3 py-2">
+        <td className="w-8 px-2 py-2">
           <button
             type="button"
             {...attributes}
@@ -191,19 +191,19 @@ function LigneEtape({ e, fr, nbDeals, glissable, sauver, onSupprimer }: {
         </td>
         <td className="px-3 py-2">
           <label htmlFor={ids.nom} className="sr-only">{fr ? 'Nom de l’étape' : 'Stage name'}</label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-0.5 lg:flex-row lg:items-center lg:gap-2">
             <ChampAuto
               id={ids.nom}
               valeur={fr ? e.name_fr : e.name_en}
               onSauver={(v) => (v.trim() === ''
                 ? Promise.resolve(false)
                 : maj(fr ? { name_fr: v.trim() } : { name_en: v.trim() }))}
-              className="w-full min-w-[120px] max-w-[320px] rounded border border-transparent bg-transparent px-1.5 py-1 text-[13px] text-text-primary hover:border-outline focus-visible:border-outline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+              className="w-full min-w-[96px] max-w-[320px] rounded border border-transparent bg-transparent px-1.5 py-1 text-[13px] text-text-primary hover:border-outline focus-visible:border-outline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
             />
-            {nbDeals > 0 && <span className="shrink-0 text-[11px] text-text-muted">{nbDeals} {fr ? 'deal(s)' : 'deal(s)'}</span>}
+            {nbDeals > 0 && <span className="shrink-0 px-1.5 text-[11px] text-text-muted lg:px-0">{nbDeals} {fr ? 'deal(s)' : 'deal(s)'}</span>}
           </div>
         </td>
-        <td className="w-[130px] px-2 py-2">
+        <td className="w-[96px] px-2 py-2 lg:w-[130px]">
           <div className="flex items-center gap-1">
             <ChampAuto
               id={ids.proba}
@@ -221,12 +221,12 @@ function LigneEtape({ e, fr, nbDeals, glissable, sauver, onSupprimer }: {
                 }
                 return maj({ probability: p });
               }}
-              className="input-field w-20 text-[12.5px] tabular-nums disabled:opacity-60"
+              className="input-field w-16 text-[12.5px] tabular-nums disabled:opacity-60 lg:w-20"
             />
             <span aria-hidden="true" className="text-[12px] text-text-tertiary">%</span>
           </div>
         </td>
-        <td className="w-[150px] px-2 py-2">
+        <td className="w-[118px] px-2 py-2 lg:w-[150px]">
           <IconesRapports
             fr={fr}
             nomEtape={nom}
@@ -497,11 +497,11 @@ export default function PipelineDetail({ fr, pipeline, onRetour, onChangement }:
 
             <div className="overflow-x-auto">
               <DndContext sensors={capteurs} collisionDetection={closestCenter} onDragEnd={glisser}>
-                <table className="w-full min-w-[600px] text-[13px]">
+                <table className="w-full text-[13px]">
                   <thead className="bg-surface-secondary/60 text-left text-[12.5px] text-text-secondary">
                     <tr>
-                      <th scope="col" className="w-10 px-3 py-2"><span className="sr-only">{fr ? 'Ordre' : 'Order'}</span></th>
-                      <th scope="col" className="min-w-[180px] px-3 py-2 font-semibold"><span className="inline-flex items-center gap-1.5"><Type size={13} aria-hidden="true" />{fr ? 'Nom d’étape' : 'Stage name'}</span></th>
+                      <th scope="col" className="w-8 px-2 py-2"><span className="sr-only">{fr ? 'Ordre' : 'Order'}</span></th>
+                      <th scope="col" className="px-3 py-2 font-semibold"><span className="inline-flex items-center gap-1.5"><Type size={13} aria-hidden="true" />{fr ? 'Nom d’étape' : 'Stage name'}</span></th>
                       <th scope="col" className="px-3 py-2 font-semibold"><span className="inline-flex items-center gap-1.5"><Percent size={13} aria-hidden="true" />{fr ? 'Probabilité (%)' : 'Probability (%)'}</span></th>
                       <th scope="col" className="px-3 py-2 font-semibold"><span className="inline-flex items-center gap-1.5"><Settings2 size={13} aria-hidden="true" />{fr ? 'Afficher dans les rapports' : 'Show in reports'}</span></th>
                       <th scope="col" className="sticky right-0 bg-surface-secondary px-3 py-2 text-right font-semibold">Actions</th>

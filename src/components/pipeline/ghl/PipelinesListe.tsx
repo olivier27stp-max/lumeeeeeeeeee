@@ -126,7 +126,7 @@ function Ligne({ p, rang, fr, admin, glissable, onOuvrir, onAction }: {
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`border-b border-border-subtle last:border-0 ${isDragging ? 'relative z-10 bg-surface-card opacity-80 shadow' : 'hover:bg-surface-secondary/50'}`}
     >
-      <td className="w-10 px-3 py-2.5">
+      <td className="w-8 px-2 py-2.5">
         <button
           type="button"
           {...attributes}
@@ -139,7 +139,7 @@ function Ligne({ p, rang, fr, admin, glissable, onOuvrir, onAction }: {
           <GripVertical size={15} aria-hidden="true" />
         </button>
       </td>
-      <td className="w-14 px-3 py-2.5 text-center tabular-nums text-text-secondary">{rang}</td>
+      <td className="w-10 px-2 py-2.5 text-center tabular-nums text-text-secondary">{rang}</td>
       <td className="px-3 py-2.5">
         <button
           type="button"
@@ -151,7 +151,7 @@ function Ligne({ p, rang, fr, admin, glissable, onOuvrir, onAction }: {
       </td>
       <td className="px-3 py-2.5 text-right tabular-nums text-text-secondary">{p.nb_etapes ?? 0}</td>
       <td className="px-3 py-2.5 text-text-secondary">
-        {date}{heure && <span className="text-text-muted"> / {heure}</span>}
+        {date}{heure && <span className="text-text-muted"><span className="hidden lg:inline"> / </span><br className="lg:hidden" />{heure}</span>}
       </td>
       <td className="w-16 px-3 py-2.5 text-right">
         <MenuActions fr={fr} nom={p.name} admin={admin} onAction={onAction} />
@@ -288,11 +288,11 @@ export default function PipelinesListe({ fr, admin, pipelines, chargement, onCre
 
         <div className="overflow-x-auto">
           <DndContext sensors={capteurs} collisionDetection={closestCenter} onDragEnd={glisser}>
-            <table className="w-full min-w-[640px] text-[13px]">
+            <table className="w-full text-[13px]">
               <thead className="bg-surface-secondary/60 text-left text-[12.5px] text-text-secondary">
                 <tr>
-                  <th scope="col" className="w-10 px-3 py-2"><span className="sr-only">{fr ? 'Ordre' : 'Order'}</span></th>
-                  <th scope="col" className="w-14 px-3 py-2 text-center font-semibold">#</th>
+                  <th scope="col" className="w-8 px-2 py-2"><span className="sr-only">{fr ? 'Ordre' : 'Order'}</span></th>
+                  <th scope="col" className="w-10 px-2 py-2 text-center font-semibold">#</th>
                   <th scope="col" className="px-3 py-2 font-semibold">{entete(<Type size={13} aria-hidden="true" />, fr ? 'Nom du pipeline' : 'Pipeline name')}</th>
                   <th scope="col" className="px-3 py-2 text-right font-semibold">{entete(<Hash size={13} aria-hidden="true" />, fr ? 'Total d’étapes' : 'Total stages', 'justify-end')}</th>
                   <th scope="col" className="px-3 py-2 font-semibold">{entete(<Calendar size={13} aria-hidden="true" />, fr ? 'Mis à jour le' : 'Updated on')}</th>
