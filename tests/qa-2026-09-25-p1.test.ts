@@ -73,3 +73,39 @@ describe('P1-8 — un parcours long ne perd plus la moitié de ses étapes', () 
     expect(lire('server/lib/validation.ts')).toMatch(/const ETAPES_MAX = 20/);
   });
 });
+
+describe('P1-4 — on doit pouvoir lire ce qui est parti', () => {
+  const journaux = lire('src/components/automations/OngletJournaux.tsx');
+  const api = lire('src/lib/automationJournauxApi.ts');
+
+  it('le contenu envoyé est exposé, pas seulement lu en base', () => {
+    /*
+     * `result_data` était SELECT-é depuis toujours, mais absent du type
+     * `LigneJournal` — donc jamais affiché. L'entrepreneur voyait
+     * « envoyé » sans pouvoir vérifier que « [client_first_name] »
+     * avait bien été remplacé par « Jean ».
+     */
+    expect(api).toMatch(/result_data\?: Record<string, unknown> \| null/);
+    expect(api).toMatch(/result_data, action_config/);
+  });
+
+  it('une ligne de journal s’ouvre', () => {
+    // « les lignes de journaux ne sont pas cliquables : impossible de
+    // voir le contenu réellement envoyé » — le rapport.
+    expect(journaux).toMatch(/setDepliee\(\(d\) => \(d === l\.id \? null : l\.id\)\)/);
+    expect(journaux).toMatch(/<DetailEnvoi ligne=\{l\} fr=\{fr\} \/>/);
+  });
+
+  it('elle s’ouvre aussi au CLAVIER', () => {
+    // Une ligne qu'on n'ouvre qu'à la souris exclut qui navigue au
+    // clavier — et le cliquet d'accessibilité le refuse.
+    expect(journaux).toMatch(/onKeyDown=/);
+    expect(journaux).toMatch(/aria-expanded=\{depliee === l\.id\}/);
+  });
+
+  it('une exécution sans contenu le DIT, au lieu d’une case vide', () => {
+    // Les vieilles exécutions n'ont pas `result_data` : une ligne vide
+    // ferait croire à un bug.
+    expect(journaux).toMatch(/n\u2019a pas \u00e9t\u00e9 conserv\u00e9/);
+  });
+});

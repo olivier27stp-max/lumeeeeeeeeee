@@ -70,6 +70,65 @@ function Vide({ texte, fr }: { texte: string; fr: boolean }) {
   );
 }
 
+/**
+ * CE QUI EST RÉELLEMENT PARTI, sous la ligne dépliée.
+ *
+ * Les journaux disaient « envoyé » sans jamais montrer le message.
+ * Impossible pour un entrepreneur de vérifier que « [client_first_name] »
+ * avait bien été remplacé par « Jean » — c'est pourtant la première
+ * chose qu'on veut contrôler avant de publier. QA du 2026-09-25 (P1-4).
+ *
+ * On montre le contenu ENVOYÉ (`result_data`), et à défaut ce qui était
+ * CONFIGURÉ (`action_config`) — les vieilles exécutions n'ont pas le
+ * premier, et une ligne vide ne dirait rien à personne.
+ */
+function DetailEnvoi({ ligne, fr }: { ligne: LigneJournal; fr: boolean }) {
+  const source = (ligne.result_data && Object.keys(ligne.result_data).length > 0)
+    ? ligne.result_data
+    : ligne.action_config;
+
+  if (!source || Object.keys(source).length === 0) {
+    return (
+      <p className="text-[12px] text-text-tertiary">
+        {fr
+          ? 'Le contenu de cet envoi n’a pas été conservé (exécution antérieure au journal détaillé).'
+          : 'The content of this run was not kept (it predates detailed logging).'}
+      </p>
+    );
+  }
+
+  /** Les champs qui intéressent vraiment, dans l'ordre où on les lit. */
+  const LIBELLES: Record<string, { fr: string; en: string }> = {
+    to: { fr: 'Destinataire', en: 'To' },
+    subject: { fr: 'Objet', en: 'Subject' },
+    body: { fr: 'Message', en: 'Message' },
+    message: { fr: 'Message', en: 'Message' },
+    title: { fr: 'Titre', en: 'Title' },
+  };
+
+  const connus = Object.keys(LIBELLES).filter((c) => source[c] !== undefined && source[c] !== null && source[c] !== '');
+  const autres = Object.keys(source).filter((c) => !(c in LIBELLES) && source[c] !== null && source[c] !== '');
+
+  return (
+    <dl className="space-y-2 text-[12px]">
+      {connus.map((cle) => (
+        <div key={cle}>
+          <dt className="font-medium text-text-secondary">{fr ? LIBELLES[cle].fr : LIBELLES[cle].en}</dt>
+          <dd className="whitespace-pre-wrap break-words text-text-primary">{String(source[cle])}</dd>
+        </div>
+      ))}
+      {autres.length > 0 && (
+        <div>
+          <dt className="font-medium text-text-secondary">{fr ? 'Autres détails' : 'Other details'}</dt>
+          <dd className="whitespace-pre-wrap break-words font-mono text-[11px] text-text-tertiary">
+            {autres.map((c) => `${c}: ${typeof source[c] === 'object' ? JSON.stringify(source[c]) : String(source[c])}`).join(String.fromCharCode(10))}
+          </dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════
 
 export function OngletJournaux({ ruleId, fr }: { ruleId: string; fr: boolean }) {
@@ -98,6 +157,14 @@ export function OngletJournaux({ ruleId, fr }: { ruleId: string; fr: boolean }) 
 
   /** Les types d'action réellement présents — pas une liste théorique. */
   const actions = [...new Set(lignes.map((l) => l.action_type))];
+
+  /*
+   * Quelle ligne est dépliée. Les journaux étaient une liste MORTE :
+   * on voyait « envoyé » sans jamais pouvoir lire ce qui était parti.
+   * L'entrepreneur ne pouvait donc pas vérifier que ses variables
+   * avaient été remplacées — QA du 2026-09-25 (P1-4).
+   */
+  const [depliee, setDepliee] = useState<string | null>(null);
 
   return (
     <div className="mx-auto max-w-[1100px] p-5">
@@ -170,7 +237,23 @@ export function OngletJournaux({ ruleId, fr }: { ruleId: string; fr: boolean }) 
                 {lignes.map((l) => {
                   const raison = raisonLisible(l.result_error, fr);
                   return (
-                    <tr key={l.id} className="border-b border-outline/20 last:border-0">
+                    <React.Fragment key={l.id}>
+                    <tr
+                      className="cursor-pointer border-b border-outline/20 transition-colors last:border-0 hover:bg-surface-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                      onClick={() => setDepliee((d) => (d === l.id ? null : l.id))}
+                      onKeyDown={(e) => {
+                        // Une ligne qu'on ne peut ouvrir qu'à la souris exclut
+                        // qui navigue au clavier — et le cliquet d'accessibilité
+                        // le refuse (à juste titre).
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setDepliee((d) => (d === l.id ? null : l.id));
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={depliee === l.id}
+                    >
                       <td className="px-4 py-2.5 text-text-primary">
                         {l.client || <span className="text-text-tertiary">—</span>}
                       </td>
@@ -185,6 +268,14 @@ export function OngletJournaux({ ruleId, fr }: { ruleId: string; fr: boolean }) 
                       </td>
                       <td className="px-4 py-2.5 text-text-secondary">{quand(l.created_at, fr)}</td>
                     </tr>
+                    {depliee === l.id && (
+                      <tr className="border-b border-outline/20 bg-surface-secondary">
+                        <td colSpan={4} className="px-4 py-3">
+                          <DetailEnvoi ligne={l} fr={fr} />
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
