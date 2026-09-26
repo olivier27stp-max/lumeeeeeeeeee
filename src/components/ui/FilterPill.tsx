@@ -47,7 +47,7 @@ export default function FilterPill({ label, value, options, onChange, className 
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="inline-flex items-center h-9 px-3.5 rounded-lg bg-surface-secondary border border-outline text-[13px] hover:bg-surface-tertiary transition-colors"
+        className="inline-flex items-center h-9 px-3.5 rounded-lg whitespace-nowrap bg-surface-secondary border border-outline text-[13px] hover:bg-surface-tertiary transition-colors"
       >
         <span className="font-medium text-text-secondary">{label}</span>
         <span aria-hidden className="w-px h-4 bg-outline mx-2.5" />

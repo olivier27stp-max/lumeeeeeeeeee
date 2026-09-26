@@ -1,49 +1,29 @@
 /**
- * Champs personnalisés dans les LISTES (clients, jobs, devis, factures).
+ * Champs personnalisés dans les LISTES (clients, jobs, devis, factures) :
+ * le FILTRE (« Filtrer par champ »). Les colonnes, elles, passent par
+ * « Gérer les champs » (colonnes.tsx).
  *
  *   const champs = useChampsListe('client', fr);
  *   // barre d'outils : {champs.bouton}
  *   // requête : listClients({ …, champs: champs.filtre })   (clé de rechargement : champs.cle)
- *   // colonne : si champs.colonnes.length, une colonne « Champs » avec <CelluleChamps …/>
  *
  * Les conditions filtrent CÔTÉ BASE (jointures PostgREST, ou ids passés à
- * la RPC des factures) : la pagination et le total restent justes. Les
- * colonnes choisies sont retenues par objet dans ce navigateur (confort
- * d'affichage, pas une donnée). Coupé par le drapeau : rien ne s'affiche.
+ * la RPC des factures) : la pagination et le total restent justes.
  */
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { GripVertical, Plus, Search, SlidersHorizontal } from 'lucide-react';
-import {
-  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
-} from '@dnd-kit/core';
-import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { usePermissions } from '../../hooks/usePermissions';
-import ModaleChamp from './reglages/ModaleChamp';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { SlidersHorizontal } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { filtrerParChamps, lireFuseau, lireValeursLot, listerChamps } from '../../lib/champsPersoApi';
 import { compilerFiltresListe, FILTRE_VIDE, type FiltreListe } from '../../lib/champs/filtresListe';
-import { formaterValeur } from '../../lib/champs/valeurs';
 import type { ChampPerso, ObjetChamp, ValeurEnregistree } from '../../lib/champs/types';
 import type { Condition } from '../../lib/champs/filtres';
 import EditeurConditions, { conditionComplete } from './EditeurConditions';
 import { messageChamps } from '../../lib/champs/messages';
 
-const MAX_COLONNES = 4;
 const AUCUN_CHAMP: ChampPerso[] = [];
 const AUCUNE_VALEUR: Record<string, Record<string, ValeurEnregistree>> = {};
-const cleStockage = (objet: ObjetChamp) => `lume.champs.colonnes.${objet}`;
-
-function lireColonnes(objet: ObjetChamp): string[] {
-  try {
-    const brut = JSON.parse(localStorage.getItem(cleStockage(objet)) || '[]');
-    return Array.isArray(brut) ? brut.filter((x) => typeof x === 'string').slice(0, MAX_COLONNES) : [];
-  } catch {
-    return [];
-  }
-}
 
 export function useChampsListe(objet: ObjetChamp, fr: boolean) {
   const { isEnabled } = useChampsPersoActifs();
@@ -56,12 +36,6 @@ export function useChampsListe(objet: ObjetChamp, fr: boolean) {
   const { data: fuseau = 'America/Toronto' } = useQuery({ queryKey: ['champs-perso', 'fuseau'], queryFn: lireFuseau, staleTime: 3_600_000, enabled: isEnabled });
   const champs = useMemo(() => (data?.fields ?? AUCUN_CHAMP).filter((c) => !c.archived_at), [data]);
   const [conditions, setConditions] = useState<Condition[]>([]);
-  const [colonnesIds, setColonnesIds] = useState<string[]>(() => lireColonnes(objet));
-
-  const choisirColonnes = (ids: string[]) => {
-    setColonnesIds(ids);
-    try { localStorage.setItem(cleStockage(objet), JSON.stringify(ids)); } catch { /* navigation privée : on garde en mémoire */ }
-  };
 
   const completes = useMemo(() => conditions.filter(conditionComplete), [conditions]);
   const cle = JSON.stringify(completes);
@@ -75,17 +49,11 @@ export function useChampsListe(objet: ObjetChamp, fr: boolean) {
     // `cle` résume `completes` ; le fuseau et les champs changent rarement.
   }, [cle, champs, fuseau, isEnabled, fr]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const colonnes = useMemo(() => colonnesIds.map((id) => champs.find((c) => c.id === id)).filter((c): c is ChampPerso => !!c), [colonnesIds, champs]);
-
   const bouton = !isEnabled || champs.length === 0 ? null : (
-    <BoutonChampsListe
-      objet={objet} dossiers={data?.folders ?? []}
-      champs={champs} conditions={conditions} onConditions={setConditions}
-      colonnes={colonnesIds} onColonnes={choisirColonnes} erreur={erreur} fr={fr}
-    />
+    <BoutonFiltreChamps champs={champs} conditions={conditions} onConditions={setConditions} erreur={erreur} fr={fr} />
   );
 
-  return { actif: isEnabled && champs.length > 0, bouton, filtre, conditions: completes, cle, colonnes, fuseau };
+  return { actif: isEnabled && champs.length > 0, bouton, filtre, conditions: completes, cle, fuseau };
 }
 
 /**
@@ -116,54 +84,9 @@ export function useValeursPage(objet: ObjetChamp, ids: string[], actif: boolean)
   return data;
 }
 
-export function CelluleChamps({ champs, valeurs, fr, fuseau }: {
-  champs: ChampPerso[]; valeurs: Record<string, ValeurEnregistree> | undefined; fr: boolean; fuseau?: string;
+function BoutonFiltreChamps({ champs, conditions, onConditions, erreur, fr }: {
+  champs: ChampPerso[]; conditions: Condition[]; onConditions: (c: Condition[]) => void; erreur: string | null; fr: boolean;
 }) {
-  const remplis = champs.filter((c) => {
-    const v = valeurs?.[c.id]?.value;
-    return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0);
-  });
-  if (remplis.length === 0) return <span className="text-[13px] text-text-tertiary">—</span>;
-  return (
-    <div className="flex min-w-0 flex-wrap gap-1">
-      {remplis.map((c) => {
-        const v = valeurs![c.id]!.value;
-        const option = c.field_type === 'dropdown_single' ? c.options.find((o) => o.id === v) : undefined;
-        return (
-          <span key={c.id} title={c.label}
-            className="max-w-full truncate rounded-md px-1.5 py-0.5 text-[11px] text-text-secondary"
-            style={{ backgroundColor: option?.color ? `${option.color}26` : 'var(--color-surface-tertiary, rgba(148,163,184,0.15))' }}>
-            <span className="text-text-tertiary">{c.label} : </span>{formaterValeur(c, v, fr ? 'fr' : 'en', fuseau)}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Une colonne affichée : poignée ⋮⋮ pour l'ordre, case pour la retirer. */
-function ColonneAffichee({ champ, fr, onRetirer }: { champ: ChampPerso; fr: boolean; onRetirer: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: champ.id });
-  return (
-    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
-      className="flex items-center gap-2 rounded-md px-1 py-1 hover:bg-surface-secondary">
-      <button type="button" {...attributes} {...listeners} aria-label={fr ? `Déplacer ${champ.label}` : `Move ${champ.label}`}
-        className="cursor-grab rounded p-0.5 text-text-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-        <GripVertical size={14} aria-hidden />
-      </button>
-      <input type="checkbox" checked onChange={onRetirer} className="h-4 w-4 accent-primary"
-        aria-label={fr ? `Retirer la colonne ${champ.label}` : `Remove column ${champ.label}`} />
-      <span className="truncate text-[13px] text-text-primary">{champ.label}</span>
-    </li>
-  );
-}
-
-function BoutonChampsListe({ objet, dossiers, champs, conditions, onConditions, colonnes, onColonnes, erreur, fr }: {
-  objet: ObjetChamp; dossiers: import('../../lib/champs/types').DossierChamp[];
-  champs: ChampPerso[]; conditions: Condition[]; onConditions: (c: Condition[]) => void;
-  colonnes: string[]; onColonnes: (ids: string[]) => void; erreur: string | null; fr: boolean;
-}) {
-  const ids = useId();
   const [ouvert, setOuvert] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -175,89 +98,21 @@ function BoutonChampsListe({ objet, dossiers, champs, conditions, onConditions, 
     return () => { document.removeEventListener('mousedown', fermer); document.removeEventListener('keydown', echap); };
   }, [ouvert]);
   const actives = conditions.filter(conditionComplete).length;
-  const [recherche, setRecherche] = useState('');
-  const [creation, setCreation] = useState(false);
-  const qc = useQueryClient();
-  const { role } = usePermissions();
-  const peutCreer = role === 'owner' || role === 'admin';
-  const q = recherche.trim().toLowerCase();
-  const parId = new Map(champs.map((c) => [c.id, c]));
-  const affichees = colonnes.filter((id) => parId.has(id));
-  const disponibles = champs.filter((c) => !colonnes.includes(c.id) && (!q || c.label.toLowerCase().includes(q)));
-  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-  const surDrag = (e: DragEndEvent) => {
-    if (!e.over || e.active.id === e.over.id) return;
-    onColonnes(arrayMove(affichees, affichees.indexOf(String(e.active.id)), affichees.indexOf(String(e.over.id))));
-  };
   return (
     <div className="relative" ref={ref}>
       <button type="button" aria-haspopup="dialog" aria-expanded={ouvert} onClick={() => setOuvert((o) => !o)}
-        className={cn('inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-[14px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+        className={cn('inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-3 text-[14px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
           actives ? 'border-primary/50 bg-primary/5 text-text-primary' : 'border-outline bg-surface-card text-text-secondary hover:text-text-primary')}>
         <SlidersHorizontal size={14} aria-hidden />
-        {fr ? 'Champs' : 'Fields'}
+        {fr ? 'Filtrer par champ' : 'Filter by field'}
         {actives > 0 && <span className="rounded-full bg-primary px-1.5 text-[11px] font-semibold text-white">{actives}</span>}
       </button>
       {ouvert && (
-        <div role="dialog" aria-label={fr ? 'Champs personnalisés' : 'Custom fields'}
-          className="absolute left-0 top-full z-50 mt-1 w-[min(560px,90vw)] space-y-4 rounded-lg border border-outline bg-surface-elevated p-3 shadow-dropdown">
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">{fr ? 'Filtrer par champ' : 'Filter by field'}</p>
-            <EditeurConditions champs={champs} conditions={conditions} onChange={onConditions} fr={fr} />
-            {erreur && <p role="alert" className="mt-2 text-[12px] text-red-600">{erreur}</p>}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
-                {fr ? `Colonnes affichées (${affichees.length} sur ${MAX_COLONNES})` : `Columns shown (${affichees.length} of ${MAX_COLONNES})`}
-              </p>
-              {affichees.length === 0 ? (
-                <p className="text-[12px] text-text-tertiary">{fr ? 'Aucune. Coche un champ à droite.' : 'None. Check a field on the right.'}</p>
-              ) : (
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={surDrag}>
-                  <SortableContext items={affichees} strategy={verticalListSortingStrategy}>
-                    <ul>
-                      {affichees.map((id) => <ColonneAffichee key={id} champ={parId.get(id)!} fr={fr} onRetirer={() => onColonnes(affichees.filter((x) => x !== id))} />)}
-                    </ul>
-                  </SortableContext>
-                </DndContext>
-              )}
-              <p className="mt-1.5 text-[11px] text-text-tertiary">{fr ? 'Glisse ⋮⋮ pour l’ordre. Réglage à toi seulement.' : 'Drag ⋮⋮ to reorder. Your own setting.'}</p>
-            </div>
-            <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">{fr ? 'Ajouter des colonnes' : 'Add columns'}</p>
-              <div className="relative mb-1.5">
-                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden />
-                <input id={`${ids}-recherche`} value={recherche} onChange={(e) => setRecherche(e.target.value)}
-                  aria-label={fr ? 'Chercher un champ' : 'Search fields'} placeholder={fr ? 'Chercher un champ' : 'Search fields'}
-                  className="glass-input h-8 w-full pl-7 text-[12px]" />
-              </div>
-              <ul className="max-h-48 space-y-0.5 overflow-y-auto">
-                {disponibles.map((c) => (
-                  <li key={c.id}>
-                    <label htmlFor={`${ids}-${c.id}`} className="flex items-center gap-2 rounded-md px-1 py-1 text-[13px] text-text-primary hover:bg-surface-secondary">
-                      <input id={`${ids}-${c.id}`} type="checkbox" className="h-4 w-4 accent-primary" checked={false}
-                        disabled={affichees.length >= MAX_COLONNES}
-                        onChange={() => onColonnes([...affichees, c.id])} />
-                      <span className="truncate">{c.label}</span>
-                    </label>
-                  </li>
-                ))}
-                {disponibles.length === 0 && <li className="text-[12px] text-text-tertiary">{fr ? 'Aucun autre champ.' : 'No other field.'}</li>}
-              </ul>
-              {peutCreer && (
-                <button type="button" onClick={() => setCreation(true)}
-                  className="mt-2 inline-flex items-center gap-1 rounded text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-                  <Plus size={12} aria-hidden />{fr ? 'Créer un champ' : 'Create a field'}
-                </button>
-              )}
-            </div>
-          </div>
+        <div role="dialog" aria-label={fr ? 'Filtrer par champ personnalisé' : 'Filter by custom field'}
+          className="absolute left-0 top-full z-50 mt-1 w-[min(420px,90vw)] rounded-lg border border-outline bg-surface-elevated p-3 shadow-dropdown">
+          <EditeurConditions champs={champs} conditions={conditions} onChange={onConditions} fr={fr} />
+          {erreur && <p role="alert" className="mt-2 text-[12px] text-red-600">{erreur}</p>}
         </div>
-      )}
-      {creation && (
-        <ModaleChamp open onClose={() => setCreation(false)} objet={objet} dossiers={dossiers} fr={fr}
-          onEnregistre={() => { void qc.invalidateQueries({ queryKey: ['champs-perso', objet] }); setCreation(false); }} />
       )}
     </div>
   );

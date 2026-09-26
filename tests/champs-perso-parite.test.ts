@@ -16,15 +16,21 @@ import { slugCle } from '../src/lib/champs/valeurs';
 
 const MIG = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260926100000_champs_personnalises_v2.sql'), 'utf8');
 const liste = (s: string) => [...s.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+// Types ajoutés ensuite (Case à cocher, URL) : la version en vigueur des fonctions est la plus récente.
+const MIG_TYPES = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260929170000_champs_types_case_url_fichier.sql'), 'utf8');
+// Objet « Propriété » : cf_cles_standard en vigueur y est redéfinie.
+const MIG_PROPRIETE = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260929180000_champs_objet_propriete.sql'), 'utf8');
 
 describe('parité SQL ↔ TypeScript', () => {
   it('objets', () => {
     const m = /create type public\.cf_object_type as enum \(([^)]*)\)/.exec(MIG);
-    expect(liste(m![1])).toEqual([...OBJETS]);
+    const ajoutes = [...MIG_PROPRIETE.matchAll(/alter type public\.cf_object_type add value if not exists '([a-z_]+)'/g)].map((x) => x[1]);
+    expect([...liste(m![1]), ...ajoutes]).toEqual([...OBJETS]);
   });
   it('types de champ', () => {
     const m = /create type public\.cf_field_type as enum \(([^)]*)\)/s.exec(MIG);
-    expect(liste(m![1])).toEqual([...TYPES_CHAMP]);
+    const ajoutes = [...MIG_TYPES.matchAll(/alter type public\.cf_field_type add value if not exists '([a-z_]+)'/g)].map((x) => x[1]);
+    expect([...liste(m![1]), ...ajoutes].sort()).toEqual([...TYPES_CHAMP].sort());
   });
   it('types uniques (CHECK custom_fields_unique_types)', () => {
     const m = /not is_unique or field_type in \(([^)]*)\)/.exec(MIG);
@@ -32,7 +38,7 @@ describe('parité SQL ↔ TypeScript', () => {
   });
   it('clés standard réservées (cf_cles_standard) = registre CHAMPS_STANDARD', () => {
     for (const objet of OBJETS) {
-      const m = new RegExp(`when '${objet}'\\s+then array\\[([^\\]]*)\\]`).exec(MIG);
+      const m = new RegExp(`when '${objet}'\\s+then array\\[([^\\]]*)\\]`).exec(MIG_PROPRIETE);
       expect(m, objet).not.toBeNull();
       expect(liste(m![1]), objet).toEqual(CHAMPS_STANDARD[objet].map((c) => c.key));
     }
@@ -46,6 +52,14 @@ describe('parité SQL ↔ TypeScript', () => {
     const tableaux = [...bloc.matchAll(/array\[([^\]]*)\]/g)].map((m) => liste(m[1]));
     expect(tableaux).toEqual([
       OPERATEURS_PAR_FAMILLE.texte, OPERATEURS_PAR_FAMILLE.nombre, OPERATEURS_PAR_FAMILLE.liste, OPERATEURS_PAR_FAMILLE.date,
+    ]);
+  });
+  it('opérateurs par famille — version en vigueur (20260929170000, case à cocher et fichier)', () => {
+    const bloc = MIG_TYPES.slice(MIG_TYPES.indexOf('-- Opérateurs permis par type'), MIG_TYPES.indexOf("if op = 'is_empty'"));
+    const tableaux = [...bloc.matchAll(/array\[([^\]]*)\]/g)].map((m) => liste(m[1]));
+    expect(tableaux).toEqual([
+      OPERATEURS_PAR_FAMILLE.texte, OPERATEURS_PAR_FAMILLE.nombre, OPERATEURS_PAR_FAMILLE.liste, OPERATEURS_PAR_FAMILLE.case,
+      OPERATEURS_PAR_FAMILLE.fichier, OPERATEURS_PAR_FAMILLE.date,
     ]);
   });
 });

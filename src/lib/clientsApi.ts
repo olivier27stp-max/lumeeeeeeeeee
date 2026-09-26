@@ -59,6 +59,8 @@ export interface ClientsQuery {
   pageSize?: number;
   /** Conditions de champs personnalisés, compilées (jointures PostgREST). */
   champs?: FiltreListe;
+  /** Tri par une colonne de champ personnalisé (prime sur `sort`). `cle` résume les filtres. */
+  triChamp?: { champId: string; asc: boolean; cle: string } | null;
 }
 
 export interface ClientsResult {
@@ -118,6 +120,29 @@ export async function listClients(query: ClientsQuery = {}): Promise<ClientsResu
   const orgId = await getCurrentOrgIdOrThrow();
   // `string` explicite : une projection dynamique (champs personnalisés) ne se type pas.
   const projection: string = `*${query.champs?.select ?? ''}`;
+
+  // Tri par un champ personnalisé : mêmes filtres, ordre donné par la valeur du champ.
+  if (query.triChamp) {
+    const filtree = (select: string) => {
+      let r = supabase.from('clients').select(select).eq('org_id', orgId).is('deleted_at', null);
+      if (query.champs) r = query.champs.appliquer(r);
+      if (query.q?.trim()) r = r.or(buildSearchFilter(query.q));
+      if (query.status && query.status !== 'All') r = r.eq('status', query.status);
+      return r;
+    };
+    const { champId, asc, cle } = query.triChamp;
+    const res = await pageTrieeParChamp<ClientRecord>({
+      cle: `clients|${cle}|${query.q ?? ''}|${query.status ?? ''}`, champId, asc, from, to,
+      idsFiltres: () => tousLesIds((a, b) => filtree(`id${query.champs?.select ?? ''}`).order('created_at', { ascending: false }).range(a, b)),
+      lignes: async (ids) => {
+        const { data, error } = await filtree(projection).in('id', ids);
+        if (error) throw error;
+        return (data || []) as unknown as ClientRecord[];
+      },
+    });
+    return res;
+  }
+
   let request = supabase
     .from('clients')
     // count 'estimated' : évite le scan intégral sous RLS à chaque page.
@@ -180,6 +205,7 @@ export interface ClientPayload {
 // Use the centralized version from orgApi instead of duplicating
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import type { FiltreListe } from './champs/filtresListe';
+import { pageTrieeParChamp, tousLesIds } from './colonnesTableauApi';
 
 /**
  * The client's primary display name. When `display_as_company` is set and a

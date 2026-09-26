@@ -176,6 +176,12 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
                           {c.archived_at && <span className="ml-1 text-[10px] text-text-tertiary">{fr ? '(archivé)' : '(archived)'}</span>}
                         </label>
                         {enCours[c.id] && <Loader2 size={12} className="animate-spin text-text-tertiary" aria-label={fr ? 'Enregistrement…' : 'Saving…'} />}
+                        {/* URL : lien pour l'ouvrir (http(s) seulement, déjà garanti par la base). */}
+                        {!enCours[c.id] && c.field_type === 'url' && typeof data.values[c.id]?.value === 'string'
+                          && /^https?:\/\//i.test(String(data.values[c.id]?.value)) && (
+                          <a href={String(data.values[c.id]?.value)} target="_blank" rel="noopener noreferrer"
+                            className="text-[11px] font-medium text-primary hover:underline">{fr ? 'Ouvrir' : 'Open'}</a>
+                        )}
                       </div>
                       <ChampSaisie
                         id={idChamp}

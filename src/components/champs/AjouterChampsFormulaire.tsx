@@ -17,6 +17,8 @@ export function typeQuestion(c: ChampPerso): FormFieldType {
     case 'monetary': return 'number';
     case 'dropdown_single': return 'dropdown';
     case 'dropdown_multi': return 'checkbox';
+    // Case à cocher : une question Oui / Non (liste), relue en booléen à la réception.
+    case 'checkbox': return 'dropdown';
     default: return 'text';
   }
 }
@@ -29,7 +31,7 @@ export function questionPour(c: ChampPerso, section: FormField['section'], id: s
     label: c.label,
     type: typeQuestion(c),
     required: !!c.is_required,
-    options: avecOptions ? c.options.filter((o) => !o.archived_at).map((o) => o.label) : [],
+    options: avecOptions ? c.options.filter((o) => !o.archived_at).map((o) => o.label) : c.field_type === 'checkbox' ? ['Oui', 'Non'] : [],
     section,
     cf_field_id: c.id,
   };
@@ -45,7 +47,8 @@ export default function AjouterChampsFormulaire({ champs, dejaRelies, fr, onAjou
   const ids = useId();
   const [ouvert, setOuvert] = useState(false);
   const [choisis, setChoisis] = useState<Set<string>>(new Set());
-  const libres = champs.filter((c) => !dejaRelies.has(c.id));
+  // Un champ « Fichier » ne se remplit pas depuis le formulaire public (pas de téléversement).
+  const libres = champs.filter((c) => !dejaRelies.has(c.id) && c.field_type !== 'file');
   if (champs.length === 0) return null;
   const basculer = (id: string) => setChoisis((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   return (

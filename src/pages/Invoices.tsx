@@ -46,7 +46,8 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
 import { versDate } from '../lib/dateSeule';
-import { useChampsListe, useIdsFiltresChamps, useValeursPage, CelluleChamps } from '../components/champs/liste';
+import { useChampsListe, useIdsFiltresChamps, useValeursPage } from '../components/champs/liste';
+import { useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
 import { colonnesChampsCsv } from '../lib/champsPersoApi';
 // InvoiceTemplate type removed — no more invoice template system
 
@@ -176,6 +177,8 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   // Champs personnalisés : la liste passe par une RPC → le filtre calcule
   // d'abord les ids (cf_filtrer), puis les lui passe (p_ids). Colonne en plus.
   const champsListe = useChampsListe('invoice', fr);
+  // Tri par une colonne de champ personnalisé (tenu ici : le chargement en dépend).
+  const [triChamp, setTriChamp] = useState<TriChamp | null>(null);
   const idsChamps = useIdsFiltresChamps('invoice', champsListe.conditions);
   // Nouveau filtre de champs → page 1 (pas au chargement : un lien vers la page 3 reste valable).
   const cleChampsVue = useRef(champsListe.cle);
@@ -186,12 +189,13 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   }, [champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
   // Liste infinie : chaque page s'ajoute sous les précédentes dans le même tableau.
   const invoicesQuery = useInfiniteQuery({
-    queryKey: ['invoicesTable', status, sort, q, salesperson, champsListe.cle, idsChamps.ids?.length ?? -1],
+    queryKey: ['invoicesTable', status, sort, q, salesperson, champsListe.cle, idsChamps.ids?.length ?? -1, triChamp],
     queryFn: ({ pageParam }) => listInvoices({
       status, range: 'all', sort, page: pageParam, q,
       pageSize: PAGE_SIZE,
       salespersonId: salesperson,
       ids: idsChamps.ids,
+      triChamp: triChamp ? { ...triChamp, cle: champsListe.cle } : null,
     }),
     initialPageParam: 1,
     getNextPageParam: (last, all) => (all.length * PAGE_SIZE < (last?.total || 0) ? all.length + 1 : undefined),
@@ -213,7 +217,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     }
     return out;
   }, [invoicesQuery.data]);
-  const valeursChamps = useValeursPage('invoice', rows.map((r) => r.id), champsListe.colonnes.length > 0);
   const loadedPages = invoicesQuery.data?.pages || [];
   const total = loadedPages.length ? (loadedPages[loadedPages.length - 1]?.total || 0) : 0;
 
@@ -306,6 +309,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   }
 
   function applySort(column: 'client' | 'invoice_number' | 'due_date' | 'status' | 'total' | 'balance') {
+    setTriChamp(null);
     const prefix = `${column}_`;
     const isSame = sort.startsWith(prefix);
     const nextSort = (isSame
@@ -477,6 +481,51 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   const IconSort = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>;
   const IconDots = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>;
 
+  // Colonnes de la liste (« Gérer les champs ») : le client est verrouillé.
+  const trieur = (label: string, col: Parameters<typeof applySort>[0]) => (
+    <button type="button" onClick={() => applySort(col)} className="inline-flex items-center gap-1">{label} {IconSort}</button>
+  );
+  const date = (v: string | null | undefined, rouge = false) => (
+    <span className={cn('text-[14px] tabular-nums truncate', rouge ? 'text-[#dc2626]' : 'text-text-primary')}>{v ? formatDate(v) : '—'}</span>
+  );
+  const colonnesStandard: ColonneStandard<InvoiceRow>[] = [
+    {
+      id: 'client', libelle: 'Client', largeur: 'minmax(180px, 1.4fr)', verrouillee: true, entete: trieur('Client', 'client'),
+      cellule: (row) => {
+        const client = clientMap[row.client_id];
+        return (
+          <div className="flex items-center gap-3 min-w-0">
+            <UnifiedAvatar id={row.client_id || row.id} name={client?.name || row.client_name || '?'} />
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold text-text-primary truncate leading-tight">{client?.name || row.client_name || '—'}</p>
+              {client?.secondary && <p className="text-[12px] font-normal text-text-tertiary truncate leading-tight mt-0.5">{client.secondary}</p>}
+            </div>
+          </div>
+        );
+      },
+    },
+    { id: 'numero', libelle: fr ? 'N° facture' : 'Invoice #', largeur: '110px', parDefaut: true, entete: trieur(fr ? 'N° facture' : 'Invoice #', 'invoice_number'), cellule: (row) => <span className="text-[14px] text-text-primary tabular-nums truncate">{row.invoice_number}</span> },
+    { id: 'creee', libelle: fr ? 'Créée' : 'Created', largeur: '120px', parDefaut: true, cellule: (row) => date(row.created_at) },
+    { id: 'echeance', libelle: fr ? 'Échéance' : 'Due Date', largeur: '120px', parDefaut: true, entete: trieur(fr ? 'Échéance' : 'Due Date', 'due_date'), cellule: (row) => date(row.due_date, getInvoiceRowUiStatus(row) === 'past_due') },
+    { id: 'sujet', libelle: fr ? 'Sujet' : 'Subject', largeur: 'minmax(140px, 1.4fr)', parDefaut: true, cellule: (row) => <span className="text-[14px] text-text-primary truncate">{row.subject || (fr ? DEFAULT_INVOICE_SUBJECT_FR : DEFAULT_INVOICE_SUBJECT_EN)}</span> },
+    { id: 'statut', libelle: fr ? 'Statut' : 'Status', largeur: '200px', parDefaut: true, entete: trieur(fr ? 'Statut' : 'Status', 'status'), cellule: (row) => <InvoiceBadge status={getInvoiceRowUiStatus(row)} fr={fr} /> },
+    { id: 'total', libelle: 'Total', largeur: '120px', parDefaut: true, entete: trieur('Total', 'total'), cellule: (row) => <span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoneyFromCents(row.total_cents)}</span> },
+    {
+      id: 'solde', libelle: fr ? 'Solde' : 'Balance', largeur: '120px', parDefaut: true, entete: trieur(fr ? 'Solde' : 'Balance', 'balance'),
+      cellule: (row) => (
+        <span className={cn('text-[14px] font-bold tabular-nums', row.balance_cents === 0 ? 'text-text-muted' : getInvoiceRowUiStatus(row) === 'past_due' ? 'text-[#dc2626]' : 'text-text-primary')}>
+          {formatMoneyFromCents(row.balance_cents === 0 ? 0 : row.balance_cents)}
+        </span>
+      ),
+    },
+    { id: 'emise', libelle: fr ? 'Émise le' : 'Issued', largeur: '120px', cellule: (row) => date(row.issued_at) },
+    { id: 'paye', libelle: fr ? 'Payé' : 'Paid', largeur: '110px', cellule: (row) => <span className="text-[14px] text-text-primary tabular-nums">{formatMoneyFromCents(row.paid_cents)}</span> },
+    { id: 'devis', libelle: fr ? 'N° devis' : 'Quote #', largeur: '110px', cellule: (row) => <span className="text-[14px] text-text-primary tabular-nums truncate">{row.quote_number || '—'}</span> },
+    { id: 'site', libelle: fr ? 'Lieu' : 'Site', largeur: 'minmax(120px, 1fr)', cellule: (row) => <span className="text-[14px] text-text-primary truncate">{row.site || '—'}</span> },
+  ];
+  const colonnes = useColonnesTableau<InvoiceRow>('invoice', colonnesStandard, fr, { tri: triChamp, setTri: setTriChamp });
+  const valeursChamps = useValeursPage('invoice', rows.map((r) => r.id), colonnes.avecChamps);
+
   // ═══════════════════════════════════════════════════════════
   //  RENDER
   // ═══════════════════════════════════════════════════════════
@@ -547,7 +596,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
       </div>
 
       {/* ── TOOLBAR (Jobs/Clients pattern) ── */}
-      <div className="flex items-center gap-2 mt-4 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mt-4 mb-4">
         <FilterPill
           label={fr ? 'Statut' : 'Status'}
           value={status}
@@ -569,6 +618,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
           ]}
         />
         {champsListe.bouton}
+        {colonnes.bouton}
         <form onSubmit={applySearch} className="relative">
           <input
             value={searchInput}
@@ -594,51 +644,21 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
         <>
           {/* ── TABLE (CSS Grid — identical pattern to Jobs & Clients) ── */}
           <div className="border border-outline rounded-md overflow-x-auto bg-white dark:bg-[#0e0e11]">
-            <div className="grid min-w-[980px]" style={{ gridTemplateColumns: champsListe.colonnes.length ? INVOICE_GRID_COLUMNS.replace(/ 44px$/, ' 1.4fr 44px') : INVOICE_GRID_COLUMNS }} onMouseLeave={() => setHoveredId(null)}>
+            <div className="grid min-w-[980px]" style={{ gridTemplateColumns: `40px ${colonnes.pistes} 44px` }} onMouseLeave={() => setHoveredId(null)}>
               {/* HEADER */}
               <div className="py-3 pl-4 border-b border-outline flex items-center">
                 <input type="checkbox" checked={allSel} onChange={toggleAll} aria-label={fr ? 'Tout sélectionner' : 'Select all'} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
               </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('client')} className="inline-flex items-center gap-1">Client {IconSort}</button>
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('invoice_number')} className="inline-flex items-center gap-1">{fr ? 'N° facture' : 'Invoice #'} {IconSort}</button>
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                {fr ? 'Créée' : 'Created'}
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('due_date')} className="inline-flex items-center gap-1">{fr ? 'Échéance' : 'Due Date'} {IconSort}</button>
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                {fr ? 'Sujet' : 'Subject'}
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('status')} className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</button>
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('total')} className="inline-flex items-center gap-1">Total {IconSort}</button>
-              </div>
-              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('balance')} className="inline-flex items-center gap-1">{fr ? 'Solde' : 'Balance'} {IconSort}</button>
-              </div>
-              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">{fr ? 'Champs' : 'Fields'}</div>}
+              {colonnes.visibles.map((c) => c.entete)}
               <div className="py-3 border-b border-outline" />
 
               {/* LOADING */}
               {invoicesQuery.isLoading && Array.from({ length: 10 }).map((_, i) => (
                 <React.Fragment key={`sk-${i}`}>
                   <div className="py-3 pl-4 border-b border-outline/30 flex items-center"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-28 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-12 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-28 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
-                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
-                  {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>}
+                  {colonnes.visibles.map((c) => (
+                    <div key={c.id} className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
+                  ))}
                   <div className="py-3 border-b border-outline/30" />
                 </React.Fragment>
               ))}
@@ -672,7 +692,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
               {/* DATA ROWS */}
               {!invoicesQuery.isLoading && rows.map((row) => {
                 const uiStatus = getInvoiceRowUiStatus(row);
-                const client = clientMap[row.client_id];
                 const isMenuOpen = actionMenuId === row.id;
                 const isSelected = selectedIds.has(row.id);
                 const isHovered = hoveredId === row.id;
@@ -680,7 +699,6 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                 const click = () => navigate(`/invoices/${row.id}`);
                 const keyClick = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); click(); } };
                 const hover = () => setHoveredId(row.id);
-                const isPastDue = uiStatus === 'past_due';
 
                 return (
                   <React.Fragment key={row.id}>
@@ -688,65 +706,11 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                     <div className={`py-3 pl-4 flex items-center ${rowCls}`} role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                       <input type="checkbox" checked={isSelected} onChange={() => toggleOne(row.id)} aria-label={`${fr ? 'Sélectionner la facture' : 'Select invoice'} ${row.invoice_number}`} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
                     </div>
-                    {/* Client */}
-                    <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} role="button" tabIndex={0} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
-                      <div className="flex items-center gap-3 min-w-0">
-                        <UnifiedAvatar id={row.client_id || row.id} name={client?.name || row.client_name || '?'} />
-                        <div className="min-w-0">
-                          <p className="text-[14px] font-bold text-text-primary truncate leading-tight">{client?.name || row.client_name || '—'}</p>
-                          {client?.secondary && (
-                            <p className="text-[12px] font-normal text-text-tertiary truncate leading-tight mt-0.5">{client.secondary}</p>
-                          )}
-                        </div>
+                    {colonnes.visibles.map((c, i) => (
+                      <div key={c.id} className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${i === 0 ? '' : 'overflow-hidden'} ${rowCls}`} role="button" tabIndex={i === 0 ? 0 : -1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
+                        {c.rendu(row, valeursChamps[row.id])}
                       </div>
-                    </div>
-                    {/* Invoice # */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
-                      <span className="text-[14px] text-text-primary tabular-nums truncate">{row.invoice_number}</span>
-                    </div>
-                    {/* Created date */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
-                      <span className="text-[14px] text-text-primary tabular-nums truncate">
-                        {row.created_at ? formatDate(row.created_at) : '—'}
-                      </span>
-                    </div>
-                    {/* Due date */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
-                      <span className={cn(
-                        'text-[14px] tabular-nums truncate',
-                        isPastDue ? 'text-[#dc2626]' : 'text-text-primary'
-                      )}>
-                        {row.due_date ? formatDate(row.due_date) : '—'}
-                      </span>
-                    </div>
-                    {/* Subject (default "Pour service rendu") */}
-                    <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
-                      <span className="text-[14px] text-text-primary truncate">
-                        {row.subject || (fr ? DEFAULT_INVOICE_SUBJECT_FR : DEFAULT_INVOICE_SUBJECT_EN)}
-                      </span>
-                    </div>
-                    {/* Status */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
-                      <InvoiceBadge status={uiStatus} fr={fr} />
-                    </div>
-                    {/* Total */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
-                      <span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoneyFromCents(row.total_cents)}</span>
-                    </div>
-                    {/* Balance */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
-                      <span className={cn(
-                        'text-[14px] font-bold tabular-nums',
-                        row.balance_cents === 0 ? 'text-text-muted' : isPastDue ? 'text-[#dc2626]' : 'text-text-primary'
-                      )}>
-                        {row.balance_cents === 0 ? formatMoneyFromCents(0) : formatMoneyFromCents(row.balance_cents)}
-                      </span>
-                    </div>
-                    {champsListe.colonnes.length > 0 && (
-                      <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="presentation" tabIndex={-1} onClick={click} onMouseEnter={hover}>
-                        <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[row.id]} fr={fr} fuseau={champsListe.fuseau} />
-                      </div>
-                    )}
+                    ))}
                     {/* Actions */}
                     <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onMouseEnter={hover}>
                       <button
@@ -902,6 +866,8 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
           />
         )}
       </AnimatePresence>
+
+      {colonnes.panneau}
 
       {/* ─── Create Modal ─── */}
       <CreateInvoiceModal

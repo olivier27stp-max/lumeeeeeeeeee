@@ -26,7 +26,7 @@ import type { PermissionKey } from '../../../src/lib/permissions';
 import type { IdTopic } from '../lumi/topics';
 import type { AgentTool, ToolContext } from './tools';
 import type { ChampPerso, ObjetChamp, TypeChamp, ValeurChamp } from '../../../src/lib/champs/types';
-import { formaterValeur } from '../../../src/lib/champs/valeurs';
+import { formaterValeur, lireBooleen } from '../../../src/lib/champs/valeurs';
 import { listerChamps, lireValeursLot, ecrireValeurs } from '../champs/service';
 import {
   executerIdempotent, champRequis, appelInterne, AppelInterneIncertain,
@@ -886,7 +886,7 @@ const optionsActives = (c: ChampPerso) => c.options.filter((o) => !o.archived_at
 function valeurAncienne(c: ChampPerso, v: ValeurChamp): string | number | null {
   if (v === null || v === undefined) return null;
   if (c.field_type === 'monetary') return Number(v) / 100;
-  if (c.field_type === 'dropdown_single' || c.field_type === 'dropdown_multi') return formaterValeur(c, v) || null;
+  if (c.field_type === 'dropdown_single' || c.field_type === 'dropdown_multi' || c.field_type === 'checkbox') return formaterValeur(c, v) || null;
   return v as string | number;
 }
 
@@ -972,6 +972,7 @@ const setCustomField: AgentTool = {
             valeur = col.field_type === 'dropdown_multi' ? (ids as string[]) : (ids[0] as string); break;
           }
           case 'number': valeur = Number(brut.replace(',', '.')); if (!Number.isFinite(valeur)) throw new Error(`« ${col.label} » attend un nombre.`); break;
+          case 'checkbox': valeur = lireBooleen(brut); if (valeur === null) throw new Error(`« ${col.label} » attend oui ou non.`); break;
           default: valeur = brut.slice(0, 5000);
         }
       }

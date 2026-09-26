@@ -9,6 +9,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ValeurChamp } from '../../../src/lib/champs/types';
+import { lireBooleen } from '../../../src/lib/champs/valeurs';
 import { listerChamps, ecrireValeurs } from './service';
 import { logger } from '../logger';
 
@@ -25,6 +26,10 @@ function convertir(reponse: unknown, champ: Awaited<ReturnType<typeof listerCham
     }
     case 'dropdown_multi':
       return (Array.isArray(reponse) ? reponse : [reponse]).map((l) => parLibelle(l) ?? String(l));
+    case 'checkbox': {
+      const l = Array.isArray(reponse) ? reponse[0] : reponse;
+      return lireBooleen(l) ?? String(l); // illisible : refusé proprement par la validation
+    }
     case 'monetary': {
       const n = Number(String(reponse).replace(/[\s$]/g, '').replace(',', '.'));
       return Number.isFinite(n) ? Math.round(n * 100) : String(reponse);

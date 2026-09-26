@@ -357,7 +357,14 @@ export function applyTemplate(
 ): string {
   const remplacer = (entier: string, cle: string) =>
     Object.prototype.hasOwnProperty.call(vars, cle) ? (vars[cle] ?? '') : entier;
+  // {{client.type_de_toiture}} (format GoHighLevel des champs personnalisés) =
+  // {client_cf_type_de_toiture}. Inconnue : laissée telle quelle, comme les autres.
+  const remplacerChamp = (entier: string, objet: string, cle: string) => {
+    const nom = `${objet}_cf_${cle}`;
+    return Object.prototype.hasOwnProperty.call(vars, nom) ? (vars[nom] ?? '') : entier;
+  };
   return template
+    .replace(/\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g, remplacerChamp)
     .replace(/\{([A-Za-z]\w*)\}/g, remplacer)
     .replace(/\[([A-Za-z]\w*)\]/g, remplacer);
 }

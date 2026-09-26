@@ -380,7 +380,9 @@ export function resolveTemplate(
   vars: Record<string, string | null | undefined>,
 ): string {
   // Support both {var} and [var] syntax for backward compatibility, normalize to {var}
+  // Champs personnalisés : {{client.cle}} (format GoHighLevel) = {client_cf_cle}.
   return template
+    .replace(/\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g, (_, objet, cle) => vars[`${objet}_cf_${cle}`] ?? '')
     .replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '')
     .replace(/\[(\w+)\]/g, (_, key) => vars[key] ?? '');
 }

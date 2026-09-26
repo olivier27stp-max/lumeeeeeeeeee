@@ -31,7 +31,7 @@ import {
   archiverChamp, listerChamps, lireFuseau, renommerDossier, supprimerDossier, modifierChamp,
   type ChampPerso, type ObjetChamp,
 } from '../../lib/champsPersoApi';
-import { OBJETS, LIBELLES_OBJET, LIBELLES_TYPE, TYPES_CHAMP, variableModele, type TypeChamp } from '../../lib/champs/types';
+import { OBJETS, LIBELLES_OBJET, LIBELLES_TYPE, TYPES_CHAMP, variableAffichee, type TypeChamp } from '../../lib/champs/types';
 import {
   evaluerCondition, LIBELLES_OPERATEUR, OPERATEURS_DUREE, OPERATEURS_PAR_FAMILLE,
   type Operateur, type UniteDuree,
@@ -378,7 +378,7 @@ export default function ChampsPersoSettings() {
                         const type = l.sorte === 'custom' ? l.champ.field_type : l.std.field_type;
                         const Icone = ICONE_TYPE[type];
                         const nom = l.sorte === 'custom' ? l.champ.label : (fr ? l.std.label.fr : l.std.label.en);
-                        const variable = l.sorte === 'custom' ? `{${variableModele(l.objet, l.champ.key)}}` : `${l.objet}.${l.std.key}`;
+                        const variable = l.sorte === 'custom' ? variableAffichee(l.objet, l.champ.key) : `${l.objet}.${l.std.key}`;
                         const dossier = l.sorte === 'custom' ? dossiers.find((d) => d.id === l.champ.folder_id)?.name : null;
                         const cell = cn('flex items-center border-b border-outline/30 px-3 py-2.5 text-[13px] text-text-primary min-w-0', l.sorte === 'custom' && l.champ.archived_at && 'opacity-60');
                         return (

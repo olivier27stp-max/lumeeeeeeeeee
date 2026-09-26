@@ -1,5 +1,5 @@
 import {
-  Type, AlignLeft, Hash, DollarSign, Phone, Mail, Calendar, ListChecks, CircleChevronDown, type LucideIcon,
+  Type, AlignLeft, Hash, DollarSign, Phone, Mail, Calendar, ListChecks, CircleChevronDown, SquareCheck, Link, Paperclip, type LucideIcon,
 } from 'lucide-react';
 import type { TypeChamp } from '../../lib/champs/types';
 
@@ -13,6 +13,9 @@ export const ICONE_TYPE: Record<TypeChamp, LucideIcon> = {
   date: Calendar,
   dropdown_single: CircleChevronDown,
   dropdown_multi: ListChecks,
+  checkbox: SquareCheck,
+  url: Link,
+  file: Paperclip,
 };
 
 export const AIDE_TYPE: Record<TypeChamp, { fr: string; en: string }> = {
@@ -25,4 +28,7 @@ export const AIDE_TYPE: Record<TypeChamp, { fr: string; en: string }> = {
   date: { fr: 'Une date, avec ou sans heure.', en: 'A date, with or without time.' },
   dropdown_single: { fr: 'Un choix dans une liste.', en: 'One choice from a list.' },
   dropdown_multi: { fr: 'Plusieurs choix dans une liste.', en: 'Several choices from a list.' },
+  checkbox: { fr: 'Oui ou non : une case à cocher.', en: 'Yes or no: a checkbox.' },
+  url: { fr: 'Une adresse web (https://…), cliquable sur la fiche.', en: 'A web address (https://…), clickable on the record.' },
+  file: { fr: 'Un document ou une photo (25 Mo au plus), privé à l’entreprise.', en: 'A document or photo (25 MB max), private to the company.' },
 };

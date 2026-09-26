@@ -44,6 +44,11 @@ export async function rechercherDansChamps(db: SupabaseClient, orgId: string, q:
       const { data } = await db.from('deals').select('id, client_id').eq('org_id', orgId).in('id', ids('deal'));
       for (const d of data ?? []) clientDuDeal.set(d.id as string, d.client_id as string);
     }
+    // Propriété → son client (c'est sur la fiche client qu'on la voit).
+    if (ids('property').length) {
+      const { data } = await db.from('properties').select('id, client_id').eq('org_id', orgId).in('id', ids('property')).is('deleted_at', null);
+      for (const p of data ?? []) clientDuDeal.set(p.id as string, p.client_id as string);
+    }
     const idsClients = [...new Set([...ids('client'), ...clientDuDeal.values()])];
     const [clients, jobs, devis, factures] = await Promise.all([
       idsClients.length ? db.from('clients').select('id, first_name, last_name, company, status, created_at').eq('org_id', orgId).in('id', idsClients).is('deleted_at', null) : { data: [] },
@@ -61,8 +66,8 @@ export async function rechercherDansChamps(db: SupabaseClient, orgId: string, q:
     const base = { amountCents: null, currency: null, date: null, refId: null, rank: 0.4 } as const;
     for (const t of trouves) {
       const sousTitre = `${t.field_label} : ${t.value_text}`;
-      if (t.object_type === 'client' || t.object_type === 'deal') {
-        const cid = t.object_type === 'deal' ? clientDuDeal.get(t.entity_id) : t.entity_id;
+      if (t.object_type === 'client' || t.object_type === 'deal' || t.object_type === 'property') {
+        const cid = t.object_type === 'client' ? t.entity_id : clientDuDeal.get(t.entity_id);
         const c = cid ? mc.get(cid) : undefined;
         if (!c || dejaVus.has(c.id)) continue;
         dejaVus.add(c.id);
