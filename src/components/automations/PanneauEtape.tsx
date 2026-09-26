@@ -614,6 +614,22 @@ export default function PanneauEtape({
           {fr ? 'Supprimer' : 'Delete'}
         </button>
         <span className="flex-1" />
+        {/*
+          POURQUOI « Enregistrer » est grisé.
+
+          Le bouton était désactivé sans un mot : au clic, rien ne se
+          passait, l'étape restait « à compléter » et l'utilisateur ne
+          savait pas ce qui manquait. QA du 2026-09-25 (P2-12) — cas
+          rencontré : un message de texto laissé vide.
+
+          Les problèmes sont déjà calculés en clair juste au-dessus : il
+          suffisait de les dire.
+        */}
+        {problemes.length > 0 && (
+          <span className="max-w-[55%] text-right text-[11px] leading-tight text-danger">
+            {problemes[0]}
+          </span>
+        )}
         <button
           type="button"
           onClick={onFermer}
