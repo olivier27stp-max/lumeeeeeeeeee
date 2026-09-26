@@ -18,10 +18,12 @@
  */
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, ExternalLink, FileText, Hammer, MapPin, User, X } from 'lucide-react';
+import { Briefcase, ExternalLink, FileText, Hammer, MapPin, Pencil, Trash2, User, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import Modal from '../ui/Modal';
+import { confirmer } from '../ui/ConfirmDialog';
+import { deleteTask, updateTask } from '../../lib/tasksApi';
 import SpecificNotes from '../SpecificNotes';
 import CustomFieldsPanel from '../champs/CustomFieldsPanel';
 import ActivityTimeline from '../ActivityTimeline';
@@ -157,6 +159,8 @@ function OngletTaches({ dealId, fr }: { dealId: string; fr: boolean }) {
   const [echeance, setEcheance] = useState('');
   const idTri = useId();
   const [tri, setTri] = useState<'echeance' | 'creation'>('echeance');
+  // La tâche en cours de modification, et ce qu'on est en train d'y écrire.
+  const [enEdition, setEnEdition] = useState<{ id: string; titre: string; echeance: string } | null>(null);
 
   const cle = useMemo(() => ['deal-taches', dealId], [dealId]);
   const { data: taches = [], isLoading } = useQuery({
@@ -186,6 +190,42 @@ function OngletTaches({ dealId, fr }: { dealId: string; fr: boolean }) {
       toast.error(e instanceof Error ? e.message : String(e));
     },
   });
+
+  // Mêmes fonctions que la page Tâches : une tâche modifiée ou supprimée ici
+  // se comporte exactement comme là-bas (suppression douce, jamais effacée).
+  const modifier = useMutation({
+    mutationFn: (v: { id: string; titre: string; echeance: string }) =>
+      updateTask(v.id, { title: v.titre.trim(), due_date: v.echeance || null }),
+    onSuccess: () => {
+      setEnEdition(null);
+      void client.invalidateQueries({ queryKey: cle });
+      toast.success(fr ? 'Tâche modifiée.' : 'Task updated.');
+    },
+    onError: (e: unknown) => {
+      console.error('[DealDrawer] modification de tâche', e);
+      toast.error(e instanceof Error ? e.message : String(e));
+    },
+  });
+
+  const supprimer = useMutation({
+    mutationFn: (id: string) => deleteTask(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: cle });
+      toast.success(fr ? 'Tâche supprimée.' : 'Task deleted.');
+    },
+    onError: (e: unknown) => {
+      console.error('[DealDrawer] suppression de tâche', e);
+      toast.error(e instanceof Error ? e.message : String(e));
+    },
+  });
+
+  async function demanderSuppression(t: TacheDeal) {
+    const ok = await confirmer({
+      message: fr ? `Supprimer la tâche « ${t.title} » ?` : `Delete the task “${t.title}”?`,
+      danger: true,
+    });
+    if (ok) supprimer.mutate(t.id);
+  }
 
   /**
    * Les tâches triées.
@@ -288,6 +328,64 @@ function OngletTaches({ dealId, fr }: { dealId: string; fr: boolean }) {
           <ul className="rounded-xl border border-outline bg-surface-card divide-y divide-border-subtle">
             {tachesTriees.map((t) => {
               const idCase = `tache-${t.id}`;
+              if (enEdition?.id === t.id) {
+                const idTitreEd = `tache-titre-${t.id}`;
+                const idEcheanceEd = `tache-echeance-${t.id}`;
+                return (
+                  <li key={t.id} className="px-3 py-2.5">
+                    <form
+                      className="space-y-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (enEdition.titre.trim()) modifier.mutate(enEdition);
+                      }}
+                    >
+                      <div>
+                        <label htmlFor={idTitreEd} className="block text-[11px] text-text-tertiary mb-1">
+                          {fr ? 'Titre' : 'Title'}
+                        </label>
+                        <input
+                          id={idTitreEd}
+                          type="text"
+                          autoFocus
+                          value={enEdition.titre}
+                          onChange={(e) => setEnEdition({ ...enEdition, titre: e.target.value })}
+                          onKeyDown={(e) => { if (e.key === 'Escape') setEnEdition(null); }}
+                          className="input-field w-full text-[12.5px]"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor={idEcheanceEd} className="block text-[11px] text-text-tertiary mb-1">
+                          {fr ? 'Échéance (optionnelle)' : 'Due date (optional)'}
+                        </label>
+                        <input
+                          id={idEcheanceEd}
+                          type="date"
+                          value={enEdition.echeance}
+                          onChange={(e) => setEnEdition({ ...enEdition, echeance: e.target.value })}
+                          className="input-field w-full text-[12.5px]"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={modifier.isPending}
+                          className="btn-primary text-[12px] px-3 py-1.5 disabled:opacity-50"
+                        >
+                          {modifier.isPending ? (fr ? 'Enregistrement…' : 'Saving…') : (fr ? 'Enregistrer' : 'Save')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEnEdition(null)}
+                          className="btn-secondary text-[12px] px-3 py-1.5"
+                        >
+                          {fr ? 'Annuler' : 'Cancel'}
+                        </button>
+                      </div>
+                    </form>
+                  </li>
+                );
+              }
               return (
                 <li key={t.id} className="flex items-start gap-2.5 px-3 py-2">
                   <input
@@ -315,6 +413,27 @@ function OngletTaches({ dealId, fr }: { dealId: string; fr: boolean }) {
                       {enRetard(t) && ` · ${fr ? 'en retard' : 'overdue'}`}
                     </span>
                   </label>
+                  <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setEnEdition({ id: t.id, titre: t.title, echeance: t.due_date ?? '' })}
+                      aria-label={fr ? `Modifier la tâche « ${t.title} »` : `Edit task “${t.title}”`}
+                      title={fr ? 'Modifier' : 'Edit'}
+                      className="rounded-md p-1 text-text-muted hover:bg-surface-secondary hover:text-text-primary focus-visible:outline focus-visible:outline-2"
+                    >
+                      <Pencil size={13} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void demanderSuppression(t)}
+                      disabled={supprimer.isPending}
+                      aria-label={fr ? `Supprimer la tâche « ${t.title} »` : `Delete task “${t.title}”`}
+                      title={fr ? 'Supprimer' : 'Delete'}
+                      className="rounded-md p-1 text-text-muted hover:bg-surface-secondary hover:text-red-600 focus-visible:outline focus-visible:outline-2 disabled:opacity-50"
+                    >
+                      <Trash2 size={13} aria-hidden="true" />
+                    </button>
+                  </div>
                 </li>
               );
             })}
