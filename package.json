@@ -135,7 +135,7 @@
     "tailwind-merge": "^3.5.0",
     "tus-js-client": "4.3.1",
     "twilio": "^5.12.2",
-    "xlsx": "0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^4.3.6"
   },
   "devDependencies": {
