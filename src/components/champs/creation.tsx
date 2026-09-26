@@ -17,7 +17,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
-import { ecrireValeurs, listerChamps } from '../../lib/champsPersoApi';
+import { ecrireValeurs, listerChamps, supprimerFichierChamp } from '../../lib/champsPersoApi';
 import { preparerValeur, ErreurValeur } from '../../lib/champs/valeurs';
 import type { ObjetChamp, ValeurChamp } from '../../lib/champs/types';
 import ChampSaisie from './ChampSaisie';
@@ -58,6 +58,13 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
   // l'ancienne valeur. La ref, elle, est à jour.
   const courant = useRef<Record<string, ValeurChamp>>({});
   const poser = (id: string, v: ValeurChamp) => {
+    // Fichier remplacé avant même la création de la fiche : le précédent n'est
+    // référencé nulle part, il part tout de suite.
+    const ancien = courant.current[id];
+    if (typeof ancien === 'string' && ancien !== v
+        && champs.find((c) => c.id === id)?.field_type === 'file') {
+      void supprimerFichierChamp(ancien);
+    }
     courant.current = { ...courant.current, [id]: v };
     setValeurs(courant.current);
   };

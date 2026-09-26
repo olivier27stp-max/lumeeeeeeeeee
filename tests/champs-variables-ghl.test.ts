@@ -84,3 +84,29 @@ describe('valeur par défaut', () => {
     expect(src).toMatch(/o\.label === l\)\?\.id/);
   });
 });
+
+describe('ce que les boutons « Insérer » écrivent', () => {
+  it('automatisations : la variable d’un champ s’écrit {{objet.cle}}, sans crochets par-dessus', () => {
+    const src = lire('src/components/champs/automatisations.tsx');
+    expect(src).toMatch(/onInserer\(variableAffichee\(c\.object_type, c\.key\)\)/);
+    const builder = lire('src/components/automations/AutomationBuilder.tsx');
+    // Les variables classiques gardent [crochets] ; celle d’un champ arrive déjà écrite.
+    expect(builder).toMatch(/\$\{actuel\}\$\{variable\}/);
+    expect(builder).not.toMatch(/\$\{actuel\}\[\$\{variable\}\]/);
+  });
+
+  it('courriels : le champ apporte son jeton, la variable classique garde ses crochets', () => {
+    const src = lire('src/components/champs/automatisations.tsx');
+    expect(src).toMatch(/jeton: variableAffichee\(c\.object_type, c\.key\)/);
+    const editeur = lire('src/components/automations/EmailPreviewEditor.tsx');
+    expect(editeur).toMatch(/const ecriture = jeton \?\? `\[\$\{cle\}\]`/);
+    expect(editeur).toMatch(/insererVariable\(v\.cle, v\.jeton\)/);
+  });
+
+  it('courriels : {{client.cle}} d’un champ connu n’est pas signalé comme faute de frappe', () => {
+    const editeur = lire('src/components/automations/EmailPreviewEditor.tsx');
+    // Le format GoHighLevel est consommé AVANT le balayage des crochets,
+    // sinon « {{client.x}} » passerait pour la clé bancale « {client.x ».
+    expect(editeur).toMatch(/connues\.has\(`\$\{obj\}_cf_\$\{cle\}`\)/);
+  });
+});

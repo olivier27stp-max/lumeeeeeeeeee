@@ -16,7 +16,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
-import { ecrireValeurs, lireValeurs, type ObjetChamp, type ValeurChamp } from '../../lib/champsPersoApi';
+import { ecrireValeurs, lireValeurs, supprimerFichierChamp, type ObjetChamp, type ValeurChamp } from '../../lib/champsPersoApi';
 import ChampSaisie from './ChampSaisie';
 import { messageChamps } from '../../lib/champs/messages';
 import LienAjouterChamps from './LienAjouterChamps';
@@ -117,6 +117,10 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
 
   const enregistrer = async (fieldId: string, valeur: ValeurChamp) => {
     const version = data.values[fieldId]?.version ?? null;
+    // Un fichier remplacé ou retiré n'a plus de raison d'occuper le bucket ;
+    // on le supprime seulement une fois la nouvelle valeur acceptée.
+    const ancienFichier = data.fields.find((f) => f.id === fieldId)?.field_type === 'file'
+      ? (data.values[fieldId]?.value as string | null | undefined) : null;
     setEnCours((e) => ({ ...e, [fieldId]: true }));
     setErreurs((e) => { const { [fieldId]: _x, ...reste } = e; return reste; });
     try {
@@ -126,6 +130,7 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
         if (r?.conflict) await qc.invalidateQueries({ queryKey: cleRequete });
         return;
       }
+      if (ancienFichier && ancienFichier !== valeur) await supprimerFichierChamp(ancienFichier);
       await qc.invalidateQueries({ queryKey: cleRequete });
     } catch (err) {
       console.error('[CustomFieldsPanel] écriture', err);
