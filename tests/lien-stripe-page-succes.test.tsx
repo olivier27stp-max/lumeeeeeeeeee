@@ -101,3 +101,15 @@ describe('abonnements figés : reprise pendant le rechargement du cache PostgRES
     expect(appels()).toBe(1);
   });
 });
+
+describe('lien Stripe : l entreprise garde le nom saisi par le client', () => {
+  const PAYMENTS = lire('server/routes/payments.ts');
+  it('le nom collecté par Stripe sert de repli aux métadonnées absentes', () => {
+    expect(PAYMENTS).toMatch(/const companyName = meta\.company_name\s*\|\| session\.customer_details\?\.business_name/);
+  });
+  it('le téléphone collecté par Stripe est gardé, sans écraser une valeur existante', () => {
+    expect(PAYMENTS).toContain('...(billingPhone ? { phone: billingPhone } : {})');
+    expect(PAYMENTS).toContain('if (!currentSettings?.phone && billingPhone) patch.phone = billingPhone;');
+    expect(PAYMENTS).toContain('if (!currentSettings?.company_name && companyName) patch.company_name = companyName;');
+  });
+});
