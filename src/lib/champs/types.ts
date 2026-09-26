@@ -44,6 +44,8 @@ export interface ConfigChamp {
   show_on_documents?: boolean;
   /** Retiré de la fenêtre de création (« Gérer les champs ») — reste sur la fiche. */
   masque_creation?: boolean;
+  /** Retiré de la fiche (« Gérer les champs » de la fiche) — la valeur reste en base. */
+  masque_fiche?: boolean;
 }
 
 export interface OptionChamp {

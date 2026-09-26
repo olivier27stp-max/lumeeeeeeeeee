@@ -168,6 +168,7 @@ function configPour(type: TypeChamp, c: ConfigChamp = {}): ConfigChamp {
   const doc: ConfigChamp = {
     ...(c.show_on_documents ? { show_on_documents: true } : {}),
     ...(c.masque_creation ? { masque_creation: true } : {}),
+    ...(c.masque_fiche ? { masque_fiche: true } : {}),
   };
   if (type === 'number') return { decimals: c.decimals ?? null, min: c.min ?? null, max: c.max ?? null, ...doc };
   if (type === 'monetary') return { currency: (c.currency || 'CAD').toUpperCase(), ...doc };

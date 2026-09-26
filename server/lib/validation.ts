@@ -1262,6 +1262,7 @@ const configChamp = z.object({
   include_time: z.boolean().optional(),
   show_on_documents: z.boolean().optional(),
   masque_creation: z.boolean().optional(),
+  masque_fiche: z.boolean().optional(),
 }).strict();
 const baseChamp = {
   label: z.string().trim().min(1, 'Le nom du champ est obligatoire.').max(100),

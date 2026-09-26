@@ -21,3 +21,12 @@ describe('gérer les champs d’une fenêtre', () => {
     expect(c).toContain('<GererChampsFenetre');
   });
 });
+
+describe('gérer les champs d’une fiche', () => {
+  it('masque_fiche accepté et conservé, la fiche l’applique, le panneau sort en portail', () => {
+    expect(lire('server/lib/validation.ts')).toContain('masque_fiche: z.boolean().optional(),');
+    expect(lire('server/lib/champs/service.ts')).toContain('...(c.masque_fiche ? { masque_fiche: true } : {}),');
+    expect(lire('src/components/champs/CustomFieldsPanel.tsx')).toContain('data.fields.filter((x) => !x.config?.masque_fiche)');
+    expect(lire('src/components/champs/GererChampsFenetre.tsx')).toContain('createPortal(');
+  });
+});

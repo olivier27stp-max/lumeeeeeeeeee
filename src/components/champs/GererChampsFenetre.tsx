@@ -14,6 +14,7 @@
  * Propriétaire et admin seulement.
  */
 import { useEffect, useId, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { GripVertical, Plus, Search, X, Loader2 } from 'lucide-react';
@@ -40,7 +41,7 @@ function LigneAffichee({ champ, etat, fr, onChange }: {
         <GripVertical size={14} aria-hidden />
       </button>
       <input id={`${id}-aff`} type="checkbox" checked onChange={() => onChange({ affiche: false })} className="h-4 w-4 accent-primary"
-        aria-label={fr ? `Retirer ${champ.label} de la fenêtre` : `Remove ${champ.label} from the window`} />
+        aria-label={fr ? `Retirer ${champ.label}` : `Remove ${champ.label}`} />
       <span className="min-w-0 flex-1 truncate text-[13px] text-text-primary">{champ.label}</span>
       <label htmlFor={`${id}-req`} className="flex shrink-0 items-center gap-1 text-[11px] text-text-secondary">
         <input id={`${id}-req`} type="checkbox" checked={etat.obligatoire} onChange={(e) => onChange({ obligatoire: e.target.checked })} className="h-3.5 w-3.5 accent-primary" />
@@ -50,9 +51,11 @@ function LigneAffichee({ champ, etat, fr, onChange }: {
   );
 }
 
-export default function GererChampsFenetre({ objet, titreFenetre, champs, dossiers, fr, onClose }: {
+export default function GererChampsFenetre({ objet, titreFenetre, champs, dossiers, fr, onClose, portee = 'creation' }: {
   objet: ObjetChamp;
   titreFenetre: string;
+  /** « creation » : la fenêtre « Nouveau … » ; « fiche » : la fiche d'un élément existant. */
+  portee?: 'creation' | 'fiche';
   /** Champs actifs (non archivés) de l'objet, dans l'ordre. */
   champs: ChampPerso[];
   dossiers: DossierChamp[];
@@ -60,8 +63,10 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const cleMasque = portee === 'fiche' ? 'masque_fiche' : 'masque_creation';
+  const lieu = portee === 'fiche' ? (fr ? 'la fiche' : 'the record') : (fr ? 'la fenêtre' : 'the window');
   const idRecherche = useId();
-  const initial = useMemo(() => champs.map((c) => ({ id: c.id, affiche: !c.config?.masque_creation, obligatoire: !!c.is_required })), [champs]);
+  const initial = useMemo(() => champs.map((c) => ({ id: c.id, affiche: !c.config?.[cleMasque], obligatoire: !!c.is_required })), [champs, cleMasque]);
   const [etats, setEtats] = useState<Etat[]>(initial);
   const [ordre, setOrdre] = useState<string[]>(champs.map((c) => c.id));
   const [recherche, setRecherche] = useState('');
@@ -92,13 +97,14 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
         const e = etat(id);
         if (!c || !e) return null;
         const patch: Parameters<typeof modifierChamp>[1] = {};
-        if (e.affiche !== !c.config?.masque_creation) patch.config = { masque_creation: !e.affiche };
+        if (e.affiche !== !c.config?.[cleMasque]) patch.config = { [cleMasque]: !e.affiche };
         if (e.obligatoire !== !!c.is_required) patch.is_required = e.obligatoire;
         if ((c.position ?? 0) !== pos) patch.position = pos;
         return Object.keys(patch).length ? modifierChamp(id, patch) : null;
       }));
       await qc.invalidateQueries({ queryKey: ['champs-perso', objet] });
-      toast.success(fr ? 'Champs de la fenêtre enregistrés.' : 'Window fields saved.');
+      await qc.invalidateQueries({ queryKey: ['champs-perso-valeurs', objet] });
+      toast.success(fr ? `Champs de ${lieu} enregistrés.` : `Fields of ${lieu} saved.`);
       onClose();
     } catch (err) {
       console.error('[GererChampsFenetre] enregistrement', err);
@@ -108,14 +114,16 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
     }
   };
 
-  return (
+  // Portail vers <body> : rendu DANS une fiche animée (transform), le panneau restait
+  // coincé sous le widget « Configuration » et le bouton d'aide, « Appliquer » caché.
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex justify-end bg-black/30" role="presentation" tabIndex={-1} onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-label={fr ? 'Gérer les champs' : 'Manage fields'} tabIndex={-1}
         className="flex h-full w-full max-w-sm flex-col bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between border-b border-outline px-4 py-3">
           <div>
             <h3 className="text-[15px] font-semibold text-text-primary">{fr ? 'Gérer les champs' : 'Manage fields'}</h3>
-            <p className="text-[12px] text-text-tertiary">{fr ? `Fenêtre « ${titreFenetre} » — pour tout le compte` : `“${titreFenetre}” window — for the whole account`}</p>
+            <p className="text-[12px] text-text-tertiary">{fr ? `${portee === 'fiche' ? 'Fiche' : 'Fenêtre'} « ${titreFenetre} » — pour tout le compte` : `“${titreFenetre}” ${portee === 'fiche' ? 'record' : 'window'} — for the whole account`}</p>
           </div>
           <button type="button" onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'}
             className="rounded p-1 text-text-tertiary hover:bg-surface-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><X size={16} /></button>
@@ -132,7 +140,7 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
 
         <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
           <section>
-            <p className="mb-1 px-1 text-[12px] font-semibold text-text-secondary">{fr ? 'Champs affichés dans la fenêtre' : 'Fields shown in the window'}</p>
+            <p className="mb-1 px-1 text-[12px] font-semibold text-text-secondary">{fr ? `Champs affichés dans ${lieu}` : `Fields shown in ${lieu}`}</p>
             {affiches.length === 0 ? (
               <p className="px-1 text-[12px] text-text-tertiary">{fr ? 'Aucun. Coche un champ plus bas pour l’ajouter.' : 'None. Check a field below to add it.'}</p>
             ) : (
@@ -146,7 +154,7 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
           <section>
             <p className="mb-1 px-1 text-[12px] font-semibold text-text-secondary">{fr ? 'Ajouter des champs' : 'Add fields'}</p>
             {disponibles.length === 0 ? (
-              <p className="px-1 text-[12px] text-text-tertiary">{fr ? 'Tous tes champs sont déjà dans la fenêtre.' : 'All your fields are already in the window.'}</p>
+              <p className="px-1 text-[12px] text-text-tertiary">{fr ? `Tous tes champs sont déjà dans ${lieu}.` : `All your fields are already in ${lieu}.`}</p>
             ) : disponibles.map((id) => (
               <label key={id} htmlFor={`${idRecherche}-${id}`} className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1.5 pl-6 text-[13px] text-text-primary hover:bg-surface-secondary">
                 <input id={`${idRecherche}-${id}`} type="checkbox" checked={false} onChange={() => poser(id, { affiche: true })} className="h-4 w-4 accent-primary" />
@@ -175,6 +183,7 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
             onEnregistre={() => { void qc.invalidateQueries({ queryKey: ['champs-perso', objet] }); setCreation(false); }} />
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

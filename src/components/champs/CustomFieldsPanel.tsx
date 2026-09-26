@@ -20,6 +20,11 @@ import { ecrireValeurs, lireValeurs, type ObjetChamp, type ValeurChamp } from '.
 import ChampSaisie from './ChampSaisie';
 import { messageChamps } from '../../lib/champs/messages';
 import LienAjouterChamps from './LienAjouterChamps';
+import GererChampsFenetre from './GererChampsFenetre';
+import { usePermissions } from '../../hooks/usePermissions';
+import { listerChamps } from '../../lib/champsPersoApi';
+import { LIBELLES_OBJET } from '../../lib/champs/types';
+import { Settings2 } from 'lucide-react';
 
 interface Props {
   objet: ObjetChamp;
@@ -46,11 +51,32 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
   const [enCours, setEnCours] = useState<Record<string, boolean>>({});
   const [replies, setReplies] = useState<Record<string, boolean>>({});
+  const { role } = usePermissions();
+  const peutGerer = (role === 'owner' || role === 'admin') && !lectureSeule;
+  const [gerer, setGerer] = useState(false);
+  const { data: tousChamps } = useQuery({
+    queryKey: ['champs-perso', objet],
+    queryFn: () => listerChamps(objet),
+    enabled: isEnabled && peutGerer,
+    staleTime: 60_000,
+  });
+  const actifsObjet = useMemo(() => (tousChamps?.fields ?? []).filter((c) => !c.archived_at), [tousChamps]);
+  const boutonGerer = peutGerer ? (
+    <button type="button" onClick={() => setGerer(true)}
+      className="inline-flex items-center gap-1 rounded text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+      <Settings2 size={12} aria-hidden />{fr ? 'Gérer les champs' : 'Manage fields'}
+    </button>
+  ) : null;
+  const panneau = gerer ? (
+    <GererChampsFenetre portee="fiche" objet={objet} titreFenetre={fr ? LIBELLES_OBJET[objet].fr : LIBELLES_OBJET[objet].en}
+      champs={actifsObjet} dossiers={tousChamps?.folders ?? []} fr={fr} onClose={() => setGerer(false)} />
+  ) : null;
 
   const groupes = useMemo(() => {
     if (!data) return [];
     const parDossier = new Map<string | null, typeof data.fields>();
-    for (const c of data.fields) {
+    // Retirés de la fiche par « Gérer les champs » : masqués (la valeur reste en base).
+    for (const c of data.fields.filter((x) => !x.config?.masque_fiche)) {
       const cle = c.folder_id && data.folders.some((d) => d.id === c.folder_id) ? c.folder_id : null;
       parDossier.set(cle, [...(parDossier.get(cle) ?? []), c]);
     }
@@ -77,7 +103,17 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
     );
   }
   if (!data) return null;
-  if (data.fields.length === 0) return <LienAjouterChamps fr={fr} className={cn('py-2', className)} />;
+  if (groupes.length === 0) {
+    return (
+      <div className={cn('flex flex-wrap items-center justify-between gap-2 py-2', className)}>
+        {data.fields.length === 0 ? <LienAjouterChamps fr={fr} /> : (
+          <p className="text-[12px] text-text-tertiary">{fr ? 'Aucun champ personnalisé sur cette fiche.' : 'No custom fields on this record.'}</p>
+        )}
+        {boutonGerer}
+        {panneau}
+      </div>
+    );
+  }
 
   const enregistrer = async (fieldId: string, valeur: ValeurChamp) => {
     const version = data.values[fieldId]?.version ?? null;
@@ -101,9 +137,13 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
 
   return (
     <section className={cn('space-y-3', className)} aria-label={titre ?? (fr ? 'Champs personnalisés' : 'Custom fields')}>
-      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
-        {titre ?? (fr ? 'Champs personnalisés' : 'Custom fields')}
-      </h4>
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
+          {titre ?? (fr ? 'Champs personnalisés' : 'Custom fields')}
+        </h4>
+        {boutonGerer}
+      </div>
+      {panneau}
       {groupes.map((g) => {
         const replie = !!replies[g.id];
         const idGroupe = `${idBase}-g-${g.id}`;
