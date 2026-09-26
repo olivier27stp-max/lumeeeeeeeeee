@@ -113,8 +113,10 @@ export async function fetchLoyalty(params: { from: string; to: string }): Promis
 
     const cohorts = await fetchCohortRetention();
     // months_after = 0 vaut 100 % par définition — l'inclure gonflait la moyenne.
+    // retention_pct arrive DÉJÀ en pourcentage (round((active/size)*100) côté RPC) :
+    // pas de re-mise à l'échelle, sinon un vrai 1 % devenait 100 %.
     const rets = cohorts.filter((c) => Number(c.months_after) >= 1)
-      .map((c) => { const r = c.retention_pct || 0; return r > 0 && r <= 1 ? r * 100 : r; });
+      .map((c) => c.retention_pct || 0);
     const retentionPct = rets.length ? Math.round(rets.reduce((s, r) => s + r, 0) / rets.length) : 0;
 
     return { recurringPct, ltvAvgCents, retentionPct };

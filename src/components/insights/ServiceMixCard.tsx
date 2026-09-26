@@ -1,7 +1,9 @@
 /**
- * Revenue by service — donut wired to fetchTopServices (sum of job total_cents
- * per title, top 3 + "Other"). One indigo hue at decreasing opacity (sequential,
- * monochrome-friendly). Hover a segment/row → the donut center shows its detail.
+ * Job value by service — donut wired to fetchTopServices (sum of job total_cents
+ * per title, top 3 + "Other"). This is the booked VALUE of jobs, not paid
+ * revenue (contrast RevenueTrendCard, which follows payments), hence the label.
+ * One indigo hue at decreasing opacity (sequential, monochrome-friendly).
+ * Hover a segment/row → the donut center shows its detail.
  */
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -57,7 +59,7 @@ export default function ServiceMixCard({
   return (
     <div className="flex flex-col">
       <div className="flex items-end justify-between gap-3 px-6 pb-3 border-b border-border">
-        <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Revenu par service' : 'Revenue by service'}</div>
+        <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Valeur des jobs par service' : 'Job value by service'}</div>
         <PeriodSelector value={period} onChange={onPeriod} />
       </div>
 
