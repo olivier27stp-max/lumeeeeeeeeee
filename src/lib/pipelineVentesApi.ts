@@ -10,6 +10,7 @@
  */
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
+import { listClients } from './clientsApi';
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -668,11 +669,16 @@ export async function majContactDuDeal(
 /**
  * Crée un deal à la main, depuis le board.
  *
- * Passe par `ingest_lead` — la porte d'entrée unique déjà utilisée par le
- * formulaire public. Un deal créé ici suit donc exactement le même chemin
- * qu'un lead entrant : rapprochement sur le téléphone ou le courriel,
- * première étape ouverte, non assigné. Écrire directement dans `deals`
- * contournerait tout ça et créerait un doublon pour un client existant.
+ * Trois portes d'entrée :
+ *  - `clientId` : un client DÉJÀ en base. La base lit le contact sur sa fiche
+ *    et y rattache le deal — aucun doublon possible, même pour un client
+ *    sans téléphone ni courriel.
+ *  - `quoteId` : un devis existant. Il donne son client et son montant, et
+ *    est RATTACHÉ au deal au lieu qu'un devis estimatif soit fabriqué.
+ *  - ni l'un ni l'autre : un nouveau contact, rapproché par `ingest_lead`
+ *    sur le téléphone ou le courriel (la porte du formulaire public).
+ *
+ * `pipelineId` choisit le pipeline ; sans lui, celui par défaut.
  */
 export async function creerDealManuel(champs: {
   prenom: string;
@@ -691,6 +697,9 @@ export async function creerDealManuel(champs: {
   assigneA?: string | null;
   dateFermetureVisee?: string | null;
   source?: string | null;
+  clientId?: string | null;
+  quoteId?: string | null;
+  pipelineId?: string | null;
 }): Promise<{ dealId: string; fusionne: boolean; dealExistant: boolean; pipelineId: string | null }> {
   // `pipeline_creer_deal` ne prend PAS d'organisation : elle la dérive de la
   // session et vérifie la permission « leads.create ». `ingest_lead` reste
@@ -706,15 +715,17 @@ export async function creerDealManuel(champs: {
     p_assigne_a: champs.assigneA ?? null,
     p_date_fermeture_visee: champs.dateFermetureVisee ?? null,
     p_source: champs.source ?? null,
+    p_client_id: champs.clientId ?? null,
+    p_quote_id: champs.quoteId ?? null,
+    p_pipeline_id: champs.pipelineId ?? null,
   });
   if (error) throw error;
   const r = data as { deal_id: string; fusionne: boolean; deal_existant: boolean };
 
-  // OÙ le deal a atterri. `ingest_lead` le place toujours dans le pipeline
-  // PAR DÉFAUT de l'organisation — pas dans celui qu'on regarde. Sans cette
-  // information, créer un deal en consultant un autre pipeline laissait le
-  // compteur à zéro, et le bug passait pour un défaut de rafraîchissement
-  // (QA 2026-09-24, P1-6).
+  // OÙ le deal a VRAIMENT atterri, relu en base plutôt que supposé : un
+  // pipeline sans étape ouverte fait retomber `ingest_lead` sur le pipeline
+  // par défaut. Sans cette relecture, le compteur restait à zéro et le bug
+  // passait pour un défaut de rafraîchissement (QA 2026-09-24, P1-6).
   let pipelineId: string | null = null;
   if (r.deal_id) {
     const { data: place } = await supabase
@@ -726,6 +737,121 @@ export async function creerDealManuel(champs: {
   }
 
   return { dealId: r.deal_id, fusionne: r.fusionne, dealExistant: r.deal_existant, pipelineId };
+}
+
+/** Un client proposé dans « Nouveau deal ». */
+export interface ClientPourDeal {
+  id: string;
+  nom: string;
+  telephone: string | null;
+  courriel: string | null;
+  adresse: string | null;
+}
+
+/** Un devis proposé dans « Nouveau deal ». */
+export interface DevisPourDeal {
+  id: string;
+  numero: string;
+  titre: string | null;
+  statut: string;
+  totalCents: number;
+  clientId: string;
+  clientNom: string;
+}
+
+function sansAccents(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+function nomAffiche(c: { first_name?: string | null; last_name?: string | null; company?: string | null }): string {
+  const n = `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim();
+  return n || (c.company ?? '').trim() || '—';
+}
+
+/**
+ * Cherche les clients de l'organisation (nom, entreprise, courriel,
+ * téléphone, adresse — accents ignorés, via `listClients`).
+ *
+ * Sert aussi l'AVERTISSEMENT de doublon : un nom tapé à la main est
+ * comparé aux fiches existantes avant la création.
+ */
+export async function rechercherClientsPourDeal(q: string, limite = 8): Promise<ClientPourDeal[]> {
+  const mots = sansAccents(q).split(/\s+/).filter((m) => m.length > 0);
+  if (mots.join('').length < 2) return [];
+  // `listClients` compare chaque colonne SÉPARÉMENT : « marc tremblay » n'est
+  // contenu ni dans le prénom ni dans le nom, et ne trouverait rien — ni ici,
+  // ni pour l'avertissement de doublon. On interroge donc la base sur le mot
+  // le plus long, puis on exige que TOUS les mots soient présents.
+  const pivot = mots.reduce((a, b) => (b.length > a.length ? b : a));
+  const { items } = await listClients({
+    q: pivot,
+    pageSize: mots.length > 1 ? 50 : limite,
+    sort: 'activity_desc',
+  });
+  return items
+    .filter((c) => {
+      const botte = sansAccents(
+        [c.first_name, c.last_name, c.company, c.email, c.phone, c.address].filter(Boolean).join(' '),
+      );
+      return mots.every((m) => botte.includes(m));
+    })
+    .slice(0, limite)
+    .map((c) => ({
+    id: c.id,
+    nom: nomAffiche(c),
+    telephone: c.phone ?? null,
+    courriel: c.email ?? null,
+    adresse: c.address ?? null,
+  }));
+}
+
+/**
+ * Les devis qui peuvent encore devenir une affaire : ni convertis, ni
+ * archivés, ni refusés, ni expirés — ceux-là sont déjà tranchés.
+ * Recherche sur le numéro, le titre ou le nom du client.
+ */
+export async function rechercherDevisPourDeal(q: string, limite = 8): Promise<DevisPourDeal[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  let requete = supabase
+    .from('quotes')
+    .select('id,quote_number,title,status,total_cents,client_id,clients!quotes_client_id_fkey!inner(first_name,last_name,company,deleted_at)')
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .not('client_id', 'is', null)
+    .in('status', ['draft', 'awaiting_response', 'changes_requested', 'approved'])
+    .order('created_at', { ascending: false })
+    .limit(limite);
+
+  // Le nom du client vit sur `clients`, pas sur `quotes` : un `.or()` qui
+  // mélangerait les deux ferait échouer TOUTE la requête (PostgREST refuse une
+  // colonne inconnue, et supabase-js ne lève pas — la liste resterait vide en
+  // silence). On cherche donc d'abord les clients, puis leurs devis.
+  const t = q.trim().replace(/[,%_()]/g, ' ').trim();
+  if (t) {
+    const clients = await rechercherClientsPourDeal(t, 25);
+    const ids = clients.map((c) => c.id);
+    const parDevis = `quote_number.ilike.%${t}%,title.ilike.%${t}%`;
+    requete = requete.or(ids.length ? `${parDevis},client_id.in.(${ids.join(',')})` : parDevis);
+  }
+
+  const { data, error } = await requete;
+  if (error) throw error;
+  type Ligne = {
+    id: string; quote_number: string | null; title: string | null; status: string;
+    total_cents: number | null; client_id: string;
+    clients: { first_name: string | null; last_name: string | null; company: string | null; deleted_at: string | null } | null;
+  };
+  return ((data ?? []) as unknown as Ligne[])
+    .filter((d) => d.clients && !d.clients.deleted_at)
+    .map((d) => ({
+      id: d.id,
+      numero: d.quote_number ?? '—',
+      titre: d.title,
+      statut: d.status,
+      totalCents: d.total_cents ?? 0,
+      clientId: d.client_id,
+      clientNom: d.clients ? nomAffiche(d.clients) : '—',
+    }));
 }
 
 // ── Réglages des étapes ─────────────────────────────────────

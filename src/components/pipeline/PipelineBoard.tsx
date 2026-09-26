@@ -10,7 +10,7 @@
  * ne reste qu'une pastille ronde devant le nom. La couleur porte l'information
  * qui presse (priorité sur le liseré gauche des cartes), pas la décoration.
  */
-import { useCallback, useContext, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   DndContext, DragOverlay, PointerSensor, closestCorners, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
@@ -35,6 +35,8 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
   creerDealManuel, creerVue, estJobACreer, fetchVues, journaliserLot, nomClient, pastilles, priorite, supprimerVue,
+  rechercherClientsPourDeal, rechercherDevisPourDeal,
+  type ClientPourDeal, type DevisPourDeal,
   type Deal, type ModeCouleur, type PipelineStage, type VueSauvegardee,
 } from '../../lib/pipelineVentesApi';
 import {
@@ -533,12 +535,39 @@ function champsDealVides(): ChampsDeal {
   };
 }
 
+/** Une valeur qui ne suit la saisie qu'après une pause : une requête par mot, pas par touche. */
+function useDiffere<T>(valeur: T, ms: number): T {
+  const [v, setV] = useState(valeur);
+  useEffect(() => {
+    const t = setTimeout(() => setV(valeur), ms);
+    return () => clearTimeout(t);
+  }, [valeur, ms]);
+  return v;
+}
+
+/**
+ * D'où part le deal.
+ *
+ * `client` et `devis` d'abord : dans un CRM qui a déjà des clients, retaper un
+ * contact est l'exception. Et c'est le seul chemin où un doublon est
+ * IMPOSSIBLE — le rapprochement automatique ne reconnaît quelqu'un que par
+ * son téléphone ou son courriel, jamais par son nom.
+ */
+type ModeDeal = 'client' | 'devis' | 'nouveau';
+
+const STATUT_DEVIS: Record<string, { fr: string; en: string }> = {
+  draft: { fr: 'Brouillon', en: 'Draft' },
+  awaiting_response: { fr: 'En attente', en: 'Awaiting response' },
+  changes_requested: { fr: 'Modifs demandées', en: 'Changes requested' },
+  approved: { fr: 'Approuvé', en: 'Approved' },
+};
+
 /**
  * Petit formulaire de création. En cas d'erreur de la base, il reste ouvert
  * avec les valeurs saisies : retaper une adresse parce qu'un courriel était
  * déjà pris est la meilleure façon de perdre quelqu'un.
  */
-function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
+function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFermer, onCree }: {
   ouvert: boolean;
   fr: boolean;
   onFermer: () => void;
@@ -546,10 +575,21 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
   onCree: (pipelineId: string | null) => void;
   /** Pour proposer un responsable dès la création. */
   membres: Membre[];
+  /** Le deal part dans celui qu'on regarde, sauf choix contraire. */
+  pipelines: { id: string; name: string; is_default: boolean }[];
+  pipelineActif: string | null;
 }) {
+  const [mode, setMode] = useState<ModeDeal>('client');
   const [champs, setChamps] = useState<ChampsDeal>(champsDealVides);
+  const [client, setClient] = useState<ClientPourDeal | null>(null);
+  const [devis, setDevis] = useState<DevisPourDeal | null>(null);
+  const [recherche, setRecherche] = useState('');
+  // '' = pas encore touché : on suit le pipeline affiché.
+  const [pipelineId, setPipelineId] = useState('');
   const [envoi, setEnvoi] = useState(false);
   const champsPerso = useChampsCreation('deal', fr);
+  const idPipeline = useId();
+  const idRecherche = useId();
   const idPrenom = useId();
   const idNom = useId();
   const idCourriel = useId();
@@ -560,8 +600,51 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
   const idDateVisee = useId();
   const idSource = useId();
 
+  const pipelineCible = pipelineId
+    || pipelineActif
+    || pipelines.find((p) => p.is_default)?.id
+    || '';
+  const nomPipeline = pipelines.find((p) => p.id === pipelineCible)?.name ?? '';
+
+  const termeDiffere = useDiffere(recherche.trim(), 250);
+  const clientsQ = useQuery({
+    queryKey: ['nouveau-deal', 'clients', termeDiffere],
+    queryFn: () => rechercherClientsPourDeal(termeDiffere),
+    enabled: ouvert && mode === 'client' && !client && termeDiffere.length >= 2,
+    staleTime: 30_000,
+  });
+  // Sans saisie, les devis récents : le plus souvent, c'est celui qu'on vient d'envoyer.
+  const devisQ = useQuery({
+    queryKey: ['nouveau-deal', 'devis', termeDiffere],
+    queryFn: () => rechercherDevisPourDeal(termeDiffere),
+    enabled: ouvert && mode === 'devis' && !devis,
+    staleTime: 30_000,
+  });
+
+  // L'avertissement de doublon : le nom tapé est comparé aux fiches existantes.
+  const nomSaisi = useDiffere(`${champs.prenom} ${champs.nom}`.trim(), 400);
+  const doublonsQ = useQuery({
+    queryKey: ['nouveau-deal', 'doublons', nomSaisi],
+    queryFn: () => rechercherClientsPourDeal(nomSaisi, 3),
+    enabled: ouvert && mode === 'nouveau' && nomSaisi.length >= 3,
+    staleTime: 30_000,
+  });
+  const doublons = mode === 'nouveau' ? (doublonsQ.data ?? []) : [];
+
+  function changerMode(m: ModeDeal) {
+    setMode(m);
+    setClient(null);
+    setDevis(null);
+    setRecherche('');
+  }
+
   function fermer() {
     setChamps(champsDealVides());
+    setMode('client');
+    setClient(null);
+    setDevis(null);
+    setRecherche('');
+    setPipelineId('');
     onFermer();
   }
 
@@ -572,41 +655,62 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
 
   async function soumettre(e: FormEvent) {
     e.preventDefault();
-    const prenom = champs.prenom.trim();
-    if (prenom === '') {
-      toast.error(fr ? 'Le prénom est requis.' : 'First name is required.');
-      return;
+
+    let prenom: string;
+    if (mode === 'client') {
+      if (!client) {
+        toast.error(fr ? 'Choisis un client.' : 'Pick a client.');
+        return;
+      }
+      prenom = client.nom;
+    } else if (mode === 'devis') {
+      if (!devis) {
+        toast.error(fr ? 'Choisis un devis.' : 'Pick a quote.');
+        return;
+      }
+      prenom = devis.clientNom;
+    } else {
+      prenom = champs.prenom.trim();
+      if (prenom === '') {
+        toast.error(fr ? 'Le prénom est requis.' : 'First name is required.');
+        return;
+      }
     }
+
     const erreurChamps = champsPerso.valider();
     if (erreurChamps) { toast.error(erreurChamps); return; }
     setEnvoi(true);
     try {
       // Saisi en dollars, envoyé en CENTS : les cents sont la source de
-      // vérité dans tout Lume. Envoyer 1250 au lieu de 125000 afficherait
-      // 12,50 $ sur la carte.
+      // vérité dans tout Lume. Un devis choisi apporte SON montant : on
+      // n'en envoie pas un second qui divergerait du document.
       const brut = Number(champs.montant.replace(',', '.').replace(/\s/g, ''));
-      const cents = champs.montant.trim() !== '' && Number.isFinite(brut) && brut > 0
+      const cents = mode !== 'devis' && champs.montant.trim() !== '' && Number.isFinite(brut) && brut > 0
         ? Math.round(brut * 100)
         : null;
 
+      const nouveau = mode === 'nouveau';
       const r = await creerDealManuel({
         prenom,
-        nom: vide(champs.nom),
-        courriel: vide(champs.courriel),
-        telephone: vide(champs.telephone),
-        adresse: vide(champs.adresse),
+        nom: nouveau ? vide(champs.nom) : null,
+        courriel: nouveau ? vide(champs.courriel) : null,
+        telephone: nouveau ? vide(champs.telephone) : null,
+        adresse: nouveau ? vide(champs.adresse) : null,
         montantCents: cents,
         assigneA: vide(champs.assigneA),
         dateFermetureVisee: vide(champs.dateVisee),
         source: vide(champs.source),
+        clientId: mode === 'client' ? client?.id ?? null : mode === 'devis' ? devis?.clientId ?? null : null,
+        quoteId: mode === 'devis' ? devis?.id ?? null : null,
+        pipelineId: pipelineCible || null,
       });
       // Un deal DÉJÀ ouvert pour ce contact garde ses valeurs : on n'écrase pas.
       if (!r.dealExistant) await champsPerso.enregistrer(r.dealId);
       if (r.dealExistant) {
         toast.success(fr
-          ? 'Ce contact avait déjà un deal ouvert : la demande y a été ajoutée.'
-          : 'This contact already had an open deal: the request was added to it.');
-      } else if (r.fusionne) {
+          ? 'Ce client avait déjà un deal ouvert dans ce pipeline : on l\'a gardé plutôt que d\'en créer un second.'
+          : 'This client already had an open deal in this pipeline: it was kept instead of creating a second one.');
+      } else if (r.fusionne && mode === 'nouveau') {
         toast.success(fr
           ? 'Un client existant a été retrouvé : le deal lui est rattaché.'
           : 'An existing client was found: the deal is linked to them.');
@@ -631,33 +735,258 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
     { id: idAdresse, cle: 'adresse', label: fr ? 'Adresse' : 'Address', type: 'text', requis: false },
   ];
 
+  const MODES: { cle: ModeDeal; fr: string; en: string }[] = [
+    { cle: 'client', fr: 'Client existant', en: 'Existing client' },
+    { cle: 'devis', fr: 'À partir d\'un devis', en: 'From a quote' },
+    { cle: 'nouveau', fr: 'Nouveau contact', en: 'New contact' },
+  ];
+
+  const resultats = mode === 'client' ? (clientsQ.data ?? []) : [];
+  const listeDevis = mode === 'devis' ? (devisQ.data ?? []) : [];
+
   return (
     <Modal
       open={ouvert}
       onClose={fermer}
       size="md"
       title={fr ? 'Nouveau deal' : 'New deal'}
-      description={fr
-        ? 'Le deal apparaîtra dans la première étape ouverte du pipeline.'
-        : 'The deal will appear in the first open stage of the pipeline.'}
+      description={nomPipeline
+        ? (fr
+          ? `Le deal apparaîtra dans la première étape ouverte de « ${nomPipeline} ».`
+          : `The deal will appear in the first open stage of “${nomPipeline}”.`)
+        : (fr
+          ? 'Le deal apparaîtra dans la première étape ouverte du pipeline.'
+          : 'The deal will appear in the first open stage of the pipeline.')}
     >
       <form onSubmit={soumettre} className="flex flex-col gap-3">
-        {champsTexte.map((c) => (
-          <div key={c.id}>
-            <label htmlFor={c.id} className="mb-1.5 block text-[11px] text-text-tertiary">
-              {c.label}
-              {c.requis && <span aria-hidden="true"> *</span>}
+        {pipelines.length > 1 && (
+          <div>
+            <label htmlFor={idPipeline} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Pipeline' : 'Pipeline'}
+            </label>
+            <select
+              id={idPipeline}
+              value={pipelineCible}
+              onChange={(e) => setPipelineId(e.target.value)}
+              className={CLASSE_CHAMP}
+            >
+              {pipelines.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div
+          role="group"
+          aria-label={fr ? 'Partir de' : 'Start from'}
+          className="grid grid-cols-3 gap-1 rounded-lg border border-outline p-1"
+        >
+          {MODES.map((m) => (
+            <button
+              key={m.cle}
+              type="button"
+              aria-pressed={mode === m.cle}
+              onClick={() => changerMode(m.cle)}
+              className={cn(
+                'rounded-md px-2 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
+                mode === m.cle
+                  ? 'bg-surface-secondary text-text-primary shadow-sm'
+                  : 'text-text-tertiary hover:text-text-primary',
+              )}
+            >
+              {fr ? m.fr : m.en}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Client existant ── */}
+        {mode === 'client' && (client ? (
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-outline px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold text-text-primary">{client.nom}</p>
+              <p className="truncate text-[11.5px] text-text-tertiary">
+                {[client.telephone, client.courriel, client.adresse].filter(Boolean).join(' · ')
+                  || (fr ? 'Aucune coordonnée sur la fiche' : 'No contact details on file')}
+              </p>
+            </div>
+            <button type="button" onClick={() => setClient(null)} className={CLASSE_BOUTON}>
+              {fr ? 'Changer' : 'Change'}
+            </button>
+          </div>
+        ) : (
+          <div>
+            <label htmlFor={idRecherche} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Rechercher un client' : 'Search a client'}
             </label>
             <input
-              id={c.id}
-              type={c.type}
-              required={c.requis}
-              value={champs[c.cle]}
-              onChange={(e) => setChamps((v) => ({ ...v, [c.cle]: e.target.value }))}
+              id={idRecherche}
+              type="search"
+              autoFocus
+              value={recherche}
+              onChange={(e) => setRecherche(e.target.value)}
+              placeholder={fr ? 'Nom, téléphone, courriel, adresse…' : 'Name, phone, email, address…'}
               className={CLASSE_CHAMP}
             />
+            <ul className="mt-1.5 flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+              {resultats.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => { setClient(c); setRecherche(''); }}
+                    className="w-full rounded-md px-2.5 py-1.5 text-left hover:bg-surface-secondary focus-visible:outline focus-visible:outline-2"
+                  >
+                    <span className="block truncate text-[12.5px] font-medium text-text-primary">{c.nom}</span>
+                    <span className="block truncate text-[11px] text-text-tertiary">
+                      {[c.telephone, c.courriel].filter(Boolean).join(' · ') || c.adresse || '—'}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {termeDiffere.length >= 2 && clientsQ.isSuccess && resultats.length === 0 && (
+              <p className="mt-1.5 text-[11.5px] text-text-tertiary">
+                {fr ? 'Aucun client trouvé. ' : 'No client found. '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const [p, ...n] = recherche.trim().split(/\s+/);
+                    changerMode('nouveau');
+                    setChamps((v) => ({ ...v, prenom: p ?? '', nom: n.join(' ') }));
+                  }}
+                  className="font-medium text-text-primary underline underline-offset-2"
+                >
+                  {fr ? 'Créer un nouveau contact' : 'Create a new contact'}
+                </button>
+              </p>
+            )}
           </div>
         ))}
+
+        {/* ── À partir d'un devis ── */}
+        {mode === 'devis' && (devis ? (
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-outline px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold text-text-primary">
+                {devis.numero} · {argent(devis.totalCents, fr)}
+              </p>
+              <p className="truncate text-[11.5px] text-text-tertiary">
+                {devis.clientNom}{devis.titre ? ` · ${devis.titre}` : ''}
+              </p>
+            </div>
+            <button type="button" onClick={() => setDevis(null)} className={CLASSE_BOUTON}>
+              {fr ? 'Changer' : 'Change'}
+            </button>
+          </div>
+        ) : (
+          <div>
+            <label htmlFor={idRecherche} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Rechercher un devis' : 'Search a quote'}
+            </label>
+            <input
+              id={idRecherche}
+              type="search"
+              autoFocus
+              value={recherche}
+              onChange={(e) => setRecherche(e.target.value)}
+              placeholder={fr ? 'Numéro, titre ou client…' : 'Number, title or client…'}
+              className={CLASSE_CHAMP}
+            />
+            <ul className="mt-1.5 flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+              {listeDevis.map((d) => (
+                <li key={d.id}>
+                  <button
+                    type="button"
+                    onClick={() => { setDevis(d); setRecherche(''); }}
+                    className="w-full rounded-md px-2.5 py-1.5 text-left hover:bg-surface-secondary focus-visible:outline focus-visible:outline-2"
+                  >
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-[12.5px] font-medium text-text-primary">
+                        {d.numero} · {d.clientNom}
+                      </span>
+                      <span className="shrink-0 text-[12px] tabular-nums text-text-primary">
+                        {argent(d.totalCents, fr)}
+                      </span>
+                    </span>
+                    <span className="block truncate text-[11px] text-text-tertiary">
+                      {(fr ? STATUT_DEVIS[d.statut]?.fr : STATUT_DEVIS[d.statut]?.en) ?? d.statut}
+                      {d.titre ? ` · ${d.titre}` : ''}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {devisQ.isSuccess && listeDevis.length === 0 && (
+              <p className="mt-1.5 text-[11.5px] text-text-tertiary">
+                {fr
+                  ? 'Aucun devis ouvert trouvé (les devis convertis, refusés ou expirés sont exclus).'
+                  : 'No open quote found (converted, declined or expired quotes are excluded).'}
+              </p>
+            )}
+          </div>
+        ))}
+
+        {/* ── Nouveau contact ── */}
+        {mode === 'nouveau' && (
+          <>
+            {champsTexte.map((c) => (
+              <div key={c.id}>
+                <label htmlFor={c.id} className="mb-1.5 block text-[11px] text-text-tertiary">
+                  {c.label}
+                  {c.requis && <span aria-hidden="true"> *</span>}
+                </label>
+                <input
+                  id={c.id}
+                  type={c.type}
+                  required={c.requis}
+                  value={champs[c.cle]}
+                  onChange={(e) => setChamps((v) => ({ ...v, [c.cle]: e.target.value }))}
+                  className={CLASSE_CHAMP}
+                />
+              </div>
+            ))}
+
+            {/*
+              Avertir, pas bloquer : deux personnes peuvent porter le même nom.
+              Mais le rapprochement automatique ne reconnaît quelqu'un QUE par
+              son téléphone ou son courriel — un nom seul crée une seconde
+              fiche en silence. On le dit, et on offre la fiche existante.
+            */}
+            {doublons.length > 0 && (
+              <div role="status" className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                <p className="font-medium">
+                  {fr
+                    ? (doublons.length === 1 ? 'Un client porte déjà ce nom :' : 'Des clients portent déjà ce nom :')
+                    : (doublons.length === 1 ? 'A client already has this name:' : 'Clients already have this name:')}
+                </p>
+                <ul className="mt-1.5 flex flex-col gap-1">
+                  {doublons.map((d) => (
+                    <li key={d.id} className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate">
+                        {d.nom}
+                        {(d.telephone || d.courriel) && (
+                          <span className="opacity-75"> · {d.telephone || d.courriel}</span>
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => { setMode('client'); setClient(d); setRecherche(''); }}
+                        className="shrink-0 font-semibold underline underline-offset-2"
+                      >
+                        {fr ? 'Utiliser cette fiche' : 'Use this record'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 opacity-80">
+                  {fr
+                    ? 'Si c\'est une autre personne, continue : une nouvelle fiche sera créée.'
+                    : 'If it\'s someone else, carry on: a new record will be created.'}
+                </p>
+              </div>
+            )}
+          </>
+        )}
 
         {/*
           Ce qui fait vivre les prévisions. Rien n'est obligatoire : rendre le
@@ -666,25 +995,27 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
           vide met simplement le deal dans « Corriger vos données ».
         */}
         <div className="mt-1 grid grid-cols-1 gap-3 border-t border-border-subtle pt-3 sm:grid-cols-2">
-          <div>
-            <label htmlFor={idMontant} className="mb-1.5 block text-[11px] text-text-tertiary">
-              {fr ? 'Montant estimé ($)' : 'Estimated amount ($)'}
-            </label>
-            <input
-              id={idMontant}
-              type="text"
-              inputMode="decimal"
-              value={champs.montant}
-              onChange={(e) => setChamps((v) => ({ ...v, montant: e.target.value }))}
-              placeholder={fr ? 'Ex. : 1250' : 'e.g. 1250'}
-              className={CLASSE_CHAMP}
-            />
-            <p className="mt-1 text-[10.5px] text-text-muted">
-              {fr
-                ? 'Devient une estimation modifiable, remplacée par la vraie soumission.'
-                : 'Becomes an editable estimate, replaced by the real quote.'}
-            </p>
-          </div>
+          {mode !== 'devis' && (
+            <div>
+              <label htmlFor={idMontant} className="mb-1.5 block text-[11px] text-text-tertiary">
+                {fr ? 'Montant estimé ($)' : 'Estimated amount ($)'}
+              </label>
+              <input
+                id={idMontant}
+                type="text"
+                inputMode="decimal"
+                value={champs.montant}
+                onChange={(e) => setChamps((v) => ({ ...v, montant: e.target.value }))}
+                placeholder={fr ? 'Ex. : 1250' : 'e.g. 1250'}
+                className={CLASSE_CHAMP}
+              />
+              <p className="mt-1 text-[10.5px] text-text-muted">
+                {fr
+                  ? 'Devient une estimation modifiable, remplacée par la vraie soumission.'
+                  : 'Becomes an editable estimate, replaced by the real quote.'}
+              </p>
+            </div>
+          )}
 
           <div>
             <label htmlFor={idDateVisee} className="mb-1.5 block text-[11px] text-text-tertiary">
@@ -1745,15 +2076,19 @@ export default function PipelineBoard({
         ouvert={nouveauDeal}
         fr={fr}
         membres={membres}
+        pipelines={pipelines}
+        pipelineActif={pipelineActif}
         onFermer={() => setNouveauDeal(false)}
         onCree={(pipelineOuCree) => {
-          // Le deal atterrit dans le pipeline PAR DÉFAUT. Si on en regardait
-          // un autre, le board resterait vide sans explication : on bascule
-          // dessus plutôt que de laisser croire que rien ne s'est passé.
+          // Le pipeline se CHOISIT dans le formulaire. Si le deal a atterri
+          // ailleurs que sur le board affiché (autre choix, ou pipeline sans
+          // étape ouverte), on bascule dessus plutôt que de laisser croire
+          // que rien ne s'est passé.
           if (pipelineOuCree && pipelineActif && pipelineOuCree !== pipelineActif) {
+            const nom = pipelines.find((p) => p.id === pipelineOuCree)?.name;
             toast.info(fr
-              ? 'Le deal part dans le pipeline par défaut — on t\'y amène.'
-              : 'New deals land in the default pipeline — taking you there.');
+              ? `Deal créé dans « ${nom ?? 'un autre pipeline'} » — on t'y amène.`
+              : `Deal created in “${nom ?? 'another pipeline'}” — taking you there.`);
             onChangerPipeline(pipelineOuCree);
           }
           onChangement?.();
