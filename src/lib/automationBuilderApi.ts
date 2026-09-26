@@ -213,6 +213,8 @@ export interface ParcoursPropose {
   trigger_event: string;
   resume: string;
   steps: unknown[];
+  /** Coût de CETTE génération, en cents (null si inconnu). */
+  cout_cents?: number | null;
 }
 
 /**

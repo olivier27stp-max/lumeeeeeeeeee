@@ -259,6 +259,7 @@ router.post('/automations/rules/generer', async (req, res) => {
 
   return res.json({
     nom: resultat.parcours.nom,
+    cout_cents: resultat.coutCents ?? null,
     trigger_event: resultat.parcours.trigger_event,
     resume: resultat.parcours.resume,
     steps: verdict.data,

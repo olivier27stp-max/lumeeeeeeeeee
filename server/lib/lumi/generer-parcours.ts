@@ -49,7 +49,7 @@ export interface ParcoursPropose {
 }
 
 /** Le prompt système : le catalogue, la forme, et les interdits. */
-function consignes(fr: boolean): string {
+export function consignes(fr: boolean): string {
   const declencheurs = DECLENCHEURS
     .map((d) => `- ${d.cle} : ${fr ? d.aide_fr : d.aide_en}`)
     .join('\n');
@@ -125,7 +125,7 @@ Réponds UNIQUEMENT par le JSON.`;
  * On demande « uniquement le JSON », mais un modèle ajoute parfois une
  * phrase ou des balises de code. Échouer là-dessus serait absurde.
  */
-function extraireJson(texte: string): unknown {
+export function extraireJson(texte: string): unknown {
   const nettoye = texte.trim()
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/, '');
@@ -145,6 +145,12 @@ export interface ResultatGeneration {
   parcours: ParcoursPropose | null;
   /** Message à afficher si rien n'a pu être généré. */
   erreur?: string;
+  /**
+   * Ce que cette génération a coûté, en cents. Le budget du mois était
+   * visible dans le module Lumi, jamais le coût d'UNE génération — QA du
+   * 2026-09-25 (P2-10).
+   */
+  coutCents?: number;
 }
 
 /**
@@ -155,7 +161,7 @@ export interface ResultatGeneration {
  * pour que « change le délai à 7 jours » ait quelque chose à modifier
  * plutôt qu'une page blanche à remplir.
  */
-function construireMessages(
+export function construireMessages(
   demande: string,
   echanges?: Array<{ role: 'user' | 'assistant'; content: string }>,
   parcoursActuel?: { trigger_event?: string; steps?: unknown[] } | null,
@@ -249,6 +255,7 @@ export async function genererParcours(params: {
     // `coutEnCents` prend l'usage BRUT de l'API : il sait lire un id daté et
     // distinguer les écritures de cache 5 min / 1 h.
     const modeleRendu = reponse.model ?? MODELE;
+    const coutGeneration = coutEnCents(modeleRendu, u ?? { input_tokens: 0, output_tokens: 0 });
     await journaliserUsage(admin, {
       orgId,
       userId,
@@ -258,7 +265,7 @@ export async function genererParcours(params: {
       output_tokens: u?.output_tokens ?? 0,
       cache_creation_input_tokens: u?.cache_creation_input_tokens ?? 0,
       cache_read_input_tokens: u?.cache_read_input_tokens ?? 0,
-      cost_cents: coutEnCents(modeleRendu, u ?? { input_tokens: 0, output_tokens: 0 }),
+      cost_cents: coutGeneration,
       // `source` est borné par une contrainte CHECK en base : 'lumi' est la
       // valeur juste ici, c'est bien lui qui génère.
       source: 'lumi',
@@ -268,7 +275,44 @@ export async function genererParcours(params: {
       .map((b) => (b.type === 'text' ? b.text : ''))
       .join('');
 
-    const brut = extraireJson(texte) as Partial<ParcoursPropose>;
+    /*
+     * Le modèle peut répondre en TEXTE au lieu du JSON — typiquement quand
+     * on lui demande de MODIFIER un parcours qu'il ne voit pas
+     * (« Réécris le premier texto » sur un éditeur vide). `extraireJson`
+     * levait, et le `catch` plus bas rendait « Lumi n'a pas pu répondre » :
+     * une erreur générique, sans rien pour s'en sortir. QA du 2026-09-25
+     * (P2-6).
+     *
+     * On ne recopie PAS la phrase du modèle : mesuré, il y parle de
+     * « JSON » une fois sur deux — du jargon pour un plombier. On dit ce
+     * qui manque, avec des mots fixes.
+     */
+    let brut: Partial<ParcoursPropose>;
+    try {
+      brut = extraireJson(texte) as Partial<ParcoursPropose>;
+    } catch {
+      const rienAModifier = !parcoursActuel?.steps?.length;
+      return {
+        parcours: null,
+        erreur: rienAModifier
+          ? (fr
+            ? 'Il n’y a pas encore de parcours à modifier. Décris ce que l’automatisation doit faire (ex. : « relance la soumission après 3 jours par texto »), ou ajoute une étape avec le « + ».'
+            : 'There is no path to change yet. Describe what the automation should do (e.g. “follow up on the quote after 3 days by text”), or add a step with “+”.')
+          : (fr
+            ? 'Lumi n’a pas compris cette modification. Précise quelle étape changer (ex. : « le premier texto », « la deuxième attente »), ou modifie-la directement en cliquant dessus.'
+            : 'Lumi did not understand that change. Say which step to change (e.g. “the first text”), or edit it directly by clicking it.'),
+      };
+    }
+
+    /*
+     * Filet : en MODIFIANT un parcours, le modèle omet parfois le
+     * déclencheur, qu'il considère inchangé. On reprend celui du parcours
+     * courant plutôt que de tout refuser.
+     */
+    if (brut && !brut.trigger_event && parcoursActuel?.trigger_event) {
+      brut.trigger_event = parcoursActuel.trigger_event;
+    }
+
     if (!brut?.trigger_event || !Array.isArray(brut.steps) || brut.steps.length === 0) {
       return {
         parcours: null,
@@ -285,6 +329,7 @@ export async function genererParcours(params: {
         resume: String(brut.resume ?? '').slice(0, 300),
         steps: brut.steps as Array<Record<string, unknown>>,
       },
+      coutCents: coutGeneration,
     };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
