@@ -2393,7 +2393,6 @@ const en = {
     nameYourColumn: 'Name Your Column',
     newOption: 'New option...',
     newStatus: 'New status...',
-    noCustomColumnsYet: 'No custom columns yet.',
     options: 'Options',
     required: 'Required',
     save: 'Save',

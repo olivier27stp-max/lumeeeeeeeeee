@@ -2385,7 +2385,6 @@ const fr: TranslationKeys = {
     nameYourColumn: 'Nommer la colonne',
     newOption: 'Nouvelle option...',
     newStatus: 'Nouveau statut...',
-    noCustomColumnsYet: 'Aucune colonne personnalisée.',
     options: 'Options',
     required: 'Requis',
     save: 'Enregistrer',

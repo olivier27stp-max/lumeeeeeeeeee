@@ -16,7 +16,7 @@ import {
   modeleInstallerSchema,
 } from '../lib/validation';
 import {
-  ErreurChamps, estObjet, champsV2Actifs, listerChamps, creerChamp, modifierChamp, archiverChamp, impactChamp,
+  ErreurChamps, estObjet, listerChamps, creerChamp, modifierChamp, archiverChamp, impactChamp,
   purgerChamp, majCherchables, majUnique, creerDossier, renommerDossier, supprimerDossier, lireValeurs,
   lireValeursLot, ecrireValeurs, filtrer, lireCartesPipeline, majCartesPipeline, industrieDe, installerModele,
 } from '../lib/champs/service';
@@ -47,11 +47,9 @@ router.get('/custom-fields', async (req, res) => {
     if (!auth) return;
     const objet = req.query.object;
     if (objet !== undefined && !estObjet(objet)) return res.status(400).json({ error: 'Objet inconnu.' });
-    const [{ champs, dossiers }, actif] = await Promise.all([
-      listerChamps(auth.client, auth.orgId, { objet: objet as never, inclureArchives: req.query.include_archived === '1' }),
-      champsV2Actifs(auth.client, auth.orgId),
-    ]);
-    return res.json({ enabled: actif, fields: champs, folders: dossiers, standard: CHAMPS_STANDARD });
+    const { champs, dossiers } = await listerChamps(auth.client, auth.orgId, { objet: objet as never, inclureArchives: req.query.include_archived === '1' });
+    // Les champs personnalisés sont offerts à toutes les entreprises (plus de drapeau).
+    return res.json({ enabled: true, fields: champs, folders: dossiers, standard: CHAMPS_STANDARD });
   } catch (err) {
     return repondreErreur(res, err, 'lire les champs');
   }

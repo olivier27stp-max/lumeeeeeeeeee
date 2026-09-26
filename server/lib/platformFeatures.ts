@@ -42,7 +42,6 @@ export const PLATFORM_FEATURES: readonly PlatformFeature[] = [
   // personnalisés, panneaux sur les fiches, cartes et filtres du pipeline.
   // Coupé = aucun écran v2 ; les outils MCP/Lumi et les automatisations
   // continuent de fonctionner (même service).
-  { key: 'custom_fields_v2', kind: 'module', label: 'Champs personnalisés v2', description: 'Gestionnaire de champs personnalisés (type GoHighLevel) : réglages, fiches, pipeline.' },
 ];
 
 const KEYS = new Set(PLATFORM_FEATURES.map((f) => f.key));
