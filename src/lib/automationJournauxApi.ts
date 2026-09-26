@@ -9,7 +9,7 @@
 
    Colonnes vérifiées en base le 2026-09-24 (pas devinées) :
    · execution_logs  : action_type, action_config, result_success,
-                       result_error, result_data, duration_ms, entity_type,
+                       result_error, result_data, action_config, duration_ms, entity_type,
                        entity_id, trigger_event, created_at
    · scheduled_tasks : entity_type, entity_id, action_config, execute_at,
                        status, attempts, last_error, completed_at,
@@ -43,6 +43,16 @@ export interface LigneJournal {
   created_at: string;
   /** Nom du client, résolu après coup — la table ne le porte pas. */
   client?: string | null;
+  /**
+   * Ce qui est RÉELLEMENT parti : destinataire, objet, corps du message.
+   *
+   * La colonne était lue en base mais absente de ce type, donc jamais
+   * affichée. L'entrepreneur ne pouvait pas vérifier que ses variables
+   * avaient été remplacées — QA du 2026-09-25 (P1-4).
+   */
+  result_data?: Record<string, unknown> | null;
+  /** La configuration de l'action au moment de l'envoi. */
+  action_config?: Record<string, unknown> | null;
 }
 
 export interface FiltresJournal {

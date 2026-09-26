@@ -347,7 +347,12 @@ describe('route — les gardes qui demandent de lire le catalogue', () => {
     const appels = source.match(/getServiceClient\(\)/g) ?? [];
     expect(appels.length, 'le service_role a un nouvel usage : le justifier ici').toBe(2);
     const bloc = source.slice(source.indexOf('rules/generer'));
-    expect(bloc.slice(0, 2000)).toContain('getServiceClient()');
+    // 3000, pas 2000 : le bloc qui prépare le contexte de Lumi (échanges
+    // + parcours courant, ajouté le 2026-09-25 pour P1-6/P1-7) s'insère
+    // avant l'appel. Ce qui compte reste le COMPTE total ci-dessus — la
+    // fenêtre ne sert qu'à vérifier que l'appel est bien CELUI de cette
+    // route, pas d'une autre.
+    expect(bloc.slice(0, 3000)).toContain('getServiceClient()');
     // Et l'autre est bien dans la suppression, pas ailleurs.
     const suppression = source.slice(source.indexOf("router.delete('/automations/rules/:id'"));
     expect(suppression.slice(0, 2500)).toContain('getServiceClient()');

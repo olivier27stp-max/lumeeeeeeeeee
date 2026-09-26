@@ -222,11 +222,30 @@ export interface ParcoursPropose {
  * canevas, et c'est l'utilisateur qui décide de le garder — la règle du
  * projet veut qu'une écriture ne soit jamais exécutée par l'orchestrateur.
  */
-export async function genererParcoursAvecLumi(demande: string, langue: 'fr' | 'en'): Promise<ParcoursPropose> {
+export async function genererParcoursAvecLumi(
+  demande: string,
+  langue: 'fr' | 'en',
+  /**
+   * Ce que Lumi doit savoir pour MODIFIER au lieu de tout refaire :
+   * les échanges précédents et le parcours à l'écran.
+   *
+   * Sans eux, « change le délai à 7 jours » reconstruisait tout depuis
+   * cette seule phrase — QA du 2026-09-25 (P1-6, P1-7).
+   */
+  contexte?: {
+    echanges?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    parcoursActuel?: { trigger_event?: string; steps?: unknown[] } | null;
+  },
+): Promise<ParcoursPropose> {
   const reponse = await fetch('/api/automations/rules/generer', {
     method: 'POST',
     headers: await entetes(),
-    body: JSON.stringify({ demande, langue }),
+    body: JSON.stringify({
+      demande,
+      langue,
+      echanges: contexte?.echanges,
+      parcours_actuel: contexte?.parcoursActuel ?? null,
+    }),
   });
   if (!reponse.ok) throw await erreurDe(reponse, 'Lumi n’a pas pu construire ce parcours.');
   return reponse.json();

@@ -104,6 +104,17 @@ export default function AutomationBuilderPage() {
   // son travail est en sécurité sans avoir à chercher un bouton.
   const [etatSauvegarde, setEtatSauvegarde] = useState<'a_jour' | 'en_cours' | 'modifie' | 'incomplet'>('a_jour');
 
+  /*
+   * Le serveur refuse au-delà de 20 étapes (`ETAPES_MAX`, validation.ts) :
+   * un parcours plus long n'est jamais enregistré. Sans garde ici, on
+   * laissait l'utilisateur en ajouter puis échouer — il croyait avoir
+   * perdu son travail. On refuse AVANT, avec la raison. QA du 2026-09-25.
+   */
+  const ETAPES_MAX = 20;
+
+  /** Les échanges avec Lumi, pour qu'une correction porte sur le contexte. */
+  const [echangesLumi, setEchangesLumi] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+
   // ── Le parcours ──
   const [steps, setSteps] = useState<Etape[]>([]);
   const [etapeChoisie, setEtapeChoisie] = useState<string | null>(null);
@@ -198,6 +209,13 @@ export default function AutomationBuilderPage() {
    */
   const confirmerAjout = (cle: string) => {
     if (!ajoutEnCours) return;
+    if (steps.length >= ETAPES_MAX) {
+      toast.error(fr
+        ? `Un parcours compte au plus ${ETAPES_MAX} étapes. Retirez-en une avant d’ajouter.`
+        : `A journey holds at most ${ETAPES_MAX} steps. Remove one before adding.`);
+      setAjoutEnCours(null);
+      return;
+    }
     const id = nouvelIdEtape(steps);
     const estLogique = cle === 'attendre' || cle === 'si' || cle === 'arreter';
     const nouvelle = estLogique
@@ -297,7 +315,20 @@ export default function AutomationBuilderPage() {
     if (demande.length < 10 || genere) return;
     setGenere(true);
     try {
-      const propose = await genererParcoursAvecLumi(demande, fr ? 'fr' : 'en');
+      /*
+       * On donne à Lumi la CONVERSATION et le parcours à l'écran.
+       *
+       * Avant, il ne recevait que la dernière phrase : « change le
+       * délai à 7 jours » reconstruisait tout — déclencheur changé,
+       * deux SMS devenus un, nom renommé. Et « non, le deuxième c'est
+       * 2 jours » ne produisait RIEN, sans un mot. QA du 2026-09-25.
+       */
+      const propose = await genererParcoursAvecLumi(demande, fr ? 'fr' : 'en', {
+        echanges: echangesLumi,
+        parcoursActuel: steps.length > 0
+          ? { trigger_event: regle?.trigger_event, steps }
+          : null,
+      });
       memoriser(propose.steps as Etape[]);
       setResumeLumi(propose.resume || null);
       // Le nom et le déclencheur suivent la proposition — c'est ce que
@@ -307,6 +338,13 @@ export default function AutomationBuilderPage() {
         setRegle({ ...regle, trigger_event: propose.trigger_event });
         modifierAutomatisation(regle.id, { trigger_event: propose.trigger_event }).catch(() => {});
       }
+      // La conversation se poursuit : le tour suivant saura ce qui
+      // vient d'être demandé et ce que Lumi a répondu.
+      setEchangesLumi((e) => [
+        ...e.slice(-4),
+        { role: 'user' as const, content: demande },
+        { role: 'assistant' as const, content: propose.resume || 'Parcours construit.' },
+      ]);
       setPrompt('');
       toast.success(fr ? 'Lumi a construit le parcours' : 'Lumi built the path');
     } catch (e: unknown) {
@@ -427,10 +465,17 @@ export default function AutomationBuilderPage() {
       action: { ...source.action, config: { ...source.action.config } },
       suivant: null,
     };
+    if (steps.length >= ETAPES_MAX) {
+      toast.error(fr
+        ? `Un parcours compte au plus ${ETAPES_MAX} étapes. Retirez-en une avant de dupliquer.`
+        : `A journey holds at most ${ETAPES_MAX} steps. Remove one before duplicating.`);
+      setMenuEtape(null);
+      return;
+    }
     memoriser(insererEtape(steps, copie, idEtape));
     setMenuEtape(null);
     setEtapeChoisie(copie.id);
-  }, [steps, memoriser]);
+  }, [steps, memoriser, fr]);
 
   /**
    * Supprimer cette étape ET tout ce qui la suit.
@@ -562,6 +607,24 @@ export default function AutomationBuilderPage() {
     let annule = false;
 
     const minuterie = setTimeout(async () => {
+      /*
+       * CE QUI EST PARTI AU SERVEUR DOIT ÊTRE CONFIRMÉ À L'ÉCRAN.
+       *
+       * Cet effet dépend de `steps` ET de `etatSauvegarde`. Poser
+       * `en_cours` le RELANÇAIT donc lui-même : le nettoyage mettait
+       * `annule = true`, la réponse du serveur revenait, et le
+       * `if (!annule)` l'ignorait. `a_jour` n'était JAMAIS posé —
+       * l'indicateur restait bloqué sur « Enregistrement… » alors que
+       * la mutation avait réussi. QA du 2026-09-25 (P1-3), et le même
+       * à la publication.
+       *
+       * On retient ce qu'on envoie : à la réponse, on ne confirme que si
+       * l'état à l'écran est TOUJOURS celui-là. Un changement survenu
+       * entre-temps repart en « modifié » au lieu d'être perdu — c'est
+       * ce qui faisait disparaître la moitié d'un parcours de 16 étapes
+       * (P1-8) : chaque duplication annulait la sauvegarde en vol.
+       */
+      const envoye = JSON.stringify(steps);
       setEtatSauvegarde('en_cours');
       // Trois tentatives, espacées de plus en plus : 1,5 s puis 4 s. Un
       // plafond de débit se relâche vite ; réessayer tout de suite le
@@ -571,7 +634,16 @@ export default function AutomationBuilderPage() {
         if (annule) return;
         try {
           await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
-          if (!annule) setEtatSauvegarde('a_jour');
+          /*
+           * On confirme même si l'effet a été relancé : le serveur a bien
+           * reçu `envoye`. Si l'écran a changé depuis, le nouvel état
+           * repart de lui-même en « modifié » — ce qu'on ne veut surtout
+           * pas, c'est laisser « Enregistrement… » à jamais.
+           */
+          setEtatSauvegarde((actuel) => {
+            if (actuel !== 'en_cours') return actuel;
+            return JSON.stringify(steps) === envoye ? 'a_jour' : 'modifie';
+          });
           return;
         } catch (e: unknown) {
           const message = e instanceof Error ? e.message : String(e);
@@ -580,8 +652,9 @@ export default function AutomationBuilderPage() {
             await new Promise((r) => setTimeout(r, attentes[essai]));
             continue;
           }
+          // Même raison : ne jamais rester bloqué sur « en cours ».
+          setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
           if (annule) return;
-          setEtatSauvegarde('modifie');
           // Jamais l'erreur brute : « Too many requests » en anglais ne dit
           // rien à un entrepreneur qui écrivait son message.
           toast.error(tropVite
