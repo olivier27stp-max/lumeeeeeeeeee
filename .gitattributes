@@ -1,0 +1,9 @@
+# npm réécrit package.json et package-lock.json en LF à chaque « npm install ».
+# Ces deux fichiers étaient stockés en CRLF : chaque PR de dépendance affichait
+# donc le lock ENTIER comme modifié (~8 800 lignes de brassage, cf. #440, #276),
+# ce qui rend le vrai changement — souvent 4 lignes — impossible à relire.
+#
+# On fixe LF pour ces deux-là seulement. Les 103 autres fichiers CRLF du dépôt
+# ne sont réécrits par aucun outil : les renormaliser serait du bruit sans gain.
+package.json      text eol=lf
+package-lock.json text eol=lf
