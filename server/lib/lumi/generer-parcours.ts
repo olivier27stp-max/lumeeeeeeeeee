@@ -110,6 +110,11 @@ RÈGLES ABSOLUES :
 - Si tu ne comprends pas la demande, renvoie le parcours ACTUEL inchangé et
   dis-le dans "resume". Ne reste jamais silencieux : l'utilisateur croirait
   que sa correction a été prise en compte.
+- Si la demande est VAGUE (« relance mes clients », sans dire quoi ni quand),
+  construis la version la plus courante ET pose UNE seule question dans
+  "resume" pour la préciser. Exemple : « J'ai fait une relance de soumission
+  à 3 jours. Tu veux plutôt viser les factures impayées ? ». Une question,
+  pas trois — et jamais un questionnaire avant de construire.
 
 Réponds UNIQUEMENT par le JSON.`;
 }
