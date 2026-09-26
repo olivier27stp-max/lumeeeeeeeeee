@@ -82,6 +82,12 @@ function champLocalise(config: Record<string, any>, champ: string, langue?: 'fr'
  * UTC : c'est ainsi qu'un rendez-vous de 9 h devenait « 13 h 00 » dans le
  * message envoyé au client.
  */
+/**
+ * REPLI seulement. Le fuseau réel vient de `company_settings.timezone`
+ * (NOT NULL, DEFAULT 'America/Toronto') — cette constante ne sert que si la
+ * ligne de réglages de l'org n'existe pas encore. Ne pas l'utiliser
+ * directement pour formater : voir `fuseau` plus bas.
+ */
 const FUSEAU_CLIENT = 'America/Toronto';
 
 /**
@@ -507,7 +513,7 @@ export async function resolveEntityVariables(
   // Fetch company settings
   const { data: company } = await supabase
     .from('company_settings')
-    .select('company_name, phone, google_review_url, facebook_review_url, default_language')
+    .select('company_name, phone, google_review_url, facebook_review_url, default_language, timezone')
     .eq('org_id', orgId)
     .maybeSingle();
 
@@ -742,8 +748,16 @@ export async function resolveEntityVariables(
          * donc la mauvaise heure, et parfois le mauvais jour — invisible en
          * développement (machine à l'heure locale), systématique en production.
          */
-        vars.appointment_date = d.toLocaleDateString('fr-CA', { timeZone: FUSEAU_CLIENT });
-        vars.appointment_time = d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', timeZone: FUSEAU_CLIENT });
+        /*
+         * Le fuseau de l'ENTREPRISE, pas un fuseau figé. `company_settings.
+         * timezone` est NOT NULL avec DEFAULT 'America/Toronto' : une org qui
+         * n'y a jamais touché garde donc exactement le comportement d'avant,
+         * et une org ailleurs qu'à l'Est cesse d'annoncer la mauvaise heure.
+         * Le repli ne sert que si la ligne de réglages n'existe pas encore.
+         */
+        const fuseau = (company?.timezone as string | undefined) || FUSEAU_CLIENT;
+        vars.appointment_date = d.toLocaleDateString('fr-CA', { timeZone: fuseau });
+        vars.appointment_time = d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', timeZone: fuseau });
       }
       vars.appointment_title = evt.job?.title || '';
       // `jobs.property_address` a pour DEFAULT '-' : sans ce filtre, le client
