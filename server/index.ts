@@ -292,6 +292,14 @@ app.use('/api', (req, res, next) => {
   // le pire cas d'un CSRF réussi serait de désabonner quelqu'un — ce que la
   // route est faite pour faire.
   if (/^\/unsubscribe\/[a-f0-9]{64}$/.test(req.path)) return next();
+  // Webhooks ENTRANTS des clients (Zapier, formulaire de site, Facebook
+  // Leads). Même raisonnement que la désinscription : la clé de 64 hex
+  // dans l'URL EST l'authentification, aucun cookie ni session n'est en jeu,
+  // donc un CSRF n'a rien à détourner. Sans cette exemption, Zapier — qui
+  // envoie par défaut en `form-urlencoded` — et tout formulaire HTML étaient
+  // refusés en 403 : l'intégration ne marchait pas avec ses réglages par
+  // défaut. Constaté le 2026-09-25 en vérifiant le déploiement.
+  if (/^\/hooks\/[a-f0-9]{64}$/.test(req.path)) return next();
   // Endpoints OAuth appelés de SERVEUR à SERVEUR (Claude, Cursor…) : la spec
   // OAuth impose `application/x-www-form-urlencoded` sur /token et /revoke, et
   // /register est un appel machine. Aucun de ces trois ne porte d'en-tête de
