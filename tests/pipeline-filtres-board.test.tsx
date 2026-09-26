@@ -35,6 +35,9 @@ vi.mock('../src/lib/pipelineVentesApi', async () => {
     supprimerVue: async () => {},
     creerDealManuel: (...a: any[]) => creerDealMock(...(a as [])),
     journaliserLot: async () => {},
+    // Le formulaire cherche des clients, des devis et des doublons : jamais de réseau ici.
+    rechercherClientsPourDeal: async () => [],
+    rechercherDevisPourDeal: async () => [],
   };
 });
 
@@ -268,6 +271,11 @@ describe('création de deal — ce qui nourrit les prévisions', () => {
       .find((x) => /nouveau deal/i.test(x.textContent ?? ''));
     expect(b).toBeTruthy();
     await act(async () => { b!.click(); });
+    // S'ouvre sur « Client existant » : ces tests portent sur un nouveau contact.
+    const nouveau = [...conteneur.querySelectorAll('button')]
+      .find((x) => /nouveau contact/i.test(x.textContent ?? ''));
+    expect(nouveau).toBeTruthy();
+    await act(async () => { nouveau!.click(); });
   }
   function parEtiquette(re: RegExp): HTMLElement | undefined {
     const lab = [...conteneur.querySelectorAll('label')]
