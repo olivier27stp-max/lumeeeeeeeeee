@@ -103,6 +103,13 @@ RÈGLES ABSOLUES :
 - Les messages sont écrits en ${fr ? 'français québécois, tutoiement, ton d\'entrepreneur — court et direct' : 'plain English, short and direct'}.
 - Utilise les variables entre crochets quand c'est utile : [client_first_name],
   [company_name], [invoice_total], [quote_number], [appointment_date].
+- Si un parcours ACTUEL est fourni, tu le MODIFIES. Tu ne le reconstruis
+  pas : garde son déclencheur, son nom et toutes ses étapes, et ne change
+  QUE ce qui est demandé. « Change le délai à 7 jours » ne touche que le
+  délai ; « le deuxième c'est 2 jours » ne touche que la deuxième attente.
+- Si tu ne comprends pas la demande, renvoie le parcours ACTUEL inchangé et
+  dis-le dans "resume". Ne reste jamais silencieux : l'utilisateur croirait
+  que sa correction a été prise en compte.
 
 Réponds UNIQUEMENT par le JSON.`;
 }
@@ -135,14 +142,72 @@ export interface ResultatGeneration {
   erreur?: string;
 }
 
+/**
+ * Les messages envoyés au modèle : l'historique, le parcours courant,
+ * puis la demande.
+ *
+ * L'ordre compte. Le parcours courant est collé juste avant la demande
+ * pour que « change le délai à 7 jours » ait quelque chose à modifier
+ * plutôt qu'une page blanche à remplir.
+ */
+function construireMessages(
+  demande: string,
+  echanges?: Array<{ role: 'user' | 'assistant'; content: string }>,
+  parcoursActuel?: { trigger_event?: string; steps?: unknown[] } | null,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+  /*
+   * On borne l'historique aux 6 derniers tours : au-delà, on paie des
+   * tokens pour du contexte qui ne sert plus, et le modèle se met à
+   * suivre une consigne périmée.
+   */
+  for (const e of (echanges ?? []).slice(-6)) {
+    if (!e?.content) continue;
+    messages.push({ role: e.role, content: String(e.content).slice(0, 2_000) });
+  }
+
+  if (parcoursActuel && Array.isArray(parcoursActuel.steps) && parcoursActuel.steps.length > 0) {
+    messages.push({
+      role: 'user',
+      content: `Voici le parcours ACTUEL, à modifier (ne le reconstruis pas de zéro) :
+${
+        JSON.stringify(parcoursActuel).slice(0, 6_000)
+      }`,
+    });
+  }
+
+  messages.push({ role: 'user', content: demande.slice(0, 2_000) });
+  return messages;
+}
+
 export async function genererParcours(params: {
   admin: SupabaseClient;
   orgId: string;
   userId: string | null;
   demande: string;
   langue: 'fr' | 'en';
+  /**
+   * Les échanges précédents de cette conversation.
+   *
+   * Sans eux, Lumi recevait UNIQUEMENT la dernière phrase : « Change le
+   * délai à 7 jours » reconstruisait tout le parcours depuis cette
+   * seule phrase — déclencheur changé, deux SMS devenus un, nom
+   * renommé. Reproduit deux fois au QA du 2026-09-25 (P1-6).
+   */
+  echanges?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /**
+   * Le parcours actuellement à l'écran.
+   *
+   * C'est ce qu'il faut MODIFIER. Sans lui, une correction du genre
+   * « Non, le deuxième c'est 2 jours, pas 5 » n'avait rien à quoi se
+   * rattacher : Lumi ne répondait rien et le parcours restait tel quel
+   * (P1-7). Le silence est le pire comportement — l'utilisateur croit
+   * que c'est corrigé.
+   */
+  parcoursActuel?: { trigger_event?: string; steps?: unknown[] } | null;
 }): Promise<ResultatGeneration> {
-  const { admin, orgId, userId, demande, langue } = params;
+  const { admin, orgId, userId, demande, langue, echanges, parcoursActuel } = params;
   const fr = langue === 'fr';
 
   if (!isLumiConfigured()) {
@@ -172,7 +237,7 @@ export async function genererParcours(params: {
       model: MODELE,
       max_tokens: MAX_TOKENS,
       system: [{ type: 'text', text: systeme, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: demande.slice(0, 2_000) }],
+      messages: construireMessages(demande, echanges, parcoursActuel),
     });
 
     const u = reponse.usage;

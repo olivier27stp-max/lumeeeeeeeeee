@@ -112,6 +112,9 @@ export default function AutomationBuilderPage() {
    */
   const ETAPES_MAX = 20;
 
+  /** Les échanges avec Lumi, pour qu'une correction porte sur le contexte. */
+  const [echangesLumi, setEchangesLumi] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+
   // ── Le parcours ──
   const [steps, setSteps] = useState<Etape[]>([]);
   const [etapeChoisie, setEtapeChoisie] = useState<string | null>(null);
@@ -312,7 +315,20 @@ export default function AutomationBuilderPage() {
     if (demande.length < 10 || genere) return;
     setGenere(true);
     try {
-      const propose = await genererParcoursAvecLumi(demande, fr ? 'fr' : 'en');
+      /*
+       * On donne à Lumi la CONVERSATION et le parcours à l'écran.
+       *
+       * Avant, il ne recevait que la dernière phrase : « change le
+       * délai à 7 jours » reconstruisait tout — déclencheur changé,
+       * deux SMS devenus un, nom renommé. Et « non, le deuxième c'est
+       * 2 jours » ne produisait RIEN, sans un mot. QA du 2026-09-25.
+       */
+      const propose = await genererParcoursAvecLumi(demande, fr ? 'fr' : 'en', {
+        echanges: echangesLumi,
+        parcoursActuel: steps.length > 0
+          ? { trigger_event: regle?.trigger_event, steps }
+          : null,
+      });
       memoriser(propose.steps as Etape[]);
       setResumeLumi(propose.resume || null);
       // Le nom et le déclencheur suivent la proposition — c'est ce que
@@ -322,6 +338,13 @@ export default function AutomationBuilderPage() {
         setRegle({ ...regle, trigger_event: propose.trigger_event });
         modifierAutomatisation(regle.id, { trigger_event: propose.trigger_event }).catch(() => {});
       }
+      // La conversation se poursuit : le tour suivant saura ce qui
+      // vient d'être demandé et ce que Lumi a répondu.
+      setEchangesLumi((e) => [
+        ...e.slice(-4),
+        { role: 'user' as const, content: demande },
+        { role: 'assistant' as const, content: propose.resume || 'Parcours construit.' },
+      ]);
       setPrompt('');
       toast.success(fr ? 'Lumi a construit le parcours' : 'Lumi built the path');
     } catch (e: unknown) {

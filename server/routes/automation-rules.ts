@@ -199,12 +199,35 @@ router.post('/automations/rules/generer', async (req, res) => {
 
   // Le budget et le journal des coûts vivent côté service_role : la RLS
   // interdirait à l'utilisateur d'écrire dans `ai_usage`.
+  /*
+   * Le contexte vient du navigateur : l'éditeur sait ce qui est à
+   * l'écran et ce qui a déjà été dit. Sans lui, Lumi ne recevait que la
+   * dernière phrase et reconstruisait tout depuis zéro — QA du
+   * 2026-09-25 (P1-6, P1-7).
+   *
+   * On ne fait CONFIANCE à rien de tout ça : c'est du contexte pour le
+   * modèle, jamais une donnée qu'on enregistre. Le parcours produit
+   * repasse par `sequenceEtapes` comme avant.
+   */
+  const corps = req.body as {
+    echanges?: Array<{ role?: string; content?: string }>;
+    parcours_actuel?: { trigger_event?: string; steps?: unknown[] } | null;
+  };
+  const echanges = Array.isArray(corps?.echanges)
+    ? corps.echanges
+        .filter((e) => e && typeof e.content === 'string' && (e.role === 'user' || e.role === 'assistant'))
+        .slice(-6)
+        .map((e) => ({ role: e.role as 'user' | 'assistant', content: String(e.content) }))
+    : undefined;
+
   const resultat = await genererParcours({
     admin: getServiceClient(),
     orgId: auth.orgId,
     userId: auth.user.id,
     demande,
     langue,
+    echanges,
+    parcoursActuel: corps?.parcours_actuel ?? null,
   });
 
   if (!resultat.parcours) {

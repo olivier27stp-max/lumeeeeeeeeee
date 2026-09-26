@@ -109,3 +109,54 @@ describe('P1-4 — on doit pouvoir lire ce qui est parti', () => {
     expect(journaux).toMatch(/n\u2019a pas \u00e9t\u00e9 conserv\u00e9/);
   });
 });
+
+describe('P1-6 / P1-7 — Lumi doit MODIFIER, pas tout refaire', () => {
+  const gen = lire('server/lib/lumi/generer-parcours.ts');
+  const route = lire('server/routes/automation-rules.ts');
+  const editeur = lire(EDITEUR);
+
+  it('le modèle reçoit la CONVERSATION, plus seulement la dernière phrase', () => {
+    /*
+     * LA CAUSE : `messages: [{ role: 'user', content: demande }]` — un
+     * seul message. « Change le délai à 7 jours » reconstruisait donc
+     * tout depuis cette seule phrase : déclencheur changé, 2 SMS
+     * devenus 1, nom renommé. Reproduit 2 fois au QA.
+     */
+    expect(gen, 'les messages doivent être construits, pas figés à un seul')
+      .toMatch(/messages: construireMessages\(demande, echanges, parcoursActuel\)/);
+    expect(gen).toMatch(/function construireMessages\(/);
+  });
+
+  it('il reçoit aussi le parcours À L’ÉCRAN', () => {
+    // Sans lui, « le deuxième c'est 2 jours, pas 5 » n'a rien à quoi se
+    // rattacher — d'où le silence total de P1-7.
+    expect(gen).toMatch(/parcours ACTUEL, \u00e0 modifier \(ne le reconstruis pas de z\u00e9ro\)/);
+  });
+
+  it('la consigne dit explicitement de ne changer QUE ce qui est demandé', () => {
+    expect(gen).toMatch(/tu le MODIFIES\. Tu ne le reconstruis\s+pas/);
+  });
+
+  it('le silence est interdit', () => {
+    /*
+     * « Le silence est le pire comportement : l'utilisateur croit que
+     * c'est corrigé » — le rapport. Faute de comprendre, Lumi doit
+     * renvoyer le parcours inchangé ET le dire.
+     */
+    expect(gen).toMatch(/Ne reste jamais silencieux/);
+  });
+
+  it('la chaîne complète transporte le contexte', () => {
+    // Un maillon manquant et le correctif ne sert à rien.
+    expect(route, 'la route doit relayer les échanges').toMatch(/echanges,/);
+    expect(route, 'et le parcours courant').toMatch(/parcoursActuel: corps\?\.parcours_actuel/);
+    expect(editeur, 'l’éditeur doit les envoyer').toMatch(/echanges: echangesLumi/);
+    expect(editeur, 'et mémoriser la suite').toMatch(/setEchangesLumi\(/);
+  });
+
+  it('l’historique est BORNÉ — on ne paie pas des tokens pour rien', () => {
+    // Au-delà de quelques tours, le contexte ne sert plus et le modèle
+    // se met à suivre une consigne périmée.
+    expect(gen).toMatch(/\(echanges \?\? \[\]\)\.slice\(-6\)/);
+  });
+});
