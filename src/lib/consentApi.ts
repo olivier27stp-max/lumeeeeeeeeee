@@ -28,23 +28,34 @@ export interface StoredConsent extends ConsentChoice {
 
 const STORAGE_KEY = 'lume.cookieConsent.v1';
 
-// Current live version of the cookie policy. Bump when policy text changes
-// → triggers re-consent on next visit.
-export const CURRENT_COOKIE_POLICY_VERSION = 'cookie-policy-2026-07-23';
+/**
+ * Version vivante de la politique de témoins.
+ *
+ * C'est le SEUL levier qui redemande son choix à l'utilisateur : on la monte
+ * quand le texte de la politique change pour de vrai — une catégorie ajoutée
+ * ou retirée, un nouveau sous-traitant, une finalité différente. Un choix
+ * déjà fait tient sinon indéfiniment : re-poser la question sans que rien
+ * n'ait changé, c'est du harcèlement de bandeau, et ça pousse les gens à
+ * cliquer « Tout accepter » pour s'en débarrasser.
+ *
+ * Il n'y a donc PAS de péremption par le temps (voir `readStoredConsent`).
+ */
+export const CURRENT_COOKIE_POLICY_VERSION = 'cookie-policy-2026-09-26';
 export const CURRENT_PRIVACY_POLICY_VERSION = 'privacy-policy-2026-07-23';
 export const CURRENT_TOS_VERSION = 'tos-2026-09-10';
-
-// Re-consent every 13 months (RGPD/CNIL guidance)
-const REVALIDATE_AFTER_MS = 13 * 30 * 24 * 60 * 60 * 1000;
 
 export function readStoredConsent(): StoredConsent | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredConsent;
+    // Un changement de version de la politique invalide le choix — et c'est
+    // la seule chose qui l'invalide. Pas de péremption aux 13 mois : décision
+    // produit du 2026-09-26, assumée contre la recommandation de la CNIL de
+    // redemander périodiquement. Ce qu'on protège, c'est qu'un « non » ne soit
+    // jamais re-sollicité tant que rien n'a changé. `decidedAt` reste stocké :
+    // il date le choix dans le registre, il ne le périme plus.
     if (parsed.docVersion !== CURRENT_COOKIE_POLICY_VERSION) return null;
-    const age = Date.now() - new Date(parsed.decidedAt).getTime();
-    if (age > REVALIDATE_AFTER_MS) return null;
     return parsed;
   } catch {
     return null;
@@ -63,6 +74,23 @@ export function writeStoredConsent(choice: ConsentChoice): StoredConsent {
 
 export function clearStoredConsent() {
   localStorage.removeItem(STORAGE_KEY);
+}
+
+/**
+ * Le consentement « Statistiques » est-il accordé ?
+ *
+ * SEUL point de vérité pour tout ce qui MESURE (aujourd'hui : le traçage de
+ * performance Sentry, voir `src/lib/sentry.ts`). Toute future mesure
+ * d'audience doit passer par ici — sinon le bandeau redevient un décor.
+ *
+ * Relu à chaque appel plutôt que mis en cache : un choix changé dans le
+ * bandeau, ou réinitialisé depuis le Centre de confidentialité, doit prendre
+ * effet sans rechargement.
+ *
+ * Refus par défaut : pas de choix enregistré = pas de mesure.
+ */
+export function aConsentiAuxStatistiques(): boolean {
+  return readStoredConsent()?.analytics === true;
 }
 
 /**
@@ -117,14 +145,18 @@ export async function submitCookieConsent(
   orgId: string | null,
 ): Promise<void> {
   if (!userId) return;                // anonymous users: localStorage only
-  const purposes: Array<[ConsentPurpose, boolean]> = [
-    ['cookies-essential', true],
-    ['cookies-analytics', choice.analytics],
-    ['cookies-marketing', choice.marketing],
-    ['cookies-preferences', choice.preferences],
+  // Les quatre finalités restent journalisées — c'est la trace de ce qui était
+  // RÉELLEMENT en vigueur ce jour-là — mais le `method` dit laquelle a été
+  // choisie et laquelle est imposée. Écrire 'web-banner' sur une case que
+  // l'utilisateur n'a jamais vue reviendrait à fabriquer un consentement.
+  const purposes: Array<[ConsentPurpose, boolean, string]> = [
+    ['cookies-essential', true, 'strictement-necessaire'],
+    ['cookies-analytics', choice.analytics, 'web-banner'],
+    ['cookies-marketing', choice.marketing, 'web-banner'],
+    ['cookies-preferences', choice.preferences, 'strictement-necessaire'],
   ];
   await Promise.all(
-    purposes.map(([purpose, granted]) =>
+    purposes.map(([purpose, granted, method]) =>
       recordConsent({
         subjectType: 'user',
         subjectId: userId,
@@ -132,7 +164,7 @@ export async function submitCookieConsent(
         granted,
         authToken,
         orgId,
-        method: 'web-banner',
+        method,
       })
     )
   );

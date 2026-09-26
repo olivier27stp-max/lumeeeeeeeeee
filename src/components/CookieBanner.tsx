@@ -11,27 +11,39 @@ import {
 import { supabase } from '../lib/supabase';
 
 /**
- * GDPR/Loi 25 compliant cookie banner.
- * - Refusal as easy as acceptance (symmetric CTAs).
- * - Granular: essentials (forced), analytics, marketing, preferences.
- * - Re-prompts every 13 months or when policy version changes.
+ * Bandeau de témoins — RGPD / Loi 25.
+ * - Refuser est aussi simple qu'accepter (deux boutons de même poids).
+ * - Ne redemande QUE si la version de la politique change (pas de péremption
+ *   par le temps : voir `CURRENT_COOKIE_POLICY_VERSION`).
+ *
+ * UNE SEULE case à cocher, et c'est délibéré : on ne demande un consentement
+ * que là où il pilote vraiment quelque chose.
+ *   • « Statistiques » commande le traçage de performance Sentry
+ *     (`aConsentiAuxStatistiques()` dans `src/lib/sentry.ts`).
+ *   • « Marketing » a disparu : l'application ne charge aucun pixel ni régie
+ *     publicitaire. Une case qui ne coupe rien est un décor trompeur — si un
+ *     traceur publicitaire arrive un jour, c'est ICI qu'on remet la case, et
+ *     le traceur doit la lire avant de se charger.
+ *   • « Préférences » a rejoint les strictement nécessaires : langue, thème et
+ *     panneaux ouverts sont un stockage que l'utilisateur demande lui-même, il
+ *     reste sur son appareil et ne part chez personne.
  */
 export function CookieBanner() {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [choice, setChoice] = useState<ConsentChoice>({
-    analytics: false,
-    marketing: false,
-    preferences: false,
-  });
+  const [statistiques, setStatistiques] = useState(false);
 
   useEffect(() => {
     const existing = readStoredConsent();
     if (!existing) setVisible(true);
   }, []);
 
-  async function persist(c: ConsentChoice) {
+  async function persist(statsAcceptees: boolean) {
+    // `marketing` faux et `preferences` vrai par construction : voir l'en-tête
+    // du fichier. On garde les trois champs pour que le journal de
+    // consentement continue de décrire l'état réel des quatre finalités.
+    const c: ConsentChoice = { analytics: statsAcceptees, marketing: false, preferences: true };
     writeStoredConsent(c);
     setVisible(false);
     try {
@@ -42,9 +54,9 @@ export function CookieBanner() {
     } catch { /* non-blocking */ }
   }
 
-  function acceptAll() { persist({ analytics: true, marketing: true, preferences: true }); }
-  function rejectAll() { persist({ analytics: false, marketing: false, preferences: false }); }
-  function saveGranular() { persist(choice); }
+  function acceptAll() { persist(true); }
+  function rejectAll() { persist(false); }
+  function saveGranular() { persist(statistiques); }
 
   if (!visible) return null;
 
@@ -73,10 +85,8 @@ export function CookieBanner() {
 
             {expanded && (
               <div className="mt-4 space-y-3 border-t border-gray-200 pt-4 dark:border-gray-800">
-                <GranularRow label={t.cookies.essential}    desc={t.cookies.essentialDesc}    checked disabled />
-                <GranularRow label={t.cookies.analytics}    desc={t.cookies.analyticsDesc}    checked={choice.analytics}    onChange={(v) => setChoice({ ...choice, analytics: v })} />
-                <GranularRow label={t.cookies.marketing}    desc={t.cookies.marketingDesc}    checked={choice.marketing}    onChange={(v) => setChoice({ ...choice, marketing: v })} />
-                <GranularRow label={t.cookies.preferences}  desc={t.cookies.preferencesDesc}  checked={choice.preferences}  onChange={(v) => setChoice({ ...choice, preferences: v })} />
+                <GranularRow label={t.cookies.essential} desc={t.cookies.essentialDesc} checked disabled />
+                <GranularRow label={t.cookies.analytics} desc={t.cookies.analyticsDesc} checked={statistiques} onChange={setStatistiques} />
               </div>
             )}
           </div>

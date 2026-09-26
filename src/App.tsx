@@ -720,7 +720,15 @@ function AppInner() {
 
   if (!user) {
     if (view === 'auth') {
-      return <Auth onBack={() => setView('landing')} />;
+      // Le bandeau suit jusqu'ici : on atterrit souvent directement sur /auth
+      // par un lien ou un signet, sans jamais voir la page d'accueil. Sans ça,
+      // ces visiteurs-là ne se voyaient jamais poser la question.
+      return (
+        <>
+          <CookieBanner />
+          <Auth onBack={() => setView('landing')} />
+        </>
+      );
     }
     return (
       <>

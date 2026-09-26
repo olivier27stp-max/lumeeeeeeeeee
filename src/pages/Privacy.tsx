@@ -297,8 +297,18 @@ export default function Privacy() {
           <Section id="cookies" title={sections[8].label}>
             <p>
               {fr
-                ? "Nous utilisons des témoins de session strictement nécessaires au fonctionnement du service (authentification, sécurité). Les témoins d'analyse et de marketing ne sont déposés qu'avec votre consentement, que vous pouvez retirer à tout moment depuis le Centre de confidentialité."
-                : 'We use session cookies that are strictly necessary for the service to function (authentication, security). Analytics and marketing cookies are only set with your consent, which you can withdraw at any time from the Privacy Center.'}
+                ? "Lume ne dépose aucun témoin publicitaire et n'emploie aucun traceur tiers : ni Google Analytics, ni pixel Meta, ni outil équivalent. Le strict nécessaire est gardé dans le stockage local de votre navigateur — votre session d'authentification et vos réglages d'affichage (langue, thème, panneaux ouverts) — et ne quitte jamais votre appareil."
+                : 'Lume sets no advertising cookies and uses no third-party trackers: no Google Analytics, no Meta pixel, nothing equivalent. What is strictly necessary is kept in your browser\u2019s local storage \u2014 your authentication session and your display settings (language, theme, open panels) \u2014 and never leaves your device.'}
+            </p>
+            <p>
+              {fr
+                ? "La mesure de performance (temps de chargement, parcours dans l'application) est transmise à Sentry, notre sous-traitant de diagnostic, uniquement si vous l'avez acceptée dans le bandeau. Vous pouvez retirer ce consentement à tout moment depuis le Centre de confidentialité : la mesure s'arrête aussitôt, sans rechargement."
+                : 'Performance measurement (page-load timings, in-app navigation) is sent to Sentry, our diagnostics processor, only if you accepted it in the banner. You can withdraw that consent at any time from the Privacy Center: measurement stops immediately, with no page reload.'}
+            </p>
+            <p>
+              {fr
+                ? "Le signalement des pannes reste actif même sans ce consentement : il repose sur notre intérêt légitime à maintenir et sécuriser le service. Il transmet l'identifiant technique de votre compte et le nom de votre entreprise — jamais votre nom, ni votre adresse courriel, et aucun enregistrement de votre écran."
+                : 'Crash reporting stays on even without that consent: it rests on our legitimate interest in keeping the service running and secure. It sends your account\u2019s technical identifier and your company name \u2014 never your name, never your email address, and no session recording.'}
             </p>
           </Section>
 

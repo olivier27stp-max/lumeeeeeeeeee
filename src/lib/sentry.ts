@@ -3,7 +3,18 @@
  *
  * Active only if VITE_SENTRY_DSN is set. No-op otherwise.
  * See docs/operations/sentry_setup.md.
+ *
+ * DEUX RÉGIMES, deux bases légales — ne pas les refondre en un seul :
+ *   • le signalement des PANNES tourne toujours (intérêt légitime : maintenir
+ *     et sécuriser le service), sans nom ni adresse courriel ;
+ *   • la MESURE DE PERFORMANCE (pages vues, Core Web Vitals, durée de chaque
+ *     appel API) est de la mesure d'audience : elle ne part qu'avec la case
+ *     « Statistiques » du bandeau de témoins.
+ * Jusqu'au 2026-09-26 la mesure partait même après « Tout refuser », ce que la
+ * politique de confidentialité démentait noir sur blanc.
  */
+
+import { aConsentiAuxStatistiques } from './consentApi';
 
 let sentryReact: any = null;
 
@@ -33,13 +44,17 @@ export async function initSentryClient(): Promise<void> {
       dsn,
       environment: import.meta.env.MODE,
       release: import.meta.env.VITE_SENTRY_RELEASE,
-      // Sans cette intégration, `tracesSampleRate` ne mesure RIEN côté
-      // navigateur : ni le chargement de page, ni les Core Web Vitals (LCP,
-      // CLS, INP), ni les appels API. C'est ce qui laissait Insights vide.
+      // Sans cette intégration, l'échantillonneur ci-dessous ne mesure RIEN
+      // côté navigateur : ni le chargement de page, ni les Core Web Vitals
+      // (LCP, CLS, INP), ni les appels API. C'est ce qui laissait Insights
+      // vide.
       integrations: [sentryReact.browserTracingIntegration()],
-      // 0.1 est un réglage pour gros trafic ; à notre volume il ne restait
-      // presque rien à afficher. À redescendre si le quota devient serré.
-      tracesSampleRate: Number(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || '1.0'),
+      // `tracesSampler` plutôt que `tracesSampleRate` : le taux serait figé à
+      // l'initialisation, alors que l'échantillonneur est relu à CHAQUE
+      // transaction. Un consentement donné après le chargement prend donc
+      // effet tout de suite, et un consentement retiré coupe la mesure sans
+      // rechargement. Sans consentement, on renvoie 0 : rien n'est envoyé.
+      tracesSampler: () => (aConsentiAuxStatistiques() ? tauxDeTracage() : 0),
       // Ne pas mesurer les appels vers des domaines tiers (Stripe, Mapbox,
       // Google) : leur lenteur n'est pas la nôtre et brouillerait les données.
       tracePropagationTargets: [/^\//, /^https:\/\/lumecrm\.net/],
@@ -60,6 +75,19 @@ export async function initSentryClient(): Promise<void> {
   } catch (e) {
     console.warn('[sentry] @sentry/react not installed — run: npm i @sentry/react');
   }
+}
+
+/**
+ * Taux d'échantillonnage du traçage, une fois le consentement acquis.
+ *
+ * 0.1 est un réglage pour gros trafic ; à notre volume il ne restait presque
+ * rien à afficher, d'où le 1.0 par défaut. À redescendre si le quota devient
+ * serré. Une valeur illisible dans l'environnement ne doit pas produire un
+ * `NaN` — Sentry le traiterait comme « ne rien mesurer », en silence.
+ */
+function tauxDeTracage(): number {
+  const brut = Number(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || '1.0');
+  return Number.isFinite(brut) ? brut : 1.0;
 }
 
 export function captureClientException(err: unknown, context?: Record<string, unknown>): void {
