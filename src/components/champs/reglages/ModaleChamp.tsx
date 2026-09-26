@@ -1,15 +1,17 @@
 /**
- * Créer / modifier un champ personnalisé (écran 2 de GoHighLevel).
- *
- * Création en deux temps : 1) la grille des types, 2) la configuration,
- * avec l'aperçu en direct à droite. En modification, le type ne propose
- * que les conversions sans perte, et la clé est figée (les modèles et
- * automatisations en dépendent).
+ * Créer / modifier un champ personnalisé — reproduit l'écran « Create custom
+ * field » de GoHighLevel (capture de Rafba, 2026-09-25) : panneau latéral
+ * pleine hauteur, bloc « Détails du champ » (Type | Objet, Nom | Dossier,
+ * Clé ⓘ, Description), bloc « Valeur par défaut » (texte indicatif ⓘ, valeur
+ * pré-remplie, réglages du type), « Aperçu en direct » à droite, Annuler /
+ * Créer en bas.
+ * En modification, le type ne propose que les conversions sans perte, et la
+ * clé est figée (les modèles et automatisations en dépendent).
  */
 import { useEffect, useId, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Copy, GripVertical, Loader2, MapPin, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Copy, GripVertical, Info, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core';
@@ -17,15 +19,15 @@ import {
   arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import Modal from '../../ui/Modal';
+import { confirmer } from '../../ui/ConfirmDialog';
 import { cn } from '../../../lib/utils';
 import {
-  creerChamp, listerChamps, modifierChamp, type ChampPerso, type DossierChamp, type EntreeOption, type ObjetChamp, type TypeChamp,
+  creerChamp, creerDossier, modifierChamp, type ChampPerso, type DossierChamp, type EntreeOption, type ObjetChamp, type TypeChamp,
 } from '../../../lib/champsPersoApi';
-import { OBJETS, TYPES_CHAMP, LIBELLES_OBJET, LIBELLES_TYPE, conversionPermise, variableModele, type ConfigChamp } from '../../../lib/champs/types';
+import { OBJETS, TYPES_CHAMP, LIBELLES_OBJET, LIBELLES_TYPE, conversionPermise, variableAffichee, type ConfigChamp, type ValeurChamp } from '../../../lib/champs/types';
 import { slugCle } from '../../../lib/champs/valeurs';
 import { clesStandard } from '../../../lib/champs/standard';
-import { ICONE_TYPE, AIDE_TYPE } from '../icones';
+import { AIDE_TYPE } from '../icones';
 import ChampSaisie from '../ChampSaisie';
 
 interface Props {
@@ -77,46 +79,17 @@ function LigneOption({ o, fr, onChange, onRetirer, idBase }: {
   );
 }
 
-/** La fenêtre de création que l'aperçu imite, et ses champs de base (grisés). */
-const FENETRE: Record<ObjetChamp, { fr: string; en: string; base: { fr: string; en: string }[] }> = {
-  client: { fr: 'Nouveau client', en: 'New client', base: [{ fr: 'Prénom', en: 'First name' }, { fr: 'Nom', en: 'Last name' }, { fr: 'Téléphone', en: 'Phone' }, { fr: 'Courriel', en: 'Email' }] },
-  deal: { fr: 'Nouvelle carte du pipeline', en: 'New pipeline card', base: [{ fr: 'Titre', en: 'Title' }, { fr: 'Client', en: 'Client' }, { fr: 'Étape', en: 'Stage' }] },
-  job: { fr: 'Nouveau job', en: 'New job', base: [{ fr: 'Titre du job', en: 'Job title' }, { fr: 'Client', en: 'Client' }, { fr: 'Date et heure', en: 'Date and time' }, { fr: 'Équipe', en: 'Team' }] },
-  quote: { fr: 'Nouvelle soumission', en: 'New quote', base: [{ fr: 'Client', en: 'Client' }, { fr: 'Titre', en: 'Title' }, { fr: 'Produits et services', en: 'Products & services' }] },
-  invoice: { fr: 'Nouvelle facture', en: 'New invoice', base: [{ fr: 'Client', en: 'Client' }, { fr: 'Échéance', en: 'Due date' }, { fr: 'Produits et services', en: 'Products & services' }] },
-};
-
-/** Où un champ apparaît, selon l'objet — pour qu'on sache, AVANT de le créer, où il va se retrouver. */
-const OU_IL_APPARAIT: Record<ObjetChamp, { fr: string[]; en: string[] }> = {
-  client: {
-    fr: ['Fiche du client, section « Champs personnalisés »', 'Fenêtre « Nouveau client »', 'Liste Clients : bouton « Champs » (filtrer, afficher en colonne)', 'Import CSV et formulaire de demande (s’il y est relié)'],
-    en: ['Client record, “Custom fields” section', '“New client” window', 'Clients list: “Fields” button (filter, show as column)', 'CSV import and request form (if linked)'],
-  },
-  deal: {
-    fr: ['Fiche d’une carte du pipeline', 'Fenêtre de création d’une carte', 'Sur les cartes elles-mêmes si tu le choisis dans l’onglet Pipeline de cette page'],
-    en: ['A pipeline card’s record', 'New card window', 'On the cards themselves if you pick it in this page’s Pipeline tab'],
-  },
-  job: {
-    fr: ['Fiche du job, section « Champs personnalisés »', 'Fenêtre « Nouveau job »', 'Liste Jobs : bouton « Champs »'],
-    en: ['Job record, “Custom fields” section', '“New job” window', 'Jobs list: “Fields” button'],
-  },
-  quote: {
-    fr: ['Fiche de la soumission', 'Création d’une soumission', 'Liste Devis : bouton « Champs »', 'Sur la soumission du client (PDF et page en ligne) si « Afficher sur » est coché'],
-    en: ['Quote record', 'Quote creation', 'Quotes list: “Fields” button', 'On the client’s quote (PDF and online page) if “Show on” is checked'],
-  },
-  invoice: {
-    fr: ['Fiche de la facture', 'Création d’une facture', 'Liste Factures : bouton « Champs »', 'Sur la facture du client (PDF et page en ligne) si « Afficher sur » est coché'],
-    en: ['Invoice record', 'Invoice creation', 'Invoices list: “Fields” button', 'On the client’s invoice (PDF and online page) if “Show on” is checked'],
-  },
-};
-
 export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetDefaut, dossiers: tousDossiers, champ, dossierInitial, fr }: Props) {
   const ids = useId();
   const edition = !!champ;
   // « Ajouter à l'objet » : n'importe quel objet, avec ou sans pipeline.
   const [objet, setObjet] = useState<ObjetChamp>(champ?.object_type ?? objetDefaut);
-  const dossiers = tousDossiers.filter((d) => d.object_type === objet);
-  const [etape, setEtape] = useState<'type' | 'config'>(edition ? 'config' : 'type');
+  // Dossiers créés depuis ce panneau (« Créer un dossier ») : la liste du parent ne les a pas encore.
+  const [dossiersCrees, setDossiersCrees] = useState<DossierChamp[]>([]);
+  const dossiers = [...tousDossiers, ...dossiersCrees.filter((c) => !tousDossiers.some((d) => d.id === c.id))]
+    .filter((d) => d.object_type === objet);
+  const [nouveauDossier, setNouveauDossier] = useState<string | null>(null);
+  const [creationDossier, setCreationDossier] = useState(false);
   const [type, setType] = useState<TypeChamp>(champ?.field_type ?? 'single_line');
   const [label, setLabel] = useState(champ?.label ?? '');
   const [cle, setCle] = useState(champ?.key ?? '');
@@ -130,12 +103,18 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
     (champ?.options ?? []).filter((o) => !o.archived_at).map((o) => ({ id: o.id, label: o.label, color: o.color, _cle: nouvelleCle() })),
   );
   const [apercu, setApercu] = useState<string | number | string[] | null>(null);
+  // Valeur par défaut : pour une liste, stockée en LIBELLÉ(S) d'option (les ids
+  // n'existent pas encore à la création) ; saisie ici via les clés locales.
+  const [defaut, setDefaut] = useState<ValeurChamp>(() => {
+    const v = champ?.default_value;
+    if (v === null || v === undefined || typeof v === 'boolean') return null;
+    return v;
+  });
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setEtape(champ ? 'config' : 'type');
     setObjet(champ?.object_type ?? objetDefaut);
     setErreur(null);
   }, [open, champ, objetDefaut]);
@@ -163,6 +142,43 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
     return p;
   }, [label, cleInvalide, cleReservee, cle, avecOptions, options, type, config, fr]);
 
+  // Liste : libellés stockés ⇄ clés locales des options affichées.
+  const cleOption = (o: OptionEdit) => o.id ?? o._cle;
+  const defautSaisi: ValeurChamp = !avecOptions || defaut === null ? defaut
+    : Array.isArray(defaut)
+      ? defaut.map((l) => options.find((o) => o.label === l)).filter((o): o is OptionEdit => !!o).map(cleOption)
+      : (() => { const o = options.find((x) => x.label === defaut); return o ? cleOption(o) : null; })();
+  const surDefaut = (v: ValeurChamp) => {
+    if (!avecOptions || v === null) return setDefaut(v);
+    const libelle = (k: string) => options.find((o) => cleOption(o) === k)?.label ?? '';
+    setDefaut(Array.isArray(v) ? v.map(libelle).filter(Boolean) : libelle(String(v)) || null);
+  };
+  const defautFinal = (): ValeurChamp => {
+    if (defaut === null || defaut === '' || (Array.isArray(defaut) && defaut.length === 0)) return null;
+    if (!avecOptions) return defaut;
+    const libelles = new Set(options.map((o) => o.label.trim()).filter(Boolean));
+    // Une option renommée ou retirée entre-temps ne laisse pas de défaut orphelin.
+    return Array.isArray(defaut) ? (defaut.filter((l) => libelles.has(l)).length ? defaut.filter((l) => libelles.has(l)) : null)
+      : (libelles.has(String(defaut)) ? defaut : null);
+  };
+
+  const ajouterDossier = async () => {
+    const nom = (nouveauDossier ?? '').trim();
+    if (!nom) return;
+    setCreationDossier(true);
+    try {
+      const id = await creerDossier(objet, nom);
+      setDossiersCrees((l) => [...l, { id, object_type: objet, name: nom } as DossierChamp]);
+      setDossier(id);
+      setNouveauDossier(null);
+    } catch (err) {
+      console.error('[ModaleChamp] création du dossier', err);
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreationDossier(false);
+    }
+  };
+
   const enregistrer = async () => {
     if (problemes.length) { setErreur(problemes[0]); return; }
     setEnvoi(true);
@@ -172,11 +188,12 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
       const resultat = edition
         ? await modifierChamp(champ!.id, {
           label: label.trim(), placeholder: placeholder || null, help_text: aide || null, is_required: obligatoire,
-          folder_id: dossier || null, config, options: opts, ...(type !== champ!.field_type ? { field_type: type } : {}),
+          folder_id: dossier || null, config, options: opts, default_value: defautFinal(),
+          ...(type !== champ!.field_type ? { field_type: type } : {}),
         })
         : await creerChamp(objet, {
           label: label.trim(), field_type: type, key: cle, placeholder: placeholder || null, help_text: aide || null,
-          is_required: obligatoire, config, options: opts, folder_id: dossier || null,
+          is_required: obligatoire, config, options: opts, folder_id: dossier || null, default_value: defautFinal(),
         });
       toast.success(edition ? (fr ? 'Champ modifié.' : 'Field updated.') : (fr ? 'Champ créé.' : 'Field created.'));
       onEnregistre(resultat);
@@ -195,287 +212,296 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
       liste.findIndex((o) => o._cle === e.active.id), liste.findIndex((o) => o._cle === e.over!.id)));
   };
 
-  // Les autres champs du même objet et du même dossier, pour montrer où le champ se place.
-  const { data: existants } = useQuery({
-    queryKey: ['champs-perso', objet],
-    queryFn: () => listerChamps(objet),
-    enabled: open,
-    staleTime: 60_000,
-  });
-  const { avant, apres } = useMemo(() => {
-    const freres = (existants?.fields ?? [])
-      .filter((c) => !c.archived_at && (c.folder_id ?? '') === dossier && c.id !== champ?.id)
-      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-    if (!champ) return { avant: freres, apres: [] as typeof freres };
-    const i = freres.findIndex((c) => (c.position ?? 0) > (champ.position ?? 0));
-    return i < 0 ? { avant: freres, apres: [] as typeof freres } : { avant: freres.slice(0, i), apres: freres.slice(i) };
-  }, [existants, dossier, champ]);
-
   const champApercu = {
     label: label || (fr ? 'Nom du champ' : 'Field name'), field_type: type, config, placeholder: placeholder || null,
     options: options.filter((o) => o.label.trim()).map((o, i) => ({ id: o.id ?? o._cle, label: o.label, color: o.color ?? null, position: i, archived_at: null })),
   };
-  const variable = `{${variableModele(objet, cle || 'cle')}}`;
+  const variable = variableAffichee(objet, cle || 'cle');
 
-  const titre = edition
-    ? (fr ? 'Modifier le champ' : 'Edit field')
-    : (fr ? 'Nouveau champ personnalisé' : 'Create custom field');
+  const [cleEditable, setCleEditable] = useState(false);
+  const [detailsOuverts, setDetailsOuverts] = useState(true);
+  const [saisieOuverte, setSaisieOuverte] = useState(true);
+  const modifie = !!(label || placeholder || aide || defaut !== null || (edition && champ && (label !== champ.label)));
+  const fermer = async () => {
+    if (modifie && !envoi) {
+      const ok = await confirmer({
+        title: fr ? 'Modifications non enregistrées' : 'Unsaved changes',
+        message: fr ? 'Si tu fermes, tes modifications seront perdues.' : 'If you close, your changes will be lost.',
+        confirmLabel: fr ? 'Fermer sans enregistrer' : 'Discard changes',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    onClose();
+  };
+  const choisirType = (t: TypeChamp) => {
+    setType(t);
+    if ((t === 'dropdown_single' || t === 'dropdown_multi') && options.length === 0) setOptions([{ label: '', color: couleurs[0], _cle: nouvelleCle() }]);
+  };
 
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      size="2xl"
-      title={titre}
-      description={fr ? 'Configure le champ et vois l’aperçu en direct.' : 'Customize your field and see a live preview.'}
-      footer={etape === 'config' ? (
-        <div className="flex w-full items-center justify-between gap-3">
-          {!edition ? (
-            <button type="button" onClick={() => setEtape('type')} className="inline-flex items-center gap-1 text-[13px] text-text-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded">
-              <ArrowLeft size={14} aria-hidden /> {fr ? 'Changer de type' : 'Change type'}
-            </button>
-          ) : <span />}
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onClose} className="glass-button">{fr ? 'Annuler' : 'Cancel'}</button>
-            <button type="button" onClick={() => { void enregistrer(); }} disabled={envoi} className="glass-button-primary inline-flex items-center gap-2">
-              {envoi && <Loader2 size={14} className="animate-spin" aria-hidden />}
-              {edition ? (fr ? 'Enregistrer' : 'Save') : (fr ? 'Créer le champ' : 'Create custom field')}
-            </button>
+  if (!open) return null;
+  const titre = edition ? (fr ? 'Modifier le champ' : 'Edit custom field') : (fr ? 'Créer un champ personnalisé' : 'Create custom field');
+  const etiquette = 'mb-1 block text-[13px] font-medium text-text-primary';
+  const bulle = (texte: string) => (
+    <span className="group relative inline-flex">
+      <button type="button" aria-label={texte} className="rounded text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+        <Info size={13} aria-hidden />
+      </button>
+      <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden w-56 -translate-x-1/2 rounded-md bg-text-primary px-2 py-1.5 text-[11px] font-normal text-surface shadow-lg group-hover:block group-focus-within:block">
+        {texte}
+      </span>
+    </span>
+  );
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex justify-end bg-black/30" role="presentation" tabIndex={-1} onClick={() => { void fermer(); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby={`${ids}-titre`} tabIndex={-1}
+        className="flex h-full w-full flex-col bg-surface shadow-xl sm:w-[min(1100px,72vw)]" onClick={(e) => e.stopPropagation()}>
+        {/* En-tête */}
+        <div className="flex items-start justify-between border-b border-outline px-6 py-4">
+          <div>
+            <h2 id={`${ids}-titre`} className="text-[16px] font-semibold text-text-primary">{titre}</h2>
+            <p className="text-[13px] text-text-tertiary">{fr ? 'Personnalise les détails du champ et vois l’aperçu en direct' : 'Customize your field’s details and see live preview'}</p>
           </div>
+          <button type="button" onClick={() => { void fermer(); }} aria-label={fr ? 'Fermer' : 'Close'}
+            className="rounded p-1 text-text-tertiary hover:bg-surface-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><X size={18} /></button>
         </div>
-      ) : undefined}
-    >
-      {etape === 'type' ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {TYPES_CHAMP.map((t) => {
-            const Icone = ICONE_TYPE[t];
-            return (
-              <button
-                key={t} type="button"
-                onClick={() => { setType(t); setEtape('config'); if ((t === 'dropdown_single' || t === 'dropdown_multi') && options.length === 0) setOptions([{ label: '', color: couleurs[0], _cle: nouvelleCle() }]); }}
-                className="flex items-start gap-3 rounded-xl border border-outline-subtle bg-surface-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-surface-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Icone size={16} aria-hidden /></span>
-                <span>
-                  <span className="block text-[13px] font-semibold text-text-primary">{fr ? LIBELLES_TYPE[t].fr : LIBELLES_TYPE[t].en}</span>
-                  <span className="block text-[11px] text-text-tertiary">{fr ? AIDE_TYPE[t].fr : AIDE_TYPE[t].en}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="grid gap-5 md:grid-cols-[1fr_230px]">
+
+        {/* Corps : formulaire | aperçu */}
+        <div className="grid flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[1fr_380px]">
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div>
-                <label htmlFor={`${ids}-objet`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Ajouter à l’objet' : 'Add to object'} *</label>
-                <select id={`${ids}-objet`} value={objet} disabled={edition}
-                  onChange={(e) => { setObjet(e.target.value as ObjetChamp); setDossier(''); }} className="glass-input h-9 w-full text-[13px]">
-                  {OBJETS.map((o) => <option key={o} value={o}>{fr ? LIBELLES_OBJET[o].fr : LIBELLES_OBJET[o].en}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor={`${ids}-type`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Type de champ' : 'Field type'}</label>
-                <select id={`${ids}-type`} value={type} disabled={!edition || typesPermis.length < 2}
-                  onChange={(e) => setType(e.target.value as TypeChamp)} className="glass-input h-9 w-full text-[13px]">
-                  {typesPermis.map((t) => <option key={t} value={t}>{fr ? LIBELLES_TYPE[t].fr : LIBELLES_TYPE[t].en}</option>)}
-                </select>
-                {edition && typesPermis.length < 2 && (
-                  <p className="mt-1 text-[11px] text-text-tertiary">{fr ? 'Aucune conversion sans perte pour ce type.' : 'No lossless conversion for this type.'}</p>
-                )}
-              </div>
-              <div>
-                <label htmlFor={`${ids}-dossier`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Dossier' : 'Folder'}</label>
-                <select id={`${ids}-dossier`} value={dossier} onChange={(e) => setDossier(e.target.value)} className="glass-input h-9 w-full text-[13px]">
-                  <option value="">{fr ? 'Sans dossier' : 'No folder'}</option>
-                  {dossiers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Où il apparaîtra — suit l'objet choisi. */}
-            <div className="rounded-lg border border-outline-subtle bg-surface-secondary/40 px-3 py-2.5 text-[12px] text-text-secondary">
-              <p className="mb-1 flex items-center gap-1.5 font-semibold text-text-primary">
-                <MapPin size={12} aria-hidden />{fr ? 'Où il apparaîtra' : 'Where it will appear'}
-              </p>
-              <ul className="list-disc space-y-0.5 pl-5">
-                {(fr ? OU_IL_APPARAIT[objet].fr : OU_IL_APPARAIT[objet].en).map((t) => <li key={t}>{t}</li>)}
-              </ul>
-              <p className="mt-1.5 text-text-tertiary">
-                {fr
-                  ? `Placé à la fin ${dossier ? 'de son dossier' : 'des champs sans dossier'} ; « … » → Monter / Descendre pour changer l’ordre.`
-                  : `Placed last ${dossier ? 'in its folder' : 'among fields without a folder'}; “…” → Move up / down to reorder.`}
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor={`${ids}-label`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Nom du champ' : 'Field name'} *</label>
-              <input id={`${ids}-label`} value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)}
-                placeholder={fr ? 'Ex. : Superficie du terrain' : 'e.g. Lot size'} className="glass-input h-9 w-full text-[13px]" />
-            </div>
-
-            <div>
-              <label htmlFor={`${ids}-cle`} className="mb-1 block text-[12px] font-medium text-text-secondary">
-                {fr ? 'Nom technique' : 'Technical name'} <span className="font-normal text-text-tertiary">— {fr ? 'automatique, tu n’as pas à y toucher' : 'automatic, no need to touch it'}</span>
-              </label>
-              <p className="mb-1.5 text-[11px] text-text-tertiary">
-                {fr
-                  ? 'Se remplit tout seul à partir du nom. Il sert à glisser la valeur du champ dans un courriel, un texto ou une automatisation, en écrivant la variable ci-dessous.'
-                  : 'Filled in automatically from the name. It lets you insert the field’s value into an email, a text or an automation, using the variable below.'}
-              </p>
-              {edition ? (
-                <div className="flex items-center gap-2">
-                  <code className="rounded bg-surface-secondary px-2 py-1 text-[12px] text-text-secondary">{variable}</code>
-                  <button type="button" aria-label={fr ? 'Copier la variable' : 'Copy variable'}
-                    onClick={() => { void navigator.clipboard.writeText(variable); toast.success(fr ? 'Variable copiée.' : 'Variable copied.'); }}
-                    className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-                    <Copy size={13} aria-hidden />
-                  </button>
-                  <span className="text-[11px] text-text-tertiary">{fr ? 'Figée après la création.' : 'Locked after creation.'}</span>
-                </div>
-              ) : (
-                <>
-                  <input id={`${ids}-cle`} value={cle} maxLength={50}
-                    onChange={(e) => { setCleTouchee(true); setCle(e.target.value.toLowerCase()); }}
-                    aria-invalid={cleInvalide || cleReservee}
-                    className={cn('glass-input h-9 w-full font-mono text-[12px]', (cleInvalide || cleReservee) && 'border-red-400')} />
-                  <p className="mt-1 text-[11px] text-text-tertiary">
-                    {fr ? 'Variable : ' : 'Variable: '}<code>{variable}</code>{fr ? ' — ne pourra plus changer ensuite.' : ' — cannot change afterwards.'}
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label htmlFor={`${ids}-ph`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Exemple dans la case (optionnel)' : 'Example in the box (optional)'}</label>
-                <input id={`${ids}-ph`} value={placeholder} maxLength={200} onChange={(e) => setPlaceholder(e.target.value)}
-                  placeholder={fr ? 'Ex. : 2 500 pi²' : 'e.g. 2,500 sq ft'} className="glass-input h-9 w-full text-[13px]" />
-                <p className="mt-1 text-[11px] text-text-tertiary">{fr ? 'Texte gris affiché dans la case tant qu’elle est vide, pour guider. Il n’est pas enregistré.' : 'Grey text shown in the empty box as a hint. It is not saved.'}</p>
-              </div>
-              <div className="flex items-end">
-                <label htmlFor={`${ids}-req`} className="flex items-center gap-2 text-[13px] text-text-primary">
-                  <input id={`${ids}-req`} type="checkbox" checked={obligatoire} onChange={(e) => setObligatoire(e.target.checked)} className="h-4 w-4 accent-primary" />
-                  {fr ? 'Obligatoire' : 'Required'}
-                </label>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor={`${ids}-aide`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Aide sous le champ (optionnel)' : 'Help below the field (optional)'}</label>
-              <textarea id={`${ids}-aide`} rows={2} value={aide} maxLength={200} onChange={(e) => setAide(e.target.value)}
-                placeholder={fr ? 'Une phrase pour expliquer ce champ' : 'A short description to explain this field'} className="glass-input w-full py-2 text-[13px]" />
-              <p className="mt-0.5 text-right text-[11px] text-text-tertiary">{aide.length} / 200</p>
-            </div>
-
-            {/* Réglages propres au type */}
-            {(objet === 'quote' || objet === 'invoice') && (
-              <label htmlFor={`${ids}-document`} className="flex items-center gap-2 text-[13px] text-text-primary">
-                <input id={`${ids}-document`} type="checkbox" checked={!!config.show_on_documents}
-                  onChange={(e) => setConfig({ ...config, show_on_documents: e.target.checked })} className="h-4 w-4 accent-primary" />
-                {fr ? `Afficher sur ${objet === 'quote' ? 'la soumission' : 'la facture'} du client (PDF et page en ligne)` : `Show on the client's ${objet === 'quote' ? 'quote' : 'invoice'} (PDF and online page)`}
-              </label>
-            )}
-            {type === 'number' && (
-              <div className="grid grid-cols-3 gap-3">
-                {(['decimals', 'min', 'max'] as const).map((k) => (
-                  <div key={k}>
-                    <label htmlFor={`${ids}-${k}`} className="mb-1 block text-[12px] font-medium text-text-secondary">
-                      {k === 'decimals' ? (fr ? 'Décimales' : 'Decimals') : k === 'min' ? 'Minimum' : 'Maximum'}
-                    </label>
-                    <input id={`${ids}-${k}`} type="number" min={k === 'decimals' ? 0 : undefined} max={k === 'decimals' ? 6 : undefined}
-                      value={config[k] ?? ''} onChange={(e) => setConfig({ ...config, [k]: e.target.value === '' ? null : Number(e.target.value) })}
-                      className="glass-input h-9 w-full text-[13px]" />
+            {/* Détails du champ */}
+            <section className="rounded-xl border border-outline bg-surface-card">
+              <button type="button" aria-expanded={detailsOuverts} onClick={() => setDetailsOuverts((o) => !o)}
+                className="flex w-full items-center justify-between px-4 py-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
+                <span className="text-[14px] font-semibold text-text-primary">{fr ? 'Détails du champ' : 'Field details'}</span>
+                <ChevronDown size={16} aria-hidden className={cn('text-text-tertiary transition-transform', !detailsOuverts && '-rotate-90')} />
+              </button>
+              {detailsOuverts && (
+                <div className="space-y-4 border-t border-outline-subtle px-4 pb-4 pt-3">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label htmlFor={`${ids}-type`} className={etiquette}>{fr ? 'Type de champ' : 'Field type'} <span className="text-red-500">*</span></label>
+                      <select id={`${ids}-type`} value={type} disabled={edition && typesPermis.length < 2}
+                        onChange={(e) => choisirType(e.target.value as TypeChamp)} className="glass-input h-9 w-full text-[13px]">
+                        {typesPermis.map((t) => <option key={t} value={t}>{fr ? LIBELLES_TYPE[t].fr : LIBELLES_TYPE[t].en}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor={`${ids}-objet`} className={etiquette}>{fr ? 'Ajouter à l’objet' : 'Add to object'} <span className="text-red-500">*</span></label>
+                      <select id={`${ids}-objet`} value={objet} disabled={edition}
+                        onChange={(e) => { setObjet(e.target.value as ObjetChamp); setDossier(''); }} className="glass-input h-9 w-full text-[13px]">
+                        {OBJETS.map((o) => <option key={o} value={o}>{fr ? LIBELLES_OBJET[o].fr : LIBELLES_OBJET[o].en}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor={`${ids}-label`} className={etiquette}>{fr ? 'Nom du champ' : 'Field name'} <span className="text-red-500">*</span></label>
+                      <div className="relative">
+                        <input id={`${ids}-label`} value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)}
+                          placeholder={fr ? 'Entre un nom' : 'Enter name'} className="glass-input h-9 w-full pr-10 text-[13px]" />
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-text-tertiary">{label.length}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor={`${ids}-dossier`} className={etiquette}>{fr ? 'Dossier' : 'Folder name'}</label>
+                      {nouveauDossier === null ? (
+                        <select id={`${ids}-dossier`} value={dossier}
+                          onChange={(e) => { if (e.target.value === '__nouveau__') setNouveauDossier(''); else setDossier(e.target.value); }}
+                          className="glass-input h-9 w-full text-[13px]">
+                          <option value="">{fr ? 'Sans dossier' : 'No folder'}</option>
+                          {dossiers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                          <option value="__nouveau__">{fr ? '+ Créer un dossier' : '+ Create folder'}</option>
+                        </select>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input id={`${ids}-dossier`} value={nouveauDossier} maxLength={80} autoFocus
+                            onChange={(e) => setNouveauDossier(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void ajouterDossier(); } if (e.key === 'Escape') { e.stopPropagation(); setNouveauDossier(null); } }}
+                            placeholder={fr ? 'Nom du dossier' : 'Folder name'} className="glass-input h-9 min-w-0 flex-1 text-[13px]" />
+                          <button type="button" onClick={() => { void ajouterDossier(); }} disabled={creationDossier || !nouveauDossier.trim()}
+                            className="glass-button-primary inline-flex items-center gap-1 px-3 text-[12px] disabled:opacity-50">
+                            {creationDossier && <Loader2 size={12} className="animate-spin" aria-hidden />}{fr ? 'Créer' : 'Create'}
+                          </button>
+                          <button type="button" onClick={() => setNouveauDossier(null)} aria-label={fr ? 'Annuler la création du dossier' : 'Cancel folder creation'}
+                            className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><X size={14} aria-hidden /></button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-            {type === 'monetary' && (
-              <div className="w-40">
-                <label htmlFor={`${ids}-devise`} className="mb-1 block text-[12px] font-medium text-text-secondary">{fr ? 'Devise' : 'Currency'}</label>
-                <select id={`${ids}-devise`} value={config.currency ?? 'CAD'} onChange={(e) => setConfig({ ...config, currency: e.target.value })} className="glass-input h-9 w-full text-[13px]">
-                  {['CAD', 'USD', 'EUR'].map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-            )}
-            {type === 'date' && (
-              <label htmlFor={`${ids}-heure`} className="flex items-center gap-2 text-[13px] text-text-primary">
-                <input id={`${ids}-heure`} type="checkbox" checked={!!config.include_time} disabled={edition}
-                  onChange={(e) => setConfig({ ...config, include_time: e.target.checked })} className="h-4 w-4 accent-primary" />
-                {fr ? 'Inclure l’heure' : 'Include time'}
-                {edition && <span className="text-[11px] text-text-tertiary">{fr ? '(figé : les valeurs en dépendent)' : '(locked: values depend on it)'}</span>}
-              </label>
-            )}
-            {avecOptions && (
-              <div className="space-y-2">
-                <p className="text-[12px] font-medium text-text-secondary">{fr ? 'Options' : 'Options'}</p>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={surDrag}>
-                  <SortableContext items={options.map((o) => o._cle)} strategy={verticalListSortingStrategy}>
-                    {options.map((o, i) => (
-                      <LigneOption key={o._cle} o={o} fr={fr} idBase={ids}
-                        onChange={(p) => setOptions((l) => l.map((x, j) => (j === i ? { ...x, ...p } : x)))}
-                        onRetirer={() => setOptions((l) => l.filter((_, j) => j !== i))} />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-                <button type="button"
-                  onClick={() => setOptions((l) => [...l, { label: '', color: couleurs[l.length % couleurs.length], _cle: nouvelleCle() }])}
-                  className="inline-flex items-center gap-1 rounded px-1 text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-                  <Plus size={13} aria-hidden /> {fr ? 'Ajouter une option' : 'Add option'}
-                </button>
-                {edition && (
-                  <p className="text-[11px] text-text-tertiary">
-                    {fr ? 'Renommer une option ne touche aucune donnée. Une option retirée mais déjà utilisée est archivée : elle reste sur les fiches, et disparaît des choix.'
-                      : 'Renaming an option changes no data. A removed option already in use is archived: it stays on records and disappears from the choices.'}
-                  </p>
-                )}
-              </div>
-            )}
+
+                  <div>
+                    <span className={cn(etiquette, 'inline-flex items-center gap-1')}>
+                      <label htmlFor={`${ids}-cle`}>{fr ? 'Clé' : 'Key'}</label>
+                      {bulle(fr ? 'Une fois créée, elle ne peut plus être renommée. Elle sert à insérer la valeur dans un courriel, un texto ou une automatisation.' : 'Once created, can’t be renamed later. Used to insert the value in an email, a text or an automation.')}
+                    </span>
+                    {edition || !cleEditable ? (
+                      <div className="flex items-center gap-2">
+                        <code className="rounded bg-surface-secondary px-2 py-1 text-[12px] text-text-secondary">{variable}</code>
+                        {edition ? (
+                          <button type="button" aria-label={fr ? 'Copier la clé' : 'Copy key'}
+                            onClick={() => { void navigator.clipboard.writeText(variable); toast.success(fr ? 'Clé copiée.' : 'Key copied.'); }}
+                            className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Copy size={13} aria-hidden /></button>
+                        ) : (
+                          <button type="button" aria-label={fr ? 'Modifier la clé' : 'Edit key'} onClick={() => setCleEditable(true)}
+                            className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Pencil size={13} aria-hidden /></button>
+                        )}
+                      </div>
+                    ) : (
+                      <input id={`${ids}-cle`} value={cle} maxLength={50} autoFocus
+                        onChange={(e) => { setCleTouchee(true); setCle(e.target.value.toLowerCase()); }}
+                        aria-invalid={cleInvalide || cleReservee}
+                        className={cn('glass-input h-9 w-full font-mono text-[12px]', (cleInvalide || cleReservee) && 'border-red-400')} />
+                    )}
+                  </div>
+
+                  <div>
+                    <label htmlFor={`${ids}-aide`} className={etiquette}>{fr ? 'Description' : 'Description'}</label>
+                    <div className="relative">
+                      <textarea id={`${ids}-aide`} rows={3} value={aide} maxLength={200} onChange={(e) => setAide(e.target.value)}
+                        placeholder={fr ? 'Ajoute une courte description pour expliquer ce champ' : 'Add a short description to explain this field'} className="glass-input w-full py-2 text-[13px]" />
+                      <span className="pointer-events-none absolute bottom-2 right-3 text-[11px] text-text-tertiary">{aide.length} / 200</span>
+                    </div>
+                  </div>
+
+                  <label htmlFor={`${ids}-req`} className="flex items-center gap-2 text-[13px] text-text-primary">
+                    <input id={`${ids}-req`} type="checkbox" checked={obligatoire} onChange={(e) => setObligatoire(e.target.checked)} className="h-4 w-4 accent-primary" />
+                    {fr ? 'Obligatoire' : 'Required'}
+                  </label>
+                </div>
+              )}
+            </section>
+
+            {/* Valeur par défaut : texte indicatif, valeur pré-remplie, réglages du type */}
+            <section className="rounded-xl border border-outline bg-surface-card">
+              <button type="button" aria-expanded={saisieOuverte} onClick={() => setSaisieOuverte((o) => !o)}
+                className="flex w-full items-center justify-between px-4 py-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
+                <span>
+                  <span className="block text-[14px] font-semibold text-text-primary">{fr ? 'Valeur par défaut' : 'Set default value'}</span>
+                  <span className="block text-[12px] text-text-tertiary">{fr ? AIDE_TYPE[type].fr : AIDE_TYPE[type].en}</span>
+                </span>
+                <ChevronDown size={16} aria-hidden className={cn('text-text-tertiary transition-transform', !saisieOuverte && '-rotate-90')} />
+              </button>
+              {saisieOuverte && (
+                <div className="space-y-4 border-t border-outline-subtle px-4 pb-4 pt-3">
+                  <div>
+                    <span className={cn(etiquette, 'inline-flex items-center gap-1')}>
+                      <label htmlFor={`${ids}-ph`}>{fr ? 'Texte indicatif' : 'Placeholder text'}</label>
+                      {bulle(fr ? 'Affiché dans la case avant qu’on commence à écrire. Il n’est pas enregistré.' : 'Shown inside the field before the user starts typing.')}
+                    </span>
+                    <input id={`${ids}-ph`} value={placeholder} maxLength={200} onChange={(e) => setPlaceholder(e.target.value)}
+                      placeholder={fr ? 'Un indice pour savoir quelle information fournir' : 'Provide a hint for users to know what kind of information to provide'} className="glass-input h-9 w-full text-[13px]" />
+                  </div>
+
+                  {!avecOptions && (
+                    <div>
+                      <span className={cn(etiquette, 'inline-flex items-center gap-1')}>
+                        <label htmlFor={`${ids}-defaut`}>{fr ? 'Valeur par défaut' : 'Default value'}</label>
+                        {bulle(fr ? 'Déjà remplie quand on crée une nouvelle fiche ; on peut la changer. Les fiches existantes ne sont pas touchées.' : 'Pre-filled when creating a new record; can be changed. Existing records are not touched.')}
+                      </span>
+                      <ChampSaisie id={`${ids}-defaut`} champ={{ ...champApercu, placeholder: fr ? 'Aucune' : 'None' }} valeur={defautSaisi} fr={fr} onValider={surDefaut} />
+                    </div>
+                  )}
+
+                  {(objet === 'quote' || objet === 'invoice') && (
+                    <label htmlFor={`${ids}-document`} className="flex items-center gap-2 text-[13px] text-text-primary">
+                      <input id={`${ids}-document`} type="checkbox" checked={!!config.show_on_documents}
+                        onChange={(e) => setConfig({ ...config, show_on_documents: e.target.checked })} className="h-4 w-4 accent-primary" />
+                      {fr ? `Afficher sur ${objet === 'quote' ? 'la soumission' : 'la facture'} du client (PDF et page en ligne)` : `Show on the client's ${objet === 'quote' ? 'quote' : 'invoice'} (PDF and online page)`}
+                    </label>
+                  )}
+                  {type === 'number' && (
+                    <div className="grid grid-cols-3 gap-3">
+                      {(['decimals', 'min', 'max'] as const).map((k) => (
+                        <div key={k}>
+                          <label htmlFor={`${ids}-${k}`} className={etiquette}>
+                            {k === 'decimals' ? (fr ? 'Décimales' : 'Decimals') : k === 'min' ? 'Minimum' : 'Maximum'}
+                          </label>
+                          <input id={`${ids}-${k}`} type="number" min={k === 'decimals' ? 0 : undefined} max={k === 'decimals' ? 6 : undefined}
+                            value={config[k] ?? ''} onChange={(e) => setConfig({ ...config, [k]: e.target.value === '' ? null : Number(e.target.value) })}
+                            className="glass-input h-9 w-full text-[13px]" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {type === 'monetary' && (
+                    <div className="w-40">
+                      <label htmlFor={`${ids}-devise`} className={etiquette}>{fr ? 'Devise' : 'Currency'}</label>
+                      <select id={`${ids}-devise`} value={config.currency ?? 'CAD'} onChange={(e) => setConfig({ ...config, currency: e.target.value })} className="glass-input h-9 w-full text-[13px]">
+                        {['CAD', 'USD', 'EUR'].map((d) => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {type === 'date' && (
+                    <label htmlFor={`${ids}-heure`} className="flex items-center gap-2 text-[13px] text-text-primary">
+                      <input id={`${ids}-heure`} type="checkbox" checked={!!config.include_time} disabled={edition}
+                        onChange={(e) => setConfig({ ...config, include_time: e.target.checked })} className="h-4 w-4 accent-primary" />
+                      {fr ? 'Inclure l’heure' : 'Include time'}
+                      {edition && <span className="text-[11px] text-text-tertiary">{fr ? '(figé : les valeurs en dépendent)' : '(locked: values depend on it)'}</span>}
+                    </label>
+                  )}
+                  {avecOptions && (
+                    <div className="space-y-2">
+                      <p className={etiquette}>{fr ? 'Options' : 'Options'}</p>
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={surDrag}>
+                        <SortableContext items={options.map((o) => o._cle)} strategy={verticalListSortingStrategy}>
+                          {options.map((o, i) => (
+                            <LigneOption key={o._cle} o={o} fr={fr} idBase={ids}
+                              onChange={(p) => setOptions((l) => l.map((x, j) => (j === i ? { ...x, ...p } : x)))}
+                              onRetirer={() => setOptions((l) => l.filter((_, j) => j !== i))} />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
+                      <button type="button"
+                        onClick={() => setOptions((l) => [...l, { label: '', color: couleurs[l.length % couleurs.length], _cle: nouvelleCle() }])}
+                        className="inline-flex items-center gap-1 rounded px-1 text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                        <Plus size={13} aria-hidden /> {fr ? 'Ajouter une option' : 'Add option'}
+                      </button>
+                      {options.some((o) => o.label.trim()) && (
+                        <div>
+                          <span className={cn(etiquette, 'mt-2 inline-flex items-center gap-1')}>
+                            <label htmlFor={`${ids}-defaut`}>{fr ? 'Option par défaut' : 'Default option'}</label>
+                            {bulle(fr ? 'Déjà choisie quand on crée une nouvelle fiche ; on peut la changer.' : 'Pre-selected when creating a new record; can be changed.')}
+                          </span>
+                          <ChampSaisie id={`${ids}-defaut`} champ={{ ...champApercu, placeholder: fr ? 'Aucune' : 'None' }} valeur={defautSaisi} fr={fr} onValider={surDefaut} />
+                        </div>
+                      )}
+                      {edition && (
+                        <p className="text-[11px] text-text-tertiary">
+                          {fr ? 'Renommer une option ne touche aucune donnée. Une option retirée mais déjà utilisée est archivée : elle reste sur les fiches, et disparaît des choix.'
+                            : 'Renaming an option changes no data. A removed option already in use is archived: it stays on records and disappears from the choices.'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
 
             {erreur && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:bg-red-500/10 dark:text-red-300">{erreur}</p>}
           </div>
 
           {/* Aperçu en direct */}
-          <aside aria-label={fr ? 'Aperçu en direct' : 'Live preview'} className="rounded-xl border border-outline-subtle bg-surface-secondary/50 p-4">
-            <p className="mb-3 text-[12px] font-semibold text-text-secondary">
-              {fr ? `Aperçu dans la fenêtre « ${FENETRE[objet].fr} »` : `Preview in the “${FENETRE[objet].en}” window`}
-            </p>
-            <div className="overflow-hidden rounded-lg border border-outline bg-surface shadow-sm">
-              <div className="border-b border-outline px-3 py-2 text-[13px] font-semibold text-text-primary">{fr ? FENETRE[objet].fr : FENETRE[objet].en}</div>
-              <div className="space-y-2.5 p-3">
-                {FENETRE[objet].base.map((c) => (
-                  <div key={c.fr} className="opacity-50" aria-hidden>
-                    <p className="mb-1 text-[11px] font-medium text-text-secondary">{fr ? c.fr : c.en}</p>
-                    <div className="h-7 rounded-md border border-outline-subtle bg-surface-secondary" />
-                  </div>
-                ))}
-                <p className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">{fr ? 'Champs personnalisés' : 'Custom fields'}</p>
-                {avant.map((c) => (
-                  <div key={c.id} className="opacity-50" aria-hidden>
-                    <p className="mb-1 text-[11px] font-medium text-text-secondary">{c.label}</p>
-                    <div className="h-7 rounded-md border border-outline-subtle bg-surface-secondary" />
-                  </div>
-                ))}
-                <div className="rounded-md p-2 ring-2 ring-primary/60">
-                  <label htmlFor={`${ids}-apercu`} className="mb-1 block text-[12px] font-medium text-text-primary">
-                    {champApercu.label}{obligatoire && <span className="text-red-500" aria-hidden> *</span>}
-                  </label>
-                  <ChampSaisie id={`${ids}-apercu`} champ={champApercu} valeur={apercu} fr={fr} onValider={setApercu} />
-                  {aide && <p className="mt-1 text-[11px] text-text-tertiary">{aide}</p>}
-                </div>
-                {apres.map((c) => (
-                  <div key={c.id} className="opacity-50" aria-hidden>
-                    <p className="mb-1 text-[11px] font-medium text-text-secondary">{c.label}</p>
-                    <div className="h-7 rounded-md border border-outline-subtle bg-surface-secondary" />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <p className="mt-2 text-[11px] text-text-tertiary">{fr ? 'Ton champ est encadré, à la place qu’il aura.' : 'Your field is outlined, where it will sit.'}</p>
+          <aside aria-label={fr ? 'Aperçu en direct' : 'Live preview'} className="h-fit rounded-xl border border-outline bg-surface-card p-4">
+            <p className="mb-3 text-[14px] font-semibold text-text-primary">{fr ? 'Aperçu en direct' : 'Live preview'}</p>
+            <label htmlFor={`${ids}-apercu`} className={etiquette}>
+              {champApercu.label}{obligatoire && <span className="text-red-500" aria-hidden> *</span>}
+            </label>
+            <ChampSaisie id={`${ids}-apercu`} champ={{ ...champApercu, placeholder: placeholder || (fr ? 'Texte indicatif' : 'Placeholder text') }} valeur={apercu ?? defautSaisi} fr={fr} onValider={setApercu} />
+            {aide && <p className="mt-1 text-[11px] text-text-tertiary">{aide}</p>}
           </aside>
         </div>
-      )}
-    </Modal>
+
+        {/* Pied */}
+        <div className="flex justify-end gap-2 border-t border-outline px-6 py-3">
+          <button type="button" onClick={() => { void fermer(); }} className="glass-button px-4 py-2 text-[13px]">{fr ? 'Annuler' : 'Cancel'}</button>
+          <button type="button" onClick={() => { void enregistrer(); }} disabled={envoi || !label.trim()}
+            className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-[13px] disabled:opacity-50">
+            {envoi && <Loader2 size={14} className="animate-spin" aria-hidden />}
+            {edition ? (fr ? 'Enregistrer' : 'Save') : (fr ? 'Créer le champ' : 'Create custom field')}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

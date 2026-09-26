@@ -13,7 +13,7 @@
  * qu'une fiche à moitié remplie n'existe. Coupé par le drapeau, `bloc` est
  * null et les deux fonctions ne font rien.
  */
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
@@ -60,6 +60,30 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
     courant.current = { ...courant.current, [id]: v };
     setValeurs(courant.current);
   };
+
+  // Valeur par défaut (« Set default value ») : posée une fois par champ, dès
+  // qu'il est connu, sans écraser ce que l'utilisateur a déjà saisi. Liste :
+  // le défaut est un libellé, la saisie attend l'id de l'option.
+  const preremplis = useRef(new Set<string>());
+  useEffect(() => {
+    let change = false;
+    for (const c of champs) {
+      if (preremplis.current.has(c.id)) continue;
+      preremplis.current.add(c.id);
+      const d = c.default_value;
+      if (d === null || d === undefined || typeof d === 'boolean' || c.id in courant.current) continue;
+      const actives = c.options.filter((o) => !o.archived_at);
+      const idDe = (l: string) => actives.find((o) => o.label === l)?.id;
+      const v: ValeurChamp = c.field_type === 'dropdown_multi'
+        ? (Array.isArray(d) ? d : [String(d)]).map(idDe).filter((x): x is string => !!x)
+        : c.field_type === 'dropdown_single' ? (idDe(Array.isArray(d) ? d[0] ?? '' : String(d)) ?? null)
+          : Array.isArray(d) ? null : d;
+      if (vide(v)) continue;
+      courant.current = { ...courant.current, [c.id]: v };
+      change = true;
+    }
+    if (change) setValeurs(courant.current);
+  }, [champs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const vide = (v: ValeurChamp | undefined) => v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
 
