@@ -65,3 +65,70 @@ describe('P2-14 — `maxLength` tronque en silence', () => {
     expect(champ).toMatch(/valeur\.length > champ\.max \* 0\.9/);
   });
 });
+
+describe('P1-5 — « Copier vers d’autres bureaux » ne doit pas disparaître', () => {
+  const liste = lire('src/pages/Automations.tsx');
+
+  it('la lecture des bureaux se RATTRAPE d’un échec', () => {
+    /*
+     * Un seul appel au montage : s'il échouait, la liste restait vide
+     * POUR TOUJOURS et l'option n'apparaissait jamais — sur un compte
+     * qui a pourtant deux bureaux. Vu 1 fois sur 6 au QA.
+     *
+     * La cause la plus probable est celle de P0-1 (400 `org_required`
+     * quand le bureau n'est pas encore publié) ; ce correctif rend
+     * l'échec réparable quelle qu'en soit la raison.
+     */
+    expect(liste).toMatch(/if \(vivant && essai < 3\)/);
+    expect(liste).toMatch(/setTimeout\(\(\) => charger\(essai \+ 1\), 800 \* essai\)/);
+  });
+});
+
+describe('P2-8 — un dossier se renomme', () => {
+  const liste = lire('src/pages/Automations.tsx');
+
+  it('le bouton existe', () => {
+    /*
+     * La route et le client existaient DÉJÀ — il n'y avait aucun
+     * bouton. Corriger une faute de frappe obligeait à détruire le
+     * dossier et à tout reclasser.
+     */
+    expect(liste).toMatch(/renommerDossier/);
+    expect(liste).toMatch(/Renommer le dossier/);
+  });
+
+  it('la saisie est en ligne, jamais un `prompt\u00b4()` natif', () => {
+    // Banni par `dialogues-natifs-bannis` — et tant mieux : il ne se
+    // traduit pas.
+    const bloc = liste.slice(liste.indexOf('validerRenommage'), liste.indexOf('validerRenommage') + 1200);
+    expect(bloc).not.toMatch(/\bprompt\(/);
+  });
+
+  it('Échap annule — on ne renomme pas par accident', () => {
+    expect(liste).toMatch(/if \(e\.key === 'Escape'\) setDossierRenomme\(null\)/);
+  });
+});
+
+describe('P2-4 / P2-5 — Lumi dit ce qu’il fait', () => {
+  const editeur = lire('src/pages/AutomationBuilderPage.tsx');
+  const gen = lire('server/lib/lumi/generer-parcours.ts');
+
+  it('la règle créée est annoncée EN PAUSE', () => {
+    /*
+     * Lumi construisait sans jamais le dire : seul l'état « Brouillon »
+     * dans un coin le montrait. Quelqu'un qui vient de décrire une
+     * relance croit qu'elle tourne.
+     *
+     * C'est dit dans le CODE, pas demandé au modèle : une consigne de
+     * plus coûte des tokens à chaque appel et peut être oubliée.
+     */
+    expect(editeur).toMatch(/en pause, \u00e0 publier quand tu es pr\u00eat/);
+  });
+
+  it('une demande vague appelle UNE question', () => {
+    // « Relance mes clients » faisait inventer un scénario complet sans
+    // jamais demander de précision.
+    expect(gen).toMatch(/Si la demande est VAGUE/);
+    expect(gen).toMatch(/Une question,\s+pas trois/);
+  });
+});

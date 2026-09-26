@@ -346,7 +346,21 @@ export default function AutomationBuilderPage() {
         { role: 'assistant' as const, content: propose.resume || 'Parcours construit.' },
       ]);
       setPrompt('');
-      toast.success(fr ? 'Lumi a construit le parcours' : 'Lumi built the path');
+      /*
+       * On DIT que rien ne part encore.
+       *
+       * Lumi construisait sans jamais l'annoncer : seul l'état
+       * « Brouillon » dans un coin de l'écran le montrait. Quelqu'un qui
+       * vient de décrire une relance croit qu'elle tourne — QA du
+       * 2026-09-25 (P2-4).
+       *
+       * C'est dit ICI plutôt que demandé au modèle : une consigne de
+       * plus coûte des tokens à chaque appel et peut être oubliée. Le
+       * code, lui, le dit toujours.
+       */
+      toast.success(fr
+        ? 'Lumi a construit le parcours — en pause, à publier quand tu es prêt.'
+        : 'Lumi built the path — paused, publish it when you are ready.');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {

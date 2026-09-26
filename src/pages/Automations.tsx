@@ -39,6 +39,7 @@ import {
   supprimerDossier,
   rangerDansDossier,
   chargerBureauxCibles,
+  renommerDossier,
   type BureauCible,
   type CatalogueAutomatisations,
   type DossierAutomatisation,
@@ -490,6 +491,38 @@ export default function Automations() {
     }
   };
 
+  /*
+   * RENOMMER UN DOSSIER.
+   *
+   * La route (PATCH /automations/folders/:id) et le client existaient
+   * déjà — il n'y avait simplement aucun bouton : seul « Supprimer »
+   * était proposé, donc corriger une faute de frappe obligeait à
+   * détruire le dossier et à tout reclasser. QA du 2026-09-25 (P2-8).
+   *
+   * La saisie se fait EN LIGNE : `prompt()` natif est banni (test
+   * `dialogues-natifs-bannis`), et c'est tant mieux — il ne se traduit
+   * pas et ne ressemble à rien.
+   */
+  const [dossierRenomme, setDossierRenomme] = useState<string | null>(null);
+  const [nouveauNom, setNouveauNom] = useState('');
+
+  const validerRenommage = async (id: string) => {
+    const nom = nouveauNom.trim();
+    setDossierRenomme(null);
+    if (!nom) return;
+    const avant = dossiers;
+    // On affiche le nouveau nom tout de suite ; on revient en arrière si
+    // le serveur refuse.
+    setDossiers((prev) => prev.map((d) => (d.id === id ? { ...d, name: nom } : d))
+      .sort((a, b) => a.name.localeCompare(b.name)));
+    try {
+      await renommerDossier(id, nom);
+    } catch (e: unknown) {
+      setDossiers(avant);
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const retirerDossier = async (id: string, nom: string) => {
     const ok = await confirmer({
       title: fr ? `Supprimer le dossier « ${nom} » ?` : `Delete folder “${nom}”?`,
@@ -581,10 +614,38 @@ export default function Automations() {
   // Multi-bureaux : bureaux où l'on peut copier (vide = un seul bureau, l'option n'apparaît pas).
   const [bureauxCibles, setBureauxCibles] = useState<BureauCible[]>([]);
   const [copieVers, setCopieVers] = useState<AutomationRule | null>(null);
+  /*
+   * LA LISTE DES BUREAUX SE RÉCUPÈRE D'UN ÉCHEC.
+   *
+   * Un seul appel au montage : s'il échouait, `bureauxCibles` restait
+   * vide POUR TOUJOURS et « Copier vers d'autres bureaux » n'apparaissait
+   * jamais — sur un compte qui a pourtant deux bureaux. Vu 1 fois sur 6
+   * au QA du 2026-09-25 (P1-5), sans que personne comprenne pourquoi.
+   *
+   * La cause la plus probable est celle de P0-1 : au chargement direct,
+   * le bureau n'est pas encore publié et le serveur répond 400
+   * `org_required`. Ce correctif-là règle la course ; celui-ci rend
+   * l'échec RÉPARABLE, ce qui vaut pour n'importe quelle autre panne
+   * passagère (réseau, jeton en cours de rafraîchissement).
+   */
   useEffect(() => {
-    chargerBureauxCibles().then(setBureauxCibles).catch((e: unknown) => {
-      console.error('[automatisations] bureaux cibles illisibles', e);
-    });
+    let vivant = true;
+    let minuterie: ReturnType<typeof setTimeout> | null = null;
+
+    const charger = (essai: number) => {
+      chargerBureauxCibles()
+        .then((b) => { if (vivant) setBureauxCibles(b); })
+        .catch((e: unknown) => {
+          console.error('[automatisations] bureaux cibles illisibles', e);
+          // Trois essais, espacés : le temps que le bureau soit connu.
+          if (vivant && essai < 3) {
+            minuterie = setTimeout(() => charger(essai + 1), 800 * essai);
+          }
+        });
+    };
+
+    charger(1);
+    return () => { vivant = false; if (minuterie) clearTimeout(minuterie); };
   }, []);
 
   const dupliquer = async (regle: AutomationRule, ouvrir = false) => {
@@ -1073,14 +1134,41 @@ export default function Automations() {
                     : 'border-border text-text-secondary',
                 )}
               >
+                {dossierRenomme === d.id ? (
+                  <input
+                    type="text"
+                    value={nouveauNom}
+                    onChange={(e) => setNouveauNom(e.target.value)}
+                    onBlur={() => void validerRenommage(d.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void validerRenommage(d.id);
+                      // Échap annule : on ne renomme pas par accident en
+                      // quittant le champ.
+                      if (e.key === 'Escape') setDossierRenomme(null);
+                    }}
+                    aria-label={fr ? `Nouveau nom du dossier ${d.name}` : `New name for folder ${d.name}`}
+                    maxLength={60}
+                    autoFocus
+                    className="w-[140px] rounded bg-surface px-1.5 py-0.5 text-[12px] text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setDossierActif(d.id)}
+                    aria-pressed={dossierActif === d.id}
+                    className="py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    {d.name}
+                    <span className="ml-1 tabular-nums opacity-60">{compteParDossier(d.id)}</span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setDossierActif(d.id)}
-                  aria-pressed={dossierActif === d.id}
-                  className="py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  onClick={() => { setDossierRenomme(d.id); setNouveauNom(d.name); }}
+                  aria-label={fr ? `Renommer le dossier ${d.name}` : `Rename folder ${d.name}`}
+                  className="rounded-full p-1 text-text-tertiary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
-                  {d.name}
-                  <span className="ml-1 tabular-nums opacity-60">{compteParDossier(d.id)}</span>
+                  <Pencil size={11} aria-hidden="true" />
                 </button>
                 <button
                   type="button"
