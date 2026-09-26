@@ -70,6 +70,9 @@ function getEventDetail(entry: ActivityLogEntry, lang: 'en' | 'fr'): string {
   if (entry.event_type === 'status_changed') {
     return `${meta.old_status || '?'} \u203A ${meta.new_status || '?'}`;
   }
+  if (entry.event_type.startsWith('task_')) {
+    return typeof meta.title === 'string' ? meta.title : '';
+  }
   if (entry.event_type === 'lead_converted') {
     return meta.job_title || '';
   }

@@ -19,6 +19,10 @@ const fetchRaisonsMock = vi.fn(async () => [] as any[]);
 const lireValeursMock = vi.fn(async () => ({ fields: [], folders: [], values: {} }) as any);
 const ecrireValeursMock = vi.fn(async () => [] as any[]);
 const rdvMock = vi.fn(async () => [] as any[]);
+const tachesMock = vi.fn(async () => [] as any[]);
+const updateTaskMock = vi.fn(async (..._a: any[]) => ({}) as any);
+const deleteTaskMock = vi.fn(async (..._a: any[]) => undefined);
+const confirmerMock = vi.fn(async (..._a: any[]) => true);
 const dossierMock = vi.fn(async () => ({
   jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
 }) as any);
@@ -29,7 +33,7 @@ vi.mock('../src/lib/pipelineVentesApi', () => ({
   fetchDossierClient: (...a: any[]) => dossierMock(...(a as [])),
   fetchRendezVousClient: (...a: any[]) => rdvMock(...(a as [])),
   fetchHistorique: vi.fn(async () => []),
-  fetchTachesDuDeal: vi.fn(async () => []),
+  fetchTachesDuDeal: (...a: any[]) => tachesMock(...(a as [])),
   creerTacheDeal: vi.fn(async () => undefined),
   basculerTacheDeal: vi.fn(async () => undefined),
   deplacerDeal: vi.fn(async () => undefined),
@@ -54,6 +58,14 @@ vi.mock('../src/hooks/useModuleAccess', () => ({
 
 // Les notes et la chronologie parlent à la base : hors sujet ici.
 vi.mock('../src/components/SpecificNotes', () => ({ default: () => null }));
+// Les tâches passent par les MÊMES fonctions que la page Tâches.
+vi.mock('../src/lib/tasksApi', () => ({
+  updateTask: (...a: any[]) => updateTaskMock(...a),
+  deleteTask: (...a: any[]) => deleteTaskMock(...a),
+}));
+vi.mock('../src/components/ui/ConfirmDialog', () => ({
+  confirmer: (...a: any[]) => confirmerMock(...a),
+}));
 vi.mock('../src/components/ActivityTimeline', () => ({ default: () => null }));
 
 vi.mock('../src/i18n', () => ({ useTranslation: () => ({ language: 'fr', t: {} }) }));
@@ -156,6 +168,10 @@ function boutonNomme(motif: RegExp): HTMLButtonElement | undefined {
 
 beforeEach(() => {
   fetchRaisonsMock.mockClear().mockResolvedValue([]);
+  tachesMock.mockClear().mockResolvedValue([]);
+  updateTaskMock.mockClear();
+  deleteTaskMock.mockClear();
+  confirmerMock.mockClear().mockResolvedValue(true);
   lireValeursMock.mockClear().mockResolvedValue({ fields: [], folders: [], values: {} });
   ecrireValeursMock.mockClear().mockResolvedValue([]);
   rdvMock.mockClear().mockResolvedValue([]);
@@ -498,5 +514,65 @@ describe('fiche du deal — paiements', () => {
 
     expect(conteneur.textContent).toContain('DEV-12');
     expect(conteneur.textContent).not.toContain('FAC-55');
+  });
+});
+
+describe('fiche du deal — tâches', () => {
+  const TACHE = {
+    id: 't1', title: 'Rappeler Jean', status: 'open', priority: 'medium',
+    due_date: '2026-10-01', created_at: new Date().toISOString(),
+  };
+
+  function bouton(re: RegExp): HTMLButtonElement | undefined {
+    return [...conteneur.querySelectorAll('button')]
+      .find((b) => re.test(b.getAttribute('aria-label') ?? b.textContent ?? '')) as HTMLButtonElement | undefined;
+  }
+
+  async function ouvrirTaches() {
+    tachesMock.mockResolvedValue([TACHE]);
+    await rendre();
+    await ouvrirSection('Tâches');
+  }
+
+  it('chaque tâche peut être modifiée et supprimée', async () => {
+    await ouvrirTaches();
+    expect(bouton(/Modifier la tâche « Rappeler Jean »/)).toBeTruthy();
+    expect(bouton(/Supprimer la tâche « Rappeler Jean »/)).toBeTruthy();
+  });
+
+  it('modifier : enregistre le nouveau titre et la nouvelle échéance', async () => {
+    await ouvrirTaches();
+    await act(async () => { bouton(/Modifier la tâche/)!.click(); });
+
+    const titre = conteneur.querySelector('#tache-titre-t1') as HTMLInputElement;
+    const echeance = conteneur.querySelector('#tache-echeance-t1') as HTMLInputElement;
+    expect(titre.value).toBe('Rappeler Jean');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(titre, 'Rappeler Jean vendredi');
+      titre.dispatchEvent(new Event('input', { bubbles: true }));
+      setter.call(echeance, '2026-10-03');
+      echeance.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { bouton(/^Enregistrer$/)!.click(); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+    expect(updateTaskMock).toHaveBeenCalledWith('t1', { title: 'Rappeler Jean vendredi', due_date: '2026-10-03' });
+  });
+
+  it('supprimer : demande confirmation, puis supprime', async () => {
+    await ouvrirTaches();
+    await act(async () => { bouton(/Supprimer la tâche/)!.click(); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(confirmerMock).toHaveBeenCalled();
+    expect(deleteTaskMock).toHaveBeenCalledWith('t1');
+  });
+
+  it('supprimer : rien ne part si on annule', async () => {
+    confirmerMock.mockResolvedValueOnce(false);
+    await ouvrirTaches();
+    await act(async () => { bouton(/Supprimer la tâche/)!.click(); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(deleteTaskMock).not.toHaveBeenCalled();
   });
 });

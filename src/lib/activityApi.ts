@@ -20,6 +20,14 @@ export interface ActivityLogEntry {
 
 export const EVENT_TYPE_LABELS: Record<string, { en: string; fr: string; icon: string }> = {
   lead_created: { en: 'Lead created', fr: 'Lead créé', icon: 'plus' },
+  // Journal d'un deal : les étapes (serveur) et ses tâches (déclencheur trg_log_tache_deal).
+  deal_stage_entered: { en: 'Entered a stage', fr: 'Entré dans une étape', icon: 'arrow-right' },
+  deal_stage_exited: { en: 'Left a stage', fr: 'Sorti d\'une étape', icon: 'arrow-right' },
+  task_created: { en: 'Task added', fr: 'Tâche ajoutée', icon: 'plus' },
+  task_completed: { en: 'Task completed', fr: 'Tâche terminée', icon: 'check-circle' },
+  task_reopened: { en: 'Task reopened', fr: 'Tâche rouverte', icon: 'refresh' },
+  task_updated: { en: 'Task edited', fr: 'Tâche modifiée', icon: 'edit' },
+  task_deleted: { en: 'Task deleted', fr: 'Tâche supprimée', icon: 'trash' },
   lead_updated: { en: 'Lead updated', fr: 'Lead mis à jour', icon: 'edit' },
   status_changed: { en: 'Status changed', fr: 'Statut modifié', icon: 'refresh' },
   lead_converted: { en: 'Lead converted to job', fr: 'Lead converti en travail', icon: 'arrow-right' },
