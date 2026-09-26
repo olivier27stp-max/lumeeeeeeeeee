@@ -72,6 +72,8 @@ export interface ChampPerso {
   label: string;
   placeholder: string | null;
   help_text: string | null;
+  /** Pré-remplissage à la création (texte, nombre, date, libellé d'option). */
+  default_value?: string | number | string[] | boolean | null;
   field_type: TypeChamp;
   config: ConfigChamp;
   is_required: boolean;
@@ -108,6 +110,11 @@ export function colonneEntite(objet: ObjetChamp): 'client_id' | 'deal_id' | 'job
  *  résolveurs existants ({var} et [var], noms \w+) sans les modifier. */
 export function variableModele(objet: ObjetChamp, cle: string): string {
   return `${objet}_cf_${cle}`;
+}
+
+/** La variable telle qu'on l'écrit dans un courriel ou une automatisation (format GoHighLevel). */
+export function variableAffichee(objet: ObjetChamp, cle: string): string {
+  return `{{${objet}.${cle}}}`;
 }
 
 export const LIBELLES_OBJET: Record<ObjetChamp, { fr: string; en: string }> = {

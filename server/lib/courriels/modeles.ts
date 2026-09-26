@@ -243,7 +243,7 @@ export async function texteDuCourriel(
 
     // Champs personnalisés : lus SEULEMENT si le modèle en cite un — aucun
     // coût pour les modèles qui n'en utilisent pas.
-    if (refsChamps && /_cf_/.test(`${modele.subject ?? ''} ${modele.body ?? ''}`)) {
+    if (refsChamps && /_cf_|\{\{\s*[a-z]+\.[a-z]/.test(`${modele.subject ?? ''} ${modele.body ?? ''}`)) {
       try {
         const { data: cs } = await db.from('company_settings').select('default_language').eq('org_id', orgId).maybeSingle();
         variables = { ...(await variablesChamps(db, orgId, refsChamps, cs?.default_language === 'en' ? 'en' : 'fr')), ...variables };

@@ -1274,6 +1274,7 @@ const baseChamp = {
   is_searchable: z.boolean().optional(),
   config: configChamp.optional(),
   options: z.array(optionChamp).max(200).optional(),
+  default_value: z.union([z.string().max(5000), z.number().finite(), z.array(z.string().max(100)).max(50), z.boolean()]).nullable().optional(),
 };
 
 export const champCreerSchema = z.object({
@@ -1298,6 +1299,7 @@ export const champModifierSchema = z.object({
   position: z.number().int().min(0).max(100000).optional(),
   config: configChamp.optional(),
   options: baseChamp.options,
+  default_value: baseChamp.default_value,
 }).strict().refine((o) => Object.keys(o).length > 0, 'Rien à modifier.');
 
 export const champPurgerSchema = z.object({

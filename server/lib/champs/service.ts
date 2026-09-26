@@ -63,7 +63,7 @@ export function estObjet(x: unknown): x is ObjetChamp {
 
 // ─── Lecture des définitions ─────────────────────────────────────
 
-const COLONNES_CHAMP = 'id, object_type, folder_id, key, label, placeholder, help_text, field_type, config, is_required, is_searchable, is_unique, position, created_at, updated_at, archived_at';
+const COLONNES_CHAMP = 'id, object_type, folder_id, key, label, placeholder, help_text, default_value, field_type, config, is_required, is_searchable, is_unique, position, created_at, updated_at, archived_at';
 
 export async function listerChamps(
   db: SupabaseClient, orgId: string,
@@ -123,6 +123,7 @@ export interface EntreeChamp {
   is_searchable?: boolean;
   config?: ConfigChamp;
   options?: EntreeOption[];
+  default_value?: ChampPerso['default_value'];
 }
 
 function verifierEntree(e: Pick<EntreeChamp, 'object_type' | 'field_type' | 'key' | 'options' | 'config' | 'is_searchable'>) {
@@ -175,6 +176,12 @@ export async function creerChamp(db: SupabaseClient, orgId: string, e: EntreeCha
     },
   });
   if (error) traduireErreur(error, 'créer le champ');
+  // La valeur par défaut n'est pas dans la RPC de création : posée juste après.
+  if (e.default_value !== undefined && e.default_value !== null && e.default_value !== '') {
+    const { error: eDef } = await db.from('custom_fields').update({ default_value: e.default_value })
+      .eq('org_id', orgId).eq('id', data as string);
+    if (eDef) traduireErreur(eDef, 'poser la valeur par défaut');
+  }
   return unChamp(db, orgId, data as string);
 }
 
@@ -188,6 +195,7 @@ export interface PatchChamp {
   config?: ConfigChamp;
   position?: number;
   options?: EntreeOption[];
+  default_value?: ChampPerso['default_value'];
 }
 
 export async function modifierChamp(db: SupabaseClient, orgId: string, id: string, p: PatchChamp): Promise<ChampPerso> {
@@ -204,6 +212,7 @@ export async function modifierChamp(db: SupabaseClient, orgId: string, id: strin
   if (p.folder_id !== undefined) maj.folder_id = p.folder_id;
   if (p.is_required !== undefined) maj.is_required = p.is_required;
   if (p.position !== undefined) maj.position = p.position;
+  if (p.default_value !== undefined) maj.default_value = p.default_value === '' ? null : p.default_value;
   if (p.field_type !== undefined && p.field_type !== avant.field_type) {
     maj.field_type = type;
     // Un champ unique qui devient multi-lignes perd son unicité (CHECK).
