@@ -35,7 +35,10 @@ const onboardingSchema = z.object({
 
 const subscribeSchema = z.object({
   plan_slug: z.string().trim().min(1, 'Plan is required.'),
-  interval: z.enum(['monthly', 'yearly']).default('monthly'),
+  // Le trimestriel n'est pas offert publiquement : il s'obtient par un lien
+  // Stripe que le propriétaire envoie. La validation doit quand même
+  // l'accepter, sinon ce lien est refusé avant d'atteindre la base.
+  interval: z.enum(['monthly', 'quarterly', 'yearly']).default('monthly'),
   currency: z.enum(['USD', 'CAD']).default('CAD'),
   payment_method_id: z.string().trim().optional(), // Stripe PaymentMethod ID
   promo_code: z.string().trim().optional(),
@@ -844,7 +847,10 @@ router.post('/billing/cancel', async (req, res) => {
 
 const changePlanSchema = z.object({
   plan_slug: z.string().trim().min(1, 'Plan is required.'),
-  interval: z.enum(['monthly', 'yearly']).default('monthly'),
+  // Le trimestriel n'est pas offert publiquement : il s'obtient par un lien
+  // Stripe que le propriétaire envoie. La validation doit quand même
+  // l'accepter, sinon ce lien est refusé avant d'atteindre la base.
+  interval: z.enum(['monthly', 'quarterly', 'yearly']).default('monthly'),
 });
 
 router.post('/billing/change-plan', validate(changePlanSchema), async (req, res) => {
@@ -1115,7 +1121,10 @@ router.post('/billing/change-plan', validate(changePlanSchema), async (req, res)
 // Admin/owner only. Remove before relying on real billing flows.
 const devSwitchPlanSchema = z.object({
   plan_slug: z.string().trim().min(1, 'Plan is required.'),
-  interval: z.enum(['monthly', 'yearly']).default('monthly'),
+  // Le trimestriel n'est pas offert publiquement : il s'obtient par un lien
+  // Stripe que le propriétaire envoie. La validation doit quand même
+  // l'accepter, sinon ce lien est refusé avant d'atteindre la base.
+  interval: z.enum(['monthly', 'quarterly', 'yearly']).default('monthly'),
 });
 
 router.post('/billing/dev-switch-plan', validate(devSwitchPlanSchema), async (req, res) => {
