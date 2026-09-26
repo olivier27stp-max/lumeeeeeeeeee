@@ -47,7 +47,8 @@ export default function EditeurConditions({ champs, conditions, onChange, fr, ma
   const ajouter = () => {
     const premier = actifs[0];
     if (!premier) return;
-    onChange([...conditions, { field_id: premier.id, op: OPERATEURS_PAR_FAMILLE[familleDuType(premier.field_type)][0] }]);
+    const f = familleDuType(premier.field_type);
+    onChange([...conditions, { field_id: premier.id, op: OPERATEURS_PAR_FAMILLE[f][0], ...(f === 'case' ? { value: true } : {}) }]);
   };
 
   if (actifs.length === 0) {
@@ -72,7 +73,7 @@ export default function EditeurConditions({ champs, conditions, onChange, fr, ma
               onChange={(e) => {
                 const nouveau = champs.find((x) => x.id === e.target.value);
                 const f = nouveau ? familleDuType(nouveau.field_type) : 'texte';
-                maj(i, { field_id: e.target.value, op: OPERATEURS_PAR_FAMILLE[f][0], value: null, value2: null, n: undefined, unit: undefined });
+                maj(i, { field_id: e.target.value, op: OPERATEURS_PAR_FAMILLE[f][0], value: f === 'case' ? true : null, value2: null, n: undefined, unit: undefined });
               }}
             >
               {actifs.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
@@ -86,6 +87,16 @@ export default function EditeurConditions({ champs, conditions, onChange, fr, ma
             </select>
 
             {/* Valeurs selon la famille et l'opérateur */}
+            {famille === 'case' && (
+              <>
+                <label htmlFor={`${id}-case`} className="sr-only">{fr ? 'Valeur' : 'Value'}</label>
+                <select id={`${id}-case`} className={input} value={c.value === false || c.value === 'false' ? 'false' : 'true'}
+                  onChange={(e) => maj(i, { value: e.target.value === 'true' })}>
+                  <option value="true">{fr ? 'oui (cochée)' : 'yes (checked)'}</option>
+                  <option value="false">{fr ? 'non (pas cochée)' : 'no (not checked)'}</option>
+                </select>
+              </>
+            )}
             {famille === 'texte' && !['is_empty', 'is_not_empty'].includes(c.op) && (
               <input
                 aria-label={fr ? 'Valeur' : 'Value'} className={input} value={String(c.value ?? '')}

@@ -25,6 +25,7 @@ export interface ColonnesValeur {
   value_date: string | null;
   value_timestamp: string | null;
   value_option_id: string | null;
+  value_boolean: boolean | null;
 }
 
 export interface ValeurPreparee {
@@ -36,10 +37,27 @@ export interface ValeurPreparee {
 
 const COLONNES_VIDES: ColonnesValeur = {
   value_text: null, value_number: null, value_money_cents: null, value_currency: null,
-  value_date: null, value_timestamp: null, value_option_id: null,
+  value_date: null, value_timestamp: null, value_option_id: null, value_boolean: null,
 };
 
 const RE_COURRIEL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+/** http(s) seulement — miroir du trigger (pas de « javascript: » cliquable sur une fiche). */
+const RE_URL = /^https?:\/\/[^\s/$.?#][^\s]*$/i;
+
+/** Chemin d'un fichier de champ (bucket custom-field-files) : <org>/<uuid>/<nom>. */
+const RE_CHEMIN_FICHIER = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\/[^/]{1,200}$/;
+/** Nom affiché d'un fichier : le dernier segment du chemin. */
+export const nomFichier = (chemin: string) => chemin.replace(/^.*\//, '');
+
+/** « oui », « true », « 1 », « x », case cochée… → booléen ; null si illisible. */
+export function lireBooleen(brut: unknown): boolean | null {
+  if (typeof brut === 'boolean') return brut;
+  if (typeof brut === 'number') return brut === 1 ? true : brut === 0 ? false : null;
+  const t = String(brut ?? '').trim().toLowerCase();
+  if (['true', 'oui', 'yes', 'o', 'y', '1', 'x', 'vrai', '✓'].includes(t)) return true;
+  if (['false', 'non', 'no', 'n', '0', 'faux'].includes(t)) return false;
+  return null;
+}
 const RE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function nombre(brut: unknown, libelle: string): number {
@@ -79,6 +97,24 @@ export function preparerValeur(champ: Pick<ChampPerso, 'label' | 'field_type' | 
       const t = String(brut).trim();
       if (!RE_COURRIEL.test(t)) throw new ErreurValeur(`« ${libelle} » attend une adresse courriel valide.`);
       c.value_text = t;
+      break;
+    }
+    case 'url': {
+      const t = String(brut).trim();
+      if (!RE_URL.test(t) || t.length > 2000) throw new ErreurValeur(`« ${libelle} » attend une adresse web (https://…).`);
+      c.value_text = t;
+      break;
+    }
+    case 'file': {
+      const t = String(brut).trim();
+      if (!RE_CHEMIN_FICHIER.test(t)) throw new ErreurValeur(`« ${libelle} » attend un fichier téléversé.`);
+      c.value_text = t;
+      break;
+    }
+    case 'checkbox': {
+      const b = lireBooleen(brut);
+      if (b === null) throw new ErreurValeur(`« ${libelle} » attend oui ou non.`);
+      c.value_boolean = b;
       break;
     }
     case 'phone': {
@@ -150,6 +186,7 @@ export function lireValeur(
     case 'date': return ligne.value_timestamp ?? ligne.value_date ?? null;
     case 'dropdown_single': return ligne.value_option_id ?? null;
     case 'dropdown_multi': return optionsMultiples.length ? optionsMultiples : null;
+    case 'checkbox': return ligne.value_boolean ?? null;
     default: return ligne.value_text ?? null;
   }
 }
@@ -190,6 +227,12 @@ export function formaterValeur(
       return libelleOption(String(valeur));
     case 'dropdown_multi':
       return (Array.isArray(valeur) ? valeur : [valeur]).map((id) => libelleOption(String(id))).filter(Boolean).join(', ');
+    case 'checkbox': {
+      const b = lireBooleen(valeur);
+      return b === null ? '' : b ? (langue === 'fr' ? 'Oui' : 'Yes') : (langue === 'fr' ? 'Non' : 'No');
+    }
+    case 'file':
+      return nomFichier(String(valeur));
     case 'phone': {
       const t = String(valeur);
       const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(t);
@@ -220,6 +263,8 @@ export function valeurCsv(champ: Pick<ChampPerso, 'field_type' | 'options'>, v: 
   switch (champ.field_type) {
     case 'monetary': { const t = (Number(v) / 100).toFixed(2); return fr ? t.replace('.', ',') : t; }
     case 'number': return fr ? String(v).replace('.', ',') : String(v);
+    case 'checkbox': { const b = lireBooleen(v); return b === null ? '' : b ? (fr ? 'oui' : 'yes') : (fr ? 'non' : 'no'); }
+    case 'file': return nomFichier(String(v));
     case 'dropdown_single': case 'dropdown_multi':
       return (Array.isArray(v) ? v : [String(v)]).map((id) => champ.options.find((o) => o.id === id)?.label ?? '').filter(Boolean).join(' | ');
     default: return String(v);
@@ -251,6 +296,7 @@ export function valeurDepuisTexte(champ: Pick<ChampPerso, 'field_type' | 'option
       const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
       return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : t;
     }
+    case 'checkbox': return lireBooleen(t) ?? t;
     case 'dropdown_single': return option(t);
     case 'dropdown_multi': return t.split(/[|;]/).map((x) => x.trim()).filter(Boolean).map(option);
     default: return t;

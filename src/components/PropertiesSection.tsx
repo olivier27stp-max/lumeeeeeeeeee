@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { MapPin, Plus, Navigation, ExternalLink, Edit2, Trash2, Check, X } from 'lucide-react';
+import { MapPin, Plus, Navigation, ExternalLink, Edit2, Trash2, Check, X, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { confirmer } from './ui/ConfirmDialog';
 import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
@@ -11,6 +11,8 @@ import {
   softDeleteProperty,
   type PropertyRecord,
 } from '../lib/propertiesApi';
+import CustomFieldsPanel from './champs/CustomFieldsPanel';
+import { useChampsCreation } from './champs/creation';
 
 function fullAddressLine(p: PropertyRecord): string {
   if (p.address) return p.address;
@@ -43,7 +45,8 @@ interface EditorState {
 const EMPTY_EDITOR: EditorState = { name: '', search: '', addr: null };
 
 export default function PropertiesSection({ clientId, highlightId }: { clientId: string; highlightId?: string | null }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
   const cd = t.clientDetails as any;
   const [properties, setProperties] = useState<PropertyRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +54,8 @@ export default function PropertiesSection({ clientId, highlightId }: { clientId:
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState>(EMPTY_EDITOR);
   const [saving, setSaving] = useState(false);
+  // Champs personnalisés d'une propriété : dépliés à la demande, une carte à la fois.
+  const [champsOuverts, setChampsOuverts] = useState<string | null>(null);
   // Search deep-link (?property=<id>): scroll to the card and flash it once loaded
   const [flashId, setFlashId] = useState<string | null>(null);
   const highlightRef = useRef<HTMLDivElement | null>(null);
@@ -107,7 +112,8 @@ export default function PropertiesSection({ clientId, highlightId }: { clientId:
     setEditor(EMPTY_EDITOR);
   }
 
-  async function save() {
+  /** `apres` : écrit les champs personnalisés sur la propriété qui vient d'être créée. */
+  async function save(apres?: (id: string) => Promise<void>) {
     if (!editor.name.trim()) {
       toast.error(cd.propertyNameRequired);
       return;
@@ -134,7 +140,8 @@ export default function PropertiesSection({ clientId, highlightId }: { clientId:
         await updateProperty(editingId, base);
         toast.success(cd.propertyUpdated);
       } else {
-        await createProperty({ client_id: clientId, ...base });
+        const creee = await createProperty({ client_id: clientId, ...base });
+        if (apres) await apres(creee.id);
         toast.success(cd.propertyAdded);
       }
       cancel();
@@ -248,6 +255,16 @@ export default function PropertiesSection({ clientId, highlightId }: { clientId:
                       </>
                     )}
                     <button
+                      type="button"
+                      onClick={() => setChampsOuverts((o) => (o === p.id ? null : p.id))}
+                      aria-expanded={champsOuverts === p.id}
+                      aria-label={fr ? `Champs personnalisés de ${p.name}` : `Custom fields of ${p.name}`}
+                      className={`inline-flex items-center justify-center h-6 w-6 border border-outline rounded transition-colors ${champsOuverts === p.id ? 'bg-primary/10 text-primary' : 'bg-surface text-text-secondary hover:bg-surface-secondary'}`}
+                      title={fr ? 'Champs personnalisés' : 'Custom fields'}
+                    >
+                      <SlidersHorizontal size={11} />
+                    </button>
+                    <button
                       onClick={() => openEdit(p)}
                       className="inline-flex items-center justify-center h-6 w-6 bg-surface border border-outline rounded text-text-secondary hover:bg-surface-secondary transition-colors"
                       title={cd.editProperty}
@@ -266,19 +283,41 @@ export default function PropertiesSection({ clientId, highlightId }: { clientId:
               ),
             )}
 
+            {champsOuverts && properties.some((p) => p.id === champsOuverts) && (
+              <CustomFieldsPanel objet="property" entityId={champsOuverts} fr={fr}
+                titre={`${fr ? 'Champs personnalisés' : 'Custom fields'} — ${properties.find((p) => p.id === champsOuverts)?.name ?? ''}`} />
+            )}
+
             {adding && (
-              <PropertyEditor
-                editor={editor}
-                setEditor={setEditor}
-                onSave={save}
-                onCancel={cancel}
-                saving={saving}
-              />
+              <NouvellePropriete editor={editor} setEditor={setEditor} onSave={save} onCancel={cancel} saving={saving} fr={fr} />
             )}
           </>
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Ajout d'une propriété avec ses champs personnalisés (monté à chaque ouverture :
+ * les valeurs saisies ne survivent pas à l'ajout suivant).
+ */
+function NouvellePropriete({ editor, setEditor, onSave, onCancel, saving, fr }: {
+  editor: EditorState;
+  setEditor: React.Dispatch<React.SetStateAction<EditorState>>;
+  onSave: (apres?: (id: string) => Promise<void>) => Promise<void>;
+  onCancel: () => void;
+  saving: boolean;
+  fr: boolean;
+}) {
+  const champs = useChampsCreation('property', fr);
+  return (
+    <PropertyEditor editor={editor} setEditor={setEditor} onCancel={onCancel} saving={saving} extra={champs.bloc}
+      onSave={() => {
+        const erreur = champs.valider();
+        if (erreur) { toast.error(erreur); return; }
+        void onSave((id) => champs.enregistrer(id));
+      }} />
   );
 }
 
@@ -288,12 +327,15 @@ function PropertyEditor({
   onSave,
   onCancel,
   saving,
+  extra,
 }: {
   editor: EditorState;
   setEditor: React.Dispatch<React.SetStateAction<EditorState>>;
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
+  /** Champs personnalisés (ajout seulement). */
+  extra?: React.ReactNode;
 }) {
   const { t } = useTranslation();
   const cd = t.clientDetails as any;
@@ -312,6 +354,7 @@ function PropertyEditor({
         onChange={(v) => setEditor((s) => ({ ...s, search: v }))}
         onSelect={(addr) => setEditor((s) => ({ ...s, addr, search: addr.formatted_address }))}
       />
+      {extra && <div className="border-t border-outline pt-2.5">{extra}</div>}
       <div className="flex items-center justify-end gap-2 pt-1">
         <button
           onClick={onCancel}

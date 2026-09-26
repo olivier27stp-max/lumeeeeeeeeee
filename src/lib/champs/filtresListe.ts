@@ -18,7 +18,7 @@
  */
 import type { ChampPerso } from './types';
 import {
-  familleDuType, heureMurale, normaliserTelephone, normaliserTexte, retirerDuree, OPERATEURS_PAR_FAMILLE,
+  cibleCase, familleDuType, heureMurale, normaliserTelephone, normaliserTexte, retirerDuree, OPERATEURS_PAR_FAMILLE,
   type Condition,
 } from './filtres';
 
@@ -80,6 +80,12 @@ function predicat(champ: ChampPerso, c: Condition, alias: string, fuseau: string
   const famille = familleDuType(champ.field_type);
   const op = c.op;
   if (op === 'is_empty' || op === 'is_not_empty') return [];
+
+  // Case à cocher : toujours « cochée = oui » ; « non » est l'absence de ce oui.
+  if (famille === 'case') {
+    if (cibleCase(c.value) === null) throw new Error(`Valeur manquante pour « ${op} » (oui ou non).`);
+    return [{ col: `${alias}.value_boolean`, f: 'eq', v: true }];
+  }
 
   if (famille === 'texte') {
     const val = champ.field_type === 'phone'
@@ -168,7 +174,7 @@ export function compilerFiltresListe(
       throw new Error(`Opérateur « ${c.op} » invalide pour un champ ${champ.field_type}.`);
     }
     const alias = `cf${i}`;
-    const absence = ABSENCES.has(c.op);
+    const absence = ABSENCES.has(c.op) || (champ.field_type === 'checkbox' && cibleCase(c.value) === false);
     const ops = predicat(champ, c, alias, fuseau, maintenant);
     const multi = champ.field_type === 'dropdown_multi' && ops.some((o) => o.col.startsWith(`${alias}.o.`));
     const embed = multi ? 'id,o:custom_field_value_options!inner(option_id)' : 'id';

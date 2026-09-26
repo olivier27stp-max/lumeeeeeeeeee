@@ -28,7 +28,8 @@ import PresetSelectModal from '../components/quotes/PresetSelectModal';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import type { QuotePreset } from '../types';
 import { CirclePlus, ArrowUpDown, Ruler, Eye } from 'lucide-react';
-import { useChampsListe, useValeursPage, CelluleChamps } from '../components/champs/liste';
+import { useChampsListe, useValeursPage } from '../components/champs/liste';
+import { useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
 
 const PAGE_SIZE = 20;
 type StatusTab = 'all' | QuoteStatus;
@@ -165,10 +166,12 @@ export default function Quotes() {
 
   // Champs personnalisés : filtre côté base + colonne (drapeau custom_fields_v2).
   const champsListe = useChampsListe('quote', fr);
+  // Tri par une colonne de champ personnalisé (tenu ici : le chargement en dépend).
+  const [triChamp, setTriChamp] = useState<TriChamp | null>(null);
   // Liste infinie : chaque page s'ajoute sous les précédentes dans le même tableau.
   const quotesQuery = useInfiniteQuery({
-    queryKey: ['quotes-list', tab, salespersonFilter, debounced, champsListe.cle],
-    queryFn: ({ pageParam }) => listAllQuotes({ status: tab, salespersonId: salespersonFilter, search: debounced, page: pageParam, pageSize: PAGE_SIZE, champs: champsListe.filtre }),
+    queryKey: ['quotes-list', tab, salespersonFilter, debounced, champsListe.cle, triChamp],
+    queryFn: ({ pageParam }) => listAllQuotes({ status: tab, salespersonId: salespersonFilter, search: debounced, page: pageParam, pageSize: PAGE_SIZE, champs: champsListe.filtre, triChamp: triChamp ? { ...triChamp, cle: champsListe.cle } : null }),
     initialPageParam: 1,
     getNextPageParam: (last, all) => (all.length * PAGE_SIZE < (last?.total || 0) ? all.length + 1 : undefined),
   });
@@ -194,17 +197,17 @@ export default function Quotes() {
     }
     return out;
   }, [quotesQuery.data]);
-  const valeursChamps = useValeursPage('quote', rows.map((q) => q.id), champsListe.colonnes.length > 0);
   const pagesLoaded = quotesQuery.data?.pages || [];
   const total = pagesLoaded.length ? (pagesLoaded[pagesLoaded.length - 1]?.total || 0) : 0;
 
   const sorted = React.useMemo(() => {
     const l = [...rows];
+    if (triChamp) return l; // déjà dans l'ordre du champ
     if (sort === 'oldest') return l.reverse();
     if (sort === 'total_desc') return l.sort((a, b) => b.total_cents - a.total_cents);
     if (sort === 'total_asc') return l.sort((a, b) => a.total_cents - b.total_cents);
     return l;
-  }, [rows, sort]);
+  }, [rows, sort, triChamp]);
 
   function clientRecord(q: any) {
     const c = q.clients as any, l = q.leads as any;
@@ -286,6 +289,45 @@ export default function Quotes() {
   const IconSort = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>;
   const IconDots = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>;
 
+  // Colonnes de la liste (« Gérer les champs ») : le client est verrouillé.
+  const enteteTexte = (label: string) => <span className="inline-flex items-center gap-1">{label} {IconSort}</span>;
+  const vide = <span className="text-[14px] text-text-tertiary">—</span>;
+  const colonnesStandard: ColonneStandard<Quote>[] = [
+    {
+      id: 'client', libelle: 'Client', largeur: 'minmax(180px, 1.2fr)', verrouillee: true, entete: enteteTexte('Client'),
+      cellule: (q) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <UnifiedAvatar id={clientRecord(q)?.id || q.client_id || q.id} name={name(q)} />
+          <div className="min-w-0">
+            <p className="text-[14px] font-bold text-text-primary truncate leading-tight">{name(q)}</p>
+            {secondaryName(q) && <p className="text-[12px] font-normal text-text-tertiary truncate leading-tight mt-0.5">{secondaryName(q)}</p>}
+          </div>
+        </div>
+      ),
+    },
+    { id: 'numero', libelle: fr ? '# Devis' : 'Quote #', largeur: 'minmax(80px, 0.7fr)', parDefaut: true, entete: enteteTexte(fr ? '# Devis' : 'Quote #'), cellule: (q) => <span className="text-[14px] text-text-primary tabular-nums truncate">{q.quote_number}</span> },
+    { id: 'propriete', libelle: fr ? 'Propriété' : 'Property', largeur: 'minmax(140px, 1.2fr)', parDefaut: true, entete: enteteTexte(fr ? 'Propriété' : 'Property'), cellule: (q) => <span className="text-[14px] text-text-primary truncate">{propertyLabel(q)}</span> },
+    { id: 'cree', libelle: fr ? 'Créé le' : 'Created', largeur: 'minmax(100px, 1fr)', parDefaut: true, entete: enteteTexte(fr ? 'Créé le' : 'Created'), cellule: (q) => <span className="text-[14px] text-text-primary tabular-nums truncate">{formatDate(q.created_at)}</span> },
+    { id: 'statut', libelle: fr ? 'Statut' : 'Status', largeur: '200px', parDefaut: true, entete: enteteTexte(fr ? 'Statut' : 'Status'), cellule: (q) => <Badge status={q.status} /> },
+    { id: 'total', libelle: 'Total', largeur: 'minmax(90px, 0.9fr)', parDefaut: true, entete: enteteTexte('Total'), cellule: (q) => <span className="text-[14px] font-bold text-text-primary tabular-nums truncate">{formatQuoteMoney(q.total_cents, q.currency)}</span> },
+    {
+      id: 'ouverture', libelle: fr ? 'Ouverture' : 'Opened', largeur: '110px', parDefaut: true,
+      // Ouverture : œil dès que le client a ouvert le devis (is_viewed, 1re vue), tiret sinon.
+      cellule: (q) => (q.is_viewed ? (
+        <span className="inline-flex items-center gap-1.5 text-entity-quote"
+          title={q.viewed_at ? (fr ? `Ouvert le ${formatDate(q.viewed_at)}` : `Opened ${formatDate(q.viewed_at)}`) : (fr ? 'Ouvert par le client' : 'Opened by the client')}>
+          <Eye size={16} strokeWidth={2} />
+          {(q.view_count || 0) > 1 && <span className="text-[12px] tabular-nums">{q.view_count}</span>}
+        </span>
+      ) : <span className="text-[14px] text-text-tertiary" title={fr ? 'Pas encore ouvert' : 'Not opened yet'}>—</span>),
+    },
+    { id: 'titre', libelle: fr ? 'Titre' : 'Title', largeur: 'minmax(140px, 1.2fr)', cellule: (q) => (q.title ? <span className="text-[14px] text-text-primary truncate" title={q.title}>{q.title}</span> : vide) },
+    { id: 'valide', libelle: fr ? 'Valide jusqu’au' : 'Valid until', largeur: '130px', cellule: (q) => (q.valid_until ? <span className="text-[14px] text-text-primary tabular-nums">{formatDate(q.valid_until)}</span> : vide) },
+    { id: 'approuve', libelle: fr ? 'Approuvé le' : 'Approved', largeur: '120px', cellule: (q) => (q.approved_at ? <span className="text-[14px] text-text-primary tabular-nums">{formatDate(q.approved_at)}</span> : vide) },
+  ];
+  const colonnes = useColonnesTableau<Quote>('quote', colonnesStandard, fr, { tri: triChamp, setTri: setTriChamp });
+  const valeursChamps = useValeursPage('quote', rows.map((q) => q.id), colonnes.avecChamps);
+
   return (
     <>
       {/* ── PAGE HEADER ── */}
@@ -309,7 +351,7 @@ export default function Quotes() {
       </div>
 
       {/* ── TOOLBAR ── */}
-      <div className="flex items-center gap-2 mt-5 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mt-5 mb-4">
         <FilterPill
           label={fr ? 'Statut' : 'Status'}
           value={tab}
@@ -331,6 +373,7 @@ export default function Quotes() {
           ]}
         />
         {champsListe.bouton}
+        {colonnes.bouton}
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder={fr ? 'Rechercher devis...' : 'Search quotes...'}
           aria-label={fr ? 'Rechercher devis' : 'Search quotes'}
@@ -355,32 +398,20 @@ export default function Quotes() {
       </div>
 
       {/* ── TABLE ── */}
-      <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: `40px 1.2fr 0.7fr 1.2fr 1fr 200px 0.9fr 110px${champsListe.colonnes.length ? ' 1.4fr' : ''} 48px` }} onMouseLeave={() => setHoveredId(null)}>
+      <div className="border border-outline rounded-md overflow-x-auto bg-white dark:bg-[#0e0e11]">
+        <div className="grid" style={{ gridTemplateColumns: `40px ${colonnes.pistes} 48px` }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} aria-label={fr ? 'Tout sélectionner' : 'Select all'} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Client {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? '# Devis' : 'Quote #'} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Propriété' : 'Property'} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Créé le' : 'Created'} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Total {IconSort}</span></div>
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Ouverture' : 'Opened'}</span></div>
-          {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">{fr ? 'Champs' : 'Fields'}</div>}
+          {colonnes.visibles.map((c) => c.entete)}
           <div className="py-3 border-b border-outline" />
 
           {/* LOADING */}
           {isLoading && Array.from({ length: 10 }).map((_, i) => (
             <React.Fragment key={`sk-${i}`}>
               <div className="py-3 pl-4 border-b border-outline/30 flex items-center"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-8 bg-surface-tertiary rounded animate-pulse" /></div>
-              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>}
+              {colonnes.visibles.map((c) => (
+                <div key={c.id} className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
+              ))}
               <div className="py-3 border-b border-outline/30" />
             </React.Fragment>
           ))}
@@ -402,41 +433,11 @@ export default function Quotes() {
                 <div className={`py-3 pl-4 flex items-center ${rowCls}`} role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <input type="checkbox" checked={sel.has(q.id)} onChange={() => toggle(q.id)} aria-label={`${fr ? 'Sélectionner le devis' : 'Select quote'} ${q.quote_number}`} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
                 </div>
-                <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} role="button" tabIndex={0} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <UnifiedAvatar id={clientRecord(q)?.id || (q as any).client_id || q.id} name={name(q)} />
-                    <div className="min-w-0">
-                      <p className="text-[14px] font-bold text-text-primary truncate leading-tight">{name(q)}</p>
-                      {secondaryName(q) && (
-                        <p className="text-[12px] font-normal text-text-tertiary truncate leading-tight mt-0.5">{secondaryName(q)}</p>
-                      )}
-                    </div>
+                {colonnes.visibles.map((c, i) => (
+                  <div key={c.id} className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${i === 0 ? '' : 'overflow-hidden'} ${rowCls}`} role="button" tabIndex={i === 0 ? 0 : -1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
+                    {c.rendu(q, valeursChamps[q.id])}
                   </div>
-                </div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{q.quote_number}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}><span className="text-[14px] text-text-primary truncate">{propertyLabel(q)}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{formatDate(q.created_at)}</span></div>
-                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}><Badge status={q.status} /></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}><span className="text-[14px] font-bold text-text-primary tabular-nums truncate">{formatQuoteMoney(q.total_cents, q.currency)}</span></div>
-                {/* Ouverture : œil dès que le client a ouvert le devis (is_viewed, 1re vue), tiret sinon. */}
-                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
-                  {q.is_viewed ? (
-                    <span
-                      className="inline-flex items-center gap-1.5 text-entity-quote"
-                      title={q.viewed_at ? (fr ? `Ouvert le ${formatDate(q.viewed_at)}` : `Opened ${formatDate(q.viewed_at)}`) : (fr ? 'Ouvert par le client' : 'Opened by the client')}
-                    >
-                      <Eye size={16} strokeWidth={2} />
-                      {(q.view_count || 0) > 1 && <span className="text-[12px] tabular-nums">{q.view_count}</span>}
-                    </span>
-                  ) : (
-                    <span className="text-[14px] text-text-tertiary" title={fr ? 'Pas encore ouvert' : 'Not opened yet'}>—</span>
-                  )}
-                </div>
-                {champsListe.colonnes.length > 0 && (
-                  <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={() => nav(`/quotes/${q.id}`)} onMouseEnter={hover}>
-                    <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[q.id]} fr={fr} fuseau={champsListe.fuseau} />
-                  </div>
-                )}
+                ))}
                 <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <button
                     className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
@@ -490,6 +491,8 @@ export default function Quotes() {
       <div className="flex items-center justify-between mt-3">
         <span className="text-[14px] text-text-secondary">{t.common.rowsSelected.replace('{selected}', String(sel.size)).replace('{total}', String(total))}</span>
       </div>
+
+      {colonnes.panneau}
 
       <PresetSelectModal
         isOpen={presetSelectOpen}

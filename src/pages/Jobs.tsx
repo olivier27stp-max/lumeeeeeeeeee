@@ -61,7 +61,8 @@ import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
-import { useChampsListe, useValeursPage, CelluleChamps } from '../components/champs/liste';
+import { useChampsListe, useValeursPage } from '../components/champs/liste';
+import { useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
 
 // ─── View mode ───────────────────────────────────────────────────
 type ViewMode = 'grid' | 'list';
@@ -406,7 +407,9 @@ export default function Jobs() {
 
   // Champs personnalisés : filtre côté base + colonne (drapeau custom_fields_v2).
   const champsListe = useChampsListe('job', language === 'fr');
-  const valeursChamps = useValeursPage('job', jobs.map((j) => j.id), champsListe.colonnes.length > 0);
+  // Tri par une colonne de champ personnalisé (tenu ici : le chargement en dépend).
+  const [triChamp, setTriChampBrut] = useState<TriChamp | null>(null);
+  const setTriChamp = (t: TriChamp | null) => { setTriChampBrut(t); setPage(1); };
   useEffect(() => { setPage(1); }, [champsListe.cle]);
 
   // Liste infinie : 'append' ajoute la page courante sous les lignes déjà
@@ -417,7 +420,7 @@ export default function Jobs() {
     if (append) setLoadingMore(true); else setLoading(true);
     setError(null);
     try {
-      const params = { status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, tagId: tagFilter, q: debouncedQuery, sort: sortBy, sortDirection, champs: champsListe.filtre };
+      const params = { status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, tagId: tagFilter, q: debouncedQuery, sort: sortBy, sortDirection, champs: champsListe.filtre, triChamp: triChamp ? { ...triChamp, cle: champsListe.cle } : null };
       const result = append
         ? await getJobs({ ...params, page, pageSize })
         : await getJobs({ ...params, page: 1, pageSize: pageSize * Math.max(1, page) });
@@ -448,7 +451,7 @@ export default function Jobs() {
   useEffect(() => { getJobTypes().then(setJobTypes).catch(() => setJobTypes([])); }, []);
   useEffect(() => { listSalespeople().then(setSalespeople).catch(() => setSalespeople([])); }, []);
   useEffect(() => { listJobTags().then(setJobTags).catch(() => setJobTags([])); }, []);
-  useEffect(() => { void loadJobs(page > 1 ? 'append' : 'refresh'); }, [statusFilter, jobTypeFilter, salespersonFilter, tagFilter, debouncedQuery, sortBy, sortDirection, page, champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadJobs(page > 1 ? 'append' : 'refresh'); }, [statusFilter, jobTypeFilter, salespersonFilter, tagFilter, debouncedQuery, sortBy, sortDirection, page, champsListe.cle, triChamp]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void loadKpis(); }, [jobTypeFilter, debouncedQuery]);
 
   // Listen for command palette create event
@@ -477,6 +480,7 @@ export default function Jobs() {
 
   const handleSort = (key: JobSort) => {
     setPage(1);
+    if (triChamp) { setTriChampBrut(null); setSortBy(key); setSortDirection(key === 'total' ? 'desc' : 'asc'); return; }
     if (sortBy === key) { setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc')); return; }
     setSortBy(key);
     setSortDirection(key === 'total' ? 'desc' : 'asc');
@@ -589,25 +593,75 @@ export default function Jobs() {
   // Flèches de tri : double chevron neutre sur les colonnes inactives, chevron
   // simple (haut/bas) sur la colonne active. Clic = trier / inverser.
   const sortIcon = (key: JobSort) => {
-    if (sortBy !== key) {
+    if (sortBy !== key || triChamp) {
       return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>;
     }
     return sortDirection === 'asc'
       ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 14 5-5 5 5"/></svg>
       : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 10 5 5 5-5"/></svg>;
   };
-  const SortHeader = ({ label, sortKey }: { label: React.ReactNode; sortKey: JobSort }) => (
-    <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-      <button
-        type="button"
-        onClick={() => handleSort(sortKey)}
-        aria-sort={sortBy === sortKey ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
-        className={`inline-flex items-center gap-1 rounded px-1 -mx-1 hover:bg-surface-secondary transition-colors cursor-pointer ${sortBy === sortKey ? 'text-text-primary' : ''}`}
-      >
-        {label} {sortIcon(sortKey)}
-      </button>
-    </div>
+  const TriEntete = ({ label, sortKey }: { label: React.ReactNode; sortKey: JobSort }) => (
+    <button
+      type="button"
+      onClick={() => handleSort(sortKey)}
+      aria-sort={sortBy === sortKey && !triChamp ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={`inline-flex items-center gap-1 rounded px-1 -mx-1 hover:bg-surface-secondary transition-colors cursor-pointer ${sortBy === sortKey && !triChamp ? 'text-text-primary' : ''}`}
+    >
+      {label} {sortIcon(sortKey)}
+    </button>
   );
+
+  // Colonnes de la liste (« Gérer les champs ») : le client est verrouillé ; les
+  // colonnes historiques sont affichées par défaut, les autres s'ajoutent.
+  const vide = <span className="text-[14px] text-text-tertiary">—</span>;
+  const texte = (v: string | null | undefined) => (v ? <span className="text-[14px] text-text-primary truncate" title={v}>{v}</span> : vide);
+  const colonnesStandard: ColonneStandard<Job>[] = [
+    {
+      id: 'client', libelle: t.jobs.client, largeur: 'minmax(180px, 1.6fr)', verrouillee: true,
+      entete: <TriEntete label={t.jobs.client} sortKey="client" />,
+      cellule: (job) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <UnifiedAvatar id={job.client_id || job.id} name={job.client_name || job.title} />
+          <div className="min-w-0">
+            <p className="text-[14px] font-bold text-text-primary truncate leading-tight">{job.client_name || '—'}</p>
+            {job.client_secondary_name && <p className="text-[12px] font-normal text-text-tertiary truncate leading-tight mt-0.5">{job.client_secondary_name}</p>}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'numero', libelle: t.jobs.jobNumber, largeur: 'minmax(90px, 0.8fr)', parDefaut: true,
+      entete: <TriEntete label={t.jobs.jobNumber} sortKey="job_number" />,
+      cellule: (job) => (
+        <div className="min-w-0">
+          <p className="text-[14px] text-text-primary tabular-nums truncate leading-tight">#{job.job_number}</p>
+          {job.title && <p className="text-[12px] font-normal text-text-tertiary truncate leading-tight mt-0.5" title={job.title}>{job.title}</p>}
+        </div>
+      ),
+    },
+    { id: 'propriete', libelle: t.jobs.property, largeur: 'minmax(160px, 1.6fr)', parDefaut: true, cellule: (job) => texte(job.property_address) },
+    {
+      id: 'planification', libelle: t.jobs.schedule, largeur: 'minmax(120px, 1fr)', parDefaut: true,
+      entete: <TriEntete label={t.jobs.schedule} sortKey="schedule" />,
+      cellule: (job) => <span className="text-[14px] text-text-primary tabular-nums truncate">{job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}</span>,
+    },
+    {
+      id: 'statut', libelle: fr ? 'Statut' : 'Status', largeur: '200px', parDefaut: true,
+      entete: <TriEntete label={fr ? 'Statut' : 'Status'} sortKey="status" />,
+      cellule: (job) => <JobBadge status={job.status} />,
+    },
+    {
+      id: 'total', libelle: 'Total', largeur: 'minmax(90px, 0.8fr)', parDefaut: true,
+      entete: <TriEntete label="Total" sortKey="total" />,
+      cellule: (job) => <span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoney(job)}</span>,
+    },
+    { id: 'titre', libelle: fr ? 'Titre' : 'Title', largeur: 'minmax(140px, 1.2fr)', cellule: (job) => texte(job.title) },
+    { id: 'type', libelle: fr ? 'Type de job' : 'Job type', largeur: 'minmax(110px, 1fr)', cellule: (job) => texte(job.job_type) },
+    { id: 'vente', libelle: fr ? 'Date de vente' : 'Sale date', largeur: '120px', cellule: (job) => texte(job.sale_date ? formatDate(job.sale_date) : null) },
+    { id: 'fin', libelle: fr ? 'Fin prévue' : 'End', largeur: '120px', cellule: (job) => texte(job.end_at ? formatDate(job.end_at) : null) },
+  ];
+  const colonnes = useColonnesTableau<Job>('job', colonnesStandard, fr, { tri: triChamp, setTri: setTriChamp });
+  const valeursChamps = useValeursPage('job', jobs.map((j) => j.id), colonnes.avecChamps);
   const IconPlusSm = (c: string) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>;
   const IconSliders = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>;
   const IconDots = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>;
@@ -647,7 +701,7 @@ export default function Jobs() {
       </div>
 
       {/* ── TOOLBAR ── */}
-      <div className="flex items-center gap-2 mt-4 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mt-4 mb-4">
         <FilterPill
           label={fr ? 'Statut' : 'Status'}
           value={statusFilter}
@@ -698,6 +752,7 @@ export default function Jobs() {
           ]}
         />
         {champsListe.bouton}
+        {colonnes.bouton}
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
           aria-label={fr ? 'Rechercher jobs' : 'Search jobs'}
           placeholder={fr ? 'Rechercher jobs...' : 'Search jobs...'}
@@ -706,30 +761,20 @@ export default function Jobs() {
 
       {/* ── TABLE (grid layout — identical structure to Clients & Devis) ── */}
       {/* dark interior pinned to #0e0e11 (= CRM page card color); white in light mode */}
-      <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: `40px 1.6fr 0.8fr 1.6fr 1fr 200px 0.8fr${champsListe.colonnes.length ? ' 1.4fr' : ''} 48px` }} onMouseLeave={() => setHoveredId(null)}>
+      <div className="border border-outline rounded-md overflow-x-auto bg-white dark:bg-[#0e0e11]">
+        <div className="grid" style={{ gridTemplateColumns: `40px ${colonnes.pistes} 48px` }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" aria-label={fr ? 'Sélectionner tous les jobs' : 'Select all jobs'} checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
-          <SortHeader label={t.jobs.client} sortKey="client" />
-          <SortHeader label={t.jobs.jobNumber} sortKey="job_number" />
-          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">{t.jobs.property}</div>
-          <SortHeader label={t.jobs.schedule} sortKey="schedule" />
-          <SortHeader label={fr ? 'Statut' : 'Status'} sortKey="status" />
-          <SortHeader label="Total" sortKey="total" />
-          {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">{fr ? 'Champs' : 'Fields'}</div>}
+          {colonnes.visibles.map((c) => c.entete)}
           <div className="py-3 border-b border-outline" />
 
           {/* LOADING */}
           {loading && Array.from({ length: 10 }).map((_, i) => (
             <React.Fragment key={`sk-${i}`}>
               <div className="py-3 pl-4 border-b border-outline/30 flex items-center"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-12 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-24 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
-              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>}
+              {colonnes.visibles.map((c) => (
+                <div key={c.id} className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
+              ))}
               <div className="py-3 border-b border-outline/30" />
             </React.Fragment>
           ))}
@@ -751,34 +796,15 @@ export default function Jobs() {
                 <div role="presentation" tabIndex={-1} className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <input type="checkbox" aria-label={`${fr ? 'Sélectionner le job' : 'Select job'} #${job.job_number}`} checked={selectedJobIds.has(job.id)} onChange={() => toggleOne(job.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
                 </div>
-                <div role="button" tabIndex={0} aria-label={`${fr ? 'Ouvrir le job' : 'Open job'} #${job.job_number} — ${job.client_name || job.title}`} onKeyDown={clickKey} className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <UnifiedAvatar id={job.client_id || job.id} name={job.client_name || job.title} />
-                    <div className="min-w-0">
-                      <p className="text-[14px] font-bold text-text-primary truncate leading-tight">{job.client_name || '—'}</p>
-                      {job.client_secondary_name && (
-                        <p className="text-[12px] font-normal text-text-tertiary truncate leading-tight mt-0.5">{job.client_secondary_name}</p>
-                      )}
-                    </div>
+                {colonnes.visibles.map((c, i) => (i === 0 ? (
+                  <div key={c.id} role="button" tabIndex={0} aria-label={`${fr ? 'Ouvrir le job' : 'Open job'} #${job.job_number} — ${job.client_name || job.title}`} onKeyDown={clickKey} className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    {c.rendu(job, valeursChamps[job.id])}
                   </div>
-                </div>
-                <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
-                  <div className="min-w-0">
-                    <p className="text-[14px] text-text-primary tabular-nums truncate leading-tight">#{job.job_number}</p>
-                    {job.title && (
-                      <p className="text-[12px] font-normal text-text-tertiary truncate leading-tight mt-0.5" title={job.title}>{job.title}</p>
-                    )}
+                ) : (
+                  <div key={c.id} role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center min-w-0 overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    {c.rendu(job, valeursChamps[job.id])}
                   </div>
-                </div>
-                <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary truncate">{job.property_address || '—'}</span></div>
-                <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}</span></div>
-                <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><JobBadge status={job.status} /></div>
-                <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoney(job)}</span></div>
-                {champsListe.colonnes.length > 0 && (
-                  <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
-                    <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[job.id]} fr={fr} fuseau={champsListe.fuseau} />
-                  </div>
-                )}
+                )))}
                 <div role="presentation" tabIndex={-1} className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <button
                     aria-label={`${fr ? 'Actions du job' : 'Job actions'} #${job.job_number}`}
@@ -827,6 +853,8 @@ export default function Jobs() {
       <div className="flex items-center justify-between mt-3">
         <span className="text-[14px] text-text-secondary">{t.common.rowsSelected.replace('{selected}', String(selectedJobIds.size)).replace('{total}', String(total))}</span>
       </div>
+
+      {colonnes.panneau}
 
       {/* Delete confirmation modal */}
       <AnimatePresence>

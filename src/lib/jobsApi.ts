@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { colonnesChampsCsv } from './champsPersoApi';
 import { commissionEnArrierePlan, projectCommissionForJob, voidCommissionForJob } from './commissionsApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
+import { pageTrieeParChamp, tousLesIds } from './colonnesTableauApi';
 import { Job } from '../types';
 import type { JobDraftInitialValues } from '../components/NewJobModal';
 import { calculateJobFinancials, type CalcLineItem, type TaxLine } from './jobCalc';
@@ -32,6 +33,8 @@ export interface JobsQuery {
   pageSize?: number;
   /** Conditions de champs personnalisés, compilées (jointures PostgREST). */
   champs?: FiltreListe;
+  /** Tri par une colonne de champ personnalisé (prime sur `sort`). `cle` résume les filtres. */
+  triChamp?: { champId: string; asc: boolean; cle: string } | null;
 }
 
 export interface JobsResult {
@@ -440,6 +443,36 @@ export async function getJobs(query: JobsQuery): Promise<JobsResult> {
   const rangeFrom = (page - 1) * pageSize;
   const rangeTo = rangeFrom + pageSize - 1;
 
+  const avecClients = async (rows: any[]): Promise<Job[]> => {
+    const clientMap = await loadClientNames(rows.map((job: any) => job.client_id).filter(Boolean) as string[]);
+    return rows.map((row: any) => {
+      const clientInfo = row.client_id ? clientMap.get(row.client_id) : undefined;
+      return { ...mapJob(row, clientInfo?.name ?? null), client_secondary_name: clientInfo?.secondary ?? null };
+    });
+  };
+
+  // Tri par un champ personnalisé : mêmes filtres, ordre donné par la valeur du champ.
+  if (query.triChamp) {
+    const orgId = await getCurrentOrgIdOrThrow();
+    const filtree = (select: string) => {
+      let r = applyTableFilters(supabase.from('jobs_active').select(select).eq('org_id', orgId), query);
+      if (query.champs) r = query.champs.appliquer(r);
+      return r;
+    };
+    const { champId, asc, cle } = query.triChamp;
+    const res = await pageTrieeParChamp<{ id: string }>({
+      cle: `jobs|${cle}|${JSON.stringify([query.status, query.jobType, query.clientId, query.salespersonId, query.tagId, query.q])}`,
+      champId, asc, from: rangeFrom, to: rangeTo,
+      idsFiltres: () => tousLesIds((a, b) => filtree(`id${query.champs?.select ?? ''}`).order('created_at', { ascending: false }).range(a, b)),
+      lignes: async (ids) => {
+        const { data, error } = await filtree(`*${query.champs?.select ?? ''}`).in('id', ids);
+        if (error) throw error;
+        return (data || []) as { id: string }[];
+      },
+    });
+    return { jobs: await avecClients(res.items), total: res.total };
+  }
+
   // count 'estimated' : exact sous un seuil, estimé (stats Postgres) au-dessus.
   // 'exact' scannait toute la table filtrée sous RLS à CHAQUE page (O(n)/page).
   let request = supabase.from('jobs_active').select(`*${query.champs?.select ?? ''}`, { count: 'estimated' }).eq('org_id', await getCurrentOrgIdOrThrow()).range(rangeFrom, rangeTo);
@@ -451,16 +484,7 @@ export async function getJobs(query: JobsQuery): Promise<JobsResult> {
 
   const { data, error, count } = await request;
   if (error) throw error;
-  const rows = data || [];
-  const clientMap = await loadClientNames(rows.map((job: any) => job.client_id).filter(Boolean) as string[]);
-
-  return {
-    jobs: rows.map((row: any) => {
-      const clientInfo = row.client_id ? clientMap.get(row.client_id) : undefined;
-      return { ...mapJob(row, clientInfo?.name ?? null), client_secondary_name: clientInfo?.secondary ?? null };
-    }),
-    total: count || 0,
-  };
+  return { jobs: await avecClients(data || []), total: count || 0 };
 }
 
 export async function getJobsKpis(params: { status?: string; jobType?: string; q?: string }): Promise<JobsKpis> {

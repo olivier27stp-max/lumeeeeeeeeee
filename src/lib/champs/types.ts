@@ -6,19 +6,19 @@
  * Aucun import : ce fichier est lu par src/ et par server/.
  */
 
-export const OBJETS = ['client', 'deal', 'job', 'quote', 'invoice'] as const;
+export const OBJETS = ['client', 'deal', 'job', 'quote', 'invoice', 'property'] as const;
 export type ObjetChamp = (typeof OBJETS)[number];
 
 export const TYPES_CHAMP = [
-  'single_line', 'multi_line', 'number', 'monetary', 'phone', 'email',
-  'date', 'dropdown_single', 'dropdown_multi',
+  'single_line', 'multi_line', 'number', 'monetary', 'date', 'dropdown_single', 'dropdown_multi',
+  'checkbox', 'phone', 'email', 'url', 'file',
 ] as const;
 export type TypeChamp = (typeof TYPES_CHAMP)[number];
 
 /** Types sur lesquels l'unicité a un sens (CHECK custom_fields_unique_types). */
 export const TYPES_UNIQUES: readonly TypeChamp[] = ['single_line', 'email', 'phone', 'number'];
 /** Types qu'une recherche « contient » sait lire (value_normalized textuel). */
-export const TYPES_CHERCHABLES: readonly TypeChamp[] = ['single_line', 'multi_line', 'email', 'phone', 'number'];
+export const TYPES_CHERCHABLES: readonly TypeChamp[] = ['single_line', 'multi_line', 'email', 'phone', 'number', 'url'];
 
 /** Conversions permises (trigger cf_champ_avant_ecriture). */
 export const CONVERSIONS_SURES: ReadonlyArray<readonly [TypeChamp, TypeChamp]> = [
@@ -72,6 +72,8 @@ export interface ChampPerso {
   label: string;
   placeholder: string | null;
   help_text: string | null;
+  /** Pré-remplissage à la création (texte, nombre, date, libellé d'option). */
+  default_value?: string | number | string[] | boolean | null;
   field_type: TypeChamp;
   config: ConfigChamp;
   is_required: boolean;
@@ -90,7 +92,8 @@ export interface ChampPerso {
  *   date → 'AAAA-MM-JJ' · date+heure → ISO · liste simple → id d'option
  *   liste multiple → ids d'options[]
  */
-export type ValeurChamp = string | number | string[] | null;
+/** Case à cocher : booléen (true = cochée). */
+export type ValeurChamp = string | number | boolean | string[] | null;
 
 export interface ValeurEnregistree {
   field_id: string;
@@ -100,7 +103,7 @@ export interface ValeurEnregistree {
 }
 
 /** Colonne de l'entité dans custom_field_values. */
-export function colonneEntite(objet: ObjetChamp): 'client_id' | 'deal_id' | 'job_id' | 'quote_id' | 'invoice_id' {
+export function colonneEntite(objet: ObjetChamp): 'client_id' | 'deal_id' | 'job_id' | 'quote_id' | 'invoice_id' | 'property_id' {
   return `${objet}_id` as const;
 }
 
@@ -110,22 +113,31 @@ export function variableModele(objet: ObjetChamp, cle: string): string {
   return `${objet}_cf_${cle}`;
 }
 
+/** La variable telle qu'on l'écrit dans un courriel ou une automatisation (format GoHighLevel). */
+export function variableAffichee(objet: ObjetChamp, cle: string): string {
+  return `{{${objet}.${cle}}}`;
+}
+
 export const LIBELLES_OBJET: Record<ObjetChamp, { fr: string; en: string }> = {
   client: { fr: 'Client', en: 'Client' },
   deal: { fr: 'Pipeline', en: 'Pipeline' },
   job: { fr: 'Job', en: 'Job' },
   quote: { fr: 'Devis', en: 'Quote' },
   invoice: { fr: 'Facture', en: 'Invoice' },
+  property: { fr: 'Propriété', en: 'Property' },
 };
 
 export const LIBELLES_TYPE: Record<TypeChamp, { fr: string; en: string }> = {
-  single_line: { fr: 'Une ligne', en: 'Single line' },
-  multi_line: { fr: 'Plusieurs lignes', en: 'Multi line' },
+  single_line: { fr: 'Ligne simple', en: 'Single line' },
+  multi_line: { fr: 'Paragraphe', en: 'Multi line' },
   number: { fr: 'Nombre', en: 'Number' },
-  monetary: { fr: 'Montant', en: 'Monetary' },
+  monetary: { fr: 'Monétaire', en: 'Monetary' },
   phone: { fr: 'Téléphone', en: 'Phone' },
   email: { fr: 'Courriel', en: 'Email' },
   date: { fr: 'Date', en: 'Date' },
-  dropdown_single: { fr: 'Liste (un choix)', en: 'Dropdown (single)' },
-  dropdown_multi: { fr: 'Liste (plusieurs choix)', en: 'Dropdown (multiple)' },
+  dropdown_single: { fr: 'Liste déroulante', en: 'Dropdown (single)' },
+  dropdown_multi: { fr: 'Choix multiples', en: 'Dropdown (multiple)' },
+  checkbox: { fr: 'Case à cocher', en: 'Checkbox' },
+  url: { fr: 'URL', en: 'URL' },
+  file: { fr: 'Fichier', en: 'File' },
 };

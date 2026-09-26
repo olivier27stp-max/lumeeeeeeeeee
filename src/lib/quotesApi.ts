@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { computeTaxLines, getDocumentTaxLines, saveAppliedTaxes, type TaxLine } from './taxApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
+import { pageTrieeParChamp, tousLesIds } from './colonnesTableauApi';
 import { emitQuoteDeclined, emitQuoteApproved } from './automationEventsApi';
 import { syncEntityPin } from './fieldSalesApi';
 import { versDate } from './dateSeule';
@@ -784,6 +785,8 @@ export async function listAllQuotes(opts?: {
   pageSize?: number;
   /** Conditions de champs personnalisés, compilées (jointures PostgREST). */
   champs?: FiltreListe;
+  /** Tri par une colonne de champ personnalisé. `cle` résume les filtres. */
+  triChamp?: { champId: string; asc: boolean; cle: string } | null;
 }): Promise<{ data: Quote[]; total: number }> {
   const page = opts?.page || 1;
   const pageSize = opts?.pageSize || 20;
@@ -792,6 +795,30 @@ export async function listAllQuotes(opts?: {
 
   // `string` explicite : une projection dynamique (champs personnalisés) ne se type pas.
   const projection: string = `*, clients!quotes_client_id_fkey(id, first_name, last_name, company, display_as_company, deleted_at), leads:clients!quotes_lead_id_fkey(id, first_name, last_name, company, display_as_company, deleted_at), properties!quotes_property_id_fkey(name, address)${opts?.champs?.select ?? ''}`;
+
+  // Tri par un champ personnalisé : mêmes filtres, ordre donné par la valeur du champ.
+  if (opts?.triChamp) {
+    const filtree = (select: string) => {
+      let r = supabase.from('quotes').select(select).eq('org_id', orgId).is('deleted_at', null);
+      if (opts.status && opts.status !== 'all') r = r.eq('status', opts.status);
+      if (opts.salespersonId && opts.salespersonId !== 'All') r = r.eq('salesperson_id', opts.salespersonId);
+      if (opts.search) r = r.or(`quote_number.ilike.%${opts.search}%,title.ilike.%${opts.search}%`);
+      if (opts.champs) r = opts.champs.appliquer(r);
+      return r;
+    };
+    const { champId, asc, cle } = opts.triChamp;
+    const res = await pageTrieeParChamp<Quote>({
+      cle: `quotes|${cle}|${opts.status ?? ''}|${opts.salespersonId ?? ''}|${opts.search ?? ''}`,
+      champId, asc, from: offset, to: offset + pageSize - 1,
+      idsFiltres: () => tousLesIds((a, b) => filtree(`id${opts.champs?.select ?? ''}`).order('created_at', { ascending: false }).range(a, b)),
+      lignes: async (ids) => {
+        const { data, error } = await filtree(projection).in('id', ids);
+        if (error) throw error;
+        return (data || []) as unknown as Quote[];
+      },
+    });
+    return { data: res.items, total: res.total };
+  }
   let query = supabase
     .from('quotes')
     // quotes has two FKs to clients (client_id + lead_id since the leads merge) —

@@ -973,7 +973,7 @@ export const conditionChampSchema = z.object({
   field_id: z.string().uuid(),
   op: z.enum(['is', 'is_not', 'contains', 'not_contains', 'eq', 'neq', 'gt', 'lt', 'between', 'any_of', 'none_of',
     'today', 'yesterday', 'in_last', 'more_than_ago', 'less_than_ago', 'before', 'after', 'is_empty', 'is_not_empty']),
-  value: z.union([z.string().max(500), z.number().finite(), z.array(z.string().max(100)).max(100)]).nullable().optional(),
+  value: z.union([z.string().max(500), z.number().finite(), z.boolean(), z.array(z.string().max(100)).max(100)]).nullable().optional(),
   value2: z.union([z.string().max(500), z.number().finite()]).nullable().optional(),
   n: z.number().int().min(0).max(3650).optional(),
   unit: z.enum(['days', 'weeks', 'months']).optional(),
@@ -1244,9 +1244,9 @@ export const automationRuleUpdateSchema = z
 // ─── Champs personnalisés v2 (server/routes/custom-fields.ts) ───
 // `nullable()` partout où le client peut envoyer null (règle du projet).
 
-const objetChamp = z.enum(['client', 'deal', 'job', 'quote', 'invoice'], { message: 'Objet inconnu.' });
+const objetChamp = z.enum(['client', 'deal', 'job', 'quote', 'invoice', 'property'], { message: 'Objet inconnu.' });
 const typeChamp = z.enum(
-  ['single_line', 'multi_line', 'number', 'monetary', 'phone', 'email', 'date', 'dropdown_single', 'dropdown_multi'],
+  ['single_line', 'multi_line', 'number', 'monetary', 'phone', 'email', 'date', 'dropdown_single', 'dropdown_multi', 'checkbox', 'url', 'file'],
   { message: 'Type de champ inconnu.' },
 );
 const optionChamp = z.object({
@@ -1274,6 +1274,7 @@ const baseChamp = {
   is_searchable: z.boolean().optional(),
   config: configChamp.optional(),
   options: z.array(optionChamp).max(200).optional(),
+  default_value: z.union([z.string().max(5000), z.number().finite(), z.array(z.string().max(100)).max(50), z.boolean()]).nullable().optional(),
 };
 
 export const champCreerSchema = z.object({
@@ -1298,6 +1299,7 @@ export const champModifierSchema = z.object({
   position: z.number().int().min(0).max(100000).optional(),
   config: configChamp.optional(),
   options: baseChamp.options,
+  default_value: baseChamp.default_value,
 }).strict().refine((o) => Object.keys(o).length > 0, 'Rien à modifier.');
 
 export const champPurgerSchema = z.object({
@@ -1326,7 +1328,7 @@ export const champUniqueSchema = z.object({
 }).strict();
 
 const valeurChamp = z.union([
-  z.string().max(5000), z.number().finite(), z.array(z.string().uuid()).max(100), z.null(),
+  z.string().max(5000), z.number().finite(), z.boolean(), z.array(z.string().uuid()).max(100), z.null(),
 ]);
 export const valeursEcrireSchema = z.object({
   values: z.array(z.object({

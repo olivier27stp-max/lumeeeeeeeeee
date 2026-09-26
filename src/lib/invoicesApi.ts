@@ -3,6 +3,7 @@ import { commissionEnArrierePlan, generateCommissionsForInvoice } from './commis
 import { supabase } from './supabase';
 import { getDocumentTaxLines } from './taxApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
+import { pageTrieeParChamp } from './colonnesTableauApi';
 import { emitInvoicePaidManually } from './automationEventsApi';
 
 export type InvoiceStatusFilter = 'all' | 'draft' | 'sent_not_due' | 'past_due' | 'paid';
@@ -94,6 +95,8 @@ export interface InvoicesListQuery {
   salespersonId?: string | null;
   /** Filtre par champs personnalisés : ids retenus par cf_filtrer (null = aucun filtre). */
   ids?: string[] | null;
+  /** Tri par une colonne de champ personnalisé (prime sur `sort`). `cle` résume les filtres. */
+  triChamp?: { champId: string; asc: boolean; cle: string } | null;
 }
 
 export interface InvoicesListResult {
@@ -315,6 +318,18 @@ export function computeInvoiceStatusTotals(rows: InvoiceStatsRow[], period: Invo
 }
 
 export async function listInvoices(query: InvoicesListQuery): Promise<InvoicesListResult> {
+  // Tri par un champ personnalisé : la RPC donne les ids filtrés, puis les lignes de la tranche.
+  if (query.triChamp) {
+    const { champId, asc, cle } = query.triChamp;
+    const sans = { ...query, triChamp: null, page: 1 };
+    const res = await pageTrieeParChamp<InvoiceRow>({
+      cle: `invoices|${cle}|${JSON.stringify([query.status, query.range, query.q, query.salespersonId, query.fromDate, query.toDate])}`,
+      champId, asc, from: (query.page - 1) * query.pageSize, to: query.page * query.pageSize - 1,
+      idsFiltres: async () => (await listInvoices({ ...sans, pageSize: 5000 })).rows.map((r) => r.id),
+      lignes: async (ids) => (await listInvoices({ ...sans, ids, pageSize: ids.length })).rows,
+    });
+    return { rows: res.items, total: res.total };
+  }
   const params: Record<string, unknown> = {
     p_status: query.status,
     p_range: query.range,

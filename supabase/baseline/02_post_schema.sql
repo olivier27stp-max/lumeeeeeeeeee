@@ -14,6 +14,7 @@ CREATE OR REPLACE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EA
 -- ── Buckets de stockage ──
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('attachments', 'attachments', false, 52428800, null) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('avatars', 'avatars', true, 10485760, array['image/*']::text[]) on conflict (id) do nothing;
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('custom-field-files', 'custom-field-files', false, 26214400, array['application/pdf','image/png','image/jpeg','image/webp','image/gif','image/heic','text/plain','text/csv','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-powerpoint','application/vnd.openxmlformats-officedocument.presentationml.presentation']::text[]) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('company-logos', 'company-logos', true, 10485760, array['image/*']::text[]) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('director-panel', 'director-panel', false, 104857600, array['image/png','image/jpeg','image/webp','image/gif','video/mp4','video/webm']::text[]) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('job-photos', 'job-photos', false, 26214400, array['image/*','video/*']::text[]) on conflict (id) do nothing;
@@ -35,6 +36,14 @@ drop policy if exists "company_logos_insert_own_org" on storage.objects;
 create policy "company_logos_insert_own_org" on storage.objects for insert to authenticated with check (((bucket_id = 'company-logos'::text) AND has_org_membership(( SELECT auth.uid() AS uid), lume_storage_object_org(name))));
 drop policy if exists "company_logos_update_own_org" on storage.objects;
 create policy "company_logos_update_own_org" on storage.objects for update to authenticated using (((bucket_id = 'company-logos'::text) AND has_org_membership(( SELECT auth.uid() AS uid), lume_storage_object_org(name)))) with check (((bucket_id = 'company-logos'::text) AND has_org_membership(( SELECT auth.uid() AS uid), lume_storage_object_org(name))));
+drop policy if exists "custom_field_files_delete_own_org" on storage.objects;
+create policy "custom_field_files_delete_own_org" on storage.objects for delete to authenticated using (((bucket_id = 'custom-field-files'::text) AND has_org_membership(( SELECT auth.uid() AS uid), lume_storage_object_org(name))));
+drop policy if exists "custom_field_files_insert_own_org" on storage.objects;
+create policy "custom_field_files_insert_own_org" on storage.objects for insert to authenticated with check (((bucket_id = 'custom-field-files'::text) AND has_org_membership(( SELECT auth.uid() AS uid), lume_storage_object_org(name))));
+drop policy if exists "custom_field_files_select_own_org" on storage.objects;
+create policy "custom_field_files_select_own_org" on storage.objects for select to authenticated using (((bucket_id = 'custom-field-files'::text) AND has_org_membership(( SELECT auth.uid() AS uid), lume_storage_object_org(name))));
+drop policy if exists "custom_field_files_update_own_org" on storage.objects;
+create policy "custom_field_files_update_own_org" on storage.objects for update to authenticated using (((bucket_id = 'custom-field-files'::text) AND has_org_membership(( SELECT auth.uid() AS uid), lume_storage_object_org(name)))) with check (((bucket_id = 'custom-field-files'::text) AND has_org_membership(( SELECT auth.uid() AS uid), lume_storage_object_org(name))));
 drop policy if exists "job_photos_delete_own_org" on storage.objects;
 create policy "job_photos_delete_own_org" on storage.objects for delete to authenticated using (((bucket_id = 'job-photos'::text) AND has_org_membership(( SELECT auth.uid() AS uid), lume_storage_object_org(name))));
 drop policy if exists "job_photos_insert_own_org" on storage.objects;

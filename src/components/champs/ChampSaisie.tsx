@@ -9,9 +9,12 @@
  * Montant : l'utilisateur tape des DOLLARS, la valeur émise est en CENTS
  * (règle Lume : *_cents = source de vérité).
  */
-import { useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, Loader2, Paperclip, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { lienFichierChamp, televerserFichierChamp } from '../../lib/champsPersoApi';
+import { nomFichier } from '../../lib/champs/valeurs';
 import DatePickerInput from '../ui/DatePickerInput';
 import type { ChampPerso, ValeurChamp } from '../../lib/champs/types';
 
@@ -41,11 +44,17 @@ export default function ChampSaisie({ id, champ, valeur, fr, onValider, disabled
     return String(v);
   };
   const [brouillon, setBrouillon] = useState(versTexte(valeur));
-  useEffect(() => { setBrouillon(versTexte(valeur)); }, [valeur]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Dernier texte déjà envoyé : Entrée PUIS la sortie du champ ne doivent pas
+  // écrire deux fois la même valeur (deux insertions simultanées → « Doublon refusé »).
+  const envoye = useRef<string | null>(null);
+  useEffect(() => { setBrouillon(versTexte(valeur)); envoye.current = null; }, [valeur]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Refusé : on peut renvoyer le même texte (réessai après une erreur réseau).
+  useEffect(() => { if (invalide) envoye.current = null; }, [invalide]);
 
   const commettre = () => {
     const t = brouillon.trim();
-    if (t === versTexte(valeur)) return;
+    if (t === versTexte(valeur) || t === envoye.current) return;
+    envoye.current = t;
     if (t === '') return onValider(null);
     if (champ.field_type === 'monetary') {
       const n = Number(t.replace(/[\s$]/g, '').replace(',', '.'));
@@ -67,6 +76,21 @@ export default function ChampSaisie({ id, champ, valeur, fr, onValider, disabled
           onChange={(e) => setBrouillon(e.target.value)} onBlur={commettre}
           className={cn(base, bord, 'h-auto py-2 resize-y')}
         />
+      );
+    case 'file':
+      return <SaisieFichier id={id} valeur={typeof valeur === 'string' ? valeur : null} fr={fr} disabled={disabled}
+        describedBy={describedBy} onValider={onValider} />;
+    case 'checkbox':
+      return (
+        <label htmlFor={id} className="inline-flex h-9 items-center gap-2 text-[14px] text-text-primary">
+          <input
+            id={id} type="checkbox" disabled={disabled} aria-invalid={invalide} aria-describedby={describedBy}
+            checked={valeur === true || valeur === 'true'}
+            onChange={(e) => onValider(e.target.checked)}
+            className="h-4 w-4 accent-primary"
+          />
+          {champ.placeholder || (fr ? 'Oui' : 'Yes')}
+        </label>
       );
     case 'dropdown_single':
       return (
@@ -134,7 +158,7 @@ export default function ChampSaisie({ id, champ, valeur, fr, onValider, disabled
         </div>
       );
     default: {
-      const type = champ.field_type === 'email' ? 'email' : champ.field_type === 'phone' ? 'tel'
+      const type = champ.field_type === 'email' ? 'email' : champ.field_type === 'phone' ? 'tel' : champ.field_type === 'url' ? 'url'
         : champ.field_type === 'number' || champ.field_type === 'monetary' ? 'text' : 'text';
       return (
         <div className="relative">
@@ -157,4 +181,61 @@ export default function ChampSaisie({ id, champ, valeur, fr, onValider, disabled
       );
     }
   }
+}
+
+/** Ouvre un fichier de champ par un lien temporaire (bucket privé). */
+export async function ouvrirFichierChamp(chemin: string, fr: boolean) {
+  try {
+    window.open(await lienFichierChamp(chemin), '_blank', 'noopener,noreferrer');
+  } catch (err) {
+    console.error('[champs] ouverture du fichier', err);
+    toast.error(err instanceof Error ? err.message : (fr ? 'Le fichier n’a pas pu être ouvert.' : 'The file could not be opened.'));
+  }
+}
+
+/** Champ « Fichier » : téléverser, ouvrir, retirer. Le téléversement précède l'écriture de la valeur. */
+function SaisieFichier({ id, valeur, fr, disabled, describedBy, onValider }: {
+  id: string; valeur: string | null; fr: boolean; disabled?: boolean; describedBy?: string; onValider: (v: ValeurChamp) => void;
+}) {
+  const entree = useRef<HTMLInputElement>(null);
+  const [envoi, setEnvoi] = useState(false);
+  const choisir = async (f: File | undefined) => {
+    if (!f) return;
+    setEnvoi(true);
+    try {
+      onValider(await televerserFichierChamp(f));
+    } catch (err) {
+      console.error('[champs] téléversement', err);
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEnvoi(false);
+      if (entree.current) entree.current.value = '';
+    }
+  };
+  return (
+    <div className="flex min-h-9 flex-wrap items-center gap-2" aria-describedby={describedBy}>
+      {valeur && (
+        <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-outline bg-surface-card px-2 py-1 text-[13px]">
+          <Paperclip size={12} aria-hidden className="shrink-0 text-text-tertiary" />
+          <button type="button" onClick={() => { void ouvrirFichierChamp(valeur, fr); }}
+            className="truncate text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" title={nomFichier(valeur)}>
+            {nomFichier(valeur)}
+          </button>
+          {!disabled && (
+            <button type="button" onClick={() => onValider(null)} aria-label={fr ? 'Retirer le fichier' : 'Remove file'}
+              className="rounded p-0.5 text-text-tertiary hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><X size={12} aria-hidden /></button>
+          )}
+        </span>
+      )}
+      <input id={id} ref={entree} type="file" className="sr-only" disabled={disabled || envoi}
+        accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.heic,.txt,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+        onChange={(e) => { void choisir(e.target.files?.[0]); }} />
+      <label htmlFor={id}
+        className={cn('inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-outline px-3 text-[13px] text-text-secondary hover:text-text-primary',
+          (disabled || envoi) && 'pointer-events-none opacity-50')}>
+        {envoi ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Paperclip size={13} aria-hidden />}
+        {valeur ? (fr ? 'Remplacer' : 'Replace') : (fr ? 'Téléverser un fichier' : 'Upload a file')}
+      </label>
+    </div>
+  );
 }

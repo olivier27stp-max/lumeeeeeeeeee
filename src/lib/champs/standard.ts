@@ -87,6 +87,19 @@ export const CHAMPS_STANDARD: Record<ObjetChamp, ChampStandard[]> = {
     s('created_at', 'Créé le', 'Created', 'date'),
     s('updated_at', 'Modifié le', 'Updated', 'date'),
   ],
+  property: [
+    s('name', 'Nom', 'Name', 'single_line', true),
+    s('address', 'Adresse', 'Address', 'single_line', true),
+    s('city', 'Ville', 'City', 'single_line'),
+    s('province', 'Province', 'Province', 'single_line'),
+    s('postal_code', 'Code postal', 'Postal code', 'single_line'),
+    s('country', 'Pays', 'Country', 'single_line'),
+    s('client', 'Client', 'Client', 'single_line', true),
+    s('kind', 'Type d’adresse', 'Address kind', 'dropdown_single'),
+    s('is_primary', 'Principale', 'Primary', 'checkbox'),
+    s('created_at', 'Créé le', 'Created', 'date'),
+    s('updated_at', 'Modifié le', 'Updated', 'date'),
+  ],
 };
 
 export function clesStandard(objet: ObjetChamp): string[] {

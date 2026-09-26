@@ -29,15 +29,17 @@ export interface Condition {
   /** id du champ personnalisé, ou clé d'un champ standard. */
   field_id: string;
   op: Operateur;
-  value?: string | number | string[] | null;
+  value?: string | number | boolean | string[] | null;
   value2?: string | number | null;
   n?: number;
   unit?: UniteDuree;
 }
 
-export type FamilleType = 'texte' | 'nombre' | 'liste' | 'date';
+export type FamilleType = 'texte' | 'nombre' | 'liste' | 'date' | 'case' | 'fichier';
 
 export function familleDuType(type: TypeChamp): FamilleType {
+  if (type === 'checkbox') return 'case';
+  if (type === 'file') return 'fichier';
   if (type === 'number' || type === 'monetary') return 'nombre';
   if (type === 'dropdown_single' || type === 'dropdown_multi') return 'liste';
   if (type === 'date') return 'date';
@@ -49,7 +51,18 @@ export const OPERATEURS_PAR_FAMILLE: Record<FamilleType, Operateur[]> = {
   nombre: ['eq', 'neq', 'gt', 'lt', 'between', 'is_empty', 'is_not_empty'],
   liste: ['any_of', 'none_of', 'is_empty', 'is_not_empty'],
   date: ['today', 'yesterday', 'in_last', 'more_than_ago', 'less_than_ago', 'before', 'after', 'between', 'is_empty', 'is_not_empty'],
+  // « est oui / est non » : non = pas cochée, y compris jamais remplie.
+  case: ['is'],
+  // Un fichier est là ou pas.
+  fichier: ['is_empty', 'is_not_empty'],
 };
+
+/** Valeur d'une condition « case à cocher » : true (oui) ou false (non). */
+export function cibleCase(v: unknown): boolean | null {
+  if (v === true || v === 'true') return true;
+  if (v === false || v === 'false') return false;
+  return null;
+}
 
 export const LIBELLES_OPERATEUR: Record<Operateur, { fr: string; en: string }> = {
   is: { fr: 'est', en: 'is' },
@@ -165,6 +178,13 @@ export function evaluerCondition(type: TypeChamp, valeur: unknown, c: Condition,
   }
   if (c.op === 'is_empty') return estVide(valeur);
   if (c.op === 'is_not_empty') return !estVide(valeur);
+
+  if (famille === 'case') {
+    const cible = cibleCase(c.value);
+    if (cible === null) throw new Error(`Valeur manquante pour « ${c.op} » (oui ou non).`);
+    const cochee = valeur === true || valeur === 'true';
+    return cible ? cochee : !cochee;
+  }
 
   if (famille === 'texte') {
     const norme = (x: unknown) => (type === 'phone' ? normaliserTelephone(String(x ?? '')) ?? normaliserTexte(x) : normaliserTexte(x));

@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import {
   clientDisplayName,
+  type ClientRecord,
   createClient,
   getClientById,
   softDeleteClient,
@@ -23,13 +24,16 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
-import { useChampsListe, useValeursPage, CelluleChamps } from '../components/champs/liste';
+import { useChampsListe, useValeursPage } from '../components/champs/liste';
+import { useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
 import { correspondancesImport, ecrireValeurs } from '../lib/champsPersoApi';
 import { valeurDepuisTexte } from '../lib/champs/valeurs';
 import { messageChamps } from '../lib/champs/messages';
 
 type ClientSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc' | 'activity_desc' | 'activity_asc';
 type ClientSortColumn = 'name' | 'activity';
+/** Une ligne de la liste : le client + ce que la page calcule (activité, étiquettes). */
+type LigneClient = ClientRecord & { last_activity?: string | null; tags?: string[] };
 
 const STATUS_OPTIONS = ['All', 'active', 'lead', 'inactive'];
 
@@ -170,14 +174,16 @@ export default function Clients() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Champs personnalisés : filtre côté base + colonne (drapeau custom_fields_v2).
+  // Champs personnalisés : filtre côté base ; les colonnes passent par « Gérer les champs ».
   const champsListe = useChampsListe('client', language === 'fr');
-  const valeursChamps = useValeursPage('client', items.map((c) => c.id as string), champsListe.colonnes.length > 0);
+  // Tri par une colonne de champ personnalisé (tenu ici : le chargement en dépend).
+  const [triChamp, setTriChampBrut] = useState<TriChamp | null>(null);
+  const setTriChamp = (t: TriChamp | null) => { setTriChampBrut(t); setPage(1); };
   useEffect(() => { setPage(1); }, [champsListe.cle]);
 
   useEffect(() => {
     void loadClients(page > 1 ? 'append' : 'refresh');
-  }, [page, statusFilter, sortBy, debouncedSearch, champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, statusFilter, sortBy, debouncedSearch, champsListe.cle, triChamp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for command palette create event
   useEffect(() => {
@@ -314,6 +320,7 @@ export default function Clients() {
         q: debouncedSearch,
         sort: sortBy,
         champs: champsListe.filtre,
+        triChamp: triChamp ? { ...triChamp, cle: champsListe.cle } : null,
       });
 
       // Statut dérivé des jobs : un client avec ≥1 job (non supprimé) est
@@ -598,10 +605,11 @@ export default function Clients() {
 
   // Tri par colonne : Nom (name_asc/name_desc) et Dernière activité
   // (activity_desc/activity_asc). Clic = trier, second clic = inverser.
-  const sortColumn: ClientSortColumn | null = sortBy.startsWith('name_') ? 'name' : sortBy.startsWith('activity_') ? 'activity' : null;
+  const sortColumn: ClientSortColumn | null = triChamp ? null : sortBy.startsWith('name_') ? 'name' : sortBy.startsWith('activity_') ? 'activity' : null;
   const sortAsc = sortBy === 'name_asc' || sortBy === 'activity_asc';
   const handleSort = (col: ClientSortColumn) => {
     setPage(1);
+    setTriChampBrut(null);
     if (col === 'name') setSortBy(sortBy === 'name_asc' ? 'name_desc' : 'name_asc');
     else setSortBy(sortBy === 'activity_desc' ? 'activity_asc' : 'activity_desc');
   };
@@ -613,18 +621,79 @@ export default function Clients() {
       ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 14 5-5 5 5"/></svg>
       : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 10 5 5 5-5"/></svg>;
   };
-  const SortHeader = ({ label, col }: { label: string; col: ClientSortColumn }) => (
-    <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">
-      <button
-        type="button"
-        onClick={() => handleSort(col)}
-        aria-sort={sortColumn === col ? (sortAsc ? 'ascending' : 'descending') : 'none'}
-        className="inline-flex items-center gap-1 rounded px-1 -mx-1 hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer"
-      >
-        {label} {sortIcon(col)}
-      </button>
-    </div>
+  // Le bouton de tri vit dans la cellule d'en-tête fournie par « Gérer les champs ».
+  const TriEntete = ({ label, col }: { label: string; col: ClientSortColumn }) => (
+    <button type="button" onClick={() => handleSort(col)}
+      aria-sort={sortColumn === col ? (sortAsc ? 'ascending' : 'descending') : 'none'}
+      className="inline-flex items-center gap-1 rounded px-1 -mx-1 hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer">
+      {label} {sortIcon(col)}
+    </button>
   );
+
+  // Colonnes de la liste (« Gérer les champs ») : le nom est verrouillé ; les
+  // cinq historiques sont affichées par défaut, les autres s'ajoutent.
+  const vide = <span className="text-[14px] text-[var(--color-text-tertiary)]">—</span>;
+  const texte = (v: string | null | undefined) => (v ? <span className="text-[14px] text-[var(--color-text-primary)] truncate" title={v}>{v}</span> : vide);
+  const colonnesStandard: ColonneStandard<LigneClient>[] = [
+    {
+      id: 'nom', libelle: fr ? 'Nom' : 'Name', largeur: 'minmax(180px, 1.4fr)', verrouillee: true,
+      entete: <TriEntete label={fr ? 'Nom' : 'Name'} col="name" />,
+      cellule: (item) => {
+        const secondary = item.display_as_company && item.company
+          ? `${item.first_name || ''} ${item.last_name || ''}`.trim()
+          : (item.company || '');
+        return (
+          <div className="flex items-center gap-3 min-w-0">
+            <UnifiedAvatar id={item.id} name={clientDisplayName(item)} />
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold text-[var(--color-text-primary)] truncate leading-tight">{clientDisplayName(item) || '—'}</p>
+              {secondary && <p className="text-[12px] font-normal text-[var(--color-text-tertiary)] truncate leading-tight mt-0.5">{secondary}</p>}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: 'adresse', libelle: fr ? 'Adresse' : 'Address', largeur: 'minmax(160px, 1.6fr)', parDefaut: true,
+      cellule: (item) => {
+        const line1 = [item.street_number, item.street_name].filter(Boolean).join(' ').trim() || item.address || '';
+        const line2 = [item.city, item.province, item.postal_code].filter(Boolean).join(', ').trim();
+        if (!line1 && !line2) return <span className="text-[14px] text-[var(--color-text-primary)]">—</span>;
+        return (
+          <div className="flex min-w-0 flex-col">
+            <span className="text-[14px] text-[var(--color-text-primary)] whitespace-normal break-words leading-tight">{line1 || '—'}</span>
+            {line2 && <span className="text-[12px] text-[var(--color-text-tertiary)] whitespace-normal break-words leading-tight mt-0.5">{line2}</span>}
+          </div>
+        );
+      },
+    },
+    {
+      id: 'etiquettes', libelle: fr ? 'Étiquettes' : 'Tags', largeur: 'minmax(120px, 1.3fr)', parDefaut: true,
+      cellule: (item) => (item.tags && item.tags.length > 0 ? (
+        <div className="flex items-center gap-1 overflow-hidden">
+          {item.tags.slice(0, 2).map((tag: string) => (
+            <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded-full bg-[var(--color-surface-tertiary)] text-[11px] font-medium text-[var(--color-text-secondary)] border border-[var(--color-outline)] whitespace-nowrap">{tag}</span>
+          ))}
+          {item.tags.length > 2 && <span className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">+{item.tags.length - 2}</span>}
+        </div>
+      ) : vide),
+    },
+    { id: 'statut', libelle: fr ? 'Statut' : 'Status', largeur: '200px', parDefaut: true, cellule: (item) => <Badge status={item.status} /> },
+    {
+      id: 'activite', libelle: fr ? 'Dernière activité' : 'Last activity', largeur: '130px', parDefaut: true,
+      entete: <TriEntete label={fr ? 'Dernière activité' : 'Last activity'} col="activity" />,
+      cellule: (item) => <span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span>,
+    },
+    { id: 'courriel', libelle: fr ? 'Courriel' : 'Email', largeur: 'minmax(160px, 1.4fr)', cellule: (item) => texte(item.email) },
+    { id: 'telephone', libelle: fr ? 'Téléphone' : 'Phone', largeur: '150px', cellule: (item) => texte(item.phone) },
+    { id: 'entreprise', libelle: fr ? 'Entreprise' : 'Company', largeur: 'minmax(120px, 1.2fr)', cellule: (item) => texte(item.company) },
+    { id: 'numero', libelle: fr ? 'N° de client' : 'Client #', largeur: '110px', cellule: (item) => texte(item.client_number) },
+    { id: 'source', libelle: fr ? 'Source' : 'Lead source', largeur: 'minmax(110px, 1fr)', cellule: (item) => texte(item.lead_source) },
+    { id: 'ville', libelle: fr ? 'Ville' : 'City', largeur: 'minmax(110px, 1fr)', cellule: (item) => texte(item.city) },
+    { id: 'cree', libelle: fr ? 'Créé le' : 'Created', largeur: '120px', cellule: (item) => texte(item.created_at ? formatDate(item.created_at) : null) },
+  ];
+  const colonnes = useColonnesTableau<LigneClient>('client', colonnesStandard, fr, { tri: triChamp, setTri: setTriChamp });
+  const valeursChamps = useValeursPage('client', items.map((c) => c.id as string), colonnes.avecChamps);
 
   return (
     <>
@@ -640,7 +709,7 @@ export default function Clients() {
       </div>
 
       {/* ── TOOLBAR ── */}
-      <div className="flex items-center gap-2 mt-5 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mt-5 mb-4">
         {/* Status filter pill — "Status | All", dropdown lists statuses with colored dot + count */}
         <FilterPill
           label={fr ? 'Statut' : 'Status'}
@@ -668,6 +737,7 @@ export default function Clients() {
         />
 
         {champsListe.bouton}
+        {colonnes.bouton}
 
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
           aria-label={fr ? 'Rechercher clients' : 'Search clients'}
@@ -677,25 +747,17 @@ export default function Clients() {
       </div>
 
       {/* ── TABLE ── */}
-      <div className="border border-[var(--color-outline)] rounded-md bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: `1.4fr 1.6fr 1.3fr 200px 130px${champsListe.colonnes.length ? ' 1.4fr' : ''}` }} onMouseLeave={() => setHoveredId(null)}>
+      <div className="border border-[var(--color-outline)] rounded-md bg-white dark:bg-[#0e0e11] overflow-x-auto">
+        <div className="grid" style={{ gridTemplateColumns: colonnes.pistes }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
-          <SortHeader label={fr ? 'Nom' : 'Name'} col="name" />
-          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Adresse' : 'Address'}</div>
-          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Étiquettes' : 'Tags'}</div>
-          <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Statut' : 'Status'}</div>
-          <SortHeader label={fr ? 'Dernière activité' : 'Last activity'} col="activity" />
-          {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Champs' : 'Fields'}</div>}
+          {colonnes.visibles.map((c) => c.entete)}
 
           {/* LOADING */}
           {loading && Array.from({ length: 10 }).map((_, i) => (
             <React.Fragment key={`sk-${i}`}>
-              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-24 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-28 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
-              <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-14 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
-              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>}
+              {colonnes.visibles.map((c) => (
+                <div key={c.id} className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
+              ))}
             </React.Fragment>
           ))}
 
@@ -705,7 +767,7 @@ export default function Clients() {
           )}
 
           {/* ROWS */}
-          {!loading && displayItems.map(item => {
+          {!loading && (displayItems as LigneClient[]).map(item => {
             const isHovered = hoveredId === item.id;
             const rowCls = `border-b border-[var(--color-surface-tertiary)] transition-colors duration-150 cursor-pointer ${isHovered ? 'crm-row-hover' : ''}`;
             const click = () => navigate(`/clients/${item.id}`);
@@ -713,52 +775,15 @@ export default function Clients() {
             const keyNav = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); click(); } };
             return (
               <React.Fragment key={item.id}>
-                <div className={`py-3 px-4 flex items-center min-w-0 ${rowCls}`} onClick={click} onMouseEnter={hover} role="button" tabIndex={0} onKeyDown={keyNav}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <UnifiedAvatar id={item.id} name={clientDisplayName(item)} />
-                    <div className="min-w-0">
-                      <p className="text-[14px] font-bold text-[var(--color-text-primary)] truncate leading-tight">{clientDisplayName(item) || '—'}</p>
-                      {(() => {
-                        const secondary = item.display_as_company && item.company
-                          ? `${item.first_name || ''} ${item.last_name || ''}`.trim()
-                          : (item.company || '');
-                        return secondary
-                          ? <p className="text-[12px] font-normal text-[var(--color-text-tertiary)] truncate leading-tight mt-0.5">{secondary}</p>
-                          : null;
-                      })()}
-                    </div>
+                {colonnes.visibles.map((c, i) => (i === 0 ? (
+                  <div key={c.id} className={`py-3 px-4 flex items-center min-w-0 ${rowCls}`} onClick={click} onMouseEnter={hover} role="button" tabIndex={0} onKeyDown={keyNav}>
+                    {c.rendu(item, valeursChamps[item.id])}
                   </div>
-                </div>
-                <div className={`py-3 px-4 flex flex-col justify-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}>
-                  {(() => {
-                    const line1 = [item.street_number, item.street_name].filter(Boolean).join(' ').trim() || item.address || '';
-                    const line2 = [item.city, item.province, item.postal_code].filter(Boolean).join(', ').trim();
-                    if (!line1 && !line2) return <span className="text-[14px] text-[var(--color-text-primary)]">—</span>;
-                    return (
-                      <>
-                        <span className="text-[14px] text-[var(--color-text-primary)] whitespace-normal break-words leading-tight">{line1 || '—'}</span>
-                        {line2 && <span className="text-[12px] text-[var(--color-text-tertiary)] whitespace-normal break-words leading-tight mt-0.5">{line2}</span>}
-                      </>
-                    );
-                  })()}
-                </div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}>
-                  {item.tags && item.tags.length > 0 ? (
-                    <div className="flex items-center gap-1 overflow-hidden">
-                      {item.tags.slice(0, 2).map((tag: string) => (
-                        <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded-full bg-[var(--color-surface-tertiary)] text-[11px] font-medium text-[var(--color-text-secondary)] border border-[var(--color-outline)] whitespace-nowrap">{tag}</span>
-                      ))}
-                      {item.tags.length > 2 && <span className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">+{item.tags.length - 2}</span>}
-                    </div>
-                  ) : <span className="text-[14px] text-[var(--color-text-tertiary)]">—</span>}
-                </div>
-                <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}><Badge status={item.status} /></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}><span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span></div>
-                {champsListe.colonnes.length > 0 && (
-                  <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}>
-                    <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[item.id]} fr={fr} fuseau={champsListe.fuseau} />
+                ) : (
+                  <div key={c.id} className={`py-3 px-4 flex items-center min-w-0 overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}>
+                    {c.rendu(item, valeursChamps[item.id])}
                   </div>
-                )}
+                )))}
               </React.Fragment>
             );
           })}
@@ -782,6 +807,8 @@ export default function Clients() {
           {total} {fr ? (total === 1 ? 'client' : 'clients') : (total === 1 ? 'client' : 'clients')}
         </span>
       </div>
+
+      {colonnes.panneau}
 
       {/* Detail drawer */}
       <AnimatePresence>

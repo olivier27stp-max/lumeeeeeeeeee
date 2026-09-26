@@ -229,7 +229,11 @@ export const VARIABLES_CONNUES: readonly string[] = [
  * Accepte les deux syntaxes reconnues par `resolveTemplate` : `{var}` et `[var]`.
  */
 export function variablesInconnues(texte: string, variablesChamps?: readonly string[]): string[] {
-  const citees = [...texte.matchAll(/[{[](\w+)[}\]]/g)].map((m) => m[1]);
+  const citees = [
+    ...[...texte.matchAll(/[{[](\w+)[}\]]/g)].map((m) => m[1]),
+    // {{client.cle}} (format GoHighLevel des champs) = client_cf_cle.
+    ...[...texte.matchAll(/\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g)].map((m) => `${m[1]}_cf_${m[2]}`),
+  ];
   // Champs personnalisés : {client_cf_<clé>}… Avec la liste des champs de
   // l'entreprise, une clé mal tapée reste signalée ; sans elle, on ne peut
   // pas trancher et on ne crie pas au loup.

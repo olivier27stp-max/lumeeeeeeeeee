@@ -21,6 +21,36 @@ import type { IndustrieModele } from './champs/modeles';
 
 export type { ChampPerso, DossierChamp, ObjetChamp, TypeChamp, ValeurChamp, ValeurEnregistree, Condition };
 
+/**
+ * Champs « Fichier » : le fichier va dans le bucket PRIVÉ custom-field-files
+ * (policies storage : membres de l'entreprise seulement), sous
+ * <org>/<uuid>/<nom> ; la valeur écrite par le serveur est ce chemin (le
+ * trigger refuse un chemin hors du dossier de l'entreprise du champ).
+ */
+export const BUCKET_FICHIERS_CHAMPS = 'custom-field-files';
+export const TAILLE_MAX_FICHIER_CHAMP = 25 * 1024 * 1024;
+
+export async function televerserFichierChamp(fichier: File): Promise<string> {
+  if (fichier.size > TAILLE_MAX_FICHIER_CHAMP) throw new Error(messageChamps('Fichier trop lourd (25 Mo au plus).'));
+  const orgId = await getCurrentOrgId();
+  if (!orgId) throw new Error(messageChamps('Session expirée.'));
+  const nom = (fichier.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'fichier').slice(-150);
+  const chemin = `${orgId}/${crypto.randomUUID()}/${nom}`;
+  const { error } = await supabase.storage.from(BUCKET_FICHIERS_CHAMPS).upload(chemin, fichier, { contentType: fichier.type || undefined, upsert: false });
+  if (error) {
+    console.error('[champs] téléversement', error);
+    throw new Error(messageChamps(/mime|type/i.test(error.message) ? 'Ce type de fichier n’est pas accepté.' : 'Le fichier n’a pas pu être téléversé.'));
+  }
+  return chemin;
+}
+
+/** Lien temporaire (5 min) pour ouvrir un fichier de champ. */
+export async function lienFichierChamp(chemin: string): Promise<string> {
+  const { data, error } = await supabase.storage.from(BUCKET_FICHIERS_CHAMPS).createSignedUrl(chemin, 300);
+  if (error || !data?.signedUrl) throw new Error(messageChamps('Le fichier n’a pas pu être ouvert.'));
+  return data.signedUrl;
+}
+
 async function entetes(): Promise<HeadersInit> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -91,6 +121,7 @@ export interface EntreeChamp {
   is_searchable?: boolean;
   config?: ConfigChamp;
   options?: EntreeOption[];
+  default_value?: ChampPerso['default_value'];
 }
 
 export async function creerChamp(objet: ObjetChamp, e: EntreeChamp & { folder_id?: string | null }): Promise<ChampPerso> {

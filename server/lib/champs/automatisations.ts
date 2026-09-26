@@ -13,6 +13,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ObjetChamp, ValeurChamp } from '../../../src/lib/champs/types';
+import { lireBooleen } from '../../../src/lib/champs/valeurs';
 import { evaluerCondition, type Condition } from '../../../src/lib/champs/filtres';
 import { listerChamps, lireValeursLot, ecrireValeurs } from './service';
 import { logger } from '../logger';
@@ -84,6 +85,7 @@ export async function executerMajChamp(
     else if (champs[0].field_type === 'monetary') valeur = t === '' ? null : Math.round(Number(t.replace(/[\s$]/g, '').replace(',', '.')) * 100);
     else if (champs[0].field_type === 'dropdown_single') valeur = t === '' ? null : option(t);
     else if (champs[0].field_type === 'dropdown_multi') valeur = t === '' ? null : t.split(',').map((x) => option(x.trim()));
+    else if (champs[0].field_type === 'checkbox') valeur = t === '' ? null : (lireBooleen(t) ?? t);
   }
   const [r] = await ecrireValeurs(supabase, ctx.orgId, objet, ctx.entityId,
     [{ field_id: champs[0].id, value: valeur }], { source: 'automation' });

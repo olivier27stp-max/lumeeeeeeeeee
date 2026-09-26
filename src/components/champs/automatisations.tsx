@@ -24,7 +24,8 @@ export function useChampsTous(): ChampPerso[] {
     enabled: isEnabled,
     staleTime: 60_000,
   });
-  return useMemo(() => (data?.fields ?? []).filter((c) => !c.archived_at), [data]);
+  // Aucun déclencheur ne porte encore une propriété : ses champs ne seraient jamais remplis ici.
+  return useMemo(() => (data?.fields ?? []).filter((c) => !c.archived_at && c.object_type !== 'property'), [data]);
 }
 
 /** L'objet d'un déclencheur du catalogue (champ `entite`). */
@@ -49,7 +50,7 @@ export function SelecteurChamp({ id, valeur, onChange, champs, fr, objet, classN
   /** Restreindre à un objet (celui de l'événement), sinon tous groupés. */
   objet?: ObjetChamp | null; className?: string;
 }) {
-  const objets = objet ? [objet] : [...OBJETS];
+  const objets = objet ? [objet] : OBJETS.filter((o) => o !== 'property');
   return (
     <select id={id} value={valeur} onChange={(e) => onChange(e.target.value)} className={className}>
       <option value="">{fr ? '— Choisir un champ —' : '— Choose a field —'}</option>
@@ -118,7 +119,7 @@ export function variablesChampsPourCourriel(
   typeCourriel: string | undefined, champs: ChampPerso[],
 ): Array<{ cle: string; fr: string; en: string }> {
   const objets: ObjetChamp[] = !typeCourriel
-    ? [...OBJETS]
+    ? OBJETS.filter((o) => o !== 'property')
     : typeCourriel === 'invoice_sent' || typeCourriel === 'invoice_reminder' ? ['client', 'invoice']
     : typeCourriel === 'quote_sent' ? ['client', 'quote'] : [];
   return champs.filter((c) => objets.includes(c.object_type)).map((c) => ({
