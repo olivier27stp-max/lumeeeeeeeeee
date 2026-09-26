@@ -90,7 +90,20 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
 
   // ── Fetch all memberships for user ──────────────────────────────────
   const fetchMemberships = useCallback(async (essai = 1): Promise<void> => {
-    setLectureEchouee(false);
+    /*
+     * On ne réarme « pas d'échec » qu'au PREMIER essai.
+     *
+     * Avant, chaque tentative remettait `lectureEchouee` à false. Entre
+     * deux essais, l'état disait donc « lecture réussie » alors que
+     * `companies` était encore vide — et `hasNoCompany` devenait vrai :
+     * l'écran « Aucune compagnie » s'affichait PENDANT les reprises, sur
+     * une session parfaitement valide.
+     *
+     * Reproduit le 2026-09-25 : 3 lectures en 401, « Aucune compagnie »
+     * sur les trois routes, alors que le compte avait bien ses 2 bureaux
+     * actifs en base (vérifié).
+     */
+    if (essai === 1) setLectureEchouee(false);
     if (!userId) {
       setCompanies([]);
       setLoading(false);
@@ -261,6 +274,19 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
       // trop tôt et échouer. On réessaie avant de conclure quoi que ce soit —
       // conclure « aucune compagnie » ici mettait l'utilisateur dehors.
       if (essai < ESSAIS_MAX) {
+        /*
+         * `setLectureEchouee(true)` AVANT de reprendre.
+         *
+         * Le `finally` ci-dessous pose `loading = false` à chaque essai,
+         * y compris celui-ci. Sans ce drapeau, on se retrouvait pendant
+         * la reprise avec : `loading` faux, `lectureEchouee` faux,
+         * `companies` vide — donc `hasNoCompany` VRAI, et l'écran
+         * « Aucune compagnie » s'affichait sur une session valide.
+         *
+         * C'est le défaut reproduit le 2026-09-25 : trois lectures en
+         * échec, l'écran apparaît dès la première.
+         */
+        setLectureEchouee(true);
         await new Promise((r) => setTimeout(r, 400 * essai));
         return fetchMemberships(essai + 1);
       }
