@@ -31,5 +31,21 @@
     "strict": true,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true
-  }
+  },
+
+  // Sans `exclude`, tsc ratisse TOUT le dossier depuis la racine. Deux dégâts :
+  //
+  //  1. `mobile/` (l'app Expo, non suivie sur main — elle vit sur la branche
+  //     `mobile-app`). expo-modules-core y déclare NODE_ENV comme membre
+  //     OBLIGATOIRE de NodeJS.ProcessEnv dans un `declare global`, et la fusion
+  //     de déclarations la rend contagieuse : `npm run lint` remontait alors
+  //     60 erreurs dans tests/ et server/ — du code sain — pendant que la CI
+  //     restait verte, puisqu'elle ne voit jamais ce dossier. Un lint qui ment
+  //     en local ne sert plus à rien : on cesse de le croire.
+  //  2. `dist/` après un `npm run build` : avec `allowJs: true`, le bundle
+  //     minifié devient de l'entrée de compilation.
+  //
+  // `node_modules` est redéclaré parce qu'un `exclude` explicite REMPLACE les
+  // exclusions par défaut de tsc, il ne s'y ajoute pas.
+  "exclude": ["node_modules", "dist", "mobile"]
 }
