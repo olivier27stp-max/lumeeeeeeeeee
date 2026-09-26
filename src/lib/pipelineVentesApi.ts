@@ -28,8 +28,10 @@ export interface PipelineStage {
   kind: StageKind;
   /** Chance de conclure depuis cette étape, 0-100. `null` = non renseignée. */
   probability: number | null;
-  /** `false` = l'étape est exclue des entonnoirs et des prévisions. */
+  /** Icône ENTONNOIR — `false` = exclue de l'entonnoir et des prévisions. */
   show_in_reports: boolean;
+  /** Icône CAMEMBERT — `false` = exclue de la répartition par étape. */
+  show_in_pie: boolean;
   archived_at: string | null;
 }
 
@@ -191,6 +193,7 @@ export async function fetchPipelineDefaut(): Promise<{ id: string; name: string 
     .select('id,name')
     .eq('org_id', orgId)
     .eq('is_default', true)
+    .is('archived_at', null)
     .maybeSingle();
   if (error) throw error;
   return data ?? null;
@@ -209,7 +212,10 @@ export type ModeCouleur = 'none' | 'dot' | 'tint';
 export interface PipelineResume {
   id: string;
   name: string;
+  /** Le premier de la liste (position 1) — c'est lui qui reçoit les leads sans destination. */
   is_default: boolean;
+  /** Ordre de la liste « Pipelines », utilisé partout où l'on choisit un pipeline. */
+  position?: number;
   /** Dernière modification du pipeline lui-même (pas de ses deals). */
   updated_at?: string;
   /** Étapes actives. Compté par la base — la liste seule ne le dirait pas. */
@@ -220,7 +226,7 @@ export interface PipelineResume {
   use_deal_probability?: boolean;
 }
 
-/** Tous les pipelines de l'organisation — le défaut en premier, puis par nom. */
+/** Les pipelines ACTIFS de l'organisation, dans l'ordre de la liste « Pipelines ». */
 export async function fetchPipelines(): Promise<PipelineResume[]> {
   const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
@@ -228,10 +234,13 @@ export async function fetchPipelines(): Promise<PipelineResume[]> {
     // `pipeline_stages(count)` : PostgREST compte les étapes actives sans
     // les rapatrier. Les charger toutes pour n'afficher qu'un nombre
     // ramènerait des centaines de lignes inutiles.
-    .select('id,name,is_default,updated_at,color_mode,use_deal_probability,pipeline_stages(count)')
+    .select('id,name,is_default,position,updated_at,color_mode,use_deal_probability,pipeline_stages(count)')
     .eq('org_id', orgId)
+    // Un pipeline supprimé est ARCHIVÉ : ses deals ont été déplacés, il
+    // n'est plus proposé nulle part.
+    .is('archived_at', null)
     .is('pipeline_stages.archived_at', null)
-    .order('is_default', { ascending: false })
+    .order('position')
     .order('name');
   if (error) throw error;
   return (data ?? []).map((r) => {
@@ -241,6 +250,7 @@ export async function fetchPipelines(): Promise<PipelineResume[]> {
       id: x.id as string,
       name: x.name as string,
       is_default: x.is_default as boolean,
+      position: x.position as number | undefined,
       updated_at: x.updated_at as string | undefined,
       nb_etapes: compte?.[0]?.count ?? 0,
       color_mode: (x.color_mode as ModeCouleur | null) ?? 'none',
@@ -252,7 +262,7 @@ export async function fetchPipelines(): Promise<PipelineResume[]> {
 export async function fetchStages(pipelineId: string): Promise<PipelineStage[]> {
   const { data, error } = await supabase
     .from('pipeline_stages')
-    .select('id,pipeline_id,name_fr,name_en,guidance_fr,guidance_en,position,kind,probability,show_in_reports,archived_at')
+    .select('id,pipeline_id,name_fr,name_en,guidance_fr,guidance_en,position,kind,probability,show_in_reports,show_in_pie,archived_at')
     .eq('pipeline_id', pipelineId)
     .order('position');
   if (error) throw error;
@@ -858,7 +868,7 @@ export async function rechercherDevisPourDeal(q: string, limite = 8): Promise<De
 
 export async function renommerEtape(
   stageId: string,
-  champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en' | 'probability' | 'show_in_reports'>>,
+  champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en' | 'probability' | 'show_in_reports' | 'show_in_pie'>>,
 ): Promise<void> {
   const { error } = await supabase.from('pipeline_stages').update(champs).eq('id', stageId);
   if (error) throw error;
@@ -961,12 +971,19 @@ export async function creerPipeline(nom: string, modele: ModelePipeline): Promis
   return data as string;
 }
 
+/** Le refus d'unicité de la base, en clair : jamais de code brut à l'écran. */
+function nomDejaPris(error: unknown): Error | null {
+  return (error as { code?: string } | null)?.code === '23505'
+    ? new Error('Un pipeline porte déjà ce nom. Choisissez-en un autre.')
+    : null;
+}
+
 export async function renommerPipeline(pipelineId: string, nom: string): Promise<void> {
   const { error } = await supabase
     .from('pipelines_ventes')
-    .update({ name: nom })
+    .update({ name: nom.trim() })
     .eq('id', pipelineId);
-  if (error) throw error;
+  if (error) throw nomDejaPris(error) ?? error;
 }
 
 /**
@@ -993,16 +1010,9 @@ export async function definirAffichagePipeline(
 }
 
 /**
- * Change le pipeline par défaut. Passe par un RPC : l'index partiel
- * `uq_pipelines_ventes_defaut` refuserait l'état intermédiaire à deux
- * défauts que produiraient deux `update` PostgREST séparés.
+ * Le pipeline par défaut n'est plus un réglage à part : c'est le PREMIER de
+ * la liste « Pipelines » (voir `reordonnerPipelines`).
  */
-export async function definirParDefaut(pipelineId: string): Promise<void> {
-  const { error } = await supabase.rpc('pipeline_definir_defaut', {
-    p_pipeline_id: pipelineId,
-  });
-  if (error) throw error;
-}
 
 // ── Statistiques ────────────────────────────────────────────
 //
@@ -1131,6 +1141,33 @@ export async function fetchMembres(): Promise<{ id: string; name: string }[]> {
       id: m.user_id,
       name: `${m.first_name ?? ''} ${m.last_name ?? ''}`.trim() || m.email,
     }));
+}
+
+/** Les pipelines que l'utilisateur connecté peut MODIFIER sans être administrateur. */
+export async function fetchMesPipelinesModifiables(): Promise<string[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from('pipeline_acces')
+    .select('pipeline_id')
+    .eq('user_id', user.id)
+    .eq('peut_modifier', true);
+  if (error) throw error;
+  return ((data ?? []) as { pipeline_id: string }[]).map((r) => r.pipeline_id);
+}
+
+/** Rôle de chaque membre actif (page Rôles) — pour les permissions d'un pipeline. */
+export async function fetchRolesMembres(): Promise<Record<string, string>> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('memberships')
+    .select('user_id,role')
+    .eq('org_id', orgId)
+    .eq('status', 'active');
+  if (error) throw error;
+  const out: Record<string, string> = {};
+  for (const m of (data ?? []) as { user_id: string; role: string }[]) out[m.user_id] = m.role;
+  return out;
 }
 
 // ── Dérivés (jamais stockés) ────────────────────────────────
@@ -1555,12 +1592,14 @@ export function pastilles(
 export interface AccesPipeline {
   id: string;
   user_id: string;
+  /** Peut aussi MODIFIER le pipeline (nom, étapes, réglages). */
+  peut_modifier: boolean;
 }
 
 export async function fetchAccesPipeline(pipelineId: string): Promise<AccesPipeline[]> {
   const { data, error } = await supabase
     .from('pipeline_acces')
-    .select('id,user_id')
+    .select('id,user_id,peut_modifier')
     .eq('pipeline_id', pipelineId);
   if (error) throw error;
   return (data ?? []) as AccesPipeline[];
@@ -1572,13 +1611,19 @@ export async function fetchAccesPipeline(pipelineId: string): Promise<AccesPipel
  * Le premier appel sur un pipeline le FERME : il passe de « visible de tous »
  * à « réservé aux nommés ». L'écran doit le dire avant, pas après.
  */
-export async function donnerAccesPipeline(pipelineId: string, userId: string): Promise<void> {
+export async function donnerAccesPipeline(pipelineId: string, userId: string, peutModifier = false): Promise<void> {
   const orgId = await getCurrentOrgIdOrThrow();
   const { error } = await supabase
     .from('pipeline_acces')
-    .insert({ org_id: orgId, pipeline_id: pipelineId, user_id: userId });
+    .insert({ org_id: orgId, pipeline_id: pipelineId, user_id: userId, peut_modifier: peutModifier });
   // 23505 = ce membre a déjà accès : ce n'est pas une erreur à montrer.
   if (error && (error as { code?: string }).code !== '23505') throw error;
+}
+
+/** Donne ou retire le droit de MODIFIER à un membre qui voit déjà le pipeline. */
+export async function majDroitModifier(accesId: string, peutModifier: boolean): Promise<void> {
+  const { error } = await supabase.from('pipeline_acces').update({ peut_modifier: peutModifier }).eq('id', accesId);
+  if (error) throw error;
 }
 
 export async function retirerAccesPipeline(accesId: string): Promise<void> {
@@ -1822,61 +1867,142 @@ export async function creerPipelineSurMesure(
   return data as string;
 }
 
-/** Renommer se fait déjà ; supprimer un pipeline n'est PAS exposé :
- *  ses deals partiraient avec lui (cascade). On archive ses étapes. */
 /**
- * Duplique un pipeline avec toutes ses étapes.
- *
- * Aucun RPC dédié : on relit les étapes et on rappelle
- * `creer_pipeline_sur_mesure`. Une fonction serveur qui copierait les lignes
- * dupliquerait aussi ses propres règles (ajout de Gagné/Perdu, garde admin,
- * bornes de probabilité) — deux chemins de création qui dériveraient l'un de
- * l'autre au premier ajustement.
- *
- * Les DEALS ne sont pas copiés : on duplique un parcours, pas un carnet de
- * commandes. Les étapes archivées non plus — on repart du pipeline tel qu'il
- * est utilisé aujourd'hui.
+ * Duplique un pipeline : « Nom (copie) », mêmes réglages, mêmes étapes
+ * actives — SANS les deals. La base fait la copie (`pipeline_dupliquer`) :
+ * conseils, deux interrupteurs de rapports et probabilités compris.
  */
-export async function dupliquerPipeline(
+export async function dupliquerPipeline(pipelineId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('pipeline_dupliquer', { p_id: pipelineId });
+  if (error) throw error;
+  return data as string;
+}
+
+/**
+ * Supprime (archive) un pipeline. S'il contient des deals, ils sont d'abord
+ * DÉPLACÉS vers `dest` — sans déclencher d'automatisation chez ces clients.
+ * Le dernier pipeline ne peut pas être supprimé. Renvoie le nombre de deals
+ * déplacés.
+ */
+export async function supprimerPipeline(
   pipelineId: string,
-  nouveauNom: string,
+  dest?: { pipelineId: string; etapeId: string } | null,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('pipeline_supprimer', {
+    p_id: pipelineId,
+    p_dest_pipeline: dest?.pipelineId ?? null,
+    p_dest_etape: dest?.etapeId ?? null,
+  });
+  if (error) throw error;
+  return (data as number | null) ?? 0;
+}
+
+/** Nombre de deals actifs d'un pipeline — pour savoir s'il faut une destination. */
+export async function compterDealsPipeline(pipelineId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('deals')
+    .select('id', { count: 'exact', head: true })
+    .eq('pipeline_id', pipelineId)
+    .is('deleted_at', null);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** Une étape telle qu'éditée dans le modal « Créer / Modifier le pipeline ». */
+export interface EtapeEditee {
+  /** Absent = nouvelle étape. */
+  id?: string;
+  nom_fr: string;
+  nom_en?: string;
+  kind: StageKind;
+  /** `null` = répartie uniformément par la base (comme GHL). */
+  probability: number | null;
+  show_in_reports: boolean;
+  show_in_pie: boolean;
+}
+
+/**
+ * Crée (`pipelineId` null) ou modifie un pipeline et TOUTES ses étapes, dans
+ * l'ordre donné. En modification, une étape retirée de la liste est
+ * supprimée ; Gagné et Perdu sont verrouillés. La base valide tout : nom
+ * unique, au moins une étape, probabilité entre 0 et 100.
+ */
+export async function enregistrerPipeline(
+  pipelineId: string | null,
+  champs: { nom: string; color_mode: ModeCouleur; use_deal_probability: boolean; etapes: EtapeEditee[] },
 ): Promise<string> {
-  const etapes = await fetchStages(pipelineId);
-  const actives = etapes
-    .filter((e) => e.archived_at === null)
-    .sort((a, b) => a.position - b.position);
-
-  if (actives.length === 0) {
-    throw new Error("Ce pipeline n'a aucune étape active à copier.");
-  }
-
-  // Les réglages d'affichage suivent aussi : dupliquer un pipeline teinté
-  // pour obtenir un pipeline gris ne serait pas une copie.
-  const { data: source } = await supabase
-    .from('pipelines_ventes')
-    .select('color_mode,use_deal_probability')
-    .eq('id', pipelineId)
-    .maybeSingle();
-
-  return creerPipelineSurMesure(
-    nouveauNom,
-    actives.map((e) => ({
-      nom_fr: e.name_fr,
-      nom_en: e.name_en,
+  const { data, error } = await supabase.rpc('pipeline_enregistrer', {
+    p_id: pipelineId,
+    p_nom: champs.nom.trim(),
+    p_color_mode: champs.color_mode,
+    p_use_deal_probability: champs.use_deal_probability,
+    p_etapes: champs.etapes.map((e) => ({
+      id: e.id ?? null,
+      nom_fr: e.nom_fr.trim(),
+      nom_en: (e.nom_en ?? '').trim() || e.nom_fr.trim(),
       kind: e.kind,
       probability: e.probability,
       show_in_reports: e.show_in_reports,
+      show_in_pie: e.show_in_pie,
     })),
-    {
-      color_mode: (source?.color_mode as ModeCouleur | undefined) ?? 'none',
-      use_deal_probability: (source?.use_deal_probability as boolean | undefined) ?? false,
-    },
-  );
+  });
+  if (error) throw error;
+  return data as string;
 }
 
-export async function supprimerPipeline(pipelineId: string): Promise<void> {
-  const { error } = await supabase.from('pipelines_ventes').delete().eq('id', pipelineId);
+/**
+ * Réordonne les pipelines (glisser-déposer, « Déplacer à la position »).
+ * `ids` = TOUS les pipelines actifs, dans le nouvel ordre. Le premier devient
+ * le pipeline par défaut.
+ */
+export async function reordonnerPipelines(ids: string[]): Promise<void> {
+  const { error } = await supabase.rpc('pipeline_reordonner', { p_ids: ids });
   if (error) throw error;
+}
+
+/**
+ * Supprime (archive) une étape. Si elle contient des deals, ils vont d'abord
+ * vers `destId` (une autre étape ouverte du même pipeline), sans automatisation.
+ */
+export async function supprimerEtape(etapeId: string, destId?: string | null): Promise<number> {
+  const { data, error } = await supabase.rpc('pipeline_supprimer_etape', {
+    p_etape: etapeId,
+    p_dest: destId ?? null,
+  });
+  if (error) throw error;
+  return (data as number | null) ?? 0;
+}
+
+/** Les autres bureaux que l'utilisateur administre (« sous-comptes » GHL). */
+export async function fetchBureauxAdministres(): Promise<{ org_id: string; nom: string }[]> {
+  const { data, error } = await supabase.rpc('pipeline_bureaux_administres');
+  if (error) throw error;
+  return (data ?? []) as { org_id: string; nom: string }[];
+}
+
+/** Copie le pipeline (réglages + étapes, sans deals) vers d'autres bureaux. */
+export async function copierVersBureaux(pipelineId: string, orgIds: string[]): Promise<number> {
+  const { data, error } = await supabase.rpc('pipeline_copier_vers_bureaux', {
+    p_id: pipelineId,
+    p_orgs: orgIds,
+  });
+  if (error) throw error;
+  return (data as number | null) ?? 0;
+}
+
+/** Deals ouverts par étape — le camembert. Seules les étapes « camembert » y figurent. */
+export interface PartEtape {
+  stage_id: string;
+  nom_fr: string;
+  nom_en: string;
+  rang: number;
+  deals: number;
+}
+
+export async function fetchRepartitionEtapes(pipelineId: string): Promise<PartEtape[]> {
+  const { data, error } = await supabase.rpc('pipeline_repartition_etapes', { p_pipeline_id: pipelineId });
+  if (error) throw error;
+  return ((data ?? []) as PartEtape[]).map((r) => ({ ...r, deals: Number(r.deals) }));
 }
 
 // ── Journal des opérations en lot et des imports ────────────

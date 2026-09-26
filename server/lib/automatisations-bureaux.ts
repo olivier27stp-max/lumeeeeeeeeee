@@ -82,7 +82,7 @@ const norm = (s: unknown) => String(s ?? '').trim().toLowerCase();
 export async function correspondances(source: SupabaseClient, orgSource: string, cible: SupabaseClient, orgCible: string): Promise<Correspondances> {
   const lire = async (client: SupabaseClient, org: string) => {
     const [p, e, ch, op, r, m] = await Promise.all([
-      client.from('pipelines_ventes').select('id, name').eq('org_id', org),
+      client.from('pipelines_ventes').select('id, name').eq('org_id', org).is('archived_at', null),
       client.from('pipeline_stages').select('id, pipeline_id, name_fr, name_en').eq('org_id', org).is('archived_at', null),
       client.from('custom_fields').select('id, object_type, key').eq('org_id', org).is('archived_at', null),
       client.from('custom_field_options').select('id, field_id, label').eq('org_id', org).is('archived_at', null),
