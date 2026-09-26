@@ -30,6 +30,7 @@ import FileUpload from '../components/FileUpload';
 import Modal from '../components/ui/Modal';
 import type { RequestForm, FormField, FormFieldType } from '../types';
 import { useChampsPourFormulaire } from '../components/champs/formulaire';
+import AjouterChampsFormulaire, { questionPour } from '../components/champs/AjouterChampsFormulaire';
 import type { ChampPerso } from '../lib/champs/types';
 
 // ── Constants ──────────────────────────────────────────────
@@ -909,13 +910,21 @@ export default function RequestFormSettings() {
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
                   {t.requestForm.serviceDetailsCustomizable}
                 </h3>
-                <button
-                  onClick={() => addField('service_details')}
-                  className="glass-button text-[11px] inline-flex items-center gap-1"
-                >
-                  <Plus size={12} />
-                  {t.requestForm.addField}
-                </button>
+                <div className="flex items-center gap-2">
+                  <AjouterChampsFormulaire
+                    champs={champsPerso}
+                    dejaRelies={new Set(customFields.map((f) => f.cf_field_id).filter((x): x is string => !!x))}
+                    fr={isFr}
+                    onAjouter={(choisis) => setCustomFields((prev) => [...prev, ...choisis.map((c) => questionPour(c, 'service_details', generateId()))])}
+                  />
+                  <button
+                    onClick={() => addField('service_details')}
+                    className="glass-button text-[11px] inline-flex items-center gap-1"
+                  >
+                    <Plus size={12} />
+                    {t.requestForm.addField}
+                  </button>
+                </div>
               </div>
 
               {customFields.filter(f => f.section === 'service_details').length === 0 ? (
