@@ -54,6 +54,7 @@ import {
   type AutomationFailure,
   getAutomationLanguage,
   setAutomationLanguage,
+  avisActives,
 } from '../lib/automationRulesApi';
 
 // ── Automation name translations (for DB-seeded English names) ──
@@ -612,6 +613,34 @@ export default function Automations() {
   };
 
   // Multi-bureaux : bureaux où l'on peut copier (vide = un seul bureau, l'option n'apparaît pas).
+  /*
+   * « Tout arrêter » actif ? Pendant la pause, chaque ligne publiée restait
+   * étiquetée « Publiée » malgré le bandeau rouge : on ne savait plus ce
+   * qui tournait vraiment. QA du 2026-09-25 (P2-9).
+   */
+  const [toutEnPause, setToutEnPause] = useState(false);
+
+  /*
+   * Les demandes d'avis sont-elles activées ? `review_enabled` vaut FAUX par
+   * défaut alors que le préréglage d'avis est actif par défaut : mesuré le
+   * 2026-09-25, 6 entreprises sur 7 avaient une règle d'avis « Publiée »
+   * qui échouait à chaque fois, sans que rien ne le montre. `null` =
+   * inconnu : on n'affiche alors aucun avertissement plutôt qu'un faux.
+   */
+  const [avisOk, setAvisOk] = useState<boolean | null>(null);
+  useEffect(() => {
+    let vivant = true;
+    avisActives()
+      .then((v) => { if (vivant) setAvisOk(v); })
+      // Inconnu = aucun avertissement, jamais un plantage de la page.
+      .catch(() => { if (vivant) setAvisOk(null); });
+    return () => { vivant = false; };
+  }, []);
+
+  /** La règle demande-t-elle un avis (ancien format OU parcours) ? */
+  const demandeUnAvis = (r: AutomationRule): boolean =>
+    JSON.stringify(r.actions ?? []).includes('"request_review"')
+    || JSON.stringify((r as { steps?: unknown }).steps ?? []).includes('"request_review"');
   const [bureauxCibles, setBureauxCibles] = useState<BureauCible[]>([]);
   const [copieVers, setCopieVers] = useState<AutomationRule | null>(null);
   /*
@@ -950,7 +979,7 @@ export default function Automations() {
           rouge impossible à manquer — oublier que ses automatisations
           dorment coûte des relances pendant des jours.
         */}
-        <BandeauPause fr={fr} />
+        <BandeauPause fr={fr} onChange={setToutEnPause} />
 
         {/* ══ 2. Titre + les trois boutons ══ */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1383,7 +1412,7 @@ export default function Automations() {
                                 if (n.has(rule.id)) n.delete(rule.id); else n.add(rule.id);
                                 return n;
                               })}
-                              aria-label={fr ? `Cocher ${rule.name}` : `Select ${rule.name}`}
+                              aria-label={fr ? `Cocher ${localizeAutomationName(rule.name, language)}` : `Select ${localizeAutomationName(rule.name, language)}`}
                               className="h-3.5 w-3.5 rounded border-outline"
                             />
                           </td>
@@ -1411,6 +1440,14 @@ export default function Automations() {
                                       : `${rule.steps.length} step${rule.steps.length > 1 ? 's' : ''}`)
                                     : formatDelay(rule.delay_seconds, language)}
                                 </span>
+                                {avisOk === false && rule.is_active && !rule.deleted_at && demandeUnAvis(rule) && (
+                                  <span className="mt-0.5 inline-flex items-start gap-1 text-[11px] text-amber-700 dark:text-amber-400">
+                                    <AlertTriangle size={11} className="mt-px shrink-0" aria-hidden="true" />
+                                    {fr
+                                      ? 'Les demandes d’avis sont désactivées : rien ne part. Activez-les dans Paramètres › Avis clients.'
+                                      : 'Review requests are turned off: nothing goes out. Turn them on in Settings › Customer reviews.'}
+                                  </span>
+                                )}
                                 {rule.modele_id && (
                                   <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-text-tertiary" title={fr ? 'Suit l’automatisation d’un autre bureau ; la modifier ici la détache.' : 'Follows an automation from another office; editing it here detaches it.'}>
                                     <Link2 size={11} aria-hidden="true" />
@@ -1431,10 +1468,13 @@ export default function Automations() {
                             <span className={cn(
                               'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium',
                               rule.deleted_at ? 'bg-surface-tertiary text-text-tertiary'
+                                : rule.is_active && toutEnPause ? 'bg-danger-light text-danger'
                                 : rule.is_active ? 'bg-success-light text-success'
                                 : 'bg-surface-tertiary text-text-tertiary',
                             )}>
                               {rule.deleted_at ? (fr ? 'Supprimée' : 'Deleted')
+                                // Publiée, mais rien ne part tant que la pause dure.
+                                : rule.is_active && toutEnPause ? (fr ? 'Publiée · en pause' : 'Published · paused')
                                 : rule.is_active ? (fr ? 'Publiée' : 'Published')
                                 : (fr ? 'Brouillon' : 'Draft')}
                             </span>
@@ -1453,7 +1493,7 @@ export default function Automations() {
                               type="button"
                               onClick={() => setStatsId((s) => (s === rule.id ? null : rule.id))}
                               aria-expanded={statsId === rule.id}
-                              aria-label={fr ? `Statistiques de ${rule.name}` : `Stats for ${rule.name}`}
+                              aria-label={fr ? `Statistiques de ${localizeAutomationName(rule.name, language)}` : `Stats for ${localizeAutomationName(rule.name, language)}`}
                               className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                             >
                               <ChevronRight
@@ -1492,7 +1532,7 @@ export default function Automations() {
                                 type="button"
                                 onClick={() => setDeplieId((d) => (d === rule.id ? null : rule.id))}
                                 aria-expanded={deplieId === rule.id}
-                                aria-label={fr ? `Voir les messages de ${rule.name}` : `View messages of ${rule.name}`}
+                                aria-label={fr ? `Voir les messages de ${localizeAutomationName(rule.name, language)}` : `View messages of ${localizeAutomationName(rule.name, language)}`}
                                 className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                               >
                                 <ChevronDown
@@ -1508,7 +1548,7 @@ export default function Automations() {
                                   onClick={(e) => { e.stopPropagation(); setMenuLigne((m) => (m === rule.id ? null : rule.id)); }}
                                   aria-haspopup="menu"
                                   aria-expanded={menuLigne === rule.id}
-                                  aria-label={fr ? `Actions pour ${rule.name}` : `Actions for ${rule.name}`}
+                                  aria-label={fr ? `Actions pour ${localizeAutomationName(rule.name, language)}` : `Actions for ${localizeAutomationName(rule.name, language)}`}
                                   className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                 >
                                   {occupeId === rule.id
@@ -1659,7 +1699,57 @@ export default function Automations() {
                         {deplieId === rule.id && (
                           <tr className="bg-surface-secondary/30">
                             <td colSpan={9} className="px-6 py-4">
-                              {rule.actions.filter((a) => a.type === 'send_sms' || a.type === 'send_email').length === 0 ? (
+                              {Array.isArray(rule.steps) && rule.steps.length > 0 ? (
+                                /*
+                                 * UNE AUTOMATISATION BÂTIE DANS L'ÉDITEUR : on montre SON parcours.
+                                 *
+                                 * Créée de zéro, une règle reçoit une action de remplissage
+                                 * « À compléter » dans l'ancien format (`actions`). On bâtit
+                                 * ensuite le vrai parcours (`steps`) — mais la liste lisait
+                                 * toujours l'ancien, et affichait ce texto fantôme pour une
+                                 * automatisation qui n'envoie qu'un courriel. QA du 2026-09-25
+                                 * (P2-2).
+                                 *
+                                 * LECTURE SEULE, et c'est voulu : l'édition depuis la liste
+                                 * écrit dans `actions`, que le moteur IGNORE dès qu'un parcours
+                                 * existe. Une modification faite ici ne partirait jamais.
+                                 */
+                                (() => {
+                                  const envois = (rule.steps as Array<{ type?: string; action?: { type?: string; config?: Record<string, unknown> } }>)
+                                    .filter((e) => e.type === 'action' && (e.action?.type === 'send_sms' || e.action?.type === 'send_email'));
+                                  return (
+                                    <div className="space-y-2">
+                                      {envois.length === 0 ? (
+                                        <p className="text-[12px] text-text-tertiary">
+                                          {fr ? 'Ce parcours n’envoie ni texto ni courriel.' : 'This journey sends neither text nor email.'}
+                                        </p>
+                                      ) : envois.map((e, i) => (
+                                        <div key={`${rule.id}-apercu-${i}`} className="rounded-md border border-outline/40 bg-surface px-3 py-2">
+                                          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                                            {e.action?.type === 'send_email'
+                                              ? (fr ? 'Courriel envoyé au client' : 'Email sent to client')
+                                              : (fr ? 'Texto envoyé au client' : 'Text sent to client')}
+                                          </p>
+                                          {e.action?.type === 'send_email' && e.action.config?.subject ? (
+                                            <p className="mt-1 text-[12px] font-medium text-text-primary">{String(e.action.config.subject)}</p>
+                                          ) : null}
+                                          <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[12px] text-text-secondary">
+                                            {String(e.action?.config?.body ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+                                              || (fr ? '(vide)' : '(empty)')}
+                                          </p>
+                                        </div>
+                                      ))}
+                                      <button
+                                        type="button"
+                                        onClick={() => navigate(`/automations/${rule.id}`)}
+                                        className="text-[12px] font-medium text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        {fr ? 'Modifier dans l’éditeur' : 'Edit in the editor'}
+                                      </button>
+                                    </div>
+                                  );
+                                })()
+                              ) : rule.actions.filter((a) => a.type === 'send_sms' || a.type === 'send_email').length === 0 ? (
                                 <p className="text-[12px] text-text-tertiary">
                                   {fr
                                     ? 'Cette automatisation n’envoie ni texto ni courriel.'

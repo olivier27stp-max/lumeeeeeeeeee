@@ -62,6 +62,7 @@ vi.mock('../src/lib/automationRulesApi', () => ({
   getRecentAutomationFailures: vi.fn(async () => []),
   getAutomationLanguage: vi.fn(async () => 'fr'),
   setAutomationLanguage: vi.fn(async () => undefined),
+  avisActives: vi.fn(async () => true),
 }));
 
 vi.mock('../src/lib/automationBuilderApi', () => ({

@@ -358,9 +358,17 @@ export default function AutomationBuilderPage() {
        * plus coûte des tokens à chaque appel et peut être oubliée. Le
        * code, lui, le dit toujours.
        */
+      /*
+       * Le coût de CETTE génération (P2-10). Moins d'un cent la plupart du
+       * temps : on l'arrondit au dixième pour ne pas afficher « 0 ¢ », qui
+       * ferait croire que c'est gratuit.
+       */
+      const cout = typeof propose.cout_cents === 'number'
+        ? ` (${(Math.max(0.1, Math.round(propose.cout_cents * 10) / 10)).toLocaleString(fr ? 'fr-CA' : 'en-CA')} ¢ ${fr ? 'de ton budget Lumi' : 'of your Lumi budget'})`
+        : '';
       toast.success(fr
-        ? 'Lumi a construit le parcours — en pause, à publier quand tu es prêt.'
-        : 'Lumi built the path — paused, publish it when you are ready.');
+        ? `Lumi a construit le parcours — en pause, à publier quand tu es prêt.${cout}`
+        : `Lumi built the path — paused, publish it when you are ready.${cout}`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -838,7 +846,9 @@ export default function AutomationBuilderPage() {
    * bloque l'enregistrement (un champ obligatoire vide) — c'est le cas le
    * plus dangereux : on croit son parcours sauvé alors que rien n'est parti.
    */
-  const travailNonEnregistre = etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet';
+  // « en cours » compte aussi : fermer l'onglet pendant l'enregistrement
+  // peut couper la requête avant que le serveur l'ait reçue (P2-13).
+  const travailNonEnregistre = etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours';
 
   /**
    * Prévenir avant de FERMER l'onglet.
@@ -858,7 +868,30 @@ export default function AutomationBuilderPage() {
 
   /** Quitter l'éditeur — en demandant d'abord si du travail se perdrait. */
   const quitterEditeur = useCallback(async () => {
-    if (travailNonEnregistre) {
+    /*
+     * ENREGISTRER AVANT DE PARTIR, plutôt qu'avertir.
+     *
+     * Quand toutes les étapes sont complètes, rien n'empêche d'enregistrer :
+     * on le fait, puis on part. Avant, deux trous : quitter pendant les 3 s
+     * d'attente de l'autosauvegarde, ou pendant qu'elle était EN COURS
+     * (état non couvert par le garde) — sans aucun signal. QA du 2026-09-25
+     * (P2-13) : « avertir ou garantir la sauvegarde dans tous les cas ».
+     *
+     * On n'avertit plus que quand on NE PEUT PAS enregistrer : une étape
+     * incomplète, ou le serveur qui refuse.
+     */
+    let echecEnregistrement = false;
+    if (regle && etapesIncompletes === 0 && (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours')) {
+      try {
+        await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
+        setEtatSauvegarde('a_jour');
+      } catch (e: unknown) {
+        console.error('[automatisations] enregistrement à la sortie impossible', e);
+        echecEnregistrement = true;
+      }
+    }
+
+    if (etatSauvegarde === 'incomplet' || echecEnregistrement) {
       const ok = await confirmer({
         title: fr ? 'Quitter sans enregistrer ?' : 'Leave without saving?',
         message: etatSauvegarde === 'incomplet'
@@ -874,7 +907,7 @@ export default function AutomationBuilderPage() {
       if (!ok) return;
     }
     navigate('/automations');
-  }, [travailNonEnregistre, etatSauvegarde, fr, navigate]);
+  }, [regle, etapesIncompletes, etatSauvegarde, nom, steps, fr, navigate]);
 
   const declencheurLabel = useMemo(() => {
     if (!catalogue || !regle) return fr ? '— à choisir —' : '— to pick —';
