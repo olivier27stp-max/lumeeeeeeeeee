@@ -13,8 +13,8 @@ Ce dossier est la **source de vérité** pour créer un environnement neuf.
 
 | Fichier | Contient | Généré depuis |
 |---|---|---|
-| `01_schema.sql` | les 10 extensions (en tête : le schéma en dépend), puis schémas `public`, `app`, `archive` : 254 tables, 15 vues, 407 fonctions, 675 policies, 263 triggers, contraintes, index, privilèges | `pg_dump` de la prod, 2026-09-25 |
-| `02_post_schema.sql` | ce que `pg_dump` ne contient pas : trigger de création de compte sur `auth.users`, 7 buckets + leurs 13 policies, publication temps réel (20 tables), 10 tâches `pg_cron` | catalogue de la prod, 2026-09-25 |
+| `01_schema.sql` | les 10 extensions (en tête : le schéma en dépend), puis schémas `public`, `app`, `archive` : 255 tables, 15 vues, 449 fonctions, 875 policies, 271 triggers, contraintes, index, privilèges | `pg_dump` de la prod, 2026-09-26 |
+| `02_post_schema.sql` | ce que `pg_dump` ne contient pas : trigger de création de compte sur `auth.users`, 8 buckets + leurs 17 policies, publication temps réel (20 tables), 11 tâches `pg_cron` | catalogue de la prod, 2026-09-26 |
 
 Oublier `02` donne un environnement qui **a l'air** correct mais où les
 fichiers, le temps réel et les jobs de fond ne fonctionnent pas.
@@ -34,6 +34,10 @@ fichiers, le temps réel et les jobs de fond ne fonctionnent pas.
 
 ## Ce qui est prouvé, ce qui ne l'est pas
 
+- ⚠️ **Le rejeu de bout en bout date de la version du 2026-09-25**, pas de
+  celle-ci : le dossier a été régénéré depuis la prod le 2026-09-26 (après les
+  4 migrations des champs personnalisés) et n'a pas été rejoué depuis. Ce qui
+  suit décrit la version précédente, à refaire quand on en aura besoin.
 - ✅ **Rejoué de bout en bout le 2026-09-25** sur un conteneur vierge de l'image
   Supabase `public.ecr.aws/supabase/postgres:17.6.1.167` : `01` puis `02`,
   **zéro erreur** ; la base obtenue compte exactement ce que compte la prod

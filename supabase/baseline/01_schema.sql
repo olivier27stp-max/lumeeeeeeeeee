@@ -1,5 +1,5 @@
 -- ============================================================================
--- BASELINE 01 — schémas public, app, archive (pg_dump de la PROD, 2026-09-25)
+-- BASELINE 01 — schémas public, app, archive (pg_dump de la PROD, 2026-09-26)
 -- Généré par scripts/regenerer-baseline.mjs — ne pas modifier à la main.
 -- Les extensions viennent en tête : le schéma en dépend (index, types, recherche).
 -- ============================================================================
@@ -21,7 +21,7 @@ create extension if not exists vector with schema extensions;
 
 
 -- Dumped from database version 17.6
--- Dumped by pg_dump version 17.11 (Debian 17.11-1.pgdg13+2)
+-- Dumped by pg_dump version 17.10 (Debian 17.10-1.pgdg13+1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -74,7 +74,10 @@ CREATE TYPE public.cf_field_type AS ENUM (
     'email',
     'date',
     'dropdown_single',
-    'dropdown_multi'
+    'dropdown_multi',
+    'checkbox',
+    'url',
+    'file'
 );
 
 
@@ -87,7 +90,8 @@ CREATE TYPE public.cf_object_type AS ENUM (
     'deal',
     'job',
     'quote',
-    'invoice'
+    'invoice',
+    'property'
 );
 
 
@@ -277,6 +281,68 @@ CREATE FUNCTION public._membre_actif_ou_nul(p_user uuid, p_org uuid) RETURNS uui
     SET search_path TO 'public', 'pg_temp'
     AS $$
   select case when p_user is not null and public.has_org_membership(p_user, p_org) then p_user end;
+$$;
+
+
+--
+-- Name: _pipeline_copier(uuid, uuid, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._pipeline_copier(p_source uuid, p_org uuid, p_nom text, p_uid uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_nouveau uuid;
+begin
+  insert into public.pipelines_ventes (org_id, name, is_default, color_mode, use_deal_probability)
+  select p_org, public._pipeline_nom_libre(p_org, p_nom), false, s.color_mode, s.use_deal_probability
+  from public.pipelines_ventes s
+  where s.id = p_source
+  returning id into v_nouveau;
+
+  if v_nouveau is null then
+    raise exception 'Pipeline introuvable';
+  end if;
+
+  insert into public.pipeline_stages (
+    org_id, pipeline_id, name_fr, name_en, guidance_fr, guidance_en,
+    position, kind, probability, show_in_reports, show_in_pie
+  )
+  select
+    p_org, v_nouveau, e.name_fr, e.name_en, e.guidance_fr, e.guidance_en,
+    row_number() over (order by e.position), e.kind, e.probability,
+    e.show_in_reports, e.show_in_pie
+  from public.pipeline_stages e
+  where e.pipeline_id = p_source and e.archived_at is null;
+
+  perform public.pipeline_resynchroniser_defaut(p_org);
+  return v_nouveau;
+end;
+$$;
+
+
+--
+-- Name: _pipeline_nom_libre(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._pipeline_nom_libre(p_org uuid, p_base text) RETURNS text
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_nom text := btrim(p_base);
+  v_i   integer := 1;
+begin
+  while exists (
+    select 1 from public.pipelines_ventes
+    where org_id = p_org and archived_at is null and lower(btrim(name)) = lower(v_nom)
+  ) loop
+    v_i := v_i + 1;
+    v_nom := btrim(p_base) || ' (' || v_i || ')';
+  end loop;
+  return v_nom;
+end;
 $$;
 
 
@@ -1190,10 +1256,11 @@ begin
      where id = v_contact_id;
   end if;
 
-  -- champs personnalisés (2026-09-26) : valeurs du client et de ses deals.
+  -- champs personnalisés (2026-09-26) : valeurs du client, de ses deals et (2026-09-29) de ses propriétés.
   delete from public.custom_field_values
    where client_id = p_client_id
-      or deal_id in (select d.id from public.deals d where d.client_id = p_client_id);
+      or deal_id in (select d.id from public.deals d where d.client_id = p_client_id)
+      or property_id in (select p.id from public.properties p where p.client_id = p_client_id);
 
   insert into public.audit_events(org_id, actor_id, action, entity_type, entity_id, metadata)
   values (v_org, auth.uid(), 'anonymize', 'client', p_client_id, jsonb_build_object('method','dsr_erasure'));
@@ -3228,12 +3295,13 @@ CREATE FUNCTION public.cf_cle_permission_ecriture(p_object public.cf_object_type
     LANGUAGE sql IMMUTABLE
     SET search_path TO ''
     AS $$
-  select case p_object
+  select case p_object::text
     when 'client' then 'clients.update'
     when 'deal' then 'leads.update'
     when 'job' then 'jobs.update'
     when 'quote' then 'quotes.update'
     when 'invoice' then 'invoices.update'
+    when 'property' then 'clients.update'
   end;
 $$;
 
@@ -3246,12 +3314,13 @@ CREATE FUNCTION public.cf_cles_standard(p_object public.cf_object_type) RETURNS 
     LANGUAGE sql IMMUTABLE
     SET search_path TO ''
     AS $$
-  select case p_object
+  select case p_object::text
     when 'client'  then array['first_name','last_name','name','company','email','phone','address','city','province','postal_code','status','source','notes','created_at','updated_at']
     when 'deal'    then array['title','stage','pipeline','source','assigned_user','amount','probability','expected_close_date','lost_reason','status','created_at','updated_at']
     when 'job'     then array['title','job_number','status','client','address','scheduled_at','total','notes','created_at','updated_at']
     when 'quote'   then array['title','quote_number','status','client','total','valid_until','notes','created_at','updated_at']
     when 'invoice' then array['invoice_number','status','client','total','due_date','balance','notes','created_at','updated_at']
+    when 'property' then array['name','address','city','province','postal_code','country','client','kind','is_primary','created_at','updated_at']
   end;
 $$;
 
@@ -3279,8 +3348,9 @@ CREATE TABLE public.custom_fields (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     archived_at timestamp with time zone,
-    legacy_column_id uuid,
+    default_value jsonb,
     CONSTRAINT custom_fields_config_objet CHECK ((jsonb_typeof(config) = 'object'::text)),
+    CONSTRAINT custom_fields_default_value_type CHECK (((default_value IS NULL) OR (jsonb_typeof(default_value) = ANY (ARRAY['string'::text, 'number'::text, 'array'::text, 'boolean'::text])))),
     CONSTRAINT custom_fields_help_text_len CHECK (((help_text IS NULL) OR (length(help_text) <= 200))),
     CONSTRAINT custom_fields_key_format CHECK ((key ~ '^[a-z][a-z0-9_]{0,49}$'::text)),
     CONSTRAINT custom_fields_label_len CHECK (((length(btrim(label)) >= 1) AND (length(btrim(label)) <= 100))),
@@ -3299,10 +3369,10 @@ COMMENT ON TABLE public.custom_fields IS 'Champs personnalisés v2 (modèle GoHi
 
 
 --
--- Name: COLUMN custom_fields.legacy_column_id; Type: COMMENT; Schema: public; Owner: -
+-- Name: COLUMN custom_fields.default_value; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.custom_fields.legacy_column_id IS 'Id de la ligne d''origine dans l''ancien registre custom_columns (copie : archive.custom_columns_20260926). Trace de reprise, pas une FK.';
+COMMENT ON COLUMN public.custom_fields.default_value IS 'Pré-remplissage à la création d''une fiche (texte, nombre, date AAAA-MM-JJ, libellé d''option). N''écrit rien sur les fiches existantes.';
 
 
 --
@@ -3335,12 +3405,16 @@ begin
 
   -- Opérateurs permis par type (miroir de OPERATEURS_PAR_TYPE, src/lib/champs/filtres.ts).
   if op is null or not (op = any (case
-      when p_champ.field_type in ('single_line', 'multi_line', 'email', 'phone')
+      when p_champ.field_type in ('single_line', 'multi_line', 'email', 'phone', 'url')
         then array['is', 'is_not', 'contains', 'not_contains', 'is_empty', 'is_not_empty']
       when p_champ.field_type in ('number', 'monetary')
         then array['eq', 'neq', 'gt', 'lt', 'between', 'is_empty', 'is_not_empty']
       when p_champ.field_type in ('dropdown_single', 'dropdown_multi')
         then array['any_of', 'none_of', 'is_empty', 'is_not_empty']
+      when p_champ.field_type = 'checkbox'
+        then array['is']
+      when p_champ.field_type = 'file'
+        then array['is_empty', 'is_not_empty']
       else array['today', 'yesterday', 'in_last', 'more_than_ago', 'less_than_ago', 'before', 'after', 'between', 'is_empty', 'is_not_empty']
     end)) then
     raise exception 'Opérateur « % » invalide pour un champ %.', op, p_champ.field_type using errcode = '22023';
@@ -3350,7 +3424,7 @@ begin
     v_expr := 'true';
   else
   case p_champ.field_type
-    when 'single_line', 'multi_line', 'email', 'phone' then
+    when 'single_line', 'multi_line', 'email', 'phone', 'url' then
       v_col := 'v.value_normalized';
       if p_champ.field_type = 'phone' then
         v_val := coalesce(public.cf_normaliser_telephone(v_val), lower(btrim(coalesce(v_val, ''))));
@@ -3363,6 +3437,13 @@ begin
         when 'contains' then format('%s like %L', v_col, '%' || replace(replace(v_val, '%', '\%'), '_', '\_') || '%')
         when 'not_contains' then format('%s like %L', v_col, '%' || replace(replace(v_val, '%', '\%'), '_', '\_') || '%')
       end;
+    when 'checkbox' then
+      -- « est non » = pas cochée, y compris jamais remplie : l'absence d'un « oui ».
+      if lower(coalesce(v_val, '')) not in ('true', 'false') then
+        raise exception 'Valeur manquante pour « % » (oui ou non).', op using errcode = '22023';
+      end if;
+      v_absence := lower(v_val) = 'false';
+      v_expr := 'v.value_boolean = true';
     when 'number', 'monetary' then
       v_col := case when p_champ.field_type = 'number' then 'v.value_number' else 'v.value_money_cents' end;
       -- Les montants arrivent en cents, comme partout dans Lume.
@@ -3488,13 +3569,13 @@ begin
 
     execute format($i$
       insert into public.custom_field_values (org_id, field_id, object_type, %I, value_text, value_number,
-        value_money_cents, value_currency, value_date, value_timestamp, value_option_id)
-      values ($1, $2, $3::public.cf_object_type, $4, $5, $6, $7, $8, $9, $10, $11)
+        value_money_cents, value_currency, value_date, value_timestamp, value_option_id, value_boolean)
+      values ($1, $2, $3::public.cf_object_type, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       returning id
     $i$, p_vers || '_id')
     into v_nouvelle
     using r.org_id, r.champ_cible, p_vers, p_vers_id, r.value_text, r.value_number,
-      r.value_money_cents, r.value_currency, r.value_date, r.value_timestamp, v_option;
+      r.value_money_cents, r.value_currency, r.value_date, r.value_timestamp, v_option, r.value_boolean;
 
     if r.type_cible = 'dropdown_multi' then
       insert into public.custom_field_value_options (org_id, field_id, value_id, option_id)
@@ -3535,13 +3616,14 @@ begin
        and not exists (select 1 from public.custom_field_values x where x.field_id = fj.id and x.job_id = p_job)
   loop
     insert into public.custom_field_values (org_id, field_id, object_type, job_id, value_text, value_number,
-      value_money_cents, value_currency, value_date, value_timestamp, value_option_id)
+      value_money_cents, value_currency, value_date, value_timestamp, value_option_id, value_boolean)
     values (r.org_id, r.champ_job, 'job', p_job, r.value_text, r.value_number, r.value_money_cents,
       r.value_currency, r.value_date, r.value_timestamp,
       -- une option se retrouve par son libellé dans la liste du champ job
       (select oj.id from public.custom_field_options od
          join public.custom_field_options oj on oj.field_id = r.champ_job and lower(oj.label) = lower(od.label) and oj.archived_at is null
-        where od.id = r.value_option_id limit 1))
+        where od.id = r.value_option_id limit 1),
+      r.value_boolean)
     returning id into v_nouvelle;
     if r.type_job = 'dropdown_multi' then
       insert into public.custom_field_value_options (org_id, field_id, value_id, option_id)
@@ -3688,7 +3770,7 @@ CREATE FUNCTION public.cf_doublons(p_field uuid) RETURNS TABLE(value_normalized 
     SET search_path TO ''
     AS $$
   select v.value_normalized, count(*),
-         array_agg(coalesce(v.client_id, v.deal_id, v.job_id, v.quote_id, v.invoice_id))
+         array_agg(coalesce(v.client_id, v.deal_id, v.job_id, v.quote_id, v.invoice_id, v.property_id))
     from public.custom_field_values v
    where v.field_id = p_field and v.value_normalized is not null
    group by v.value_normalized
@@ -3729,6 +3811,7 @@ begin
     v_ancien := jsonb_build_object(
       'value_text', v.value_text, 'value_number', v.value_number, 'value_money_cents', v.value_money_cents,
       'value_date', v.value_date, 'value_timestamp', v.value_timestamp, 'value_option_id', v.value_option_id,
+      'value_boolean', v.value_boolean,
       'options', to_jsonb(v_anciennes));
   end if;
 
@@ -3753,6 +3836,7 @@ begin
       and v.value_date is not distinct from (p_cols->>'value_date')::date
       and v.value_timestamp is not distinct from (p_cols->>'value_timestamp')::timestamptz
       and v.value_option_id is not distinct from (p_cols->>'value_option_id')::uuid
+      and v.value_boolean is not distinct from (p_cols->>'value_boolean')::boolean
       and v_anciennes = coalesce((select array_agg(x order by x) from unnest(p_options) x), '{}');
     if v_identique then
       return jsonb_build_object('changed', false, 'conflict', false, 'version', v.version, 'old', v_ancien);
@@ -3768,18 +3852,20 @@ begin
       value_date = (p_cols->>'value_date')::date,
       value_timestamp = (p_cols->>'value_timestamp')::timestamptz,
       value_option_id = (p_cols->>'value_option_id')::uuid,
+      value_boolean = (p_cols->>'value_boolean')::boolean,
       updated_by = (select auth.uid())
     where id = v.id
     returning * into v_nouv;
   else
     execute format(
       'insert into public.custom_field_values (org_id, field_id, object_type, %I, value_text, value_number,
-         value_money_cents, value_currency, value_date, value_timestamp, value_option_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning *', v_col)
+         value_money_cents, value_currency, value_date, value_timestamp, value_option_id, value_boolean)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning *', v_col)
       into v_nouv
       using f.org_id, p_field, f.object_type, p_entity, p_cols->>'value_text', (p_cols->>'value_number')::numeric,
             (p_cols->>'value_money_cents')::bigint, nullif(p_cols->>'value_currency', ''),
-            (p_cols->>'value_date')::date, (p_cols->>'value_timestamp')::timestamptz, (p_cols->>'value_option_id')::uuid;
+            (p_cols->>'value_date')::date, (p_cols->>'value_timestamp')::timestamptz, (p_cols->>'value_option_id')::uuid,
+            (p_cols->>'value_boolean')::boolean;
   end if;
 
   if f.field_type = 'dropdown_multi' then
@@ -3827,8 +3913,8 @@ declare
 begin
   -- Visibilité : la RLS du parent, sur les seules lignes retenues.
   return query execute format('select e.id from public.%I e where e.id = any($1) and e.org_id = $2',
-    case p_object when 'client' then 'clients' when 'deal' then 'deals' when 'job' then 'jobs'
-                  when 'quote' then 'quotes' when 'invoice' then 'invoices' end)
+    case p_object::text when 'client' then 'clients' when 'deal' then 'deals' when 'job' then 'jobs'
+                  when 'quote' then 'quotes' when 'invoice' then 'invoices' when 'property' then 'properties' end)
     using v_ids, p_org;
 end $_$;
 
@@ -3838,7 +3924,7 @@ end $_$;
 --
 
 CREATE FUNCTION public.cf_filtrer_brut(p_org uuid, p_object public.cf_object_type, p_conditions jsonb, p_ids uuid[] DEFAULT NULL::uuid[]) RETURNS SETOF uuid
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql STABLE
     SET search_path TO ''
     AS $_$
 declare
@@ -3860,8 +3946,8 @@ begin
   if jsonb_typeof(coalesce(p_conditions, '[]'::jsonb)) <> 'array' or jsonb_array_length(coalesce(p_conditions, '[]'::jsonb)) > 25 then
     raise exception 'Conditions invalides (25 au plus).' using errcode = '22023';
   end if;
-  v_table := case p_object when 'client' then 'clients' when 'deal' then 'deals' when 'job' then 'jobs'
-                           when 'quote' then 'quotes' when 'invoice' then 'invoices' end;
+  v_table := case p_object::text when 'client' then 'clients' when 'deal' then 'deals' when 'job' then 'jobs'
+                           when 'quote' then 'quotes' when 'invoice' then 'invoices' when 'property' then 'properties' end;
   v_col := p_object::text || '_id';
   for c in select * from jsonb_array_elements(coalesce(p_conditions, '[]'::jsonb)) loop
     select * into f from public.custom_fields
@@ -3909,24 +3995,30 @@ CREATE FUNCTION public.cf_impact_champ(p_field uuid) RETURNS jsonb
 declare
   f public.custom_fields%rowtype;
   v_tag text;
+  v_alias text;
 begin
   select * into f from public.custom_fields where id = p_field;
   if not found then raise exception 'Champ introuvable.' using errcode = 'P0002'; end if;
   v_tag := f.object_type::text || '_cf_' || f.key;
+  -- La clé ne contient que [a-z0-9_] (contrainte) : sûre dans une regex.
+  v_alias := '\{\{\s*' || f.object_type::text || '\.' || f.key || '\s*\}\}';
   return jsonb_build_object(
     'valeurs', (select count(*) from public.custom_field_values v where v.field_id = p_field),
     'automatisations', (
       select coalesce(jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name)), '[]'::jsonb)
         from public.automation_rules r
        where r.org_id = f.org_id
-         and (coalesce(r.conditions::text, '') || coalesce(r.actions::text, '') || coalesce(r.steps::text, ''))
-             like '%' || p_field::text || '%'
+         and ((coalesce(r.conditions::text, '') || coalesce(r.actions::text, '') || coalesce(r.steps::text, ''))
+               like '%' || p_field::text || '%'
+           or (coalesce(r.actions::text, '') || coalesce(r.steps::text, '')) like '%' || v_tag || '%'
+           or (coalesce(r.actions::text, '') || coalesce(r.steps::text, '')) ~ v_alias)
     ),
     'modeles', (
       select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name)), '[]'::jsonb)
         from public.email_templates t
        where t.org_id = f.org_id
-         and (coalesce(t.subject, '') || coalesce(t.body, '')) like '%' || v_tag || '%'
+         and ((coalesce(t.subject, '') || coalesce(t.body, '')) like '%' || v_tag || '%'
+           or (coalesce(t.subject, '') || coalesce(t.body, '')) ~ v_alias)
     ),
     'pipelines', (
       select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name)), '[]'::jsonb)
@@ -4053,19 +4145,50 @@ end $$;
 
 
 --
--- Name: cf_parent_visible(uuid, uuid, uuid, uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+-- Name: cf_ordre_ids(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_invoice uuid) RETURNS boolean
+CREATE FUNCTION public.cf_ordre_ids(p_field uuid, p_asc boolean DEFAULT true) RETURNS SETOF uuid
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $$
+  select coalesce(v.client_id, v.deal_id, v.job_id, v.quote_id, v.invoice_id, v.property_id)
+    from public.custom_field_values v
+    left join public.custom_field_options o on o.id = v.value_option_id
+   where v.field_id = p_field
+   order by
+     case when p_asc then v.value_number end asc nulls last,
+     case when not p_asc then v.value_number end desc nulls last,
+     case when p_asc then v.value_money_cents end asc nulls last,
+     case when not p_asc then v.value_money_cents end desc nulls last,
+     case when p_asc then coalesce(v.value_timestamp, v.value_date::timestamptz) end asc nulls last,
+     case when not p_asc then coalesce(v.value_timestamp, v.value_date::timestamptz) end desc nulls last,
+     case when p_asc then o.position end asc nulls last,
+     case when not p_asc then o.position end desc nulls last,
+     case when p_asc then v.value_boolean end asc nulls last,
+     case when not p_asc then v.value_boolean end desc nulls last,
+     case when p_asc then lower(coalesce(v.value_text, v.value_normalized)) end asc nulls last,
+     case when not p_asc then lower(coalesce(v.value_text, v.value_normalized)) end desc nulls last,
+     v.created_at desc
+   limit 10000
+$$;
+
+
+--
+-- Name: cf_parent_visible(uuid, uuid, uuid, uuid, uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_invoice uuid, p_property uuid) RETURNS boolean
     LANGUAGE sql STABLE
     SET search_path TO ''
     AS $$
   select case
-    when p_client  is not null then exists (select 1 from public.clients  e where e.org_id = p_org and e.id = p_client)
-    when p_deal    is not null then exists (select 1 from public.deals    e where e.org_id = p_org and e.id = p_deal)
-    when p_job     is not null then exists (select 1 from public.jobs     e where e.org_id = p_org and e.id = p_job)
-    when p_quote   is not null then exists (select 1 from public.quotes   e where e.org_id = p_org and e.id = p_quote)
-    when p_invoice is not null then exists (select 1 from public.invoices e where e.org_id = p_org and e.id = p_invoice)
+    when p_client   is not null then exists (select 1 from public.clients    e where e.org_id = p_org and e.id = p_client)
+    when p_deal     is not null then exists (select 1 from public.deals      e where e.org_id = p_org and e.id = p_deal)
+    when p_job      is not null then exists (select 1 from public.jobs       e where e.org_id = p_org and e.id = p_job)
+    when p_quote    is not null then exists (select 1 from public.quotes     e where e.org_id = p_org and e.id = p_quote)
+    when p_invoice  is not null then exists (select 1 from public.invoices   e where e.org_id = p_org and e.id = p_invoice)
+    when p_property is not null then exists (select 1 from public.properties e where e.org_id = p_org and e.id = p_property)
     else false
   end;
 $$;
@@ -4116,7 +4239,7 @@ CREATE FUNCTION public.cf_rechercher(p_org uuid, p_q text, p_limit integer DEFAU
     LANGUAGE sql STABLE
     SET search_path TO ''
     AS $$
-  select v.object_type, coalesce(v.client_id, v.deal_id, v.job_id, v.quote_id, v.invoice_id), f.id, f.label,
+  select v.object_type, coalesce(v.client_id, v.deal_id, v.job_id, v.quote_id, v.invoice_id, v.property_id), f.id, f.label,
          coalesce(v.value_text, v.value_normalized)
     from public.custom_field_values v
     join public.custom_fields f on f.id = v.field_id
@@ -4169,20 +4292,20 @@ begin
   new.unique_enforced := f.is_unique;
 
   -- Seule la colonne du type peut être remplie.
-  if f.field_type in ('single_line', 'multi_line', 'phone', 'email') then
-    if num_nonnulls(new.value_number, new.value_money_cents, new.value_date, new.value_timestamp, new.value_option_id) > 0 then
+  if f.field_type in ('single_line', 'multi_line', 'phone', 'email', 'url', 'file') then
+    if num_nonnulls(new.value_number, new.value_money_cents, new.value_date, new.value_timestamp, new.value_option_id, new.value_boolean) > 0 then
       raise exception '« % » attend du texte.', f.label using errcode = '22023';
     end if;
   elsif f.field_type = 'number' then
-    if num_nonnulls(new.value_text, new.value_money_cents, new.value_date, new.value_timestamp, new.value_option_id) > 0 then
+    if num_nonnulls(new.value_text, new.value_money_cents, new.value_date, new.value_timestamp, new.value_option_id, new.value_boolean) > 0 then
       raise exception '« % » attend un nombre.', f.label using errcode = '22023';
     end if;
   elsif f.field_type = 'monetary' then
-    if num_nonnulls(new.value_text, new.value_number, new.value_date, new.value_timestamp, new.value_option_id) > 0 then
+    if num_nonnulls(new.value_text, new.value_number, new.value_date, new.value_timestamp, new.value_option_id, new.value_boolean) > 0 then
       raise exception '« % » attend un montant.', f.label using errcode = '22023';
     end if;
   elsif f.field_type = 'date' then
-    if num_nonnulls(new.value_text, new.value_number, new.value_money_cents, new.value_option_id) > 0
+    if num_nonnulls(new.value_text, new.value_number, new.value_money_cents, new.value_option_id, new.value_boolean) > 0
        or (coalesce((f.config->>'include_time')::boolean, false) and new.value_date is not null)
        or (not coalesce((f.config->>'include_time')::boolean, false) and new.value_timestamp is not null) then
       raise exception '« % » attend une date%.', f.label,
@@ -4190,12 +4313,16 @@ begin
         using errcode = '22023';
     end if;
   elsif f.field_type = 'dropdown_single' then
-    if num_nonnulls(new.value_text, new.value_number, new.value_money_cents, new.value_date, new.value_timestamp) > 0 then
+    if num_nonnulls(new.value_text, new.value_number, new.value_money_cents, new.value_date, new.value_timestamp, new.value_boolean) > 0 then
       raise exception '« % » attend une option de la liste.', f.label using errcode = '22023';
     end if;
   elsif f.field_type = 'dropdown_multi' then
-    if num_nonnulls(new.value_text, new.value_number, new.value_money_cents, new.value_date, new.value_timestamp, new.value_option_id) > 0 then
+    if num_nonnulls(new.value_text, new.value_number, new.value_money_cents, new.value_date, new.value_timestamp, new.value_option_id, new.value_boolean) > 0 then
       raise exception '« % » attend des options de la liste.', f.label using errcode = '22023';
+    end if;
+  elsif f.field_type = 'checkbox' then
+    if num_nonnulls(new.value_text, new.value_number, new.value_money_cents, new.value_date, new.value_timestamp, new.value_option_id) > 0 then
+      raise exception '« % » attend oui ou non.', f.label using errcode = '22023';
     end if;
   end if;
 
@@ -4207,6 +4334,19 @@ begin
       raise exception '« % » attend une adresse courriel valide.', f.label using errcode = '22023';
     end if;
     new.value_normalized := lower(new.value_text);
+  elsif f.field_type = 'url' and new.value_text is not null then
+    new.value_text := btrim(new.value_text);
+    -- http(s) seulement : un lien « javascript: » ou « data: » affiché sur une fiche serait un piège.
+    if new.value_text !~* '^https?://[^\s/$.?#][^\s]*$' or length(new.value_text) > 2000 then
+      raise exception '« % » attend une adresse web (https://…).', f.label using errcode = '22023';
+    end if;
+    new.value_normalized := lower(new.value_text);
+  elsif f.field_type = 'file' and new.value_text is not null then
+    -- Chemin dans custom-field-files : <org du champ>/<uuid>/<nom>. Jamais le fichier d'une autre entreprise.
+    if new.value_text !~ ('^' || f.org_id::text || '/[0-9a-f-]{36}/[^/]{1,200}$') then
+      raise exception '« % » attend un fichier téléversé.', f.label using errcode = '22023';
+    end if;
+    new.value_normalized := lower(regexp_replace(new.value_text, '^.*/', ''));
   elsif f.field_type = 'phone' and new.value_text is not null then
     new.value_normalized := public.cf_normaliser_telephone(new.value_text);
     if new.value_normalized is null then
@@ -4233,6 +4373,8 @@ begin
   elsif f.field_type = 'monetary' and new.value_money_cents is not null then
     new.value_currency := upper(coalesce(new.value_currency, nullif(f.config->>'currency', ''), 'CAD'));
     new.value_normalized := new.value_money_cents::text;
+  elsif f.field_type = 'checkbox' and new.value_boolean is not null then
+    new.value_normalized := new.value_boolean::text;
   end if;
   if f.field_type <> 'monetary' then new.value_currency := null; end if;
 
@@ -4255,10 +4397,11 @@ CREATE FUNCTION public.cf_valeurs_lisibles(p_client uuid) RETURNS jsonb
     AS $$
   select coalesce(jsonb_agg(jsonb_build_object(
            'object_type', v.object_type,
-           'entity_id', coalesce(v.client_id, v.deal_id, v.job_id, v.quote_id, v.invoice_id),
+           'entity_id', coalesce(v.client_id, v.deal_id, v.job_id, v.quote_id, v.invoice_id, v.property_id),
            'field', f.label, 'key', f.key, 'type', f.field_type,
            'value', coalesce(v.value_text, v.value_number::text, v.value_money_cents::text, v.value_date::text,
                              v.value_timestamp::text, o.label,
+                             case v.value_boolean when true then 'oui' when false then 'non' end,
                              (select string_agg(mo.label, ', ') from public.custom_field_value_options vo
                                 join public.custom_field_options mo on mo.id = vo.option_id where vo.value_id = v.id)),
            'updated_at', v.updated_at) order by f.label), '[]'::jsonb)
@@ -4269,7 +4412,8 @@ CREATE FUNCTION public.cf_valeurs_lisibles(p_client uuid) RETURNS jsonb
       or v.deal_id in (select d.id from public.deals d where d.client_id = p_client)
       or v.job_id in (select j.id from public.jobs j where j.client_id = p_client)
       or v.quote_id in (select q.id from public.quotes q where q.client_id = p_client)
-      or v.invoice_id in (select i.id from public.invoices i where i.client_id = p_client);
+      or v.invoice_id in (select i.id from public.invoices i where i.client_id = p_client)
+      or v.property_id in (select p.id from public.properties p where p.client_id = p_client);
 $$;
 
 
@@ -6566,7 +6710,7 @@ begin
       case v_kind
         when 'won'  then 100
         when 'lost' then 0
-        else nullif(v_etape ->> 'probability', '')::integer
+        else nullif(v_etape ->> 'probability', '')::numeric
       end,
       coalesce((v_etape ->> 'show_in_reports')::boolean, true)
     );
@@ -7101,6 +7245,10 @@ CREATE FUNCTION public.deals_emettre_evenements() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 begin
+  if current_setting('lume.deplacement_administratif', true) = 'on' then
+    return null;
+  end if;
+
   if tg_op = 'UPDATE' and new.stage_id is not distinct from old.stage_id then
     return null;
   end if;
@@ -9210,7 +9358,7 @@ begin
   if p_pipeline_id is not null then
     select id into v_pipeline
     from public.pipelines_ventes
-    where id = p_pipeline_id and org_id = p_org_id
+    where id = p_pipeline_id and org_id = p_org_id and archived_at is null
     limit 1;
   end if;
 
@@ -9925,8 +10073,8 @@ begin
   -- échouer la conversion en silence le jour où ce n'est plus vrai.
   select id into v_pipeline
   from public.pipelines_ventes
-  where org_id = p_org_id
-  order by is_default desc, created_at asc
+  where org_id = p_org_id and archived_at is null
+  order by is_default desc, position asc, created_at asc
   limit 1;
   if v_pipeline is null then
     return null;  -- Pas de pipeline de ventes : rien à gagner, ce n'est pas une erreur.
@@ -10265,6 +10413,55 @@ begin
     jsonb_build_object('quote_number', coalesce(new.quote_number, ''), 'total_cents', coalesce(new.total_cents, 0)));
   return new;
 end; $$;
+
+
+--
+-- Name: log_tache_deal(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.log_tache_deal() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_evenement text;
+begin
+  if new.linked_entity_type is distinct from 'deal' or new.linked_entity_id is null then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if new.deleted_at is not null then
+      return new;
+    end if;
+    v_evenement := 'task_created';
+  elsif old.deleted_at is null and new.deleted_at is not null then
+    v_evenement := 'task_deleted';
+  elsif new.deleted_at is not null then
+    -- Une tâche déjà supprimée qu'on retouche : rien à raconter.
+    return new;
+  elsif old.status is distinct from new.status and new.status = 'done' then
+    v_evenement := 'task_completed';
+  elsif old.status is distinct from new.status and new.status = 'open' then
+    v_evenement := 'task_reopened';
+  elsif old.title is distinct from new.title or old.due_date is distinct from new.due_date then
+    v_evenement := 'task_updated';
+  else
+    return new;
+  end if;
+
+  insert into public.activity_log (
+    org_id, entity_type, entity_id, related_entity_type, related_entity_id,
+    event_type, actor_id, metadata
+  )
+  values (
+    new.org_id, 'task', new.id, 'deal', new.linked_entity_id,
+    v_evenement, coalesce(auth.uid(), new.created_by),
+    jsonb_build_object('title', coalesce(new.title, ''), 'due_date', new.due_date)
+  );
+  return new;
+end;
+$$;
 
 
 --
@@ -10662,27 +10859,6 @@ COMMENT ON FUNCTION public.oauth_menage() IS 'Supprime les codes périmés et le
 
 
 --
--- Name: org_activer_champs_perso(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.org_activer_champs_perso() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO ''
-    AS $$
-begin
-  begin
-    insert into public.org_features (org_id, feature, enabled)
-    values (new.id, 'custom_fields_v2', true)
-    on conflict (org_id, feature) do nothing;
-  exception when others then
-    -- Jamais au prix de la création d'une entreprise.
-    raise warning 'org_activer_champs_perso(%) : %', new.id, sqlerrm;
-  end;
-  return new;
-end $$;
-
-
---
 -- Name: org_has_no_members(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10839,6 +11015,31 @@ begin
   new.paid_at := new.payment_date;
   return new;
 end;
+$$;
+
+
+--
+-- Name: peut_modifier_pipeline(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.peut_modifier_pipeline(p_user uuid, p_pipeline uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (
+    select 1 from public.pipelines_ventes p
+    where p.id = p_pipeline
+      and (
+        public.has_org_admin_role(p_user, p.org_id)
+        or (
+          public.has_org_membership(p_user, p.org_id)
+          and exists (
+            select 1 from public.pipeline_acces a
+            where a.pipeline_id = p.id and a.user_id = p_user and a.peut_modifier
+          )
+        )
+      )
+  );
 $$;
 
 
@@ -11021,6 +11222,25 @@ COMMENT ON FUNCTION public.pipeline_abandonner_deal(p_deal_id uuid, p_raison tex
 
 
 --
+-- Name: pipeline_bureaux_administres(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipeline_bureaux_administres() RETURNS TABLE(org_id uuid, nom text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select o.id, o.name
+  from public.memberships m
+  join public.orgs o on o.id = m.org_id
+  where m.user_id = auth.uid()
+    and coalesce(m.status, 'active') = 'active'
+    and o.id is distinct from public.current_org_id()
+    and public.has_org_admin_role(auth.uid(), o.id)
+  order by o.name;
+$$;
+
+
+--
 -- Name: pipeline_chronologie(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -11095,10 +11315,51 @@ COMMENT ON FUNCTION public.pipeline_cohortes(p_mois integer) IS 'Cohortes du for
 
 
 --
--- Name: pipeline_creer_deal(text, text, text, text, text, bigint, uuid, date, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: pipeline_copier_vers_bureaux(uuid, uuid[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.pipeline_creer_deal(p_first_name text, p_last_name text DEFAULT NULL::text, p_email text DEFAULT NULL::text, p_phone text DEFAULT NULL::text, p_address text DEFAULT NULL::text, p_montant_cents bigint DEFAULT NULL::bigint, p_assigne_a uuid DEFAULT NULL::uuid, p_date_fermeture_visee date DEFAULT NULL::date, p_source text DEFAULT NULL::text) RETURNS jsonb
+CREATE FUNCTION public.pipeline_copier_vers_bureaux(p_id uuid, p_orgs uuid[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_org uuid := current_org_id();
+  v_uid uuid := auth.uid();
+  v_nom text;
+  v_cible uuid;
+  v_n integer := 0;
+begin
+  if v_org is null or v_uid is null then raise exception 'Aucune session'; end if;
+  if not has_org_admin_role(v_uid, v_org) then
+    raise exception 'Seuls les administrateurs peuvent copier un pipeline';
+  end if;
+  select name into v_nom from public.pipelines_ventes
+  where id = p_id and org_id = v_org and archived_at is null;
+  if v_nom is null then raise exception 'Pipeline introuvable'; end if;
+  if coalesce(array_length(p_orgs, 1), 0) = 0 then
+    raise exception 'Choisissez au moins un bureau';
+  end if;
+
+  foreach v_cible in array p_orgs loop
+    if v_cible = v_org then continue; end if;
+    -- Chaque bureau cible est vérifié : administrer celui-ci ne donne aucun
+    -- droit sur un autre.
+    if not has_org_admin_role(v_uid, v_cible) then
+      raise exception 'Vous n''êtes pas administrateur d''un des bureaux choisis';
+    end if;
+    perform public._pipeline_copier(p_id, v_cible, v_nom, v_uid);
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+
+--
+-- Name: pipeline_creer_deal(text, text, text, text, text, bigint, uuid, date, text, uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipeline_creer_deal(p_first_name text, p_last_name text DEFAULT NULL::text, p_email text DEFAULT NULL::text, p_phone text DEFAULT NULL::text, p_address text DEFAULT NULL::text, p_montant_cents bigint DEFAULT NULL::bigint, p_assigne_a uuid DEFAULT NULL::uuid, p_date_fermeture_visee date DEFAULT NULL::date, p_source text DEFAULT NULL::text, p_client_id uuid DEFAULT NULL::uuid, p_quote_id uuid DEFAULT NULL::uuid, p_pipeline_id uuid DEFAULT NULL::uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -11108,6 +11369,14 @@ declare
   v_res     jsonb;
   v_deal_id uuid;
   v_source  text := nullif(btrim(coalesce(p_source, '')), '');
+  v_client  uuid;
+  v_quote   uuid;
+  v_montant bigint := p_montant_cents;
+  v_prenom  text := p_first_name;
+  v_nom     text := p_last_name;
+  v_courriel text := p_email;
+  v_tel     text := p_phone;
+  v_adresse text := p_address;
 begin
   if v_org is null or v_uid is null then
     raise exception 'Aucune session';
@@ -11117,18 +11386,10 @@ begin
     raise exception 'Vous n''avez pas la permission de créer un lead';
   end if;
 
-  if btrim(coalesce(p_first_name, '')) = '' then
-    raise exception 'Le nom est requis';
-  end if;
-
-  -- Un montant négatif n'est pas une saisie maladroite, c'est une donnée
-  -- fausse qui ferait mentir le total d'une colonne.
   if p_montant_cents is not null and p_montant_cents < 0 then
     raise exception 'Le montant ne peut pas être négatif';
   end if;
 
-  -- L'assigné doit appartenir à CETTE organisation : sans ce contrôle, un
-  -- identifiant copié d'ailleurs assignerait un deal à un inconnu.
   if p_assigne_a is not null
      and not exists (
        select 1 from public.memberships m
@@ -11137,27 +11398,144 @@ begin
     raise exception 'La personne assignée ne fait pas partie de l''organisation';
   end if;
 
-  -- Le rapprochement de contacts, inchangé.
-  v_res := public.ingest_lead(
-    p_org_id     => v_org,
-    p_source     => coalesce(v_source, 'manual'),
-    p_first_name => btrim(p_first_name),
-    p_last_name  => nullif(btrim(coalesce(p_last_name, '')), ''),
-    p_email      => nullif(btrim(coalesce(p_email, '')), ''),
-    p_phone      => nullif(btrim(coalesce(p_phone, '')), ''),
-    p_address    => nullif(btrim(coalesce(p_address, '')), ''),
-    p_created_by => v_uid
-  );
+  -- ── Le devis choisi donne son client ET son montant ──────────
+  -- Un devis porte déjà les deux. Les redemander au vendeur, c'est l'inviter
+  -- à saisir un chiffre qui divergera du document.
+  if p_quote_id is not null then
+    select q.id, q.client_id, q.total_cents
+      into v_quote, v_client, v_montant
+    from public.quotes q
+    where q.id = p_quote_id and q.org_id = v_org and q.deleted_at is null;
+
+    if v_quote is null then
+      raise exception 'Devis introuvable';
+    end if;
+    if v_client is null then
+      raise exception 'Ce devis n''est rattaché à aucun client';
+    end if;
+  end if;
+
+  -- ── Le client choisi fournit le contact ──────────────────────
+  -- On LIT la fiche au lieu de faire confiance à ce qui a été retapé : c'est
+  -- ce qui garantit zéro doublon. « p_client_id » gagne sur le devis seulement
+  -- s'il est cohérent avec lui.
+  if p_client_id is not null then
+    if v_client is not null and v_client <> p_client_id then
+      raise exception 'Le client choisi ne correspond pas à celui du devis';
+    end if;
+    v_client := p_client_id;
+  end if;
+
+  if v_client is not null then
+    select
+      coalesce(nullif(btrim(coalesce(c.first_name, '')), ''), 'Client'),
+      c.last_name, c.email, c.phone, c.address
+      into v_prenom, v_nom, v_courriel, v_tel, v_adresse
+    from public.clients c
+    where c.id = v_client and c.org_id = v_org and c.deleted_at is null;
+
+    if v_prenom is null then
+      raise exception 'Client introuvable';
+    end if;
+  end if;
+
+  if btrim(coalesce(v_prenom, '')) = '' then
+    raise exception 'Le nom est requis';
+  end if;
+
+  -- Le pipeline cible est VALIDÉ ici : ingest_lead retomberait sur le pipeline
+  -- par défaut sans rien dire si l'identifiant venait d'ailleurs, et le deal
+  -- atterrirait dans le mauvais tableau. (« pipelines_ventes » n'a pas
+  -- d'archivage : l'existence dans l'organisation suffit.)
+  if p_pipeline_id is not null
+     and not exists (
+       select 1 from public.pipelines_ventes p
+       where p.id = p_pipeline_id and p.org_id = v_org and p.archived_at is null
+     ) then
+    raise exception 'Pipeline introuvable';
+  end if;
+
+  if v_client is null then
+    -- Nouveau contact : le rapprochement d'ingest_lead, inchangé.
+    v_res := public.ingest_lead(
+      p_org_id      => v_org,
+      p_source      => coalesce(v_source, 'manual'),
+      p_first_name  => btrim(v_prenom),
+      p_last_name   => nullif(btrim(coalesce(v_nom, '')), ''),
+      p_email       => nullif(btrim(coalesce(v_courriel, '')), ''),
+      p_phone       => nullif(btrim(coalesce(v_tel, '')), ''),
+      p_address     => nullif(btrim(coalesce(v_adresse, '')), ''),
+      p_created_by  => v_uid,
+      p_pipeline_id => p_pipeline_id
+    );
+  else
+    -- Client CHOISI : on ne passe PAS par le rapprochement. Il ne sait
+    -- retrouver quelqu'un que par téléphone ou courriel ; un client connu
+    -- qui n'a ni l'un ni l'autre serait recréé en double — exactement le
+    -- défaut qu'on corrige. Le deal est donc rattaché à CE client.
+    -- Même résolution de pipeline et d'étape qu'ingest_lead (§2b), même
+    -- règle « un seul deal ouvert par client et par pipeline » (§2e).
+    declare
+      v_pipeline    uuid;
+      v_etape       uuid;
+      v_deal_ouvert uuid;
+    begin
+      if p_pipeline_id is not null then
+        v_pipeline := p_pipeline_id;
+      else
+        select id into v_pipeline from public.pipelines_ventes
+        where org_id = v_org and is_default limit 1;
+      end if;
+      if v_pipeline is null then
+        v_pipeline := public.seed_pipeline_ventes(v_org, 'generique');
+      end if;
+
+      select id into v_etape from public.pipeline_stages
+      where org_id = v_org and pipeline_id = v_pipeline
+        and kind = 'open' and archived_at is null
+      order by position limit 1;
+
+      if v_etape is null then
+        raise exception 'Ce pipeline n''a aucune étape ouverte';
+      end if;
+
+      select d.id into v_deal_ouvert
+      from public.deals d
+      join public.pipeline_stages s on s.id = d.stage_id
+      where d.org_id = v_org and d.client_id = v_client
+        and d.pipeline_id = v_pipeline
+        and d.deleted_at is null and s.kind = 'open'
+      order by d.created_at desc limit 1;
+
+      if v_deal_ouvert is not null then
+        update public.deals
+        set last_activity_at = now(), updated_at = now()
+        where id = v_deal_ouvert;
+        v_res := jsonb_build_object(
+          'deal_id', v_deal_ouvert, 'client_id', v_client, 'pipeline_id', v_pipeline,
+          'cree', false, 'fusionne', true, 'deal_existant', true,
+          'raison', 'deal_ouvert_existant');
+      else
+        insert into public.deals (org_id, pipeline_id, stage_id, client_id, source, created_by)
+        values (v_org, v_pipeline, v_etape, v_client, coalesce(v_source, 'manual'), v_uid)
+        returning id into v_deal_id;
+
+        update public.clients
+        set last_client_activity_at = now(), updated_at = now()
+        where id = v_client;
+
+        v_res := jsonb_build_object(
+          'deal_id', v_deal_id, 'client_id', v_client, 'pipeline_id', v_pipeline,
+          'cree', true, 'fusionne', true, 'deal_existant', false,
+          'raison', 'client_choisi');
+      end if;
+    end;
+  end if;
 
   v_deal_id := (v_res ->> 'deal_id')::uuid;
 
-  -- Les compléments, seulement s'ils ont été fournis. `coalesce` garde la
-  -- valeur existante : un deal rapproché d'un lead déjà là ne doit pas
-  -- perdre son assignation parce qu'on a resaisi le contact.
   if v_deal_id is not null
-     and (p_montant_cents is not null
-          or p_assigne_a is not null
-          or p_date_fermeture_visee is not null) then
+     and (p_assigne_a is not null or p_date_fermeture_visee is not null) then
     update public.deals d
     set
       assigned_user_id    = coalesce(p_assigne_a, d.assigned_user_id),
@@ -11172,21 +11550,25 @@ begin
       and d.org_id = v_org;
   end if;
 
-  -- Le MONTANT n'est pas écrit sur le deal : il est DÉRIVÉ du devis ou de la
-  -- job (`pipeline_montants`). Un montant saisi à la création est une
-  -- estimation du vendeur, pas un document — on la garde comme devis
-  -- brouillon rattaché au deal, ce qui la rend visible, modifiable, et
-  -- convertible. Sans ça, elle serait un chiffre orphelin que rien ne met
-  -- à jour quand la vraie soumission part.
-  if v_deal_id is not null and p_montant_cents is not null and p_montant_cents > 0 then
-    declare
-      v_client uuid;
-      v_quote  uuid;
-      v_num    text;
-    begin
-      select client_id into v_client from public.deals where id = v_deal_id;
+  -- ── Le devis existant est RATTACHÉ, pas recréé ───────────────
+  if v_deal_id is not null and v_quote is not null then
+    update public.deals
+    set quote_id = coalesce(quote_id, v_quote), updated_at = now()
+    where id = v_deal_id and org_id = v_org;
 
-      if v_client is not null then
+  -- Sinon, et seulement sinon, l'estimation saisie devient un devis
+  -- brouillon : visible, modifiable, remplaçable par la vraie soumission.
+  -- Un montant repris d'un devis choisi ne repasse JAMAIS ici, sans quoi on
+  -- fabriquerait le doublon qu'on cherche à supprimer.
+  elsif v_deal_id is not null and v_montant is not null and v_montant > 0 then
+    declare
+      v_client_deal uuid;
+      v_nouveau     uuid;
+      v_num         text;
+    begin
+      select client_id into v_client_deal from public.deals where id = v_deal_id;
+
+      if v_client_deal is not null then
         v_num := 'EST-' || to_char(now(), 'YYYYMMDD') || '-' || substr(v_deal_id::text, 1, 6);
 
         insert into public.quotes (
@@ -11194,13 +11576,13 @@ begin
           subtotal_cents, tax_cents, total_cents, created_by
         )
         values (
-          v_org, v_client, v_num, 'draft',
-          p_montant_cents, 0, p_montant_cents, v_uid
+          v_org, v_client_deal, v_num, 'draft',
+          v_montant, 0, v_montant, v_uid
         )
-        returning id into v_quote;
+        returning id into v_nouveau;
 
         update public.deals
-        set quote_id = coalesce(quote_id, v_quote), updated_at = now()
+        set quote_id = coalesce(quote_id, v_nouveau), updated_at = now()
         where id = v_deal_id and org_id = v_org;
       end if;
     end;
@@ -11212,10 +11594,10 @@ $$;
 
 
 --
--- Name: FUNCTION pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text); Type: COMMENT; Schema: public; Owner: -
+-- Name: FUNCTION pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text, p_client_id uuid, p_quote_id uuid, p_pipeline_id uuid); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text) IS 'Crée un deal depuis l''app : rapprochement de contact par ingest_lead, puis assignation, date de fermeture visée et estimation (devis brouillon). Le montant reste DÉRIVÉ — il n''est jamais écrit sur le deal. Tous les compléments sont optionnels : un champ absent laisse le deal dans « Corriger vos données », jamais un chiffre inventé.';
+COMMENT ON FUNCTION public.pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text, p_client_id uuid, p_quote_id uuid, p_pipeline_id uuid) IS 'Crée un deal depuis l''app. Trois portes d''entrée : un client existant (p_client_id — le contact est LU sur sa fiche, donc zéro doublon), un devis existant (p_quote_id — donne son client et son montant, et est RATTACHÉ au lieu d''être recréé), ou un nouveau contact (rapprochement par ingest_lead). p_pipeline_id dirige le deal vers un pipeline précis au lieu du pipeline par défaut. Le montant reste DÉRIVÉ, jamais écrit sur le deal.';
 
 
 --
@@ -11408,38 +11790,31 @@ COMMENT ON FUNCTION public.pipeline_definir_affichage(p_pipeline_id uuid, p_colo
 --
 
 CREATE FUNCTION public.pipeline_definir_defaut(p_pipeline_id uuid) RETURNS void
-    LANGUAGE plpgsql
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
   v_org uuid;
+  v_ids uuid[];
 begin
-  -- La RLS de lecture limite déjà à l'org de l'utilisateur : un id étranger
-  -- ne remonte simplement pas.
-  select org_id into v_org
-  from public.pipelines_ventes
-  where id = p_pipeline_id;
-
-  if v_org is null then
+  select org_id into v_org from public.pipelines_ventes
+  where id = p_pipeline_id and archived_at is null;
+  if v_org is null or v_org is distinct from current_org_id() then
     raise exception 'Pipeline introuvable';
   end if;
-
-  update public.pipelines_ventes
-  set is_default = false, updated_at = now()
-  where org_id = v_org and id <> p_pipeline_id and is_default;
-
-  update public.pipelines_ventes
-  set is_default = true, updated_at = now()
-  where id = p_pipeline_id and not is_default;
-
-  -- Zéro ligne modifiée ET pipeline pas déjà par défaut = la policy d'écriture
-  -- a refusé (l'appelant n'est pas administrateur). Sans ce contrôle, l'écran
-  -- afficherait un succès pour une opération qui n'a rien fait.
-  if not exists (
-    select 1 from public.pipelines_ventes where id = p_pipeline_id and is_default
-  ) then
+  if not has_org_admin_role(auth.uid(), v_org) then
     raise exception 'Changement refusé : seuls les administrateurs peuvent changer le pipeline par défaut';
   end if;
+
+  select array_agg(id order by (id = p_pipeline_id) desc, position, created_at, id) into v_ids
+  from public.pipelines_ventes where org_id = v_org and archived_at is null;
+
+  update public.pipelines_ventes p
+  set position = o.rang::integer, updated_at = now()
+  from unnest(v_ids) with ordinality as o(id, rang)
+  where p.id = o.id;
+
+  perform public.pipeline_resynchroniser_defaut(v_org);
 end;
 $$;
 
@@ -11513,6 +11888,221 @@ COMMENT ON FUNCTION public.pipeline_detecter_stagnation() IS 'Détecte les deals
 
 
 --
+-- Name: pipeline_dupliquer(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipeline_dupliquer(p_id uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_org uuid := current_org_id();
+  v_uid uuid := auth.uid();
+  v_nom text;
+begin
+  if v_org is null or v_uid is null then raise exception 'Aucune session'; end if;
+  if not has_org_admin_role(v_uid, v_org) then
+    raise exception 'Seuls les administrateurs peuvent dupliquer un pipeline';
+  end if;
+  select name into v_nom from public.pipelines_ventes
+  where id = p_id and org_id = v_org and archived_at is null;
+  if v_nom is null then raise exception 'Pipeline introuvable'; end if;
+  return public._pipeline_copier(p_id, v_org, v_nom || ' (copie)', v_uid);
+end;
+$$;
+
+
+--
+-- Name: pipeline_enregistrer(uuid, text, text, boolean, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipeline_enregistrer(p_id uuid, p_nom text, p_color_mode text, p_use_deal_probability boolean, p_etapes jsonb) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_org      uuid := current_org_id();
+  v_uid      uuid := auth.uid();
+  v_nom      text := btrim(coalesce(p_nom, ''));
+  v_mode     text := coalesce(nullif(btrim(coalesce(p_color_mode, '')), ''), 'none');
+  v_pipeline uuid := p_id;
+  v_e        jsonb;
+  v_kind     text;
+  v_proba    numeric;
+  v_nb_open  integer := 0;
+  v_rang_open integer := 0;
+  v_pos      integer := 0;
+  v_id       uuid;
+  v_gardes   uuid[] := '{}';
+  v_a_gagne  boolean := false;
+  v_a_perdu  boolean := false;
+begin
+  if v_org is null or v_uid is null then
+    raise exception 'Aucune session';
+  end if;
+  if v_nom = '' then
+    raise exception 'Le nom du pipeline est requis';
+  end if;
+  if v_mode not in ('none', 'dot', 'tint') then
+    raise exception 'Mode de couleur inconnu : %', v_mode;
+  end if;
+  if jsonb_typeof(p_etapes) is distinct from 'array' then
+    raise exception 'Les étapes doivent être une liste';
+  end if;
+
+  -- Validation complète AVANT toute écriture.
+  for v_e in select * from jsonb_array_elements(p_etapes) loop
+    v_kind := coalesce(v_e ->> 'kind', 'open');
+    if v_kind not in ('open', 'won', 'lost') then
+      raise exception 'Type d''étape inconnu : %', v_kind;
+    end if;
+    if btrim(coalesce(v_e ->> 'nom_fr', '')) = '' then
+      raise exception 'Chaque étape doit avoir un nom';
+    end if;
+    v_proba := nullif(v_e ->> 'probability', '')::numeric;
+    if v_proba is not null and (v_proba < 0 or v_proba > 100) then
+      raise exception 'La probabilité doit être comprise entre 0 et 100';
+    end if;
+    if v_kind = 'open' then v_nb_open := v_nb_open + 1; end if;
+  end loop;
+
+  if v_nb_open = 0 then
+    raise exception 'Un pipeline a besoin d''au moins une étape';
+  end if;
+
+  if exists (
+    select 1 from public.pipelines_ventes
+    where org_id = v_org and archived_at is null
+      and lower(btrim(name)) = lower(v_nom)
+      and id is distinct from p_id
+  ) then
+    raise exception 'Un pipeline porte déjà ce nom. Choisissez-en un autre.';
+  end if;
+
+  if p_id is null then
+    if not has_org_admin_role(v_uid, v_org) then
+      raise exception 'Seuls les administrateurs peuvent créer un pipeline';
+    end if;
+    insert into public.pipelines_ventes (org_id, name, is_default, color_mode, use_deal_probability)
+    values (v_org, v_nom, false, v_mode, coalesce(p_use_deal_probability, false))
+    returning id into v_pipeline;
+  else
+    if not exists (
+      select 1 from public.pipelines_ventes
+      where id = p_id and org_id = v_org and archived_at is null
+    ) then
+      raise exception 'Pipeline introuvable';
+    end if;
+    if not peut_modifier_pipeline(v_uid, p_id) then
+      raise exception 'Vous n''avez pas le droit de modifier ce pipeline';
+    end if;
+    update public.pipelines_ventes
+    set name = v_nom, color_mode = v_mode,
+        use_deal_probability = coalesce(p_use_deal_probability, use_deal_probability),
+        updated_at = now()
+    where id = p_id;
+
+    -- Écarter les positions existantes (index partiel non reportable).
+    update public.pipeline_stages
+    set position = position + 100000
+    where pipeline_id = p_id and archived_at is null;
+  end if;
+
+  for v_e in select * from jsonb_array_elements(p_etapes) loop
+    v_kind := coalesce(v_e ->> 'kind', 'open');
+    v_pos := v_pos + 1;
+    v_proba := nullif(v_e ->> 'probability', '')::numeric;
+    if v_kind = 'open' then
+      v_rang_open := v_rang_open + 1;
+      -- Non saisie : répartie uniformément, comme GHL (7 étapes → 14,29…).
+      if v_proba is null then
+        v_proba := round(v_rang_open * 100.0 / (v_nb_open + 1), 2);
+      end if;
+    elsif v_kind = 'won' then
+      v_proba := 100; v_a_gagne := true;
+    else
+      v_proba := 0; v_a_perdu := true;
+    end if;
+
+    v_id := nullif(v_e ->> 'id', '')::uuid;
+
+    if v_id is not null and p_id is not null then
+      update public.pipeline_stages
+      set name_fr = btrim(v_e ->> 'nom_fr'),
+          name_en = coalesce(nullif(btrim(coalesce(v_e ->> 'nom_en', '')), ''), name_en),
+          position = v_pos,
+          probability = v_proba,
+          show_in_reports = coalesce((v_e ->> 'show_in_reports')::boolean, show_in_reports),
+          show_in_pie = coalesce((v_e ->> 'show_in_pie')::boolean, show_in_pie),
+          updated_at = now()
+      where id = v_id and pipeline_id = p_id and archived_at is null;
+      if not found then
+        raise exception 'Étape introuvable dans ce pipeline';
+      end if;
+    else
+      insert into public.pipeline_stages (
+        org_id, pipeline_id, name_fr, name_en, position, kind,
+        probability, show_in_reports, show_in_pie
+      )
+      values (
+        v_org, v_pipeline, btrim(v_e ->> 'nom_fr'),
+        coalesce(nullif(btrim(coalesce(v_e ->> 'nom_en', '')), ''), btrim(v_e ->> 'nom_fr')),
+        v_pos, v_kind::public.pipeline_stage_kind, v_proba,
+        coalesce((v_e ->> 'show_in_reports')::boolean, true),
+        coalesce((v_e ->> 'show_in_pie')::boolean, true)
+      )
+      returning id into v_id;
+    end if;
+    v_gardes := v_gardes || v_id;
+  end loop;
+
+  if p_id is not null then
+    -- Gagné et Perdu sont verrouillés : les retirer du modal ne les supprime pas.
+    if exists (
+      select 1 from public.pipeline_stages
+      where pipeline_id = p_id and archived_at is null
+        and kind in ('won', 'lost') and not (id = any (v_gardes))
+    ) then
+      raise exception 'Les étapes Gagné et Perdu sont verrouillées : elles ne peuvent pas être supprimées';
+    end if;
+    -- Les autres étapes retirées sont archivées. Le déclencheur
+    -- d'archivage refuse si des deals y sont encore.
+    begin
+      update public.pipeline_stages
+      set archived_at = now(), updated_at = now()
+      where pipeline_id = p_id and archived_at is null and not (id = any (v_gardes));
+    exception when others then
+      raise exception '% — déplacez d''abord ses deals depuis la page du pipeline (menu ⋮ de l''étape → Supprimer).', sqlerrm;
+    end;
+    -- Recaler les étapes restées écartées (aucune normalement).
+    update public.pipeline_stages
+    set position = position - 100000
+    where pipeline_id = p_id and archived_at is null and position > 100000;
+  else
+    -- Un pipeline qu'on ne peut pas terminer casse le closing et « Job à
+    -- créer » : Gagné et Perdu sont ajoutés s'ils manquent.
+    if not v_a_gagne then
+      v_pos := v_pos + 1;
+      insert into public.pipeline_stages (org_id, pipeline_id, name_fr, name_en, position, kind, probability)
+      values (v_org, v_pipeline, 'Gagné', 'Won', v_pos, 'won', 100);
+    end if;
+    if not v_a_perdu then
+      v_pos := v_pos + 1;
+      insert into public.pipeline_stages (org_id, pipeline_id, name_fr, name_en, position, kind, probability)
+      values (v_org, v_pipeline, 'Perdu', 'Lost', v_pos, 'lost', 0);
+    end if;
+  end if;
+
+  perform public.pipeline_resynchroniser_defaut(v_org);
+  return v_pipeline;
+exception
+  when unique_violation then
+    raise exception 'Un pipeline porte déjà ce nom. Choisissez-en un autre.';
+end;
+$$;
+
+
+--
 -- Name: pipeline_entonnoir(date, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -11540,6 +12130,7 @@ CREATE FUNCTION public.pipeline_entonnoir(p_from date DEFAULT NULL::date, p_to d
     select s.id, s.name_fr, s.name_en, s.position
     from public.pipeline_stages s
     where s.kind = 'open'
+      and s.show_in_reports
       and s.pipeline_id in (select distinct pipeline_id from public.deals d2 where d2.id in (select id from concernes))
       -- Une étape archivée reste dans l'entonnoir historique : les deals qui
       -- y sont passés existent toujours (décision Q3).
@@ -12124,6 +12715,41 @@ COMMENT ON FUNCTION public.pipeline_raisons_perte(p_from date, p_to date) IS 'De
 
 
 --
+-- Name: pipeline_reordonner(uuid[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipeline_reordonner(p_ids uuid[]) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_org uuid := current_org_id();
+  v_uid uuid := auth.uid();
+begin
+  if v_org is null or v_uid is null then raise exception 'Aucune session'; end if;
+  if not has_org_admin_role(v_uid, v_org) then
+    raise exception 'Seuls les administrateurs peuvent réordonner les pipelines';
+  end if;
+  -- La liste doit être EXACTEMENT les pipelines actifs de l'organisation :
+  -- un id oublié ou étranger laisserait des positions incohérentes.
+  if (select array_agg(id order by id) from public.pipelines_ventes
+      where org_id = v_org and archived_at is null)
+     is distinct from
+     (select array_agg(x order by x) from unnest(p_ids) as x) then
+    raise exception 'La liste ne correspond pas aux pipelines de ce bureau';
+  end if;
+
+  update public.pipelines_ventes p
+  set position = o.rang::integer, updated_at = now()
+  from unnest(p_ids) with ordinality as o(id, rang)
+  where p.id = o.id and p.org_id = v_org;
+
+  perform public.pipeline_resynchroniser_defaut(v_org);
+end;
+$$;
+
+
+--
 -- Name: pipeline_reordonner_etapes(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -12138,9 +12764,13 @@ begin
     raise exception 'p_ordre doit être un tableau [{id, position}]';
   end if;
 
-  -- La contrainte est reportée à la fin de CETTE transaction : les positions
-  -- peuvent se croiser le temps des écritures.
-  set constraints public.pipeline_stages_position_unique deferred;
+  -- L'unicité (pipeline_id, position) est un INDEX PARTIEL : il ne se
+  -- reporte pas. Deux passes : on écarte d'abord les étapes visées hors de
+  -- toute position existante, puis on pose les positions finales.
+  update public.pipeline_stages s
+  set position = s.position + 100000
+  from jsonb_array_elements(p_ordre) as e
+  where s.id = (e.value ->> 'id')::uuid;
 
   update public.pipeline_stages s
   set position = (e.value ->> 'position')::integer,
@@ -12162,6 +12792,27 @@ $$;
 --
 
 COMMENT ON FUNCTION public.pipeline_reordonner_etapes(p_ordre jsonb) IS 'Réécrit les positions des étapes en UNE transaction, pour que la contrainte d''unicité différée puisse jouer son rôle — PostgREST enverrait sinon chaque update séparément et la permutation échouerait.';
+
+
+--
+-- Name: pipeline_repartition_etapes(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipeline_repartition_etapes(p_pipeline_id uuid) RETURNS TABLE(stage_id uuid, nom_fr text, nom_en text, rang integer, deals bigint)
+    LANGUAGE sql STABLE
+    SET search_path TO 'public'
+    AS $$
+  select s.id, s.name_fr, s.name_en, s.position,
+         count(d.id) filter (where d.deleted_at is null)::bigint
+  from public.pipeline_stages s
+  left join public.deals d on d.stage_id = s.id
+  where s.pipeline_id = p_pipeline_id
+    and s.archived_at is null
+    and s.kind = 'open'
+    and s.show_in_pie
+  group by s.id, s.name_fr, s.name_en, s.position
+  order by s.position;
+$$;
 
 
 --
@@ -12221,6 +12872,38 @@ COMMENT ON FUNCTION public.pipeline_restaurer_lot(p_operation_id uuid) IS 'Annul
 
 
 --
+-- Name: pipeline_resynchroniser_defaut(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipeline_resynchroniser_defaut(p_org uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_premier uuid;
+begin
+  select id into v_premier
+  from public.pipelines_ventes
+  where org_id = p_org and archived_at is null
+  order by position, created_at, id
+  limit 1;
+
+  -- Deux temps : l'index unique « un seul défaut par org » interdit d'en
+  -- avoir deux, même un instant.
+  update public.pipelines_ventes
+  set is_default = false
+  where org_id = p_org and is_default and id is distinct from v_premier;
+
+  if v_premier is not null then
+    update public.pipelines_ventes
+    set is_default = true
+    where id = v_premier and not is_default;
+  end if;
+end;
+$$;
+
+
+--
 -- Name: pipeline_stages_verifier_archivage(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -12257,6 +12940,123 @@ begin
   end if;
 
   return new;
+end;
+$$;
+
+
+--
+-- Name: pipeline_supprimer(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipeline_supprimer(p_id uuid, p_dest_pipeline uuid DEFAULT NULL::uuid, p_dest_etape uuid DEFAULT NULL::uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_org uuid := current_org_id();
+  v_uid uuid := auth.uid();
+  v_deals integer;
+begin
+  if v_org is null or v_uid is null then raise exception 'Aucune session'; end if;
+  if not has_org_admin_role(v_uid, v_org) then
+    raise exception 'Seuls les administrateurs peuvent supprimer un pipeline';
+  end if;
+  if not exists (select 1 from public.pipelines_ventes where id = p_id and org_id = v_org and archived_at is null) then
+    raise exception 'Pipeline introuvable';
+  end if;
+  if (select count(*) from public.pipelines_ventes where org_id = v_org and archived_at is null) <= 1 then
+    raise exception 'Impossible de supprimer le dernier pipeline';
+  end if;
+
+  select count(*) into v_deals from public.deals
+  where pipeline_id = p_id and org_id = v_org and deleted_at is null;
+
+  if v_deals > 0 then
+    if p_dest_pipeline is null or p_dest_etape is null then
+      raise exception 'Ce pipeline contient % deal(s) : choisissez le pipeline et l''étape où les déplacer', v_deals;
+    end if;
+    if p_dest_pipeline = p_id then
+      raise exception 'Choisissez un AUTRE pipeline comme destination';
+    end if;
+    if not exists (
+      select 1 from public.pipeline_stages s
+      join public.pipelines_ventes p on p.id = s.pipeline_id
+      where s.id = p_dest_etape and s.pipeline_id = p_dest_pipeline
+        and s.org_id = v_org and s.archived_at is null and s.kind = 'open'
+        and p.archived_at is null
+    ) then
+      raise exception 'Étape de destination invalide : choisissez une étape ouverte du pipeline de destination';
+    end if;
+
+    -- Geste administratif : aucune automatisation ne doit partir chez ces clients.
+    perform set_config('lume.deplacement_administratif', 'on', true);
+    update public.deals
+    set pipeline_id = p_dest_pipeline, stage_id = p_dest_etape, updated_at = now()
+    where pipeline_id = p_id and org_id = v_org and deleted_at is null;
+    perform set_config('lume.deplacement_administratif', 'off', true);
+  end if;
+
+  -- Les formulaires qui visaient ce pipeline repartent vers le défaut.
+  update public.request_forms set pipeline_id = null where pipeline_id = p_id;
+
+  update public.pipelines_ventes
+  set archived_at = now(), is_default = false, updated_at = now()
+  where id = p_id;
+
+  perform public.pipeline_resynchroniser_defaut(v_org);
+  return v_deals;
+end;
+$$;
+
+
+--
+-- Name: pipeline_supprimer_etape(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipeline_supprimer_etape(p_etape uuid, p_dest uuid DEFAULT NULL::uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_org uuid := current_org_id();
+  v_pipeline uuid;
+  v_kind text;
+  v_deals integer;
+begin
+  if v_org is null or v_uid is null then raise exception 'Aucune session'; end if;
+  select pipeline_id, kind::text into v_pipeline, v_kind
+  from public.pipeline_stages
+  where id = p_etape and org_id = v_org and archived_at is null;
+  if v_pipeline is null then raise exception 'Étape introuvable'; end if;
+  if not peut_modifier_pipeline(v_uid, v_pipeline) then
+    raise exception 'Vous n''avez pas le droit de modifier ce pipeline';
+  end if;
+  if v_kind in ('won', 'lost') then
+    raise exception 'Les étapes Gagné et Perdu sont verrouillées : elles ne peuvent pas être supprimées';
+  end if;
+
+  select count(*) into v_deals from public.deals
+  where stage_id = p_etape and deleted_at is null;
+
+  if v_deals > 0 then
+    if p_dest is null then
+      raise exception 'Cette étape contient % deal(s) : choisissez l''étape où les déplacer', v_deals;
+    end if;
+    if p_dest = p_etape or not exists (
+      select 1 from public.pipeline_stages
+      where id = p_dest and pipeline_id = v_pipeline and archived_at is null and kind = 'open'
+    ) then
+      raise exception 'Étape de destination invalide : choisissez une autre étape ouverte de ce pipeline';
+    end if;
+    perform set_config('lume.deplacement_administratif', 'on', true);
+    update public.deals set stage_id = p_dest, updated_at = now()
+    where stage_id = p_etape and deleted_at is null;
+    perform set_config('lume.deplacement_administratif', 'off', true);
+  end if;
+
+  update public.pipeline_stages set archived_at = now(), updated_at = now() where id = p_etape;
+  return v_deals;
 end;
 $$;
 
@@ -12359,6 +13159,23 @@ $$;
 --
 
 COMMENT ON FUNCTION public.pipeline_vitesse(p_from date, p_to date) IS 'Délai moyen de premier contact et taux de closing par tranche (< 1 h, < 24 h, > 24 h), plus la durée moyenne du cycle. Un taux sur zéro deal fermé rend NULL, pas 0 % — la nuance change la lecture.';
+
+
+--
+-- Name: pipelines_ventes_position_initiale(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pipelines_ventes_position_initiale() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  select coalesce(max(position), 0) + 1 into new.position
+  from public.pipelines_ventes
+  where org_id = new.org_id and archived_at is null;
+  return new;
+end;
+$$;
 
 
 --
@@ -18207,6 +19024,20 @@ $$;
 
 
 --
+-- Name: table_view_preferences_touch(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.table_view_preferences_touch() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
+
+
+--
 -- Name: tasks_update_timestamp(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -19014,63 +19845,6 @@ ALTER TEXT SEARCH CONFIGURATION public.french_unaccent
 
 
 --
--- Name: custom_column_values_20260926; Type: TABLE; Schema: archive; Owner: -
---
-
-CREATE TABLE archive.custom_column_values_20260926 (
-    id uuid,
-    org_id uuid,
-    column_id uuid,
-    record_id uuid,
-    value_text text,
-    value_number numeric,
-    value_boolean boolean,
-    value_date date,
-    value_json jsonb,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone
-);
-
-ALTER TABLE ONLY archive.custom_column_values_20260926 FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: TABLE custom_column_values_20260926; Type: COMMENT; Schema: archive; Owner: -
---
-
-COMMENT ON TABLE archive.custom_column_values_20260926 IS 'Copie de public.custom_column_values au retrait de l''ancien registre (2026-09-26) — vide : aucune valeur n''a jamais pu s''écrire. RLS sans policy : deny-all volontaire.';
-
-
---
--- Name: custom_columns_20260926; Type: TABLE; Schema: archive; Owner: -
---
-
-CREATE TABLE archive.custom_columns_20260926 (
-    id uuid,
-    org_id uuid,
-    entity text,
-    name text,
-    col_type text,
-    config jsonb,
-    "position" integer,
-    visible boolean,
-    required boolean,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    deleted_at timestamp with time zone
-);
-
-ALTER TABLE ONLY archive.custom_columns_20260926 FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: TABLE custom_columns_20260926; Type: COMMENT; Schema: archive; Owner: -
---
-
-COMMENT ON TABLE archive.custom_columns_20260926 IS 'Copie de public.custom_columns au retrait de l''ancien registre (2026-09-26) — remplacé par public.custom_fields (legacy_column_id). RLS sans policy : deny-all volontaire.';
-
-
---
 -- Name: orphans_billing_profiles_20260710; Type: TABLE; Schema: archive; Owner: -
 --
 
@@ -19746,6 +20520,46 @@ COMMENT ON COLUMN public.automation_scheduled_tasks.sequence_context IS 'Métado
 
 
 --
+-- Name: automation_webhook_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.automation_webhook_receipts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    webhook_id uuid NOT NULL,
+    org_id uuid NOT NULL,
+    statut text NOT NULL,
+    motif text,
+    corps jsonb,
+    event_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT automation_webhook_receipts_statut_check CHECK ((statut = ANY (ARRAY['accepte'::text, 'refuse'::text])))
+);
+
+ALTER TABLE ONLY public.automation_webhook_receipts FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: automation_webhooks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.automation_webhooks (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    org_id uuid NOT NULL,
+    created_by uuid,
+    name text DEFAULT 'Webhook'::text NOT NULL,
+    api_key text DEFAULT encode(extensions.gen_random_bytes(32), 'hex'::text) NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    mode text DEFAULT 'evenement'::text NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT automation_webhooks_mode_check CHECK ((mode = 'evenement'::text))
+);
+
+ALTER TABLE ONLY public.automation_webhooks FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: automations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -20281,6 +21095,9 @@ CREATE TABLE public.company_settings (
     social_links jsonb DEFAULT '{}'::jsonb NOT NULL,
     prefixe_documents text,
     suit_marque_entreprise boolean DEFAULT false NOT NULL,
+    automations_paused boolean DEFAULT false NOT NULL,
+    automations_paused_at timestamp with time zone,
+    automations_paused_by uuid,
     CONSTRAINT company_settings_brand_color_hex CHECK (((brand_color IS NULL) OR (brand_color ~ '^#[0-9A-Fa-f]{6}$'::text))),
     CONSTRAINT company_settings_city_len CHECK ((length(city) <= 200)),
     CONSTRAINT company_settings_company_name_len CHECK ((length(company_name) <= 200)),
@@ -20427,6 +21244,13 @@ COMMENT ON COLUMN public.company_settings.prefixe_documents IS 'Préfixe des num
 --
 
 COMMENT ON COLUMN public.company_settings.suit_marque_entreprise IS 'Vrai : ce bureau affiche le logo et la couleur de l''entreprise (company_groups), recopiés automatiquement.';
+
+
+--
+-- Name: COLUMN company_settings.automations_paused; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.company_settings.automations_paused IS 'Interrupteur par entreprise : true = le moteur ne traite plus rien pour cette org. La file est conservée. Distinct de AUTOMATIONS_ENABLED, qui coupe TOUTE la plateforme.';
 
 
 --
@@ -20920,16 +21744,19 @@ CREATE TABLE public.custom_field_values (
     updated_by uuid DEFAULT auth.uid(),
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    value_boolean boolean,
+    property_id uuid,
     CONSTRAINT custom_field_values_entite_du_type CHECK (
-CASE object_type
-    WHEN 'client'::public.cf_object_type THEN (client_id IS NOT NULL)
-    WHEN 'deal'::public.cf_object_type THEN (deal_id IS NOT NULL)
-    WHEN 'job'::public.cf_object_type THEN (job_id IS NOT NULL)
-    WHEN 'quote'::public.cf_object_type THEN (quote_id IS NOT NULL)
-    WHEN 'invoice'::public.cf_object_type THEN (invoice_id IS NOT NULL)
+CASE (object_type)::text
+    WHEN 'client'::text THEN (client_id IS NOT NULL)
+    WHEN 'deal'::text THEN (deal_id IS NOT NULL)
+    WHEN 'job'::text THEN (job_id IS NOT NULL)
+    WHEN 'quote'::text THEN (quote_id IS NOT NULL)
+    WHEN 'invoice'::text THEN (invoice_id IS NOT NULL)
+    WHEN 'property'::text THEN (property_id IS NOT NULL)
     ELSE NULL::boolean
 END),
-    CONSTRAINT custom_field_values_une_entite CHECK ((num_nonnulls(client_id, deal_id, job_id, quote_id, invoice_id) = 1)),
+    CONSTRAINT custom_field_values_une_entite CHECK ((num_nonnulls(client_id, deal_id, job_id, quote_id, invoice_id, property_id) = 1)),
     CONSTRAINT custom_field_values_value_text_len CHECK (((value_text IS NULL) OR (length(value_text) <= 5000)))
 );
 
@@ -25328,7 +26155,8 @@ CREATE TABLE public.pipeline_acces (
     pipeline_id uuid NOT NULL,
     user_id uuid NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid DEFAULT auth.uid()
+    created_by uuid DEFAULT auth.uid(),
+    peut_modifier boolean DEFAULT false NOT NULL
 );
 
 ALTER TABLE ONLY public.pipeline_acces FORCE ROW LEVEL SECURITY;
@@ -25606,11 +26434,12 @@ CREATE TABLE public.pipeline_stages (
     archived_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    probability integer,
+    probability numeric(5,2),
     show_in_reports boolean DEFAULT true NOT NULL,
+    show_in_pie boolean DEFAULT true NOT NULL,
     CONSTRAINT pipeline_stages_noms_non_vides CHECK (((length(btrim(name_fr)) > 0) AND (length(btrim(name_en)) > 0))),
     CONSTRAINT pipeline_stages_position_positive CHECK (("position" > 0)),
-    CONSTRAINT pipeline_stages_probability_bornee CHECK (((probability IS NULL) OR ((probability >= 0) AND (probability <= 100))))
+    CONSTRAINT pipeline_stages_probability_bornee CHECK (((probability IS NULL) OR ((probability >= (0)::numeric) AND (probability <= (100)::numeric))))
 );
 
 ALTER TABLE ONLY public.pipeline_stages FORCE ROW LEVEL SECURITY;
@@ -25627,7 +26456,14 @@ COMMENT ON COLUMN public.pipeline_stages.probability IS 'Chance de conclure depu
 -- Name: COLUMN pipeline_stages.show_in_reports; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.pipeline_stages.show_in_reports IS 'false = l''étape est exclue des entonnoirs et des prévisions (« Spam », « Doublon »…).';
+COMMENT ON COLUMN public.pipeline_stages.show_in_reports IS 'Icône ENTONNOIR : l''étape compte dans l''entonnoir et les prévisions.';
+
+
+--
+-- Name: COLUMN pipeline_stages.show_in_pie; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.pipeline_stages.show_in_pie IS 'Icône CAMEMBERT : l''étape apparaît dans la répartition par étape.';
 
 
 --
@@ -25683,6 +26519,8 @@ CREATE TABLE public.pipelines_ventes (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     color_mode text DEFAULT 'none'::text NOT NULL,
     use_deal_probability boolean DEFAULT false NOT NULL,
+    "position" integer DEFAULT 1 NOT NULL,
+    archived_at timestamp with time zone,
     CONSTRAINT pipelines_ventes_color_mode_check CHECK ((color_mode = ANY (ARRAY['none'::text, 'dot'::text, 'tint'::text]))),
     CONSTRAINT pipelines_ventes_name_non_vide CHECK ((length(btrim(name)) > 0))
 );
@@ -25702,6 +26540,20 @@ COMMENT ON COLUMN public.pipelines_ventes.color_mode IS 'Où le board pose la te
 --
 
 COMMENT ON COLUMN public.pipelines_ventes.use_deal_probability IS 'Quand vrai, la prévision utilise la probabilité portée par le deal, et retombe sur celle de l''étape si le deal n''en a pas.';
+
+
+--
+-- Name: COLUMN pipelines_ventes."position"; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.pipelines_ventes."position" IS 'Ordre dans la liste « Pipelines » (1 = premier = pipeline par défaut). Utilisé partout où l''on choisit un pipeline.';
+
+
+--
+-- Name: COLUMN pipelines_ventes.archived_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.pipelines_ventes.archived_at IS 'Suppression douce. Un pipeline archivé n''a plus de deals (déplacés avant) et n''est plus proposé nulle part.';
 
 
 --
@@ -27242,7 +28094,7 @@ CREATE TABLE public.subscriptions (
     commitment_end timestamp with time zone,
     cancel_at timestamp with time zone,
     CONSTRAINT subscriptions_installments_check CHECK (((installments_count IS NULL) OR (((installments_count >= 2) AND (installments_count <= 12)) AND ((installments_paid >= 0) AND (installments_paid <= installments_count))))),
-    CONSTRAINT subscriptions_scheduled_interval_check CHECK ((scheduled_interval = ANY (ARRAY['monthly'::text, 'yearly'::text])))
+    CONSTRAINT subscriptions_scheduled_interval_check CHECK ((scheduled_interval = ANY (ARRAY['monthly'::text, 'quarterly'::text, 'yearly'::text])))
 );
 
 ALTER TABLE ONLY public.subscriptions FORCE ROW LEVEL SECURITY;
@@ -27266,7 +28118,7 @@ COMMENT ON COLUMN public.subscriptions.scheduled_plan_id IS 'Plan id the subscri
 -- Name: COLUMN subscriptions.scheduled_interval; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.subscriptions.scheduled_interval IS 'Billing interval after the scheduled change';
+COMMENT ON COLUMN public.subscriptions.scheduled_interval IS 'Intervalle visé par un changement de forfait programmé : monthly, quarterly ou yearly. NULL = aucun changement en attente. Le trimestriel vaut 3 × le mensuel, sans remise (2026-09-26).';
 
 
 --
@@ -27479,6 +28331,30 @@ COMMENT ON TABLE public.support_tickets IS 'Conversations de support : IA (statu
 --
 
 COMMENT ON COLUMN public.support_tickets.source IS 'D''où le client a écrit : app (chat d''aide), migration_portal (portail de migration), public (site).';
+
+
+--
+-- Name: table_view_preferences; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.table_view_preferences (
+    org_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    object_type text NOT NULL,
+    columns jsonb DEFAULT '[]'::jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT table_view_preferences_colonnes CHECK (((jsonb_typeof(columns) = 'array'::text) AND (jsonb_array_length(columns) <= 80))),
+    CONSTRAINT table_view_preferences_objet CHECK ((object_type = ANY (ARRAY['client'::text, 'deal'::text, 'job'::text, 'quote'::text, 'invoice'::text])))
+);
+
+ALTER TABLE ONLY public.table_view_preferences FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: TABLE table_view_preferences; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.table_view_preferences IS 'Colonnes d''une liste (ordre + visibles) par utilisateur, entreprise et objet. Réglage d''affichage personnel.';
 
 
 --
@@ -28761,6 +29637,22 @@ ALTER TABLE ONLY public.automation_scheduled_tasks
 
 
 --
+-- Name: automation_webhook_receipts automation_webhook_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_webhook_receipts
+    ADD CONSTRAINT automation_webhook_receipts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: automation_webhooks automation_webhooks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_webhooks
+    ADD CONSTRAINT automation_webhooks_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: automations automations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -29150,14 +30042,6 @@ ALTER TABLE ONLY public.custom_field_values
 
 ALTER TABLE ONLY public.custom_fields
     ADD CONSTRAINT custom_fields_cle_uq UNIQUE (org_id, object_type, key);
-
-
---
--- Name: custom_fields custom_fields_legacy_column_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.custom_fields
-    ADD CONSTRAINT custom_fields_legacy_column_id_key UNIQUE (legacy_column_id);
 
 
 --
@@ -31161,6 +32045,14 @@ ALTER TABLE ONLY public.support_tickets
 
 
 --
+-- Name: table_view_preferences table_view_preferences_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.table_view_preferences
+    ADD CONSTRAINT table_view_preferences_pkey PRIMARY KEY (org_id, user_id, object_type);
+
+
+--
 -- Name: tags tags_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -31498,6 +32390,27 @@ CREATE INDEX automation_rules_vivantes_idx ON public.automation_rules USING btre
 
 
 --
+-- Name: automation_webhook_receipts_webhook_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX automation_webhook_receipts_webhook_idx ON public.automation_webhook_receipts USING btree (webhook_id, created_at DESC);
+
+
+--
+-- Name: automation_webhooks_api_key_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX automation_webhooks_api_key_idx ON public.automation_webhooks USING btree (api_key);
+
+
+--
+-- Name: automation_webhooks_org_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX automation_webhooks_org_idx ON public.automation_webhooks USING btree (org_id) WHERE (deleted_at IS NULL);
+
+
+--
 -- Name: checklist_templates_org_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -31684,6 +32597,20 @@ CREATE INDEX custom_field_values_option_idx ON public.custom_field_values USING 
 --
 
 CREATE INDEX custom_field_values_org_field_idx ON public.custom_field_values USING btree (org_id, field_id);
+
+
+--
+-- Name: custom_field_values_property_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX custom_field_values_property_idx ON public.custom_field_values USING btree (property_id) WHERE (property_id IS NOT NULL);
+
+
+--
+-- Name: custom_field_values_property_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX custom_field_values_property_uniq ON public.custom_field_values USING btree (field_id, property_id) WHERE (property_id IS NOT NULL);
 
 
 --
@@ -34648,6 +35575,13 @@ CREATE INDEX idx_pipeline_vues_pipeline ON public.pipeline_vues USING btree (org
 
 
 --
+-- Name: idx_pipelines_ventes_ordre; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_pipelines_ventes_ordre ON public.pipelines_ventes USING btree (org_id, "position") WHERE (archived_at IS NULL);
+
+
+--
 -- Name: idx_pipelines_ventes_org; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -36160,6 +37094,13 @@ CREATE UNIQUE INDEX uq_pipelines_ventes_defaut ON public.pipelines_ventes USING 
 
 
 --
+-- Name: uq_pipelines_ventes_nom; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uq_pipelines_ventes_nom ON public.pipelines_ventes USING btree (org_id, lower(btrim(name))) WHERE (archived_at IS NULL);
+
+
+--
 -- Name: uq_properties_billing_per_client; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -36234,6 +37175,13 @@ CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON public.audit_events FOR E
 --
 
 CREATE TRIGGER automation_folders_touch BEFORE UPDATE ON public.automation_folders FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: automation_webhooks automation_webhooks_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER automation_webhooks_updated_at BEFORE UPDATE ON public.automation_webhooks FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 
 --
@@ -36916,6 +37864,13 @@ CREATE TRIGGER sync_jobs_legacy_money BEFORE INSERT OR UPDATE ON public.jobs FOR
 
 
 --
+-- Name: table_view_preferences table_view_preferences_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER table_view_preferences_updated_at BEFORE UPDATE ON public.table_view_preferences FOR EACH ROW EXECUTE FUNCTION public.table_view_preferences_touch();
+
+
+--
 -- Name: tasks tasks_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -37532,6 +38487,13 @@ CREATE TRIGGER trg_log_quote_created AFTER INSERT ON public.quotes FOR EACH ROW 
 
 
 --
+-- Name: tasks trg_log_tache_deal; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_log_tache_deal AFTER INSERT OR UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.log_tache_deal();
+
+
+--
 -- Name: memberships trg_membership_security_audit; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -37634,13 +38596,6 @@ CREATE TRIGGER trg_org_created_seed_automations AFTER INSERT ON public.orgs FOR 
 --
 
 CREATE TRIGGER trg_org_knowledge_updated_at BEFORE UPDATE ON public.org_knowledge FOR EACH ROW EXECUTE FUNCTION public.update_org_knowledge_updated_at();
-
-
---
--- Name: orgs trg_orgs_activer_champs_perso; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trg_orgs_activer_champs_perso AFTER INSERT ON public.orgs FOR EACH ROW EXECUTE FUNCTION public.org_activer_champs_perso();
 
 
 --
@@ -37809,6 +38764,13 @@ CREATE TRIGGER trg_pipeline_stages_updated BEFORE UPDATE ON public.pipeline_stag
 --
 
 CREATE TRIGGER trg_pipeline_vues_updated_at BEFORE UPDATE ON public.pipeline_vues FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: pipelines_ventes trg_pipelines_ventes_position; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_pipelines_ventes_position BEFORE INSERT ON public.pipelines_ventes FOR EACH ROW EXECUTE FUNCTION public.pipelines_ventes_position_initiale();
 
 
 --
@@ -38364,6 +39326,38 @@ ALTER TABLE ONLY public.automation_scheduled_tasks
 
 
 --
+-- Name: automation_webhook_receipts automation_webhook_receipts_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_webhook_receipts
+    ADD CONSTRAINT automation_webhook_receipts_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: automation_webhook_receipts automation_webhook_receipts_webhook_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_webhook_receipts
+    ADD CONSTRAINT automation_webhook_receipts_webhook_id_fkey FOREIGN KEY (webhook_id) REFERENCES public.automation_webhooks(id) ON DELETE CASCADE;
+
+
+--
+-- Name: automation_webhooks automation_webhooks_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_webhooks
+    ADD CONSTRAINT automation_webhooks_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: automation_webhooks automation_webhooks_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.automation_webhooks
+    ADD CONSTRAINT automation_webhooks_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE;
+
+
+--
 -- Name: automations automations_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -38593,6 +39587,14 @@ ALTER TABLE ONLY public.communication_settings
 
 ALTER TABLE ONLY public.company_operating_profile
     ADD CONSTRAINT company_operating_profile_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: company_settings company_settings_automations_paused_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.company_settings
+    ADD CONSTRAINT company_settings_automations_paused_by_fkey FOREIGN KEY (automations_paused_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
 
 --
@@ -38841,6 +39843,14 @@ ALTER TABLE ONLY public.custom_field_values
 
 ALTER TABLE ONLY public.custom_field_values
     ADD CONSTRAINT custom_field_values_option_fk FOREIGN KEY (org_id, field_id, value_option_id) REFERENCES public.custom_field_options(org_id, field_id, id) ON DELETE RESTRICT;
+
+
+--
+-- Name: custom_field_values custom_field_values_property_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_field_values
+    ADD CONSTRAINT custom_field_values_property_fk FOREIGN KEY (org_id, property_id) REFERENCES public.properties(org_id, id) ON DELETE CASCADE;
 
 
 --
@@ -42444,6 +43454,14 @@ ALTER TABLE ONLY public.support_tickets
 
 
 --
+-- Name: table_view_preferences table_view_preferences_membre; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.table_view_preferences
+    ADD CONSTRAINT table_view_preferences_membre FOREIGN KEY (user_id, org_id) REFERENCES public.memberships(user_id, org_id) ON DELETE CASCADE;
+
+
+--
 -- Name: tags tags_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -43100,18 +44118,6 @@ ALTER TABLE ONLY public.webhook_endpoints
 
 
 --
--- Name: custom_column_values_20260926; Type: ROW SECURITY; Schema: archive; Owner: -
---
-
-ALTER TABLE archive.custom_column_values_20260926 ENABLE ROW LEVEL SECURITY;
-
---
--- Name: custom_columns_20260926; Type: ROW SECURITY; Schema: archive; Owner: -
---
-
-ALTER TABLE archive.custom_columns_20260926 ENABLE ROW LEVEL SECURITY;
-
---
 -- Name: orphans_billing_profiles_20260710; Type: ROW SECURITY; Schema: archive; Owner: -
 --
 
@@ -43565,6 +44571,39 @@ ALTER TABLE public.automation_scheduled_tasks ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY automation_scheduled_tasks_select_org ON public.automation_scheduled_tasks FOR SELECT TO authenticated USING (public.has_org_membership(( SELECT auth.uid() AS uid), org_id));
+
+
+--
+-- Name: automation_webhook_receipts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.automation_webhook_receipts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: automation_webhook_receipts automation_webhook_receipts_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY automation_webhook_receipts_select ON public.automation_webhook_receipts FOR SELECT USING ((public.has_org_membership(auth.uid(), org_id) AND public.member_has_permission(auth.uid(), org_id, 'automations.read'::text)));
+
+
+--
+-- Name: automation_webhooks; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.automation_webhooks ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: automation_webhooks automation_webhooks_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY automation_webhooks_select ON public.automation_webhooks FOR SELECT USING ((public.has_org_membership(auth.uid(), org_id) AND public.member_has_permission(auth.uid(), org_id, 'automations.read'::text)));
+
+
+--
+-- Name: automation_webhooks automation_webhooks_write; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY automation_webhooks_write ON public.automation_webhooks USING ((public.has_org_membership(auth.uid(), org_id) AND public.member_has_permission(auth.uid(), org_id, 'automations.update'::text))) WITH CHECK ((public.has_org_membership(auth.uid(), org_id) AND public.member_has_permission(auth.uid(), org_id, 'automations.update'::text)));
 
 
 --
@@ -45762,14 +46801,14 @@ ALTER TABLE public.custom_field_values ENABLE ROW LEVEL SECURITY;
 -- Name: custom_field_values custom_field_values_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY custom_field_values_delete ON public.custom_field_values FOR DELETE TO authenticated USING ((public.member_has_permission(( SELECT auth.uid() AS uid), org_id, public.cf_cle_permission_ecriture(object_type)) AND public.cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id)));
+CREATE POLICY custom_field_values_delete ON public.custom_field_values FOR DELETE TO authenticated USING ((public.member_has_permission(( SELECT auth.uid() AS uid), org_id, public.cf_cle_permission_ecriture(object_type)) AND public.cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id, property_id)));
 
 
 --
 -- Name: custom_field_values custom_field_values_insert; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY custom_field_values_insert ON public.custom_field_values FOR INSERT TO authenticated WITH CHECK ((public.member_has_permission(( SELECT auth.uid() AS uid), org_id, public.cf_cle_permission_ecriture(object_type)) AND public.cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id)));
+CREATE POLICY custom_field_values_insert ON public.custom_field_values FOR INSERT TO authenticated WITH CHECK ((public.member_has_permission(( SELECT auth.uid() AS uid), org_id, public.cf_cle_permission_ecriture(object_type)) AND public.cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id, property_id)));
 
 
 --
@@ -45781,14 +46820,15 @@ CREATE POLICY custom_field_values_select ON public.custom_field_values FOR SELEC
    FROM public.deals e))) OR ((job_id IS NOT NULL) AND (job_id IN ( SELECT e.id
    FROM public.jobs e))) OR ((quote_id IS NOT NULL) AND (quote_id IN ( SELECT e.id
    FROM public.quotes e))) OR ((invoice_id IS NOT NULL) AND (invoice_id IN ( SELECT e.id
-   FROM public.invoices e)))));
+   FROM public.invoices e))) OR ((property_id IS NOT NULL) AND (property_id IN ( SELECT e.id
+   FROM public.properties e)))));
 
 
 --
 -- Name: custom_field_values custom_field_values_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY custom_field_values_update ON public.custom_field_values FOR UPDATE TO authenticated USING ((public.member_has_permission(( SELECT auth.uid() AS uid), org_id, public.cf_cle_permission_ecriture(object_type)) AND public.cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id))) WITH CHECK ((public.member_has_permission(( SELECT auth.uid() AS uid), org_id, public.cf_cle_permission_ecriture(object_type)) AND public.cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id)));
+CREATE POLICY custom_field_values_update ON public.custom_field_values FOR UPDATE TO authenticated USING ((public.member_has_permission(( SELECT auth.uid() AS uid), org_id, public.cf_cle_permission_ecriture(object_type)) AND public.cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id, property_id))) WITH CHECK ((public.member_has_permission(( SELECT auth.uid() AS uid), org_id, public.cf_cle_permission_ecriture(object_type)) AND public.cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id, property_id)));
 
 
 --
@@ -49166,10 +50206,10 @@ CREATE POLICY pipeline_raisons_perte_select ON public.pipeline_raisons_perte_lis
 ALTER TABLE public.pipeline_stages ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: pipeline_stages pipeline_stages_admin_write; Type: POLICY; Schema: public; Owner: -
+-- Name: pipeline_stages pipeline_stages_modifier; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY pipeline_stages_admin_write ON public.pipeline_stages TO authenticated USING (public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id)) WITH CHECK (public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id));
+CREATE POLICY pipeline_stages_modifier ON public.pipeline_stages TO authenticated USING (public.peut_modifier_pipeline(( SELECT auth.uid() AS uid), pipeline_id)) WITH CHECK (public.peut_modifier_pipeline(( SELECT auth.uid() AS uid), pipeline_id));
 
 
 --
@@ -49213,10 +50253,24 @@ CREATE POLICY pipeline_vues_select ON public.pipeline_vues FOR SELECT TO authent
 ALTER TABLE public.pipelines_ventes ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: pipelines_ventes pipelines_ventes_admin_write; Type: POLICY; Schema: public; Owner: -
+-- Name: pipelines_ventes pipelines_ventes_admin_delete; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY pipelines_ventes_admin_write ON public.pipelines_ventes TO authenticated USING (public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id)) WITH CHECK (public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id));
+CREATE POLICY pipelines_ventes_admin_delete ON public.pipelines_ventes FOR DELETE TO authenticated USING (public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id));
+
+
+--
+-- Name: pipelines_ventes pipelines_ventes_admin_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY pipelines_ventes_admin_insert ON public.pipelines_ventes FOR INSERT TO authenticated WITH CHECK (public.has_org_admin_role(( SELECT auth.uid() AS uid), org_id));
+
+
+--
+-- Name: pipelines_ventes pipelines_ventes_modifier; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY pipelines_ventes_modifier ON public.pipelines_ventes FOR UPDATE TO authenticated USING (public.peut_modifier_pipeline(( SELECT auth.uid() AS uid), id)) WITH CHECK (public.peut_modifier_pipeline(( SELECT auth.uid() AS uid), id));
 
 
 --
@@ -50497,6 +51551,40 @@ CREATE POLICY surveys_select_org ON public.satisfaction_surveys FOR SELECT TO au
 
 
 --
+-- Name: table_view_preferences; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.table_view_preferences ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: table_view_preferences table_view_preferences_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY table_view_preferences_delete ON public.table_view_preferences FOR DELETE TO authenticated USING (((user_id = ( SELECT auth.uid() AS uid)) AND public.has_org_membership(( SELECT auth.uid() AS uid), org_id)));
+
+
+--
+-- Name: table_view_preferences table_view_preferences_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY table_view_preferences_insert ON public.table_view_preferences FOR INSERT TO authenticated WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND public.has_org_membership(( SELECT auth.uid() AS uid), org_id)));
+
+
+--
+-- Name: table_view_preferences table_view_preferences_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY table_view_preferences_select ON public.table_view_preferences FOR SELECT TO authenticated USING (((user_id = ( SELECT auth.uid() AS uid)) AND public.has_org_membership(( SELECT auth.uid() AS uid), org_id)));
+
+
+--
+-- Name: table_view_preferences table_view_preferences_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY table_view_preferences_update ON public.table_view_preferences FOR UPDATE TO authenticated USING (((user_id = ( SELECT auth.uid() AS uid)) AND public.has_org_membership(( SELECT auth.uid() AS uid), org_id))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND public.has_org_membership(( SELECT auth.uid() AS uid), org_id)));
+
+
+--
 -- Name: tags; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -51334,6 +52422,22 @@ GRANT ALL ON FUNCTION public._client_dans_bureau(p_client uuid, p_cible uuid, p_
 
 REVOKE ALL ON FUNCTION public._membre_actif_ou_nul(p_user uuid, p_org uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public._membre_actif_ou_nul(p_user uuid, p_org uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION _pipeline_copier(p_source uuid, p_org uuid, p_nom text, p_uid uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._pipeline_copier(p_source uuid, p_org uuid, p_nom text, p_uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._pipeline_copier(p_source uuid, p_org uuid, p_nom text, p_uid uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION _pipeline_nom_libre(p_org uuid, p_base text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._pipeline_nom_libre(p_org uuid, p_base text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public._pipeline_nom_libre(p_org uuid, p_base text) TO service_role;
 
 
 --
@@ -53167,12 +54271,21 @@ GRANT ALL ON FUNCTION public.cf_option_multiple_avant_ecriture() TO service_role
 
 
 --
--- Name: FUNCTION cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_invoice uuid); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION cf_ordre_ids(p_field uuid, p_asc boolean); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_invoice uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_invoice uuid) TO authenticated;
-GRANT ALL ON FUNCTION public.cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_invoice uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.cf_ordre_ids(p_field uuid, p_asc boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.cf_ordre_ids(p_field uuid, p_asc boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.cf_ordre_ids(p_field uuid, p_asc boolean) TO service_role;
+
+
+--
+-- Name: FUNCTION cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_invoice uuid, p_property uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_invoice uuid, p_property uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_invoice uuid, p_property uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_invoice uuid, p_property uuid) TO service_role;
 
 
 --
@@ -54399,6 +55512,14 @@ GRANT ALL ON FUNCTION public.log_quote_created() TO service_role;
 
 
 --
+-- Name: FUNCTION log_tache_deal(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.log_tache_deal() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.log_tache_deal() TO service_role;
+
+
+--
 -- Name: FUNCTION lume_storage_object_org(object_name text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -54527,14 +55648,6 @@ GRANT ALL ON FUNCTION public.oauth_menage() TO service_role;
 
 
 --
--- Name: FUNCTION org_activer_champs_perso(); Type: ACL; Schema: public; Owner: -
---
-
-REVOKE ALL ON FUNCTION public.org_activer_champs_perso() FROM PUBLIC;
-GRANT ALL ON FUNCTION public.org_activer_champs_perso() TO service_role;
-
-
---
 -- Name: FUNCTION org_has_no_members(p_org uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -54595,6 +55708,15 @@ GRANT ALL ON FUNCTION public.payments_sync_legacy_dates() TO service_role;
 
 
 --
+-- Name: FUNCTION peut_modifier_pipeline(p_user uuid, p_pipeline uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.peut_modifier_pipeline(p_user uuid, p_pipeline uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.peut_modifier_pipeline(p_user uuid, p_pipeline uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.peut_modifier_pipeline(p_user uuid, p_pipeline uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION peut_voir_pipeline(p_user uuid, p_pipeline uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -54629,6 +55751,15 @@ GRANT ALL ON FUNCTION public.pipeline_abandonner_deal(p_deal_id uuid, p_raison t
 
 
 --
+-- Name: FUNCTION pipeline_bureaux_administres(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipeline_bureaux_administres() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_bureaux_administres() TO authenticated;
+GRANT ALL ON FUNCTION public.pipeline_bureaux_administres() TO service_role;
+
+
+--
 -- Name: FUNCTION pipeline_chronologie(p_pipeline_id uuid, p_mois integer); Type: ACL; Schema: public; Owner: -
 --
 
@@ -54645,12 +55776,21 @@ GRANT ALL ON FUNCTION public.pipeline_cohortes(p_mois integer) TO service_role;
 
 
 --
--- Name: FUNCTION pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION pipeline_copier_vers_bureaux(p_id uuid, p_orgs uuid[]); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text) TO authenticated;
-GRANT ALL ON FUNCTION public.pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text) TO service_role;
+REVOKE ALL ON FUNCTION public.pipeline_copier_vers_bureaux(p_id uuid, p_orgs uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_copier_vers_bureaux(p_id uuid, p_orgs uuid[]) TO authenticated;
+GRANT ALL ON FUNCTION public.pipeline_copier_vers_bureaux(p_id uuid, p_orgs uuid[]) TO service_role;
+
+
+--
+-- Name: FUNCTION pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text, p_client_id uuid, p_quote_id uuid, p_pipeline_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text, p_client_id uuid, p_quote_id uuid, p_pipeline_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text, p_client_id uuid, p_quote_id uuid, p_pipeline_id uuid) TO service_role;
+GRANT ALL ON FUNCTION public.pipeline_creer_deal(p_first_name text, p_last_name text, p_email text, p_phone text, p_address text, p_montant_cents bigint, p_assigne_a uuid, p_date_fermeture_visee date, p_source text, p_client_id uuid, p_quote_id uuid, p_pipeline_id uuid) TO authenticated;
 
 
 --
@@ -54698,6 +55838,7 @@ GRANT ALL ON FUNCTION public.pipeline_definir_affichage(p_pipeline_id uuid, p_co
 -- Name: FUNCTION pipeline_definir_defaut(p_pipeline_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
+REVOKE ALL ON FUNCTION public.pipeline_definir_defaut(p_pipeline_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.pipeline_definir_defaut(p_pipeline_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.pipeline_definir_defaut(p_pipeline_id uuid) TO service_role;
 
@@ -54708,6 +55849,24 @@ GRANT ALL ON FUNCTION public.pipeline_definir_defaut(p_pipeline_id uuid) TO serv
 
 REVOKE ALL ON FUNCTION public.pipeline_detecter_stagnation() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.pipeline_detecter_stagnation() TO service_role;
+
+
+--
+-- Name: FUNCTION pipeline_dupliquer(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipeline_dupliquer(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_dupliquer(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.pipeline_dupliquer(p_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION pipeline_enregistrer(p_id uuid, p_nom text, p_color_mode text, p_use_deal_probability boolean, p_etapes jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipeline_enregistrer(p_id uuid, p_nom text, p_color_mode text, p_use_deal_probability boolean, p_etapes jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_enregistrer(p_id uuid, p_nom text, p_color_mode text, p_use_deal_probability boolean, p_etapes jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.pipeline_enregistrer(p_id uuid, p_nom text, p_color_mode text, p_use_deal_probability boolean, p_etapes jsonb) TO service_role;
 
 
 --
@@ -54784,11 +55943,29 @@ GRANT ALL ON FUNCTION public.pipeline_raisons_perte(p_from date, p_to date) TO s
 
 
 --
+-- Name: FUNCTION pipeline_reordonner(p_ids uuid[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipeline_reordonner(p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_reordonner(p_ids uuid[]) TO authenticated;
+GRANT ALL ON FUNCTION public.pipeline_reordonner(p_ids uuid[]) TO service_role;
+
+
+--
 -- Name: FUNCTION pipeline_reordonner_etapes(p_ordre jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.pipeline_reordonner_etapes(p_ordre jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public.pipeline_reordonner_etapes(p_ordre jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION pipeline_repartition_etapes(p_pipeline_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipeline_repartition_etapes(p_pipeline_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_repartition_etapes(p_pipeline_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.pipeline_repartition_etapes(p_pipeline_id uuid) TO service_role;
 
 
 --
@@ -54801,11 +55978,37 @@ GRANT ALL ON FUNCTION public.pipeline_restaurer_lot(p_operation_id uuid) TO serv
 
 
 --
+-- Name: FUNCTION pipeline_resynchroniser_defaut(p_org uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipeline_resynchroniser_defaut(p_org uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_resynchroniser_defaut(p_org uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION pipeline_stages_verifier_archivage(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.pipeline_stages_verifier_archivage() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.pipeline_stages_verifier_archivage() TO service_role;
+
+
+--
+-- Name: FUNCTION pipeline_supprimer(p_id uuid, p_dest_pipeline uuid, p_dest_etape uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipeline_supprimer(p_id uuid, p_dest_pipeline uuid, p_dest_etape uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_supprimer(p_id uuid, p_dest_pipeline uuid, p_dest_etape uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.pipeline_supprimer(p_id uuid, p_dest_pipeline uuid, p_dest_etape uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION pipeline_supprimer_etape(p_etape uuid, p_dest uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipeline_supprimer_etape(p_etape uuid, p_dest uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipeline_supprimer_etape(p_etape uuid, p_dest uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.pipeline_supprimer_etape(p_etape uuid, p_dest uuid) TO service_role;
 
 
 --
@@ -54822,6 +56025,14 @@ GRANT ALL ON FUNCTION public.pipeline_tendance(p_semaines integer) TO service_ro
 
 GRANT ALL ON FUNCTION public.pipeline_vitesse(p_from date, p_to date) TO authenticated;
 GRANT ALL ON FUNCTION public.pipeline_vitesse(p_from date, p_to date) TO service_role;
+
+
+--
+-- Name: FUNCTION pipelines_ventes_position_initiale(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pipelines_ventes_position_initiale() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.pipelines_ventes_position_initiale() TO service_role;
 
 
 --
@@ -55845,6 +57056,14 @@ GRANT ALL ON FUNCTION public.sync_team_member_from_membership() TO service_role;
 
 
 --
+-- Name: FUNCTION table_view_preferences_touch(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.table_view_preferences_touch() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.table_view_preferences_touch() TO service_role;
+
+
+--
 -- Name: FUNCTION tasks_update_timestamp(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -56346,6 +57565,22 @@ GRANT ALL ON TABLE public.automation_rules TO service_role;
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.automation_scheduled_tasks TO anon;
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.automation_scheduled_tasks TO authenticated;
 GRANT ALL ON TABLE public.automation_scheduled_tasks TO service_role;
+
+
+--
+-- Name: TABLE automation_webhook_receipts; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.automation_webhook_receipts TO service_role;
+GRANT SELECT ON TABLE public.automation_webhook_receipts TO authenticated;
+
+
+--
+-- Name: TABLE automation_webhooks; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.automation_webhooks TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.automation_webhooks TO authenticated;
 
 
 --
@@ -58240,6 +59475,14 @@ GRANT ALL ON TABLE public.support_slack_channels TO service_role;
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.support_tickets TO anon;
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE public.support_tickets TO authenticated;
 GRANT ALL ON TABLE public.support_tickets TO service_role;
+
+
+--
+-- Name: TABLE table_view_preferences; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.table_view_preferences TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.table_view_preferences TO authenticated;
 
 
 --

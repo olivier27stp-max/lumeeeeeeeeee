@@ -1,5 +1,5 @@
 -- ============================================================================
--- BASELINE 02 — tout ce que pg_dump ne contient PAS (catalogue de la PROD, 2026-09-25)
+-- BASELINE 02 — tout ce que pg_dump ne contient PAS (catalogue de la PROD, 2026-09-26)
 -- Généré par scripts/regenerer-baseline.mjs — ne pas modifier à la main.
 -- Triggers sur auth.users, buckets de stockage + leurs policies, publication
 -- temps réel, tâches planifiées. Oublier ce fichier = un environnement qui a
@@ -14,8 +14,8 @@ CREATE OR REPLACE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EA
 -- ── Buckets de stockage ──
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('attachments', 'attachments', false, 52428800, null) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('avatars', 'avatars', true, 10485760, array['image/*']::text[]) on conflict (id) do nothing;
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('custom-field-files', 'custom-field-files', false, 26214400, array['application/pdf','image/png','image/jpeg','image/webp','image/gif','image/heic','text/plain','text/csv','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-powerpoint','application/vnd.openxmlformats-officedocument.presentationml.presentation']::text[]) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('company-logos', 'company-logos', true, 10485760, array['image/*']::text[]) on conflict (id) do nothing;
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('custom-field-files', 'custom-field-files', false, 26214400, array['application/pdf','image/png','image/jpeg','image/webp','image/gif','image/heic','text/plain','text/csv','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-powerpoint','application/vnd.openxmlformats-officedocument.presentationml.presentation']::text[]) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('director-panel', 'director-panel', false, 104857600, array['image/png','image/jpeg','image/webp','image/gif','video/mp4','video/webm']::text[]) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('job-photos', 'job-photos', false, 26214400, array['image/*','video/*']::text[]) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('migration-files', 'migration-files', false, 52428800, null) on conflict (id) do nothing;
