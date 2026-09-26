@@ -65,6 +65,32 @@ describe('les modales montées dans toute l’app se chargent à la demande', ()
      */
     expect(controleur).not.toMatch(/setDejaOuvert\(false\)/);
   });
+
+  /*
+   * Le même contrôleur rend AUSSI l'aperçu de facture, et il était resté en
+   * import statique quand `NewJobModal` est passé en lazy. Il ne pèse que
+   * 7 Ko lui-même, mais il tire `InvoiceRenderer`, `buildRenderData` et
+   * `useChampsDocument` : le rendu complet d'une facture, dans l'entrée,
+   * pour quelqu'un qui n'en ouvre peut-être aucune. Mesuré au build :
+   * l'entrée passe de 1 139 à 1 107 Ko (−32 Ko).
+   *
+   * La règle est la même que ci-dessus — c'est pourquoi elle est vérifiée
+   * ici et pas dans un fichier à part : ce qui la casserait est identique.
+   */
+  it('`InvoicePreviewModal` est importé en lazy, pas en statique', () => {
+    expect(controleur, 'un import statique le ramène dans l’entrée')
+      .not.toMatch(/^import\s+InvoicePreviewModal/m);
+    expect(controleur).toMatch(/lazyResilient\(\(\)\s*=>\s*import\('\.\.\/components\/InvoicePreviewModal'\)\)/);
+  });
+
+  it('l’aperçu n’est RENDU qu’après une première ouverture, et reste monté', () => {
+    expect(controleur, 'un garde d’ouverture doit exister').toMatch(/apercuDejaOuvert/);
+    const rendu = controleur.slice(controleur.indexOf('<JobModalControllerContext.Provider'));
+    expect(rendu, 'le rendu doit être conditionné').toMatch(/\{apercuDejaOuvert\s*&&/);
+    // Même raison que pour le formulaire : l'animation de sortie a besoin
+    // que le composant survive à la fermeture.
+    expect(controleur).not.toMatch(/setApercuDejaOuvert\(false\)/);
+  });
 });
 
 describe('le préchargement du premier écran reste minimal', () => {

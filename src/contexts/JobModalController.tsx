@@ -1,4 +1,4 @@
-import React, { Suspense, createContext, lazy, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import React, { Suspense, createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { lazyResilient } from '../lib/lazyResilient';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -20,7 +20,14 @@ import type { JobDraftInitialValues, JobModalSourceContext } from '../components
  * fermé — sans ça, `lazy` téléchargerait quand même dès le montage.
  */
 const NewJobModal = lazyResilient(() => import('../components/NewJobModal'));
-import InvoicePreviewModal from '../components/InvoicePreviewModal';
+/*
+ * L'aperçu de facture suit la même règle que le formulaire ci-dessus : ce
+ * contrôleur enveloppe toute l'application, donc un import statique le
+ * plaçait dans le chunk d'entrée. Il ne pèse que 7 Ko lui-même, mais il
+ * tire InvoiceRenderer, buildRenderData et useChampsDocument — le rendu
+ * complet d'une facture, pour quelqu'un qui n'en ouvre peut-être aucune.
+ */
+const InvoicePreviewModal = lazyResilient(() => import('../components/InvoicePreviewModal'));
 import { createJob, getJobModalDraftById, updateJob, softDeleteJob } from '../lib/jobsApi';
 import { geocodeJob } from '../lib/geocodeApi';
 import { invalidateScheduleCache } from '../lib/scheduleApi';
@@ -247,6 +254,10 @@ export function JobModalControllerProvider({ children }: { children: React.React
   const [dejaOuvert, setDejaOuvert] = useState(false);
   if (isOpen && !dejaOuvert) setDejaOuvert(true);
 
+  // Idem pour l'aperçu de facture, avec son propre déclencheur.
+  const [apercuDejaOuvert, setApercuDejaOuvert] = useState(false);
+  if (isInvoicePreviewOpen && !apercuDejaOuvert) setApercuDejaOuvert(true);
+
   return (
     <JobModalControllerContext.Provider value={value}>
       {children}
@@ -269,11 +280,15 @@ export function JobModalControllerProvider({ children }: { children: React.React
       />
       </Suspense>
       )}
+      {apercuDejaOuvert && (
+      <Suspense fallback={null}>
       <InvoicePreviewModal
         isOpen={isInvoicePreviewOpen}
         invoiceId={previewInvoiceId}
         onClose={() => setIsInvoicePreviewOpen(false)}
       />
+      </Suspense>
+      )}
     </JobModalControllerContext.Provider>
   );
 }
