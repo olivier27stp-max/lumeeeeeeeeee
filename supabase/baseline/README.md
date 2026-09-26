@@ -34,11 +34,15 @@ fichiers, le temps réel et les jobs de fond ne fonctionnent pas.
 
 ## Ce qui est prouvé, ce qui ne l'est pas
 
-- ⚠️ **Le rejeu de bout en bout date de la version du 2026-09-25**, pas de
-  celle-ci : le dossier a été régénéré depuis la prod le 2026-09-26 (après les
-  4 migrations des champs personnalisés) et n'a pas été rejoué depuis. Ce qui
-  suit décrit la version précédente, à refaire quand on en aura besoin.
-- ✅ **Rejoué de bout en bout le 2026-09-25** sur un conteneur vierge de l'image
+- ✅ **Rejoué de bout en bout le 2026-09-26** (version courante) : `bash scripts/rejouer-baseline.sh`
+  monte un conteneur vierge `public.ecr.aws/supabase/postgres:17.6.1.167`, y recrée les
+  trois objets que les services Supabase fournissent sur un vrai projet (`auth.jwt()`,
+  `storage.foldername()`, les tables `auth.users` / `storage.buckets` / `storage.objects`),
+  applique `01` puis `02` en tant que `supabase_admin`, et compte. Résultat : **zéro erreur**,
+  et on retrouve exactement la prod — 255 tables, 15 vues, 449 fonctions, 892 policies
+  (public + storage), 271 triggers, 8 buckets, 20 tables temps réel, 11 tâches `pg_cron`.
+  Le script est rejouable à volonté et ne touche à aucune base distante.
+- ✅ **Rejeu précédent, le 2026-09-25** (à la main) sur un conteneur vierge de l'image
   Supabase `public.ecr.aws/supabase/postgres:17.6.1.167` : `01` puis `02`,
   **zéro erreur** ; la base obtenue compte exactement ce que compte la prod
   (254 tables, 15 vues, 407 fonctions, 675 policies, 7 buckets, 13 policies de
