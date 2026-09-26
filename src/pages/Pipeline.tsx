@@ -22,16 +22,17 @@ import PipelineBoard from '../components/pipeline/PipelineBoard';
 import DealDrawer from '../components/pipeline/DealDrawer';
 import { useJobModalController } from '../contexts/JobModalController';
 import PerduModal from '../components/pipeline/PerduModal';
-import PipelineReglages from '../components/pipeline/PipelineReglages';
-import CreerPipelineModal from '../components/pipeline/CreerPipelineModal';
+import PipelinesListe from '../components/pipeline/ghl/PipelinesListe';
+import PipelineDetail from '../components/pipeline/ghl/PipelineDetail';
+import PipelineModal from '../components/pipeline/ghl/PipelineModal';
 import PipelinePrevisions from '../components/pipeline/PipelinePrevisions';
 import { useTranslation } from '../i18n';
 import { hasPermission } from '../lib/permissions';
 import { usePermissions } from '../hooks/usePermissions';
 import {
   assignerDeal, deplacerDeal, fetchDeals, fetchMembres, fetchMontants, fetchMontantsDetailles,
-  fetchPipelineDefaut, fetchPipelines, fetchStages, lierJob, marquerPerdu, nomClient,
-  type Deal, type PipelineStage,
+  fetchMesPipelinesModifiables, fetchPipelineDefaut, fetchPipelines, fetchStages, lierJob, marquerPerdu, nomClient,
+  type Deal, type PipelineResume, type PipelineStage,
 } from '../lib/pipelineVentesApi';
 
 /**
@@ -80,6 +81,17 @@ export default function Pipeline() {
   const voitLesStats = estPatron
     || hasPermission(perms.permissions, 'financial.view_analytics', perms.role ?? undefined);
   const peutConfigurer = estPatron;
+
+  // Un membre à qui l'on a confié « Modifier » sur un pipeline (menu ⋮ →
+  // Gérer les permissions) accède à l'onglet Pipelines, limité à ceux-là.
+  const modifiablesQ = useQuery({
+    queryKey: ['pipeline-mes-modifiables'],
+    queryFn: fetchMesPipelinesModifiables,
+    enabled: !estPatron,
+    staleTime: 60_000,
+  });
+  const mesModifiables = useMemo(() => new Set(modifiablesQ.data ?? []), [modifiablesQ.data]);
+  const voitOngletPipelines = peutConfigurer || mesModifiables.size > 0;
 
   const pipelineQ = useQuery({
     queryKey: ['pipeline-defaut'],
@@ -161,6 +173,10 @@ export default function Pipeline() {
 
   const [dealOuvert, setDealOuvert] = useState<Deal | null>(null);
   const [creationPipeline, setCreationPipeline] = useState(false);
+  const [pipelineAModifier, setPipelineAModifier] = useState<PipelineResume | null>(null);
+  // Page détail d'un pipeline : `?tab=reglages&pipeline=<id>` — c'est aussi
+  // le lien que copie « Copier le lien ».
+  const detailId = params.get('pipeline');
 
   /**
    * La fiche suit les données rechargées.
@@ -261,6 +277,22 @@ export default function Pipeline() {
     setParams(sp);
   }
 
+  function ouvrirDetail(id: string | null) {
+    const sp = new URLSearchParams();
+    sp.set('tab', 'reglages');
+    if (id) sp.set('pipeline', id);
+    setParams(sp);
+  }
+
+  /** Après tout changement de pipeline : la liste, le défaut et le board suivent. */
+  function pipelinesChanges() {
+    qc.invalidateQueries({ queryKey: ['pipeline-liste'] });
+    qc.invalidateQueries({ queryKey: ['pipeline-defaut'] });
+    qc.invalidateQueries({ queryKey: ['pipeline-stages'] });
+    qc.invalidateQueries({ queryKey: ['pipelines-ventes', 'liste'] });
+    rafraichir();
+  }
+
   /** Déplacement depuis le board : les étapes terminales ouvrent une fenêtre. */
   async function deplacer(dealId: string, versEtapeId: string) {
     const deal = deals.find((d) => d.id === dealId);
@@ -312,7 +344,7 @@ export default function Pipeline() {
     // « Pipelines », comme chez GoHighLevel : l'onglet liste les pipelines et
     // règle leurs étapes. « Réglages » laissait croire à des préférences de
     // l'app, alors qu'on y configure le parcours de vente lui-même.
-    { cle: 'reglages', libelle: 'Pipelines', visible: peutConfigurer },
+    { cle: 'reglages', libelle: 'Pipelines', visible: voitOngletPipelines },
   ];
   const ongletActif = tabs.find((t) => t.cle === onglet)?.visible ? onglet : 'board';
 
@@ -409,23 +441,50 @@ export default function Pipeline() {
         )}
 
 
-        {ongletActif === 'reglages' && peutConfigurer && (
-          <PipelineReglages
-            pipelineId={pipelineId}
-            etapes={etapes}
-            deals={deals}
-            onOuvrirPipeline={(id) => { choisirPipeline(id); choisirOnglet('board'); }}
-            onChangement={() => {
-              qc.invalidateQueries({ queryKey: ['pipeline-stages', pipelineId] });
-              // La LISTE aussi : supprimer un pipeline ou changer le défaut
-              // laissait le sélecteur du board proposer l'ancien état
-              // pendant cinq minutes (staleTime).
-              qc.invalidateQueries({ queryKey: ['pipeline-liste'] });
-              qc.invalidateQueries({ queryKey: ['pipeline-defaut'] });
-              rafraichir();
-            }}
-          />
-        )}
+        {ongletActif === 'reglages' && voitOngletPipelines && (() => {
+          // Un non-administrateur ne voit QUE les pipelines qu'on lui a confiés.
+          const listePermise = peutConfigurer ? pipelines : pipelines.filter((p) => mesModifiables.has(p.id));
+          if (detailId) {
+            const choisi = listePermise.find((p) => p.id === detailId);
+            if (!choisi) {
+              return pipelinesQ.isLoading ? null : (
+                <EmptyState
+                  icon={GitBranch}
+                  title={fr ? 'Pipeline introuvable' : 'Pipeline not found'}
+                  description={fr
+                    ? 'Il a peut-être été supprimé, ou vous n’y avez pas accès.'
+                    : 'It may have been deleted, or you don’t have access.'}
+                  action={(
+                    <button type="button" onClick={() => ouvrirDetail(null)} className="btn-secondary text-[13px] px-3.5 py-1.5">
+                      {fr ? 'Retour aux pipelines' : 'Back to pipelines'}
+                    </button>
+                  )}
+                />
+              );
+            }
+            return (
+              <PipelineDetail
+                key={choisi.id}
+                fr={fr}
+                pipeline={choisi}
+                onRetour={() => ouvrirDetail(null)}
+                onChangement={pipelinesChanges}
+              />
+            );
+          }
+          return (
+            <PipelinesListe
+              fr={fr}
+              admin={peutConfigurer}
+              pipelines={listePermise}
+              chargement={pipelinesQ.isLoading}
+              onCreer={() => setCreationPipeline(true)}
+              onModifier={(p) => setPipelineAModifier(p)}
+              onOuvrir={(id) => ouvrirDetail(id)}
+              onChangement={pipelinesChanges}
+            />
+          );
+        })()}
       </div>
 
       <DealDrawer
@@ -476,16 +535,19 @@ export default function Pipeline() {
         }}
       />
 
-      <CreerPipelineModal
-        ouvert={creationPipeline}
-        onFermer={() => setCreationPipeline(false)}
-        onCree={(id) => {
+      <PipelineModal
+        ouvert={creationPipeline || !!pipelineAModifier}
+        fr={fr}
+        pipeline={pipelineAModifier}
+        onFermer={() => { setCreationPipeline(false); setPipelineAModifier(null); }}
+        onEnregistre={(id) => {
+          const cree = creationPipeline;
           setCreationPipeline(false);
-          // On affiche le pipeline qu'on vient de créer : le créer pour
-          // rester devant l'ancien n'aurait aucun sens.
-          choisirPipeline(id);
-          qc.invalidateQueries({ queryKey: ['pipeline-liste'] });
-          qc.invalidateQueries({ queryKey: ['pipeline-defaut'] });
+          setPipelineAModifier(null);
+          // Créé depuis le BOARD : on affiche le pipeline qu'on vient de
+          // créer. Créé ou modifié depuis l'onglet Pipelines : on y reste.
+          if (cree && ongletActif === 'board') choisirPipeline(id);
+          pipelinesChanges();
         }}
       />
 

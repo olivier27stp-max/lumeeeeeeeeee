@@ -18,6 +18,7 @@
 import { useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import PipelineStats from './PipelineStats';
+import CamembertEtapes from './ghl/CamembertEtapes';
 import { libelleSource } from '../../lib/pipeline/presentation';
 import { useTranslation } from '../../i18n';
 import {
@@ -328,6 +329,9 @@ export default function PipelinePrevisions({ pipelines, pipelineActif, onOuvrirD
               detail={fr ? 'En cours en ce moment' : 'Currently in progress'}
             />
           </div>
+
+          {/* Le camembert GHL : seulement pour UN pipeline, dont les étapes ont un sens ensemble. */}
+          {portee && <CamembertEtapes fr={fr} pipelineId={portee} />}
 
           {/* ── Ventilation ──
               Les quatre totaux disent COMBIEN ; cette section dit D'OÙ. Un
