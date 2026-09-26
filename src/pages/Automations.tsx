@@ -232,6 +232,20 @@ const PRESET_META: Record<string, {
 const DEFAULT_ACTIVE_PRESETS = new Set(Object.keys(PRESET_META));
 
 const TRIGGER_DISPLAY: Record<string, { en: string; fr: string }> = {
+  // Ajoutés le 2026-09-25 (QA, P2-11) : ces neuf-là manquaient, et la
+  // liste affichait la CLÉ BRUTE — « deal.stage_entered », « custom_field.
+  // changed » — au milieu de libellés français. Un test croise désormais
+  // cette table avec le catalogue : un déclencheur neuf ne peut plus
+  // arriver sans son nom.
+  'client.replied':        { en: 'Client replied',        fr: 'Le client répond' },
+  'client.tagged':         { en: 'Tag added',             fr: 'Étiquette ajoutée' },
+  'task.completed':        { en: 'Task completed',        fr: 'Tâche terminée' },
+  'note.added':            { en: 'Note added',            fr: 'Note ajoutée' },
+  'webhook.received':      { en: 'Incoming webhook',      fr: 'Appel reçu de l’extérieur' },
+  'date.reached':          { en: 'Date reached',          fr: 'Date atteinte' },
+  'deal.stage_entered':    { en: 'Deal enters a stage',   fr: 'Opportunité entre dans une étape' },
+  'deal.stage_idle':       { en: 'Deal idle in a stage',  fr: 'Opportunité qui dort' },
+  'custom_field.changed':  { en: 'Custom field changed',  fr: 'Champ personnalisé modifié' },
   'appointment.created':   { en: 'Appointment created',   fr: 'Rendez-vous créé' },
   'appointment.updated':   { en: 'Appointment updated',   fr: 'Rendez-vous modifié' },
   'appointment.cancelled': { en: 'Appointment cancelled', fr: 'Rendez-vous annulé' },
@@ -1303,7 +1317,10 @@ export default function Automations() {
                                   {decl ? (fr ? decl.fr : decl.en) : rule.trigger_event}
                                   {' · '}
                                   {Array.isArray(rule.steps) && rule.steps.length > 0
-                                    ? (fr ? `${rule.steps.length} étapes` : `${rule.steps.length} steps`)
+                                    ? (fr
+                                      // « 1 étapes » (QA 2026-09-25, P2-11).
+                                      ? `${rule.steps.length} étape${rule.steps.length > 1 ? 's' : ''}`
+                                      : `${rule.steps.length} step${rule.steps.length > 1 ? 's' : ''}`)
                                     : formatDelay(rule.delay_seconds, language)}
                                 </span>
                                 {rule.modele_id && (

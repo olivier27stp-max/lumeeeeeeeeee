@@ -51,14 +51,40 @@ export default function ChampActionUI({
     switch (champ.type) {
       case 'zone':
         return (
-          <textarea
-            id={id}
-            rows={champ.max && champ.max > 2000 ? 6 : 3}
-            maxLength={champ.max}
-            value={valeur}
-            onChange={(e) => onChange(e.target.value)}
-            className={classeChamp}
-          />
+          <>
+            <textarea
+              id={id}
+              rows={champ.max && champ.max > 2000 ? 6 : 3}
+              maxLength={champ.max}
+              value={valeur}
+              onChange={(e) => onChange(e.target.value)}
+              className={classeChamp}
+            />
+            {/*
+              LE COMPTEUR, parce que `maxLength` TRONQUE EN SILENCE.
+
+              Le navigateur refuse la frappe une fois la limite atteinte,
+              sans rien dire : on colle un texte de 1800 caractères, il en
+              reste 1600, et personne ne voit ce qui a été coupé. QA du
+              2026-09-25 (P2-14).
+
+              On prévient dès 90 % : à 100 %, le mal est déjà fait.
+            */}
+            {champ.max && champ.max >= 200 && (
+              <p className={`mt-1 text-[10px] ${
+                valeur.length >= champ.max
+                  ? 'text-danger'
+                  : valeur.length > champ.max * 0.9
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-text-tertiary'
+              }`}>
+                {valeur.length} / {champ.max}
+                {valeur.length >= champ.max && (
+                  <span> · {fr ? 'limite atteinte' : 'limit reached'}</span>
+                )}
+              </p>
+            )}
+          </>
         );
 
       case 'choix':
