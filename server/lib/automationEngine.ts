@@ -23,6 +23,7 @@ import {
 } from './automationSequences';
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
 import { orgEnPause } from './automations-pause-org';
+import { fuseauOrg, FUSEAU_DEFAUT } from './automations-fuseau-org';
 
 interface AutomationRule {
   id: string;
@@ -257,13 +258,20 @@ function buildExecutionKey(
 // No automated text lands on a client's phone outside 08:00–19:59 local
 // (Québec). Emails/notifications are unaffected — only SMS wakes people up.
 
-const QUIET_TZ = 'America/Toronto';
+/*
+ * REPLI seulement. Le fuseau réel vient de `company_settings.timezone` via
+ * `fuseauOrg()` — voir automations-fuseau-org.ts. Cette valeur ne sert que
+ * pour les appels sans org (tests unitaires des fonctions pures) et comme
+ * défaut des signatures ci-dessous, pour qu'un appelant non encore câblé
+ * garde EXACTEMENT le comportement d'avant.
+ */
+const QUIET_TZ = FUSEAU_DEFAUT;
 const SEND_START_HOUR = 8;
 const SEND_END_HOUR = 20; // exclusive — last send at 19:59
 
-function localHour(d: Date): number {
+function localHour(d: Date, tz: string = QUIET_TZ): number {
   return parseInt(
-    new Intl.DateTimeFormat('en-CA', { timeZone: QUIET_TZ, hour: '2-digit', hour12: false }).format(d),
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz, hour: '2-digit', hour12: false }).format(d),
     10,
   );
 }
@@ -277,8 +285,8 @@ export interface ReglagesRegle {
   marquer_lu?: boolean;
 }
 
-export function isQuietHours(d: Date = new Date()): boolean {
-  const h = localHour(d);
+export function isQuietHours(d: Date = new Date(), tz: string = QUIET_TZ): boolean {
+  const h = localHour(d, tz);
   return h < SEND_START_HOUR || h >= SEND_END_HOUR;
 }
 
@@ -292,28 +300,32 @@ export function isQuietHours(d: Date = new Date()): boolean {
  * lundi matin. Utile pour les relances commerciales, pas pour un rappel de
  * rendez-vous — d'où le réglage par automatisation plutôt que global.
  */
-export function horsFenetre(reglages: ReglagesRegle | null | undefined, d: Date = new Date()): boolean {
+export function horsFenetre(
+  reglages: ReglagesRegle | null | undefined,
+  d: Date = new Date(),
+  tz: string = QUIET_TZ,
+): boolean {
   const debut = reglages?.fenetre?.debut ?? SEND_START_HOUR;
   const fin = reglages?.fenetre?.fin ?? SEND_END_HOUR;
-  const h = localHour(d);
+  const h = localHour(d, tz);
   if (h < debut || h >= fin) return true;
 
   if (reglages?.jours_ouvrables) {
     // `getDay()` lit le fuseau du SERVEUR ; on passe par Intl pour rester
-    // sur l'heure du Québec, comme le reste de la fenêtre.
-    const jour = new Intl.DateTimeFormat('en-CA', { timeZone: QUIET_TZ, weekday: 'short' }).format(d);
+    // sur l'heure de l'entreprise, comme le reste de la fenêtre.
+    const jour = new Intl.DateTimeFormat('en-CA', { timeZone: tz, weekday: 'short' }).format(d);
     if (jour === 'Sat' || jour === 'Sun') return true;
   }
   return false;
 }
 
 /** Décalage UTC (en minutes) du fuseau local à cet instant — +/- selon l'heure avancée. */
-function decalageLocalMin(t: number): number {
+function decalageLocalMin(t: number, tz: string = QUIET_TZ): number {
   const d = new Date(t);
   // Une date formatée dans le fuseau cible, relue comme si elle était UTC :
   // l'écart avec l'instant d'origine EST le décalage.
   const p = new Intl.DateTimeFormat('en-CA', {
-    timeZone: QUIET_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   }).formatToParts(d).reduce<Record<string, string>>((a, x) => (a[x.type] = x.value, a), {});
   const commeUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
@@ -333,8 +345,8 @@ function decalageLocalMin(t: number): number {
  * Rien à faire le reste de l'année : les deux décalages sont égaux, la
  * correction vaut zéro.
  */
-function corrigerChangementDHeure(reference: number, cible: number): number {
-  const ecart = decalageLocalMin(reference) - decalageLocalMin(cible);
+function corrigerChangementDHeure(reference: number, cible: number, tz: string = QUIET_TZ): number {
+  const ecart = decalageLocalMin(reference, tz) - decalageLocalMin(cible, tz);
   return ecart === 0 ? cible : cible + ecart * 60000;
 }
 
@@ -362,14 +374,18 @@ function shouldRespectQuietHours(actionType: string, delaySeconds: number): bool
 }
 
 /** Next moment inside the send window, stepping 30 min (DST-safe, no tz lib). */
-export function nextSendTime(from: Date = new Date(), reglages?: ReglagesRegle | null): Date {
+export function nextSendTime(
+  from: Date = new Date(),
+  reglages?: ReglagesRegle | null,
+  tz: string = QUIET_TZ,
+): Date {
   const next = new Date(from);
   // 48 pas de 30 min = 24 h. Avec `jours_ouvrables`, un message prêt le
   // samedi doit pouvoir attendre jusqu'à lundi : on va jusqu'à 3 jours.
   const pasMax = reglages?.jours_ouvrables ? 144 : 48;
   for (let i = 0; i < pasMax; i++) {
     next.setTime(next.getTime() + 30 * 60 * 1000);
-    if (!horsFenetre(reglages, next)) return next;
+    if (!horsFenetre(reglages, next, tz)) return next;
   }
   return from;
 }
@@ -416,6 +432,10 @@ async function executeRuleActions(
     ruleId: rule.id,
   };
 
+  // La fenêtre d'envoi se calcule dans le fuseau de l'ENTREPRISE, pas dans
+  // celui du serveur (Railway tourne en UTC) ni dans un fuseau figé.
+  const fuseau = await fuseauOrg(config.supabase, event.orgId);
+
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
     const executionKey = buildExecutionKey(rule.id, event.entityId, i, rule.settings?.reentree === true);
@@ -423,7 +443,7 @@ async function executeRuleActions(
     // Reporte à la prochaine fenêtre d'envoi les actions déclenchées en heures
     // calmes. Une règle immédiate (délai 0) porte une confirmation attendue :
     // seuls ses SMS sont reportés, jamais ses courriels.
-    if (shouldRespectQuietHours(action.type, rule.delay_seconds) && horsFenetre(rule.settings)) {
+    if (shouldRespectQuietHours(action.type, rule.delay_seconds) && horsFenetre(rule.settings, new Date(), fuseau)) {
       // supabase-js ne lève jamais : l'erreur (dont le doublon 23505) arrive
       // dans la réponse, pas dans un catch.
       const { error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
@@ -549,7 +569,11 @@ async function resolveExecuteAt(
     if (startField) {
       const eventTime = new Date(startField).getTime();
       const executeAt = new Date(
-        corrigerChangementDHeure(eventTime, eventTime + rule.delay_seconds * 1000),
+        corrigerChangementDHeure(
+          eventTime,
+          eventTime + rule.delay_seconds * 1000,
+          await fuseauOrg(config.supabase, event.orgId),
+        ),
       );
       const retard = Date.now() - executeAt.getTime();
 
@@ -999,8 +1023,13 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // un courriel de relance pouvait partir à 3h du matin.
     const taskType = task.action_config?.type;
     const reglagesRegle = (task.automation_rules?.settings ?? null) as ReglagesRegle | null;
-    if ((taskType === 'send_sms' || taskType === 'send_email') && horsFenetre(reglagesRegle)) {
-      const prochaine = nextSendTime(new Date(), reglagesRegle);
+    // Même fuseau pour le TEST et pour le REPORT : les calculer dans deux
+    // fuseaux différents ferait retomber la tâche hors fenêtre en boucle.
+    const fuseauTache = task.org_id
+      ? await fuseauOrg(supabase, task.org_id)
+      : FUSEAU_DEFAUT;
+    if ((taskType === 'send_sms' || taskType === 'send_email') && horsFenetre(reglagesRegle, new Date(), fuseauTache)) {
+      const prochaine = nextSendTime(new Date(), reglagesRegle, fuseauTache);
 
       /**
        * Un rappel « X h avant » que le report ferait tomber APRÈS son objet
