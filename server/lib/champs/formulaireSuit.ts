@@ -21,6 +21,10 @@
  *
  * Rien ici ne doit faire échouer l'écriture du champ : le formulaire est un
  * effet de bord. Les appelants encapsulent, et une erreur se journalise.
+ *
+ * Le `db` attendu est le CLIENT DE SERVICE : `request_forms` refuse l'écriture
+ * par le client utilisateur (c'est déjà ainsi que la route des formulaires
+ * procède). L'entreprise vient de la session et borne chaque requête.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { optionsQuestion, peutAllerAuFormulaire, questionPour, typeQuestion } from '../../../src/lib/champs/questionsFormulaire';
