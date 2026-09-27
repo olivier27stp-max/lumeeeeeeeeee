@@ -113,6 +113,16 @@ export default function AutomationBuilderPage() {
   const ETAPES_MAX = 20;
 
   /** Les échanges avec Lumi, pour qu'une correction porte sur le contexte. */
+  /*
+   * Le fil de la conversation avec Lumi. Il servait UNIQUEMENT de contexte
+   * envoyé au modèle, sans jamais être affiché : on tapait une demande, le
+   * canevas changeait, et les tours précédents disparaissaient. On ne voyait
+   * donc pas ce qu'on venait de demander ni ce que Lumi avait répondu.
+   *
+   * On garde ici l'historique ENTIER pour l'écran, et on ne tronque qu'à
+   * l'envoi (voir `construireAvecLumi`). L'inverse — tronquer à
+   * l'enregistrement, comme avant — donnerait un fil qui oublie en silence.
+   */
   const [echangesLumi, setEchangesLumi] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
 
   // ── Le parcours ──
@@ -324,7 +334,9 @@ export default function AutomationBuilderPage() {
        * 2 jours » ne produisait RIEN, sans un mot. QA du 2026-09-25.
        */
       const propose = await genererParcoursAvecLumi(demande, fr ? 'fr' : 'en', {
-        echanges: echangesLumi,
+        // 6 derniers tours seulement : c'est ce que la route accepte, et
+        // l'historique complet gonflerait le prompt sans rien apporter.
+        echanges: echangesLumi.slice(-6),
         parcoursActuel: steps.length > 0
           ? { trigger_event: regle?.trigger_event, steps }
           : null,
@@ -341,9 +353,9 @@ export default function AutomationBuilderPage() {
       // La conversation se poursuit : le tour suivant saura ce qui
       // vient d'être demandé et ce que Lumi a répondu.
       setEchangesLumi((e) => [
-        ...e.slice(-4),
+        ...e,
         { role: 'user' as const, content: demande },
-        { role: 'assistant' as const, content: propose.resume || 'Parcours construit.' },
+        { role: 'assistant' as const, content: propose.resume || (fr ? 'Parcours construit.' : 'Path built.') },
       ]);
       setPrompt('');
       /*
@@ -1292,8 +1304,61 @@ export default function AutomationBuilderPage() {
                     <div className="w-full rounded-2xl border border-border bg-surface-card p-5 shadow-sm">
                       <p className="mb-3 flex items-center justify-center gap-2 text-center text-sm font-medium text-text-primary">
                         <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" />
-                        {fr ? 'Décris ton automatisation à Lumi' : 'Describe your automation to Lumi'}
+                        {echangesLumi.length > 0
+                          ? (fr ? 'Continue avec Lumi' : 'Keep going with Lumi')
+                          : (fr ? 'Décris ton automatisation à Lumi' : 'Describe your automation to Lumi')}
                       </p>
+                      {/*
+                        * Le fil. `aria-live` parce que la réponse de Lumi
+                        * arrive sans que le focus bouge : sans ça, un lecteur
+                        * d'écran ne l'annonce jamais.
+                        *
+                        * Hauteur bornée et défilement : une conversation de
+                        * dix tours ne doit pas pousser le champ de saisie
+                        * hors de l'écran.
+                        */}
+                      {(echangesLumi.length > 0 || genere) && (
+                        <div
+                          aria-live="polite"
+                          className="mb-3 max-h-56 space-y-2 overflow-y-auto border-b border-border pb-3 text-left"
+                        >
+                          {echangesLumi.map((tour, i) => (
+                            <div
+                              key={`${i}-${tour.role}`}
+                              className={tour.role === 'user' ? 'flex justify-end' : 'flex justify-start'}
+                            >
+                              <p
+                                className={
+                                  tour.role === 'user'
+                                    ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-accent/10 px-3 py-2 text-[12px] text-text-primary'
+                                    : 'max-w-[85%] rounded-2xl rounded-bl-sm bg-surface px-3 py-2 text-[12px] text-text-secondary'
+                                }
+                              >
+                                {tour.content}
+                              </p>
+                            </div>
+                          ))}
+                          {/* Le tour en cours : on montre la demande AVANT la
+                              réponse, sinon le fil paraît figé pendant que
+                              Lumi travaille. */}
+                          {genere && prompt.trim().length > 0 && (
+                            <>
+                              <div className="flex justify-end">
+                                <p className="max-w-[85%] rounded-2xl rounded-br-sm bg-accent/10 px-3 py-2 text-[12px] text-text-primary">
+                                  {prompt.trim()}
+                                </p>
+                              </div>
+                              <div className="flex justify-start">
+                                <p className="inline-flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-surface px-3 py-2 text-[12px] text-text-muted">
+                                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                  {fr ? 'Lumi construit…' : 'Lumi is building…'}
+                                </p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+
                       <label htmlFor={`${idsPage}-prompt`} className="sr-only">
                         {fr ? 'Décris ton automatisation' : 'Describe your automation'}
                       </label>
@@ -1302,9 +1367,13 @@ export default function AutomationBuilderPage() {
                         rows={3}
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder={fr
-                          ? 'Après l’envoi d’une soumission, attends 24 h puis envoie un texto de suivi, attends 2 jours de plus pour un courriel, et crée une tâche d’appel après 3 jours.'
-                          : 'After sending a quote, wait 24 hours then send a text follow-up, wait 2 more days for an email, and create a call task after 3 days.'}
+                        placeholder={echangesLumi.length > 0
+                          ? (fr
+                              ? 'Change le délai du deuxième message à 2 jours. Retire le courriel.'
+                              : 'Change the second message delay to 2 days. Remove the email.')
+                          : (fr
+                              ? 'Après l’envoi d’une soumission, attends 24 h puis envoie un texto de suivi, attends 2 jours de plus pour un courriel, et crée une tâche d’appel après 3 jours.'
+                              : 'After sending a quote, wait 24 hours then send a text follow-up, wait 2 more days for an email, and create a call task after 3 days.')}
                         className="w-full resize-none rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                       />
                       <div className="mt-2 flex justify-end">

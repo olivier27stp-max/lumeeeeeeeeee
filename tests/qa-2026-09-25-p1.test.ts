@@ -159,4 +159,49 @@ describe('P1-6 / P1-7 — Lumi doit MODIFIER, pas tout refaire', () => {
     // se met à suivre une consigne périmée.
     expect(gen).toMatch(/\(echanges \?\? \[\]\)\.slice\(-6\)/);
   });
+
+  /*
+   * LE FIL, À L'ÉCRAN.
+   *
+   * Le contexte conversationnel existait depuis le QA du 2026-09-25, mais il
+   * n'était JAMAIS affiché : `echangesLumi` ne servait que de charge utile.
+   * On tapait une demande, le canevas changeait, et les tours précédents
+   * disparaissaient — impossible de voir ce qu'on avait demandé ni ce que
+   * Lumi avait répondu. Lumi était conversationnel sans que ça se voie.
+   */
+  it('le fil des échanges est AFFICHÉ, pas seulement envoyé', () => {
+    expect(editeur, 'les tours doivent être rendus').toMatch(/echangesLumi\.map\(/);
+    expect(editeur, 'les deux rôles doivent se distinguer à l’œil')
+      .toMatch(/tour\.role === 'user'/);
+  });
+
+  it('la réponse de Lumi est annoncée aux lecteurs d’écran', () => {
+    /*
+     * La réponse arrive sans que le focus bouge : sans `aria-live`, un
+     * lecteur d'écran ne l'annonce jamais et la conversation est muette.
+     */
+    expect(editeur).toMatch(/aria-live="polite"/);
+  });
+
+  it('le fil montre le tour EN COURS pendant que Lumi travaille', () => {
+    /*
+     * Sans ça, on tape, rien ne bouge, et on croit que le bouton n'a rien
+     * fait. On vise la CONDITION du tour en attente, pas le libellé « Lumi
+     * construit… » : celui-ci existe aussi sur le bouton, donc l'assertion
+     * serait passée même sans fil — un test qui ne peut pas échouer.
+     */
+    expect(editeur).toMatch(/\{genere && prompt\.trim\(\)\.length > 0 && \(/);
+  });
+
+  it('l’affichage garde TOUT l’historique ; seul l’envoi est borné', () => {
+    /*
+     * Avant, la mémorisation tronquait à 6 (`e.slice(-4)` + 2 tours) : un fil
+     * affiché aurait donc oublié en silence les tours plus anciens. On garde
+     * l'historique entier pour l'écran et on ne tranche qu'à l'envoi.
+     */
+    expect(editeur, 'plus de troncature à la mémorisation')
+      .not.toMatch(/\.\.\.e\.slice\(-4\)/);
+    expect(editeur, 'la fenêtre se décide à l’envoi')
+      .toMatch(/echanges: echangesLumi\.slice\(-6\)/);
+  });
 });
