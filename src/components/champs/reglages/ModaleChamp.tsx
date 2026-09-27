@@ -26,6 +26,7 @@ import {
 } from '../../../lib/champsPersoApi';
 import { OBJETS, TYPES_CHAMP, LIBELLES_OBJET, LIBELLES_TYPE, conversionPermise, variableAffichee, type ConfigChamp, type ValeurChamp } from '../../../lib/champs/types';
 import { slugCle } from '../../../lib/champs/valeurs';
+import { peutAllerAuFormulaire } from '../../../lib/champs/questionsFormulaire';
 import { clesStandard } from '../../../lib/champs/standard';
 import { AIDE_TYPE } from '../icones';
 import ChampSaisie from '../ChampSaisie';
@@ -98,6 +99,10 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
   const [placeholder, setPlaceholder] = useState(champ?.placeholder ?? '');
   const [aide, setAide] = useState(champ?.help_text ?? '');
   const [obligatoire, setObligatoire] = useState(champ?.is_required ?? false);
+  // Le formulaire de demande suit les champs client et pipeline : la question
+  // s'y pose d'office. Décochable pour un champ interne (une marge, un coût)
+  // qu'on ne veut pas montrer au public.
+  const [surFormulaire, setSurFormulaire] = useState(true);
   const [config, setConfig] = useState<ConfigChamp>(champ?.config ?? {});
   const [options, setOptions] = useState<OptionEdit[]>(
     (champ?.options ?? []).filter((o) => !o.archived_at).map((o) => ({ id: o.id, label: o.label, color: o.color, _cle: nouvelleCle() })),
@@ -194,6 +199,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
         : await creerChamp(objet, {
           label: label.trim(), field_type: type, key: cle, placeholder: placeholder || null, help_text: aide || null,
           is_required: obligatoire, config, options: opts, folder_id: dossier || null, default_value: defautFinal(),
+          sur_formulaire: surFormulaire,
         });
       toast.success(edition ? (fr ? 'Champ modifié.' : 'Field updated.') : (fr ? 'Champ créé.' : 'Field created.'));
       onEnregistre(resultat);
@@ -367,6 +373,20 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                     <input id={`${ids}-req`} type="checkbox" checked={obligatoire} onChange={(e) => setObligatoire(e.target.checked)} className="h-4 w-4 accent-primary" />
                     {fr ? 'Obligatoire' : 'Required'}
                   </label>
+
+                  {!edition && peutAllerAuFormulaire({ object_type: objet, field_type: type }) && (
+                    <label htmlFor={`${ids}-form`} className="flex items-start gap-2 text-[13px] text-text-primary">
+                      <input id={`${ids}-form`} type="checkbox" checked={surFormulaire}
+                        onChange={(e) => setSurFormulaire(e.target.checked)} className="mt-0.5 h-4 w-4 accent-primary" />
+                      <span>
+                        {fr ? 'L’ajouter au formulaire de demande' : 'Add it to the request form'}
+                        <span className="block text-[11px] text-text-tertiary">
+                          {fr ? 'La question se pose toute seule, déjà reliée : la réponse remplit ce champ.'
+                              : 'The question is added automatically, already linked: the answer fills this field.'}
+                        </span>
+                      </span>
+                    </label>
+                  )}
                 </div>
               )}
             </section>

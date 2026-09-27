@@ -16,6 +16,7 @@
  * événements d'automatisation, variables de modèles, filtre de fonctionnalité.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { ajouterAuxFormulaires, retirerDesFormulaires, synchroniserQuestions } from './formulaireSuit';
 import {
   OBJETS, TYPES_CHAMP, TYPES_UNIQUES, TYPES_CHERCHABLES, conversionPermise, colonneEntite, variableModele,
   type ChampPerso, type ConfigChamp, type DossierChamp, type ObjetChamp, type OptionChamp, type TypeChamp,
@@ -124,6 +125,8 @@ export interface EntreeChamp {
   config?: ConfigChamp;
   options?: EntreeOption[];
   default_value?: ChampPerso['default_value'];
+  /** Poser d'office la question sur les formulaires de demande. Absent = oui. */
+  sur_formulaire?: boolean;
 }
 
 function verifierEntree(e: Pick<EntreeChamp, 'object_type' | 'field_type' | 'key' | 'options' | 'config' | 'is_searchable'>) {
@@ -182,7 +185,15 @@ export async function creerChamp(db: SupabaseClient, orgId: string, e: EntreeCha
       .eq('org_id', orgId).eq('id', data as string);
     if (eDef) traduireErreur(eDef, 'poser la valeur par défaut');
   }
-  return unChamp(db, orgId, data as string);
+  const champ = await unChamp(db, orgId, data as string);
+  // Le formulaire de demande suit (client et pipeline seulement). Effet de
+  // bord : s'il échoue — droits insuffisants sur les formulaires, par exemple —
+  // le champ reste créé, on ne fait que le journaliser.
+  if (e.sur_formulaire !== false) {
+    try { await ajouterAuxFormulaires(db, orgId, champ); }
+    catch (err) { console.error('[champs] formulaire non mis à jour à la création', err); }
+  }
+  return champ;
 }
 
 export interface PatchChamp {
@@ -228,7 +239,11 @@ export async function modifierChamp(db: SupabaseClient, orgId: string, id: strin
     const { error } = await db.rpc('cf_maj_options', { p_field: id, p_options: p.options });
     if (error) traduireErreur(error, 'modifier les options');
   }
-  return unChamp(db, orgId, id);
+  const apres = await unChamp(db, orgId, id);
+  // Les questions déjà reliées reprennent le libellé, les options, l'obligatoire.
+  try { await synchroniserQuestions(db, orgId, apres); }
+  catch (err) { console.error('[champs] formulaire non synchronisé', err); }
+  return apres;
 }
 
 export async function archiverChamp(db: SupabaseClient, orgId: string, id: string, archive: boolean): Promise<ChampPerso> {
@@ -236,6 +251,13 @@ export async function archiverChamp(db: SupabaseClient, orgId: string, id: strin
     .update({ archived_at: archive ? new Date().toISOString() : null })
     .eq('org_id', orgId).eq('id', id).select('id').single();
   if (error) traduireErreur(error, archive ? 'archiver le champ' : 'restaurer le champ');
+  // Archivé : la question ne remplirait plus rien, elle quitte le formulaire.
+  // Restauré : on ne la remet pas d'office — à reprendre par « Ajouter des
+  // champs personnalisés », sinon on ressusciterait une question retirée exprès.
+  if (archive) {
+    try { await retirerDesFormulaires(db, orgId, id); }
+    catch (err) { console.error('[champs] formulaire non nettoyé à l’archivage', err); }
+  }
   return unChamp(db, orgId, id);
 }
 

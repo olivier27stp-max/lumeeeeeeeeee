@@ -136,6 +136,8 @@ export interface EntreeChamp {
   config?: ConfigChamp;
   options?: EntreeOption[];
   default_value?: ChampPerso['default_value'];
+  /** Poser d'office la question sur les formulaires de demande. Absent = oui. */
+  sur_formulaire?: boolean;
 }
 
 export async function creerChamp(objet: ObjetChamp, e: EntreeChamp & { folder_id?: string | null }): Promise<ChampPerso> {

@@ -7,35 +7,14 @@
 import { useId, useState } from 'react';
 import { Layers, X } from 'lucide-react';
 import type { ChampPerso } from '../../lib/champs/types';
+import { questionPour as questionBrute, typeQuestion as typeBrut } from '../../lib/champs/questionsFormulaire';
 import type { FormField, FormFieldType } from '../../types';
 
-/** Type de question du formulaire pour un type de champ personnalisé. */
-export function typeQuestion(c: ChampPerso): FormFieldType {
-  switch (c.field_type) {
-    case 'multi_line': return 'paragraph';
-    case 'number':
-    case 'monetary': return 'number';
-    case 'dropdown_single': return 'dropdown';
-    case 'dropdown_multi': return 'checkbox';
-    // Case à cocher : une question Oui / Non (liste), relue en booléen à la réception.
-    case 'checkbox': return 'dropdown';
-    default: return 'text';
-  }
-}
-
-/** La question créée pour un champ : même libellé, options, obligatoire, et reliée au champ. */
-export function questionPour(c: ChampPerso, section: FormField['section'], id: string): FormField {
-  const avecOptions = c.field_type === 'dropdown_single' || c.field_type === 'dropdown_multi';
-  return {
-    id,
-    label: c.label,
-    type: typeQuestion(c),
-    required: !!c.is_required,
-    options: avecOptions ? c.options.filter((o) => !o.archived_at).map((o) => o.label) : c.field_type === 'checkbox' ? ['Oui', 'Non'] : [],
-    section,
-    cf_field_id: c.id,
-  };
-}
+// Définitions partagées avec le serveur (le formulaire suit les champs tout
+// seul) : ici on ne fait que les retyper au modèle du constructeur de formulaire.
+export const typeQuestion = (c: ChampPerso): FormFieldType => typeBrut(c) as FormFieldType;
+export const questionPour = (c: ChampPerso, section: FormField['section'], id: string): FormField =>
+  questionBrute(c, section, id) as FormField;
 
 export default function AjouterChampsFormulaire({ champs, dejaRelies, fr, onAjouter }: {
   champs: ChampPerso[];
