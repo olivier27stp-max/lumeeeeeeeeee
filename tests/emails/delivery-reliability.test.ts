@@ -1006,10 +1006,21 @@ describe('heures calmes — plus de relance courriel à 3h du matin', () => {
     expect(bloc).toContain("status: 'cancelled'");
   });
 
-  it('la fenêtre reste 8h–20h, heure du Québec', () => {
-    expect(engine).toContain("QUIET_TZ = 'America/Toronto'");
+  it('la fenêtre reste 8h–20h, heure du Québec par défaut', () => {
+    /*
+     * Les bornes ne bougent pas. Le FUSEAU, lui, vient du réglage de
+     * l'entreprise depuis que les heures de silence le respectent
+     * (auparavant figé dans QUIET_TZ, faux hors de l'Est). Ce qui doit
+     * rester vrai : sans réglage, c'est l'heure du Québec — sinon une org
+     * existante verrait ses envois se décaler du jour au lendemain.
+     */
     expect(engine).toContain('SEND_START_HOUR = 8');
     expect(engine).toContain('SEND_END_HOUR = 20');
+    expect(engine, 'le repli du moteur doit être le défaut partagé')
+      .toContain('const QUIET_TZ = FUSEAU_DEFAUT;');
+    expect(read('server/lib/automations-fuseau-org.ts'),
+      'et ce défaut doit rester l’heure du Québec')
+      .toContain("export const FUSEAU_DEFAUT = 'America/Toronto';");
   });
 });
 
