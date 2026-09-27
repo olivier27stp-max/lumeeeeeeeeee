@@ -77,6 +77,7 @@ COPY src/lib/champs/standard.ts ./src/lib/champs/standard.ts
 COPY src/lib/champs/filtres.ts ./src/lib/champs/filtres.ts
 COPY src/lib/champs/valeurs.ts ./src/lib/champs/valeurs.ts
 COPY src/lib/champs/modeles.ts ./src/lib/champs/modeles.ts
+COPY src/lib/champs/questionsFormulaire.ts ./src/lib/champs/questionsFormulaire.ts
 # FAQ du support, lue par l'assistant de support (server/lib/support/ia.ts).
 COPY src/components/supportArticles.ts ./src/components/supportArticles.ts
 

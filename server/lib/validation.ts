@@ -1281,6 +1281,9 @@ export const champCreerSchema = z.object({
   ...baseChamp,
   object_type: objetChamp,
   folder_id: z.string().uuid().nullable().optional(),
+  // Poser d'office la question sur les formulaires de demande (client et
+  // pipeline). Absent = oui : c'est le comportement attendu par défaut.
+  sur_formulaire: z.boolean().optional(),
 }).strict();
 
 export const modeleInstallerSchema = z.object({
