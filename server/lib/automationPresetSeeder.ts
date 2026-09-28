@@ -44,6 +44,16 @@ export const PRESETS_SOLLICITATION: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Presets qui dépendent du réglage « Avis clients » : ils ne sont publiés
+ * qu'une fois les avis activés avec un lien (voir la fin de
+ * ensureAutomationPresets et SettingsReviews.tsx).
+ */
+export const PRESETS_ATTENDENT_AVIS: ReadonlySet<string> = new Set([
+  'google_review',
+  'review_reminder_7d',
+]);
+
+/**
  * Complète les presets d'automatisation d'une org. Idempotent et
  * non destructif : n'insère que les preset_key absents.
  *
@@ -128,6 +138,27 @@ export async function ensureAutomationPresets(
       .eq('is_active', false)
       .not('preset_key', 'in', `(${[...PRESETS_SOLLICITATION].join(',')})`);
     if (actErr) throw actErr;
+
+    // Les demandes d'avis ne peuvent RIEN envoyer tant que l'entreprise ne les
+    // a pas activées avec un lien Google ou Facebook (`review_enabled` vaut
+    // faux à la création). Publiées d'office — y compris par le trigger SQL
+    // `seed_automation_presets` —, elles échouaient à chaque job terminée.
+    // Elles se publient quand l'entreprise active les avis (Paramètres ›
+    // Avis clients, SettingsReviews.tsx).
+    const { data: cs, error: csErr } = await admin
+      .from('company_settings')
+      .select('review_enabled')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (csErr) throw csErr;
+    if (cs?.review_enabled !== true) {
+      const { error: avisErr } = await admin
+        .from('automation_rules')
+        .update({ is_active: false })
+        .eq('org_id', orgId)
+        .in('preset_key', [...PRESETS_ATTENDENT_AVIS]);
+      if (avisErr) throw avisErr;
+    }
   }
 
   return { inserted: missing.length, repaired: (repairedRows?.length || 0) + (reviewRows?.length || 0) };
