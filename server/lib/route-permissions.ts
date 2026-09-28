@@ -112,6 +112,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   // lecture, tout le reste écrit des règles qui enverront de vrais textos et
   // courriels aux clients — donc le droit de modification.
   'GET /api/automations/rules': 'automations.read',
+  // « X clients correspondent aujourd'hui » (déclencheur Client inactif).
+  'GET /api/automations/clients-inactifs/apercu': 'automations.read',
   'POST /api/automations/rules': 'automations.update',
   'PATCH /api/automations/rules/:id': 'automations.update',
   'DELETE /api/automations/rules/:id': 'automations.update',
@@ -393,6 +395,8 @@ function normalisePathForMatch(method: string, path: string): string[] {
 export const PUBLIC_ROUTE_PREFIXES: readonly string[] = [
     '/api/quotes/public',
     '/api/invoices/public',
+    // Lien de réservation envoyé au client (jeton de 64 hex, un seul client).
+    '/api/reservation/',
     '/api/public/book-demo',
     '/api/survey/',
     '/api/portal/',

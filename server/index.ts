@@ -56,6 +56,7 @@ import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
 import unsubscribeRouter from './routes/unsubscribe';
 import desabonnementRouter from './routes/desabonnement';
+import reservationRouter from './routes/reservation';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
@@ -824,6 +825,8 @@ app.use('/api', publicPayRouter);
 app.use('/api', unsubscribeRouter);
 // Désabonnement par canal — état et historique pour la fiche client.
 app.use('/api', desabonnementRouter);
+// Lien de réservation (public par jeton) + aperçu « Client inactif ».
+app.use('/api', reservationRouter);
 app.use('/api', featureFlagsRouter);
 app.use('/api', authRouter);
 app.use('/api', dsrRouter);
@@ -1563,6 +1566,20 @@ app.listen(port, '0.0.0.0', () => {
       setTimeout(runBriefing, 30_000);
       logger.info('[lumi-briefing] Cron started (hourly, lock-guarded)');
     }).catch((e: any) => captureCronFailure('lumi-briefing-import', e));
+
+    // « Client inactif » — chaque heure ; chaque entreprise n'est traitée
+    // qu'en journée dans SON fuseau, avec son plafond d'envois par heure.
+    // Ne touche que les entreprises qui ont le drapeau auto_client_inactif.
+    Promise.all([import('./lib/client-inactif'), import('./lib/supabase')]).then(([{ balayerClientsInactifs }, { getServiceClient }]) => {
+      const runInactifs = () =>
+        withAdvisoryLock('clients-inactifs', () => withCronCheckIn('clients-inactifs', async () => {
+          const n = await balayerClientsInactifs(getServiceClient());
+          if (n > 0) logger.info(`[clients-inactifs] ${n} déclenchement(s)`);
+        })).catch((e: any) => captureCronFailure('clients-inactifs', e));
+      setInterval(runInactifs, 60 * 60 * 1000);
+      setTimeout(runInactifs, 45_000);
+      logger.info('[clients-inactifs] Cron started (hourly, lock-guarded)');
+    }).catch((e: any) => captureCronFailure('clients-inactifs-import', e));
 
     // Security maintenance — every 15 minutes
     setInterval(() => {

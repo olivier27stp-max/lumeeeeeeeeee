@@ -10,8 +10,9 @@ const PublicPayment = lazyResilient(() => import('../pages/PublicPayment'));
 const InvoiceView = lazyResilient(() => import('../pages/InvoiceView'));
 const AcceptInvitation = lazyResilient(() => import('../pages/AcceptInvitation'));
 const MigrationPortal = lazyResilient(() => import('../pages/MigrationPortal'));
+const ReservationPublique = lazyResilient(() => import('../pages/ReservationPublique'));
 
-type TokenKind = 'quote' | 'invoice' | 'contract' | 'survey' | 'portal' | 'pay' | 'invite' | 'migration';
+type TokenKind = 'quote' | 'invoice' | 'contract' | 'survey' | 'portal' | 'pay' | 'invite' | 'migration' | 'reservation';
 
 const ELEMENTS: Record<TokenKind, { path: string; element: ReactElement }> = {
   quote: { path: '/quote/:token', element: <QuoteView /> },
@@ -25,6 +26,8 @@ const ELEMENTS: Record<TokenKind, { path: string; element: ReactElement }> = {
   // Portail de migration assistée : lien temporaire, mais session Lume requise
   // (la page gère elle-même l'invite de connexion — pas le shell).
   migration: { path: '/migration/invite/:token', element: <MigrationPortal /> },
+  // Lien de réservation ({{client.lien_reservation}}, drapeau auto_client_inactif).
+  reservation: { path: '/reserver/:token', element: <ReservationPublique /> },
 };
 
 /**
@@ -51,5 +54,6 @@ export function detectTokenKind(pathname: string): TokenKind | null {
   if (pathname.startsWith('/pay/')) return 'pay';
   if (pathname.startsWith('/invite/')) return 'invite';
   if (pathname.startsWith('/migration/invite/')) return 'migration';
+  if (pathname.startsWith('/reserver/')) return 'reservation';
   return null;
 }

@@ -13,6 +13,7 @@ import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegal
 import { motifSaut } from '../desabonnement';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../automations-drapeaux';
 import { raisonLisible } from '../paiement-echoue';
+import { creerLienReservation, demandeLienReservation } from '../client-inactif';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -53,6 +54,32 @@ export interface ActionContext {
    *     continue, le motif est dans le journal. Le transactionnel part.
    */
   parCanal?: boolean;
+}
+
+/**
+ * {{client.lien_reservation}} : un lien de 30 jours propre au client de
+ * l'entité, créé SEULEMENT si le message l'utilise et si l'entreprise a le
+ * drapeau `auto_client_inactif`. Sinon les variables sont rendues telles
+ * quelles (la variable se résout à vide, comme toute variable inconnue).
+ * Un échec ne bloque jamais l'envoi : le message part sans lien.
+ */
+async function avecLienReservation(
+  ctx: ActionContext,
+  vars: Record<string, string>,
+  ...textes: string[]
+): Promise<Record<string, string>> {
+  if (!demandeLienReservation(...textes)) return vars;
+  if (!(await drapeauActif(ctx.supabase, ctx.orgId, DRAPEAUX_AUTOMATISATIONS.clientInactif))) return vars;
+  try {
+    const clientId = await clientDeLEntite(ctx);
+    if (!clientId) return vars;
+    const { getServiceClient } = await import('../supabase');
+    const lien = await creerLienReservation(getServiceClient(), ctx.orgId, clientId);
+    return { ...vars, 'client.lien_reservation': lien };
+  } catch (e: any) {
+    console.error(`[actions] lien de réservation non créé (org ${ctx.orgId}):`, e?.message || e);
+    return vars;
+  }
 }
 
 /** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
@@ -922,6 +949,7 @@ export async function executeSendEmail(
   const to = vars.client_email;
   if (!to) return { success: false, error: 'No recipient email' };
 
+  vars = await avecLienReservation(ctx, vars, champLocalise(config, 'subject', ctx.langue), champLocalise(config, 'body', ctx.langue));
   const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
   const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
 
@@ -1138,6 +1166,7 @@ export async function executeSendSms(
     return { success: false, error: `Frequency cap reached for ${optOutPhone} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
   }
 
+  vars = await avecLienReservation(ctx, vars, champLocalise(config, 'body', ctx.langue));
   const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
 
   // Toujours partir du numero DE L'ORG, jamais du numero partage de la

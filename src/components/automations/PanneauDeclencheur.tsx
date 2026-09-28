@@ -21,6 +21,7 @@ import { X, Zap } from 'lucide-react';
 import type { DeclencheurCatalogue } from '../../lib/automationCatalogue';
 import { champVisible, CASE_SORTIE } from '../../lib/automationCatalogue';
 import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { apercuClientsInactifs } from '../../lib/reservationApi';
 import ChampActionUI from './ChampAction';
 
 interface Props {
@@ -77,6 +78,25 @@ export default function PanneauDeclencheur({
   }, [declencheur.cle]);
 
   const champs = declencheur.champs ?? [];
+
+  /*
+   * « Client inactif » : combien de clients correspondent AUJOURD'HUI au
+   * seuil choisi. C'est ce que l'entreprise doit voir avant d'activer — une
+   * règle qui viserait 400 anciens clients d'un coup ne doit pas surprendre.
+   */
+  const estClientInactif = declencheur.cle === 'client.inactive';
+  const moisChoisi = Number(brouillon.mois || 6);
+  const [nbInactifs, setNbInactifs] = useState<number | null>(null);
+  useEffect(() => {
+    if (!estClientInactif || !Number.isFinite(moisChoisi) || moisChoisi < 1) { setNbInactifs(null); return; }
+    let vivant = true;
+    const minuterie = setTimeout(() => {
+      apercuClientsInactifs(moisChoisi)
+        .then((n) => { if (vivant) setNbInactifs(n); })
+        .catch((e) => { console.error('[PanneauDeclencheur] aperçu clients inactifs', e); if (vivant) setNbInactifs(null); });
+    }, 300);
+    return () => { vivant = false; clearTimeout(minuterie); };
+  }, [estClientInactif, moisChoisi]);
 
   /** Ce qui manque encore — le bouton reste actif, le message est clair. */
   const manquants = champs.filter(
@@ -146,6 +166,14 @@ export default function PanneauDeclencheur({
               services={services}
             />
           ) : null,
+        )}
+
+        {estClientInactif && nbInactifs !== null && (
+          <p role="status" className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-[12px] text-text-primary">
+            {fr
+              ? `${nbInactifs} client${nbInactifs > 1 ? 's' : ''} correspond${nbInactifs > 1 ? 'ent' : ''} aujourd’hui.`
+              : `${nbInactifs} client${nbInactifs > 1 ? 's' : ''} match${nbInactifs > 1 ? '' : 'es'} today.`}
+          </p>
         )}
 
         {caseSortie && (

@@ -34,6 +34,8 @@ const ENTITE_DU_DECLENCHEUR: Record<string, string> = {
   'invoice.viewed': 'invoice',
   // paiement-echoue.ts : emit('payment.failed', { entityType: 'invoice' }).
   'payment.failed': 'invoice',
+  // client-inactif.ts : emit('client.inactive', { entityType: 'client' }).
+  'client.inactive': 'client',
   'quote.approved': 'quote',
   'quote.declined': 'quote',
   'quote.changes_requested': 'quote',
