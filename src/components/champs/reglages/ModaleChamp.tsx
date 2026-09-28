@@ -10,8 +10,10 @@
  */
 import { useEffect, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlignLeft, ChevronUp, Copy, GripVertical, Info, Loader2, Pencil, Plus, TextCursorInput, Trash2, X } from 'lucide-react';
+import { AlignLeft, ChevronUp, Copy, GripVertical, Info, Loader2, Plus, TextCursorInput, Trash2, X } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core';
@@ -22,7 +24,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { confirmer } from '../../ui/ConfirmDialog';
 import { cn } from '../../../lib/utils';
 import {
-  creerChamp, creerDossier, modifierChamp, type ChampPerso, type DossierChamp, type EntreeOption, type ObjetChamp, type TypeChamp,
+  creerChamp, creerDossier, listerChamps, modifierChamp, type ChampPerso, type DossierChamp, type EntreeOption, type ObjetChamp, type TypeChamp,
 } from '../../../lib/champsPersoApi';
 import { OBJETS, TYPES_CHAMP, LIBELLES_OBJET, LIBELLES_TYPE, conversionPermise, variableAffichee, type ConfigChamp, type ValeurChamp } from '../../../lib/champs/types';
 import { slugCle } from '../../../lib/champs/valeurs';
@@ -49,6 +51,10 @@ interface Props {
 }
 
 type OptionEdit = EntreeOption & { _cle: string };
+/** Où voir le formulaire de création de chaque objet (lien du message « Champ créé »). */
+const LIEN_FORMULAIRE: Partial<Record<ObjetChamp, string>> = {
+  client: '/clients/new', quote: '/quotes/new', invoice: '/invoices/new', job: '/jobs', deal: '/ventes',
+};
 const couleurs = ['#64748b', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
 let compteur = 0;
 const nouvelleCle = () => `o${++compteur}`;
@@ -97,8 +103,6 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
   const [creationDossier, setCreationDossier] = useState(false);
   const [type, setType] = useState<TypeChamp>(champ?.field_type ?? 'single_line');
   const [label, setLabel] = useState(champ?.label ?? '');
-  const [cle, setCle] = useState(champ?.key ?? '');
-  const [cleTouchee, setCleTouchee] = useState(false);
   const [dossier, setDossier] = useState<string>(champ?.folder_id ?? dossierInitial ?? '');
   const [placeholder, setPlaceholder] = useState(champ?.placeholder ?? '');
   const [aide, setAide] = useState(champ?.help_text ?? '');
@@ -128,10 +132,27 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
     setErreur(null);
   }, [open, champ, objetDefaut, objetAChoisir]);
 
-  // La clé suit le libellé tant qu'on ne l'a pas touchée (création seulement).
-  useEffect(() => {
-    if (!edition && !cleTouchee) setCle(slugCle(label));
-  }, [label, edition, cleTouchee]);
+  // Champs existants de l'objet : nom unique (vérifié ici, avant d'envoyer) et
+  // clés déjà prises (les archivés comptent : la base garde leur clé).
+  const { data: existants } = useQuery({
+    queryKey: ['champs-perso', objetChoisi || 'aucun', 'panneau'],
+    queryFn: () => listerChamps(objetChoisi as ObjetChamp, true),
+    enabled: open && !!objetChoisi,
+    staleTime: 30_000,
+  });
+  const autres = useMemo(() => (existants?.fields ?? []).filter((f) => f.id !== champ?.id), [existants, champ]);
+  const nomEnDouble = !!label.trim() && autres.some((f) => !f.archived_at && f.label.trim().toLowerCase() === label.trim().toLowerCase());
+  // Clé générée depuis l'objet et le nom, en lecture seule (comme GHL) ; figée après la création.
+  const cle = useMemo(() => {
+    if (edition) return champ!.key;
+    const prises = new Set([...clesStandard(objet), ...autres.map((f) => f.key)]);
+    let base = slugCle(label) || 'champ';
+    if (!/^[a-z]/.test(base)) base = `c_${base}`;
+    base = base.slice(0, 44);
+    let k = base;
+    for (let n = 2; prises.has(k); n += 1) k = `${base}_${n}`;
+    return k;
+  }, [edition, champ, objet, autres, label]);
 
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const avecOptions = type === 'dropdown_single' || type === 'dropdown_multi';
@@ -143,6 +164,8 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
     const p: string[] = [];
     if (!objetChoisi) p.push(fr ? 'Choisis l’objet auquel ajouter le champ.' : 'Choose the object to add the field to.');
     if (!label.trim()) p.push(fr ? 'Le nom du champ est obligatoire.' : 'Field name is required.');
+    if (nomEnDouble) p.push(fr ? `Un champ « ${label.trim()} » existe déjà pour cet objet.` : `A “${label.trim()}” field already exists for this object.`);
+    if (!edition && !dossier) p.push(fr ? 'Choisis un dossier.' : 'Choose a folder.');
     if (cleInvalide) p.push(fr ? 'Clé : lettres minuscules, chiffres et _ (commence par une lettre).' : 'Key: lowercase letters, digits and _ (starts with a letter).');
     if (cleReservee) p.push(fr ? `« ${cle} » est réservé à un champ standard.` : `“${cle}” is reserved for a standard field.`);
     if (avecOptions && options.filter((o) => o.label.trim()).length === 0) p.push(fr ? 'Ajoute au moins une option.' : 'Add at least one option.');
@@ -150,7 +173,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
     if (new Set(libelles).size !== libelles.length) p.push(fr ? 'Deux options portent le même nom.' : 'Two options share the same name.');
     if (type === 'number' && config.min != null && config.max != null && config.min > config.max) p.push(fr ? 'Le minimum dépasse le maximum.' : 'Minimum exceeds maximum.');
     return p;
-  }, [objetChoisi, label, cleInvalide, cleReservee, cle, avecOptions, options, type, config, fr]);
+  }, [objetChoisi, label, nomEnDouble, edition, dossier, cleInvalide, cleReservee, cle, avecOptions, options, type, config, fr]);
 
   // Liste : libellés stockés ⇄ clés locales des options affichées.
   const cleOption = (o: OptionEdit) => o.id ?? o._cle;
@@ -206,7 +229,17 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
           is_required: obligatoire, config, options: opts, folder_id: dossier || null, default_value: defautFinal(),
           sur_formulaire: surFormulaire,
         });
-      toast.success(edition ? (fr ? 'Champ modifié.' : 'Field updated.') : (fr ? 'Champ créé.' : 'Field created.'));
+      if (edition) {
+        toast.success(fr ? 'Champ modifié.' : 'Field updated.');
+      } else {
+        const d = dossiers.find((x) => x.id === dossier);
+        const lien = LIEN_FORMULAIRE[objet];
+        toast.success(fr
+          ? `Champ créé — ajouté à ${LIBELLES_OBJET[objet].fr} › ${d ? nomDossier(d, fr) : 'Sans dossier'}`
+          : `Field created — added to ${LIBELLES_OBJET[objet].en} › ${d ? nomDossier(d, fr) : 'No folder'}`, lien ? {
+          action: { label: fr ? 'Voir dans le formulaire' : 'See it in the form', onClick: () => navigate(lien) },
+        } : undefined);
+      }
       onEnregistre(resultat);
       onClose();
     } catch (err) {
@@ -229,7 +262,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
   };
   const variable = objetChoisi ? variableAffichee(objetChoisi, cle || 'cle') : `{{${fr ? 'objet' : 'object'}.${cle || 'cle'}}}`;
 
-  const [cleEditable, setCleEditable] = useState(false);
+  const navigate = useNavigate();
   const [detailsOuverts, setDetailsOuverts] = useState(true);
   const [saisieOuverte, setSaisieOuverte] = useState(true);
   const modifie = !!(label || placeholder || aide || defaut !== null || (edition && champ && (label !== champ.label)));
@@ -272,14 +305,14 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
         <div className="flex items-start justify-between border-b border-outline px-6 py-4">
           <div>
             <h2 id={`${ids}-titre`} className="text-[16px] font-semibold text-text-primary">{titre}</h2>
-            <p className="text-[13px] text-text-tertiary">{fr ? 'Personnalise les détails du champ et vois l’aperçu en direct' : 'Customize your field’s details and see live preview'}</p>
+            <p className="text-[13px] text-text-tertiary">{fr ? 'Personnalisez les détails de votre champ et voyez l’aperçu en direct' : 'Customize your field’s details and see live preview'}</p>
           </div>
           <button type="button" onClick={() => { void fermer(); }} aria-label={fr ? 'Fermer' : 'Close'}
             className="rounded p-1 text-text-tertiary hover:bg-surface-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><X size={18} /></button>
         </div>
 
         {/* Corps : formulaire | aperçu */}
-        <div className="grid flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[1fr_380px]">
+        <div className="grid flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[65fr_35fr]">
           <div className="space-y-4">
             {/* Détails du champ */}
             <section className="rounded-xl border border-outline bg-surface-card">
@@ -304,7 +337,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                       <label htmlFor={`${ids}-objet`} className={etiquette}>{fr ? 'Ajouter à l’objet' : 'Add to object'} <span className="text-red-500">*</span></label>
                       <select id={`${ids}-objet`} value={objetChoisi} disabled={edition} required
                         onChange={(e) => { setObjet(e.target.value as ObjetChamp | ''); setDossier(''); }} className={cn('glass-input h-9 w-full text-[13px]', !objetChoisi && 'text-text-tertiary')}>
-                        {!objetChoisi && <option value="" disabled>{fr ? 'Choisir un objet' : 'Select object'}</option>}
+                        {!objetChoisi && <option value="" disabled>{fr ? 'Sélectionner l’objet' : 'Select object'}</option>}
                         {OBJETS.map((o) => <option key={o} value={o}>{fr ? LIBELLES_OBJET[o].fr : LIBELLES_OBJET[o].en}</option>)}
                       </select>
                     </div>
@@ -312,17 +345,25 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                       <label htmlFor={`${ids}-label`} className={etiquette}>{fr ? 'Nom du champ' : 'Field name'} <span className="text-red-500">*</span></label>
                       <div className="relative">
                         <input id={`${ids}-label`} value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)}
-                          placeholder={fr ? 'Entre un nom' : 'Enter name'} className="glass-input h-9 w-full pr-10 text-[13px]" />
+                          placeholder={fr ? 'Entrer un nom' : 'Enter name'} aria-invalid={nomEnDouble} className="glass-input h-9 w-full pr-10 text-[13px]" />
                         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-text-tertiary">{label.length}</span>
                       </div>
+                      {nomEnDouble && (
+                        <p role="alert" className="mt-1 text-[12px] text-red-600">
+                          {fr ? 'Un champ porte déjà ce nom pour cet objet.' : 'A field already has this name for this object.'}
+                        </p>
+                      )}
                     </div>
                     <div>
-                      <label htmlFor={`${ids}-dossier`} className={etiquette}>{fr ? 'Dossier' : 'Folder name'}</label>
+                      <label htmlFor={`${ids}-dossier`} className={etiquette}>{fr ? 'Dossier' : 'Folder name'} {!edition && <span className="text-red-500">*</span>}</label>
                       {nouveauDossier === null ? (
                         <select id={`${ids}-dossier`} value={dossier} disabled={!objetChoisi}
                           onChange={(e) => { if (e.target.value === '__nouveau__') setNouveauDossier(''); else setDossier(e.target.value); }}
-                          className="glass-input h-9 w-full text-[13px]">
-                          <option value="">{fr ? 'Sans dossier' : 'No folder'}</option>
+                          className={cn('glass-input h-9 w-full text-[13px]', !dossier && 'text-text-tertiary')}>
+                          {/* Sans dossier : seulement pour un champ qui n'en a jamais eu (créé avant la règle). */}
+                          {edition && !champ?.folder_id
+                            ? <option value="">{fr ? 'Sans dossier' : 'No folder'}</option>
+                            : <option value="" disabled>{fr ? 'Sélectionner un dossier' : 'Select folder'}</option>}
                           {dossiers.map((d) => <option key={d.id} value={d.id}>{nomDossier(d, fr)}</option>)}
                           <option value="__nouveau__">{fr ? '+ Créer un dossier' : '+ Create folder'}</option>
                         </select>
@@ -346,33 +387,25 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                   <div>
                     <span className={cn(etiquette, 'inline-flex items-center gap-1')}>
                       <label htmlFor={`${ids}-cle`}>{fr ? 'Clé' : 'Key'}</label>
-                      {bulle(fr ? 'Une fois créée, elle ne peut plus être renommée. Elle sert à insérer la valeur dans un courriel, un texto ou une automatisation.' : 'Once created, can’t be renamed later. Used to insert the value in an email, a text or an automation.')}
+                      {bulle(fr ? 'Identifiant unique utilisé dans les automatisations et modèles. Généré à partir de l’objet et du nom ; il ne change plus après la création.' : 'Unique identifier used in automations and templates. Generated from the object and name; it never changes after creation.')}
                     </span>
-                    {edition || !cleEditable ? (
-                      <div className="flex items-center gap-2">
-                        <code className="rounded bg-surface-secondary px-2 py-1 text-[12px] text-text-secondary">{variable}</code>
-                        {edition ? (
-                          <button type="button" aria-label={fr ? 'Copier la clé' : 'Copy key'}
-                            onClick={() => { void navigator.clipboard.writeText(variable); toast.success(fr ? 'Clé copiée.' : 'Key copied.'); }}
-                            className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Copy size={13} aria-hidden /></button>
-                        ) : (
-                          <button type="button" aria-label={fr ? 'Modifier la clé' : 'Edit key'} onClick={() => setCleEditable(true)}
-                            className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Pencil size={13} aria-hidden /></button>
-                        )}
-                      </div>
-                    ) : (
-                      <input id={`${ids}-cle`} value={cle} maxLength={50} autoFocus
-                        onChange={(e) => { setCleTouchee(true); setCle(e.target.value.toLowerCase()); }}
-                        aria-invalid={cleInvalide || cleReservee}
-                        className={cn('glass-input h-9 w-full font-mono text-[12px]', (cleInvalide || cleReservee) && 'border-red-400')} />
-                    )}
+                    <div className="flex items-center gap-2">
+                      <input id={`${ids}-cle`} value={objetChoisi && label.trim() ? variable : ''} readOnly
+                        placeholder={fr ? 'Générée à partir de l’objet et du nom' : 'Generated from the object and name'}
+                        className="glass-input h-9 w-full cursor-default bg-surface-secondary font-mono text-[12px] text-text-secondary" />
+                      {objetChoisi && label.trim() && (
+                        <button type="button" aria-label={fr ? 'Copier la clé' : 'Copy key'}
+                          onClick={() => { void navigator.clipboard.writeText(variable).then(() => toast.success(fr ? 'Clé copiée.' : 'Key copied.'), (err) => console.error('[ModaleChamp] copie', err)); }}
+                          className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Copy size={13} aria-hidden /></button>
+                      )}
+                    </div>
                   </div>
 
                   <div>
                     <label htmlFor={`${ids}-aide`} className={etiquette}>{fr ? 'Description' : 'Description'}</label>
                     <div className="relative">
                       <textarea id={`${ids}-aide`} rows={3} value={aide} maxLength={200} onChange={(e) => setAide(e.target.value)}
-                        placeholder={fr ? 'Ajoute une courte description pour expliquer ce champ' : 'Add a short description to explain this field'} className="glass-input w-full py-2 text-[13px]" />
+                        placeholder={fr ? 'Ajoutez une courte description pour expliquer ce champ' : 'Add a short description to explain this field'} className="glass-input w-full py-2 text-[13px]" />
                       <span className="pointer-events-none absolute bottom-2 right-3 text-[11px] text-text-tertiary">{aide.length} / 200</span>
                     </div>
                   </div>
@@ -416,11 +449,11 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                 <div className="space-y-4 border-t border-outline-subtle px-4 pb-4 pt-3">
                   <div>
                     <span className={cn(etiquette, 'inline-flex items-center gap-1')}>
-                      <label htmlFor={`${ids}-ph`}>{fr ? 'Texte indicatif' : 'Placeholder text'}</label>
+                      <label htmlFor={`${ids}-ph`}>{fr ? 'Texte d’indice' : 'Placeholder text'}</label>
                       {bulle(fr ? 'Affiché dans la case avant qu’on commence à écrire. Il n’est pas enregistré.' : 'Shown inside the field before the user starts typing.')}
                     </span>
                     <input id={`${ids}-ph`} value={placeholder} maxLength={200} onChange={(e) => setPlaceholder(e.target.value)}
-                      placeholder={fr ? 'Un indice pour savoir quelle information fournir' : 'Provide a hint for users to know what kind of information to provide'} className="glass-input h-9 w-full text-[13px]" />
+                      placeholder={fr ? 'Donnez un indice sur le type d’information à fournir' : 'Provide a hint for users to know what kind of information to provide'} className="glass-input h-9 w-full text-[13px]" />
                   </div>
 
                   {!avecOptions && type !== 'file' && (
@@ -517,7 +550,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
             <label htmlFor={`${ids}-apercu`} className={etiquette}>
               {champApercu.label}{obligatoire && <span className="text-red-500" aria-hidden> *</span>}
             </label>
-            <ChampSaisie id={`${ids}-apercu`} champ={{ ...champApercu, placeholder: placeholder || (fr ? 'Texte indicatif' : 'Placeholder text') }} valeur={apercu ?? defautSaisi} fr={fr} onValider={setApercu} disabled={type === 'file'} />
+            <ChampSaisie id={`${ids}-apercu`} champ={{ ...champApercu, placeholder: placeholder || (fr ? 'Texte d’indice' : 'Placeholder text') }} valeur={apercu ?? defautSaisi} fr={fr} onValider={setApercu} disabled={type === 'file'} />
             {aide && <p className="mt-1 text-[11px] text-text-tertiary">{aide}</p>}
           </aside>
         </div>
@@ -525,7 +558,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
         {/* Pied */}
         <div className="flex justify-end gap-2 border-t border-outline px-6 py-3">
           <button type="button" onClick={() => { void fermer(); }} className="glass-button px-4 py-2 text-[13px]">{fr ? 'Annuler' : 'Cancel'}</button>
-          <button type="button" onClick={() => { void enregistrer(); }} disabled={envoi || !label.trim() || !objetChoisi}
+          <button type="button" onClick={() => { void enregistrer(); }} disabled={envoi || !label.trim() || !objetChoisi || (!edition && !dossier) || nomEnDouble}
             className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-[13px] disabled:opacity-50">
             {envoi && <Loader2 size={14} className="animate-spin" aria-hidden />}
             {edition ? (fr ? 'Enregistrer' : 'Save') : (fr ? 'Créer le champ' : 'Create custom field')}
