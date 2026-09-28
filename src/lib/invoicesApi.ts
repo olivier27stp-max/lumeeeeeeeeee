@@ -122,6 +122,8 @@ export interface InvoiceDetail {
     salesperson_id?: string | null;
     /** Vendeur de la job liée (repli). */
     job_salesperson_id?: string | null;
+    /** Numéro de la job liée (lien « Job #123 » du hub facture). */
+    job_number?: string | null;
     /** coalesce(salesperson_id, job_salesperson_id) — ce que l'UI affiche. */
     effective_salesperson_id?: string | null;
     salesperson_name?: string | null;
@@ -631,7 +633,11 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
   // Vendeur : assigné à la facture, sinon celui de la job liée (même règle
   // que le filtre de rpc_list_invoices).
   const directSalespersonId: string | null = (invoiceRow as any).salesperson_id || null;
-  const jobSalespersonId = invoiceRow.job_id ? await getJobSalespersonId(invoiceRow.job_id) : null;
+  const { data: jobRow } = invoiceRow.job_id
+    ? await supabase.from('jobs').select('salesperson_id, job_number').eq('id', invoiceRow.job_id).maybeSingle()
+    : { data: null };
+  const jobSalespersonId: string | null = (jobRow as any)?.salesperson_id || null;
+  const jobNumber: string | null = (jobRow as any)?.job_number != null ? String((jobRow as any).job_number) : null;
   const effectiveSalespersonId = directSalespersonId || jobSalespersonId;
   let salespersonName: string | null = null;
   if (effectiveSalespersonId) {
@@ -646,6 +652,7 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
       job_id: invoiceRow.job_id || null,
       salesperson_id: directSalespersonId,
       job_salesperson_id: jobSalespersonId,
+      job_number: jobNumber,
       effective_salesperson_id: effectiveSalespersonId,
       salesperson_name: salespersonName,
       client_name: clientRow ? toClientDisplayName(clientRow) : 'Unknown client',

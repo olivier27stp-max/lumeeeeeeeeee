@@ -792,8 +792,8 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                 </h3>
                 <p className="mt-2 text-[13px] text-text-secondary leading-relaxed">
                   {fr
-                    ? `Vous êtes sur le point de supprimer la facture ${invoiceToDelete.invoice_number}. Cette action peut être annulée.`
-                    : `You're about to delete invoice ${invoiceToDelete.invoice_number}. This action can be undone.`
+                    ? `Vous êtes sur le point de supprimer la facture ${invoiceToDelete.invoice_number}. Elle et ses paiements seront supprimés définitivement.`
+                    : `You're about to delete invoice ${invoiceToDelete.invoice_number}. It and its payments will be permanently deleted.`
                   }
                 </p>
                 <div className="mt-5 flex justify-end gap-3">

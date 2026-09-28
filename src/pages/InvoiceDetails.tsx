@@ -3,7 +3,7 @@ import EmailDeliveryBadge from '../components/EmailDeliveryBadge';
 import EmailTrackingLine, { CLE_REQUETE_ENVOIS } from '../components/EmailTrackingLine';
 import {
   ArrowLeft, Eye, EyeOff, Copy, Link2, Check, Download, RefreshCw, Send,
-  Pencil, Ban, CopyPlus, CheckCircle2, MoreHorizontal, ReceiptText,
+  Pencil, Ban, CopyPlus, CheckCircle2, MoreHorizontal, ReceiptText, Trash2,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
 import {
-  duplicateInvoice, formatMoneyFromCents, getCompanySettings, getInvoiceById,
+  deleteInvoice, duplicateInvoice, formatMoneyFromCents, getCompanySettings, getInvoiceById,
   getInvoiceRowUiStatus, getInvoiceAppliedTaxes, markInvoicePaidManually,
   sendInvoice, toClientDisplayName, voidInvoice,
 } from '../lib/invoicesApi';
@@ -160,6 +160,29 @@ export default function InvoiceDetails() {
       toast.error(err?.message || (language === 'fr' ? 'Échec de l\'opération' : 'Failed'));
     }
     setActionsOpen(false);
+  }
+
+  async function handleDelete() {
+    setActionsOpen(false);
+    const fr = language === 'fr';
+    if (!(await confirmer({
+      title: t.invoices.deleteThisInvoice,
+      message: fr
+        ? `La facture ${invoice.invoice_number} et ses paiements seront supprimés définitivement.`
+        : `Invoice ${invoice.invoice_number} and its payments will be permanently deleted.`,
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
+      danger: true,
+    }))) return;
+    try {
+      await deleteInvoice(invoice.id);
+      queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
+      queryClient.invalidateQueries({ queryKey: ['invoicesKpis30d'] });
+      queryClient.removeQueries({ queryKey: ['invoiceDetails', invoiceId] });
+      toast.success(t.invoices.invoiceDeleted);
+      navigate('/finances');
+    } catch (err: any) {
+      toast.error(err?.message || (fr ? 'Échec de la suppression' : 'Failed to delete'));
+    }
   }
 
   async function handleMarkPaid() {
@@ -356,6 +379,15 @@ export default function InvoiceDetails() {
                           {t.invoiceDetails.voidInvoice}
                         </button>
                       )}
+                      <div className="my-1 border-t border-outline/30" />
+                      <button
+                        type="button"
+                        onClick={handleDelete}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger hover:bg-surface-secondary"
+                      >
+                        <Trash2 size={12} />
+                        {language === 'fr' ? 'Supprimer' : 'Delete'}
+                      </button>
                     </motion.div>
                   </>
                 )}
@@ -380,13 +412,16 @@ export default function InvoiceDetails() {
               ) : null}
             </p>
             {invoice.job_id ? (
-              <button
-                type="button"
-                className="glass-button mt-2"
-                onClick={() => navigate(`/jobs/${invoice.job_id}`)}
-              >
-                {`${t.invoiceDetails.linkedJob} #${String(invoice.job_id).slice(0, 8)}`}
-              </button>
+              <p className="text-[13px] text-text-secondary">
+                {'Job : '}
+                <button
+                  type="button"
+                  className="font-semibold text-primary hover:underline"
+                  onClick={() => navigate(`/jobs/${invoice.job_id}`)}
+                >
+                  {invoice.job_number ? `#${invoice.job_number}` : (language === 'fr' ? 'ouvrir' : 'open')}
+                </button>
+              </p>
             ) : null}
           </div>
         </div>
