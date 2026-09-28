@@ -926,46 +926,7 @@ async function handleEvent(event: CRMEvent) {
           continue;
         }
         aAgi = true;
-        // Une SÉQUENCE se parcourt étape par étape : on ne planifie que la
-        // première, chacune ouvrant la suivante une fois faite. Rien n'est
-        // planifié d'avance, pour qu'une branche « si » soit évaluée sur
-        // l'état du devis AU MOMENT où on y arrive, pas sur celui d'il y a
-        // trois jours.
-        if (Array.isArray(rule.steps) && rule.steps.length > 0) {
-          // Visite créée en lot : la confirmation ne part qu'à la première (M6).
-          const enLot = event.metadata?.suppress_immediate === true;
-          const debut = enLot ? premiereEtapeSansConfirmation(rule.steps) : premiereEtape(rule.steps);
-          if (enLot) logger.info(`[automationEngine] confirmation du parcours supprimée (visite en lot) — règle "${rule.name}"`);
-          if (debut) {
-            await planifierEtape(
-              {
-                supabase: engineConfig.supabase,
-                orgId: event.orgId,
-                ruleId: rule.id,
-                entityType: event.entityType,
-                entityId: event.entityId,
-                contexte: event.metadata ?? {},
-                franchies: 0,
-              },
-              rule.steps,
-              debut.id,
-            );
-          }
-          continue;
-        }
-        if (rule.delay_seconds !== 0) {
-          await scheduleDelayedActions(rule, event, engineConfig);
-        } else if (event.metadata?.suppress_immediate) {
-          // Visite créée en lot (plan de service, job multi-visites) : seule la
-          // PREMIÈRE visite déclenche la confirmation immédiate — sans ce
-          // garde, un plan de 10 visites envoyait 10 confirmations d'un coup
-          // au client. Les rappels datés (délai négatif) ne sont pas touchés :
-          // ils passent par scheduleDelayedActions ci-dessus et restent calés
-          // sur la date de CHAQUE visite.
-          logger.info(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
-        } else {
-          await executeRuleActions(rule, event, engineConfig);
-        }
+        await lancerRegle(rule, event, engineConfig);
         } catch (err: any) {
           // On nomme la règle fautive : « une automatisation a planté » sans
           // dire laquelle n'aide personne à la réparer.
@@ -994,6 +955,88 @@ async function handleEvent(event: CRMEvent) {
   } catch (err: any) {
     console.error('[automationEngine] error handling event:', err.message);
   }
+}
+
+/**
+ * Lance UNE règle pour un événement déjà accepté (conditions passées) :
+ * parcours → 1re étape ; délai → tâches planifiées ; sinon → actions
+ * immédiates. Le même point d'entrée sert aux déclencheurs ET à l'action
+ * « Démarrer une automatisation » (launch 2026-09-28) : avant, celle-ci
+ * n'exécutait que `actions` — sur un parcours, la 1re action seulement,
+ * tout de suite, sans les attentes.
+ */
+async function lancerRegle(rule: AutomationRule, event: CRMEvent, config: EngineConfig): Promise<void> {
+  // Une SÉQUENCE se parcourt étape par étape : on ne planifie que la
+  // première, chacune ouvrant la suivante une fois faite. Rien n'est
+  // planifié d'avance, pour qu'une branche « si » soit évaluée sur
+  // l'état du devis AU MOMENT où on y arrive, pas sur celui d'il y a
+  // trois jours.
+  if (Array.isArray(rule.steps) && rule.steps.length > 0) {
+    // Visite créée en lot : la confirmation ne part qu'à la première (M6).
+    const enLot = event.metadata?.suppress_immediate === true;
+    const debut = enLot ? premiereEtapeSansConfirmation(rule.steps) : premiereEtape(rule.steps);
+    if (enLot) logger.info(`[automationEngine] confirmation du parcours supprimée (visite en lot) — règle "${rule.name}"`);
+    if (debut) {
+      await planifierEtape(
+        {
+          supabase: config.supabase,
+          orgId: event.orgId,
+          ruleId: rule.id,
+          entityType: event.entityType,
+          entityId: event.entityId,
+          contexte: event.metadata ?? {},
+          franchies: 0,
+        },
+        rule.steps,
+        debut.id,
+      );
+    }
+    return;
+  }
+  if (rule.delay_seconds !== 0) {
+    await scheduleDelayedActions(rule, event, config);
+  } else if (event.metadata?.suppress_immediate) {
+    // Visite créée en lot (plan de service, job multi-visites) : seule la
+    // PREMIÈRE visite déclenche la confirmation immédiate — sans ce
+    // garde, un plan de 10 visites envoyait 10 confirmations d'un coup
+    // au client. Les rappels datés (délai négatif) ne sont pas touchés :
+    // ils passent par scheduleDelayedActions ci-dessus et restent calés
+    // sur la date de CHAQUE visite.
+    logger.info(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
+  } else {
+    await executeRuleActions(rule, event, config);
+  }
+}
+
+/**
+ * « Démarrer une automatisation » (action) : inscrit l'entité dans la règle
+ * `ruleId`, par le même chemin qu'un déclencheur. `chaine` = les règles qui
+ * ont mené ici (anti-boucle, voir executeDemarrerAutomatisation).
+ */
+export async function demarrerRegle(
+  ruleId: string,
+  cible: { orgId: string; entityType: string; entityId: string; chaine: string[] },
+): Promise<{ ok: true; nom: string } | { ok: false; erreur: string }> {
+  if (!engineConfig) return { ok: false, erreur: 'Moteur d’automatisations non démarré.' };
+  const { data: rule, error } = await engineConfig.supabase
+    .from('automation_rules')
+    .select('*')
+    .eq('id', ruleId)
+    .eq('org_id', cible.orgId)
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error) return { ok: false, erreur: error.message };
+  if (!rule) return { ok: false, erreur: 'Automatisation introuvable ou en brouillon.' };
+  const event: CRMEvent = {
+    type: (rule as AutomationRule).trigger_event as CRMEvent['type'],
+    orgId: cible.orgId,
+    entityType: cible.entityType,
+    entityId: cible.entityId,
+    metadata: { chaine: cible.chaine },
+  };
+  await lancerRegle(rule as AutomationRule, event, engineConfig);
+  return { ok: true, nom: String((rule as AutomationRule).name ?? '') };
 }
 
 /**
@@ -1618,7 +1661,9 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         cleIdempotence: `${task.id}:${task.step_id ?? 'action'}`,
         // Étape de séquence : la chaîne voyage dans son contexte (anti-boucle des étiquettes).
         chaine: Array.isArray((task.sequence_context as Record<string, unknown> | null)?.chaine)
-          ? ((task.sequence_context as Record<string, unknown>).chaine as string[]) : undefined,
+          ? ((task.sequence_context as Record<string, unknown>).chaine as string[])
+          // Règle simple différée : la chaîne est dans les métadonnées de l'événement.
+          : Array.isArray(actionConfig.event_metadata?.chaine) ? (actionConfig.event_metadata.chaine as string[]) : undefined,
       };
       // Désabonnement par canal : « différé » ne veut plus dire « commercial ».
       // Un rappel de rendez-vous ou de facture est transactionnel même s'il

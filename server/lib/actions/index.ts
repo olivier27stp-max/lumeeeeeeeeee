@@ -116,7 +116,8 @@ export type CodeSaut =
   | 'adresse_injoignable'
   | 'date_absente'
   | 'desabonne'
-  | 'deja_envoye';
+  | 'deja_envoye'
+  | 'boucle';
 
 /** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
 function saute(motif: string, code: CodeSaut = 'desabonne'): ActionResult {
@@ -2638,6 +2639,9 @@ export async function executeArreterAutomatisation(
  * qui démarrent le même troisième sur le même client ne produisent qu'une
  * seule inscription.
  */
+/** Au-delà, une chaîne « A démarre B démarre C… » est arrêtée (launch 2026-09-28). */
+export const PROFONDEUR_MAX_DEMARRAGE = 3;
+
 export async function executeDemarrerAutomatisation(
   config: { rule_id?: string },
   _vars: Record<string, string>,
@@ -2650,9 +2654,23 @@ export async function executeDemarrerAutomatisation(
     return { success: false, error: 'Une automatisation ne peut pas se démarrer elle-même.' };
   }
 
+  /*
+   * Anti-boucle ENTRE parcours (launch 2026-09-28). La chaîne = les règles
+   * qui ont mené ici. A → B → A tournait sans fin : la garde ne refusait
+   * que « se démarrer soi-même ». Règle déjà dans la chaîne, ou plus de
+   * PROFONDEUR_MAX_DEMARRAGE automatisations enchaînées : arrêt, journalisé.
+   */
+  const chaine = [...(ctx.chaine ?? []), ...(ctx.ruleId ? [ctx.ruleId] : [])];
+  if (chaine.includes(cible)) {
+    return saute('Boucle évitée : cette automatisation a déjà été démarrée plus haut dans la chaîne', 'boucle');
+  }
+  if (chaine.length >= PROFONDEUR_MAX_DEMARRAGE) {
+    return saute(`Chaîne arrêtée : plus de ${PROFONDEUR_MAX_DEMARRAGE} automatisations démarrées à la suite`, 'boucle');
+  }
+
   const { data: regle, error: errLecture } = await ctx.supabase
     .from('automation_rules')
-    .select('id, name, actions, is_active, deleted_at')
+    .select('id, name, is_active, deleted_at, actions, steps')
     .eq('id', cible)
     .eq('org_id', ctx.orgId)
     .maybeSingle();
@@ -2666,32 +2684,23 @@ export async function executeDemarrerAutomatisation(
     // tâches pour une règle que personne n'a publiée.
     return { success: false, error: `« ${regle.name} » est en brouillon : rien à démarrer.` };
   }
-
-  const actions = Array.isArray(regle.actions) ? regle.actions : [];
-  if (actions.length === 0) {
+  const aDesActions = Array.isArray(regle.actions) && regle.actions.length > 0;
+  const aDesEtapes = Array.isArray(regle.steps) && regle.steps.length > 0;
+  if (!aDesActions && !aDesEtapes) {
     return { success: false, error: `« ${regle.name} » n'a aucune action.` };
   }
 
-  const maintenant = new Date().toISOString();
-  let inscrites = 0;
-  for (let i = 0; i < actions.length; i++) {
-    const { error } = await ctx.supabase.from('automation_scheduled_tasks').insert({
-      org_id: ctx.orgId,
-      automation_rule_id: regle.id,
-      entity_type: ctx.entityType,
-      entity_id: ctx.entityId,
-      action_config: { ...actions[i], trigger_event: 'automation.started' },
-      execute_at: maintenant,
-      status: 'pending',
-      execution_key: `${regle.id}:${ctx.entityId}:${i}`,
-    });
-    if (!error) { inscrites += 1; continue; }
-    // 23505 = déjà inscrit. Ce n'est pas un échec : c'est l'anti-doublon
-    // qui fait son travail.
-    if (error.code !== '23505') return { success: false, error: error.message };
-  }
-
-  return { success: true, data: { automatisation: regle.name, inscrites } };
+  /*
+   * MÊME point d'entrée qu'un déclencheur : un parcours démarre à sa 1re
+   * étape (avec ses attentes), une règle à délai est planifiée, une règle
+   * immédiate part — avec les mêmes anti-doublons. Avant, seules les
+   * `actions` étaient inscrites, toutes « maintenant » : un parcours
+   * n'envoyait que sa 1re action, sans ses attentes.
+   */
+  const { demarrerRegle } = await import('../automationEngine');
+  const r = await demarrerRegle(regle.id, { orgId: ctx.orgId, entityType: ctx.entityType, entityId: ctx.entityId, chaine });
+  if (!r.ok) return { success: false, error: r.erreur };
+  return { success: true, data: { demarree: regle.name } };
 }
 
 // ── Actions : envoyer la facture / la soumission ────────────
