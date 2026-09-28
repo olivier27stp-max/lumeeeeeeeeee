@@ -669,7 +669,17 @@ export default function Automations() {
     setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: voulu } : r)));
   };
 
+  /*
+   * Double clic sur « Créer » = deux automatisations (audit 2026-09-28).
+   * Un verrou synchrone (le ref) arrête le 2e clic avant même le rendu ;
+   * l'état désactive les boutons pendant la requête.
+   */
+  const creationVerrou = useRef(false);
+  const [creationEnCours, setCreationEnCours] = useState(false);
   const partirDeZero = async (avecLumi: boolean) => {
+    if (creationVerrou.current) return;
+    creationVerrou.current = true;
+    setCreationEnCours(true);
     try {
       const creee = await creerAutomatisation({
         name: fr ? 'Nouvelle automatisation' : 'New automation',
@@ -686,6 +696,9 @@ export default function Automations() {
       navigate(`/automations/${creee.id}${avecLumi ? '?lumi=1' : ''}`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      creationVerrou.current = false;
+      setCreationEnCours(false);
     }
   };
 
@@ -1167,7 +1180,8 @@ export default function Automations() {
             <button
               type="button"
               onClick={() => partirDeZero(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent/5 px-3 py-1.5 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              disabled={creationEnCours}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent/5 px-3 py-1.5 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
             >
               <Sparkles size={14} aria-hidden="true" />
               {fr ? 'Construire avec Lumi' : 'Build using AI'}
@@ -1179,9 +1193,12 @@ export default function Automations() {
                 onClick={(e) => { e.stopPropagation(); setMenuCreer((m) => !m); }}
                 aria-haspopup="menu"
                 aria-expanded={menuCreer}
-                className="glass-button-primary inline-flex items-center gap-1.5"
+                disabled={creationEnCours}
+                className="glass-button-primary inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                <Plus size={14} aria-hidden="true" />
+                {creationEnCours
+                  ? <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                  : <Plus size={14} aria-hidden="true" />}
                 {fr ? 'Créer' : 'Create workflow'}
                 <ChevronDown size={13} aria-hidden="true" />
               </button>
@@ -1199,7 +1216,8 @@ export default function Automations() {
                       type="button"
                       role="menuitem"
                       onClick={() => choisirDepart(d.cle)}
-                      className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      disabled={creationEnCours}
+                      className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
                     >
                       <d.icone size={15} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
                       <span className="min-w-0">

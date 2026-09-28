@@ -186,6 +186,29 @@ describe('M8 — la liste publie par la route serveur, qui peut refuser', () => 
   });
 });
 
+// ─── Double clic « Créer » ──────────────────────────────────────
+
+describe('double clic sur « Créer » : une seule automatisation', () => {
+  it('deux clics rapides sur « Construire avec Lumi » ne créent qu’une fois, bouton désactivé pendant la requête', async () => {
+    reglesServies = [];
+    let finir: (v: unknown) => void = () => {};
+    creerMock.mockImplementationOnce(() => new Promise((r) => { finir = r; }) as any);
+    await rendre();
+    const lumi = bouton('Construire avec Lumi');
+    // Les deux clics partent AVANT le moindre rendu, comme un vrai double clic.
+    act(() => {
+      lumi?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      lumi?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await attendre();
+    expect(creerMock).toHaveBeenCalledTimes(1);
+    expect(bouton('Construire avec Lumi')?.hasAttribute('disabled')).toBe(true);
+    await act(async () => { finir(regle({ id: 'neuve' })); });
+    await attendre();
+    expect(bouton('Construire avec Lumi')?.hasAttribute('disabled')).toBe(false);
+  });
+});
+
 // ─── M9 ─────────────────────────────────────────────────────────
 
 function cocher(nom: string) {
