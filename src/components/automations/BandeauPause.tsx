@@ -68,15 +68,23 @@ export default function BandeauPause({
 
     setOccupe(true);
     const avant = enPause;
-    setEnPause(vers);
     try {
-      await basculerPause(vers);
-      toast.success(vers
-        ? (fr ? 'Automatisations en pause.' : 'Automations paused.')
-        : (fr ? 'Automatisations reprises.' : 'Automations resumed.'));
-    } catch {
+      // L'état affiché est celui RELU de la base (launch 2026-09-28) : avant,
+      // l'écran disait « en pause » dès le clic, même quand rien n'avait été
+      // arrêté (rôle sans le droit).
+      const reel = await basculerPause(vers);
+      setEnPause(reel.paused);
+      if (reel.paused === vers) {
+        toast.success(vers
+          ? (fr ? 'Automatisations en pause.' : 'Automations paused.')
+          : (fr ? 'Automatisations reprises.' : 'Automations resumed.'));
+      } else {
+        toast.error(fr ? 'Le changement n’a pas été appliqué.' : 'The change was not applied.');
+      }
+    } catch (e) {
+      console.error('[BandeauPause] bascule de la pause', e);
       setEnPause(avant);
-      toast.error(fr ? 'Changement non enregistré.' : 'Change not saved.');
+      toast.error(e instanceof Error && e.message ? e.message : (fr ? 'Changement non enregistré.' : 'Change not saved.'));
     } finally {
       setOccupe(false);
     }
