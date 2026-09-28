@@ -1916,7 +1916,7 @@ async function dealDeLaSoumission(ctx: ActionContext): Promise<{ id: string; pip
   const client = (q?.client_id as string | null) ?? (q?.lead_id as string | null) ?? null;
   if (!client) return null;
   const { data: ouverts } = await ctx.supabase
-    .from('deals').select('id, pipeline_id, stage_id, pipeline_stages!inner(kind)')
+    .from('deals').select('id, pipeline_id, stage_id, pipeline_stages!deals_stage_same_org!inner(kind)')
     .eq('org_id', ctx.orgId).eq('client_id', client).is('deleted_at', null)
     .eq('pipeline_stages.kind', 'open')
     .order('created_at', { ascending: false }).limit(1);
@@ -2063,7 +2063,7 @@ export async function executeMoveDealStage(
  * Retourne `null` quand l'entité n'a pas de client (un paiement orphelin,
  * une visite sans job). L'appelant décide alors s'il échoue ou s'il passe.
  */
-async function clientDeLEntite(ctx: ActionContext): Promise<string | null> {
+export async function clientDeLEntite(ctx: Pick<ActionContext, 'supabase' | 'orgId' | 'entityType' | 'entityId'>): Promise<string | null> {
   const { supabase, orgId, entityType, entityId } = ctx;
 
   // Un prospect est une fiche client : l'identifiant est déjà le bon.

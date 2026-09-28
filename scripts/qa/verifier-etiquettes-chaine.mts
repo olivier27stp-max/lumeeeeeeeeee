@@ -82,6 +82,22 @@ try {
   const n1 = await executions(L1), n2 = await executions(L2);
   verif('boucle « retire ↔ remet » : chaque règle agit UNE fois, puis la chaîne s’arrête', n1 === 1 && n2 === 1, `L1=${n1}, L2=${n2}`);
   verif('… et l’étiquette finit posée (dernier geste : L2 la remet)', (await etiquettes()).has('ZZ-Boucle'));
+
+  // ── 4. « Quelle étiquette » et « le client n'a PAS l'étiquette » ──
+  const F = await regle('F', 'client.tagged', 'ZZ-Promo', { type: 'create_task', config: { title: `${MARQUE} tâche F`, priority: 'medium' } });
+  await admin.from('automation_rules').update({ conditions: { tag: 'ZZ-Promo', client_sans_etiquette: 'ZZ-Stop' } }).eq('id', F);
+  const tachesF = async () => (await admin.from('tasks').select('id', { count: 'exact', head: true }).eq('org_id', ORG).eq('title', `${MARQUE} tâche F`)).count ?? 0;
+  await admin.from('client_tags').insert([{ client_id: clientId, tag: 'ZZ-Stop' }, { client_id: clientId, tag: 'ZZ-Autre' }]);
+  await annoncerEtiquette(admin, { orgId: ORG, clientId: clientId!, tag: 'ZZ-Autre', sens: 'ajoutee' });
+  await admin.from('client_tags').insert({ client_id: clientId, tag: 'ZZ-Promo' });
+  await annoncerEtiquette(admin, { orgId: ORG, clientId: clientId!, tag: 'ZZ-Promo', sens: 'ajoutee' });
+  await pause(4000);
+  verif('« n’a pas ZZ-Stop » : client qui l’a → rien ; autre étiquette → rien', (await tachesF()) === 0);
+  await admin.from('client_tags').delete().eq('client_id', clientId).in('tag', ['ZZ-Stop', 'ZZ-Promo']);
+  await admin.from('client_tags').insert({ client_id: clientId, tag: 'ZZ-Promo' });
+  await annoncerEtiquette(admin, { orgId: ORG, clientId: clientId!, tag: 'ZZ-Promo', sens: 'ajoutee' });
+  await pause(4000);
+  verif('… sans ZZ-Stop, poser ZZ-Promo déclenche la règle', (await tachesF()) === 1, `${await tachesF()} tâche(s)`);
 } catch (e: any) {
   ko++; console.log('💥', e?.message ?? e);
 } finally {

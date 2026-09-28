@@ -9,11 +9,13 @@ import { eventBus, CRMEvent, CRMEventType } from './eventBus';
 import {
   ActionContext,
   ActionType,
+  clientDeLEntite,
   executeAction,
   resolveEntityVariables,
 } from './actions';
 import { logger } from './logger';
-import { regleDansLaChaine } from './etiquettes';
+import { regleDansLaChaine, conditionsEtiquettesOk } from './etiquettes';
+import { CLES_CONDITIONS_ETIQUETTES } from '../../src/lib/automationCatalogue';
 import { conditionsChampsOk, CLE_CONDITIONS_CHAMPS } from './champs/automatisations';
 import {
   type Etape,
@@ -181,6 +183,8 @@ export function evaluateConditions(
     // Champs personnalisés : jugés à part, sur les valeurs actuelles
     // (conditionsChampsOk, asynchrone) — pas contre les métadonnées.
     if (cleBrute === CLE_CONDITIONS_CHAMPS) continue;
+    // Étiquettes du client : jugées à part, sur ses étiquettes réelles (conditionsEtiquettesOk).
+    if ((CLES_CONDITIONS_ETIQUETTES as readonly string[]).includes(cleBrute)) continue;
     // Réglage VIDE d'un déclencheur (« montant minimum » laissé vide) : ce
     // n'est pas une condition, c'est l'absence de filtre.
     if (attenduBrut === '' || attenduBrut === null || attenduBrut === undefined) continue;
@@ -863,6 +867,10 @@ async function handleEvent(event: CRMEvent) {
         if (!evaluateConditions(rule.conditions, event)) continue;
         if (!(await conditionsChampsOk(engineConfig.supabase, event.orgId, event.entityType, event.entityId,
           rule.conditions?.[CLE_CONDITIONS_CHAMPS]))) continue;
+        // « Seulement si le client a / n'a pas l'étiquette » : sur ses étiquettes réelles.
+        if (!(await conditionsEtiquettesOk(engineConfig.supabase,
+          () => clientDeLEntite({ supabase: engineConfig!.supabase, orgId: event.orgId, entityType: event.entityType, entityId: event.entityId }),
+          rule.conditions))) continue;
         // « Une fois par client tous les N jours » : une réponse automatique
         // sur « Le client répond » ne repart pas à chaque texto.
         const jours = rule.settings?.delai_entre_passages_jours;

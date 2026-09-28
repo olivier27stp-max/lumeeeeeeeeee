@@ -120,7 +120,7 @@ export const CASE_SORTIE: Record<string, { fr: string; en: string; defaut: boole
  * Les 17 déclencheurs offerts. Chacun a été vérifié comme réellement émis
  * par le serveur — voir la cartographie du 2026-09-23.
  */
-export const DECLENCHEURS: DeclencheurCatalogue[] = [
+const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
   // ── Devis ──
   {
     cle: 'quote.sent', fr: 'Devis envoyé', en: 'Quote sent',
@@ -292,12 +292,28 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     aide_fr: 'Quand une étiquette est posée sur un client — à la main ou par une autre automatisation.',
     aide_en: 'When a tag is added to a client — by hand or by another automation.',
     famille: 'client', entite: 'lead',
+    champs: [
+      {
+        cle: 'tag', fr: 'Quelle étiquette', en: 'Which tag',
+        obligatoire: false, type: 'etiquette',
+        aide_fr: 'Vide = n’importe quelle étiquette.',
+        aide_en: 'Empty = any tag.',
+      },
+    ],
   },
   {
     cle: 'client.untagged', fr: 'Étiquette retirée', en: 'Tag removed',
     aide_fr: 'Quand une étiquette est retirée d’un client — à la main ou par une autre automatisation.',
     aide_en: 'When a tag is removed from a client — by hand or by another automation.',
     famille: 'client', entite: 'lead',
+    champs: [
+      {
+        cle: 'tag', fr: 'Quelle étiquette', en: 'Which tag',
+        obligatoire: false, type: 'etiquette',
+        aide_fr: 'Vide = n’importe quelle étiquette.',
+        aide_en: 'Empty = any tag.',
+      },
+    ],
   },
   {
     // server/lib/client-inactif.ts — balayage chaque heure, en journée, dans
@@ -441,6 +457,35 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     famille: 'client', entite: 'lead',
   },
 ];
+
+/**
+ * Filtres d'étiquettes du CLIENT de la fiche, offerts sur chaque déclencheur
+ * qui a un client (étape 6 du plan étiquettes + champs, 2026-09-28) : « le
+ * client a l'étiquette VIP », « le client n'a pas l'étiquette Ne pas
+ * relancer ». Jugés par le moteur sur les étiquettes RÉELLES du client
+ * (conditionsEtiquettesOk), pas sur les métadonnées de l'événement.
+ */
+export const CLES_CONDITIONS_ETIQUETTES = ['client_a_etiquette', 'client_sans_etiquette'] as const;
+const CHAMPS_ETIQUETTES_CLIENT: ChampAction[] = [
+  {
+    cle: 'client_a_etiquette', fr: 'Seulement si le client a l’étiquette', en: 'Only if the client has tag',
+    obligatoire: false, type: 'etiquette',
+  },
+  {
+    cle: 'client_sans_etiquette', fr: 'Seulement si le client n’a PAS l’étiquette', en: 'Only if the client does NOT have tag',
+    obligatoire: false, type: 'etiquette',
+    aide_fr: 'Ex. : « Ne pas relancer ».',
+    aide_en: 'E.g. “Do not follow up”.',
+  },
+];
+/** Déclencheurs sans client : un appel de l'extérieur. Ceux qui ont déjà leur propre filtre d'étiquette le gardent. */
+const SANS_FILTRE_ETIQUETTES = new Set(['webhook.received']);
+
+export const DECLENCHEURS: DeclencheurCatalogue[] = DECLENCHEURS_DE_BASE.map((d) =>
+  SANS_FILTRE_ETIQUETTES.has(d.cle) || (d.champs ?? []).some((c) => c.type === 'etiquette' && c.cle === 'etiquette')
+    ? d
+    : { ...d, champs: [...(d.champs ?? []), ...CHAMPS_ETIQUETTES_CLIENT] },
+);
 
 export const CLES_DECLENCHEURS = DECLENCHEURS.map((d) => d.cle);
 
