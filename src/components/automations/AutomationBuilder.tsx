@@ -69,7 +69,7 @@ const UNITES: Array<{ cle: UniteDelai; fr: string; en: string }> = [
 ];
 
 const FAMILLES: Array<{ cle: string; fr: string; en: string }> = [
-  { cle: 'devis', fr: 'Soumissions', en: 'Quotes' },
+  { cle: 'devis', fr: 'Devis', en: 'Quotes' },
   { cle: 'facture', fr: 'Factures', en: 'Invoices' },
   { cle: 'rendezvous', fr: 'Rendez-vous', en: 'Appointments' },
   { cle: 'job', fr: 'Jobs', en: 'Jobs' },
@@ -316,7 +316,7 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
           value={nom}
           onChange={(e) => setNom(e.target.value)}
           maxLength={120}
-          placeholder={fr ? 'Relance des soumissions sans réponse' : 'Follow up on unanswered quotes'}
+          placeholder={fr ? 'Relance des devis sans réponse' : 'Follow up on unanswered quotes'}
           className="w-full px-3 py-2 rounded-lg border border-border bg-surface-primary text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         />
       </div>
@@ -784,8 +784,8 @@ function EditeurEtape({
             className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <option value="">{fr ? '— toujours continuer —' : '— always continue —'}</option>
-            <option value="sent">{fr ? 'la soumission est toujours sans réponse' : 'the quote is still unanswered'}</option>
-            <option value="approved">{fr ? 'la soumission est acceptée' : 'the quote is approved'}</option>
+            <option value="sent">{fr ? 'le devis est toujours sans réponse' : 'the quote is still unanswered'}</option>
+            <option value="approved">{fr ? 'le devis est accepté' : 'the quote is approved'}</option>
             <option value="unpaid">{fr ? 'la facture est toujours impayée' : 'the invoice is still unpaid'}</option>
             <option value="paid">{fr ? 'la facture est payée' : 'the invoice is paid'}</option>
           </select>

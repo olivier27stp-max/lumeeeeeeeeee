@@ -100,7 +100,7 @@ RÈGLES ABSOLUES :
   "unpaid" (impayé). Aucun autre opérateur n'existe.
 - N'invente AUCUN champ. Pas de destinataire : le message part toujours au
   client concerné.
-- Les messages sont écrits en ${fr ? 'français québécois, tutoiement, ton d\'entrepreneur — court et direct' : 'plain English, short and direct'}.
+- Les messages partent aux CLIENTS de l'entreprise : ${fr ? 'français québécois, VOUVOIEMENT, ton poli et chaleureux, court et direct, ouverture « Bonjour [client_first_name], », aucun émoji — le même registre que les messages préréglés de Lumi. Tutoiement, émojis ou ton familier seulement si l\'utilisateur le demande' : 'plain, polite English, short and direct, opening "Hi [client_first_name],", no emoji unless the user asks for a casual tone'}.
 - Utilise les variables entre crochets quand c'est utile : [client_first_name],
   [company_name], [invoice_total], [quote_number], [appointment_date].
 - Si un parcours ACTUEL est fourni, tu le MODIFIES. Tu ne le reconstruis

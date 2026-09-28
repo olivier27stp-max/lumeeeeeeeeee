@@ -87,26 +87,26 @@ export interface DeclencheurCatalogue {
 export const DECLENCHEURS: DeclencheurCatalogue[] = [
   // ── Devis ──
   {
-    cle: 'quote.sent', fr: 'Soumission envoyée', en: 'Quote sent',
-    aide_fr: 'Quand une soumission part chez le client.',
+    cle: 'quote.sent', fr: 'Devis envoyé', en: 'Quote sent',
+    aide_fr: 'Quand un devis part chez le client.',
     aide_en: 'When a quote is sent to the client.',
     famille: 'devis', entite: 'quote',
   },
   {
-    cle: 'quote.approved', fr: 'Soumission acceptée', en: 'Quote approved',
-    aide_fr: 'Quand le client accepte la soumission.',
+    cle: 'quote.approved', fr: 'Devis accepté', en: 'Quote approved',
+    aide_fr: 'Quand le client accepte le devis.',
     aide_en: 'When the client approves the quote.',
     famille: 'devis', entite: 'quote',
   },
   {
-    cle: 'quote.declined', fr: 'Soumission refusée', en: 'Quote declined',
-    aide_fr: 'Quand le client refuse la soumission.',
+    cle: 'quote.declined', fr: 'Devis refusé', en: 'Quote declined',
+    aide_fr: 'Quand le client refuse le devis.',
     aide_en: 'When the client declines the quote.',
     famille: 'devis', entite: 'quote',
   },
   {
     cle: 'quote.changes_requested', fr: 'Modifications demandées', en: 'Changes requested',
-    aide_fr: 'Quand le client demande de modifier la soumission.',
+    aide_fr: 'Quand le client demande de modifier le devis.',
     aide_en: 'When the client asks for changes to the quote.',
     famille: 'devis', entite: 'quote',
   },
@@ -310,7 +310,7 @@ export const CLES_DECLENCHEURS = DECLENCHEURS.map((d) => d.cle);
  * divergent afficheraient des groupes différents selon l'écran.
  */
 export const FAMILLES_DECLENCHEURS: Array<{ cle: string; fr: string; en: string }> = [
-  { cle: 'devis', fr: 'Soumissions', en: 'Quotes' },
+  { cle: 'devis', fr: 'Devis', en: 'Quotes' },
   { cle: 'facture', fr: 'Factures', en: 'Invoices' },
   { cle: 'rendezvous', fr: 'Rendez-vous', en: 'Appointments' },
   { cle: 'job', fr: 'Jobs', en: 'Jobs' },
@@ -777,8 +777,8 @@ export const ACTIONS: ActionCatalogue[] = [
     ],
   },
   {
-    cle: 'envoyer_soumission', fr: 'Envoyer la soumission', en: 'Send the quote',
-    aide_fr: 'Envoie au client la soumission liée, par courriel.',
+    cle: 'envoyer_soumission', fr: 'Envoyer le devis', en: 'Send the quote',
+    aide_fr: 'Envoie au client le devis lié, par courriel.',
     aide_en: 'Emails the linked quote to the client.',
     famille: 'argent', vers_client: true,
     entites: ['quote'],
@@ -786,7 +786,7 @@ export const ACTIONS: ActionCatalogue[] = [
       {
         cle: 'body', fr: 'Mot d’accompagnement', en: 'Cover note',
         obligatoire: false, type: 'zone', max: 2000,
-        aide_fr: 'Vide = le texte habituel de vos soumissions.',
+        aide_fr: 'Vide = le texte habituel de vos devis.',
         aide_en: 'Empty = your usual quote wording.',
       },
     ],

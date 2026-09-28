@@ -460,7 +460,7 @@ describe('délais — ce que l\'utilisateur saisit vs ce que la base stocke', ()
 
 describe('recherche dans le catalogue', () => {
   it('trouve par clé, et rien d\'autre', () => {
-    expect(trouverDeclencheur('quote.sent')?.fr).toBe('Soumission envoyée');
+    expect(trouverDeclencheur('quote.sent')?.fr).toBe('Devis envoyé');
     expect(trouverDeclencheur('inexistant')).toBeUndefined();
     expect(trouverAction('send_sms')?.fr).toBe('Envoyer un texto');
     expect(trouverAction('inexistant')).toBeUndefined();
