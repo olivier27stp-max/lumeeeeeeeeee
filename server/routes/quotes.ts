@@ -15,7 +15,7 @@ import { getPaymentSettings } from '../lib/payment-settings';
 import { decryptSecret } from '../lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
-import { enregistrerOuverture } from '../lib/vuesSoumission';
+import { empreinte, enregistrerOuverture } from '../lib/vuesSoumission';
 import { resolveQuoteRecipients, insertTargetedNotifications } from '../lib/notificationHelpers';
 import { getCompanyBranding } from '../lib/companyBranding';
 import { senderForOrg, marqueDepuis, langueEntreprise, getCompanySettings } from './emails';
@@ -182,8 +182,9 @@ router.post('/quotes/:id/track-view', async (req, res) => {
       .insert({
         invoice_id: invoice.id,
         client_id: invoice.client_id,
-        ip_address: req.ip || req.headers['x-forwarded-for'] || null,
-        user_agent: req.headers['user-agent'] || null,
+        org_id: invoice.org_id,
+        // Loi 25 : ni IP ni navigateur en clair (voir vuesSoumission.ts).
+        user_agent_hash: empreinte(req.headers['user-agent'] as string | undefined),
       });
 
     // Client opened a quote/invoice link — stamp last activity (fire-and-forget).

@@ -17,6 +17,7 @@
  * internes, ni coûts.
  */
 import { Router } from 'express';
+import { empreinte } from '../lib/vuesSoumission';
 import { getServiceClient } from '../lib/supabase';
 import { documentTaxLines } from '../lib/taxResolve';
 import { getCompanyBranding } from '../lib/companyBranding';
@@ -60,8 +61,10 @@ export async function enregistrerVueFacture(admin: ReturnType<typeof getServiceC
       admin.from('quote_views').insert({
         invoice_id: invoice.id,
         client_id: invoice.client_id,
-        ip_address: req.ip || (req.headers['x-forwarded-for'] as string | undefined) || null,
-        user_agent: (req.headers['user-agent'] as string | undefined) || null,
+        org_id: invoice.org_id,
+        // Loi 25 (minimisation) : ni IP ni navigateur en clair — une
+        // empreinte du navigateur suffit (même règle que les devis).
+        user_agent_hash: empreinte(req.headers['user-agent'] as string | undefined),
       }),
     ),
   ];
