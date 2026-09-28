@@ -37,9 +37,12 @@
       "subject": "Un message de [company_name]",
       "body": "Bonjour [client_name],\n\nMerci de faire affaire avec [company_name].\n\nAu plaisir,\n[company_name]"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "No recipient email",
+     "result_success": true,
+     "result_data": {
+      "saute": "Aucune adresse courriel pour ce client",
+      "saute_code": "sans_courriel"
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    }
@@ -140,9 +143,12 @@
       "subject": "Un message de [company_name]",
       "body": "Bonjour [client_name],\n\nMerci de faire affaire avec [company_name].\n\nAu plaisir,\n[company_name]"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "No recipient email",
+     "result_success": true,
+     "result_data": {
+      "saute": "Aucune adresse courriel pour ce client",
+      "saute_code": "sans_courriel"
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    },
@@ -158,21 +164,9 @@
      ]
     ],
     "valeur": {
-     "status": "failed",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "No recipient email"
-    }
-   },
-   {
-    "moment": "differe:send_email",
-    "table": "notifications",
-    "op": "insert",
-    "valeur": {
-     "org_id": "11111111-1111-4111-8111-111111111111",
-     "type": "automation_failed",
-     "title": "Échec d'envoi — regle-webhook.received-send_email-86400",
-     "body": "Le courriel n'est pas parti et ne partira pas : ce client n'a pas d'adresse courriel.",
-     "reference_id": "tache-1"
+     "last_error": null
     }
    }
   ],
@@ -215,9 +209,12 @@
      "action_config": {
       "body": "Bonjour [client_name], c’est [company_name]. Merci !"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "No recipient phone",
+     "result_success": true,
+     "result_data": {
+      "saute": "Aucun numéro de téléphone pour ce client",
+      "saute_code": "sans_telephone"
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    }
@@ -317,9 +314,12 @@
      "action_config": {
       "body": "Bonjour [client_name], c’est [company_name]. Merci !"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "No recipient phone",
+     "result_success": true,
+     "result_data": {
+      "saute": "Aucun numéro de téléphone pour ce client",
+      "saute_code": "sans_telephone"
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    },
@@ -335,21 +335,9 @@
      ]
     ],
     "valeur": {
-     "status": "failed",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "No recipient phone"
-    }
-   },
-   {
-    "moment": "differe:send_sms",
-    "table": "notifications",
-    "op": "insert",
-    "valeur": {
-     "org_id": "11111111-1111-4111-8111-111111111111",
-     "type": "automation_failed",
-     "title": "Échec d'envoi — regle-webhook.received-send_sms-86400",
-     "body": "Le texto n'est pas parti et ne partira pas : ce client n'a pas de numéro de téléphone.",
-     "reference_id": "tache-1"
+     "last_error": null
     }
    }
   ],
@@ -9211,9 +9199,12 @@
      "action_config": {
       "body": "Bonjour [client_name], c’est [company_name]. Merci !"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "No recipient phone",
+     "result_success": true,
+     "result_data": {
+      "saute": "Aucun numéro de téléphone pour ce client",
+      "saute_code": "sans_telephone"
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    },
@@ -9229,21 +9220,9 @@
      ]
     ],
     "valeur": {
-     "status": "failed",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "No recipient phone"
-    }
-   },
-   {
-    "moment": "differe:send_sms#e3",
-    "table": "notifications",
-    "op": "insert",
-    "valeur": {
-     "org_id": "11111111-1111-4111-8111-111111111111",
-     "type": "automation_failed",
-     "title": "Échec d'envoi — regle-webhook.received-sequence",
-     "body": "Le texto n'est pas parti et ne partira pas : ce client n'a pas de numéro de téléphone.",
-     "reference_id": "tache-2"
+     "last_error": null
     }
    }
   ],
