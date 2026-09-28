@@ -537,7 +537,8 @@ export default function ChampsPersoSettings() {
                   const type = l.sorte === 'custom' ? l.champ.field_type : l.std.field_type;
                   const Icone = ICONE_TYPE[type];
                   const nom = l.sorte === 'custom' ? l.champ.label : (fr ? l.std.label.fr : l.std.label.en);
-                  const variable = l.sorte === 'custom' ? variableAffichee(l.objet, l.champ.key) : `${l.objet}.${l.std.key}`;
+                  // Champs système aussi : leur valeur est remplie dans les courriels et automatisations.
+                  const variable = variableAffichee(l.objet, l.sorte === 'custom' ? l.champ.key : l.std.key);
                   const dossierTrouve = l.sorte === 'custom' ? dossiers.find((d) => d.id === l.champ.folder_id) : null;
                   const dossier = dossierTrouve ? nomDossier(dossierTrouve, fr) : null;
                   const cell = cn('flex items-center border-b border-outline/30 px-3 py-2.5 text-[13px] text-text-primary min-w-0', l.sorte === 'custom' && l.champ.archived_at && 'opacity-60');
@@ -548,8 +549,8 @@ export default function ChampsPersoSettings() {
                       ? (dossier ? pastille(dossier) : <span className="text-text-tertiary">—</span>)
                       : pastille(nomSection(l.objet, l.std.section ?? '', fr) ?? '—'),
                     cle: <>
-                      <code className="truncate font-mono text-[12px] text-text-secondary" title={l.sorte === 'standard' ? (fr ? 'Champ standard : pas une variable de courriel' : 'Standard field: not an email variable') : variable}>{variable}</code>
-                      {l.sorte === 'custom' && (
+                      <code className="truncate font-mono text-[12px] text-text-secondary" title={variable}>{variable}</code>
+                      {(
                         <button type="button" aria-label={`${fr ? 'Copier' : 'Copy'} ${variable}`} onClick={() => copier(variable)}
                           className="shrink-0 rounded p-0.5 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Copy size={12} aria-hidden /></button>
                       )}

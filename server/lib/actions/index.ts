@@ -388,13 +388,19 @@ export function resolveTemplate(
 ): string {
   // Support both {var} and [var] syntax for backward compatibility, normalize to {var}
   // Champs personnalisés : {{client.cle}} (format GoHighLevel) = {client_cf_cle}.
-  return template
-    // Variables intégrées pointées ({{client.nom}}, {{soumission.total}}…)
-    // AVANT les champs personnalisés : un champ perso nommé « nom » ne doit
-    // pas masquer le nom du client.
-    .replace(/\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g, (_, objet, cle) => vars[`${objet}.${cle}`] ?? vars[`${objet}_cf_${cle}`] ?? '')
-    .replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '')
-    .replace(/\[(\w+)\]/g, (_, key) => vars[key] ?? '');
+  // UNE seule passe : une valeur insérée n'est jamais relue. En trois passes, un
+  // client « [QA] Équipe » ou une note « voir [annexe] » perdait son texte entre
+  // crochets, pris pour une ancienne variable [annexe] (constaté le 2026-09-28).
+  return template.replace(
+    /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}|\{(\w+)\}|\[(\w+)\]/g,
+    (_, objet: string | undefined, cle: string | undefined, accolade: string | undefined, crochet: string | undefined) => {
+      // Variables intégrées pointées ({{client.nom}}, {{soumission.total}}…)
+      // AVANT les champs personnalisés : un champ perso nommé « nom » ne doit
+      // pas masquer le nom du client.
+      if (objet) return vars[`${objet}.${cle}`] ?? vars[`${objet}_cf_${cle}`] ?? '';
+      return vars[(accolade ?? crochet) as string] ?? '';
+    },
+  );
 }
 
 /**

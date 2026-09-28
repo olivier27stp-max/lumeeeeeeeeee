@@ -363,8 +363,11 @@ export function applyTemplate(
     const nom = `${objet}_cf_${cle}`;
     return Object.prototype.hasOwnProperty.call(vars, nom) ? (vars[nom] ?? '') : entier;
   };
-  return template
-    .replace(/\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g, remplacerChamp)
-    .replace(/\{([A-Za-z]\w*)\}/g, remplacer)
-    .replace(/\[([A-Za-z]\w*)\]/g, remplacer);
+  // Une seule passe : une valeur insérée n'est jamais relue (un nom « [QA] Équipe »
+  // ou une note « voir [annexe] » perdait son texte entre crochets en trois passes).
+  return template.replace(
+    /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}|\{([A-Za-z]\w*)\}|\[([A-Za-z]\w*)\]/g,
+    (entier: string, objet: string | undefined, cle: string | undefined, accolade: string | undefined, crochet: string | undefined) =>
+      objet ? remplacerChamp(entier, objet, cle as string) : remplacer(entier, (accolade ?? crochet) as string),
+  );
 }
