@@ -61,6 +61,11 @@ export interface InvoiceItemInput {
   description: string;
   qty: number;
   unit_price_cents: number;
+  /** Titre et provenance de la ligne (job, visite, devis) : rpc_save_invoice_draft
+   *  les réécrit, ils étaient perdus au 1er enregistrement (audit 2026-09-28, D3). */
+  title?: string;
+  source_type?: string;
+  source_id?: string;
 }
 
 export interface InvoiceKpis30d {
@@ -120,6 +125,15 @@ export interface InvoiceDetail {
     /** coalesce(salesperson_id, job_salesperson_id) — ce que l'UI affiche. */
     effective_salesperson_id?: string | null;
     salesperson_name?: string | null;
+    /** Relus pour que la page de modification ne les écrase pas au 2e enregistrement
+     *  (rpc_save_invoice_draft les écrit sans coalesce — audit 2026-09-28, D3). */
+    notes?: string | null;
+    internal_notes?: string | null;
+    discount_cents?: number;
+    template_id?: string | null;
+    is_recurring?: boolean;
+    recurrence_interval?: string | null;
+    next_recurrence_date?: string | null;
   };
   client: {
     id: string;
@@ -140,6 +154,9 @@ export interface InvoiceDetail {
     unit_price_cents: number;
     line_total_cents: number;
     created_at: string;
+    title?: string | null;
+    source_type?: string | null;
+    source_id?: string | null;
   }>;
 }
 
@@ -562,6 +579,9 @@ export async function saveInvoiceDraft(payload: {
       description: item.description.trim(),
       qty: Number.isFinite(item.qty) ? Number(item.qty) : 0,
       unit_price_cents: Number.isFinite(item.unit_price_cents) ? Math.round(item.unit_price_cents) : 0,
+      title: item.title?.trim() || undefined,
+      source_type: item.source_type || undefined,
+      source_id: item.source_id || undefined,
     }))
     .filter((item) => item.description && item.qty > 0 && item.unit_price_cents >= 0);
 
@@ -595,7 +615,7 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
 
   const { data: itemsRows, error: itemsError } = await supabase
     .from('invoice_items')
-    .select('id,description,qty,unit_price_cents,line_total_cents,created_at')
+    .select('id,description,qty,unit_price_cents,line_total_cents,created_at,title,source_type,source_id')
     .eq('invoice_id', invoiceId)
     .order('created_at', { ascending: true });
   if (itemsError) throw itemsError;
@@ -650,6 +670,13 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
       view_count: Number(invoiceRow.view_count || 0),
       last_viewed_at: invoiceRow.last_viewed_at || null,
       billing_address_snapshot: (invoiceRow as any).billing_address_snapshot ?? null,
+      notes: invoiceRow.notes ?? null,
+      internal_notes: invoiceRow.internal_notes ?? null,
+      discount_cents: Number(invoiceRow.discount_cents || 0),
+      template_id: invoiceRow.template_id ?? null,
+      is_recurring: !!invoiceRow.is_recurring,
+      recurrence_interval: invoiceRow.recurrence_interval ?? null,
+      next_recurrence_date: invoiceRow.next_recurrence_date ?? null,
     },
     client: clientRow
       ? {
@@ -671,6 +698,9 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
       unit_price_cents: Number(item.unit_price_cents || 0),
       line_total_cents: Number(item.line_total_cents || 0),
       created_at: item.created_at,
+      title: item.title ?? null,
+      source_type: item.source_type ?? null,
+      source_id: item.source_id ?? null,
     })),
   };
 }

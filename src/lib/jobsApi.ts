@@ -629,7 +629,17 @@ export async function getJobModalDraftById(id: string): Promise<JobModalDraft | 
     // Sans ce champ, la case « Demander un avis » repartait cochée à chaque
     // réouverture, quel qu'ait été le choix à la création (QA 2026-09-25).
     ask_for_review: jobRow.ask_for_review ?? null,
-    status: deriveJobDisplayStatus({ status: jobRow.status, scheduled_at: jobRow.scheduled_at, requires_invoicing: !!jobRow.requires_invoicing }),
+    // Le VRAI statut, pas le libellé d'affichage : « Archived » renvoyé tel quel
+    // à l'enregistrement devenait `draft`, puis `scheduled` — corriger le titre
+    // d'un job terminé le rouvrait (audit 2026-09-28, D1).
+    status: jobRow.status || 'draft',
+    // Sans ces champs, le formulaire repartait avec un dépôt décoché et la
+    // propriété principale : enregistrer une modification les écrasait (D2, D6).
+    property_id: jobRow.property_id ?? null,
+    deposit_required: !!jobRow.deposit_required,
+    deposit_type: jobRow.deposit_type === 'fixed' ? 'fixed' : 'percentage',
+    deposit_value: Number(jobRow.deposit_value || 0),
+    require_payment_method: !!jobRow.require_payment_method,
     requires_invoicing: !!jobRow.requires_invoicing,
     billing_split: !!jobRow.billing_split,
     subtotal: jobRow.subtotal == null ? null : Number(jobRow.subtotal),
@@ -753,13 +763,17 @@ export async function createJob(payload: {
   }
 
   let data: any;
+  // Statut du dépôt avant la modification : un dépôt déjà payé ne redevient pas
+  // « en attente » parce qu'on a corrigé le titre (audit 2026-09-28, D2).
+  let depositStatusActuel: string | null = null;
   if (payload.id) {
     const { data: existingJob, error: existingJobError } = await supabase
       .from('jobs')
-      .select('property_address')
+      .select('property_address, deposit_status')
       .eq('id', payload.id)
       .maybeSingle();
     if (existingJobError) throw existingJobError;
+    depositStatusActuel = existingJob?.deposit_status ?? null;
 
     const nextAddress = payload.property_address || clientAddress || '-';
     shouldQueueGeocode = normalizeAddressValue(existingJob?.property_address) !== normalizeAddressValue(nextAddress);
@@ -1057,7 +1071,9 @@ export async function createJob(payload: {
         deposit_value: payload.deposit_required ? (payload.deposit_value || 0) : 0,
         deposit_cents: payload.deposit_required ? depositCents : 0,
         require_payment_method: payload.require_payment_method || false,
-        deposit_status: payload.deposit_required ? 'pending' : 'not_required',
+        deposit_status: payload.deposit_required
+          ? (depositStatusActuel && depositStatusActuel !== 'not_required' ? depositStatusActuel : 'pending')
+          : 'not_required',
       }).eq('id', data.id).eq('org_id', orgId);
       if (depErr) throw depErr;
     }

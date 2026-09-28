@@ -176,6 +176,11 @@ export interface JobDraftInitialValues {
   end_at?: string | null;
   requires_invoicing?: boolean;
   billing_split?: boolean;
+  /** Dépôt et moyen de paiement déjà enregistrés (modification). */
+  deposit_required?: boolean;
+  deposit_type?: 'percentage' | 'fixed' | null;
+  deposit_value?: number | null;
+  require_payment_method?: boolean;
   /** Pre-check the "Create agreement" box (e.g. Lead pin → "Create an agreement") */
   create_agreement?: boolean;
   line_items?: JobDraftLineItem[];
@@ -1012,6 +1017,12 @@ export default function NewJobModal({
     }
     setRequiresInvoicing(initialValues?.requires_invoicing ?? true);
     setBillingSplit(initialValues?.billing_split ?? false);
+    // Dépôt et moyen de paiement relus à l'ouverture : sinon enregistrer une
+    // modification remettait le dépôt à zéro (audit 2026-09-28, D2).
+    setJobDepositRequired(!!initialValues?.deposit_required);
+    setJobDepositType(initialValues?.deposit_type === 'fixed' ? 'fixed' : 'percentage');
+    setJobDepositValue(initialValues?.deposit_value ? String(initialValues.deposit_value) : '');
+    setJobRequirePaymentMethod(!!initialValues?.require_payment_method);
     setDescription(initialValues?.description || null);
     setPrefilledAddress(initialValues?.property_address || null);
     setAddressLine1(initialValues?.address_line1 || '');
@@ -1843,7 +1854,10 @@ export default function NewJobModal({
 
     // If user picked a non-draft status but didn't pick a date, confirm the
     // silent demotion to Draft (otherwise job wouldn't appear on calendar).
-    if (!scheduledAt && String(status).toLowerCase() !== 'draft') {
+    // Un job terminé, annulé ou en cours garde son statut, avec ou sans visite
+    // (audit 2026-09-28, D1) : ni confirmation ni retour en brouillon.
+    const statutConserve = isEditMode && ['completed', 'cancelled', 'in_progress'].includes(String(status).toLowerCase());
+    if (!scheduledAt && !statutConserve && String(status).toLowerCase() !== 'draft') {
       const msg = t.modals.statusWillDemoteToDraft
         || 'No start date set — this job will be saved as Draft and will not appear on the calendar. Continue?';
       if (!(await confirmer({ message: msg }))) return;
@@ -1985,7 +1999,7 @@ export default function NewJobModal({
         place_id: addressPlaceId,
         scheduled_at: scheduledAt,
         end_at: endAt,
-        status: scheduledAt ? status : 'Draft',
+        status: statutConserve || scheduledAt ? status : 'Draft',
         total_cents: grandTotalCents,
         currency: orgCurrency,
         requires_invoicing: requiresInvoicing,
