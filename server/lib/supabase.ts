@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, type User } from '@supabase/supabase-js';
 import express from 'express';
 import { getSupabaseAdminClient } from './supabaseAdmin';
 import { supabaseUrl, supabaseAnonKey, supabaseServiceRoleKey } from './config';
@@ -126,11 +126,44 @@ export async function companyOrgIds(admin: SupabaseClient, orgId: string): Promi
   }
 }
 
+/**
+ * Résolutions RÉUSSIES de requireAuthedClient, gardées 30 s par (jeton, bureau).
+ *
+ * Chaque requête refaisait `auth.getUser()` (un aller-retour vers Supabase
+ * Auth) puis `has_org_membership` — alors que les gardes d'abonnement et de
+ * fonctions venaient de faire le même travail. Une page lance une dizaine
+ * d'appels : autant d'allers-retours en série, ~0,3 s chacun (mesuré en prod
+ * le 2026-09-28). Accepté par Rafba le même jour.
+ *
+ * Ce qui reste vrai :
+ *   · seuls les SUCCÈS sont gardés — un refus (401, 403, bureau requis) est
+ *     revérifié à chaque fois ;
+ *   · la clé porte le bureau demandé : un autre `x-org-id` est revérifié ;
+ *   · la base applique toujours ses règles d'accès avec le jeton de
+ *     l'utilisateur : un membre suspendu reste bloqué sur ses données ;
+ *   · au pire, une session fermée ou un membre retiré garde 30 s d'accès aux
+ *     routes qui s'arrêtent à cette vérification.
+ */
+const DUREE_CACHE_SESSION_MS = 30_000;
+const cacheSessions = new Map<string, { user: User; orgId: string; expire: number }>();
+
+function cleSession(header: string, bureau: string | undefined): string {
+  // La fin du JWT (sa signature) est unique par jeton.
+  return `${header.slice(-64)}|${bureau ?? ''}`;
+}
+
 export async function requireAuthedClient(req: express.Request, res: express.Response) {
   const authorizationHeader = req.header('authorization');
   if (!authorizationHeader) {
     res.status(401).json({ error: 'Missing authorization header.' });
     return null;
+  }
+
+  const cle = cleSession(authorizationHeader, req.header('x-org-id'));
+  const enCache = cacheSessions.get(cle);
+  if (enCache && enCache.expire > Date.now()) {
+    setSentryRequestOrg(enCache.orgId, enCache.user.id);
+    return { client: buildSupabaseWithAuth(authorizationHeader, enCache.orgId), orgId: enCache.orgId, user: enCache.user };
   }
 
   const client = buildSupabaseWithAuth(authorizationHeader);
@@ -177,6 +210,13 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
   // Toute erreur levée plus loin dans cette requête portera l'org — sinon
   // l'alerte Sentry ne dit pas chez quel client ça a planté. No-op sans DSN.
   setSentryRequestOrg(orgId, user.id);
+
+  if (cacheSessions.size > 5_000) {
+    const maintenant = Date.now();
+    for (const [k, v] of cacheSessions) if (v.expire <= maintenant) cacheSessions.delete(k);
+    if (cacheSessions.size > 5_000) cacheSessions.clear();
+  }
+  cacheSessions.set(cle, { user, orgId, expire: Date.now() + DUREE_CACHE_SESSION_MS });
 
   // Le client rendu porte le bureau résolu : current_org_id() côté base = le bureau de la requête.
   return { client: buildSupabaseWithAuth(authorizationHeader, orgId), orgId, user };
