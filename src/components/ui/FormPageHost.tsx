@@ -8,9 +8,12 @@
  */
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useApercuPlacement } from '../champs/apercuPlacement';
 
 export default function FormPageHost({ children, fullscreen }: { children: React.ReactNode; fullscreen?: boolean }) {
   const [host, setHost] = useState<HTMLElement | null>(null);
+  // Aperçu d'un formulaire (« Créer un champ ») : rendu sur place, dans l'aperçu.
+  const apercu = useApercuPlacement();
 
   useEffect(() => {
     setHost(document.getElementById('page-content-area'));
@@ -21,6 +24,7 @@ export default function FormPageHost({ children, fullscreen }: { children: React
   // underneath them and the form would be clipped.
   // z-[120]: above fullscreen pages (measure is z-50) but below the floating
   // pickers the form opens (ServicePicker is z-[130]).
+  if (apercu) return <div className="relative h-full">{children}</div>;
   if (fullscreen) return <div className="fixed inset-0 z-[120]">{children}</div>;
 
   // Fallback: if the shell target isn't mounted yet, render in place so the

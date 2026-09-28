@@ -36,6 +36,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { Settings2 } from 'lucide-react';
 import { champsSysteme, nomDossier } from '../../lib/champs/standard';
 import { ancreValide } from '../../lib/champs/placement';
+import { CibleDeplacable, ZoneDepot, useApercuPlacement, zoneApres, zoneDossier, zoneSection } from './apercuPlacement';
 import type { ChampPerso } from '../../lib/champs/types';
 
 /** Titre de la fenêtre de création, par objet (panneau « Gérer les champs »). */
@@ -57,6 +58,10 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
 } = {}) {
   const { isEnabled } = useChampsPersoActifs();
   const idBase = useId();
+  // Aperçu du vrai formulaire dans « Créer un champ » : la custom key en cours y est
+  // glissée à sa place, et chaque emplacement devient une zone de dépôt.
+  const apercu = useApercuPlacement();
+  const enApercu = !!apercu && apercu.objet === objet;
   const { data, isLoading } = useQuery({
     queryKey: ['champs-perso', objet],
     queryFn: () => listerChamps(objet),
@@ -74,9 +79,12 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
   const systeme = (cle: string) => verrouilles.has(cle) || (!isLoading && !masquesSysteme.includes(cle));
   // Tous les champs actifs de l'objet (pour « Gérer les champs »), et ceux affichés dans la fenêtre.
   const tousActifs = useMemo(() => (data?.fields ?? []).filter((c) => !c.archived_at), [data]);
-  const champs = useMemo(() => tousActifs.filter((c) => !c.config?.masque_creation), [tousActifs]);
+  const champs = useMemo(() => {
+    const affiches = tousActifs.filter((c) => !c.config?.masque_creation);
+    return enApercu ? [...affiches.filter((c) => c.id !== apercu.cible.id), apercu.cible] : affiches;
+  }, [tousActifs, enApercu, apercu]);
   const { role } = usePermissions();
-  const peutGerer = role === 'owner' || role === 'admin';
+  const peutGerer = (role === 'owner' || role === 'admin') && !enApercu;
   const [gerer, setGerer] = useState(false);
   const [valeurs, setValeurs] = useState<Record<string, ValeurChamp>>({});
   // Le clic sur « Créer » suit le blur du dernier champ texte dans le MÊME
@@ -190,6 +198,13 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
   const branchees = new Set(opts.sections ?? []);
   const saisie = (c: ChampPerso) => {
     const id = `${idBase}-${c.id}`;
+    if (enApercu && c.id === apercu.cible.id) {
+      return (
+        <div key={c.id} className={c.field_type === 'multi_line' || c.field_type === 'dropdown_multi' ? 'sm:col-span-2' : undefined}>
+          <CibleDeplacable fr={fr}>{apercu.rendreCible()}</CibleDeplacable>
+        </div>
+      );
+    }
     return (
       <div key={c.id} className={c.field_type === 'multi_line' || c.field_type === 'dropdown_multi' ? 'sm:col-span-2' : undefined}>
         <label htmlFor={id} className="mb-1 block text-[12px] font-medium text-text-secondary">
@@ -213,16 +228,18 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
   const section = (cle: string, o: { tout?: boolean } = {}) => {
     if (!isEnabled) return null;
     const liste = champs.filter((c) => cleSysteme(c) === cle && (o.tout || !ancreDe(c)));
-    if (liste.length === 0) return null;
-    return <div className="mt-3 grid gap-3 sm:grid-cols-2" data-champs-section={cle}>{liste.map(saisie)}</div>;
+    const zone = enApercu ? <ZoneDepot id={zoneSection(cle)} fr={fr} /> : null;
+    if (liste.length === 0) return zone;
+    return <>{<div className="mt-3 grid gap-3 sm:grid-cols-2" data-champs-section={cle}>{liste.map(saisie)}</div>}{zone}</>;
   };
 
   /** Les custom keys glissées juste après la rangée de base dont `cle` est la 1re clé. */
   const apres = (cle: string) => {
     if (!isEnabled) return null;
     const liste = champs.filter((c) => ancreDe(c) === cle);
-    if (liste.length === 0) return null;
-    return <div className="mt-3 grid gap-3 sm:grid-cols-2" data-champs-apres={cle}>{liste.map(saisie)}</div>;
+    const zone = enApercu ? <ZoneDepot id={zoneApres(cle)} fr={fr} /> : null;
+    if (liste.length === 0) return zone;
+    return <>{<div className="mt-3 grid gap-3 sm:grid-cols-2" data-champs-apres={cle}>{liste.map(saisie)}</div>}{zone}</>;
   };
 
   // Hors des sections branchées : dossiers dans leur ordre (système non branchés,
@@ -232,8 +249,9 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
       .map((d) => ({ id: d.id, titre: nomDossier(d, fr), champs: champs.filter((c) => c.folder_id === d.id) })),
     { id: '__sans', titre: fr ? 'Champs personnalisés' : 'Custom fields',
       champs: champs.filter((c) => !c.folder_id || !dossiers.some((d) => d.id === c.folder_id)) },
-  ].filter((g) => g.champs.length > 0);
-  const nbHorsSections = groupes.reduce((n, g) => n + g.champs.length, 0);
+  // Aperçu : les dossiers vides restent visibles (on peut y déposer), pas « sans dossier ».
+  ].filter((g) => g.champs.length > 0 || (enApercu && g.id !== '__sans'));
+  const nbHorsSections = enApercu ? groupes.length : groupes.reduce((n, g) => n + g.champs.length, 0);
 
   // Aucun champ affiché (liste chargée) : on le dit, avec de quoi en ajouter, plutôt qu'un silence.
   const bloc = !isEnabled ? null : nbHorsSections === 0 ? (data ? (
@@ -254,6 +272,7 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
             {i === 0 && boutonGerer}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">{g.champs.map(saisie)}</div>
+          {enApercu && g.id !== '__sans' && <ZoneDepot id={zoneDossier(g.id)} fr={fr} />}
         </div>
       ))}
     </div>
