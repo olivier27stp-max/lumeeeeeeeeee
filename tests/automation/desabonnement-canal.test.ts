@@ -151,9 +151,16 @@ describe('STOP / START pour UNE entreprise', () => {
 
 // ── 4. Le moteur ────────────────────────────────────────────
 
-/** La dernière ligne de journal d'exécution écrite pour cette action. */
+/**
+ * Les lignes de RÉSULTAT du journal d'exécution pour cette action.
+ *
+ * Une action immédiate réserve d'abord sa ligne (« en cours », F3 #698) puis
+ * écrit son résultat : la réservation n'est pas un résultat, on l'écarte.
+ */
 function journalDe(sortie: any, action: string) {
-  return sortie.ecritures.filter((w: any) => w.table === 'automation_execution_logs' && w.valeur?.action_type === action).map((w: any) => w.valeur);
+  return sortie.ecritures
+    .filter((w: any) => w.table === 'automation_execution_logs' && w.valeur?.action_type === action && w.valeur?.result_error !== 'en cours')
+    .map((w: any) => w.valeur);
 }
 
 describe('moteur — drapeau ON', () => {
