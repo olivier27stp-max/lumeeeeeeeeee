@@ -26,6 +26,16 @@ export type ElementPlan =
 
 const parPosition = (a: ChampPerso, b: ChampPerso) => (a.position ?? 0) - (b.position ?? 0);
 
+/** Nom du formulaire de création de chaque objet. */
+export const TITRE_FORMULAIRE: Record<ObjetChamp, { fr: string; en: string }> = {
+  client: { fr: 'Nouveau client', en: 'New client' },
+  deal: { fr: 'Nouveau deal', en: 'New deal' },
+  job: { fr: 'Nouvelle job', en: 'New job' },
+  quote: { fr: 'Nouveau devis', en: 'New quote' },
+  invoice: { fr: 'Nouvelle facture', en: 'New invoice' },
+  property: { fr: 'Nouvelle propriété', en: 'New property' },
+};
+
 /** Le formulaire tel qu'il s'affiche : sections, rangées de base, custom keys à leur place. */
 export function planFormulaire(objet: ObjetChamp, champs: ChampPerso[], dossiers: DossierChamp[], fr: boolean): ElementPlan[] {
   const libelles = new Map(champsSysteme(objet).map((c) => [c.key, fr ? c.label.fr : c.label.en]));

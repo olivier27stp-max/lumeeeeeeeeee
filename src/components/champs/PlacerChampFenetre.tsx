@@ -17,18 +17,9 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { modifierChamp, type ChampPerso, type DossierChamp, type ObjetChamp } from '../../lib/champsPersoApi';
-import { lirePlan, planFormulaire, type ElementPlan } from '../../lib/champs/placement';
+import { enregistrerPlan, type ChampPerso, type DossierChamp, type ObjetChamp } from '../../lib/champsPersoApi';
+import { TITRE_FORMULAIRE, planFormulaire, type ElementPlan } from '../../lib/champs/placement';
 import { cn } from '../../lib/utils';
-
-const TITRE_FORMULAIRE: Record<ObjetChamp, { fr: string; en: string }> = {
-  client: { fr: 'Nouveau client', en: 'New client' },
-  deal: { fr: 'Nouveau deal', en: 'New deal' },
-  job: { fr: 'Nouvelle job', en: 'New job' },
-  quote: { fr: 'Nouveau devis', en: 'New quote' },
-  invoice: { fr: 'Nouvelle facture', en: 'New invoice' },
-  property: { fr: 'Nouvelle propriété', en: 'New property' },
-};
 
 function Element({ e, cible, fr }: { e: ElementPlan; cible: string; fr: boolean }) {
   const mobile = e.type === 'champ';
@@ -110,16 +101,7 @@ export default function PlacerChampFenetre({ objet, champ, champs, dossiers, fr,
   const sauvegarder = async () => {
     setEnvoi(true);
     try {
-      const places = lirePlan(objet, plan);
-      await Promise.all(tous.map((c) => {
-        const p = places.get(c.id);
-        if (!p) return null;
-        const patch: Parameters<typeof modifierChamp>[1] = {};
-        if ((c.folder_id ?? null) !== p.folder_id) patch.folder_id = p.folder_id;
-        if ((c.position ?? 0) !== p.position) patch.position = p.position;
-        if ((c.config?.apres ?? null) !== p.apres) patch.config = { apres: p.apres };
-        return Object.keys(patch).length ? modifierChamp(c.id, patch) : null;
-      }));
+      await enregistrerPlan(objet, plan, tous);
       await qc.invalidateQueries({ queryKey: ['champs-perso'] });
       toast.success(fr ? `« ${champ.label} » est placé dans le formulaire.` : `“${champ.label}” is placed in the form.`);
       onSauvegarde?.();
@@ -153,6 +135,9 @@ export default function PlacerChampFenetre({ objet, champ, champs, dossiers, fr,
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-3">
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={surDrag}
+          // Défilement automatique seulement tout près du bord : sinon, déposer sur une
+          // rangée du haut fait défiler jusqu'en haut pendant qu'on vise.
+          autoScroll={{ threshold: { x: 0, y: 0.08 } }}
             accessibility={{ screenReaderInstructions: { draggable: fr
               ? 'Pour déplacer un champ, appuie sur Espace, puis sur les flèches ; Espace pour le déposer, Échap pour annuler.'
               : 'To move a field, press Space, then the arrow keys; Space to drop it, Escape to cancel.' } }}>
