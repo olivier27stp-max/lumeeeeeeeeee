@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
 import BandeauPause from '../components/automations/BandeauPause';
 import MessageEditor from '../components/automations/MessageEditor';
+import InterrupteurPublication from '../components/automations/InterrupteurPublication';
 import CopierVersBureauxModal from '../components/automations/CopierVersBureauxModal';
 import {
   chargerAutomatisations,
@@ -1542,27 +1543,20 @@ export default function Automations() {
 
                           <td className="px-3 py-3">
                             <div className="flex items-center justify-end gap-0.5">
-                              <button
-                                type="button"
-                                onClick={() => handleToggle(rule)}
-                                /*
-                                 * Une règle à la corbeille ne se déclenche plus :
-                                 * le moteur la filtre. Un interrupteur qui
-                                 * s'allume sans rien changer mentirait.
-                                 */
-                                disabled={togglingId === rule.id || !!rule.deleted_at}
-                                aria-label={rule.is_active
+                              {/* Rouge = brouillon, vert = publiée. Une règle à la
+                                  corbeille ne se déclenche plus (le moteur la
+                                  filtre) : un interrupteur qui s'allumerait sans
+                                  rien changer mentirait. */}
+                              <InterrupteurPublication
+                                actif={rule.is_active}
+                                onBascule={() => handleToggle(rule)}
+                                enCours={togglingId === rule.id}
+                                desactive={!!rule.deleted_at}
+                                libelle={rule.is_active
                                   ? (fr ? `Repasser ${rule.name} en brouillon` : `Unpublish ${rule.name}`)
                                   : (fr ? `Publier ${rule.name}` : `Publish ${rule.name}`)}
-                                aria-pressed={rule.is_active}
-                                className="rounded-md p-1 transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                              >
-                                {togglingId === rule.id
-                                  ? <Loader2 size={17} className="animate-spin text-text-tertiary" aria-hidden="true" />
-                                  : rule.is_active
-                                    ? <ToggleRight size={19} className="text-text-primary" aria-hidden="true" />
-                                    : <ToggleLeft size={19} className="text-text-tertiary" aria-hidden="true" />}
-                              </button>
+                                fr={fr}
+                              />
 
                               <button
                                 type="button"
