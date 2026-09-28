@@ -70,6 +70,7 @@ const BillingSettings = lazyResilient(() => import('./pages/settings/BillingSett
 const LocationSettings = lazyResilient(() => import('./pages/settings/LocationSettings'));
 const OfficesSettings = lazyResilient(() => import('./pages/settings/OfficesSettings'));
 const ChampsPersoSettings = lazyResilient(() => import('./pages/settings/ChampsPersoSettings'));
+const EtiquettesSettings = lazyResilient(() => import('./pages/settings/EtiquettesSettings'));
 const OfficeNew = lazyResilient(() => import('./pages/OfficeNew'));
 const OfficesOverview = lazyResilient(() => import('./pages/OfficesOverview'));
 const ArchivesPanel = lazyResilient(() => import('./components/ArchivesPanel'));
@@ -1604,6 +1605,7 @@ function AuthenticatedApp({
                       {/* Bureaux de la compagnie (liste résolue côté serveur, owner/admin) */}
                       <Route path="offices" element={<Gated permission="settings.read"><OfficesSettings /></Gated>} />
                       <Route path="custom-fields" element={<Gated permission="settings.update"><ChampsPersoSettings /></Gated>} />
+                      <Route path="tags" element={<Gated permission="settings.update"><EtiquettesSettings /></Gated>} />
                       <Route path="billing" element={<Gated permission="settings.read"><BillingSettings /></Gated>} />
                       <Route path="products" element={<Gated permission="settings.update"><ProductsServices /></Gated>} />
                       <Route path="taxes" element={<Gated permission="settings.update"><TaxSettings /></Gated>} />

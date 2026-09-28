@@ -61,7 +61,8 @@ import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
 import SpecificNotes from '../components/SpecificNotes';
 import { getQuoteById, formatQuoteMoney, type QuoteDetail, type Quote } from '../lib/quotesApi';
 import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
-import { emitClientTagged, emitClientUntagged } from '../lib/automationEventsApi';
+import { poserEtiquette, retirerEtiquette } from '../lib/etiquettesApi';
+import SelecteurEtiquettes from '../components/etiquettes/SelecteurEtiquettes';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface JobRecord {
@@ -207,8 +208,6 @@ export default function ClientDetails() {
 
   // Tags
   const [tags, setTags] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState('');
-  const [showTagInput, setShowTagInput] = useState(false);
 
   // Drag-drop files
   const { isDragging: isDropping, dropHandlers } = useDropZone({
@@ -451,45 +450,6 @@ export default function ClientDetails() {
       navigate('/clients');
     } catch {
       toast.error(language === 'fr' ? "Échec de la suppression." : 'Erase failed.');
-    }
-  };
-
-  const handleAddTag = async () => {
-    const trimmed = newTag.trim();
-    if (!trimmed || !client) return;
-    if (tags.includes(trimmed)) { setNewTag(''); setShowTagInput(false); return; }
-    try {
-      const { error } = await supabase.from('client_tags').insert({ client_id: client.id, tag: trimmed });
-      if (error) throw error;
-    } catch (err: any) {
-      // Sans cette lecture, le tag s'affichait sans jamais être enregistré.
-      console.error('[clients] ajout de tag échoué:', err?.message ?? err);
-      toast.error(language === 'fr' ? "Impossible d'ajouter le tag" : 'Failed to add tag');
-      return;
-    }
-    // Le moteur d'automatisations ne voit pas cette écriture : `client_tags`
-    // s'écrit depuis le navigateur. On le prévient APRÈS le succès — un
-    // événement émis avant l'écriture ferait partir une séquence sur une
-    // étiquette qui n'existe pas.
-    emitClientTagged({ clientId: client.id, tag: trimmed });
-    setTags((prev) => [...prev, trimmed]);
-    setNewTag('');
-    setShowTagInput(false);
-  };
-
-  const handleRemoveTag = async (tag: string) => {
-    if (!client) return;
-    const previous = tags;
-    setTags((prev) => prev.filter((tg) => tg !== tag));
-    try {
-      // Idem : un refus renvoyait `error` sans lever, donc le tag disparaissait
-      // de l'écran tout en restant en base.
-      const { error } = await supabase.from('client_tags').delete().eq('client_id', client.id).eq('tag', tag);
-      if (error) throw error;
-      emitClientUntagged({ clientId: client.id, tag });
-    } catch {
-      setTags(previous);
-      toast.error(t.clientDetails.failedToRemoveTag);
     }
   };
 
@@ -841,42 +801,15 @@ export default function ClientDetails() {
             </div>
             <div className="grid grid-cols-[140px_1fr] items-center py-2.5 text-[13px] md:col-start-2 md:row-start-2">
               <span className="text-text-secondary">{t.clientDetails.tags}</span>
-              <span className="flex flex-wrap items-center gap-1.5 min-w-0">
-                {tags.map((tag) => (
-                  <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-tertiary text-[11px] font-medium text-text-secondary border border-outline-subtle group">
-                    <Tag size={9} className="text-text-tertiary" />
-                    {tag}
-                    <button onClick={() => handleRemoveTag(tag)} className="text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity" title={isFr ? 'Retirer' : 'Remove'}>
-                      <X size={9} />
-                    </button>
-                  </span>
-                ))}
-                {showTagInput ? (
-                  <span className="inline-flex items-center gap-1">
-                    <input
-                      type="text"
-                      aria-label={isFr ? 'Nouvelle étiquette' : 'New tag'}
-                      value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleAddTag();
-                        if (e.key === 'Escape') { setShowTagInput(false); setNewTag(''); }
-                      }}
-                      onBlur={() => { if (!newTag.trim()) { setShowTagInput(false); setNewTag(''); } }}
-                      placeholder={t.clientDetails.tagNamePlaceholder}
-                      className="h-6 px-2.5 w-36 bg-surface border border-outline rounded-full text-[11px] text-text-primary placeholder:text-text-tertiary focus:outline-none"
-                      autoFocus
-                    />
-                    <button onMouseDown={(e) => e.preventDefault()} onClick={handleAddTag} className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary text-white hover:bg-primary-hover transition-colors" title={t.clientDetails.addTag}>
-                      <Plus size={11} />
-                    </button>
-                  </span>
-                ) : (
-                  <button onClick={() => setShowTagInput(true)} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed border-outline text-[11px] text-text-tertiary hover:text-text-primary transition-colors">
-                    <Plus size={9} /> {t.clientDetails.addTag}
-                  </button>
-                )}
-              </span>
+              {/* Sélecteur commun (Réglages → Étiquettes) : suggestions, couleurs,
+                  « Créer » réservé à qui a « Réglages ». Poser / retirer prévient
+                  le moteur d'automatisations (étiquette ajoutée / retirée). */}
+              <SelecteurEtiquettes
+                valeurs={tags}
+                fr={isFr}
+                onAjouter={async (tag) => { await poserEtiquette(client.id, tag); setTags((prev) => (prev.includes(tag) ? prev : [...prev, tag])); }}
+                onRetirer={async (tag) => { await retirerEtiquette(client.id, tag); setTags((prev) => prev.filter((tg) => tg !== tag)); }}
+              />
             </div>
           </div>
           {/* Champs rangés dans les sections Coordonnées / Informations du lead du formulaire */}

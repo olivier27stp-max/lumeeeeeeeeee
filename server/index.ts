@@ -73,6 +73,7 @@ import checklistsRouter from './routes/checklists';
 import taxesRouter from './routes/taxes';
 import featureFlagsRouter from './routes/feature-flags';
 import customFieldsRouter from './routes/custom-fields';
+import etiquettesRouter from './routes/etiquettes';
 import scheduledReportsRouter from './routes/scheduled-reports';
 import goalsRouter from './routes/goals';
 import auditLogRouter from './routes/audit-log';
@@ -799,6 +800,7 @@ app.use(featureGuard({ resoudreOrg: (req) => resoudreUtilisateur(req) }));
 // ── Mount all route modules under /api ──
 app.use('/api', searchRouter);
 app.use('/api', customFieldsRouter);
+app.use('/api', etiquettesRouter);
 app.use('/api', geocodeRouter);
 app.use('/api', clientErrorsRouter);
 app.use('/api', routeOptimizationRouter);

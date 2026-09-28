@@ -18,7 +18,7 @@
   "src/pages/ChecklistTemplates.tsx": "c4b6caaccacf9ddb",
   "src/pages/CheckoutSetup.tsx": "bb674cc9fe48a55c",
   "src/pages/CheckoutSuccess.tsx": "be8338b39183b68e",
-  "src/pages/ClientDetails.tsx": "eeab1366eaf40f92",
+  "src/pages/ClientDetails.tsx": "ebcc3cc0f49321ea",
   "src/pages/ClientPortal.tsx": "1ee5f1e7508bbb3e",
   "src/pages/Clients.tsx": "66056630b5050b19",
   "src/pages/Commissions.tsx": "511d2151b39d498e",
@@ -104,6 +104,7 @@
   "src/pages/settings/BillingSettings.tsx": "6429ed8fca905c01",
   "src/pages/settings/ChampsPersoSettings.tsx": "7c70aaf89658e947",
   "src/pages/settings/EmailTemplatesSettings.tsx": "2344e65b6917fa6d",
+  "src/pages/settings/EtiquettesSettings.tsx": "a298a8df5ce45135",
   "src/pages/settings/LanguageSettings.tsx": "da39a3ee5e6b4b0d",
   "src/pages/settings/LocationSettings.tsx": "da39a3ee5e6b4b0d",
   "src/pages/settings/OfficesSettings.tsx": "a2bb43d4c59492bd",
@@ -111,5 +112,5 @@
   "src/pages/settings/ProfileSettings.tsx": "50c65bd9d90e6df2",
   "src/pages/settings/ReportView.tsx": "1f700fd639d46523",
   "src/pages/settings/ReportsCatalog.tsx": "52338e5c1675a433",
-  "src/pages/settings/SettingsLayout.tsx": "fe947493633354ef"
+  "src/pages/settings/SettingsLayout.tsx": "e24880c3cf1a976a"
 }

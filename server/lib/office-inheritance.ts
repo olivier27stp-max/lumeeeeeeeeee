@@ -196,6 +196,8 @@ export interface CopyReport {
   tax_group_items: number;
   email_templates: number;
   job_tags: number;
+  /** Catalogue des étiquettes clients (nom + couleur). */
+  tags: number;
   lead_sources: number;
   /** Nombre de lignes copiées par table, section « modèles ». */
   modeles: Record<string, number>;
@@ -231,7 +233,7 @@ export async function copyOfficeSettings(
     tax_groups: 0,
     tax_group_items: 0,
     email_templates: 0,
-    job_tags: 0,
+    job_tags: 0, tags: 0,
     lead_sources: 0,
     modeles: {},
     warnings: [],
@@ -382,6 +384,22 @@ export async function copyOfficeSettings(
       }
     } catch (e: any) {
       warn('job_tags', e?.message);
+    }
+    // Étiquettes des clients : le catalogue (nom + couleur), pas les clients.
+    try {
+      const { data: rows, error } = await admin
+        .from('tags')
+        .select('name, color_hex')
+        .eq('org_id', sourceOrgId);
+      if (error) throw new Error(error.message);
+      const mapped = (rows || []).map((r: Row) => ({ org_id: targetOrgId, name: r.name, color_hex: r.color_hex }));
+      if (mapped.length > 0) {
+        const { error: insErr } = await admin.from('tags').insert(mapped);
+        if (insErr) throw new Error(insErr.message);
+        report.tags = mapped.length;
+      }
+    } catch (e: any) {
+      warn('tags', e?.message);
     }
     try {
       const { data: rows, error } = await admin

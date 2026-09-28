@@ -23,6 +23,7 @@ import {
   Plug,
   ArrowLeft,
   Layers,
+  Tag,
   type LucideIcon,
 } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -67,6 +68,7 @@ export function useSettingsNav(): NavGroup[] {
         { path: '/settings/company', label: t.settings.companySettings, icon: Building },
         // Champs personnalisés : en haut, pas cachés sous « Plus » (introuvables sans défiler, 2026-09-25).
         ...(champsV2 ? [{ path: '/settings/custom-fields', label: isFr ? 'Champs personnalisés' : 'Custom fields', icon: Layers }] : []),
+        { path: '/settings/tags', label: isFr ? 'Étiquettes' : 'Tags', icon: Tag },
         { path: '/settings/offices', label: isFr ? 'Bureaux' : 'Offices', icon: Building2 },
         { path: '/settings/billing', label: isFr ? 'Forfait & facturation' : 'Plan & billing', icon: CreditCard },
       ],

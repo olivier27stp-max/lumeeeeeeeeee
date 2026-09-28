@@ -176,6 +176,11 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'PATCH /api/custom-field-folders/:id': 'settings.update',
   'DELETE /api/custom-field-folders/:id': 'settings.update',
 
+  // ── Étiquettes des clients : lire = tout membre ; gérer le catalogue = Réglages (D3) ──
+  'POST /api/etiquettes': 'settings.update',
+  'PATCH /api/etiquettes': 'settings.update',
+  'POST /api/etiquettes/supprimer': 'settings.update',
+
   // ── Billing ──
   // 'GET /api/billing/current' is NOT permission-gated: every member must be
   // able to resolve the org's PLAN (it gates whole app areas). The route

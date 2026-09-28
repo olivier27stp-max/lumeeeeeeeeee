@@ -72,6 +72,17 @@ export const createLeadSchema = z.object({
   orgId: optionalOrgId,
 });
 
+// ── Étiquettes des clients (Réglages → Étiquettes) ──
+const nomEtiquette = z.string().trim().min(1, 'Nom requis.').max(60, 'Une étiquette fait 60 caractères au plus.');
+const couleurEtiquette = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Couleur invalide.');
+export const etiquetteCreerSchema = z.object({ nom: nomEtiquette, couleur: couleurEtiquette.nullable().optional() });
+export const etiquetteModifierSchema = z.object({
+  nom: nomEtiquette,
+  nouveau_nom: nomEtiquette.nullable().optional(),
+  couleur: couleurEtiquette.nullable().optional(),
+});
+export const etiquetteSupprimerSchema = z.object({ nom: nomEtiquette });
+
 export const softDeleteLeadSchema = z.object({
   leadId: z.string().trim().min(1, 'leadId is required.'),
   orgId: optionalOrgId,
