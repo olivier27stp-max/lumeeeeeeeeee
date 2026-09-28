@@ -16,6 +16,9 @@ interface FilterPillProps {
   options: FilterPillOption[];
   onChange: (value: string) => void;
   className?: string;
+  /** Adds a « × » at the right end of the pill that resets the filter. */
+  onClear?: () => void;
+  clearLabel?: string;
 }
 
 /**
@@ -24,7 +27,7 @@ interface FilterPillProps {
  * with a count get it appended in parentheses. Shared by the Clients /
  * Jobs / Quotes / Invoices toolbars.
  */
-export default function FilterPill({ label, value, options, onChange, className }: FilterPillProps) {
+export default function FilterPill({ label, value, options, onChange, className, onClear, clearLabel }: FilterPillProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -43,11 +46,11 @@ export default function FilterPill({ label, value, options, onChange, className 
   const hasDots = options.some(o => o.dotColor);
 
   return (
-    <div ref={ref} className={`relative ${className || ''}`}>
+    <div ref={ref} className={`relative ${onClear ? 'inline-flex' : ''} ${className || ''}`}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="inline-flex items-center h-9 px-3.5 rounded-lg whitespace-nowrap bg-surface-secondary border border-outline text-[13px] hover:bg-surface-tertiary transition-colors"
+        className={`inline-flex items-center h-9 px-3.5 whitespace-nowrap bg-surface-secondary border border-outline text-[13px] hover:bg-surface-tertiary transition-colors ${onClear ? 'rounded-l-lg border-r-0 pr-2' : 'rounded-lg'}`}
       >
         <span className="font-medium text-text-secondary">{label}</span>
         <span aria-hidden className="w-px h-4 bg-outline mx-2.5" />
@@ -56,6 +59,16 @@ export default function FilterPill({ label, value, options, onChange, className 
           {selected?.label ?? value}
         </span>
       </button>
+      {onClear && (
+        <button
+          type="button"
+          onClick={() => { onClear(); setOpen(false); }}
+          aria-label={clearLabel ?? `Reset ${label}`}
+          className="inline-flex items-center h-9 pl-1 pr-2.5 rounded-r-lg bg-surface-secondary border border-l-0 border-outline text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden><path d="M18 6 6 18M6 6l12 12" /></svg>
+        </button>
+      )}
       {open && (
         <div className="absolute top-full left-0 mt-1 w-56 max-h-72 overflow-y-auto bg-surface-card border border-outline rounded-md shadow-lg z-50 py-1">
           {options.map(opt => (

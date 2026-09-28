@@ -11,7 +11,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
-import { ChevronDown, Copy, GripVertical, Info, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { AlignLeft, ChevronUp, Copy, GripVertical, Info, Loader2, Pencil, Plus, TextCursorInput, Trash2, X } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core';
@@ -44,6 +44,8 @@ interface Props {
   /** Dossier présélectionné à la création. */
   dossierInitial?: string | null;
   fr: boolean;
+  /** Création depuis « Tous » : l'objet part vide et doit être choisi (GHL : « Select object »). */
+  objetAChoisir?: boolean;
 }
 
 type OptionEdit = EntreeOption & { _cle: string };
@@ -80,15 +82,17 @@ function LigneOption({ o, fr, onChange, onRetirer, idBase }: {
   );
 }
 
-export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetDefaut, dossiers: tousDossiers, champ, dossierInitial, fr }: Props) {
+export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetDefaut, dossiers: tousDossiers, champ, dossierInitial, fr, objetAChoisir = false }: Props) {
   const ids = useId();
   const edition = !!champ;
-  // « Ajouter à l'objet » : n'importe quel objet, avec ou sans pipeline.
-  const [objet, setObjet] = useState<ObjetChamp>(champ?.object_type ?? objetDefaut);
+  const objetInitial = (): ObjetChamp | '' => champ?.object_type ?? (objetAChoisir ? '' : objetDefaut);
+  // « Ajouter à l'objet » : n'importe quel objet, avec ou sans pipeline. Vide = pas encore choisi.
+  const [objetChoisi, setObjet] = useState<ObjetChamp | ''>(objetInitial);
+  const objet: ObjetChamp = objetChoisi || objetDefaut;
   // Dossiers créés depuis ce panneau (« Créer un dossier ») : la liste du parent ne les a pas encore.
   const [dossiersCrees, setDossiersCrees] = useState<DossierChamp[]>([]);
-  const dossiers = [...tousDossiers, ...dossiersCrees.filter((c) => !tousDossiers.some((d) => d.id === c.id))]
-    .filter((d) => d.object_type === objet);
+  const dossiers = objetChoisi ? [...tousDossiers, ...dossiersCrees.filter((c) => !tousDossiers.some((d) => d.id === c.id))]
+    .filter((d) => d.object_type === objetChoisi) : [];
   const [nouveauDossier, setNouveauDossier] = useState<string | null>(null);
   const [creationDossier, setCreationDossier] = useState(false);
   const [type, setType] = useState<TypeChamp>(champ?.field_type ?? 'single_line');
@@ -120,9 +124,9 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
 
   useEffect(() => {
     if (!open) return;
-    setObjet(champ?.object_type ?? objetDefaut);
+    setObjet(champ?.object_type ?? (objetAChoisir ? '' : objetDefaut));
     setErreur(null);
-  }, [open, champ, objetDefaut]);
+  }, [open, champ, objetDefaut, objetAChoisir]);
 
   // La clé suit le libellé tant qu'on ne l'a pas touchée (création seulement).
   useEffect(() => {
@@ -137,6 +141,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
 
   const problemes = useMemo(() => {
     const p: string[] = [];
+    if (!objetChoisi) p.push(fr ? 'Choisis l’objet auquel ajouter le champ.' : 'Choose the object to add the field to.');
     if (!label.trim()) p.push(fr ? 'Le nom du champ est obligatoire.' : 'Field name is required.');
     if (cleInvalide) p.push(fr ? 'Clé : lettres minuscules, chiffres et _ (commence par une lettre).' : 'Key: lowercase letters, digits and _ (starts with a letter).');
     if (cleReservee) p.push(fr ? `« ${cle} » est réservé à un champ standard.` : `“${cle}” is reserved for a standard field.`);
@@ -145,7 +150,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
     if (new Set(libelles).size !== libelles.length) p.push(fr ? 'Deux options portent le même nom.' : 'Two options share the same name.');
     if (type === 'number' && config.min != null && config.max != null && config.min > config.max) p.push(fr ? 'Le minimum dépasse le maximum.' : 'Minimum exceeds maximum.');
     return p;
-  }, [label, cleInvalide, cleReservee, cle, avecOptions, options, type, config, fr]);
+  }, [objetChoisi, label, cleInvalide, cleReservee, cle, avecOptions, options, type, config, fr]);
 
   // Liste : libellés stockés ⇄ clés locales des options affichées.
   const cleOption = (o: OptionEdit) => o.id ?? o._cle;
@@ -222,7 +227,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
     label: label || (fr ? 'Nom du champ' : 'Field name'), field_type: type, config, placeholder: placeholder || null,
     options: options.filter((o) => o.label.trim()).map((o, i) => ({ id: o.id ?? o._cle, label: o.label, color: o.color ?? null, position: i, archived_at: null })),
   };
-  const variable = variableAffichee(objet, cle || 'cle');
+  const variable = objetChoisi ? variableAffichee(objetChoisi, cle || 'cle') : `{{${fr ? 'objet' : 'object'}.${cle || 'cle'}}}`;
 
   const [cleEditable, setCleEditable] = useState(false);
   const [detailsOuverts, setDetailsOuverts] = useState(true);
@@ -262,7 +267,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
   return createPortal(
     <div className="fixed inset-0 z-[80] flex justify-end bg-black/30" role="presentation" tabIndex={-1} onClick={() => { void fermer(); }}>
       <div role="dialog" aria-modal="true" aria-labelledby={`${ids}-titre`} tabIndex={-1}
-        className="flex h-full w-full flex-col bg-surface shadow-xl sm:w-[min(1100px,72vw)]" onClick={(e) => e.stopPropagation()}>
+        className="flex h-full w-full flex-col bg-surface shadow-xl sm:w-[92vw] lg:w-[70vw]" onClick={(e) => e.stopPropagation()}>
         {/* En-tête */}
         <div className="flex items-start justify-between border-b border-outline px-6 py-4">
           <div>
@@ -280,8 +285,10 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
             <section className="rounded-xl border border-outline bg-surface-card">
               <button type="button" aria-expanded={detailsOuverts} onClick={() => setDetailsOuverts((o) => !o)}
                 className="flex w-full items-center justify-between px-4 py-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
-                <span className="text-[14px] font-semibold text-text-primary">{fr ? 'Détails du champ' : 'Field details'}</span>
-                <ChevronDown size={16} aria-hidden className={cn('text-text-tertiary transition-transform', !detailsOuverts && '-rotate-90')} />
+                <span className="inline-flex items-center gap-2 text-[14px] font-semibold text-text-primary">
+                  <AlignLeft size={16} aria-hidden className="text-text-secondary" />{fr ? 'Détails du champ' : 'Field details'}
+                </span>
+                <ChevronUp size={16} aria-hidden className={cn('text-text-tertiary transition-transform', !detailsOuverts && 'rotate-180')} />
               </button>
               {detailsOuverts && (
                 <div className="space-y-4 border-t border-outline-subtle px-4 pb-4 pt-3">
@@ -295,8 +302,9 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                     </div>
                     <div>
                       <label htmlFor={`${ids}-objet`} className={etiquette}>{fr ? 'Ajouter à l’objet' : 'Add to object'} <span className="text-red-500">*</span></label>
-                      <select id={`${ids}-objet`} value={objet} disabled={edition}
-                        onChange={(e) => { setObjet(e.target.value as ObjetChamp); setDossier(''); }} className="glass-input h-9 w-full text-[13px]">
+                      <select id={`${ids}-objet`} value={objetChoisi} disabled={edition} required
+                        onChange={(e) => { setObjet(e.target.value as ObjetChamp | ''); setDossier(''); }} className={cn('glass-input h-9 w-full text-[13px]', !objetChoisi && 'text-text-tertiary')}>
+                        {!objetChoisi && <option value="" disabled>{fr ? 'Choisir un objet' : 'Select object'}</option>}
                         {OBJETS.map((o) => <option key={o} value={o}>{fr ? LIBELLES_OBJET[o].fr : LIBELLES_OBJET[o].en}</option>)}
                       </select>
                     </div>
@@ -311,7 +319,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                     <div>
                       <label htmlFor={`${ids}-dossier`} className={etiquette}>{fr ? 'Dossier' : 'Folder name'}</label>
                       {nouveauDossier === null ? (
-                        <select id={`${ids}-dossier`} value={dossier}
+                        <select id={`${ids}-dossier`} value={dossier} disabled={!objetChoisi}
                           onChange={(e) => { if (e.target.value === '__nouveau__') setNouveauDossier(''); else setDossier(e.target.value); }}
                           className="glass-input h-9 w-full text-[13px]">
                           <option value="">{fr ? 'Sans dossier' : 'No folder'}</option>
@@ -395,11 +403,14 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
             <section className="rounded-xl border border-outline bg-surface-card">
               <button type="button" aria-expanded={saisieOuverte} onClick={() => setSaisieOuverte((o) => !o)}
                 className="flex w-full items-center justify-between px-4 py-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-xl">
-                <span>
-                  <span className="block text-[14px] font-semibold text-text-primary">{fr ? 'Valeur par défaut' : 'Set default value'}</span>
-                  <span className="block text-[12px] text-text-tertiary">{fr ? AIDE_TYPE[type].fr : AIDE_TYPE[type].en}</span>
+                <span className="flex items-start gap-2">
+                  <TextCursorInput size={16} aria-hidden className="mt-0.5 shrink-0 text-text-secondary" />
+                  <span>
+                    <span className="block text-[14px] font-semibold text-text-primary">{fr ? 'Valeur par défaut' : 'Set default value'}</span>
+                    <span className="block text-[12px] text-text-tertiary">{fr ? AIDE_TYPE[type].fr : AIDE_TYPE[type].en}</span>
+                  </span>
                 </span>
-                <ChevronDown size={16} aria-hidden className={cn('text-text-tertiary transition-transform', !saisieOuverte && '-rotate-90')} />
+                <ChevronUp size={16} aria-hidden className={cn('text-text-tertiary transition-transform', !saisieOuverte && 'rotate-180')} />
               </button>
               {saisieOuverte && (
                 <div className="space-y-4 border-t border-outline-subtle px-4 pb-4 pt-3">
@@ -514,7 +525,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
         {/* Pied */}
         <div className="flex justify-end gap-2 border-t border-outline px-6 py-3">
           <button type="button" onClick={() => { void fermer(); }} className="glass-button px-4 py-2 text-[13px]">{fr ? 'Annuler' : 'Cancel'}</button>
-          <button type="button" onClick={() => { void enregistrer(); }} disabled={envoi || !label.trim()}
+          <button type="button" onClick={() => { void enregistrer(); }} disabled={envoi || !label.trim() || !objetChoisi}
             className="glass-button-primary inline-flex items-center gap-2 px-4 py-2 text-[13px] disabled:opacity-50">
             {envoi && <Loader2 size={14} className="animate-spin" aria-hidden />}
             {edition ? (fr ? 'Enregistrer' : 'Save') : (fr ? 'Créer le champ' : 'Create custom field')}
