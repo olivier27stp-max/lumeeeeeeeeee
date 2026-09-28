@@ -60,6 +60,7 @@ import SequenceCanvas from '../components/automations/SequenceCanvas';
 import PanneauEtape from '../components/automations/PanneauEtape';
 import TiroirChoix, { type ChoixTiroir } from '../components/automations/TiroirChoix';
 import ClavardageLumi from '../components/automations/ClavardageLumi';
+import InterrupteurPublication from '../components/automations/InterrupteurPublication';
 import { usePlanFeature } from '../hooks/usePlanFeature';
 import PanneauDeclencheur from '../components/automations/PanneauDeclencheur';
 import { useChampsTous, objetDeLaRegle, champSurveille, saisieDepuisValeurCondition } from '../components/champs/automatisations';
@@ -1351,33 +1352,14 @@ export default function AutomationBuilderPage() {
             {fr ? 'Aperçu' : 'Preview'}
           </button>
 
-          {/* Brouillon ⚪—— Publier : l'interrupteur dit l'état ET l'action. */}
-          <div className="inline-flex items-center gap-2 text-xs">
-            <span className={cn('font-medium', !regle.is_active ? 'text-text-primary' : 'text-text-tertiary')}>
-              {fr ? 'Brouillon' : 'Draft'}
-            </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={regle.is_active}
-              onClick={basculerPublication}
-              aria-label={fr ? 'Publier l’automatisation' : 'Publish the automation'}
-              className={cn(
-                'relative h-5 w-9 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                regle.is_active ? 'bg-accent' : 'bg-surface-tertiary',
-              )}
-            >
-              <span
-                className={cn(
-                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all',
-                  regle.is_active ? 'left-[1.125rem]' : 'left-0.5',
-                )}
-              />
-            </button>
-            <span className={cn('font-medium', regle.is_active ? 'text-text-primary' : 'text-text-tertiary')}>
-              {fr ? 'Publiée' : 'Published'}
-            </span>
-          </div>
+          {/* Rouge = brouillon (rien ne part), vert = publiée. */}
+          <InterrupteurPublication
+            actif={regle.is_active}
+            onBascule={basculerPublication}
+            libelle={fr ? 'Publier l’automatisation' : 'Publish the automation'}
+            avecEtiquette
+            fr={fr}
+          />
         </div>
       </div>
 
