@@ -19,6 +19,8 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
   const champsPerso = useChampsCreation('client', fr);
+  // Mêmes champs de base masqués que « Nouveau client » (Gérer les champs).
+  const vis = champsPerso.systeme;
   const id = useId();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -84,10 +86,10 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
               <input id={`${id}-lastName`} value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full mt-1.5" placeholder="Doe" />
             </div>
           </div>
-          <div>
+          {vis('company') && <div>
             <label htmlFor={`${id}-company`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.company}</label>
             <input id={`${id}-company`} value={company} onChange={(e) => setCompany(e.target.value)} className="glass-input w-full mt-1.5" placeholder="Acme Inc." />
-            <label className={`mt-2 flex items-center gap-2 text-[13px] text-text-secondary select-none ${company.trim() ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+            {vis('display_as_company') && <label className={`mt-2 flex items-center gap-2 text-[13px] text-text-secondary select-none ${company.trim() ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
               <input
                 type="checkbox"
                 checked={displayAsCompany && !!company.trim()}
@@ -96,19 +98,19 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
                 className="rounded-[3px] border-[var(--color-outline)] w-4 h-4 accent-[var(--color-text-primary)]"
               />
               {t.common.useCompanyAsName}
-            </label>
-          </div>
+            </label>}
+          </div>}
           <div className="grid grid-cols-2 gap-4">
-            <div>
+            {vis('email') && <div>
               <label htmlFor={`${id}-email`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.email}</label>
               <input id={`${id}-email`} type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass-input w-full mt-1.5" placeholder="john@example.com" />
-            </div>
-            <div>
+            </div>}
+            {vis('phone') && <div>
               <label htmlFor={`${id}-phone`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.phone}</label>
               <input id={`${id}-phone`} type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="glass-input w-full mt-1.5" placeholder="(555) 123-4567" />
-            </div>
+            </div>}
           </div>
-          <div>
+          {vis('address') && <div>
             <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Adresse' : 'Address'}</span>
             <div className="mt-1.5">
               <AddressAutocomplete
@@ -117,7 +119,7 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
                 onSelect={(addr) => { setStructured(addr); setAddressSearch(addr.formatted_address); }}
               />
             </div>
-          </div>
+          </div>}
           {champsPerso.bloc}
         </div>
         <div className="mt-5 flex items-center justify-end gap-3">

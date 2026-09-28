@@ -84,6 +84,9 @@ export default function InvoiceEdit() {
   // (même bloc que job, devis, deal, client) puis s'écrivent sur le brouillon créé.
   // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
   const champsCreation = useChampsCreation('invoice', language === 'fr', { sections: ['details', 'articles', 'totaux', 'notes'] });
+  // Champs de base décochés dans « Gérer les champs » : retirés de la NOUVELLE facture
+  // pour toute l'entreprise (un brouillon existant montre toujours tout).
+  const vis = (cle: string) => !!draftId || champsCreation.systeme(cle);
 
   // Form state
   const [clientId, setClientId] = useState(prefillClientId || '');
@@ -598,7 +601,7 @@ export default function InvoiceEdit() {
           <div className="mx-auto max-w-2xl space-y-6">
             {/* Subject, Created Date & Due Date */}
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-              <div className="space-y-1.5 lg:col-span-2">
+              {vis('subject') && <div className="space-y-1.5 lg:col-span-2">
                 <label htmlFor={`${id}-subject`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {t.invoiceEdit.subject}
                 </label>
@@ -609,8 +612,8 @@ export default function InvoiceEdit() {
                   placeholder={t.invoiceEdit.invoiceSubject}
                   className="glass-input w-full"
                 />
-              </div>
-              <div className="space-y-1.5">
+              </div>}
+              {vis('invoice_date') && <div className="space-y-1.5">
                 <label htmlFor={`${id}-created-date`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {language === 'fr' ? 'Date de création' : 'Date of creation'}
                 </label>
@@ -621,8 +624,8 @@ export default function InvoiceEdit() {
                   onChange={(e) => setCreatedDate(e.target.value)}
                   className="glass-input w-full"
                 />
-              </div>
-              <div className="space-y-1.5">
+              </div>}
+              {vis('due_date') && <div className="space-y-1.5">
                 <label htmlFor={`${id}-due-date`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {language === 'fr' ? 'Date d\'échéance' : 'Due Date'}
                 </label>
@@ -633,11 +636,11 @@ export default function InvoiceEdit() {
                   onChange={(e) => setDueDate(e.target.value)}
                   className="glass-input w-full"
                 />
-              </div>
+              </div>}
             </div>
 
             {/* Salesperson */}
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+            {vis('salesperson') && <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
               <div className="space-y-1.5 lg:col-span-2">
                 <label htmlFor={`${id}-salesperson`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {language === 'fr' ? 'Vendeur' : 'Salesperson'}
@@ -659,7 +662,7 @@ export default function InvoiceEdit() {
                   </p>
                 )}
               </div>
-            </div>
+            </div>}
             {!draftId && champsCreation.section('details')}
 
             {/* Line Items */}
@@ -745,7 +748,7 @@ export default function InvoiceEdit() {
             {/* Totals & Tax/Discount */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="space-y-3">
-                <div className="space-y-1.5">
+                {vis('discount') && <div className="space-y-1.5">
                   <label htmlFor={`${id}-discount`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                     {t.invoiceEdit.discount}
                   </label>
@@ -758,7 +761,7 @@ export default function InvoiceEdit() {
                     onChange={(e) => setDiscountDollars(Number(e.target.value) || 0)}
                     className="glass-input w-full"
                   />
-                </div>
+                </div>}
                 <div className="space-y-1.5">
                   <label htmlFor={`${id}-tax`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                     {t.invoiceEdit.tax}
@@ -799,7 +802,7 @@ export default function InvoiceEdit() {
 
             {/* Notes */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="space-y-1.5">
+              {vis('notes') && <div className="space-y-1.5">
                 <label htmlFor={`${id}-notes`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {t.invoiceEdit.notesVisibleToClient}
                 </label>
@@ -811,8 +814,8 @@ export default function InvoiceEdit() {
                   placeholder={t.invoiceEdit.notesForTheClient}
                   className="glass-input w-full resize-none"
                 />
-              </div>
-              <div className="space-y-1.5">
+              </div>}
+              {vis('internal_notes') && <div className="space-y-1.5">
                 <label htmlFor={`${id}-internal-notes`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {t.invoiceEdit.internalNotes}
                 </label>
@@ -824,7 +827,7 @@ export default function InvoiceEdit() {
                   placeholder={t.invoiceEdit.internalNotesNotOnInvoice}
                   className="glass-input w-full resize-none"
                 />
-              </div>
+              </div>}
             </div>
             {!draftId && champsCreation.section('notes')}
 

@@ -129,6 +129,8 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
   const [addedServiceIds, setAddedServiceIds] = useState<Set<string>>(new Set());
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
   const champsPerso = useChampsCreation('quote', language === 'fr');
+  // Mêmes champs de base masqués que « Nouveau devis » (Gérer les champs).
+  const vis = champsPerso.systeme;
 
   // ── Client-view preview ──
   const [showPreview, setShowPreview] = useState(false);
@@ -729,8 +731,8 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
 
             {/* ── Title + Meta ── */}
             <div className="space-y-4">
-              <input autoFocus={!createLeadInline} value={title} onChange={e => setTitle(e.target.value)} aria-label={tq.titlePlaceholder}
-                className={cn(inputCls, 'text-lg font-medium py-3 rounded-xl')} placeholder={tq.titlePlaceholder} />
+              {vis('title') && <input autoFocus={!createLeadInline} value={title} onChange={e => setTitle(e.target.value)} aria-label={tq.titlePlaceholder}
+                className={cn(inputCls, 'text-lg font-medium py-3 rounded-xl')} placeholder={tq.titlePlaceholder} />}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <label htmlFor={`${id}-client`} className={labelCls}>{tq.clientLabel}</label>
@@ -745,7 +747,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                     </select>
                   )}
                 </div>
-                {clientId && properties.length > 0 && (
+                {vis('property') && clientId && properties.length > 0 && (
                   <div><label htmlFor={`${id}-property`} className={labelCls}>{t.modals.property}</label>
                     <select id={`${id}-property`} value={propertyId} onChange={e => setPropertyId(e.target.value)} className={inputCls}>
                       <option value="">{t.modals.selectProperty}</option>
@@ -754,27 +756,27 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                       ))}
                     </select></div>
                 )}
-                <div><label htmlFor={`${id}-quoteNumber`} className={labelCls}>{tq.quoteNumber}</label>
+                {vis('quote_number') && <div><label htmlFor={`${id}-quoteNumber`} className={labelCls}>{tq.quoteNumber}</label>
                   <input id={`${id}-quoteNumber`} value={quoteNumber}
                     onChange={e => { setQuoteNumber(e.target.value.replace(/\D/g, '')); setQuoteNumberTouched(true); }}
-                    className={inputCls} placeholder={tq.auto} disabled={!nextQuoteNumber} /></div>
-                <div><label htmlFor={`${id}-salesperson`} className={labelCls}>{tq.salesperson}</label>
+                    className={inputCls} placeholder={tq.auto} disabled={!nextQuoteNumber} /></div>}
+                {vis('salesperson') && <div><label htmlFor={`${id}-salesperson`} className={labelCls}>{tq.salesperson}</label>
                   <select id={`${id}-salesperson`} value={salespersonId} onChange={e => setSalespersonId(e.target.value)} className={inputCls}>
                     <option value="">{tq.assign}</option>
                     {salespeople.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-                  </select></div>
-                <div><label htmlFor={`${id}-validDays`} className={labelCls}>{tq.validForDays}</label>
-                  <input id={`${id}-validDays`} type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={inputCls} /></div>
+                  </select></div>}
+                {vis('valid_days') && <div><label htmlFor={`${id}-validDays`} className={labelCls}>{tq.validForDays}</label>
+                  <input id={`${id}-validDays`} type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={inputCls} /></div>}
               </div>
             </div>
 
             {/* ── Optional sections ── */}
             <div className="flex flex-wrap items-center gap-2">
               {[
-                { key: 'intro', label: tq.introduction, enabled: introEnabled, toggle: setIntroEnabled },
-                { key: 'disclaimer', label: tq.contractDisclaimer, enabled: disclaimerEnabled, toggle: setDisclaimerEnabled },
-                { key: 'clientMsg', label: tq.clientMessageLabel, enabled: clientMessageEnabled, toggle: setClientMessageEnabled },
-              ].map(s => (
+                { key: 'intro', champ: 'introduction', label: tq.introduction, enabled: introEnabled, toggle: setIntroEnabled },
+                { key: 'disclaimer', champ: 'contract_disclaimer', label: tq.contractDisclaimer, enabled: disclaimerEnabled, toggle: setDisclaimerEnabled },
+                { key: 'clientMsg', champ: 'client_message', label: tq.clientMessageLabel, enabled: clientMessageEnabled, toggle: setClientMessageEnabled },
+              ].filter(s => vis(s.champ)).map(s => (
                 <button key={s.key} type="button" onClick={() => s.toggle(!s.enabled)}
                   className={cn('px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                     s.enabled ? 'bg-primary/10 text-primary border-primary/30' : 'bg-surface-secondary text-text-secondary border-outline hover:bg-surface-tertiary')}>
@@ -784,7 +786,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             </div>
 
             {/* ── Introduction ── */}
-            {introEnabled && (
+            {introEnabled && vis('introduction') && (
               <div className="section-card p-4 space-y-2">
                 <h4 className="text-[14px] font-bold tracking-tight text-text-primary">{tq.introduction}</h4>
                 <textarea value={introContent} onChange={e => setIntroContent(e.target.value)} aria-label={tq.introduction}
@@ -868,7 +870,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                 <span className="text-text-secondary">{tq.subtotal}</span>
                 <span className="font-medium text-text-primary">{formatQuoteMoney(subtotalCents)}</span>
               </div>
-              <div className="flex justify-between items-center text-sm">
+              {vis('discount') && <div className="flex justify-between items-center text-sm">
                 <span className="text-text-secondary">{tq.discount}</span>
                 {discountType ? (
                   <div className="flex items-center gap-2">
@@ -885,7 +887,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                   <button type="button" onClick={() => setDiscountType('percentage')}
                     className="text-xs text-primary hover:underline">{tq.addDiscount}</button>
                 )}
-              </div>
+              </div>}
               <div className="flex justify-between items-center text-sm">
                 <span className="text-text-secondary">{tq.tax}</span>
                 <div className="flex items-center gap-2">
@@ -908,13 +910,13 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             </div>
 
             {/* ── Deposit Settings ── */}
-            <div className="section-card p-5 space-y-3">
+            {(vis('deposit_required') || vis('require_payment_method')) && <div className="section-card p-5 space-y-3">
               <h3 className="text-[14px] font-bold tracking-tight text-text-primary">{tq.depositPaymentSettings}</h3>
-              <label className="flex items-center gap-3 cursor-pointer">
+              {vis('deposit_required') && <label className="flex items-center gap-3 cursor-pointer">
                 <input type="checkbox" checked={depositRequired} onChange={e => setDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
                 <span className="text-[13px] text-text-primary">{tq.requireDeposit}</span>
-              </label>
-              {depositRequired && (
+              </label>}
+              {depositRequired && vis('deposit_required') && (
                 <div className="ml-7 space-y-3 border-l-2 border-outline pl-4">
                   <div className="flex items-center gap-3">
                     <select value={depositType} onChange={e => setDepositType(e.target.value as any)} aria-label={tq.requireDeposit}
@@ -945,14 +947,14 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                   </p>
                 </div>
               )}
-              <label className="flex items-center gap-3 cursor-pointer">
+              {vis('require_payment_method') && <label className="flex items-center gap-3 cursor-pointer">
                 <input type="checkbox" checked={requirePaymentMethod} onChange={e => setRequirePaymentMethod(e.target.checked)} className="h-4 w-4 rounded" />
                 <span className="text-[13px] text-text-primary">{tq.requirePaymentMethod}</span>
-              </label>
-            </div>
+              </label>}
+            </div>}
 
             {/* ── Contract / Disclaimer ── */}
-            {disclaimerEnabled && (
+            {disclaimerEnabled && vis('contract_disclaimer') && (
               <div className="section-card p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <h4 className="text-[14px] font-bold tracking-tight text-text-primary">{tq.contractDisclaimer}</h4>
@@ -964,21 +966,21 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             )}
 
             {/* ── Notes ── */}
-            <div className="section-card border-dashed p-5">
+            {vis('notes') && <div className="section-card border-dashed p-5">
               <h4 className="text-[14px] font-bold tracking-tight text-text-primary mb-2">{tq.notes}</h4>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} aria-label={tq.notes}
                 className="w-full px-3 py-2 border-0 text-sm min-h-[80px] resize-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 bg-transparent text-text-primary placeholder:text-text-tertiary"
                 placeholder={tq.notesPlaceholder} />
               <p className="text-[10px] text-text-muted mt-1">{tq.notesVisibleToClient}</p>
-            </div>
+            </div>}
 
             {/* ── Specific Notes (photos, files, etc.) ── */}
-            <SpecificNotesInline ref={specificNotesRef} tempEntityType="quote" />
+            {vis('specific_notes') && <SpecificNotesInline ref={specificNotesRef} tempEntityType="quote" />}
 
             {champsPerso.bloc}
 
             {/* ── Client message ── */}
-            {clientMessageEnabled && (
+            {clientMessageEnabled && vis('client_message') && (
               <div className="section-card p-4 space-y-2">
                 <h4 className="text-[14px] font-bold tracking-tight text-text-primary">{tq.clientMessageHeading}</h4>
                 <textarea value={clientMessage} onChange={e => setClientMessage(e.target.value)} aria-label={tq.clientMessageHeading}
