@@ -587,6 +587,8 @@ async function executeRuleActions(
     langue: await langueOrg(config.supabase, event.orgId),
     ruleId: rule.id,
     chaine: Array.isArray(event.metadata?.chaine) ? (event.metadata!.chaine as string[]) : undefined,
+    // Rejeu par l'outbox : le traitement coupé a pu envoyer avant de mourir.
+    ...(event.rejoueDepuis ? { dejaEnvoyeDepuis: event.rejoueDepuis } : {}),
   };
 
   // La fenêtre d'envoi se calcule dans le fuseau de l'ENTREPRISE, pas dans
@@ -641,7 +643,14 @@ async function executeRuleActions(
     const startTime = Date.now();
 
     try {
-      const result = await executeAction(action.type, action.config, vars, contextePour(action));
+      // Délai max, comme la file : l'outbox tient pour orphelin un événement
+      // non coché après 3 min et le rejoue. Une action immédiate sans borne
+      // pouvait encore tourner à ce moment-là → double envoi (launch M5).
+      const result = await avecDelaiMax(
+        executeAction(action.type, action.config, vars, contextePour(action)),
+        DELAI_MAX_ACTION_MS,
+        `${action.type} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
+      );
       const durationMs = Date.now() - startTime;
 
       await journaliserAction(config.supabase, reservation, rule, event, i, {
@@ -1556,6 +1565,12 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         commercial: true,
         langue: await langueOrg(supabase, task.org_id),
         ruleId: task.automation_rule_id,
+        // Une tentative a déjà eu lieu (`attempts` est incrémenté à la prise) :
+        // délai dépassé, ou tâche récupérée après un arrêt entre l'envoi et la
+        // clôture. Le message est peut-être parti — on vérifie avant de
+        // renvoyer (launch M5).
+        ...(Number(task.attempts || 0) > 0 ? { dejaEnvoyeDepuis: String(task.created_at) } : {}),
+        cleIdempotence: `${task.id}:${task.step_id ?? 'action'}`,
         // Étape de séquence : la chaîne voyage dans son contexte (anti-boucle des étiquettes).
         chaine: Array.isArray((task.sequence_context as Record<string, unknown> | null)?.chaine)
           ? ((task.sequence_context as Record<string, unknown>).chaine as string[]) : undefined,
