@@ -31,7 +31,10 @@ export default function InterrupteurPublication({ actif, onBascule, libelle, enC
         aria-checked={actif}
         aria-label={libelle}
         onClick={onBascule}
-        disabled={enCours || desactive}
+        // Jamais bloqué pendant un envoi : on peut cliquer autant qu'on veut,
+        // la file (fileBascule.ts) garde la base alignée sur l'écran.
+        disabled={desactive}
+        aria-busy={enCours || undefined}
         className={cn(
           'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-accent',

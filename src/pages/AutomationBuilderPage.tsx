@@ -86,6 +86,7 @@ import { apercuClientsInactifs } from '../lib/reservationApi';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
 import OngletReglages, { type ReglagesAutomatisation } from '../components/automations/OngletReglages';
 import { confirmer } from '../components/ui/ConfirmDialog';
+import { creerFileBascule } from '../lib/fileBascule';
 
 type Onglet = 'parcours' | 'reglages' | 'historique' | 'journaux';
 
@@ -110,6 +111,31 @@ export default function AutomationBuilderPage() {
   const lumiDisponible = aLumi || planEnChargement;
 
   const [regle, setRegle] = useState<AutomationRule | null>(null);
+  /*
+   * Interrupteur martelé (Rafba, 2026-09-28) : chaque clic envoyait sa
+   * requête calculée sur un état périmé, et la dernière réponse ARRIVÉE
+   * gagnait. La file envoie un changement à la fois et finit toujours sur
+   * le dernier clic (fileBascule.ts).
+   */
+  const frBascule = useRef(language === 'fr');
+  useEffect(() => { frBascule.current = language === 'fr'; }, [language]);
+  const confirmationPublication = useRef(false);
+  const [, setVersionBascule] = useState(0);
+  const [fileBascule] = useState(() => creerFileBascule({
+    envoyer: async (id, actif) => { await modifierAutomatisation(id, { is_active: actif }); },
+    surFin: (id, actif) => {
+      setRegle((r) => (r && r.id === id ? { ...r, is_active: actif } : r));
+      setVersionBascule((v) => v + 1);
+      toast.success(actif
+        ? (frBascule.current ? 'Automatisation publiée' : 'Automation published')
+        : (frBascule.current ? 'Repassée en brouillon' : 'Back to draft'), { id: `bascule-${id}` });
+    },
+    surEchec: (id, retour, erreur) => {
+      setRegle((r) => (r && r.id === id ? { ...r, is_active: retour } : r));
+      setVersionBascule((v) => v + 1);
+      toast.error(erreur instanceof Error ? erreur.message : String(erreur), { id: `bascule-${id}` });
+    },
+  }));
   const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
   const [chargement, setChargement] = useState(true);
   const [onglet, setOnglet] = useState<Onglet>('parcours');
@@ -852,7 +878,9 @@ export default function AutomationBuilderPage() {
   // ── Publier / dépublier ──
   const basculerPublication = async () => {
     if (!regle) return;
-    const versActive = !regle.is_active;
+    // Une confirmation déjà à l'écran : les clics suivants n'en ouvrent pas d'autres.
+    if (confirmationPublication.current) return;
+    const versActive = !fileBascule.etatAffiche(regle.id, regle.is_active);
     if (versActive) {
       /*
        * REFUSER AVANT, PAS APRÈS.
@@ -901,6 +929,7 @@ export default function AutomationBuilderPage() {
           console.error('[AutomationBuilderPage] aperçu clients inactifs', e);
         }
       }
+      confirmationPublication.current = true;
       const ok = await confirmer({
         title: fr ? 'Publier cette automatisation ?' : 'Publish this automation?',
         message: [
@@ -911,18 +940,11 @@ export default function AutomationBuilderPage() {
           ...avertissements.map((a) => `⚠ ${a.message}`),
         ].join('\n\n'),
         confirmLabel: fr ? 'Publier' : 'Publish',
-      });
+      }).finally(() => { confirmationPublication.current = false; });
       if (!ok) return;
     }
-    try {
-      const maj = await modifierAutomatisation(regle.id, { is_active: versActive });
-      setRegle(maj);
-      toast.success(versActive
-        ? (fr ? 'Automatisation publiée' : 'Automation published')
-        : (fr ? 'Repassée en brouillon' : 'Back to draft'));
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
+    const voulu = fileBascule.basculer(regle.id, regle.is_active);
+    setRegle((r) => (r ? { ...r, is_active: voulu } : r));
   };
 
   // ── Déplacement du canevas ──
@@ -1370,6 +1392,7 @@ export default function AutomationBuilderPage() {
           <InterrupteurPublication
             actif={regle.is_active}
             onBascule={basculerPublication}
+            enCours={fileBascule.enCours(regle.id)}
             libelle={fr ? 'Publier l’automatisation' : 'Publish the automation'}
             avecEtiquette
             fr={fr}

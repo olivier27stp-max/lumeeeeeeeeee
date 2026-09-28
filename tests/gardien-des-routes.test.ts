@@ -204,6 +204,7 @@ describe('aucune route ne reste sans protection', () => {
   const GARDE = new RegExp([
     'requireAuthedClient', 'requireAuth', 'isOrgAdminOrOwner',
     'requireRole',              // rbac.ts : session + adhésion + rôle (quickbooks.ts : owner/admin)
+    'requireFinancialAccess',   // rbac.ts : session + adhésion + permission (invoice-mark-paid.ts)
     'getUserContext', 'hasPermission', 'CRON_SECRET', 'authRateLimit',
     'requireCreatorSpace',      // creator-space-audit.ts : platformAdminIds
     'x-migration-invite',       // migration-portal.ts : jeton hache
