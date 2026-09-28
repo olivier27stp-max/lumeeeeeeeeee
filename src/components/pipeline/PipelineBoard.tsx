@@ -18,10 +18,10 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  ArrowUpDown, Filter, GripVertical, LayoutGrid, List, Plus, Search, X,
+  ArrowUpDown, Filter, GripVertical, LayoutGrid, List, Plus, Search, Tag, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { confirmer } from '../ui/ConfirmDialog';
 import { usePermissions } from '../../hooks/usePermissions';
 import ActionsRapides from './ActionsRapides';
@@ -47,6 +47,16 @@ import {
 import type { DealSource, MockStage } from '../../lib/pipeline/mockData';
 import { useChampsCreation } from '../champs/creation';
 import { CompanyContext } from '../../contexts/CompanyContext';
+import SelecteurEtiquettes, {
+  CLE_ETIQUETTES_CLIENTS, EtiquettesCompactes, useEtiquettesDesClients,
+} from '../etiquettes/SelecteurEtiquettes';
+import { PanneauFiltreEtiquettes } from '../etiquettes/FiltreEtiquettes';
+import { poserEtiquette, retirerEtiquette } from '../../lib/etiquettesApi';
+import {
+  FILTRE_ETIQUETTES_VIDE, clientsDistincts, correspondEtiquettes, etiquettesDepuisVue, etiquettesVersVue,
+  nbFiltresEtiquettes, type FiltreEtiquettes,
+} from '../../lib/etiquettesFiltre';
+import { captureClientException } from '../../lib/sentry';
 
 interface Membre { id: string; name: string }
 
@@ -127,10 +137,12 @@ const CLASSE_CHAMP =
 
 function CarteDeal({
   deal, etapes, membres, montantCents, onOuvrir, onAssigner, onChangement,
-  selectionne, onBasculerSelection, extra,
+  selectionne, onBasculerSelection, extra, etiquettes,
 }: {
   /** Champs personnalisés choisis pour les cartes de ce pipeline. */
   extra?: ReactNode;
+  /** Étiquettes du CLIENT du deal (D1) — sous les champs de la carte. */
+  etiquettes?: readonly string[];
   /** `undefined` = mode sélection inactif : aucune case n'est dessinée. */
   selectionne?: boolean;
   onBasculerSelection?: (dealId: string) => void;
@@ -328,6 +340,13 @@ function CarteDeal({
 
       {extra}
 
+      {/* Deux pastilles au plus, puis « +N » : la carte doit rester lisible. */}
+      {etiquettes && etiquettes.length > 0 && (
+        <div className="mt-1.5">
+          <EtiquettesCompactes noms={etiquettes} fr={fr} />
+        </div>
+      )}
+
       {deal.lost_reason && (
         <p className="mt-1 truncate text-[10px] text-text-muted">↳ {deal.lost_reason}</p>
       )}
@@ -339,10 +358,12 @@ function CarteDeal({
 
 function Colonne({
   etape, etapes, rangOuvert, deals, membres, montants, onOuvrir, onAssigner, onChangement,
-  selection, onBasculerSelection, modeCouleur, extraCarte,
+  selection, onBasculerSelection, modeCouleur, extraCarte, etiquettesClients,
 }: {
   /** Contenu ajouté au bas de chaque carte (champs personnalisés). */
   extraCarte?: (deal: Deal) => ReactNode;
+  /** Étiquettes par client (une requête groupée pour tout le board). */
+  etiquettesClients?: Record<string, string[]>;
   /** Où poser la teinte de l'étape — réglage du pipeline. */
   modeCouleur: ModeCouleur;
   /** Les deals cochés. `undefined` = mode sélection inactif. */
@@ -449,6 +470,7 @@ function Colonne({
               selectionne={selection?.has(deal.id)}
               onBasculerSelection={onBasculerSelection}
               extra={extraCarte?.(deal)}
+              etiquettes={etiquettesClients?.[deal.client_id]}
             />
           ))}
           {deals.length === 0 && (
@@ -556,6 +578,10 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
   // '' = pas encore touché : on suit le pipeline affiché.
   const [pipelineId, setPipelineId] = useState('');
   const [envoi, setEnvoi] = useState(false);
+  // Étiquettes à poser sur le CLIENT une fois le deal créé (D1).
+  const [etiquettesClient, setEtiquettesClient] = useState<string[]>([]);
+  const qc = useQueryClient();
+  const idEtiquettes = useId();
   // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
   const champsPerso = useChampsCreation('deal', fr, { sections: ['depart', 'contact', 'previsions'] });
   const idPipeline = useId();
@@ -615,6 +641,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
     setDevis(null);
     setRecherche('');
     setPipelineId('');
+    setEtiquettesClient([]);
     onFermer();
   }
 
@@ -680,6 +707,29 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
       let completes = 0;
       if (r.dealExistant) completes = await champsPerso.completerVides(r.dealId);
       else await champsPerso.enregistrer(r.dealId);
+      // Les étiquettes vont sur le client du deal — celui choisi, ou celui que
+      // la base a créé (ou retrouvé) pour un nouveau contact.
+      const clientDuDeal = r.clientId
+        ?? (mode === 'client' ? client?.id ?? null : mode === 'devis' ? devis?.clientId ?? null : null);
+      if (etiquettesClient.length > 0 && clientDuDeal) {
+        let echecs = 0;
+        for (const tag of etiquettesClient) {
+          try {
+            await poserEtiquette(clientDuDeal, tag);
+          } catch (err) {
+            echecs += 1;
+            console.error('[pipeline] étiquette non posée à la création du deal', err);
+            captureClientException(err, { contexte: 'ModalNouveauDeal.etiquettes', tag });
+          }
+        }
+        if (echecs > 0) {
+          toast.error(fr
+            ? `Deal créé, mais ${echecs} étiquette(s) n’ont pas pu être posées sur le client.`
+            : `Deal created, but ${echecs} tag(s) could not be added to the client.`);
+        }
+        void qc.invalidateQueries({ queryKey: [CLE_ETIQUETTES_CLIENTS] });
+        void qc.invalidateQueries({ queryKey: ['etiquettes'] });
+      }
       if (r.dealExistant) {
         toast.success(completes > 0
           ? (fr
@@ -968,6 +1018,18 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
         )}
 
         {champsPerso.section('contact')}
+        {/* Étiquettes du client : posées sur sa fiche après la création. */}
+        <div role="group" aria-labelledby={idEtiquettes}>
+          <p id={idEtiquettes} className="mb-1.5 text-[11px] text-text-tertiary">
+            {fr ? 'Étiquettes du client (facultatif)' : 'Client tags (optional)'}
+          </p>
+          <SelecteurEtiquettes
+            valeurs={etiquettesClient}
+            fr={fr}
+            onAjouter={(tag) => setEtiquettesClient((v) => (v.some((x) => x.toLowerCase() === tag.toLowerCase()) ? v : [...v, tag]))}
+            onRetirer={(tag) => setEtiquettesClient((v) => v.filter((x) => x !== tag))}
+          />
+        </div>
         {/*
           Ce qui fait vivre les prévisions. Rien n'est obligatoire : rendre le
           montant requis ferait saisir des chiffres inventés, et une prévision
@@ -1108,8 +1170,10 @@ function BarreOutils({
   fr, total, filtres, sources, membres, panneauOuvert, tri, affichage,
   pipelines, pipelineActif, onChangerPipeline, etapesFiltrables, onCreerPipeline,
   onFiltres, onBasculerPanneau, onTri, onAffichage, onNouveauDeal,
-  extraPanneau,
+  extraPanneau, nbFiltresExtra = 0,
 }: {
+  /** Filtres tenus hors d'EtatFiltres (étiquettes, champs) : comptés dans le badge. */
+  nbFiltresExtra?: number;
   /** Ouvre les réglages pour créer un pipeline. Absent = pas le droit. */
   onCreerPipeline?: () => void;
   /** Section ajoutée au panneau de filtres (champs personnalisés). */
@@ -1144,7 +1208,7 @@ function BarreOutils({
   const idMontant = useId();
   const idDepuis = useId();
 
-  const nbFiltres = Object.values(filtres).filter((v) => v !== '').length;
+  const nbFiltres = Object.values(filtres).filter((v) => v !== '').length + nbFiltresExtra;
 
   return (
     <>
@@ -1407,6 +1471,133 @@ function BarreOutils({
   );
 }
 
+// ── Étiquettes en lot ──
+
+/**
+ * « Ajouter / Retirer une étiquette » sur les deals cochés.
+ *
+ * L'étiquette va sur les CLIENTS de ces deals (D1), une fois par client
+ * même s'il a plusieurs deals cochés ; un deal sans client est ignoré.
+ * Chaque pose annonce « Étiquette ajoutée » au moteur : on le dit AVANT de
+ * confirmer, parce que 40 clients = 40 départs d'automatisation.
+ * Écritures l'une après l'autre (pas de rafale sur la base ni sur le
+ * moteur), et le bilan réel à la fin : jamais « 40 faits » si 3 ont échoué.
+ */
+function ModalEtiquettesLot({ action, fr, nbDeals, nbSansClient, clientIds, onFermer, onTermine }: {
+  action: 'ajouter' | 'retirer' | null;
+  fr: boolean;
+  nbDeals: number;
+  /** Deals cochés sans client : ignorés, et on le dit. */
+  nbSansClient: number;
+  clientIds: string[];
+  onFermer: () => void;
+  onTermine: () => void;
+}) {
+  const [tags, setTags] = useState<string[]>([]);
+  const [enCours, setEnCours] = useState(false);
+  useEffect(() => { if (!action) setTags([]); }, [action]);
+  if (!action) return null;
+  const ajouter = action === 'ajouter';
+  const nbClients = clientIds.length;
+
+  async function appliquer() {
+    if (tags.length === 0 || nbClients === 0 || enCours) return;
+    const liste = tags.map((t) => `« ${t} »`).join(', ');
+    const ok = await confirmer({
+      title: ajouter
+        ? (fr ? `Ajouter ${liste} ?` : `Add ${liste}?`)
+        : (fr ? `Retirer ${liste} ?` : `Remove ${liste}?`),
+      message: ajouter
+        ? (fr
+          ? `${nbClients} client(s) des ${nbDeals} deal(s) sélectionné(s) recevront l’étiquette. Les automatisations « Étiquette ajoutée » partiront pour chaque client.`
+          : `${nbClients} client(s) of the ${nbDeals} selected deal(s) will get the tag. “Tag added” automations will run for each client.`)
+        : (fr
+          ? `L’étiquette sera retirée de ${nbClients} client(s) des ${nbDeals} deal(s) sélectionné(s). Les automatisations « Étiquette retirée » partiront pour chaque client.`
+          : `The tag will be removed from ${nbClients} client(s) of the ${nbDeals} selected deal(s). “Tag removed” automations will run for each client.`),
+      confirmLabel: ajouter ? (fr ? 'Ajouter' : 'Add') : (fr ? 'Retirer' : 'Remove'),
+      danger: !ajouter,
+    });
+    if (!ok) return;
+    setEnCours(true);
+    let reussis = 0;
+    const erreurs: string[] = [];
+    for (const clientId of clientIds) {
+      try {
+        for (const tag of tags) {
+          if (ajouter) await poserEtiquette(clientId, tag);
+          else await retirerEtiquette(clientId, tag);
+        }
+        reussis += 1;
+      } catch (err) {
+        console.error('[pipeline] étiquette en lot refusée', err);
+        captureClientException(err, { contexte: 'ModalEtiquettesLot', action, clientId });
+        erreurs.push(err instanceof Error ? err.message : String(err));
+      }
+    }
+    const echecs = erreurs.length;
+    void journaliserLot({
+      libelle: ajouter
+        ? (fr ? `Étiquette ajoutée (${tags.join(', ')})` : `Tag added (${tags.join(', ')})`)
+        : (fr ? `Étiquette retirée (${tags.join(', ')})` : `Tag removed (${tags.join(', ')})`),
+      operation: 'modification',
+      statut: echecs === 0 ? 'termine' : echecs === nbClients ? 'echoue' : 'partiel',
+      total: nbClients,
+      reussis,
+      echoues: echecs,
+      cibles: clientIds,
+      erreurs: erreurs.slice(0, 20),
+    });
+    setEnCours(false);
+    if (echecs === 0) {
+      toast.success(ajouter
+        ? (fr ? `Étiquette ajoutée à ${reussis} client(s).` : `Tag added to ${reussis} client(s).`)
+        : (fr ? `Étiquette retirée de ${reussis} client(s).` : `Tag removed from ${reussis} client(s).`));
+    } else {
+      toast.error(fr ? `${reussis} client(s) mis à jour, ${echecs} en échec.` : `${reussis} client(s) updated, ${echecs} failed.`);
+    }
+    onTermine();
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onFermer}
+      size="md"
+      title={ajouter ? (fr ? 'Ajouter une étiquette' : 'Add a tag') : (fr ? 'Retirer une étiquette' : 'Remove a tag')}
+      description={fr
+        ? `Sur les clients des deals sélectionnés : ${nbClients} client(s) pour ${nbDeals} deal(s).`
+        : `On the clients of the selected deals: ${nbClients} client(s) for ${nbDeals} deal(s).`}
+    >
+      <div className="flex flex-col gap-3">
+        <SelecteurEtiquettes
+          valeurs={tags}
+          fr={fr}
+          sansCreation={!ajouter}
+          onAjouter={(t) => setTags((v) => (v.some((x) => x.toLowerCase() === t.toLowerCase()) ? v : [...v, t]))}
+          onRetirer={(t) => setTags((v) => v.filter((x) => x !== t))}
+        />
+        {nbSansClient > 0 && (
+          <p className="text-[11.5px] text-text-tertiary">
+            {fr ? `${nbSansClient} deal(s) sans client ignoré(s).` : `${nbSansClient} deal(s) without a client skipped.`}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onFermer} className={CLASSE_BOUTON}>{fr ? 'Annuler' : 'Cancel'}</button>
+          <button
+            type="button"
+            onClick={() => { void appliquer(); }}
+            disabled={tags.length === 0 || nbClients === 0 || enCours}
+            className={cn(CLASSE_BOUTON, 'font-semibold text-white disabled:opacity-60')}
+            style={{ background: 'var(--color-accent)', borderColor: 'var(--color-accent)' }}
+          >
+            {enCours ? (fr ? 'Application…' : 'Applying…') : (fr ? 'Appliquer' : 'Apply')}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Board ──
 
 /**
@@ -1527,8 +1718,10 @@ const CLASSES_COLONNE: Record<string, string> = {
  * Cliquer l'en-tête d'un champ trie par ce champ : c'est le même tri que
  * « Trier par champ » du panneau de filtres (une seule source, `triChamp`).
  */
-function ListeDeals({ fr, deals, etapes, montants, membres, maintenant, valeurs, triChamp, onTriChamp, onOuvrir }: {
+function ListeDeals({ fr, deals, etapes, montants, membres, maintenant, valeurs, triChamp, onTriChamp, onOuvrir, etiquettesClients }: {
   fr: boolean;
+  /** Étiquettes par client : la colonne « Étiquettes » (les mêmes que sur les cartes). */
+  etiquettesClients: Record<string, string[]>;
   deals: Deal[];
   etapes: PipelineStage[];
   montants: Record<string, number>;
@@ -1568,7 +1761,14 @@ function ListeDeals({ fr, deals, etapes, montants, membres, maintenant, valeurs,
       id: 'inactif', libelle: fr ? 'Inactif' : 'Inactive', largeur: 'auto', parDefaut: true,
       cellule: (d) => (priorite(d, etapes) ? `${joursDepuis(d.last_activity_at, maintenant)} ${fr ? 'j' : 'd'}` : '—'),
     },
-  ], [fr, etapes, montants, membres, maintenant]);
+    {
+      id: 'etiquettes', libelle: fr ? 'Étiquettes' : 'Tags', largeur: 'auto', parDefaut: true,
+      cellule: (d) => {
+        const noms = etiquettesClients[d.client_id] ?? [];
+        return noms.length > 0 ? <EtiquettesCompactes noms={noms} fr={fr} /> : '—';
+      },
+    },
+  ], [fr, etapes, montants, membres, maintenant, etiquettesClients]);
   const colonnes = useColonnesTableau<Deal>('deal', standard, fr);
   const classeTh = 'border-b border-outline px-3.5 py-2.5 text-left text-[10.5px] font-semibold uppercase tracking-wider text-text-tertiary';
 
@@ -1688,6 +1888,13 @@ export default function PipelineBoard({
   const idsDeals = useMemo(() => deals.map((d) => d.id), [deals]);
   const champsPipeline = useChampsPipeline(pipelineActif, idsDeals);
   const filtreChamps = useFiltreChamps(champsPipeline.actif ? conditionsChamps : [], idsDeals);
+  // Étiquettes des CLIENTS des deals (D1) : une seule requête pour tout le
+  // board — cartes, colonne de la liste, filtre et actions en lot.
+  const [filtreEtiquettes, setFiltreEtiquettes] = useState<FiltreEtiquettes>(FILTRE_ETIQUETTES_VIDE);
+  const idsClients = useMemo(() => deals.map((d) => d.client_id), [deals]);
+  const { parClient: etiquettesClients } = useEtiquettesDesClients(idsClients);
+  const qc = useQueryClient();
+  const [lotEtiquette, setLotEtiquette] = useState<'ajouter' | 'retirer' | null>(null);
   const [affichage, setAffichage] = useState<Affichage>('kanban');
   const [vue, setVue] = useState<VueEnregistree | string>('tous');
   const [nouveauDeal, setNouveauDeal] = useState(false);
@@ -1807,8 +2014,9 @@ export default function PipelineBoard({
   // Les conditions de champs (et le tri par champ) comptent aussi : une vue
   // « Type de service = Commercial » est une vraie vue à enregistrer.
   const nbFiltresActifs = useMemo(
-    () => Object.values(filtres).filter((v) => v !== '').length + nbFiltresChamps(conditionsChamps, triChamp),
-    [filtres, conditionsChamps, triChamp],
+    () => Object.values(filtres).filter((v) => v !== '').length + nbFiltresChamps(conditionsChamps, triChamp)
+      + nbFiltresEtiquettes(filtreEtiquettes),
+    [filtres, conditionsChamps, triChamp, filtreEtiquettes],
   );
 
   // Les vues enregistrées vivent en base : elles doivent suivre le vendeur
@@ -1831,6 +2039,7 @@ export default function PipelineBoard({
         ...filtres,
         ...(conditionsChamps.length ? { champs_perso: JSON.stringify(conditionsChamps) } : {}),
         ...(triChamp ? { tri_champ: JSON.stringify(triChamp) } : {}),
+        ...etiquettesVersVue(filtreEtiquettes),
       }, { tri, affichage, pourEquipe });
       await vuesQ.refetch();
       setVue(id);
@@ -1919,6 +2128,7 @@ export default function PipelineBoard({
       }
       if (depuisBorne !== null && new Date(d.created_at).getTime() < depuisBorne) return false;
       if (filtreChamps.ids && !filtreChamps.ids.has(d.id)) return false;
+      if (!correspondEtiquettes(etiquettesClients[d.client_id], filtreEtiquettes)) return false;
       if (q) {
         const c = d.client;
         // Le téléphone est cherché sans sa ponctuation : personne ne tape
@@ -1940,7 +2150,8 @@ export default function PipelineBoard({
     // Tri par champ personnalisé : stable, il départage selon le tri habituel.
     const champTrie = triChamp ? champsPipeline.champsDeal.find((c) => c.id === triChamp.field_id) : undefined;
     return triChamp ? tries.sort(comparerParChamp(triChamp, champsPipeline.valeurs, champTrie)) : tries;
-  }, [deals, etapes, filtres, montants, tri, filtreChamps.ids, triChamp, champsPipeline.valeurs, champsPipeline.champsDeal]);
+  }, [deals, etapes, filtres, montants, tri, filtreChamps.ids, triChamp, champsPipeline.valeurs, champsPipeline.champsDeal,
+    etiquettesClients, filtreEtiquettes]);
 
   const parEtape = useMemo(() => {
     const g: Record<string, Deal[]> = {};
@@ -1957,6 +2168,7 @@ export default function PipelineBoard({
     setFiltres(VUES[v].filtres);
     setConditionsChamps([]);
     setTriChamp(null);
+    setFiltreEtiquettes(FILTRE_ETIQUETTES_VIDE);
   }
 
   /**
@@ -1996,6 +2208,7 @@ export default function PipelineBoard({
     }
     setConditionsChamps(conds);
     setTriChamp(triC);
+    setFiltreEtiquettes(etiquettesDepuisVue(v.filtres));
     if (v.tri && (TRIS as readonly string[]).includes(v.tri)) setTri(v.tri as Tri);
     if (v.affichage === 'kanban' || v.affichage === 'liste') setAffichage(v.affichage);
   }
@@ -2103,16 +2316,22 @@ export default function PipelineBoard({
         onFiltres={(f) => {
           setFiltres(f);
           // « Effacer les filtres » efface aussi les conditions de champs.
-          if (f === FILTRES_VIDES) { setConditionsChamps([]); setTriChamp(null); }
+          if (f === FILTRES_VIDES) { setConditionsChamps([]); setTriChamp(null); setFiltreEtiquettes(FILTRE_ETIQUETTES_VIDE); }
         }}
+        nbFiltresExtra={nbFiltresActifs - Object.values(filtres).filter((v) => v !== '').length}
         onBasculerPanneau={() => setPanneauOuvert((o) => !o)}
         onTri={() => setTri(TRIS[(TRIS.indexOf(tri) + 1) % TRIS.length])}
         onAffichage={setAffichage}
         onNouveauDeal={() => setNouveauDeal(true)}
-        extraPanneau={champsPipeline.actif ? (
-          <PanneauChamps champs={champsPipeline.champsDeal} conditions={conditionsChamps} onConditions={setConditionsChamps}
-            tri={triChamp} onTri={setTriChamp} fr={fr} enCours={filtreChamps.enCours} />
-        ) : null}
+        extraPanneau={(
+          <>
+            <PanneauFiltreEtiquettes valeur={filtreEtiquettes} onChange={setFiltreEtiquettes} fr={fr} />
+            {champsPipeline.actif ? (
+              <PanneauChamps champs={champsPipeline.champsDeal} conditions={conditionsChamps} onConditions={setConditionsChamps}
+                tri={triChamp} onTri={setTriChamp} fr={fr} enCours={filtreChamps.enCours} />
+            ) : null}
+          </>
+        )}
       />
 
       <ModalNouveauDeal
@@ -2279,6 +2498,15 @@ export default function PipelineBoard({
             ))}
           </select>
 
+          <button type="button" onClick={() => setLotEtiquette('ajouter')} className={CLASSE_BOUTON}>
+            <Tag size={13} aria-hidden="true" />
+            {fr ? 'Ajouter une étiquette' : 'Add a tag'}
+          </button>
+          <button type="button" onClick={() => setLotEtiquette('retirer')} className={CLASSE_BOUTON}>
+            <Tag size={13} aria-hidden="true" />
+            {fr ? 'Retirer une étiquette' : 'Remove a tag'}
+          </button>
+
           <button
             type="button"
             onClick={() => setSelection(new Set())}
@@ -2288,6 +2516,21 @@ export default function PipelineBoard({
           </button>
         </div>
       )}
+
+      <ModalEtiquettesLot
+        action={lotEtiquette}
+        fr={fr}
+        nbDeals={selection.size}
+        nbSansClient={lotEtiquette ? deals.filter((d) => selection.has(d.id) && !d.client_id).length : 0}
+        clientIds={lotEtiquette ? clientsDistincts(deals, selection) : []}
+        onFermer={() => setLotEtiquette(null)}
+        onTermine={() => {
+          setLotEtiquette(null);
+          setSelection(new Set());
+          void qc.invalidateQueries({ queryKey: [CLE_ETIQUETTES_CLIENTS] });
+          void qc.invalidateQueries({ queryKey: ['etiquettes'] });
+        }}
+      />
 
       {chargement && (
         <p className="mt-2 text-[11px] text-text-muted" role="status">
@@ -2350,6 +2593,7 @@ export default function PipelineBoard({
                 setFiltres(FILTRES_VIDES);
                 setConditionsChamps([]);
                 setTriChamp(null);
+                setFiltreEtiquettes(FILTRE_ETIQUETTES_VIDE);
                 setVue('tous');
               }}
               className={cn(CLASSE_BOUTON, 'font-semibold text-white')}
@@ -2371,6 +2615,7 @@ export default function PipelineBoard({
           triChamp={triChamp}
           onTriChamp={setTriChamp}
           onOuvrir={onOuvrir}
+          etiquettesClients={etiquettesClients}
         />
       ) : (
         <DndContext
@@ -2396,6 +2641,7 @@ export default function PipelineBoard({
                 selection={selection}
                 onBasculerSelection={basculerSelection}
                 modeCouleur={modeCouleur}
+                etiquettesClients={etiquettesClients}
                 extraCarte={champsPipeline.champsCarte.length ? (d) => (
                   <ChampsSurCarte champs={champsPipeline.champsCarte} valeurs={champsPipeline.valeurs[d.id]} fr={fr} />
                 ) : undefined}

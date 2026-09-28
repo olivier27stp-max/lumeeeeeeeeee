@@ -61,6 +61,12 @@ export interface ClientsQuery {
   champs?: FiltreListe;
   /** Tri par une colonne de champ personnalisé (prime sur `sort`). `cle` résume les filtres. */
   triChamp?: { champId: string; asc: boolean; cle: string } | null;
+  /**
+   * Filtre « Étiquettes » (client_tags) : appliqué EN BASE, par jointure,
+   * pour que la pagination et le total restent justes (pas seulement la
+   * page chargée). `toutes` = a chacune ; `une` = a au moins une.
+   */
+  etiquettes?: { noms: string[]; mode: 'toutes' | 'une' } | null;
 }
 
 export interface ClientsResult {
@@ -111,6 +117,28 @@ function buildSearchFilter(search: string): string {
   return clauses.join(',');
 }
 
+/**
+ * Filtre d'étiquettes → jointures `client_tags!inner` (même mécanique que les
+ * champs personnalisés, src/lib/champs/filtresListe.ts). « Au moins une » :
+ * UNE jointure avec `tag in (…)` ; « toutes » : une jointure PAR étiquette,
+ * chacune sur son alias — la fiche ne reste que si toutes existent.
+ * La RLS de client_tags s'applique dans la jointure.
+ */
+export function jointureEtiquettes(f: ClientsQuery['etiquettes']): {
+  select: string;
+  appliquer<Q extends { eq(col: string, v: unknown): Q; in(col: string, v: readonly unknown[]): Q }>(q: Q): Q;
+} {
+  const noms = [...new Set((f?.noms ?? []).map((n) => n.trim()).filter(Boolean))];
+  if (noms.length === 0) return { select: '', appliquer: (q) => q };
+  if (f?.mode === 'toutes') {
+    return {
+      select: noms.map((_, i) => `,et${i}:client_tags!inner(tag)`).join(''),
+      appliquer: (q) => noms.reduce((r, nom, i) => r.eq(`et${i}.tag`, nom), q),
+    };
+  }
+  return { select: ',et0:client_tags!inner(tag)', appliquer: (q) => q.in('et0.tag', noms) };
+}
+
 export async function listClients(query: ClientsQuery = {}): Promise<ClientsResult> {
   const page = query.page || 1;
   const pageSize = query.pageSize || 20;
@@ -119,21 +147,23 @@ export async function listClients(query: ClientsQuery = {}): Promise<ClientsResu
 
   const orgId = await getCurrentOrgIdOrThrow();
   // `string` explicite : une projection dynamique (champs personnalisés) ne se type pas.
-  const projection: string = `*${query.champs?.select ?? ''}`;
+  const etiq = jointureEtiquettes(query.etiquettes);
+  const projection: string = `*${query.champs?.select ?? ''}${etiq.select}`;
 
   // Tri par un champ personnalisé : mêmes filtres, ordre donné par la valeur du champ.
   if (query.triChamp) {
     const filtree = (select: string) => {
       let r = supabase.from('clients').select(select).eq('org_id', orgId).is('deleted_at', null);
       if (query.champs) r = query.champs.appliquer(r);
+      r = etiq.appliquer(r);
       if (query.q?.trim()) r = r.or(buildSearchFilter(query.q));
       if (query.status && query.status !== 'All') r = r.eq('status', query.status);
       return r;
     };
     const { champId, asc, cle } = query.triChamp;
     const res = await pageTrieeParChamp<ClientRecord>({
-      cle: `clients|${cle}|${query.q ?? ''}|${query.status ?? ''}`, champId, asc, from, to,
-      idsFiltres: () => tousLesIds((a, b) => filtree(`id${query.champs?.select ?? ''}`).order('created_at', { ascending: false }).range(a, b)),
+      cle: `clients|${cle}|${query.q ?? ''}|${query.status ?? ''}|${etiq.select ? JSON.stringify(query.etiquettes) : ''}`, champId, asc, from, to,
+      idsFiltres: () => tousLesIds((a, b) => filtree(`id${query.champs?.select ?? ''}${etiq.select}`).order('created_at', { ascending: false }).range(a, b)),
       lignes: async (ids) => {
         const { data, error } = await filtree(projection).in('id', ids);
         if (error) throw error;
@@ -151,6 +181,7 @@ export async function listClients(query: ClientsQuery = {}): Promise<ClientsResu
     .is('deleted_at', null)
     .range(from, to);
   if (query.champs) request = query.champs.appliquer(request);
+  request = etiq.appliquer(request);
 
   if (query.q?.trim()) request = request.or(buildSearchFilter(query.q));
   if (query.status && query.status !== 'All') request = request.eq('status', query.status);

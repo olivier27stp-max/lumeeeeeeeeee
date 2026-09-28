@@ -300,12 +300,13 @@ describe('modal « Créer un pipeline »', () => {
 describe('page détail d’un pipeline', () => {
   const detail = () => <PipelineDetail fr pipeline={P1} onRetour={vi.fn()} onChangement={vi.fn()} />;
 
-  it('flèche retour, nom, crayon, onglets Étapes et Smart tags (Bientôt)', async () => {
+  it('flèche retour, nom, crayon, onglets Étapes et Cartes — plus de « Smart tags » vide (D4)', async () => {
     await rendre(detail());
     expect(bouton(/Retour à la liste des pipelines/)).toBeTruthy();
     expect(conteneur.textContent).toContain('Marketing Pipeline');
-    await clic([...conteneur.querySelectorAll('[role="tab"]')].find((t) => t.textContent === 'Smart tags'));
-    expect(conteneur.textContent).toContain('Bientôt');
+    const onglets = [...conteneur.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
+    expect(onglets).toEqual(['Étapes', 'Cartes']);
+    expect(conteneur.textContent).not.toContain('Smart tags');
   });
 
   it('le crayon renomme le pipeline, enregistré à la sortie du champ', async () => {

@@ -26,6 +26,7 @@ import { confirmer } from '../ui/ConfirmDialog';
 import { deleteTask, updateTask } from '../../lib/tasksApi';
 import SpecificNotes from '../SpecificNotes';
 import CustomFieldsPanel from '../champs/CustomFieldsPanel';
+import EtiquettesDuClient from '../etiquettes/EtiquettesDuClient';
 import { lireValeurs } from '../../lib/champsPersoApi';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -1400,6 +1401,8 @@ export default function DealDrawer({
                 ? `créé il y a ${depuis(deal.created_at, maintenant, fr)}`
                 : `created ${depuis(deal.created_at, maintenant, fr)} ago`}
             </p>
+            {/* Les étiquettes du CLIENT (D1), modifiables sur place. */}
+            {deal.client_id && <EtiquettesDuClient key={deal.client_id} clientId={deal.client_id} fr={fr} />}
           </div>
           <div className="text-right shrink-0">
             <p className="text-[24px] font-semibold text-text-primary tabular-nums leading-none">
