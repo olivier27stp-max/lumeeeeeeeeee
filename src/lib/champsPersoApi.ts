@@ -218,6 +218,12 @@ export async function renommerDossier(id: string, nom: string): Promise<void> {
     'Impossible de renommer le dossier.');
 }
 
+/** Ordre des dossiers de l'entreprise (après les sections du formulaire) — c'est l'ordre des sections ajoutées. */
+export async function placerDossier(id: string, nom: string, position: number): Promise<void> {
+  await appel(`/api/custom-field-folders/${id}`, { method: 'PATCH', body: JSON.stringify({ name: nom, position }) },
+    'Impossible de renommer le dossier.');
+}
+
 export async function supprimerDossier(id: string): Promise<void> {
   await appel(`/api/custom-field-folders/${id}`, { method: 'DELETE' }, 'Impossible de supprimer le dossier.');
 }
