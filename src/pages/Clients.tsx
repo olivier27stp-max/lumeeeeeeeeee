@@ -25,7 +25,9 @@ import { useTranslation } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import { useChampsListe, useValeursPage } from '../components/champs/liste';
-import { useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
+import { colonnesDuFormulaire, useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
+import { useQuery } from '@tanstack/react-query';
+import { listTaxes } from '../lib/taxApi';
 import { correspondancesImport, ecrireValeurs } from '../lib/champsPersoApi';
 import { valeurDepuisTexte } from '../lib/champs/valeurs';
 import { messageChamps } from '../lib/champs/messages';
@@ -658,7 +660,22 @@ export default function Clients() {
   // cinq historiques sont affichées par défaut, les autres s'ajoutent.
   const vide = <span className="text-[14px] text-[var(--color-text-tertiary)]">—</span>;
   const texte = (v: string | null | undefined) => (v ? <span className="text-[14px] text-[var(--color-text-primary)] truncate" title={v}>{v}</span> : vide);
-  const colonnesStandard: ColonneStandard<LigneClient>[] = [
+  // Taxes de l'entreprise (Réglages → Taxes) : nom de chaque taxe du client.
+  const { data: taxesOrg } = useQuery({ queryKey: ['taxes', 'liste'], queryFn: listTaxes, staleTime: 300_000 });
+  const nomTaxe = (id: string) => (taxesOrg?.configs ?? []).find((t) => t.id === id)?.name ?? null;
+  const TYPES_NUMERO: Record<string, string> = fr
+    ? { work: 'Travail', mobile: 'Mobile', home: 'Maison', fax: 'Fax', other: 'Autre' }
+    : { work: 'Work', mobile: 'Mobile', home: 'Home', fax: 'Fax', other: 'Other' };
+  const TYPES_COURRIEL: Record<string, string> = fr
+    ? { main: 'Principal', work: 'Travail', personal: 'Personnel', other: 'Autre' }
+    : { main: 'Main', work: 'Work', personal: 'Personal', other: 'Other' };
+  const avecType = (v: string | null | undefined, type: string | null | undefined) => (v ? (
+    <div className="flex min-w-0 flex-col">
+      <span className="text-[14px] text-[var(--color-text-primary)] truncate" title={v}>{v}</span>
+      {type && <span className="text-[12px] text-[var(--color-text-tertiary)] truncate leading-tight">{type}</span>}
+    </div>
+  ) : vide);
+  const colonnesBrutes: ColonneStandard<LigneClient>[] = [
     {
       id: 'nom', libelle: fr ? 'Nom' : 'Name', largeur: 'minmax(180px, 1.4fr)', verrouillee: true,
       entete: <TriEntete label={fr ? 'Nom' : 'Name'} col="name" />,
@@ -704,14 +721,23 @@ export default function Clients() {
       entete: <TriEntete label={fr ? 'Dernière activité' : 'Last activity'} col="activity" />,
       cellule: (item) => <span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span>,
     },
-    { id: 'courriel', libelle: fr ? 'Courriel' : 'Email', parDefaut: true, largeur: 'minmax(160px, 1.4fr)', cellule: (item) => texte(item.email) },
-    { id: 'telephone', libelle: fr ? 'Téléphone' : 'Phone', parDefaut: true, largeur: '150px', cellule: (item) => texte(item.phone) },
-    { id: 'entreprise', libelle: fr ? 'Entreprise' : 'Company', parDefaut: true, largeur: 'minmax(120px, 1.2fr)', cellule: (item) => texte(item.company) },
-    { id: 'numero', libelle: fr ? 'N° de client' : 'Client #', parDefaut: true, largeur: '110px', cellule: (item) => texte(item.client_number) },
-    { id: 'source', libelle: fr ? 'Source' : 'Lead source', parDefaut: true, largeur: 'minmax(110px, 1fr)', cellule: (item) => texte(item.lead_source) },
+    { id: 'courriel', libelle: fr ? 'Courriel' : 'Email', parDefaut: true, largeur: 'minmax(160px, 1.4fr)',
+      cellule: (item) => avecType(item.email, item.email ? TYPES_COURRIEL[item.email_label ?? ''] : null) },
+    { id: 'telephone', libelle: fr ? 'Téléphone' : 'Phone', parDefaut: true, largeur: '150px',
+      cellule: (item) => avecType(item.phone, item.phone ? TYPES_NUMERO[item.phones?.[0]?.label ?? ''] : null) },
+    { id: 'entreprise', libelle: fr ? 'Nom de la compagnie' : 'Company name', parDefaut: true, largeur: 'minmax(120px, 1.2fr)', cellule: (item) => texte(item.company) },
+    { id: 'numero', libelle: fr ? 'Numéro de client' : 'Client number', parDefaut: true, largeur: '110px', cellule: (item) => texte(item.client_number) },
+    { id: 'source', libelle: fr ? 'Source du lead' : 'Lead source', parDefaut: true, largeur: 'minmax(110px, 1fr)', cellule: (item) => texte(item.lead_source) },
+    { id: 'taxes', libelle: 'Taxes', largeur: 'minmax(110px, 1fr)',
+      cellule: (item) => texte((item.tax_ids ?? []).map(nomTaxe).filter(Boolean).join(', ') || null) },
+    { id: 'facturation', libelle: fr ? 'Adresse de facturation' : 'Billing address', largeur: 'minmax(150px, 1.3fr)',
+      cellule: (item) => texte(item.billing_same_as_service ? (fr ? 'Identique à la propriété' : 'Same as property') : item.billing_address) },
     { id: 'ville', libelle: fr ? 'Ville' : 'City', parDefaut: true, largeur: 'minmax(110px, 1fr)', cellule: (item) => texte(item.city) },
     { id: 'cree', libelle: fr ? 'Créé le' : 'Created', parDefaut: true, largeur: '120px', cellule: (item) => texte(item.created_at ? formatDate(item.created_at) : null) },
   ];
+  // Colonnes = formulaire Nouveau client (verrouillées, dans son ordre) ; le reste s'enlève.
+  const colonnesStandard = colonnesDuFormulaire(colonnesBrutes,
+    ['nom', 'numero', 'entreprise', 'telephone', 'courriel', 'source', 'adresse', 'taxes', 'facturation']);
   const colonnes = useColonnesTableau<LigneClient>('client', colonnesStandard, fr, { tri: triChamp, setTri: setTriChamp });
   const valeursChamps = useValeursPage('client', items.map((c) => c.id as string), colonnes.avecChamps);
 

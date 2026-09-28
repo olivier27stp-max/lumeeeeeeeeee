@@ -62,7 +62,10 @@ import BulkActionBar from '../components/BulkActionBar';
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import { useChampsListe, useValeursPage } from '../components/champs/liste';
-import { useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
+import { colonnesDuFormulaire, useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
+import { useQuery } from '@tanstack/react-query';
+import { listTeams } from '../lib/teamsApi';
+import { contratsDesJobs, notesDesElements, produitsDesJobs } from '../lib/colonnesFormulaireApi';
 
 // ─── View mode ───────────────────────────────────────────────────
 type ViewMode = 'grid' | 'list';
@@ -615,7 +618,20 @@ export default function Jobs() {
   // colonnes historiques sont affichées par défaut, les autres s'ajoutent.
   const vide = <span className="text-[14px] text-text-tertiary">—</span>;
   const texte = (v: string | null | undefined) => (v ? <span className="text-[14px] text-text-primary truncate" title={v}>{v}</span> : vide);
-  const colonnesStandard: ColonneStandard<Job>[] = [
+  // Champs du formulaire hors de la ligne : lus pour la page affichée seulement.
+  const idsPage = jobs.map((j) => j.id);
+  const { data: equipes } = useQuery({ queryKey: ['equipes', 'liste'], queryFn: listTeams, staleTime: 300_000 });
+  const { data: produits } = useQuery({ queryKey: ['colonnes', 'job-produits', idsPage], queryFn: () => produitsDesJobs(idsPage), enabled: idsPage.length > 0, staleTime: 60_000 });
+  const { data: contrats } = useQuery({ queryKey: ['colonnes', 'job-contrats', idsPage], queryFn: () => contratsDesJobs(idsPage), enabled: idsPage.length > 0, staleTime: 60_000 });
+  const { data: notesJobs } = useQuery({ queryKey: ['colonnes', 'job-notes', idsPage], queryFn: () => notesDesElements('job', idsPage), enabled: idsPage.length > 0, staleTime: 60_000 });
+  const STATUT_CONTRAT: Record<string, string> = fr ? { draft: 'Brouillon', sent: 'Envoyé', signed: 'Signé' } : { draft: 'Draft', sent: 'Sent', signed: 'Signed' };
+  const facturation = (job: Job) => [
+    job.requires_invoicing ? (fr ? 'Rappel de facturer' : 'Invoice reminder') : null,
+    job.billing_split ? (fr ? 'Plusieurs factures' : 'Split invoices') : null,
+    job.deposit_required ? `${fr ? 'Dépôt' : 'Deposit'} ${job.deposit_value ?? ''}${job.deposit_type === 'percentage' ? ' %' : ' $'}` : null,
+    job.require_payment_method ? (fr ? 'Carte au dossier' : 'Card on file') : null,
+  ].filter(Boolean).join(' · ') || null;
+  const colonnesBrutes: ColonneStandard<Job>[] = [
     {
       id: 'client', libelle: t.jobs.client, largeur: 'minmax(180px, 1.6fr)', verrouillee: true,
       entete: <TriEntete label={t.jobs.client} sortKey="client" />,
@@ -641,8 +657,8 @@ export default function Jobs() {
     },
     { id: 'propriete', libelle: t.jobs.property, largeur: 'minmax(160px, 1.6fr)', parDefaut: true, cellule: (job) => texte(job.property_address) },
     {
-      id: 'planification', libelle: t.jobs.schedule, largeur: 'minmax(120px, 1fr)', parDefaut: true,
-      entete: <TriEntete label={t.jobs.schedule} sortKey="schedule" />,
+      id: 'planification', libelle: fr ? 'Visites' : 'Visits', largeur: 'minmax(120px, 1fr)', parDefaut: true,
+      entete: <TriEntete label={fr ? 'Visites' : 'Visits'} sortKey="schedule" />,
       cellule: (job) => <span className="text-[14px] text-text-primary tabular-nums truncate">{job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}</span>,
     },
     {
@@ -656,10 +672,24 @@ export default function Jobs() {
       cellule: (job) => <span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoney(job)}</span>,
     },
     { id: 'titre', libelle: fr ? 'Titre' : 'Title', largeur: 'minmax(140px, 1.2fr)', cellule: (job) => texte(job.title) },
-    { id: 'type', libelle: fr ? 'Type de job' : 'Job type', largeur: 'minmax(110px, 1fr)', cellule: (job) => texte(job.job_type) },
-    { id: 'vente', libelle: fr ? 'Date de vente' : 'Sale date', largeur: '120px', cellule: (job) => texte(job.sale_date ? formatDate(job.sale_date) : null) },
+    { id: 'type', libelle: fr ? 'Type de job' : 'Job type', largeur: 'minmax(110px, 1fr)',
+      cellule: (job) => texte(job.job_type === 'one_off' ? (fr ? 'Ponctuel' : 'One-off') : job.job_type === 'recurring' ? (fr ? 'Forfait de service' : 'Service plan') : job.job_type) },
+    { id: 'vente', libelle: fr ? 'Date de création' : 'Date of creation', largeur: '120px', cellule: (job) => texte(job.sale_date ? formatDate(job.sale_date) : null) },
     { id: 'fin', libelle: fr ? 'Fin prévue' : 'End', largeur: '120px', cellule: (job) => texte(job.end_at ? formatDate(job.end_at) : null) },
+    { id: 'vendeur', libelle: fr ? 'Vendeur' : 'Salesperson', largeur: 'minmax(120px, 1fr)',
+      cellule: (job) => texte(salespeople.find((p) => p.id === job.salesperson_id)?.label ?? null) },
+    { id: 'equipe', libelle: fr ? 'Équipe' : 'Team', largeur: 'minmax(110px, 1fr)',
+      cellule: (job) => texte(equipes?.find((e) => e.id === job.team_id)?.name ?? null) },
+    { id: 'facturation', libelle: fr ? 'Facturation' : 'Billing', largeur: 'minmax(150px, 1.2fr)', cellule: (job) => texte(facturation(job)) },
+    { id: 'produits', libelle: fr ? 'Produits et services' : 'Products & services', largeur: 'minmax(160px, 1.4fr)',
+      cellule: (job) => texte(produits?.[job.id]?.join(', ') ?? null) },
+    { id: 'contrat', libelle: fr ? 'Contrat' : 'Agreement', largeur: '110px',
+      cellule: (job) => texte(contrats?.[job.id] ? (STATUT_CONTRAT[contrats[job.id]] ?? contrats[job.id]) : null) },
+    { id: 'notes', libelle: 'Notes', largeur: 'minmax(150px, 1.3fr)', cellule: (job) => texte(notesJobs?.[job.id]?.[0] ?? null) },
   ];
+  // Colonnes = formulaire Nouvelle job (verrouillées, dans son ordre) ; Statut et Fin prévue s'enlèvent.
+  const colonnesStandard = colonnesDuFormulaire(colonnesBrutes, ['titre', 'numero', 'vendeur', 'vente', 'client', 'propriete', 'type',
+    'planification', 'equipe', 'facturation', 'produits', 'total', 'contrat', 'notes']);
   const colonnes = useColonnesTableau<Job>('job', colonnesStandard, fr, { tri: triChamp, setTri: setTriChamp });
   const valeursChamps = useValeursPage('job', jobs.map((j) => j.id), colonnes.avecChamps);
   const IconPlusSm = (c: string) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>;

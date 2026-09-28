@@ -37,6 +37,7 @@ import { formaterValeur, nomFichier } from '../../lib/champs/valeurs';
 import { ouvrirFichierChamp } from './ChampSaisie';
 import { LIBELLES_OBJET, type ChampPerso, type DossierChamp, type ObjetChamp, type ValeurEnregistree } from '../../lib/champs/types';
 import ModaleChamp from './reglages/ModaleChamp';
+import PlacerChampFenetre from './PlacerChampFenetre';
 import { nomDossier } from '../../lib/champs/standard';
 
 /** Une colonne standard de la liste, décrite par la page. */
@@ -77,6 +78,16 @@ function colonnesNavigateur(objet: ObjetChamp): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Colonnes = formulaire (Rafba, 2026-09-28) : ce qui est dans le formulaire de base
+ * est une colonne verrouillée, dans l'ordre du formulaire ; le reste suit (enlevable).
+ */
+export function colonnesDuFormulaire<T>(colonnes: ColonneStandard<T>[], ordre: string[]): ColonneStandard<T>[] {
+  const du = ordre.map((id) => colonnes.find((c) => c.id === id))
+    .filter((c): c is ColonneStandard<T> => !!c).map((c) => ({ ...c, verrouillee: true }));
+  return [...du, ...colonnes.filter((c) => !ordre.includes(c.id))];
 }
 
 /** Colonnes valides, verrouillées d'abord, sans doublon. */
@@ -271,15 +282,17 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
   const [envoi, setEnvoi] = useState(false);
   // Un champ créé ici n'est pas encore dans `champs` (la liste se recharge) : gardé à part.
   const [crees, setCrees] = useState<ChampPerso[]>([]);
+  // Custom key ajoutée : on la place dans le formulaire (Rafba, 2026-09-28).
+  const [aPlacer, setAPlacer] = useState<ChampPerso | null>(null);
   const { role } = usePermissions();
   const peutCreer = role === 'owner' || role === 'admin';
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
   useEffect(() => {
-    const echap = (e: KeyboardEvent) => { if (e.key === 'Escape' && !creation) onClose(); };
+    const echap = (e: KeyboardEvent) => { if (e.key === 'Escape' && !creation && !aPlacer) onClose(); };
     document.addEventListener('keydown', echap);
     return () => document.removeEventListener('keydown', echap);
-  }, [creation, onClose]);
+  }, [creation, aPlacer, onClose]);
 
   const tousChamps = [...champs, ...crees.filter((c) => !champs.some((x) => x.id === c.id))];
   const libelle = (id: IdColonne): string => {
@@ -386,7 +399,12 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
                         <li key={e.id}>
                           <label htmlFor={`${ids}-${e.id}`} className="flex items-center gap-2.5 py-2 pl-11 pr-5 text-[14px] text-text-primary hover:bg-surface-secondary">
                             <input id={`${ids}-${e.id}`} type="checkbox" checked={false} className="h-4 w-4 accent-primary"
-                              onChange={() => setBrouillon((b) => [...b, e.id])} />
+                              onChange={() => {
+                                setBrouillon((b) => [...b, e.id]);
+                                // Une custom key ajoutée se place aussi dans le formulaire.
+                                const c = peutCreer ? tousChamps.find((x) => idColonneChamp(x.id) === e.id) : undefined;
+                                if (c) setAPlacer(c);
+                              }} />
                             <span className="truncate">{e.libelle}</span>
                           </label>
                         </li>
@@ -421,9 +439,14 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
             if (c.object_type === objet) {
               setCrees((l) => [...l, c]);
               setBrouillon((b) => (b.includes(idColonneChamp(c.id)) ? b : [...b, idColonneChamp(c.id)]));
+              setAPlacer(c);
             }
             onChampCree(c);
           }} />
+      )}
+      {aPlacer && (
+        <PlacerChampFenetre objet={objet} champ={aPlacer} champs={tousChamps} dossiers={dossiers} fr={fr}
+          onClose={() => setAPlacer(null)} />
       )}
     </>,
     document.body,

@@ -35,6 +35,7 @@ import GererChampsFenetre from './GererChampsFenetre';
 import { usePermissions } from '../../hooks/usePermissions';
 import { Settings2 } from 'lucide-react';
 import { champsSysteme, nomDossier } from '../../lib/champs/standard';
+import { ancreValide } from '../../lib/champs/placement';
 import type { ChampPerso } from '../../lib/champs/types';
 
 /** Titre de la fenêtre de création, par objet (panneau « Gérer les champs »). */
@@ -49,7 +50,11 @@ const TITRE_FENETRE: Record<ObjetChamp, { fr: string; en: string }> = {
 
 const AUCUN_MASQUE: string[] = [];
 
-export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sections?: string[] } = {}) {
+export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
+  sections?: string[];
+  /** Le formulaire pose `apres(clé)` sous ses rangées : une custom key peut s'y glisser (RANGEES_FORMULAIRE). */
+  rangees?: boolean;
+} = {}) {
   const { isEnabled } = useChampsPersoActifs();
   const idBase = useId();
   const { data, isLoading } = useQuery({
@@ -197,12 +202,27 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sectio
     );
   };
 
-  /** Les champs d'un dossier système, à poser à la fin de la section du formulaire. */
-  const section = (cle: string) => {
+  // Custom key glissée après une rangée de base (config.apres) : posée par `apres()`.
+  const ancreDe = (c: ChampPerso) => (opts.rangees ? ancreValide(objet, c, cleSysteme(c)) : null);
+
+  /**
+   * Les champs d'un dossier système, à poser à la fin de la section du formulaire —
+   * sauf ceux glissés après une rangée (`apres`). `{ tout: true }` : tous, pour un
+   * écran de la même section qui n'a pas les emplacements (ex. facturation d'un forfait).
+   */
+  const section = (cle: string, o: { tout?: boolean } = {}) => {
     if (!isEnabled) return null;
-    const liste = champs.filter((c) => cleSysteme(c) === cle);
+    const liste = champs.filter((c) => cleSysteme(c) === cle && (o.tout || !ancreDe(c)));
     if (liste.length === 0) return null;
     return <div className="mt-3 grid gap-3 sm:grid-cols-2" data-champs-section={cle}>{liste.map(saisie)}</div>;
+  };
+
+  /** Les custom keys glissées juste après la rangée de base dont `cle` est la 1re clé. */
+  const apres = (cle: string) => {
+    if (!isEnabled) return null;
+    const liste = champs.filter((c) => ancreDe(c) === cle);
+    if (liste.length === 0) return null;
+    return <div className="mt-3 grid gap-3 sm:grid-cols-2" data-champs-apres={cle}>{liste.map(saisie)}</div>;
   };
 
   // Hors des sections branchées : dossiers dans leur ordre (système non branchés,
@@ -239,5 +259,5 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sectio
     </div>
   );
 
-  return { bloc, section, systeme, valider, enregistrer, completerVides, actif: champs.length > 0 };
+  return { bloc, section, apres, systeme, valider, enregistrer, completerVides, actif: champs.length > 0 };
 }

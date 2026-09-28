@@ -21,9 +21,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Archive, ArrowDown, ArrowUp, Briefcase, Columns3, Copy, FileText, FolderOpen, FolderPlus, GitBranch, GripVertical, Home, Lock, MoreHorizontal, MoreVertical,
-  Pencil, Plus, Receipt, RotateCcw, Search, Trash2, Layers, Sparkles, Users, X, type LucideIcon,
+  Move, Pencil, Plus, Receipt, RotateCcw, Search, Trash2, Layers, Sparkles, Users, X, type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import PlacerChampFenetre from '../../components/champs/PlacerChampFenetre';
 import { useTranslation } from '../../i18n';
 import { FilterPill } from '../../components/ui';
 import EmptyState from '../../components/ui/EmptyState';
@@ -119,6 +120,8 @@ export default function ChampsPersoSettings() {
   const [modaleUniques, setModaleUniques] = useState(false);
   const [modaleSuggestions, setModaleSuggestions] = useState(false);
   const [aSupprimer, setASupprimer] = useState<ChampPerso | null>(null);
+  // « Placer dans le formulaire » : la custom key glissée entre les champs de base.
+  const [aPlacer, setAPlacer] = useState<ChampPerso | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, error } = useQuery({
@@ -587,6 +590,11 @@ export default function ChampsPersoSettings() {
                                     <Pencil size={13} aria-hidden />{fr ? 'Modifier' : 'Edit'}
                                   </button>
                                 )}
+                                {!l.champ.archived_at && (
+                                  <button role="menuitem" type="button" onClick={() => { setMenu(null); setAPlacer(l.champ); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-surface-secondary">
+                                    <Move size={13} aria-hidden />{fr ? 'Placer dans le formulaire' : 'Place in the form'}
+                                  </button>
+                                )}
                                 {!l.champ.archived_at && (() => {
                                   const liste = voisins(l.champ);
                                   const i = liste.findIndex((x) => x.id === l.champ.id);
@@ -667,6 +675,10 @@ export default function ChampsPersoSettings() {
         <CartesPipelineReglage champs={data.fields.filter((c) => c.object_type === 'deal' && !c.archived_at)} fr={fr} />
       )}
 
+      {aPlacer && (
+        <PlacerChampFenetre objet={aPlacer.object_type} champ={aPlacer} champs={data?.fields ?? []} dossiers={data?.folders ?? []} fr={fr}
+          onClose={() => setAPlacer(null)} />
+      )}
       {modaleChamp && (
         <ModaleChamp key={modaleChamp.champ?.id ?? `nouveau-${modaleChamp.dossier ?? ''}`} open onClose={() => setModaleChamp(null)}
           onEnregistre={() => { void recharger(); }} objet={modaleChamp.champ?.object_type

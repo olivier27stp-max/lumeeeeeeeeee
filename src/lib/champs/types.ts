@@ -46,6 +46,11 @@ export interface ConfigChamp {
   masque_creation?: boolean;
   /** Retiré de la fiche (« Gérer les champs » de la fiche) — la valeur reste en base. */
   masque_fiche?: boolean;
+  /**
+   * Place dans le formulaire : juste après la rangée de base dont c'est la 1re clé
+   * (RANGEES_FORMULAIRE) ; absent = à la fin de la section de son dossier.
+   */
+  apres?: string | null;
 }
 
 export interface OptionChamp {

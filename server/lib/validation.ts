@@ -1311,6 +1311,8 @@ const configChamp = z.object({
   show_on_documents: z.boolean().optional(),
   masque_creation: z.boolean().optional(),
   masque_fiche: z.boolean().optional(),
+  // Place dans le formulaire : après la rangée de base dont c'est la 1re clé.
+  apres: z.string().regex(/^[a-z][a-z0-9_]{0,49}$/).nullable().optional(),
 }).strict();
 const baseChamp = {
   label: z.string().trim().min(1, 'Le nom du champ est obligatoire.').max(100),

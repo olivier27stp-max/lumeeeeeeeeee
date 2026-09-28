@@ -41,7 +41,7 @@ export default function NewClient() {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
   // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
-  const champsPerso = useChampsCreation('client', fr, { sections: ['coordonnees', 'lead', 'adresse'] });
+  const champsPerso = useChampsCreation('client', fr, { sections: ['coordonnees', 'lead', 'adresse'], rangees: true });
   // Champs de base décochés dans « Gérer les champs » : retirés du formulaire pour toute l'entreprise.
   const vis = champsPerso.systeme;
   const id = useId();
@@ -352,6 +352,7 @@ export default function NewClient() {
                 <input id={`${id}-last-name`} value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full" />
               </div>
             </div>
+            {champsPerso.apres('first_name')}
             {vis('client_number') && <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label htmlFor={`${id}-client-number`} className={fieldLabel}>{fr ? 'Numéro de client' : 'Client number'}</label>
@@ -369,6 +370,7 @@ export default function NewClient() {
                 />
               </div>
             </div>}
+            {champsPerso.apres('client_number')}
             {vis('company') && <div className="space-y-2">
               <label htmlFor={`${id}-company`} className={fieldLabel}>{fr ? 'Nom de la compagnie' : 'Company name'}</label>
               <input id={`${id}-company`} value={company} onChange={(e) => setCompany(e.target.value)} className="glass-input w-full" />
@@ -402,6 +404,7 @@ export default function NewClient() {
                 )}
               </AnimatePresence>
             </div>}
+            {champsPerso.apres('company')}
             {vis('phone') && <div className="space-y-2">
               <span className={fieldLabel}>{fr ? 'Numéro de téléphone' : 'Phone number'}</span>
               {/* Same bar as the email one below — the add/remove controls live
@@ -446,6 +449,7 @@ export default function NewClient() {
                 ))}
               </div>
             </div>}
+            {champsPerso.apres('phone')}
             {vis('email') && <div className="space-y-2">
               <label htmlFor={`${id}-email`} className={fieldLabel}>{fr ? 'Courriel' : 'Email'}</label>
               <div className={inlineBar} style={inlineBarStyle}>
@@ -551,6 +555,7 @@ export default function NewClient() {
                 placeholder={fr ? 'Commencez à taper une adresse…' : 'Start typing an address...'}
               />
             </div>}
+            {champsPerso.apres('address')}
 
             {/* Taxes — org defaults pre-checked */}
             {vis('taxes') && <div className="space-y-2">
@@ -593,6 +598,7 @@ export default function NewClient() {
                   : "Applied by default to this client's quotes and invoices. Preselected: your company's taxes."}
               </p>
             </div>}
+            {champsPerso.apres('taxes')}
 
             {/* Billing address */}
             {vis('billing_same_as_service') && <label className="flex items-start gap-3 cursor-pointer pt-1">
