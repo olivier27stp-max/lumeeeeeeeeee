@@ -591,6 +591,12 @@ export const ACTIONS: ActionCatalogue[] = [
         obligatoire: false, type: 'membre',
         visible_si: { champ: 'destinataire', valeurs: ['membre'] },
       },
+      {
+        cle: 'par_courriel', fr: 'Aussi par courriel', en: 'Also by email',
+        obligatoire: false, type: 'bascule',
+        aide_fr: 'Les mêmes personnes reçoivent aussi un courriel.',
+        aide_en: 'The same people also get an email.',
+      },
     ],
   },
   {
