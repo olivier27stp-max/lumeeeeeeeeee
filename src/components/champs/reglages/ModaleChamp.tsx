@@ -25,12 +25,14 @@ import { CSS } from '@dnd-kit/utilities';
 import { confirmer } from '../../ui/ConfirmDialog';
 import { cn } from '../../../lib/utils';
 import {
-  creerChamp, creerDossier, listerChamps, modifierChamp, type ChampPerso, type DossierChamp, type EntreeOption, type ObjetChamp, type TypeChamp,
+  creerChamp, creerDossier, enregistrerPlan, listerChamps, modifierChamp, type ChampPerso, type DossierChamp, type EntreeOption, type ObjetChamp, type TypeChamp,
 } from '../../../lib/champsPersoApi';
 import { OBJETS, TYPES_CHAMP, LIBELLES_OBJET, LIBELLES_TYPE, conversionPermise, variableAffichee, type ConfigChamp, type ValeurChamp } from '../../../lib/champs/types';
 import { slugCle } from '../../../lib/champs/valeurs';
 import { peutAllerAuFormulaire } from '../../../lib/champs/questionsFormulaire';
-import { clesStandard, nomDossier } from '../../../lib/champs/standard';
+import { SECTIONS_SYSTEME, clesStandard, nomDossier } from '../../../lib/champs/standard';
+import { TITRE_FORMULAIRE, lirePlan, planFormulaire, type ElementPlan } from '../../../lib/champs/placement';
+import ApercuFormulaire from '../ApercuFormulaire';
 import { AIDE_TYPE } from '../icones';
 import ChampSaisie from '../ChampSaisie';
 
@@ -157,6 +159,49 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
     return k;
   }, [edition, champ, objet, autres, label]);
 
+  // ── Aperçu = le vrai formulaire, avec le champ à sa place (glissable) ──
+  const idCible = champ?.id ?? '__nouveau__';
+  const autresActifs = useMemo(() => autres.filter((f) => !f.archived_at && !f.config?.masque_creation), [autres]);
+  const pseudo = (o: ObjetChamp, dossierId: string, apres: string | null): ChampPerso => ({
+    ...(champ ?? {}), id: idCible, object_type: o, folder_id: dossierId || null, label, field_type: type,
+    config: { ...config, apres }, options: [], archived_at: null,
+    // Nouveau (ou changé de dossier) : à la fin de sa section.
+    position: champ && dossierId === champ.folder_id ? champ.position : 1_000_000,
+  } as unknown as ChampPerso);
+  const construirePlan = (dossierId: string, apres: string | null, liste: DossierChamp[] = dossiers): ElementPlan[] =>
+    (objetChoisi ? planFormulaire(objetChoisi, [...autresActifs, pseudo(objetChoisi, dossierId, apres)], liste, fr) : []);
+  const [plan, setPlan] = useState<ElementPlan[]>([]);
+  const dossiersCle = dossiers.map((d) => d.id).join();
+  useEffect(() => {
+    if (!open || !objetChoisi) { setPlan([]); return; }
+    // Les sections du formulaire sont les dossiers de base : la 1re est proposée d'office.
+    let d = dossier;
+    if (!edition && !dossiers.some((x) => x.id === d)) {
+      const premier = SECTIONS_SYSTEME[objetChoisi].map((s) => dossiers.find((x) => x.cle_systeme === s.cle)).find(Boolean);
+      d = premier?.id ?? '';
+      setDossier(d);
+    }
+    setPlan(construirePlan(d, edition && d === champ?.folder_id ? champ?.config?.apres ?? null : null));
+  }, [open, objetChoisi, existants, dossiersCle]); // eslint-disable-line react-hooks/exhaustive-deps
+  const choisirDossier = (id: string) => { setDossier(id); setPlan(construirePlan(id, null)); };
+  const surPlan = (p: ElementPlan[]) => {
+    setPlan(p);
+    const place = objetChoisi ? lirePlan(objetChoisi, p).get(idCible) : undefined;
+    if (place) setDossier(place.folder_id ?? '');
+  };
+  /** Après l'enregistrement : la place choisie dans l'aperçu (et l'ordre des voisins). */
+  const enregistrerPlace = async (resultat: ChampPerso) => {
+    if (!plan.length) return;
+    const final = plan.map((e) => (e.type === 'champ' && e.champ.id === idCible ? { ...e, id: `c:${resultat.id}`, champ: resultat } : e));
+    try {
+      await enregistrerPlan(objet, final, [...autresActifs, resultat]);
+    } catch (err) {
+      console.error('[ModaleChamp] place dans le formulaire', err);
+      toast.error(fr ? 'Champ enregistré, mais sa place dans le formulaire n’a pas pu l’être. Réessaie avec « Placer dans le formulaire ».'
+        : 'Field saved, but its place in the form could not be. Retry with “Place in the form”.');
+    }
+  };
+
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const avecOptions = type === 'dropdown_single' || type === 'dropdown_multi';
   const cleReservee = !edition && clesStandard(objet).includes(cle);
@@ -204,8 +249,10 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
     setCreationDossier(true);
     try {
       const id = await creerDossier(objet, nom);
-      setDossiersCrees((l) => [...l, { id, object_type: objet, name: nom } as DossierChamp]);
+      const cree = { id, object_type: objet, name: nom } as DossierChamp;
+      setDossiersCrees((l) => [...l, cree]);
       setDossier(id);
+      setPlan(construirePlan(id, null, [...dossiers, cree]));
       setNouveauDossier(null);
     } catch (err) {
       console.error('[ModaleChamp] création du dossier', err);
@@ -232,6 +279,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
           is_required: obligatoire, config, options: opts, folder_id: dossier || null, default_value: defautFinal(),
           sur_formulaire: surFormulaire,
         });
+      await enregistrerPlace(resultat);
       if (edition) {
         toast.success(fr ? 'Champ modifié.' : 'Field updated.');
       } else {
@@ -289,6 +337,16 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
   };
 
   if (!open) return null;
+  // Le champ tel qu'il s'affichera dans le formulaire (libellé + saisie).
+  const cibleApercu = (
+    <>
+      <label htmlFor={`${ids}-apercu`} className="mb-1 block text-[12px] font-medium text-text-secondary">
+        {champApercu.label}{obligatoire && <span className="text-red-500" aria-hidden> *</span>}
+      </label>
+      <ChampSaisie id={`${ids}-apercu`} champ={{ ...champApercu, placeholder: placeholder || (fr ? 'Texte d’indice' : 'Placeholder text') }} valeur={apercu ?? defautSaisi} fr={fr} onValider={setApercu} disabled={type === 'file'} />
+      {aide && <p className="mt-1 text-[11px] text-text-tertiary">{aide}</p>}
+    </>
+  );
   const titre = edition ? (fr ? 'Modifier le champ' : 'Edit custom field') : (fr ? 'Créer un champ personnalisé' : 'Create custom field');
   const etiquette = 'mb-1 block text-[13px] font-medium text-text-primary';
   const bulle = (texte: string) => (
@@ -363,13 +421,23 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                       <label htmlFor={`${ids}-dossier`} className={etiquette}>{fr ? 'Dossier' : 'Folder name'} {!edition && <span className="text-red-500">*</span>}</label>
                       {nouveauDossier === null ? (
                         <select id={`${ids}-dossier`} value={dossier} disabled={!objetChoisi}
-                          onChange={(e) => { if (e.target.value === '__nouveau__') setNouveauDossier(''); else setDossier(e.target.value); }}
+                          onChange={(e) => { if (e.target.value === '__nouveau__') setNouveauDossier(''); else choisirDossier(e.target.value); }}
                           className={cn('glass-input h-9 w-full text-[13px]', !dossier && 'text-text-tertiary')}>
                           {/* Sans dossier : seulement pour un champ qui n'en a jamais eu (créé avant la règle). */}
                           {edition && !champ?.folder_id
                             ? <option value="">{fr ? 'Sans dossier' : 'No folder'}</option>
-                            : <option value="" disabled>{fr ? 'Sélectionner un dossier' : 'Select folder'}</option>}
-                          {dossiers.map((d) => <option key={d.id} value={d.id}>{nomDossier(d, fr)}</option>)}
+                            : <option value="" disabled>{objetChoisi ? (fr ? 'Sélectionner un dossier' : 'Select folder') : (fr ? 'Choisis d’abord l’objet' : 'Choose the object first')}</option>}
+                          {/* Dossiers de base : les sections du formulaire, créés d'office pour chaque objet. */}
+                          {dossiers.some((d) => d.cle_systeme) && (
+                            <optgroup label={fr ? `Sections du formulaire « ${TITRE_FORMULAIRE[objet].fr} »` : `“${TITRE_FORMULAIRE[objet].en}” form sections`}>
+                              {dossiers.filter((d) => d.cle_systeme).map((d) => <option key={d.id} value={d.id}>{nomDossier(d, fr)}</option>)}
+                            </optgroup>
+                          )}
+                          {dossiers.some((d) => !d.cle_systeme) && (
+                            <optgroup label={fr ? 'Tes dossiers' : 'Your folders'}>
+                              {dossiers.filter((d) => !d.cle_systeme).map((d) => <option key={d.id} value={d.id}>{nomDossier(d, fr)}</option>)}
+                            </optgroup>
+                          )}
                           <option value="__nouveau__">{fr ? '+ Créer un dossier' : '+ Create folder'}</option>
                         </select>
                       ) : (
@@ -550,13 +618,18 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
           </div>
 
           {/* Aperçu en direct */}
-          <aside aria-label={fr ? 'Aperçu en direct' : 'Live preview'} className="h-fit rounded-xl border border-outline bg-surface-card p-4">
-            <p className="mb-3 text-[14px] font-semibold text-text-primary">{fr ? 'Aperçu en direct' : 'Live preview'}</p>
-            <label htmlFor={`${ids}-apercu`} className={etiquette}>
-              {champApercu.label}{obligatoire && <span className="text-red-500" aria-hidden> *</span>}
-            </label>
-            <ChampSaisie id={`${ids}-apercu`} champ={{ ...champApercu, placeholder: placeholder || (fr ? 'Texte d’indice' : 'Placeholder text') }} valeur={apercu ?? defautSaisi} fr={fr} onValider={setApercu} disabled={type === 'file'} />
-            {aide && <p className="mt-1 text-[11px] text-text-tertiary">{aide}</p>}
+          <aside aria-label={fr ? 'Aperçu en direct' : 'Live preview'}
+            className="h-fit rounded-xl border border-outline bg-surface-card p-4 lg:sticky lg:top-0 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
+            <p className="mb-2 text-[14px] font-semibold text-text-primary">{fr ? 'Aperçu en direct' : 'Live preview'}</p>
+            {objetChoisi && plan.length ? (
+              <ApercuFormulaire plan={plan} onPlan={surPlan} cibleId={idCible} cible={cibleApercu}
+                titre={fr ? TITRE_FORMULAIRE[objetChoisi].fr : TITRE_FORMULAIRE[objetChoisi].en} fr={fr} />
+            ) : (
+              <>
+                <p className="mb-3 text-[12px] text-text-tertiary">{fr ? 'Choisis l’objet pour voir le champ dans son vrai formulaire.' : 'Choose the object to see the field in its real form.'}</p>
+                {cibleApercu}
+              </>
+            )}
           </aside>
         </div>
 

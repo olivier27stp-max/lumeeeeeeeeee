@@ -439,7 +439,6 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
             if (c.object_type === objet) {
               setCrees((l) => [...l, c]);
               setBrouillon((b) => (b.includes(idColonneChamp(c.id)) ? b : [...b, idColonneChamp(c.id)]));
-              setAPlacer(c);
             }
             onChampCree(c);
           }} />

@@ -18,6 +18,7 @@ import type { Condition } from './champs/filtres';
 import { valeurCsv, valeurDepuisTexte } from './champs/valeurs';
 import { messageChamps } from './champs/messages';
 import type { IndustrieModele } from './champs/modeles';
+import { lirePlan, type ElementPlan } from './champs/placement';
 
 export type { ChampPerso, DossierChamp, ObjetChamp, TypeChamp, ValeurChamp, ValeurEnregistree, Condition };
 
@@ -157,6 +158,23 @@ export async function modifierChamp(
     method: 'PATCH', body: JSON.stringify(patch),
   }, 'Impossible de modifier le champ.');
   return r.field;
+}
+
+/**
+ * Enregistre la place de chaque custom key d'un plan de formulaire réordonné
+ * (dossier, rangée suivie `config.apres`, ordre) — seulement ce qui a changé.
+ */
+export async function enregistrerPlan(objet: ObjetChamp, plan: ElementPlan[], champs: ChampPerso[]): Promise<void> {
+  const places = lirePlan(objet, plan);
+  await Promise.all(champs.map((c) => {
+    const p = places.get(c.id);
+    if (!p) return null;
+    const patch: Parameters<typeof modifierChamp>[1] = {};
+    if ((c.folder_id ?? null) !== p.folder_id) patch.folder_id = p.folder_id;
+    if ((c.position ?? 0) !== p.position) patch.position = p.position;
+    if ((c.config?.apres ?? null) !== p.apres) patch.config = { apres: p.apres };
+    return Object.keys(patch).length ? modifierChamp(c.id, patch) : null;
+  }));
 }
 
 export async function archiverChamp(id: string, archive = true): Promise<ChampPerso> {
