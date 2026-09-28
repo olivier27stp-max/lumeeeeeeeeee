@@ -43,6 +43,7 @@ import {
   chargerEtiquettes,
   apercuAutomatisation,
   changerPublication,
+  type BrouillonAutomatisation,
   type CatalogueAutomatisations,
   type ApercuAutomatisation,
 } from '../lib/automationBuilderApi';
@@ -56,6 +57,7 @@ import {
   estFormatOrigine,
   projeterFormatOrigine,
   apercuConversion,
+  TEXTES_ACTION_PROVISOIRE,
 } from '../lib/sequenceTypes';
 import SequenceCanvas from '../components/automations/SequenceCanvas';
 import PanneauEtape from '../components/automations/PanneauEtape';
@@ -112,6 +114,62 @@ export default function AutomationBuilderPage() {
   const lumiDisponible = aLumi || planEnChargement;
 
   const [regle, setRegle] = useState<AutomationRule | null>(null);
+  /*
+   * « Partir de zéro » et « Construire avec Lumi » ouvrent
+   * `/automations/nouvelle` : RIEN n'est créé en base tant que
+   * l'utilisateur n'a rien fait (audit 2026-09-28 — brouillons orphelins, et
+   * sans Autopilot la règle naissait AVANT l'écran de vente). Elle naît à la
+   * première vraie sauvegarde, dans `ecrire`, une seule fois même si deux
+   * sauvegardes partent en même temps.
+   */
+  const estNouvelle = id === 'nouvelle';
+  const idReel = useRef<string | null>(estNouvelle ? null : (id ?? null));
+  const creationEnVol = useRef<Promise<AutomationRule> | null>(null);
+  /** Vrai le temps de remplacer `/nouvelle` par l'id créé : pas de rechargement. */
+  const passageALaRegleCreee = useRef(false);
+  const regleCourante = useRef<AutomationRule | null>(null);
+  useEffect(() => { regleCourante.current = regle; }, [regle]);
+  const { isEnabled: sortieALaCreation } = useModuleAccess('auto_sortie_parcours');
+
+  /**
+   * Toute écriture de la règle passe par ici. Brouillon jamais enregistré :
+   * la PREMIÈRE écriture le crée (avec le contenu demandé), les suivantes
+   * attendent cette création puis modifient.
+   */
+  const ecrire = useCallback(async (patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => {
+    if (idReel.current) return modifierAutomatisation(idReel.current, patch);
+    if (creationEnVol.current) {
+      const creee = await creationEnVol.current;
+      return modifierAutomatisation(creee.id, patch);
+    }
+    const base = regleCourante.current;
+    const enCreation = creerAutomatisation({
+      name: base?.name || (fr ? 'Nouvelle automatisation' : 'New automation'),
+      trigger_event: base?.trigger_event ?? 'quote.sent',
+      conditions: (base?.conditions ?? {}) as Record<string, unknown>,
+      delay_seconds: 0,
+      // Action PROVISOIRE (le serveur en exige une) : l'éditeur la reconnaît
+      // comme un parcours vide — voir TEXTES_ACTION_PROVISOIRE.
+      actions: [{ type: 'send_sms', config: { body: TEXTES_ACTION_PROVISOIRE[fr ? 0 : 1] } }],
+      steps: [],
+      // Sortie automatique du parcours : une NOUVELLE automatisation naît
+      // avec la case cochée. Drapeau coupé = rien d'écrit, comme avant.
+      ...(sortieALaCreation ? { settings: { arreter_si_resolu: true } } : {}),
+      ...patch,
+      is_active: false,
+    }).then((creee) => {
+      idReel.current = creee.id;
+      passageALaRegleCreee.current = true;
+      setRegle((r) => (r ? { ...r, id: creee.id, org_id: creee.org_id, created_at: creee.created_at, updated_at: creee.updated_at } : creee));
+      navigate(`/automations/${creee.id}${parametres.get('lumi') === '1' ? '?lumi=1' : ''}`, { replace: true });
+      return creee;
+    }, (e: unknown) => {
+      creationEnVol.current = null;
+      throw e;
+    });
+    creationEnVol.current = enCreation;
+    return enCreation;
+  }, [fr, navigate, parametres, sortieALaCreation]);
   /*
    * Interrupteur martelé (Rafba, 2026-09-28) : chaque clic envoyait sa
    * requête calculée sur un état périmé, et la dernière réponse ARRIVÉE
@@ -390,14 +448,14 @@ export default function AutomationBuilderPage() {
       // Réglages posés d'office par ce déclencheur (ex. « première ouverture
       // seulement ») — sans écraser ce que la règle portait déjà.
       const defaut = DECLENCHEURS.find((d) => d.cle === cle)?.conditions_defaut;
-      const maj = await modifierAutomatisation(regle.id, defaut
+      const maj = await ecrire(defaut
         ? { trigger_event: cle, conditions: { ...defaut, ...((regle.conditions ?? {}) as Record<string, unknown>) } }
         : { trigger_event: cle });
       setRegle(maj);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
     }
-  }, [regle]);
+  }, [regle, ecrire]);
 
   /**
    * Lumi construit le parcours à partir de la description.
@@ -424,6 +482,12 @@ export default function AutomationBuilderPage() {
     setGenere(true);
     try {
       /*
+       * Envoyer une demande à Lumi est une vraie action : un brouillon jamais
+       * enregistré naît ICI (et pas au clic sur « Construire avec Lumi »),
+       * pour que la conversation soit gardée avec l'automatisation.
+       */
+      if (!idReel.current) await ecrire({ name: nom.trim() || regle?.name || (fr ? 'Nouvelle automatisation' : 'New automation') });
+      /*
        * On donne à Lumi la CONVERSATION et le parcours à l'écran.
        *
        * Avant, il ne recevait que la dernière phrase : « change le
@@ -435,7 +499,7 @@ export default function AutomationBuilderPage() {
         // 6 derniers tours seulement : c'est ce que la route accepte, et
         // l'historique complet gonflerait le prompt sans rien apporter.
         echanges: echangesLumi.slice(-6),
-        ruleId: regle?.id ?? null,
+        ruleId: idReel.current,
         parcoursActuel: steps.length > 0
           ? { trigger_event: regle?.trigger_event, steps }
           : null,
@@ -446,8 +510,10 @@ export default function AutomationBuilderPage() {
       // l'utilisateur a décrit, il pourra les changer.
       if (propose.nom) setNom(propose.nom);
       if (propose.trigger_event && regle) {
-        setRegle({ ...regle, trigger_event: propose.trigger_event });
-        modifierAutomatisation(regle.id, { trigger_event: propose.trigger_event }).catch(() => {});
+        // Mise à jour FONCTIONNELLE : `regle` ici date d'avant la création
+        // du brouillon, et l'écraser remettrait un id vide.
+        setRegle((r) => (r ? { ...r, trigger_event: propose.trigger_event } : r));
+        ecrire({ trigger_event: propose.trigger_event }).catch(() => {});
       }
       // La conversation se poursuit : le tour suivant saura ce qui
       // vient d'être demandé et ce que Lumi a répondu.
@@ -526,6 +592,13 @@ export default function AutomationBuilderPage() {
 
   // ── Chargement ──
   useEffect(() => {
+    // `/nouvelle` vient d'être remplacé par l'id du brouillon créé : l'écran
+    // EST déjà la règle — relire la base écraserait ce qu'on tape.
+    if (passageALaRegleCreee.current) { passageALaRegleCreee.current = false; return; }
+    // Une AUTRE règle ouverte dans le même éditeur (lien « Ouvrir » d'un
+    // toast) : les écritures doivent la viser, elle.
+    idReel.current = estNouvelle ? null : (id ?? null);
+    creationEnVol.current = null;
     let vivant = true;
     /*
      * Un échec passager (serveur occupé, 429, réseau) ne doit pas laisser
@@ -545,7 +618,16 @@ export default function AutomationBuilderPage() {
       .then((d) => {
         if (!vivant) return;
         setCatalogue(d.catalogue);
-        const trouvee = d.rules.find((r) => r.id === id) ?? null;
+        // `/nouvelle` : un brouillon LOCAL, rien en base (voir `ecrire`).
+        const trouvee = estNouvelle
+          ? {
+            id: '', org_id: '', name: fr ? 'Nouvelle automatisation' : 'New automation', description: null,
+            trigger_event: 'quote.sent', conditions: {}, delay_seconds: 0,
+            actions: [{ type: 'send_sms', config: { body: TEXTES_ACTION_PROVISOIRE[fr ? 0 : 1] } }],
+            steps: [], settings: null, is_active: false, is_preset: false, preset_key: null,
+            created_at: '', updated_at: '', lumi_conversation: [],
+          } satisfies AutomationRule
+          : d.rules.find((r) => r.id === id) ?? null;
         setRegle(trouvee);
         /*
          * Le nom des préréglages est stocké en ANGLAIS en base
@@ -839,7 +921,7 @@ export default function AutomationBuilderPage() {
       for (let essai = 0; essai <= attentes.length; essai++) {
         if (annule) return;
         try {
-          await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
+          await ecrire({ name: nom.trim() || regle.name, steps });
           /*
            * On confirme même si l'effet a été relancé : le serveur a bien
            * reçu `envoye`. Si l'écran a changé depuis, le nouvel état
@@ -873,7 +955,7 @@ export default function AutomationBuilderPage() {
       }
     }, 3000);
     return () => { annule = true; clearTimeout(minuterie); };
-  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr]);
+  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire]);
 
   // Dès que la dernière étape vide est remplie, on repart en enregistrement.
   useEffect(() => {
@@ -955,7 +1037,7 @@ export default function AutomationBuilderPage() {
        */
       if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours') {
         try {
-          await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
+          await ecrire({ name: nom.trim() || regle.name, steps });
           setEtatSauvegarde('a_jour');
         } catch (e: unknown) {
           toast.error(e instanceof Error ? e.message : String(e));
@@ -963,7 +1045,11 @@ export default function AutomationBuilderPage() {
         }
       }
     }
-    const voulu = fileBascule.basculer(regle.id, regle.is_active);
+    // Un brouillon jamais enregistré n'a rien à publier (le contrôle
+    // ci-dessus l'a déjà dit) ; sinon l'id RÉEL, créé au besoin juste avant.
+    const cible = idReel.current;
+    if (!cible) return;
+    const voulu = fileBascule.basculer(cible, regle.is_active);
     setRegle((r) => (r ? { ...r, is_active: voulu } : r));
   };
 
@@ -1091,7 +1177,7 @@ export default function AutomationBuilderPage() {
     let echecEnregistrement = false;
     if (regle && etapesIncompletes === 0 && (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours')) {
       try {
-        await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
+        await ecrire({ name: nom.trim() || regle.name, steps });
         setEtatSauvegarde('a_jour');
       } catch (e: unknown) {
         console.error('[automatisations] enregistrement à la sortie impossible', e);
@@ -1115,7 +1201,7 @@ export default function AutomationBuilderPage() {
       if (!ok) return;
     }
     navigate('/automations');
-  }, [regle, etapesIncompletes, etatSauvegarde, nom, steps, fr, navigate]);
+  }, [regle, etapesIncompletes, etatSauvegarde, nom, steps, fr, navigate, ecrire]);
 
   const declencheurLabel = useMemo(() => {
     if (!catalogue || !regle) return fr ? '— à choisir —' : '— to pick —';
@@ -1244,7 +1330,7 @@ export default function AutomationBuilderPage() {
     try {
       // La case « Arrêter si… » vit dans `settings` : on la fusionne avec les
       // réglages existants (fenêtre, réentrée…) au lieu de les écraser.
-      const maj = await modifierAutomatisation(regle.id, arreterSiResolu === undefined
+      const maj = await ecrire(arreterSiResolu === undefined
         ? { conditions }
         : { conditions, settings: { ...((regle.settings ?? {}) as Record<string, unknown>), arreter_si_resolu: arreterSiResolu } });
       setRegle(maj);
@@ -1253,7 +1339,7 @@ export default function AutomationBuilderPage() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
     }
-  }, [regle, fr]);
+  }, [regle, fr, ecrire]);
 
   if (chargement) {
     return (
@@ -1390,9 +1476,13 @@ export default function AutomationBuilderPage() {
             type="button"
             onClick={async () => {
               if (!regle) return;
+              if (!idReel.current) {
+                toast.info(fr ? 'Ajoutez une première étape : il n’y a encore rien à prévisualiser.' : 'Add a first step: there is nothing to preview yet.');
+                return;
+              }
               setApercuEnCours(true);
               try {
-                setApercu(await apercuAutomatisation(regle.id));
+                setApercu(await apercuAutomatisation(idReel.current));
               } catch (e: unknown) {
                 toast.error(e instanceof Error ? e.message : String(e));
               } finally {
@@ -1923,10 +2013,22 @@ export default function AutomationBuilderPage() {
 
         {/* Historique et journaux : les données existent depuis des mois,
             c'est l'écran qui manquait. */}
-        {onglet === 'historique' && <div className="absolute inset-0 overflow-y-auto"><OngletHistorique ruleId={regle.id} fr={fr} /></div>}
-        {onglet === 'journaux' && <div className="absolute inset-0 overflow-y-auto"><OngletJournaux ruleId={regle.id} fr={fr} /></div>}
+        {/* Un brouillon jamais enregistré n'a ni historique, ni journaux, ni
+            réglages à écrire : on le dit au lieu d'interroger la base avec
+            un identifiant vide. */}
+        {onglet !== 'parcours' && !regle.id && (
+          <div className="absolute inset-0 flex items-center justify-center p-6">
+            <p className="text-sm text-text-secondary">
+              {fr
+                ? 'Cette automatisation n’est pas encore enregistrée : ajoutez une première étape.'
+                : 'This automation is not saved yet: add a first step.'}
+            </p>
+          </div>
+        )}
+        {onglet === 'historique' && regle.id && <div className="absolute inset-0 overflow-y-auto"><OngletHistorique ruleId={regle.id} fr={fr} /></div>}
+        {onglet === 'journaux' && regle.id && <div className="absolute inset-0 overflow-y-auto"><OngletJournaux ruleId={regle.id} fr={fr} /></div>}
 
-        {onglet === 'reglages' && (
+        {onglet === 'reglages' && regle.id && (
           <div className="absolute inset-0 overflow-y-auto">
             <OngletReglages
               ruleId={regle.id}

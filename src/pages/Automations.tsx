@@ -22,7 +22,6 @@ import {
   Settings, FolderPlus, Filter, Building2, Link2, Eye, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { localizeAutomationName } from '../lib/automationNames';
-import { TEXTES_ACTION_PROVISOIRE } from '../lib/sequenceTypes';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
@@ -32,7 +31,6 @@ import InterrupteurPublication from '../components/automations/InterrupteurPubli
 import CopierVersBureauxModal from '../components/automations/CopierVersBureauxModal';
 import {
   chargerAutomatisations,
-  creerAutomatisation,
   dupliquerAutomatisation,
   supprimerAutomatisation,
   restaurerAutomatisation,
@@ -49,7 +47,6 @@ import {
   type DossierAutomatisation,
 } from '../lib/automationBuilderApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
-import { useModuleAccess } from '../hooks/useModuleAccess';
 import { apercuClientsInactifs } from '../lib/reservationApi';
 import { creerFileBascule } from '../lib/fileBascule';
 import {
@@ -367,7 +364,6 @@ export default function Automations() {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
-  const { isEnabled: sortieParcoursActive } = useModuleAccess('auto_sortie_parcours');
 
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -670,36 +666,14 @@ export default function Automations() {
   };
 
   /*
-   * Double clic sur « Créer » = deux automatisations (audit 2026-09-28).
-   * Un verrou synchrone (le ref) arrête le 2e clic avant même le rendu ;
-   * l'état désactive les boutons pendant la requête.
+   * « Partir de zéro » et « Construire avec Lumi » ne créent RIEN en base
+   * (audit 2026-09-28) : l'éditeur ouvre un brouillon local, qui ne naît
+   * qu'à la première vraie sauvegarde. Plus de brouillons orphelins, plus de
+   * double création au double clic, et sans Autopilot l'écran de vente de
+   * Lumi passe avant toute écriture.
    */
-  const creationVerrou = useRef(false);
-  const [creationEnCours, setCreationEnCours] = useState(false);
-  const partirDeZero = async (avecLumi: boolean) => {
-    if (creationVerrou.current) return;
-    creationVerrou.current = true;
-    setCreationEnCours(true);
-    try {
-      const creee = await creerAutomatisation({
-        name: fr ? 'Nouvelle automatisation' : 'New automation',
-        trigger_event: 'quote.sent',
-        delay_seconds: 0,
-        // Action PROVISOIRE (le serveur en exige une) : l'éditeur la reconnaît
-        // et ouvre un parcours vide — voir TEXTES_ACTION_PROVISOIRE.
-        actions: [{ type: 'send_sms', config: { body: TEXTES_ACTION_PROVISOIRE[fr ? 0 : 1] } }],
-        steps: [],
-        // Sortie automatique du parcours : une NOUVELLE automatisation naît
-        // avec la case cochée. Drapeau coupé = rien d'écrit, comme avant.
-        ...(sortieParcoursActive ? { settings: { arreter_si_resolu: true } } : {}),
-      });
-      navigate(`/automations/${creee.id}${avecLumi ? '?lumi=1' : ''}`);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      creationVerrou.current = false;
-      setCreationEnCours(false);
-    }
+  const partirDeZero = (avecLumi: boolean) => {
+    navigate(`/automations/nouvelle${avecLumi ? '?lumi=1' : ''}`);
   };
 
   // Multi-bureaux : bureaux où l'on peut copier (vide = un seul bureau, l'option n'apparaît pas).
@@ -1180,8 +1154,7 @@ export default function Automations() {
             <button
               type="button"
               onClick={() => partirDeZero(true)}
-              disabled={creationEnCours}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent/5 px-3 py-1.5 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent/5 px-3 py-1.5 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <Sparkles size={14} aria-hidden="true" />
               {fr ? 'Construire avec Lumi' : 'Build using AI'}
@@ -1193,12 +1166,9 @@ export default function Automations() {
                 onClick={(e) => { e.stopPropagation(); setMenuCreer((m) => !m); }}
                 aria-haspopup="menu"
                 aria-expanded={menuCreer}
-                disabled={creationEnCours}
-                className="glass-button-primary inline-flex items-center gap-1.5 disabled:opacity-50"
+                className="glass-button-primary inline-flex items-center gap-1.5"
               >
-                {creationEnCours
-                  ? <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                  : <Plus size={14} aria-hidden="true" />}
+                <Plus size={14} aria-hidden="true" />
                 {fr ? 'Créer' : 'Create workflow'}
                 <ChevronDown size={13} aria-hidden="true" />
               </button>
@@ -1216,8 +1186,7 @@ export default function Automations() {
                       type="button"
                       role="menuitem"
                       onClick={() => choisirDepart(d.cle)}
-                      disabled={creationEnCours}
-                      className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+                      className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
                       <d.icone size={15} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
                       <span className="min-w-0">

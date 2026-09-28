@@ -188,24 +188,34 @@ describe('M8 — la liste publie par la route serveur, qui peut refuser', () => 
 
 // ─── Double clic « Créer » ──────────────────────────────────────
 
-describe('double clic sur « Créer » : une seule automatisation', () => {
-  it('deux clics rapides sur « Construire avec Lumi » ne créent qu’une fois, bouton désactivé pendant la requête', async () => {
+describe('double clic sur « Créer » : jamais deux automatisations', () => {
+  /*
+   * D'abord corrigé par un verrou sur la requête ; depuis que la liste ne
+   * crée plus rien (« rien en base avant la première vraie sauvegarde »),
+   * un double clic ne fait qu'ouvrir l'éditeur. La création unique est
+   * gardée côté éditeur (automatisations-editeur-launch.test.tsx).
+   */
+  it('deux clics rapides sur « Construire avec Lumi » ne créent RIEN et ouvrent le brouillon', async () => {
     reglesServies = [];
-    let finir: (v: unknown) => void = () => {};
-    creerMock.mockImplementationOnce(() => new Promise((r) => { finir = r; }) as any);
     await rendre();
     const lumi = bouton('Construire avec Lumi');
-    // Les deux clics partent AVANT le moindre rendu, comme un vrai double clic.
     act(() => {
       lumi?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       lumi?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await attendre();
-    expect(creerMock).toHaveBeenCalledTimes(1);
-    expect(bouton('Construire avec Lumi')?.hasAttribute('disabled')).toBe(true);
-    await act(async () => { finir(regle({ id: 'neuve' })); });
+    expect(creerMock).not.toHaveBeenCalled();
+    expect(naviguer).toHaveBeenCalledWith('/automations/nouvelle?lumi=1');
+  });
+
+  it('« Partir de zéro » ouvre le brouillon sans rien créer', async () => {
+    reglesServies = [];
+    await rendre();
+    cliquer(bouton('Créer'));
+    cliquer(bouton('Partir de zéro'));
     await attendre();
-    expect(bouton('Construire avec Lumi')?.hasAttribute('disabled')).toBe(false);
+    expect(creerMock).not.toHaveBeenCalled();
+    expect(naviguer).toHaveBeenCalledWith('/automations/nouvelle');
   });
 });
 
