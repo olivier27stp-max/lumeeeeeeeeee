@@ -89,9 +89,28 @@ async function avecLienReservation(
   }
 }
 
+/**
+ * Pourquoi un envoi n'a pas pu partir sur CE canal — jamais une panne.
+ *
+ * Launch 2026-09-28 (M1) : ces cas faisaient ÉCHOUER l'étape, et une étape
+ * échouée arrête tout le parcours. Sans numéro texto (aucun bureau n'en a
+ * encore), le rappel de rendez-vous mourait au premier texto : ni le
+ * courriel, ni les rappels 7 j / veille / 2 h ne partaient. Ce ne sont pas
+ * des pannes à reprendre, ce sont des impossibilités : l'étape est SAUTÉE,
+ * le parcours continue, le motif est dans le journal (`result_data.saute`).
+ */
+export type CodeSaut =
+  | 'sms_non_configure'
+  | 'sans_telephone'
+  | 'sans_courriel'
+  | 'sans_consentement'
+  | 'adresse_injoignable'
+  | 'date_absente'
+  | 'desabonne';
+
 /** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
-function saute(motif: string): ActionResult {
-  return { success: true, data: { saute: motif } };
+function saute(motif: string, code: CodeSaut = 'desabonne'): ActionResult {
+  return { success: true, data: { saute: motif, saute_code: code } };
 }
 
 /** Le résultat est-il un vrai envoi (pas un saut) ? */
@@ -250,7 +269,7 @@ async function depassePlafondFrequence(
  */
 export type VerdictConsentement =
   | { autorise: true; base?: BaseLegale; clientId?: string }
-  | { autorise: false; motif: string; desabonne?: boolean };
+  | { autorise: false; motif: string; desabonne?: boolean; technique?: boolean };
 
 /**
  * Les dates qui peuvent fonder un tacite, pour un client donné.
@@ -371,7 +390,7 @@ async function consentementCommercial(
     console.error(`[actions] consentement indéterminable (${canal}, org ${ctx.orgId}):`, e?.message || e);
     // Doute = on ne part pas. Voir l'en-tête : l'inverse du plafond de fréquence.
     return ctx.commercial
-      ? { autorise: false, motif: 'consentement invérifiable (erreur technique) — envoi commercial suspendu' }
+      ? { autorise: false, motif: 'consentement invérifiable (erreur technique) — envoi commercial suspendu', technique: true }
       : { autorise: true };
   }
 }
@@ -1011,7 +1030,7 @@ export async function executeSendEmail(
   // Voir `DESTINATAIRE_IMPOSE` plus haut : `config.to` permettait d'envoyer les
   // données d'un client (nom, montants, adresse) vers une adresse arbitraire.
   const to = vars.client_email;
-  if (!to) return { success: false, error: 'No recipient email' };
+  if (!to) return saute('Aucune adresse courriel pour ce client', 'sans_courriel');
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'subject', ctx.langue), champLocalise(config, 'body', ctx.langue));
   const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
@@ -1045,7 +1064,7 @@ export async function executeSendEmail(
       if (ctx.parCanal) {
         if (ctx.commercial) return saute(motifSaut('courriel'));
       } else {
-        return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails` };
+        return saute(motifSaut('courriel'));
       }
     }
 
@@ -1055,7 +1074,9 @@ export async function executeSendEmail(
     const consentement = await consentementCommercial(ctx, 'email', to);
     if (!consentement.autorise) {
       if (ctx.parCanal && consentement.desabonne) return saute(motifSaut('courriel'));
-      return { success: false, error: `Consentement manquant pour ${to} : ${consentement.motif}` };
+      // Une LECTURE ratée n'est pas une absence de consentement : vrai échec, repris plus tard.
+      if (consentement.technique) return { success: false, error: 'Lecture du carnet de clients impossible (erreur technique) — envoi suspendu' };
+      return saute(`Consentement manquant (courriel) : ${consentement.motif}`, consentement.desabonne ? 'desabonne' : 'sans_consentement');
     }
     // La preuve, pas seulement l'autorisation : le CRTC demande à l'expéditeur
     // de démontrer POURQUOI il avait le droit. N'échoue jamais l'envoi.
@@ -1192,12 +1213,12 @@ export async function executeSendSms(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  if (!ctx.twilio) return { success: false, error: 'Twilio not configured' };
+  if (!ctx.twilio) return saute('Aucun numéro texto configuré pour le bureau', 'sms_non_configure');
 
   // Même règle que pour le courriel : le numéro vient de l'entité, pas de la
   // règle. Voir `DESTINATAIRE_IMPOSE`.
   const to = vars.client_phone;
-  if (!to) return { success: false, error: 'No recipient phone' };
+  if (!to) return saute('Aucun numéro de téléphone pour ce client', 'sans_telephone');
 
   // CASL compliance — manual sends already blocked opted-out recipients, but
   // automations bypassed the list entirely and kept texting after a STOP.
@@ -1212,7 +1233,7 @@ export async function executeSendSms(
     // Désabonnement par canal : seul le marketing est sauté. Un texto
     // transactionnel est tenté — si l'opérateur le bloque (STOP géré par
     // Twilio, erreur 21610), il est sauté plus bas avec le même motif.
-    if (!ctx.parCanal) return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)` };
+    if (!ctx.parCanal) return saute(motifSaut('texto'));
     if (ctx.commercial) return saute(motifSaut('texto'));
   }
 
@@ -1220,7 +1241,9 @@ export async function executeSendSms(
   // qu'une base légale existe — exprès, ou la relation d'affaires (LCAP).
   const consentementSms = await consentementCommercial(ctx, 'sms', to);
   if (!consentementSms.autorise) {
-    return { success: false, error: `Consentement manquant pour ${optOutPhone} : ${consentementSms.motif}` };
+    // Une LECTURE ratée n'est pas une absence de consentement : vrai échec, repris plus tard.
+    if (consentementSms.technique) return { success: false, error: 'Lecture du carnet de clients impossible (erreur technique) — envoi suspendu' };
+    return saute(`Consentement manquant (texto) : ${consentementSms.motif}`, 'sans_consentement');
   }
   // Même raison que pour le courriel : la base retenue doit être démontrable.
   if (ctx.commercial) void journaliserBaseLegale(ctx, 'sms', consentementSms.clientId ?? null, consentementSms.base);
@@ -1242,13 +1265,12 @@ export async function executeSendSms(
     const { getOrgSmsFromNumber } = await import('../twilioProvisioning');
     fromNumber = await getOrgSmsFromNumber(ctx.orgId);
   } catch (err: any) {
-    return {
-      success: false,
-      error:
-        err?.code === 'plan_excludes_sms'
-          ? 'Plan does not include SMS'
-          : `Organization has no SMS number provisioned (${err?.code || err?.message || 'unknown'})`,
-    };
+    return saute(
+      err?.code === 'plan_excludes_sms'
+        ? 'Le forfait n’inclut pas les textos'
+        : 'Aucun numéro texto configuré pour le bureau',
+      'sms_non_configure',
+    );
   }
 
   {
@@ -1772,10 +1794,8 @@ export async function executeRequestReview(
     ? await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx)
     : { success: false, error: 'Client has no phone number.' };
 
-  // Avec le désabonnement par canal, un canal SAUTÉ n'est pas un envoi.
-  const sent = ctx.parCanal
-    ? estEnvoye(emailResult) || estEnvoye(smsResult)
-    : emailResult.success || smsResult.success;
+  // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
+  const sent = estEnvoye(emailResult) || estEnvoye(smsResult);
   const sautes = [emailResult, smsResult]
     .map((r) => (r.success && r.data && typeof r.data === 'object' ? (r.data as { saute?: string }).saute : undefined))
     .filter((m): m is string => !!m);

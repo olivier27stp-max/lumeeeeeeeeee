@@ -797,7 +797,8 @@ describe('désabonnement courriel — le pendant email de STOP', () => {
     // de retrait.
     expect(helpers).toContain('export async function isEmailUnsubscribed');
     expect(actions).toContain('isEmailUnsubscribed(ctx.supabase, ctx.orgId, to)');
-    expect(actions).toContain('has unsubscribed from marketing emails');
+    // Launch M1 : le désabonné est SAUTÉ (motif « Client désabonné (courriel) »), plus un échec.
+    expect(actions).toMatch(/isEmailUnsubscribed\(ctx\.supabase, ctx\.orgId, to\)[\s\S]{0,400}return saute\(motifSaut\('courriel'\)\)/);
   });
 
   it('un porteur de jeton n’est pas traité comme un désabonné', () => {

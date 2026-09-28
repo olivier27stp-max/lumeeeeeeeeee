@@ -86,21 +86,25 @@ describe('message COMMERCIAL', () => {
 
   it('NE PART PAS sans consentement enregistré', async () => {
     const r = await executeSendEmail(config as any, vars, contexte({ email_consent_at: null, sms_consent_at: null, email_opt_out_at: null }, true) as any);
-    expect(r.success).toBe(false);
-    expect(r.error).toMatch(/[Cc]onsentement/);
+    // Launch M1 : une impossibilité est un SAUT (le parcours continue), jamais un envoi.
+    expect((r.data as any)?.saute).toMatch(/[Cc]onsentement/);
+    expect((r.data as any)?.saute_code).toBe('sans_consentement');
     expect(envois).toHaveLength(0);
   });
 
   it('NE PART PAS vers un destinataire inconnu du carnet de clients', async () => {
     const r = await executeSendEmail(config as any, vars, contexte(null, true) as any);
-    expect(r.success).toBe(false);
+    // Launch M1 : une impossibilité est un SAUT (le parcours continue), jamais un envoi.
+    expect((r.data as any)?.saute).toMatch(/inconnu du carnet/);
     expect(envois).toHaveLength(0);
   });
 
   it('NE PART PAS si le consentement est invérifiable (erreur technique)', async () => {
     const r = await executeSendEmail(config as any, vars, contexte(null, true, { erreur: true }) as any);
+    // Une lecture ratée reste un VRAI échec (repris plus tard), jamais un saut.
     expect(r.success).toBe(false);
-    expect(r.error).toMatch(/invérifiable|consentement/i);
+    expect(r.error).toMatch(/erreur technique/i);
+    expect(r.error).not.toMatch(/consent/i); // sinon le moteur la jugerait définitive
     expect(envois).toHaveLength(0);
   });
 });
@@ -119,8 +123,9 @@ describe('message TRANSACTIONNEL', () => {
 
   it('NE PART PAS si le client s\'est désabonné : un retrait vaut pour tout', async () => {
     const r = await executeSendEmail(config as any, vars, contexte({ email_consent_at: '2026-01-01', sms_consent_at: null, email_opt_out_at: '2026-06-01' }, false) as any);
-    expect(r.success).toBe(false);
-    expect(r.error).toMatch(/désabonn/i);
+    // Launch M1 : une impossibilité est un SAUT (le parcours continue), jamais un envoi.
+    expect((r.data as any)?.saute).toMatch(/désabonn/i);
+    expect((r.data as any)?.saute_code).toBe('desabonne');
     expect(envois).toHaveLength(0);
   });
 });
