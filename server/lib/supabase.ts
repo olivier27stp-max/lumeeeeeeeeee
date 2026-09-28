@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from './supabaseAdmin';
 import { supabaseUrl, supabaseAnonKey, supabaseServiceRoleKey } from './config';
 import { ORG_UUID_RE, shouldUseRequestedOrg } from './active-org';
 import { setSentryRequestOrg } from './sentry';
+import { creerPartageEnVol } from './partage-en-vol';
 
 let adminClientCache: SupabaseClient | null = null;
 
@@ -152,44 +153,32 @@ function cleSession(header: string, bureau: string | undefined): string {
   return `${header.slice(-64)}|${bureau ?? ''}`;
 }
 
-export async function requireAuthedClient(req: express.Request, res: express.Response) {
-  const authorizationHeader = req.header('authorization');
-  if (!authorizationHeader) {
-    res.status(401).json({ error: 'Missing authorization header.' });
-    return null;
-  }
+type ResolutionSession =
+  | { ok: true; user: User; orgId: string }
+  | { ok: false; statut: number; corps: Record<string, string> };
 
-  const cle = cleSession(authorizationHeader, req.header('x-org-id'));
-  const enCache = cacheSessions.get(cle);
-  if (enCache && enCache.expire > Date.now()) {
-    setSentryRequestOrg(enCache.orgId, enCache.user.id);
-    return { client: buildSupabaseWithAuth(authorizationHeader, enCache.orgId), orgId: enCache.orgId, user: enCache.user };
-  }
+const partagerSession = creerPartageEnVol<ResolutionSession>();
 
+async function resoudreSession(authorizationHeader: string, headerOrg: string | undefined): Promise<ResolutionSession> {
   const client = buildSupabaseWithAuth(authorizationHeader);
   const {
     data: { user },
     error: userError,
   } = await client.auth.getUser();
 
-  if (userError || !user) {
-    res.status(401).json({ error: 'Invalid auth token.' });
-    return null;
-  }
+  if (userError || !user) return { ok: false, statut: 401, corps: { error: 'Invalid auth token.' } };
 
   // Office actif : le front transmet l'office réellement sélectionné via le
   // header `x-org-id` (un user peut être membre de plusieurs offices d'une même
   // compagnie). On ne l'honore QUE si l'utilisateur en est bien membre
   // (anti-IDOR) ; sinon on retombe sur current_org_id() (première membership).
   let orgId: string | null = null;
-  const headerOrg = req.header('x-org-id');
   if (headerOrg && ORG_UUID_RE.test(headerOrg)) {
     const { data: isMember } = await client.rpc('has_org_membership', { p_user: user.id, p_org: headerOrg });
     if (shouldUseRequestedOrg(headerOrg, isMember === true)) orgId = headerOrg;
     else {
       // Bureau demandé mais pas membre : refus explicite, jamais un repli silencieux sur un autre bureau.
-      res.status(403).json({ error: 'Accès refusé à ce bureau.', code: 'org_forbidden' });
-      return null;
+      return { ok: false, statut: 403, corps: { error: 'Accès refusé à ce bureau.', code: 'org_forbidden' } };
     }
   }
   if (!orgId) {
@@ -197,15 +186,36 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
     // « le premier » mélangeait les données (Vision Lavage voyait Coquin lavage, 2026-09-24).
     const { count } = await getServiceClient().from('memberships').select('org_id', { count: 'exact', head: true }).eq('user_id', user.id);
     if ((count ?? 0) > 1) {
-      res.status(400).json({ error: 'Bureau requis : envoyez l\'en-tête x-org-id du bureau sélectionné.', code: 'org_required' });
-      return null;
+      return { ok: false, statut: 400, corps: { error: 'Bureau requis : envoyez l\'en-tête x-org-id du bureau sélectionné.', code: 'org_required' } };
     }
     orgId = await resolveOrgId(client);
   }
-  if (!orgId) {
-    res.status(403).json({ error: 'No organization context found for user.' });
+  if (!orgId) return { ok: false, statut: 403, corps: { error: 'No organization context found for user.' } };
+  return { ok: true, user, orgId };
+}
+
+export async function requireAuthedClient(req: express.Request, res: express.Response) {
+  const authorizationHeader = req.header('authorization');
+  if (!authorizationHeader) {
+    res.status(401).json({ error: 'Missing authorization header.' });
     return null;
   }
+
+  const headerOrg = req.header('x-org-id');
+  const cle = cleSession(authorizationHeader, headerOrg);
+  const enCache = cacheSessions.get(cle);
+  if (enCache && enCache.expire > Date.now()) {
+    setSentryRequestOrg(enCache.orgId, enCache.user.id);
+    return { client: buildSupabaseWithAuth(authorizationHeader, enCache.orgId), orgId: enCache.orgId, user: enCache.user };
+  }
+
+  // Les appels simultanés d'une même page attendent la même vérification.
+  const r = await partagerSession(cle, () => resoudreSession(authorizationHeader, headerOrg));
+  if (!r.ok) {
+    res.status(r.statut).json(r.corps);
+    return null;
+  }
+  const { user, orgId } = r;
 
   // Toute erreur levée plus loin dans cette requête portera l'org — sinon
   // l'alerte Sentry ne dit pas chez quel client ça a planté. No-op sans DSN.

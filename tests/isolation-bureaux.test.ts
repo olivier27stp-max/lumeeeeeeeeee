@@ -98,7 +98,7 @@ describe('3. Le serveur ne devine plus le bureau', () => {
   const s = lire('server/lib/supabase.ts');
   it('400 org_required pour un compte multi-bureaux sans en-tête', () => {
     expect(s).toMatch(/code:\s*'org_required'/);
-    expect(s).toMatch(/status\(400\)/);
+    expect(s).toMatch(/statut: 400, corps: \{ error: 'Bureau requis/);
   });
   it('403 org_forbidden quand l’en-tête vise un bureau non membre', () => {
     expect(s).toMatch(/code:\s*'org_forbidden'/);

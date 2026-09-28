@@ -44,6 +44,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildSupabaseWithAuth, companyOrgIds, getServiceClient, resolveOrgId } from './supabase';
 import { PUBLIC_ROUTE_PREFIXES } from './route-permissions';
 import { JOURS_DE_GRACE } from './subscription-email';
+import { creerPartageEnVol } from './partage-en-vol';
 
 export type ModeGarde = 'enforce' | 'log' | 'off';
 
@@ -159,37 +160,46 @@ function purger<T extends { expire: number }>(m: Map<string, T>, maintenant: num
  * ailleurs doublerait un `auth.getUser()` par requête et ferait dériver les
  * deux réponses.
  */
+type UtilisateurResolu = { userId: string; email: string | null; orgId: string | null; expire: number };
+const partagerUtilisateur = creerPartageEnVol<UtilisateurResolu | null>();
+const partagerVerdict = creerPartageEnVol<VerdictAbonnement>();
+
 export async function resoudreUtilisateur(req: express.Request, maintenant: number = Date.now()) {
   const header = req.header('authorization');
   if (!header || !/^Bearer\s+\S+/i.test(header)) return null;
-  const cle = header.slice(-64); // fin du JWT (signature) : unique par token
+  const headerOrg = req.header('x-org-id');
+  // Fin du JWT (signature, unique par token) + bureau demandé : changer de
+  // bureau ne doit pas resservir la résolution de l'ancien.
+  const cle = `${header.slice(-64)}|${headerOrg ?? ''}`;
   const enCache = cacheToken.get(cle);
   if (enCache && enCache.expire > maintenant) return enCache;
 
-  const client = buildSupabaseWithAuth(header);
-  const { data: { user }, error } = await client.auth.getUser();
-  if (error || !user) return null; // pas un utilisateur Supabase → la route tranche
+  // Les appels simultanés d'une même page attendent la même vérification.
+  return partagerUtilisateur(cle, async () => {
+    const client = buildSupabaseWithAuth(header);
+    const { data: { user }, error } = await client.auth.getUser();
+    if (error || !user) return null; // pas un utilisateur Supabase → la route tranche
 
-  // Bureau actif : même règle anti-IDOR que requireAuthedClient — on honore
-  // x-org-id seulement si l'utilisateur en est membre.
-  let orgId: string | null = null;
-  const headerOrg = req.header('x-org-id');
-  if (headerOrg && /^[0-9a-f-]{36}$/i.test(headerOrg)) {
-    const { data: isMember } = await client.rpc('has_org_membership', { p_user: user.id, p_org: headerOrg });
-    if (isMember === true) orgId = headerOrg;
-  }
-  if (!orgId) orgId = await resolveOrgId(client);
+    // Bureau actif : même règle anti-IDOR que requireAuthedClient — on honore
+    // x-org-id seulement si l'utilisateur en est membre.
+    let orgId: string | null = null;
+    if (headerOrg && /^[0-9a-f-]{36}$/i.test(headerOrg)) {
+      const { data: isMember } = await client.rpc('has_org_membership', { p_user: user.id, p_org: headerOrg });
+      if (isMember === true) orgId = headerOrg;
+    }
+    if (!orgId) orgId = await resolveOrgId(client);
 
-  const entree = { userId: user.id, email: user.email ?? null, orgId, expire: maintenant + TTL_MS };
-  purger(cacheToken, maintenant);
-  cacheToken.set(cle, entree);
-  return entree;
+    const entree = { userId: user.id, email: user.email ?? null, orgId, expire: maintenant + TTL_MS };
+    purger(cacheToken, maintenant);
+    cacheToken.set(cle, entree);
+    return entree;
+  });
 }
 
 async function verdictOrgEnCache(orgId: string, maintenant: number): Promise<VerdictAbonnement> {
   const enCache = cacheOrg.get(orgId);
   if (enCache && enCache.expire > maintenant) return enCache.verdict;
-  const verdict = await verdictPourOrg(getServiceClient(), orgId);
+  const verdict = await partagerVerdict(orgId, () => verdictPourOrg(getServiceClient(), orgId));
   purger(cacheOrg, maintenant);
   // Un refus n'est gardé que 10 s : le client qui vient de payer ne doit pas
   // rester bloqué une minute devant un écran qui lui dit de payer.
