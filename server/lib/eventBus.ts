@@ -33,6 +33,8 @@ export type CRMEventType =
   | 'invoice.viewed'
   /** Le paiement d'un client final a échoué (drapeau auto_paiement_echoue). */
   | 'payment.failed'
+  /** Client sans job terminé depuis N mois ni job à venir (drapeau auto_client_inactif). */
+  | 'client.inactive'
   | 'quote.approved'
   | 'quote.declined'
   | 'quote.changes_requested'
@@ -143,6 +145,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'quote.viewed': 'quote_viewed',
   'invoice.viewed': 'invoice_viewed',
   'payment.failed': 'payment_failed',
+  'client.inactive': 'client_inactive',
   'quote.approved': 'quote_approved',
   'quote.declined': 'quote_declined',
   'quote.changes_requested': 'quote_changes_requested',

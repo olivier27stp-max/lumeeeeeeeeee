@@ -80,6 +80,7 @@ import {
   trouverAction,
 } from '../lib/automationCatalogue';
 import { useModuleAccess } from '../hooks/useModuleAccess';
+import { apercuClientsInactifs } from '../lib/reservationApi';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
 import OngletReglages, { type ReglagesAutomatisation } from '../components/automations/OngletReglages';
 import { confirmer } from '../components/ui/ConfirmDialog';
@@ -307,12 +308,14 @@ export default function AutomationBuilderPage() {
    */
   const { isEnabled: consultationDocumentsActive } = useModuleAccess('auto_consultation_documents');
   const { isEnabled: paiementEchoueActif } = useModuleAccess('auto_paiement_echoue');
+  const { isEnabled: clientInactifActif } = useModuleAccess('auto_client_inactif');
   const drapeauxActifs = useMemo(
     () => new Set<string>([
       ...(consultationDocumentsActive ? ['auto_consultation_documents'] : []),
       ...(paiementEchoueActif ? ['auto_paiement_echoue'] : []),
+      ...(clientInactifActif ? ['auto_client_inactif'] : []),
     ]),
-    [consultationDocumentsActive, paiementEchoueActif],
+    [consultationDocumentsActive, paiementEchoueActif, clientInactifActif],
   );
 
   /** Les déclencheurs offerts, ceux qui ne partent pas encore étant grisés. */
@@ -851,12 +854,25 @@ export default function AutomationBuilderPage() {
       }
 
       const avertissements = problemes.filter((p) => p.gravite === 'avertissement');
+      // « Client inactif » : dire combien de clients sont visés AVANT d'activer.
+      let visesAujourdhui: string | null = null;
+      if (regle.trigger_event === 'client.inactive') {
+        try {
+          const n = await apercuClientsInactifs(Number((regle.conditions as Record<string, unknown> | null)?.mois ?? 6));
+          visesAujourdhui = fr
+            ? `${n} client${n > 1 ? 's' : ''} correspond${n > 1 ? 'ent' : ''} aujourd’hui. Les messages partiront par petits lots, en journée.`
+            : `${n} client${n > 1 ? 's' : ''} match${n > 1 ? '' : 'es'} today. Messages will go out in small batches, during the day.`;
+        } catch (e) {
+          console.error('[AutomationBuilderPage] aperçu clients inactifs', e);
+        }
+      }
       const ok = await confirmer({
         title: fr ? 'Publier cette automatisation ?' : 'Publish this automation?',
         message: [
           fr
             ? 'Elle commencera à envoyer de vrais messages à vos clients dès le prochain déclenchement.'
             : 'It will start sending real messages to your clients at the next trigger.',
+          ...(visesAujourdhui ? [visesAujourdhui] : []),
           ...avertissements.map((a) => `⚠ ${a.message}`),
         ].join('\n\n'),
         confirmLabel: fr ? 'Publier' : 'Publish',

@@ -294,6 +294,30 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     famille: 'client', entite: 'lead',
   },
   {
+    // server/lib/client-inactif.ts — balayage chaque heure, en journée, dans
+    // le fuseau de l'entreprise ; une fois par période d'inactivité.
+    cle: 'client.inactive', fr: 'Client inactif', en: 'Inactive client',
+    aide_fr: 'Quand un ancien client n’a eu aucun job terminé depuis le délai choisi, et n’a rien de prévu. Une seule fois par période : un nouveau job terminé le réarme.',
+    aide_en: 'When a past client has had no completed job for the chosen time and has nothing scheduled. Once per period: a new completed job re-arms it.',
+    famille: 'client', entite: 'lead',
+    drapeau: 'auto_client_inactif',
+    conditions_defaut: { mois: 6, max_par_heure: 25 },
+    champs: [
+      {
+        cle: 'mois', fr: 'Aucun job terminé depuis (mois)', en: 'No completed job for (months)',
+        obligatoire: true, type: 'nombre', min_valeur: 1, max_valeur: 60, defaut_fr: '6', defaut_en: '6',
+        aide_fr: '3, 6 ou 12 mois — ou toute autre valeur.',
+        aide_en: '3, 6 or 12 months — or any other value.',
+      },
+      {
+        cle: 'max_par_heure', fr: 'Au plus, par heure', en: 'At most, per hour',
+        obligatoire: false, type: 'nombre', min_valeur: 1, max_valeur: 1000,
+        aide_fr: 'Évite d’envoyer des centaines de messages d’un coup à l’activation. Le reste part aux heures suivantes (entre 9 h et 19 h).',
+        aide_en: 'Avoids sending hundreds of messages at once when activated. The rest go out in the following hours (9 a.m. – 7 p.m.).',
+      },
+    ],
+  },
+  {
     cle: 'agreement.signed', fr: 'Contrat signé', en: 'Agreement signed',
     aide_fr: 'Quand le client signe un contrat.',
     aide_en: 'When the client signs an agreement.',
@@ -1038,6 +1062,7 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   'quote.viewed': 'quote',
   'invoice.viewed': 'invoice',
   'payment.failed': 'invoice',
+  'client.inactive': 'client',
   'quote.approved': 'quote',
   'quote.declined': 'quote',
   'quote.changes_requested': 'quote',

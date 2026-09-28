@@ -47,6 +47,7 @@ import {
 } from '../lib/automationBuilderApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { useModuleAccess } from '../hooks/useModuleAccess';
+import { apercuClientsInactifs } from '../lib/reservationApi';
 import {
   type AutomationRule,
   getAutomationRules,
@@ -261,6 +262,7 @@ const TRIGGER_DISPLAY: Record<string, { en: string; fr: string }> = {
   'quote.viewed':          { en: 'Quote opened by client', fr: 'Devis ouvert par le client' },
   'invoice.viewed':        { en: 'Invoice viewed by client', fr: 'Facture consultée par le client' },
   'payment.failed':        { en: 'Payment failed',        fr: 'Paiement échoué' },
+  'client.inactive':       { en: 'Inactive client',       fr: 'Client inactif' },
   'quote.approved':        { en: 'Quote approved',        fr: 'Devis accepté' },
   'quote.declined':        { en: 'Quote declined',        fr: 'Devis refusé' },
   'invoice.sent':          { en: 'Invoice sent',          fr: 'Facture envoyée' },
@@ -591,6 +593,25 @@ export default function Automations() {
 
   const handleToggle = async (rule: AutomationRule) => {
     const newActive = !rule.is_active;
+    // « Client inactif » : dire combien de clients sont visés AVANT d'activer.
+    if (newActive && rule.trigger_event === 'client.inactive') {
+      let n: number | null = null;
+      try {
+        n = await apercuClientsInactifs(Number((rule.conditions as Record<string, unknown> | null)?.mois ?? 6));
+      } catch (e) {
+        console.error('[Automations] aperçu clients inactifs', e);
+      }
+      const ok = await confirmer({
+        title: fr ? 'Activer « Client inactif » ?' : 'Activate “Inactive client”?',
+        message: n === null
+          ? (fr ? 'Les messages partiront par petits lots, en journée.' : 'Messages will go out in small batches, during the day.')
+          : (fr
+            ? `${n} client${n > 1 ? 's' : ''} correspond${n > 1 ? 'ent' : ''} aujourd’hui. Les messages partiront par petits lots, en journée.`
+            : `${n} client${n > 1 ? 's' : ''} match${n > 1 ? '' : 'es'} today. Messages will go out in small batches, during the day.`),
+        confirmLabel: fr ? 'Activer' : 'Activate',
+      });
+      if (!ok) return;
+    }
     setTogglingId(rule.id);
     setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: newActive } : r)));
     try {
