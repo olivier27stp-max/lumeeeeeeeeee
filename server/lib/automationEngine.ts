@@ -947,6 +947,18 @@ async function handleEvent(event: CRMEvent) {
 }
 
 /**
+ * Une tâche prévue doit-elle être ANNULÉE parce que sa règle ne tourne plus ?
+ * Brouillon (interrupteur rouge) ou corbeille → le motif, lisible dans les
+ * Journaux ; sinon null. Règle introuvable (null) : on ne décide rien ici.
+ */
+export function motifAnnulationRegle(regle: { is_active?: boolean; deleted_at?: string | null } | null | undefined): string | null {
+  if (!regle) return null;
+  if (regle.deleted_at) return 'Automatisation supprimée : envoi annulé.';
+  if (regle.is_active === false) return 'Automatisation en brouillon : envoi annulé.';
+  return null;
+}
+
+/**
  * La règle a-t-elle déjà agi pour ce client dans les `jours` derniers jours ?
  *
  * On regarde les DEUX traces : une exécution immédiate laisse une ligne de
@@ -1199,7 +1211,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // (org_id, automation_rule_id) qui porte l'isolation multi-tenant).
     // PostgREST répondait PGRST201 et AUCUNE tâche d'automatisation planifiée
     // n'était plus exécutée.
-    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, trigger_event, delay_seconds, preset_key, conditions, steps, settings)')
+    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, trigger_event, delay_seconds, preset_key, conditions, steps, settings, is_active, deleted_at)')
     .eq('status', 'pending')
     .lte('execute_at', now)
     .order('execute_at', { ascending: true })
@@ -1222,6 +1234,33 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
      * marquer en échec ferait perdre un envoi légitime.
      */
     if (task.org_id && await orgEnPause(supabase, task.org_id)) continue;
+
+    /*
+     * Automatisation repassée en BROUILLON (ou mise à la corbeille) : ce qui
+     * était prévu ne part plus. Avant, seuls les NOUVEAUX déclenchements
+     * s'arrêtaient — mettre « Relance de devis » en brouillon laissait
+     * partir les relances déjà en file, pour tous les clients en cours
+     * (constaté le 2026-09-28). L'interrupteur rouge doit vouloir dire
+     * « rien ne part ».
+     *
+     * Annulée, pas gardée en attente : republier ne doit pas déverser d'un
+     * coup des relances devenues en retard. À distinguer de « Tout arrêter »
+     * (pause d'entreprise, juste au-dessus), qui CONSERVE ce qui est prévu.
+     */
+    const motifAnnulation = motifAnnulationRegle(task.automation_rules);
+    if (motifAnnulation) {
+      const { error: annuleErr } = await supabase
+        .from('automation_scheduled_tasks')
+        .update({
+          status: 'cancelled',
+          completed_at: new Date().toISOString(),
+          last_error: motifAnnulation,
+        })
+        .eq('id', task.id)
+        .eq('status', 'pending');
+      if (annuleErr) console.error(`[automationEngine] annulation (brouillon) impossible pour la tâche ${task.id}:`, annuleErr.message);
+      continue;
+    }
 
     // Heures calmes : on repousse à la prochaine fenêtre sans consommer de
     // tentative. Toute tâche présente ici est par construction DIFFÉRÉE (une

@@ -65,6 +65,17 @@ describe('les parcours du pack', () => {
     expect(f.steps.filter((e: any) => e.type === 'attendre').map((e: any) => (cumul += e.delai_secondes) / 86400)).toEqual([3, 7, 14, 30]);
   });
 
+  it.each([
+    ['pack_relance_devis', 'quote_link'],
+    ['pack_relance_facture', 'invoice_link'],
+    ['pack_depot', 'quote_link'],
+  ])('%s : chaque texto et courriel porte le lien [%s]', (cle, lien) => {
+    const p = PACK_PARCOURS.find((x) => x.preset_key === cle)!;
+    const envois = p.steps.filter((e: any) => e.type === 'action' && /^send_/.test(e.action.type));
+    expect(envois.length).toBeGreaterThan(0);
+    for (const e of envois as any[]) expect(String(e.action.config.body)).toContain(`[${lien}]`);
+  });
+
   it('aucune sollicitation commerciale n’est publiée d’office', () => {
     for (const k of PACK_ACTIF) expect(PRESETS_SOLLICITATION.has(k)).toBe(false);
   });
