@@ -58,6 +58,14 @@ jobs:
     name: RLS cross-tenant isolation
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Le secret DOIT être là partout où GitHub le fournit : push sur main, ou PR
+    # de ce dépôt ouverte par un humain. Avant, un secret absent faisait
+    # « exit 0 » en silence — la vérification affichait « success » alors que
+    # rien n'avait tourné. GitHub ne passe pas les secrets aux PR de forks ni
+    # à Dependabot (github.actor décide des privilèges, re-run compris) : là
+    # seulement, sauter reste légitime.
+    env:
+      SECRET_ATTENDU: ${{ github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -73,6 +81,10 @@ jobs:
           DB_URL: ${{ secrets.RLS_TEST_DB_URL }}
         run: |
           if [ -z "$DB_URL" ]; then
+            if [ "$SECRET_ATTENDU" = "true" ]; then
+              echo "::error::RLS_TEST_DB_URL absent alors que ce contexte y a droit — la garde ne tourne pas. Rétablir le secret du dépôt."
+              exit 1
+            fi
             echo "::warning::RLS_TEST_DB_URL not set — skipping cross-tenant isolation test. Add a staging (>=2 orgs) DB connection string as the RLS_TEST_DB_URL repo secret to enable."
             exit 0
           fi
@@ -85,6 +97,10 @@ jobs:
           DB_URL: ${{ secrets.RLS_TEST_DB_URL }}
         run: |
           if [ -z "$DB_URL" ]; then
+            if [ "$SECRET_ATTENDU" = "true" ]; then
+              echo "::error::RLS_TEST_DB_URL absent alors que ce contexte y a droit — la garde ne tourne pas. Rétablir le secret du dépôt."
+              exit 1
+            fi
             echo "::warning::RLS_TEST_DB_URL not set — skipping check:schema-refs."
             exit 0
           fi
