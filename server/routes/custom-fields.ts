@@ -13,12 +13,13 @@ import { sendSafeError } from '../lib/error-handler';
 import {
   validate, champCreerSchema, champModifierSchema, champPurgerSchema, dossierCreerSchema, dossierModifierSchema,
   champsCherchablesSchema, champUniqueSchema, valeursEcrireSchema, champsFiltrerSchema, cartesPipelineSchema,
-  modeleInstallerSchema,
+  modeleInstallerSchema, affichageSystemeSchema,
 } from '../lib/validation';
 import {
   ErreurChamps, estObjet, listerChamps, creerChamp, modifierChamp, archiverChamp, impactChamp,
   purgerChamp, majCherchables, majUnique, creerDossier, renommerDossier, supprimerDossier, lireValeurs,
   lireValeursLot, ecrireValeurs, filtrer, lireCartesPipeline, majCartesPipeline, industrieDe, installerModele,
+  lireAffichageSysteme, majAffichageSysteme,
 } from '../lib/champs/service';
 import { CHAMPS_STANDARD } from '../../src/lib/champs/standard';
 
@@ -47,9 +48,13 @@ router.get('/custom-fields', async (req, res) => {
     if (!auth) return;
     const objet = req.query.object;
     if (objet !== undefined && !estObjet(objet)) return res.status(400).json({ error: 'Objet inconnu.' });
-    const { champs, dossiers } = await listerChamps(auth.client, auth.orgId, { objet: objet as never, inclureArchives: req.query.include_archived === '1' });
+    const [{ champs, dossiers }, masques] = await Promise.all([
+      listerChamps(auth.client, auth.orgId, { objet: objet as never, inclureArchives: req.query.include_archived === '1' }),
+      lireAffichageSysteme(auth.client, auth.orgId),
+    ]);
     // Les champs personnalisés sont offerts à toutes les entreprises (plus de drapeau).
-    return res.json({ enabled: true, fields: champs, folders: dossiers, standard: CHAMPS_STANDARD });
+    // system_hidden : champs de base décochés dans « Gérer les champs » du formulaire.
+    return res.json({ enabled: true, fields: champs, folders: dossiers, standard: CHAMPS_STANDARD, system_hidden: masques });
   } catch (err) {
     return repondreErreur(res, err, 'lire les champs');
   }
@@ -96,6 +101,18 @@ router.put('/custom-fields/searchable', validate(champsCherchablesSchema), async
     return res.json({ ok: true });
   } catch (err) {
     return repondreErreur(res, err, 'modifier les champs cherchables');
+  }
+});
+
+// PUT /api/custom-fields/system-display — champs de base masqués dans le formulaire d'un objet.
+router.put('/custom-fields/system-display', validate(affichageSystemeSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    await majAffichageSysteme(auth.client, auth.orgId, req.body.object_type, req.body.hidden);
+    return res.json({ ok: true });
+  } catch (err) {
+    return repondreErreur(res, err, 'modifier les champs du formulaire');
   }
 });
 

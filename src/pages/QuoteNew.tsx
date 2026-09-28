@@ -761,10 +761,12 @@ export default function QuoteNew() {
     opt?.scrollIntoView({ block: 'nearest' });
   }, [clientHighlight, clientListOpen, id, filteredClients]);
 
+  // Champs de base décochés dans « Gérer les champs » : retirés du formulaire pour toute l'entreprise.
+  const vis = champsPerso.systeme;
   const sectionToggles = [
-    { key: 'intro', label: tq.introduction, enabled: introEnabled, toggle: setIntroEnabled },
-    { key: 'disclaimer', label: tq.contractDisclaimer, enabled: disclaimerEnabled, toggle: setDisclaimerEnabled },
-    { key: 'clientMsg', label: tq.clientMessageLabel, enabled: clientMessageEnabled, toggle: setClientMessageEnabled },
+    { key: 'intro', champ: 'introduction', label: tq.introduction, enabled: introEnabled, toggle: setIntroEnabled },
+    { key: 'disclaimer', champ: 'contract_disclaimer', label: tq.contractDisclaimer, enabled: disclaimerEnabled, toggle: setDisclaimerEnabled },
+    { key: 'clientMsg', champ: 'client_message', label: tq.clientMessageLabel, enabled: clientMessageEnabled, toggle: setClientMessageEnabled },
   ];
 
   return (
@@ -974,22 +976,22 @@ export default function QuoteNew() {
           <div className={CARD}>
             <div className={cn(CARD_LABEL, 'flex items-center justify-between mb-3.5')}>
               {fr ? 'Détails du devis' : 'Quote details'}
-              <Seg
+              {vis('quote_type') && <Seg
                 value={quoteType}
                 onChange={(v) => setQuoteType(v as 'one_off' | 'service_plan')}
                 options={[
                   { value: 'one_off', label: fr ? 'Devis ponctuel' : 'One-off quote' },
                   { value: 'service_plan', label: <><Calendar size={12} /> {fr ? 'Plan de service' : 'Service plan'}</> },
                 ]}
-              />
+              />}
             </div>
-            <input
+            {vis('title') && <input
               value={title}
               onChange={e => setTitle(e.target.value)}
               className={cn(INPUT, 'h-[46px] rounded-xl text-[16px] font-bold')}
               placeholder={tq.titlePlaceholder}
               aria-label={tq.titlePlaceholder}
-            />
+            />}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
               <div>
                 <span className={FIELD}>{tq.clientLabel}</span>
@@ -999,7 +1001,7 @@ export default function QuoteNew() {
                     : ((`${leadFirstName} ${leadLastName}`.trim()) || <span>{tq.fromContactAbove}</span>)}
                 </div>
               </div>
-              {contactMode === 'existing' && clientId && properties.length > 0 && (
+              {vis('property') && contactMode === 'existing' && clientId && properties.length > 0 && (
                 <div><label htmlFor={`${id}-property`} className={FIELD}>{tm.property}</label>
                   <select id={`${id}-property`} value={propertyId} onChange={e => setPropertyId(e.target.value)} className={INPUT}>
                     <option value="">{tm.selectProperty}</option>
@@ -1008,17 +1010,17 @@ export default function QuoteNew() {
                     ))}
                   </select></div>
               )}
-              <div><label htmlFor={`${id}-quote-number`} className={FIELD}>{tq.quoteNumber}</label>
+              {vis('quote_number') && <div><label htmlFor={`${id}-quote-number`} className={FIELD}>{tq.quoteNumber}</label>
                 <input id={`${id}-quote-number`} value={quoteNumber}
                   onChange={e => { setQuoteNumber(e.target.value.replace(/\D/g, '')); setQuoteNumberTouched(true); }}
-                  className={INPUT} placeholder={tq.auto} disabled={!nextQuoteNumber} /></div>
-              <div><label htmlFor={`${id}-salesperson`} className={FIELD}>{tq.salesperson}</label>
+                  className={INPUT} placeholder={tq.auto} disabled={!nextQuoteNumber} /></div>}
+              {vis('salesperson') && <div><label htmlFor={`${id}-salesperson`} className={FIELD}>{tq.salesperson}</label>
                 <select id={`${id}-salesperson`} value={salespersonId} onChange={e => setSalespersonId(e.target.value)} className={INPUT}>
                   <option value="">{tq.assign}</option>
                   {salespeople.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-                </select></div>
-              <div><label htmlFor={`${id}-valid-days`} className={FIELD}>{tq.validForDays}</label>
-                <input id={`${id}-valid-days`} type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={INPUT} /></div>
+                </select></div>}
+              {vis('valid_days') && <div><label htmlFor={`${id}-valid-days`} className={FIELD}>{tq.validForDays}</label>
+                <input id={`${id}-valid-days`} type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={INPUT} /></div>}
             </div>
 
             {champsPerso.section('details')}
@@ -1093,7 +1095,8 @@ export default function QuoteNew() {
           )}
 
           {/* Photos — haut du devis */}
-          <div className={CARD}>
+          {(vis('photos') || champsPerso.section('photos')) && <div className={CARD}>
+            {vis('photos') && <>
             <div className={cn(CARD_LABEL, 'flex items-center justify-between mb-3.5')}>
               {fr ? 'Photos — haut du devis' : 'Photos — top of the quote'}
             </div>
@@ -1140,12 +1143,13 @@ export default function QuoteNew() {
                 ? "Affichées en haut du devis dans la vue client, sous l'en-tête de l'entreprise."
                 : 'Shown at the top of the quote in the client view, under the company header.'}
             </p>
+            </>}
             {champsPerso.section('photos')}
-          </div>
+          </div>}
 
           {/* Sections optionnelles */}
           <div className="flex flex-wrap gap-2">
-            {sectionToggles.map(s => (
+            {sectionToggles.filter(s => vis(s.champ)).map(s => (
               <button
                 key={s.key}
                 type="button"
@@ -1164,7 +1168,7 @@ export default function QuoteNew() {
           </div>
 
           {/* Introduction */}
-          {introEnabled && (
+          {introEnabled && vis('introduction') && (
             <div className={CARD}>
               <div className={cn(CARD_LABEL, 'mb-3')}>{tq.introduction}</div>
               <textarea value={introContent} onChange={e => setIntroContent(e.target.value)}
@@ -1271,7 +1275,7 @@ export default function QuoteNew() {
           </div>
 
           {/* Contrat / avis */}
-          {disclaimerEnabled && (
+          {disclaimerEnabled && vis('contract_disclaimer') && (
             <div className={CARD}>
               <div className={cn(CARD_LABEL, 'flex items-center justify-between mb-3')}>
                 {tq.contractDisclaimer}
@@ -1287,7 +1291,7 @@ export default function QuoteNew() {
           )}
 
           {/* Message au client */}
-          {clientMessageEnabled && (
+          {clientMessageEnabled && vis('client_message') && (
             <div className={CARD}>
               <div className={cn(CARD_LABEL, 'mb-3')}>{tq.clientMessageHeading}</div>
               <textarea value={clientMessage} onChange={e => setClientMessage(e.target.value)}
@@ -1300,13 +1304,15 @@ export default function QuoteNew() {
           {/* Notes + fichiers internes */}
           <div className={CARD}>
             <div className={cn(CARD_LABEL, 'mb-3')}>{tq.notes}</div>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)}
-              aria-label={tq.notes}
-              className={TEXTAREA} placeholder={tq.notesPlaceholder} />
-            <p className={HINT}>{tq.notesVisibleToClient}</p>
-            <div className="mt-3">
+            {vis('notes') && <>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                aria-label={tq.notes}
+                className={TEXTAREA} placeholder={tq.notesPlaceholder} />
+              <p className={HINT}>{tq.notesVisibleToClient}</p>
+            </>}
+            {vis('specific_notes') && <div className="mt-3">
               <SpecificNotesInline ref={specificNotesRef} tempEntityType="quote" />
-            </div>
+            </div>}
             {champsPerso.section('notes')}
             {champsPerso.bloc && <div className="mt-4">{champsPerso.bloc}</div>}
           </div>
@@ -1336,7 +1342,7 @@ export default function QuoteNew() {
                 <span>{tq.subtotal}</span>
                 <span className="font-semibold tabular-nums">{formatQuoteMoney(subtotalCents)}</span>
               </div>
-              <div className="flex justify-between items-center py-1.5 text-[13px] text-black dark:text-white">
+              {vis('discount') && <div className="flex justify-between items-center py-1.5 text-[13px] text-black dark:text-white">
                 <span>{tq.discount}</span>
                 {discountType ? (
                   <span className="flex items-center gap-1.5">
@@ -1357,7 +1363,7 @@ export default function QuoteNew() {
                     ＋ {tq.addDiscount}
                   </button>
                 )}
-              </div>
+              </div>}
               <div className="flex justify-between items-center py-1.5 text-[13px] text-black dark:text-white">
                 <span className="flex items-center">
                   {tq.tax}
@@ -1381,25 +1387,25 @@ export default function QuoteNew() {
               </div>
             </div>
 
-            <div className={CARD}>
+            {(vis('deposit_required') || vis('require_payment_method')) && <div className={CARD}>
               <div className={cn(CARD_LABEL, 'mb-2')}>{tq.depositPaymentSettings}</div>
-              <div className="flex items-center justify-between py-2 text-[12.5px] font-semibold text-black dark:text-white">
+              {vis('deposit_required') && <div className="flex items-center justify-between py-2 text-[12.5px] font-semibold text-black dark:text-white">
                 {tq.requireDeposit}
                 <Switch on={depositRequired} onChange={(v) => { setDepositRequired(v); setDirty(true); }} />
-              </div>
-              {depositRequired && (
+              </div>}
+              {depositRequired && vis('deposit_required') && (
                 <div>
                   <div className="flex gap-2">
-                    <select value={depositType} onChange={e => setDepositType(e.target.value as any)}
+                    {vis('deposit_type') && <select value={depositType} onChange={e => setDepositType(e.target.value as any)}
                       aria-label={fr ? "Type d'acompte" : 'Deposit type'}
                       className={cn(INPUT, 'h-[34px] w-[110px] text-[12.5px]')}>
                       <option value="percentage">{tq.percentagePct}</option>
                       <option value="fixed">{tq.fixedAmount}</option>
-                    </select>
-                    <input value={depositValue} onChange={e => setDepositValue(sanitize(e.target.value))}
+                    </select>}
+                    {vis('deposit_value') && <input value={depositValue} onChange={e => setDepositValue(sanitize(e.target.value))}
                       aria-label={fr ? "Montant de l'acompte" : 'Deposit amount'}
                       className={cn(INPUT, 'h-[34px] text-right text-[12.5px]')}
-                      placeholder={depositType === 'percentage' ? '25' : '100'} />
+                      placeholder={depositType === 'percentage' ? '25' : '100'} />}
                   </div>
                   {depositType === 'percentage' && (parseFloat(depositValue) || 0) > 100 && (
                     <p className={cn(HINT, 'font-bold')}>{tq.percentageExceeds}</p>
@@ -1411,11 +1417,11 @@ export default function QuoteNew() {
                   </p>
                 </div>
               )}
-              <div className={cn('flex items-center justify-between py-2 mt-1.5 border-t text-[12.5px] font-semibold text-black dark:text-white', OUTLINE)}>
+              {vis('require_payment_method') && <div className={cn('flex items-center justify-between py-2 mt-1.5 border-t text-[12.5px] font-semibold text-black dark:text-white', OUTLINE)}>
                 {tq.requirePaymentMethod}
                 <Switch on={requirePaymentMethod} onChange={(v) => { setRequirePaymentMethod(v); setDirty(true); }} />
-              </div>
-            </div>
+              </div>}
+            </div>}
 
             <button form="quote-new-form" type="submit" disabled={saving} className={cn(PRIMARY, 'h-11 rounded-xl text-[13.5px]')}>
               {saving ? tq.saving : tq.saveQuote}

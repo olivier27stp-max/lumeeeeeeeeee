@@ -384,6 +384,9 @@ export default function NewJobModal({
   const champsPerso = useChampsCreation('job', language === 'fr', {
     sections: ['details', 'client', 'type', 'visites', 'assignation', 'facturation', 'produits', 'contrat', 'notes'],
   });
+  // Champs de base décochés dans « Gérer les champs » : retirés du formulaire de CRÉATION
+  // pour toute l'entreprise (la modification d'une job existante les montre toujours).
+  const vis = (cle: string) => isEditMode || champsPerso.systeme(cle);
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
   // Navigation guard: route where the form was opened + leave-confirmation state.
   const openedPathRef = useRef<string | null>(null);
@@ -2382,7 +2385,7 @@ export default function NewJobModal({
                   </label>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                  {vis('job_number') && <div className="space-y-2">
                     <label htmlFor={`${id}-job-number`} className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>
                     <input
                       id={`${id}-job-number`}
@@ -2391,8 +2394,8 @@ export default function NewJobModal({
                       className="glass-input w-full"
                       placeholder={language === 'fr' ? 'Numéro de job' : 'Job number'}
                     />
-                  </div>
-                  <div className="space-y-2">
+                  </div>}
+                  {vis('salesperson') && <div className="space-y-2">
                     <label htmlFor={`${id}-salesperson`} className="text-xs font-medium text-text-tertiary">{t.modals.salesperson}</label>
                     <select
                       id={`${id}-salesperson`}
@@ -2407,10 +2410,10 @@ export default function NewJobModal({
                         </option>
                       ))}
                     </select>
-                  </div>
+                  </div>}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                  {vis('sale_date') && <div className="space-y-2">
                     <label htmlFor={`${id}-sale-date`} className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Date de création' : 'Date of creation'}</label>
                     <input
                       id={`${id}-sale-date`}
@@ -2424,8 +2427,8 @@ export default function NewJobModal({
                         ? 'Le close compte pour le leaderboard de cette journée — pratique pour entrer une vente oubliée.'
                         : "The close counts toward that day's leaderboard — handy for logging a sale you forgot to enter."}
                     </p>
-                  </div>
-                  <div className="space-y-2">
+                  </div>}
+                  {vis('show_on_leaderboard') && <div className="space-y-2">
                     <span className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Classement' : 'Leaderboard'}</span>
                     <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-outline px-3 py-2.5">
                       <input
@@ -2443,15 +2446,15 @@ export default function NewJobModal({
                         </span>
                       </span>
                     </label>
-                  </div>
+                  </div>}
                 </div>
-                <label className="flex items-start gap-3 cursor-pointer">
+                {vis('ask_for_review') && <label className="flex items-start gap-3 cursor-pointer">
                   <input type="checkbox" checked={askForReview} onChange={(e) => setAskForReview(e.target.checked)} className="h-4 w-4 mt-0.5 rounded" />
                   <span>
                     <span className="block text-[13px] font-medium text-text-primary">{language === 'fr' ? 'Demander un avis' : 'Ask for a review'}</span>
                     <span className="text-[12px] text-text-tertiary">{language === 'fr' ? "Envoyer une demande d'avis au client une fois le job terminé." : 'Send the client a review request once the job is complete.'}</span>
                   </span>
-                </label>
+                </label>}
                 {!isEditMode && champsPerso.section('details')}
               </Box>
 
@@ -2724,8 +2727,8 @@ export default function NewJobModal({
                 {!isEditMode && champsPerso.section('client')}
               </Box>
 
-              <Box title={t.modals.jobType}>
-                  <div className="inline-flex rounded-xl bg-surface-secondary border border-border p-1">
+              {(vis('job_type') || champsPerso.section('type')) && <Box title={t.modals.jobType}>
+                  {vis('job_type') && <div className="inline-flex rounded-xl bg-surface-secondary border border-border p-1">
                     <button
                       type="button"
                       onClick={() => setJobType('one_off')}
@@ -2746,9 +2749,9 @@ export default function NewJobModal({
                     >
                       {t.modals.recurring}
                     </button>
-                  </div>
+                  </div>}
                 {!isEditMode && champsPerso.section('type')}
-              </Box>
+              </Box>}
 
               {isServicePlan && (
               <Box
@@ -3227,7 +3230,7 @@ export default function NewJobModal({
 
               {!isServicePlan && (
               <Box title={t.modals.billing}>
-                <label className="flex items-center gap-3 cursor-pointer">
+                {vis('requires_invoicing') && <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={requiresInvoicing}
@@ -3235,8 +3238,8 @@ export default function NewJobModal({
                     className="h-4 w-4"
                   />
                   <span className="text-sm">{t.modals.remindInvoice}</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer">
+                </label>}
+                {vis('billing_split') && <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={billingSplit}
@@ -3244,12 +3247,12 @@ export default function NewJobModal({
                     className="h-4 w-4"
                   />
                   <span className="text-sm">{t.modals.splitInvoices}</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer">
+                </label>}
+                {vis('deposit_required') && <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={jobDepositRequired} onChange={e => setJobDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
                   <span className="text-sm">{t.modals.requireDeposit}</span>
-                </label>
-                {jobDepositRequired && (
+                </label>}
+                {jobDepositRequired && vis('deposit_required') && (
                   <div className="ml-7 space-y-3 border-l-2 border-outline pl-4">
                     <div className="flex items-center gap-3">
                       <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
@@ -3275,7 +3278,7 @@ export default function NewJobModal({
                     </p>
                   </div>
                 )}
-                <label className="flex items-start gap-3 cursor-pointer">
+                {vis('require_payment_method') && <label className="flex items-start gap-3 cursor-pointer">
                   <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 mt-0.5 rounded" />
                   <span>
                     <span className="block text-sm">{language === 'fr' ? 'Demander un moyen de paiement au dossier' : 'Request a payment method on file'}</span>
@@ -3285,7 +3288,7 @@ export default function NewJobModal({
                         : 'The contract sent to the client will include a section to securely add a card (optional — they can also add it later).'}
                     </span>
                   </span>
-                </label>
+                </label>}
                 {!isEditMode && champsPerso.section('facturation')}
               </Box>
               )}
@@ -3637,7 +3640,7 @@ export default function NewJobModal({
                   </label>
 
                   {/* Dépôt initial */}
-                  <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
+                  {vis('deposit_required') && <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input type="checkbox" checked={jobDepositRequired} onChange={e => { setDirty(true); setJobDepositRequired(e.target.checked); }} className="h-4 w-4 rounded" />
                       <span className="text-sm text-text-primary">{t.modals.requireDeposit}</span>
@@ -3668,13 +3671,13 @@ export default function NewJobModal({
                         </p>
                       </div>
                     )}
-                  </div>
+                  </div>}
                 {!isEditMode && champsPerso.section('facturation')}
               </Box>
               )}
 
               {/* ── Agreement (written contract) — new jobs only ── */}
-              {!isEditMode && (
+              {!isEditMode && vis('agreement') && (
                 <Box
                   title={language === 'fr' ? 'Contrat' : 'Agreement'}
                   subtitle={language === 'fr' ? 'Optionnel — contrat écrit lié à ce job' : 'Optional — written contract attached to this job'}
@@ -3824,17 +3827,17 @@ export default function NewJobModal({
               )}
 
               {/* ── Notes ── */}
-              <Box
+              {(vis('notes') || champsPerso.section('notes')) && <Box
                 title="Notes"
                 subtitle={language === 'fr' ? 'Laissez des notes internes pour vous ou un membre de l’équipe.' : 'Leave internal notes for yourself or a team member.'}
               >
                 {isEditMode && initialValues?.id ? (
                   <SpecificNotes entityType="job" entityId={initialValues.id} mode="full" />
-                ) : (
+                ) : vis('notes') && (
                   <SpecificNotesInline ref={specificNotesRef} tempEntityType="job" />
                 )}
                 {!isEditMode && champsPerso.section('notes')}
-              </Box>
+              </Box>}
 
               {isEditMode && initialValues?.id
                 ? <CustomFieldsPanel objet="job" entityId={initialValues.id} fr={language === 'fr'} />

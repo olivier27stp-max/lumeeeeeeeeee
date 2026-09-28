@@ -115,6 +115,8 @@ export interface ListeChamps {
   fields: ChampPerso[];
   folders: DossierChamp[];
   standard: Record<ObjetChamp, ChampStandard[]>;
+  /** Champs de base décochés dans « Gérer les champs » du formulaire, par objet. */
+  system_hidden?: Partial<Record<ObjetChamp, string[]>>;
 }
 
 export function listerChamps(objet?: ObjetChamp, inclureArchives = false): Promise<ListeChamps> {
@@ -180,6 +182,13 @@ export async function purgerChamp(id: string, valeursConfirmees: number): Promis
   await appel(`/api/custom-fields/${id}`, {
     method: 'DELETE', body: JSON.stringify({ valeurs_confirmees: valeursConfirmees }),
   }, 'Impossible de supprimer le champ.');
+}
+
+/** Champs de base masqués dans le formulaire de création d'un objet (les verrouillés sont refusés). */
+export async function majAffichageSysteme(objet: ObjetChamp, masques: string[]): Promise<void> {
+  await appel('/api/custom-fields/system-display', {
+    method: 'PUT', body: JSON.stringify({ object_type: objet, hidden: masques }),
+  }, 'Impossible d’enregistrer les champs du formulaire.');
 }
 
 export async function majCherchables(objet: ObjetChamp, ids: string[]): Promise<void> {

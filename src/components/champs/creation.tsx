@@ -47,6 +47,8 @@ const TITRE_FENETRE: Record<ObjetChamp, { fr: string; en: string }> = {
   property: { fr: 'Nouvelle propriété', en: 'New property' },
 };
 
+const AUCUN_MASQUE: string[] = [];
+
 export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sections?: string[] } = {}) {
   const { isEnabled } = useChampsPersoActifs();
   const idBase = useId();
@@ -56,6 +58,10 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sectio
     enabled: isEnabled,
     staleTime: 60_000,
   });
+  // Champs de base décochés dans « Gérer les champs » (tous cochés par défaut).
+  const masquesSysteme = useMemo(() => data?.system_hidden?.[objet] ?? AUCUN_MASQUE, [data, objet]);
+  /** Ce champ de base (clé de CHAMPS_STANDARD) est-il affiché dans le formulaire ? */
+  const systeme = (cle: string) => !masquesSysteme.includes(cle);
   // Tous les champs actifs de l'objet (pour « Gérer les champs »), et ceux affichés dans la fenêtre.
   const tousActifs = useMemo(() => (data?.fields ?? []).filter((c) => !c.archived_at), [data]);
   const champs = useMemo(() => tousActifs.filter((c) => !c.config?.masque_creation), [tousActifs]);
@@ -166,7 +172,7 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sectio
   ) : null;
   const panneau = gerer ? (
     <GererChampsFenetre objet={objet} titreFenetre={fr ? TITRE_FENETRE[objet].fr : TITRE_FENETRE[objet].en}
-      champs={tousActifs} dossiers={data?.folders ?? []} fr={fr} onClose={() => setGerer(false)} />
+      champs={tousActifs} dossiers={data?.folders ?? []} fr={fr} onClose={() => setGerer(false)} masquesSysteme={masquesSysteme} />
   ) : null;
 
   const dossiers = data?.folders ?? [];
@@ -228,5 +234,5 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sectio
     </div>
   );
 
-  return { bloc, section, valider, enregistrer, completerVides, actif: champs.length > 0 };
+  return { bloc, section, systeme, valider, enregistrer, completerVides, actif: champs.length > 0 };
 }

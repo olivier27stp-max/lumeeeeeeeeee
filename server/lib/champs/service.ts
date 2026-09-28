@@ -23,7 +23,7 @@ import {
   type ChampPerso, type ConfigChamp, type DossierChamp, type ObjetChamp, type OptionChamp, type TypeChamp,
   type ValeurChamp, type ValeurEnregistree,
 } from '../../../src/lib/champs/types';
-import { clesStandard } from '../../../src/lib/champs/standard';
+import { clesStandard, champsSysteme } from '../../../src/lib/champs/standard';
 import { valeursSysteme } from './variablesSysteme';
 import { preparerValeur, lireValeur, formaterValeur, ErreurValeur } from '../../../src/lib/champs/valeurs';
 import type { Condition } from '../../../src/lib/champs/filtres';
@@ -297,6 +297,42 @@ export async function majCherchables(db: SupabaseClient, orgId: string, objet: O
     if (c.is_searchable === cible) continue;
     const { error } = await db.from('custom_fields').update({ is_searchable: cible }).eq('org_id', orgId).eq('id', c.id);
     if (error) traduireErreur(error, 'modifier les champs cherchables');
+  }
+}
+
+// ─── Champs système affichés dans le formulaire ─────────────────
+
+/**
+ * Champs de base MASQUÉS dans le formulaire de création, par objet (Gérer les
+ * champs → décocher « Source du lead »). Absent = affiché : tout est coché de base.
+ */
+export async function lireAffichageSysteme(db: SupabaseClient, orgId: string): Promise<Partial<Record<ObjetChamp, string[]>>> {
+  const { data, error } = await db.from('cf_affichage_systeme').select('object_type, key')
+    .eq('org_id', orgId).eq('masque_creation', true);
+  if (error) traduireErreur(error, 'lire les champs du formulaire');
+  const res: Partial<Record<ObjetChamp, string[]>> = {};
+  for (const r of data ?? []) {
+    const o = r.object_type as ObjetChamp;
+    res[o] = [...(res[o] ?? []), r.key as string];
+  }
+  return res;
+}
+
+/** Remplace la liste des champs de base masqués d'un objet. Un champ verrouillé ne se masque pas. */
+export async function majAffichageSysteme(db: SupabaseClient, orgId: string, objet: ObjetChamp, masques: string[]): Promise<void> {
+  const connus = new Map(champsSysteme(objet).map((c) => [c.key, c]));
+  for (const k of masques) {
+    const c = connus.get(k);
+    if (!c) throw new ErreurChamps(`Champ de formulaire inconnu : ${k}.`);
+    if (c.verrouille) throw new ErreurChamps(`« ${c.label.fr} » est indispensable au formulaire : il ne se retire pas.`);
+  }
+  const { error: ed } = await db.from('cf_affichage_systeme').delete().eq('org_id', orgId).eq('object_type', objet);
+  if (ed) traduireErreur(ed, 'modifier les champs du formulaire');
+  const uniques = [...new Set(masques)];
+  if (uniques.length) {
+    const { error } = await db.from('cf_affichage_systeme')
+      .insert(uniques.map((key) => ({ org_id: orgId, object_type: objet, key, masque_creation: true })));
+    if (error) traduireErreur(error, 'modifier les champs du formulaire');
   }
 }
 

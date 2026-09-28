@@ -31,6 +31,11 @@ export interface ChampStandard {
   cherchable: boolean;
   /** Section du formulaire (clé du dossier système) ; absente = pas dans le formulaire. */
   section?: string;
+  /**
+   * Indispensable : toujours affiché dans le formulaire (cadenas dans « Gérer les
+   * champs »). Les autres se décochent — cochés par défaut (décision de Rafba, 2026-09-28).
+   */
+  verrouille?: boolean;
 }
 
 /** Sections des formulaires, dans l'ordre de l'écran. */
@@ -82,16 +87,19 @@ export const SECTIONS_SYSTEME: Record<ObjetChamp, SectionSysteme[]> = {
 
 const s = (key: string, fr: string, en: string, field_type: TypeChamp, section?: string, cherchable = false): ChampStandard =>
   ({ key, label: { fr, en }, field_type, cherchable, ...(section ? { section } : {}) });
+const verrou = (c: ChampStandard): ChampStandard => ({ ...c, verrouille: true });
 
 export const CHAMPS_STANDARD: Record<ObjetChamp, ChampStandard[]> = {
   client: [
-    s('first_name', 'Prénom', 'First name', 'single_line', 'coordonnees', true),
-    s('last_name', 'Nom de famille', 'Last name', 'single_line', 'coordonnees', true),
+    verrou(s('first_name', 'Prénom', 'First name', 'single_line', 'coordonnees', true)),
+    verrou(s('last_name', 'Nom de famille', 'Last name', 'single_line', 'coordonnees', true)),
     s('client_number', 'Numéro de client', 'Client number', 'single_line', 'coordonnees', true),
     s('company', 'Nom de la compagnie', 'Company name', 'single_line', 'coordonnees', true),
     s('display_as_company', 'Utiliser le nom de la compagnie comme nom du client', 'Use company name as client name', 'checkbox', 'coordonnees'),
     s('phone', 'Numéro de téléphone', 'Phone number', 'phone', 'coordonnees', true),
+    s('phone_label', 'Type de numéro', 'Phone type', 'dropdown_single', 'coordonnees'),
     s('email', 'Courriel', 'Email', 'email', 'coordonnees', true),
+    s('email_label', 'Type de courriel', 'Email type', 'dropdown_single', 'coordonnees'),
     s('lead_source', 'Source du lead', 'Lead source', 'dropdown_single', 'lead'),
     s('address', 'Adresse', 'Address', 'single_line', 'adresse', true),
     s('taxes', 'Taxes', 'Taxes', 'dropdown_multi', 'adresse'),
@@ -128,36 +136,40 @@ export const CHAMPS_STANDARD: Record<ObjetChamp, ChampStandard[]> = {
     s('updated_at', 'Modifié le', 'Updated', 'date'),
   ],
   job: [
-    s('title', 'Titre', 'Title', 'single_line', 'details', true),
+    verrou(s('title', 'Titre', 'Title', 'single_line', 'details', true)),
     s('job_number', 'Job #', 'Job #', 'single_line', 'details', true),
     s('salesperson', 'Vendeur', 'Salesperson', 'dropdown_single', 'details'),
     s('sale_date', 'Date de création', 'Date of creation', 'date', 'details'),
     s('show_on_leaderboard', 'Afficher sur le leaderboard', 'Show on leaderboard', 'checkbox', 'details'),
     s('ask_for_review', 'Demander un avis', 'Ask for a review', 'checkbox', 'details'),
-    s('client', 'Client', 'Client', 'dropdown_single', 'client', true),
-    s('property', 'Propriété', 'Property', 'dropdown_single', 'client'),
+    verrou(s('client', 'Client', 'Client', 'dropdown_single', 'client', true)),
+    // La job exige une propriété (NewJobModal refuse sans) : verrouillée.
+    verrou(s('property', 'Propriété', 'Property', 'dropdown_single', 'client')),
     s('job_type', 'Service ponctuel ou forfait de service', 'One-off or service plan', 'dropdown_single', 'type'),
-    s('visits', 'Visites', 'Visits', 'date', 'visites'),
-    s('team', 'Équipe', 'Team', 'dropdown_single', 'assignation'),
+    verrou(s('visits', 'Visites — date de début', 'Visits — start date', 'date', 'visites')),
+    verrou(s('visit_start_time', 'Heure de début', 'Start time', 'single_line', 'visites')),
+    verrou(s('visit_end_time', 'Heure de fin', 'End time', 'single_line', 'visites')),
+    verrou(s('team', 'Équipe', 'Team', 'dropdown_single', 'assignation')),
     s('requires_invoicing', 'Me rappeler de facturer', 'Remind me to invoice', 'checkbox', 'facturation'),
     s('billing_split', 'Diviser en plusieurs factures', 'Split into multiple invoices', 'checkbox', 'facturation'),
     s('deposit_required', 'Exiger un dépôt', 'Require deposit', 'checkbox', 'facturation'),
     s('deposit_type', 'Type de dépôt', 'Deposit type', 'dropdown_single', 'facturation'),
     s('deposit_value', 'Valeur du dépôt', 'Deposit value', 'number', 'facturation'),
     s('require_payment_method', 'Demander un moyen de paiement au dossier', 'Request a payment method on file', 'checkbox', 'facturation'),
-    s('line_items', 'Produits et services', 'Products and services', 'multi_line', 'produits'),
-    s('taxes', 'Taxes', 'Taxes', 'dropdown_multi', 'produits'),
+    verrou(s('line_items', 'Produits et services', 'Products and services', 'multi_line', 'produits')),
+    verrou(s('taxes', 'Taxes', 'Taxes', 'dropdown_multi', 'produits')),
+    verrou(s('subtotal', 'Sous-total', 'Subtotal', 'monetary', 'produits')),
     s('agreement', 'Créer un contrat', 'Create agreement', 'checkbox', 'contrat'),
     s('notes', 'Notes', 'Notes', 'multi_line', 'notes'),
     s('status', 'Statut', 'Status', 'dropdown_single'),
     s('address', 'Adresse', 'Address', 'single_line'),
     s('scheduled_at', 'Planifié le', 'Scheduled', 'date'),
-    s('total', 'Total', 'Total', 'monetary'),
+    verrou(s('total', 'Total', 'Total', 'monetary', 'produits')),
     s('created_at', 'Créé le', 'Created', 'date'),
     s('updated_at', 'Modifié le', 'Updated', 'date'),
   ],
   quote: [
-    s('client', 'Client', 'Client', 'dropdown_single', 'contact', true),
+    verrou(s('client', 'Client', 'Client', 'dropdown_single', 'contact', true)),
     s('quote_type', 'Devis ponctuel ou plan de service', 'One-off quote or service plan', 'dropdown_single', 'details'),
     s('title', 'Titre', 'Title', 'single_line', 'details', true),
     s('property', 'Propriété', 'Property', 'dropdown_single', 'details'),
@@ -166,18 +178,20 @@ export const CHAMPS_STANDARD: Record<ObjetChamp, ChampStandard[]> = {
     s('valid_days', 'Valide pendant (jours)', 'Valid for (days)', 'number', 'details'),
     s('photos', 'Photos', 'Photos', 'file', 'photos'),
     s('introduction', 'Introduction', 'Introduction', 'multi_line', 'introduction'),
-    s('line_items', 'Produits et services', 'Products and services', 'multi_line', 'produits'),
+    verrou(s('line_items', 'Produits et services', 'Products and services', 'multi_line', 'produits')),
     s('contract_disclaimer', 'Contrat / Clause', 'Contract / Disclaimer', 'multi_line', 'contrat'),
     s('client_message', 'Message au client', 'Client message', 'multi_line', 'message'),
     s('notes', 'Notes', 'Notes', 'multi_line', 'notes'),
+    s('specific_notes', 'Notes spécifiques', 'Specific notes', 'multi_line', 'notes'),
+    verrou(s('subtotal', 'Sous-total', 'Subtotal', 'monetary', 'resume')),
     s('discount', 'Rabais', 'Discount', 'monetary', 'resume'),
-    s('tax', 'Taxe', 'Tax', 'monetary', 'resume'),
+    verrou(s('tax', 'Taxe', 'Tax', 'monetary', 'resume')),
     s('deposit_required', 'Exiger un acompte', 'Require deposit', 'checkbox', 'acompte'),
     s('deposit_type', 'Type d’acompte', 'Deposit type', 'dropdown_single', 'acompte'),
     s('deposit_value', 'Montant de l’acompte', 'Deposit amount', 'number', 'acompte'),
     s('require_payment_method', 'Exiger un moyen de paiement enregistré', 'Require payment method on file', 'checkbox', 'acompte'),
     s('status', 'Statut', 'Status', 'dropdown_single'),
-    s('total', 'Total', 'Total', 'monetary'),
+    verrou(s('total', 'Total', 'Total', 'monetary', 'resume')),
     s('valid_until', 'Valide jusqu’au', 'Valid until', 'date'),
     s('created_at', 'Créé le', 'Created', 'date'),
     s('updated_at', 'Modifié le', 'Updated', 'date'),

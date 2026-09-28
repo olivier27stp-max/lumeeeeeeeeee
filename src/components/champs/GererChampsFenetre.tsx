@@ -17,14 +17,16 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { GripVertical, Plus, Search, X, Loader2 } from 'lucide-react';
+import { GripVertical, Lock, Plus, Search, X, Loader2 } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { modifierChamp, type ChampPerso, type DossierChamp, type ObjetChamp } from '../../lib/champsPersoApi';
+import { majAffichageSysteme, modifierChamp, type ChampPerso, type DossierChamp, type ObjetChamp } from '../../lib/champsPersoApi';
+import { SECTIONS_SYSTEME, champsSysteme } from '../../lib/champs/standard';
 import ModaleChamp from './reglages/ModaleChamp';
+import { cn } from '../../lib/utils';
 
 interface Etat { id: string; affiche: boolean; obligatoire: boolean }
 
@@ -51,7 +53,7 @@ function LigneAffichee({ champ, etat, fr, onChange }: {
   );
 }
 
-export default function GererChampsFenetre({ objet, titreFenetre, champs, dossiers, fr, onClose, portee = 'creation' }: {
+export default function GererChampsFenetre({ objet, titreFenetre, champs, dossiers, fr, onClose, portee = 'creation', masquesSysteme }: {
   objet: ObjetChamp;
   titreFenetre: string;
   /** « creation » : la fenêtre « Nouveau … » ; « fiche » : la fiche d'un élément existant. */
@@ -61,6 +63,11 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
   dossiers: DossierChamp[];
   fr: boolean;
   onClose: () => void;
+  /**
+   * Fenêtre de création : champs de base décochés (tous cochés par défaut). Présent =
+   * la section « Champs du formulaire » s'affiche, les verrouillés avec un cadenas.
+   */
+  masquesSysteme?: string[];
 }) {
   const qc = useQueryClient();
   const cleMasque = portee === 'fiche' ? 'masque_fiche' : 'masque_creation';
@@ -72,6 +79,9 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
   const [recherche, setRecherche] = useState('');
   const [enCours, setEnCours] = useState(false);
   const [creation, setCreation] = useState(false);
+  const [masques, setMasques] = useState<Set<string>>(() => new Set(masquesSysteme ?? []));
+  const masquesModifies = !!masquesSysteme && [...masques].sort().join() !== [...masquesSysteme].sort().join();
+  const basculerSysteme = (cle: string) => setMasques((m) => { const n = new Set(m); if (n.has(cle)) n.delete(cle); else n.add(cle); return n; });
   useEffect(() => { setEtats(initial); setOrdre(champs.map((c) => c.id)); }, [initial, champs]);
 
   const parId = useMemo(() => new Map(champs.map((c) => [c.id, c])), [champs]);
@@ -81,7 +91,7 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
   const correspond = (id: string) => !q || (parId.get(id)?.label ?? '').toLowerCase().includes(q);
   const affiches = ordre.filter((id) => parId.has(id) && etat(id)?.affiche && correspond(id));
   const disponibles = ordre.filter((id) => parId.has(id) && !etat(id)?.affiche && correspond(id));
-  const modifie = JSON.stringify(etats) !== JSON.stringify(initial) || ordre.join() !== champs.map((c) => c.id).join();
+  const modifie = JSON.stringify(etats) !== JSON.stringify(initial) || ordre.join() !== champs.map((c) => c.id).join() || masquesModifies;
 
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const surDrag = (e: DragEndEvent) => {
@@ -102,6 +112,8 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
         if ((c.position ?? 0) !== pos) patch.position = pos;
         return Object.keys(patch).length ? modifierChamp(id, patch) : null;
       }));
+      // Champs de base décochés : masqués dans le formulaire, pour tout le compte.
+      if (masquesModifies) await majAffichageSysteme(objet, [...masques]);
       await qc.invalidateQueries({ queryKey: ['champs-perso', objet] });
       await qc.invalidateQueries({ queryKey: ['champs-perso-valeurs', objet] });
       toast.success(fr ? `Champs de ${lieu} enregistrés.` : `Fields of ${lieu} saved.`);
@@ -139,6 +151,38 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
+          {masquesSysteme && (
+            <section>
+              <p className="mb-1 px-1 text-[12px] font-semibold text-text-secondary">{fr ? 'Champs du formulaire' : 'Form fields'}</p>
+              <p className="mb-2 px-1 text-[11px] text-text-tertiary">
+                {fr ? 'Cochés de base. Décoche un champ pour le retirer du formulaire ; le cadenas = indispensable.'
+                  : 'Checked by default. Uncheck a field to remove it from the form; the lock means required.'}
+              </p>
+              {SECTIONS_SYSTEME[objet].map((sec) => {
+                const liste = champsSysteme(objet).filter((c) => c.section === sec.cle
+                  && (!q || (fr ? c.label.fr : c.label.en).toLowerCase().includes(q)));
+                if (liste.length === 0) return null;
+                return (
+                  <div key={sec.cle} className="mb-2">
+                    <p className="px-1 pb-0.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">{fr ? sec.nom.fr : sec.nom.en}</p>
+                    {liste.map((c) => {
+                      const idCase = `${idRecherche}-sys-${c.key}`;
+                      const libelle = fr ? c.label.fr : c.label.en;
+                      return (
+                        <label key={c.key} htmlFor={idCase}
+                          className={cn('flex items-center gap-2 rounded-md px-1 py-1.5 text-[13px] text-text-primary', !c.verrouille && 'cursor-pointer hover:bg-surface-secondary')}>
+                          <input id={idCase} type="checkbox" checked={c.verrouille || !masques.has(c.key)} disabled={c.verrouille}
+                            onChange={() => basculerSysteme(c.key)} className="h-4 w-4 accent-primary disabled:opacity-50" />
+                          <span className="min-w-0 flex-1 truncate">{libelle}</span>
+                          {c.verrouille && <Lock size={12} className="shrink-0 text-text-tertiary" aria-label={fr ? 'Indispensable' : 'Required'} />}
+                        </label>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </section>
+          )}
           <section>
             <p className="mb-1 px-1 text-[12px] font-semibold text-text-secondary">{fr ? `Champs affichés dans ${lieu}` : `Fields shown in ${lieu}`}</p>
             {affiches.length === 0 ? (
