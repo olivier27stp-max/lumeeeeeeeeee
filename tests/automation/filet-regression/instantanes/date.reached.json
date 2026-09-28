@@ -8125,6 +8125,11 @@
     "action": "create_notification",
     "execute_at": "2026-09-13T15:00:00.000Z",
     "step_id": "e1"
+   },
+   {
+    "action": "send_sms",
+    "execute_at": "2026-09-14T15:00:00.000Z",
+    "step_id": "e3"
    }
   ],
   "ecritures": [
@@ -8140,7 +8145,7 @@
      "step_id": "e1",
      "action_config": {
       "type": "create_notification",
-      "config": "#53d09b403d36",
+      "config": "#ab27f1dcaebc",
       "event_metadata": {
        "champ_id": "aaaaaaaa-0000-4000-8000-00000000000c",
        "date": "2026-09-20",
@@ -8203,6 +8208,42 @@
    },
    {
     "moment": "differe:create_notification#e1",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation",
+     "title": "Suivi a faire pour Marie Tremblay",
+     "body": "Suivi du parcours",
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000001"
+    }
+   },
+   {
+    "moment": "differe:create_notification#e1",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-date.reached-sequence",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "scheduled",
+     "entity_type": "client",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "action_type": "create_notification",
+     "action_config": {
+      "title": "Suivi a faire pour [client_name]",
+      "body": "Suivi du parcours"
+     },
+     "result_success": true,
+     "result_data": {
+      "title": "Suivi a faire pour Marie Tremblay"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:create_notification#e1",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -8213,13 +8254,164 @@
      ]
     ],
     "valeur": {
+     "status": "completed",
+     "completed_at": "2026-09-13T15:00:00.000Z",
+     "last_error": null
+    }
+   },
+   {
+    "moment": "differe:create_notification#e1",
+    "table": "automation_scheduled_tasks",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-date.reached-sequence",
+     "entity_type": "client",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "step_id": "e3",
+     "action_config": {
+      "type": "send_sms",
+      "config": "#a1e2d6f73412",
+      "event_metadata": {
+       "champ_id": "aaaaaaaa-0000-4000-8000-00000000000c",
+       "date": "2026-09-20",
+       "jour": "2026-09-13",
+       "franchies": 1
+      }
+     },
+     "sequence_context": {
+      "champ_id": "aaaaaaaa-0000-4000-8000-00000000000c",
+      "date": "2026-09-20",
+      "jour": "2026-09-13",
+      "franchies": 2
+     },
+     "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execute_at": "2026-09-13T15:05:00.000Z",
-     "last_error": "Cannot read properties of undefined (reading 'replace') — reprise 1/4 dans 5 min"
+     "execution_key": "regle-date.reached-sequence:aaaaaaaa-0000-4000-8000-000000000001:step:e3"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "status",
+      "running"
+     ],
+     [
+      "lt",
+      "execute_at",
+      "2026-09-14T14:45:00.000Z"
+     ]
+    ],
+    "valeur": {
+     "status": "pending",
+     "execute_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "tache-2"
+     ],
+     [
+      "eq",
+      "status",
+      "pending"
+     ]
+    ],
+    "valeur": {
+     "status": "running",
+     "attempts": 1,
+     "execute_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-date.reached-sequence",
+     "scheduled_task_id": "tache-2",
+     "trigger_event": "scheduled",
+     "entity_type": "client",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "action_type": "send_sms",
+     "action_config": {
+      "body": "Bonjour [client_name], c’est [company_name]. Merci !"
+     },
+     "result_success": true,
+     "result_data": {
+      "to": "+15145550142",
+      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "tache-2"
+     ]
+    ],
+    "valeur": {
+     "status": "completed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": null
     }
    }
   ],
-  "envois": [],
+  "envois": [
+   {
+    "moment": "differe:send_sms#e3",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+   }
+  ],
   "annulees": []
  }
 }
