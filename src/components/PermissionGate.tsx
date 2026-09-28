@@ -2,7 +2,7 @@ import React from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { usePermissions } from '../hooks/usePermissions';
 import { useTranslation } from '../i18n';
-import { type PermissionKey, hasPermission, checkScope, can } from '../lib/permissions';
+import { type PermissionKey, type TeamRole, hasPermission, checkScope, can } from '../lib/permissions';
 
 interface PermissionGateProps {
   /** Single permission to check */
@@ -17,6 +17,8 @@ interface PermissionGateProps {
     team_id?: string | null;
     department_id?: string | null;
   };
+  /** Rôles autorisés, en plus des permissions (ex. owner/admin seulement) */
+  roles?: TeamRole[];
   children: React.ReactNode;
   fallback?: React.ReactNode;
 }
@@ -41,10 +43,13 @@ const DefaultFallback: React.FC = () => {
   );
 };
 
-export default function PermissionGate({ permission, permissions: allPerms, anyPermission, resource, children, fallback }: PermissionGateProps) {
+export default function PermissionGate({ permission, permissions: allPerms, anyPermission, resource, roles, children, fallback }: PermissionGateProps) {
   const ctx = usePermissions();
 
   if (ctx.loading) return null;
+
+  // Restriction de rôle : aucune permission personnalisée ne la contourne.
+  if (roles && (!ctx.role || !roles.includes(ctx.role))) return <>{fallback ?? <DefaultFallback />}</>;
 
   // Owner bypasses everything
   if (ctx.role === 'owner') return <>{children}</>;

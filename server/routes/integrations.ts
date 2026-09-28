@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
+import { requireRole } from '../lib/rbac';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { registerAllProviders } from '../lib/integrations/providers';
 import { getProvider, getAllProviders } from '../lib/integrations/registry';
@@ -24,11 +25,17 @@ import {
 registerAllProviders();
 
 const router = Router();
+
+// Connexions = accès aux comptes externes du bureau (comptabilité…) :
+// propriétaire et admin seulement, quelle que soit la permission accordée.
+// Le retour OAuth (/callback) reste hors de ce filtre : c'est Intuit qui
+// l'appelle, protégé par l'état à usage unique vérifié en base.
+const ownerAdmin = requireRole('owner', 'admin');
 router.use(maxBodySize());
 router.use(guardCommonShape);
 
 // ── List all connections for the org ───────────────────────────
-router.get('/integrations', async (req, res) => {
+router.get('/integrations', ownerAdmin, async (req, res) => {
   try {
     const ctx = await requireAuthedClient(req, res);
     if (!ctx) return;
@@ -45,7 +52,7 @@ router.get('/integrations', async (req, res) => {
 // are provisioned by Lume itself (Connect account + plan-included SMS number).
 // The Marketplace reads their real state here instead of showing a dead
 // "Connect" button for something the org cannot action.
-router.get('/integrations/native-status', async (req, res) => {
+router.get('/integrations/native-status', ownerAdmin, async (req, res) => {
   try {
     const ctx = await requireAuthedClient(req, res);
     if (!ctx) return;
@@ -93,7 +100,7 @@ router.get('/integrations/native-status', async (req, res) => {
 });
 
 // ── Get single connection status ──────────────────────────────
-router.get('/integrations/:appId/status', async (req, res) => {
+router.get('/integrations/:appId/status', ownerAdmin, async (req, res) => {
   try {
     const ctx = await requireAuthedClient(req, res);
     if (!ctx) return;
@@ -106,7 +113,7 @@ router.get('/integrations/:appId/status', async (req, res) => {
 });
 
 // ── Get provider info (credential fields, auth type) ──────────
-router.get('/integrations/:appId/provider', async (req, res) => {
+router.get('/integrations/:appId/provider', ownerAdmin, async (req, res) => {
   const provider = getProvider(req.params.appId);
   if (!provider) {
     res.status(404).json({ error: `Unknown provider: ${req.params.appId}` });
@@ -126,7 +133,7 @@ router.get('/integrations/:appId/provider', async (req, res) => {
 // Catalogue des intégrations : réservé aux comptes connectés. Servi sans
 // authentification, il renseignait un attaquant sur la pile technique
 // (audit QA 2026-09-09, phase 3).
-router.get('/integrations-providers', async (req, res) => {
+router.get('/integrations-providers', ownerAdmin, async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
   const providers = getAllProviders().map((p) => ({
@@ -138,7 +145,7 @@ router.get('/integrations-providers', async (req, res) => {
 });
 
 // ── Start OAuth flow ──────────────────────────────────────────
-router.post('/integrations/:appId/connect/oauth', async (req, res) => {
+router.post('/integrations/:appId/connect/oauth', ownerAdmin, async (req, res) => {
   try {
     const ctx = await requireAuthedClient(req, res);
     if (!ctx) return;
@@ -217,7 +224,7 @@ router.get('/integrations/:appId/callback', async (req, res) => {
 });
 
 // ── Connect with credentials (API key, etc.) ──────────────────
-router.post('/integrations/:appId/connect/credentials', async (req, res) => {
+router.post('/integrations/:appId/connect/credentials', ownerAdmin, async (req, res) => {
   try {
     const ctx = await requireAuthedClient(req, res);
     if (!ctx) return;
@@ -257,7 +264,7 @@ router.post('/integrations/:appId/connect/credentials', async (req, res) => {
 });
 
 // ── Test connection ───────────────────────────────────────────
-router.post('/integrations/:appId/test', async (req, res) => {
+router.post('/integrations/:appId/test', ownerAdmin, async (req, res) => {
   try {
     const ctx = await requireAuthedClient(req, res);
     if (!ctx) return;
@@ -270,7 +277,7 @@ router.post('/integrations/:appId/test', async (req, res) => {
 });
 
 // ── Disconnect ────────────────────────────────────────────────
-router.post('/integrations/:appId/disconnect', async (req, res) => {
+router.post('/integrations/:appId/disconnect', ownerAdmin, async (req, res) => {
   try {
     const ctx = await requireAuthedClient(req, res);
     if (!ctx) return;
@@ -288,7 +295,7 @@ router.post('/integrations/:appId/disconnect', async (req, res) => {
 });
 
 // ── Refresh OAuth token ───────────────────────────────────────
-router.post('/integrations/:appId/refresh', async (req, res) => {
+router.post('/integrations/:appId/refresh', ownerAdmin, async (req, res) => {
   try {
     const ctx = await requireAuthedClient(req, res);
     if (!ctx) return;

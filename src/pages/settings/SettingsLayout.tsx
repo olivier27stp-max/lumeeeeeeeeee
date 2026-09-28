@@ -31,6 +31,7 @@ import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'rea
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
+import { usePermissions } from '../../hooks/usePermissions';
 
 // ─── Settings navigation (persistent sidebar) ─────────────────────
 // Organized by user intent: Mon compte / Entreprise / Ventes & paiements /
@@ -53,6 +54,9 @@ export function useSettingsNav(): NavGroup[] {
   const isFr = language === 'fr';
   // Champs personnalisés v2 : visibles seulement quand le drapeau est actif.
   const { isEnabled: champsV2 } = useChampsPersoActifs();
+  // Connexions (Marketplace) et API : propriétaire et admin seulement.
+  const { role } = usePermissions();
+  const ownerAdmin = role === 'owner' || role === 'admin';
 
   return [
     {
@@ -105,8 +109,12 @@ export function useSettingsNav(): NavGroup[] {
       items: [
         { path: '/settings/reports', label: isFr ? 'Rapports' : 'Reports', icon: BarChart3 },
         { path: '/settings/archives', label: (t.settings as any).archives || 'Archives', icon: Archive },
-        { path: '/settings/marketplace', label: 'Marketplace', icon: Store },
-        { path: '/settings/api', label: isFr ? 'API & MCP' : 'API & MCP', icon: Plug },
+        ...(ownerAdmin
+          ? [
+              { path: '/settings/marketplace', label: 'Marketplace', icon: Store },
+              { path: '/settings/api', label: isFr ? 'API & MCP' : 'API & MCP', icon: Plug },
+            ]
+          : []),
         // Parrainage retiré du menu: la récompense (crédit Stripe au parrain)
         // n'a pas été validée par un vrai paiement de bout en bout. Masqué pour
         // tout le monde, propriétaire inclus. Réactivation: REFERRALS_ENABLED.

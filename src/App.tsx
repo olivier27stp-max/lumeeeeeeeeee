@@ -197,7 +197,7 @@ import PermissionGate from './components/PermissionGate';
 import { TenantGuardRoute } from './components/TenantGuard';
 import ModuleGate from './components/ModuleGate';
 import { useModuleAccess } from './hooks/useModuleAccess';
-import type { PermissionKey } from './lib/permissions';
+import type { PermissionKey, TeamRole } from './lib/permissions';
 import { hasPermission, ROLE_LABELS } from './lib/permissions';
 import { usePermissions } from './hooks/usePermissions';
 import { useRealtimeNotifications } from './hooks/useRealtimeNotifications';
@@ -243,6 +243,8 @@ type NavItem = {
   tileColor: TileColor;
   /** Permission key required to see this nav item */
   requiredPermission?: PermissionKey;
+  /** Rôles autorisés (ex. owner/admin) — en plus de la permission */
+  requiredRoles?: TeamRole[];
   /** Plan flag required to see this nav item (e.g. 'includes_sms') */
   requiredPlanFlag?: 'includes_sms' | 'includes_ai' | 'includes_d2d' | 'includes_courses' | 'includes_api';
 };
@@ -252,9 +254,12 @@ type NavSection = {
   items: NavItem[];
 };
 
+/** Connexions et API : propriétaire et admin seulement. */
+const OWNER_ADMIN: TeamRole[] = ['owner', 'admin'];
+
 /** Wrap a page element with a permission check */
-function Gated({ permission, anyPermission, children }: { permission?: PermissionKey; anyPermission?: PermissionKey[]; children: React.ReactNode }) {
-  return <PermissionGate permission={permission} anyPermission={anyPermission}>{children}</PermissionGate>;
+function Gated({ permission, anyPermission, roles, children }: { permission?: PermissionKey; anyPermission?: PermissionKey[]; roles?: TeamRole[]; children: React.ReactNode }) {
+  return <PermissionGate permission={permission} anyPermission={anyPermission} roles={roles}>{children}</PermissionGate>;
 }
 
 /** Standard page wrapper — constrains width for form/list pages */
@@ -1047,6 +1052,7 @@ function AuthenticatedApp({
 
   /** Filter nav items based on user permissions + plan flags */
   const canSee = (item: NavItem) => {
+    if (item.requiredRoles && (!permsCtx.role || !item.requiredRoles.includes(permsCtx.role))) return false;
     // Permission check
     if (item.requiredPermission) {
       const ok = permsCtx.role === 'owner'
@@ -1138,7 +1144,7 @@ function AuthenticatedApp({
     { id: 'insights', label: language === 'fr' ? 'Statistiques' : 'Statistics', icon: TrendingUp, path: '/insights', tileColor: 'blue' as const, requiredPermission: 'financial.view_analytics' as PermissionKey },
     { id: 'tasks', label: language === 'fr' ? 'Tâches' : 'Tasks', icon: ClipboardList, path: '/tasks', tileColor: 'blue' as const, requiredPermission: 'leads.read' as PermissionKey },
     { id: 'automations', label: t.workflows?.title || 'Automations', icon: Zap, path: '/automations', tileColor: 'blue' as const, requiredPermission: 'automations.read' as PermissionKey, requiredPlanFlag: 'includes_automations' },
-    { id: 'marketplace', label: 'Marketplace', icon: Store, path: '/settings/marketplace', tileColor: 'blue' as const, requiredPermission: 'integrations.read' as PermissionKey, requiredPlanFlag: 'includes_marketplace' },
+    { id: 'marketplace', label: 'Marketplace', icon: Store, path: '/settings/marketplace', tileColor: 'blue' as const, requiredPermission: 'integrations.read' as PermissionKey, requiredRoles: OWNER_ADMIN, requiredPlanFlag: 'includes_marketplace' },
   ] as NavItem[]).filter(canSee);
 
   // Auto-expand "More" if the user is on a "more" page
@@ -1625,12 +1631,12 @@ function AuthenticatedApp({
                       <Route path="reports/:reportId" element={<Gated permission="financial.view_reports"><ReportView /></Gated>} />
                       <Route path="location" element={<Gated permission="settings.read"><LocationSettings /></Gated>} />
                       <Route path="archives" element={<Gated permission="settings.read"><div className="max-w-2xl"><ArchivesPanel /></div></Gated>} />
-                      <Route path="marketplace" element={<Gated permission="integrations.read"><PlanFeatureGate flag="includes_marketplace"><AppMarketplace /></PlanFeatureGate></Gated>} />
+                      <Route path="marketplace" element={<Gated permission="integrations.read" roles={OWNER_ADMIN}><PlanFeatureGate flag="includes_marketplace"><AppMarketplace /></PlanFeatureGate></Gated>} />
                       {/* API & MCP — clés machine + connexion d'un client MCP.
                           `integrations.update` : la page crée des identifiants
                           d'accès, la lecture seule n'y a pas sa place. Le serveur
                           re-vérifie owner/admin (requireAdmin + RLS api_keys). */}
-                      <Route path="api" element={<Gated permission="integrations.update"><ApiMcpSettings /></Gated>} />
+                      <Route path="api" element={<Gated permission="integrations.update" roles={OWNER_ADMIN}><ApiMcpSettings /></Gated>} />
                       {/* Parrainage: route retirée tant que la récompense (crédit
                           Stripe au parrain) n'est pas validée par un vrai paiement.
                           Fermée pour tout le monde, propriétaire inclus. L'API
