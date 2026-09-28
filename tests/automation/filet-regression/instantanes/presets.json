@@ -15,6 +15,7 @@
      "action_type": "create_notification",
      "action_config": {
       "destinataire": "equipe_du_deal",
+      "par_courriel": "true",
       "title": "👀 {{client.nom}} vient d'ouvrir la soumission #{{soumission.numero}} ({{soumission.total}}). Bon moment pour appeler.",
       "body": "Ouverte le {{soumission.ouverte_le}} · {{soumission.nb_vues}} vue(s)",
       "lien": "{{soumission.lien_interne}}"
@@ -58,6 +59,7 @@
      "action_type": "create_notification",
      "action_config": {
       "destinataire": "equipe_du_deal",
+      "par_courriel": "true",
       "title": "👀 {{client.nom}} vient d'ouvrir la soumission #{{soumission.numero}} ({{soumission.total}}). Bon moment pour appeler.",
       "body": "Ouverte le {{soumission.ouverte_le}} · {{soumission.nb_vues}} vue(s)",
       "lien": "{{soumission.lien_interne}}"
@@ -65,7 +67,8 @@
      "result_success": true,
      "result_data": {
       "title": "👀 Marie Tremblay vient d'ouvrir la soumission #Q-2026-042 (1 626,90 $). Bon moment pour appeler.",
-      "destinataires": 1
+      "destinataires": 1,
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -1657,7 +1660,8 @@
      "result_success": true,
      "result_data": {
       "title": "Dépôt reçu — Marie Tremblay",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -2938,7 +2942,8 @@
      "result_success": true,
      "result_data": {
       "title": "Facture INV-000042 — 14 jours de retard",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -3829,7 +3834,8 @@
      "result_success": true,
      "result_data": {
       "title": "Facture INV-000042 — 30 jours de retard",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -4943,7 +4949,8 @@
      "result_success": true,
      "result_data": {
       "title": "Facture INV-000042 — 7 jours impayée",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -6681,7 +6688,8 @@
      "result_success": true,
      "result_data": {
       "title": "Prospect sans réponse — 14 jours",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -7856,7 +7864,8 @@
      "result_success": true,
      "result_data": {
       "title": "Paiement reçu",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -8774,7 +8783,8 @@
      "result_success": true,
      "result_data": {
       "title": "Soumission sans réponse — 14 jours",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -9650,7 +9660,8 @@
      "result_success": true,
      "result_data": {
       "title": "Soumission close — aucune réponse",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -10662,7 +10673,8 @@
      "result_success": true,
      "result_data": {
       "title": "Soumission sans réponse — 7 jours",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -12244,7 +12256,8 @@
      "result_success": true,
      "result_data": {
       "title": "Prospect inactif — 7 jours",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -12829,7 +12842,8 @@
      "result_success": true,
      "result_data": {
       "title": "Nouveau prospect",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
