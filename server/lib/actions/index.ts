@@ -1813,6 +1813,11 @@ export async function executeMoveDealStage(
   if (config?.cible === 'role') {
     config = { ...config, depuis_role: 'soumission_envoyee', vers_role: 'soumission_ouverte' };
   }
+  // « Vers : l'étape Soumission envoyée » — depuis n'importe quelle étape
+  // ouverte PLUS TÔT dans le pipeline (garde « jamais en arrière » plus bas).
+  if (config?.cible === 'role_envoyee') {
+    config = { ...config, depuis_role: undefined, vers_role: 'soumission_envoyee' };
+  }
   if (ctx.entityType !== 'deal' && ctx.entityType !== 'quote') {
     return { success: false, error: `move_deal_stage s'applique à un deal ou à une soumission (reçu : ${ctx.entityType}).` };
   }
@@ -1852,6 +1857,15 @@ export async function executeMoveDealStage(
       // Seulement depuis l'étape prévue : un deal déjà plus loin (ou
       // ailleurs) ne recule JAMAIS.
       if (!depuis || deal.stage_id !== depuis.id) {
+        return { success: true, data: { deja_ailleurs: true } };
+      }
+    } else {
+      // Sans étape de départ imposée : seulement vers l'AVANT, et jamais un
+      // deal gagné ou perdu (un devis révisé et renvoyé ne rouvre rien).
+      const { data: actuelle } = await ctx.supabase
+        .from('pipeline_stages').select('position, kind')
+        .eq('id', deal.stage_id).eq('org_id', ctx.orgId).maybeSingle();
+      if (!actuelle || actuelle.kind !== 'open' || Number(actuelle.position) >= Number(vers.position)) {
         return { success: true, data: { deja_ailleurs: true } };
       }
     }

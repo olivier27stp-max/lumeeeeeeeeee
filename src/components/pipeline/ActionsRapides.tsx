@@ -183,7 +183,7 @@ export default function ActionsRapides({ deal, membres, onAssigner, onChangement
                   setOuvert(false);
                   // Le devis se crée dans son propre écran, avec le client
                   // pré-sélectionné : le chiffrage ne se bâcle pas en popup.
-                  navigate(`/quotes/new?clientId=${deal.client_id}`);
+                  navigate(`/quotes/new?clientId=${deal.client_id}&dealId=${deal.id}`);
                 }}
               >
                 <FileText size={14} aria-hidden="true" />

@@ -78,6 +78,54 @@
   "envois": [],
   "annulees": []
  },
+ "quote_sent_move_deal": {
+  "planifie": [],
+  "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-quote_sent_move_deal",
+     "trigger_event": "quote.sent",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "move_deal_stage",
+     "action_config": {
+      "cible": "role_envoyee"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "preset-quote_sent_move_deal:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-quote_sent_move_deal",
+     "trigger_event": "quote.sent",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "move_deal_stage",
+     "action_config": {
+      "cible": "role_envoyee"
+     },
+     "result_success": true,
+     "result_data": {
+      "pas_d_etape_cible": true
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   }
+  ],
+  "envois": [],
+  "annulees": []
+ },
  "quote_opened_move_deal": {
   "planifie": [],
   "ecritures": [

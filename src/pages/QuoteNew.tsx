@@ -33,6 +33,8 @@ import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { STORAGE_BUCKETS, uploadFile } from '../lib/storage';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useChampsCreation } from '../components/champs/creation';
+import { lierDevis } from '../lib/pipelineVentesApi';
+import { captureClientException } from '../lib/sentry';
 
 /* ── Design (maquette approuvée) : texte noir pur / blanc pur uniquement ── */
 const OUTLINE = 'border-[#e8e8e8] dark:border-white/10';
@@ -159,6 +161,8 @@ export default function QuoteNew() {
     const p = new URLSearchParams(window.location.search);
     return p.get('clientId') ?? p.get('client') ?? '';
   });
+  /** Devis fait depuis la fiche d'un deal : il y sera rattaché à l'enregistrement. */
+  const [dealIdLie] = useState(() => new URLSearchParams(window.location.search).get('dealId') ?? '');
   const [clientSearch, setClientSearch] = useState('');
   const [clientListOpen, setClientListOpen] = useState(false);
   const [clientHighlight, setClientHighlight] = useState(-1);
@@ -714,6 +718,18 @@ export default function QuoteNew() {
         await specificNotesRef.current.saveNote('quote', detail.quote.id);
       }
       await champsPerso.enregistrer(detail.quote.id);
+
+      if (dealIdLie) {
+        // Le devis existe déjà : un lien raté ne doit pas faire croire à un
+        // échec d'enregistrement. Le deal le retrouvera quand même par son
+        // client (dealDeLaSoumission), seulement moins précisément.
+        try {
+          await lierDevis(dealIdLie, detail.quote.id, quoteClientId);
+        } catch (e) {
+          console.error('[devis] rattachement au deal impossible', e);
+          captureClientException(e, { dealId: dealIdLie, quoteId: detail.quote.id });
+        }
+      }
 
       guard.release();
       navigate(`/quotes/${detail.quote.id}`);

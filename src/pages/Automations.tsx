@@ -187,6 +187,7 @@ const PRESET_META: Record<string, {
   // Quotes
   quote_opened_notify:      { icon: Eye,            category: 'Quotes' },
   quote_opened_move_deal:   { icon: Eye,            category: 'Quotes' },
+  quote_sent_move_deal:     { icon: Send,           category: 'Quotes' },
   quote_followup_1d:        { icon: Mail,           category: 'Quotes' },
   quote_followup_3d:        { icon: Mail,           category: 'Quotes' },
   quote_followup_7d:        { icon: Mail,           category: 'Quotes' },

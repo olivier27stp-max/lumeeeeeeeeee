@@ -43,6 +43,22 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
     ]
   },
   {
+    "preset_key": "quote_sent_move_deal",
+    "name": "Avancer le deal quand la soumission est envoyée",
+    "description": "Dès que la soumission part chez le client, le deal lié passe à « Soumission envoyée ». Seulement vers l'avant : un deal déjà plus loin, gagné ou perdu ne bouge pas.",
+    "trigger_event": "quote.sent",
+    "conditions": {},
+    "delay_seconds": 0,
+    "actions": [
+      {
+        "type": "move_deal_stage",
+        "config": {
+          "cible": "role_envoyee"
+        }
+      }
+    ]
+  },
+  {
     "preset_key": "quote_opened_move_deal",
     "name": "Avancer le deal quand le client ouvre sa soumission",
     "description": "À la première ouverture, le deal lié passe de « Soumission envoyée » à « Soumission ouverte ». Jamais de retour en arrière.",
