@@ -42,6 +42,8 @@ import {
   renommerDossier,
   changerPublication,
   changerPublicationEnLot,
+  chargerStatistiques,
+  type StatsRegle,
   type BureauCible,
   type CatalogueAutomatisations,
   type DossierAutomatisation,
@@ -406,6 +408,8 @@ export default function Automations() {
   }));
   const [search, setSearch] = useState('');
   const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
+  /** Chiffres réels par automatisation (60 j) — `null` = illisibles. */
+  const [stats, setStats] = useState<Record<string, StatsRegle> | null>(null);
   const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
   const [occupeId, setOccupeId] = useState<string | null>(null);
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
@@ -517,6 +521,13 @@ export default function Automations() {
         setFailureCounts(await getFailureCountsByRule());
       } catch (e: any) {
         console.error('Failed to load automation failures:', e.message);
+      }
+      // « Total déclenché », « En cours » et le détail › : la route agrégée.
+      try {
+        setStats((await chargerStatistiques()).par_regle);
+      } catch (e: unknown) {
+        console.error('[automations] statistiques illisibles', e instanceof Error ? e.message : String(e));
+        setStats(null);
       }
     } catch (e: any) {
       console.error('Failed to load rules:', e.message);
@@ -1581,10 +1592,10 @@ export default function Automations() {
                             </span>
                           </td>
 
-                          {/* Total déclenché / En cours : les chiffres arrivent avec
-                              l'onglet Historique (les données sont déjà en base). */}
-                          <td className="px-3 py-3 text-primary">—</td>
-                          <td className="px-3 py-3 text-primary">—</td>
+                          {/* Total déclenché / En cours : les vrais chiffres (60 j),
+                              « — » seulement si la lecture a échoué. */}
+                          <td className="px-3 py-3 tabular-nums text-primary">{stats ? (stats[rule.id]?.declenches ?? 0) : '—'}</td>
+                          <td className="px-3 py-3 tabular-nums text-primary">{stats ? (stats[rule.id]?.en_cours ?? 0) : '—'}</td>
 
                           <td className="hidden px-3 py-3 text-text-secondary lg:table-cell">{dateCourte(rule.updated_at)}</td>
                           <td className="hidden px-3 py-3 text-text-secondary lg:table-cell">{dateCourte(rule.created_at)}</td>
@@ -1776,15 +1787,20 @@ export default function Automations() {
                         {statsId === rule.id && (
                           <tr className="bg-surface-secondary/30">
                             <td colSpan={9} className="px-6 py-4">
-                              <p className="text-[12px] text-text-secondary">
-                                {echecs > 0
-                                  ? (fr
-                                    ? `${echecs} envoi(s) ont échoué ces 7 derniers jours. Le détail arrivera dans l’onglet « Journaux » de l’automatisation.`
-                                    : `${echecs} send(s) failed in the last 7 days. Details will appear in the automation’s “Logs” tab.`)
-                                  : (fr
-                                    ? 'Aucun échec ces 7 derniers jours. Les chiffres d’envoi arrivent avec l’onglet « Historique ».'
-                                    : 'No failures in the last 7 days. Send counts are coming with the “History” tab.')}
-                              </p>
+                              {(() => {
+                                const s = stats?.[rule.id];
+                                return (
+                                  <p className="text-[12px] text-text-secondary">
+                                    {!stats
+                                      ? (fr ? 'Les chiffres n’ont pas pu être lus.' : 'The numbers could not be read.')
+                                      : fr
+                                        ? `60 derniers jours : ${s?.declenches ?? 0} déclenchement(s), ${s?.envoyes ?? 0} envoi(s), ${s?.sautes ?? 0} étape(s) sautée(s), ${s?.echecs ?? 0} échec(s). ${s?.en_cours ?? 0} en cours.`
+                                        : `Last 60 days: ${s?.declenches ?? 0} enrolled, ${s?.envoyes ?? 0} sent, ${s?.sautes ?? 0} skipped step(s), ${s?.echecs ?? 0} failure(s). ${s?.en_cours ?? 0} active.`}
+                                    {' '}
+                                    {fr ? 'Le détail est dans l’onglet « Journaux » de l’automatisation.' : 'Details are in the automation’s “Logs” tab.'}
+                                  </p>
+                                );
+                              })()}
                             </td>
                           </tr>
                         )}

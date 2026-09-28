@@ -29,6 +29,7 @@ const toggleMock = vi.fn(async (_id: string, _actif: boolean) => undefined);
 const publierMock = vi.fn(async (_id: string, _actif: boolean) => undefined);
 const publierLotMock = vi.fn(async (ids: string[], _actif: boolean) => ids.map((id) => ({ id, ok: true })));
 const creerMock = vi.fn(async (_b: unknown) => regle({ id: 'neuve' }));
+const statsMock = vi.fn(async (): Promise<any> => ({ par_regle: {}, par_etape: null }));
 const naviguer = vi.fn();
 const toasts = { erreur: [] as string[], succes: [] as string[] };
 
@@ -69,6 +70,7 @@ vi.mock('../src/lib/automationBuilderApi', () => ({
   chargerBureauxCibles: vi.fn(async () => []),
   changerPublication: (id: string, actif: boolean) => publierMock(id, actif),
   changerPublicationEnLot: (ids: string[], actif: boolean) => publierLotMock(ids, actif),
+  chargerStatistiques: () => statsMock(),
 }));
 
 vi.mock('../src/components/ui/ConfirmDialog', () => ({
@@ -94,6 +96,8 @@ beforeEach(() => {
   publierMock.mockImplementation(async () => undefined);
   publierLotMock.mockClear();
   creerMock.mockClear();
+  statsMock.mockReset();
+  statsMock.mockImplementation(async () => ({ par_regle: {}, par_etape: null }));
   naviguer.mockClear();
   toasts.erreur = [];
   toasts.succes = [];
@@ -271,5 +275,42 @@ describe('M9 — le lot n’agit que sur ce qui est à l’écran', () => {
     saisirRecherche('Auto');
     await attendre();
     expect(container.textContent).not.toContain('sélectionnée(s)');
+  });
+});
+
+// ─── Bloc 5 : statistiques ──────────────────────────────────────
+
+/** Le texte des cellules de la ligne de l'automatisation `nom`. */
+function cellules(nom: string): string[] {
+  const ligne = Array.from(container.querySelectorAll('tbody tr')).find((tr) => tr.textContent?.includes(nom));
+  if (!ligne) throw new Error(`ligne « ${nom} » introuvable`);
+  return Array.from(ligne.querySelectorAll('td')).map((td) => td.textContent?.trim() ?? '');
+}
+
+describe('statistiques — « Total déclenché » et « En cours » sur de vraies données', () => {
+  it('les colonnes affichent les chiffres de la route agrégée, plus « — »', async () => {
+    reglesServies = [regle({ id: 'a', name: 'Relance A' }), regle({ id: 'b', name: 'Relance B' })];
+    statsMock.mockImplementation(async () => ({
+      par_regle: { a: { declenches: 7, en_cours: 2, envoyes: 5, sautes: 1, echecs: 1 } },
+      par_etape: null,
+    }));
+    await rendre();
+    await attendre();
+    // Colonnes : ☑ · Nom · Statut · Total déclenché · En cours · …
+    expect(cellules('Relance A').slice(3, 5)).toEqual(['7', '2']);
+    // Jamais déclenchée : un vrai zéro, pas un tiret.
+    expect(cellules('Relance B').slice(3, 5)).toEqual(['0', '0']);
+  });
+
+  it('le détail › dit les envois, les étapes sautées (à part) et les échecs', async () => {
+    reglesServies = [regle({ id: 'a', name: 'Relance A' })];
+    statsMock.mockImplementation(async () => ({
+      par_regle: { a: { declenches: 7, en_cours: 2, envoyes: 5, sautes: 1, echecs: 1 } },
+      par_etape: null,
+    }));
+    await rendre();
+    await attendre();
+    cliquer(container.querySelector('button[aria-label="Statistiques de Relance A"]'));
+    expect(container.textContent).toContain('5 envoi(s), 1 étape(s) sautée(s), 1 échec(s)');
   });
 });

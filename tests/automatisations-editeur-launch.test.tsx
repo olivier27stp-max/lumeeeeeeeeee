@@ -38,6 +38,7 @@ const api = {
   apercu: vi.fn(async (_id: string) => ({ client: null, message: 'Aucun client', apercu: [] })),
   publier: vi.fn(async (_id: string, _a: boolean) => undefined),
   generer: vi.fn(),
+  stats: vi.fn(async (_id?: string): Promise<any> => ({ par_regle: {}, par_etape: {} })),
 };
 const confirmerMock = vi.fn(async (_o: unknown) => true);
 const toasts = { erreur: [] as string[], succes: [] as string[], info: [] as string[] };
@@ -59,6 +60,7 @@ vi.mock('../src/lib/automationBuilderApi', () => ({
   chargerEtiquettes: vi.fn(async () => []),
   apercuAutomatisation: (id: string) => api.apercu(id),
   changerPublication: (id: string, a: boolean) => api.publier(id, a),
+  chargerStatistiques: (id?: string) => api.stats(id),
 }));
 vi.mock('../src/hooks/usePlanFeature', () => ({
   usePlanFeature: () => ({ hasFeature: etat.aLumi, loading: false }),
@@ -103,6 +105,8 @@ beforeEach(() => {
   api.modifier.mockClear();
   api.apercu.mockClear();
   api.publier.mockClear();
+  api.stats.mockReset();
+  api.stats.mockImplementation(async () => ({ par_regle: {}, par_etape: {} }));
   confirmerMock.mockReset();
   confirmerMock.mockImplementation(async () => true);
   toasts.erreur = []; toasts.succes = []; toasts.info = [];
@@ -190,5 +194,33 @@ describe('rien n’est créé en base avant la première vraie sauvegarde', () =
     // L'adresse devient celle de la règle créée, sans recharger l'écran.
     expect(lieu()).toBe('/automations/neuve-1?lumi=1');
     expect(api.charger).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Bloc 5 : statistiques par étape ────────────────────────────
+
+/** La carte d'étape du canevas dont le titre contient `texte`. */
+function carte(texte: string) {
+  return Array.from(container.querySelectorAll('button[aria-current], button'))
+    .find((b) => b.textContent?.includes(texte) && b.closest('.w-\\[260px\\]'));
+}
+
+describe('statistiques — onglet « Statistiques » d’une étape', () => {
+  it('affiche les passages réels de l’étape, les sautées comptées à part', async () => {
+    api.stats.mockImplementation(async () => ({
+      par_regle: {},
+      par_etape: { e1: { envoyes: 3, sautes: 2, echecs: 1, en_attente: 4 } },
+    }));
+    await ouvrir(`/automations/${ID}`);
+    await attendre();
+    expect(api.stats).toHaveBeenCalledWith(ID);
+    cliquer(carte('Envoyer un texto'));
+    cliquer(bouton('Statistiques'));
+    const texte = container.textContent ?? '';
+    expect(texte).not.toContain('Aucun passage encore');
+    expect(texte).toMatch(/Réussis\s*3/);
+    expect(texte).toMatch(/Sautés\s*2/);
+    expect(texte).toMatch(/Échoués\s*1/);
+    expect(texte).toMatch(/En attente\s*4/);
   });
 });

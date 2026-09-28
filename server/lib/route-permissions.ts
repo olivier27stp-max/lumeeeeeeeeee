@@ -112,6 +112,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   // lecture, tout le reste écrit des règles qui enverront de vrais textos et
   // courriels aux clients — donc le droit de modification.
   'GET /api/automations/rules': 'automations.read',
+  // Total déclenché, en cours, passages par étape (une route agrégée).
+  'GET /api/automations/rules/stats': 'automations.read',
   // « X clients correspondent aujourd'hui » (déclencheur Client inactif).
   'GET /api/automations/clients-inactifs/apercu': 'automations.read',
   'POST /api/automations/rules': 'automations.update',

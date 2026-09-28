@@ -153,6 +153,37 @@ export async function changerPublicationEnLot(ids: string[], actif: boolean): Pr
   return corps.resultats ?? [];
 }
 
+/** Chiffres d'une automatisation sur 60 jours — voir server/routes/automation-stats.ts. */
+export interface StatsRegle {
+  declenches: number;
+  en_cours: number;
+  envoyes: number;
+  /** Étapes sautées (pas de numéro, pas de courriel…) : ni envoi ni échec. */
+  sautes: number;
+  echecs: number;
+}
+
+export interface StatsEtape {
+  envoyes: number;
+  sautes: number;
+  echecs: number;
+  en_attente: number;
+}
+
+/**
+ * Les statistiques, par UNE route agrégée : par automatisation, et par
+ * étape quand `ruleId` est donné.
+ */
+export async function chargerStatistiques(ruleId?: string | null): Promise<{
+  par_regle: Record<string, StatsRegle>;
+  par_etape: Record<string, StatsEtape> | null;
+}> {
+  const url = ruleId ? `/api/automations/rules/stats?rule_id=${encodeURIComponent(ruleId)}` : '/api/automations/rules/stats';
+  const reponse = await fetch(url, { headers: await entetes() });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de lire les statistiques.');
+  return reponse.json();
+}
+
 export async function dupliquerAutomatisation(id: string): Promise<AutomationRule> {
   const reponse = await fetch(`/api/automations/rules/${id}/duplicate`, {
     method: 'POST',

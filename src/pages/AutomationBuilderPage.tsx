@@ -43,6 +43,8 @@ import {
   chargerEtiquettes,
   apercuAutomatisation,
   changerPublication,
+  chargerStatistiques,
+  type StatsEtape,
   type BrouillonAutomatisation,
   type CatalogueAutomatisations,
   type ApercuAutomatisation,
@@ -318,6 +320,20 @@ export default function AutomationBuilderPage() {
   /** L'aperçu (« Tester ») : ce qui partirait, sur un vrai client. */
   const [apercu, setApercu] = useState<ApercuAutomatisation | null>(null);
   const [apercuEnCours, setApercuEnCours] = useState(false);
+  /**
+   * Passages par étape (onglet « Statistiques » du panneau), lus par la
+   * route agrégée. Ils étaient toujours vides : `stats={null}` en dur.
+   */
+  const [statsEtapes, setStatsEtapes] = useState<Record<string, StatsEtape> | null>(null);
+  const idStats = regle?.id ?? '';
+  useEffect(() => {
+    if (!idStats) { setStatsEtapes(null); return; }
+    let vivant = true;
+    chargerStatistiques(idStats)
+      .then((s) => { if (vivant) setStatsEtapes(s.par_etape ?? {}); })
+      .catch((e: unknown) => console.error('[builder] statistiques par étape', e instanceof Error ? e.message : String(e)));
+    return () => { vivant = false; };
+  }, [idStats]);
 
   /**
    * Des départs tout faits — on ne part jamais d'une page blanche.
@@ -2100,7 +2116,7 @@ export default function AutomationBuilderPage() {
           automatisations={autresAutomatisations}
           champsPerso={champsPerso}
           objetChamps={objetRegle}
-          stats={null}
+          stats={statsEtapes?.[etapeOuverte.id] ?? null}
           onEnregistrer={enregistrerEtape}
           onSupprimer={supprimerEtape}
           onFermer={() => setEtapeChoisie(null)}
