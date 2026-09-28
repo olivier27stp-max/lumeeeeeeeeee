@@ -155,8 +155,8 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
             <section>
               <p className="mb-1 px-1 text-[12px] font-semibold text-text-secondary">{fr ? 'Champs du formulaire' : 'Form fields'}</p>
               <p className="mb-2 px-1 text-[11px] text-text-tertiary">
-                {fr ? 'Cochés de base. Décoche un champ pour le retirer du formulaire ; le cadenas = indispensable.'
-                  : 'Checked by default. Uncheck a field to remove it from the form; the lock means required.'}
+                {fr ? 'Les champs du formulaire de base sont toujours affichés. Seuls les champs personnalisés se décochent.'
+                  : 'The base form fields are always shown. Only custom fields can be unchecked.'}
               </p>
               {SECTIONS_SYSTEME[objet].map((sec) => {
                 const liste = champsSysteme(objet).filter((c) => c.section === sec.cle && !c.suit
