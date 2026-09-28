@@ -288,7 +288,8 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
          */
         setLectureEchouee(true);
         await new Promise((r) => setTimeout(r, 400 * essai));
-        return fetchMemberships(essai + 1);
+        // `await` : sinon le finally coupe le chargement pendant la reprise (« Accès restreint », 2026-09-28).
+        return await fetchMemberships(essai + 1);
       }
       console.error('[CompanyContext] Failed to fetch memberships:', err);
       // La liste n'est PAS vidée : on garde ce qu'on avait (au pire rien) et

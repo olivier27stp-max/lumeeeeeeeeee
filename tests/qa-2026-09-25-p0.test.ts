@@ -160,7 +160,7 @@ describe('P0-2 — « Aucune compagnie » ne doit JAMAIS s’afficher pendant un
     expect(i).toBeGreaterThan(-1);
     const bloc = src.slice(i, i + 900);
     expect(bloc, 'la reprise doit marquer l’échec avant de repartir')
-      .toMatch(/setLectureEchouee\(true\);[\s\S]{0,200}?return fetchMemberships\(essai \+ 1\)/);
+      .toMatch(/setLectureEchouee\(true\);[\s\S]{0,200}?return (await )?fetchMemberships\(essai \+ 1\)/);
   });
 
   it('le drapeau n’est réarmé qu’au PREMIER essai', () => {
