@@ -383,6 +383,8 @@ const RULE_LABELS_FR: Record<string, string> = {
   lead_followup_1d: 'Relance de lead — 1 jour',
   stale_lead_7d: 'Lead sans réponse — 7 jours',
   lost_lead_reengagement: 'Réactivation de lead perdu',
+  quote_opened_notify: 'Me notifier quand un client ouvre sa soumission',
+  quote_opened_move_deal: 'Avancer le deal quand le client ouvre sa soumission',
   quote_followup_1d: 'Relance de devis — 1 jour',
   quote_followup_3d: 'Relance de devis — 3 jours',
   quote_followup_7d: 'Relance de devis — 7 jours',

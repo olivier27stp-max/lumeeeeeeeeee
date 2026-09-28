@@ -33,7 +33,7 @@ import QuoteRenderer from '../components/quote/QuoteRenderer';
 import { buildQuoteRenderData } from '../components/quote/buildQuoteRenderData';
 import { toast } from 'sonner';
 import SpecificNotes from '../components/SpecificNotes';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { frCA as dfFr, enCA as dfEn } from 'date-fns/locale';
 import { useTranslation } from '../i18n';
 import { confirmer } from '../components/ui/ConfirmDialog';
@@ -412,12 +412,20 @@ export default function QuoteDetails() {
               </div>
             )}
             <div className="flex justify-between text-[13px] border-t border-outline pt-2.5">
-              <span className="text-text-tertiary">{language === 'fr' ? 'Consultée par le client' : 'Viewed by client'}</span>
+              <span className="text-text-tertiary">{language === 'fr' ? 'Ouverte par le client' : 'Opened by client'}</span>
               {quote.is_viewed && quote.last_viewed_at ? (
-                <span className="font-medium text-success flex items-center gap-1.5">
-                  <Eye size={13} />
-                  {format(new Date(quote.last_viewed_at), 'PPp', { locale: language === 'fr' ? dfFr : dfEn })}
-                  {(quote.view_count || 0) > 1 && <span className="text-text-tertiary font-normal">({quote.view_count}×)</span>}
+                // « il y a 2 h · 3 vues » : la fraîcheur d'abord (c'est ce qui
+                // dit s'il faut appeler maintenant), la date exacte au survol.
+                <span
+                  className="font-medium text-success flex items-center gap-1.5"
+                  title={format(new Date(quote.last_viewed_at), 'PPp', { locale: language === 'fr' ? dfFr : dfEn })}
+                  data-testid="soumission-vues"
+                >
+                  <Eye size={13} aria-hidden="true" />
+                  {formatDistanceToNow(new Date(quote.last_viewed_at), { addSuffix: true, locale: language === 'fr' ? dfFr : dfEn })}
+                  <span className="text-text-tertiary font-normal">
+                    · {quote.view_count || 1} {language === 'fr' ? ((quote.view_count || 1) > 1 ? 'vues' : 'vue') : ((quote.view_count || 1) > 1 ? 'views' : 'view')}
+                  </span>
                 </span>
               ) : (
                 <span className="text-text-tertiary">{language === 'fr' ? 'Pas encore' : 'Not yet'}</span>

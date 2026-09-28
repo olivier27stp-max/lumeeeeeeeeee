@@ -6,7 +6,7 @@ import PastilleLume from '../components/PastilleLume';
 import type { SocialLinks } from '../lib/socialLinks';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, XCircle, PenLine, Pencil, Download, Phone, Mail, Globe, MapPin, Calendar, Hash, User, FileText, CreditCard, Loader2, AlertCircle } from 'lucide-react';
-import { formatQuoteMoney } from '../lib/quotesApi';
+import { enTetesVueSoumission, formatQuoteMoney } from '../lib/quotesApi';
 import { loadStripe } from '@stripe/stripe-js/pure';
 import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -205,7 +205,10 @@ export default function QuoteView() {
       const API_BASE = import.meta.env.VITE_API_URL || '';
 
       // Fetch all quote data from public server endpoint (bypasses RLS)
-      const res = await fetch(`${API_BASE}/api/quotes/public/${token}`);
+      // L'ouverture se compte côté serveur, QUAND la page est servie — ces
+      // en-têtes lui permettent d'écarter un rechargement ou un membre de
+      // l'équipe connecté (voir enTetesVueSoumission).
+      const res = await fetch(`${API_BASE}/api/quotes/public/${token}`, { headers: await enTetesVueSoumission() });
       if (!res.ok) {
         setError(isFr ? 'Soumission introuvable' : 'Quote not found');
         setViewState('error');
@@ -213,13 +216,6 @@ export default function QuoteView() {
       }
       const result: QuoteData = await res.json();
       const quote = result.quote;
-
-      // Track view (fire-and-forget)
-      // Le suivi de vue se fait par view_token (l'endpoint public refuse les
-      // UUID bruts) — avec quote.id l'ouverture n'était jamais enregistrée.
-      // Content-Type JSON requis : le garde CSRF du serveur (server/index.ts)
-      // rejette tout POST sans Authorization / X-Requested-With / JSON.
-      fetch(`${API_BASE}/api/quotes/${token}/track-view`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }).catch(() => {});
 
       setData(result);
 

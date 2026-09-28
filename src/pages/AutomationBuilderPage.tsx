@@ -61,6 +61,7 @@ import TiroirChoix, { type ChoixTiroir } from '../components/automations/TiroirC
 import PanneauDeclencheur from '../components/automations/PanneauDeclencheur';
 import { listerChamps } from '../lib/champsPersoApi';
 import { fetchPipelines, fetchStages } from '../lib/pipelineVentesApi';
+import { listPredefinedServices } from '../lib/servicesApi';
 import { localizeAutomationName } from '../lib/automationNames';
 import {
   ACTIONS,
@@ -294,7 +295,12 @@ export default function AutomationBuilderPage() {
     setTiroirDeclencheur(false);
     if (cle === regle.trigger_event) return;
     try {
-      const maj = await modifierAutomatisation(regle.id, { trigger_event: cle });
+      // Réglages posés d'office par ce déclencheur (ex. « première ouverture
+      // seulement ») — sans écraser ce que la règle portait déjà.
+      const defaut = DECLENCHEURS.find((d) => d.cle === cle)?.conditions_defaut;
+      const maj = await modifierAutomatisation(regle.id, defaut
+        ? { trigger_event: cle, conditions: { ...defaut, ...((regle.conditions ?? {}) as Record<string, unknown>) } }
+        : { trigger_event: cle });
       setRegle(maj);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -965,6 +971,18 @@ export default function AutomationBuilderPage() {
     return () => { vivant = false; };
   }, [besoinChampsDate]);
 
+  /** Le déclencheur demande-t-il un service du catalogue ? */
+  const [servicesCatalogue, setServicesCatalogue] = useState<Array<{ id: string; label: string }>>([]);
+  const besoinServices = !!declencheurCourant?.champs?.some((c) => c.type === 'service');
+  useEffect(() => {
+    if (!besoinServices) return;
+    let vivant = true;
+    listPredefinedServices()
+      .then((s) => { if (vivant) setServicesCatalogue(s.map((x) => ({ id: x.id, label: x.name }))); })
+      .catch((e: unknown) => console.error('[automations] services illisibles', e));
+    return () => { vivant = false; };
+  }, [besoinServices]);
+
   /** Le déclencheur demande-t-il une étape de pipeline ? */
   const besoinEtapes = !!declencheurCourant?.champs?.some((c) => c.type === 'etape_pipeline');
   useEffect(() => {
@@ -1018,12 +1036,18 @@ export default function AutomationBuilderPage() {
       } else if (champ.type === 'etape_pipeline') {
         const nom = etapesPipeline.find((e) => e.id === String(v))?.label;
         bouts.push(nom ?? (fr ? 'étape supprimée' : 'deleted stage'));
+      } else if (champ.type === 'service') {
+        const nom = servicesCatalogue.find((s) => s.id === String(v))?.label;
+        bouts.push(nom ?? (fr ? 'service supprimé' : 'deleted service'));
+      } else if (champ.type === 'choix') {
+        const opt = champ.options?.find((o) => o.cle === String(v));
+        bouts.push(opt ? (fr ? opt.fr : opt.en) : String(v));
       } else {
         bouts.push(`${fr ? champ.fr : champ.en} : ${v}`);
       }
     }
     return bouts.length ? bouts.join(' · ') : null;
-  }, [declencheurCourant, regle?.conditions, champsDate, etapesPipeline, fr]);
+  }, [declencheurCourant, regle?.conditions, champsDate, etapesPipeline, servicesCatalogue, fr]);
 
   /** Enregistrer les réglages du déclencheur. */
   const enregistrerDeclencheur = useCallback(async (conditions: Record<string, unknown>) => {
@@ -1792,6 +1816,8 @@ export default function AutomationBuilderPage() {
           fr={fr}
           champsDate={champsDate}
           etapesPipeline={etapesPipeline}
+          etiquettes={etiquettes}
+          services={servicesCatalogue}
           onEnregistrer={enregistrerDeclencheur}
           onFermer={() => setReglageDeclencheur(false)}
         />

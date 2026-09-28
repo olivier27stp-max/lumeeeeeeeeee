@@ -27,6 +27,8 @@ export type CRMEventType =
   | 'estimate.rejected'
   | 'quote.created'
   | 'quote.sent'
+  /** Le client final a ouvert la page publique de sa soumission (mission 2026-09-28). */
+  | 'quote.viewed'
   | 'quote.approved'
   | 'quote.declined'
   | 'quote.changes_requested'
@@ -134,6 +136,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'estimate.rejected': 'estimate_rejected',
   'quote.created': 'quote_created',
   'quote.sent': 'quote_sent',
+  'quote.viewed': 'quote_viewed',
   'quote.approved': 'quote_approved',
   'quote.declined': 'quote_declined',
   'quote.changes_requested': 'quote_changes_requested',

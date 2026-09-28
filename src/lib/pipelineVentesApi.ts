@@ -81,6 +81,8 @@ export interface DealStageHistory {
   actor_type: ActorType;
   actor_id: string | null;
   created_at: string;
+  /** Pourquoi (automatisation) — ex. « le client a ouvert la soumission ». */
+  motif?: string | null;
 }
 
 export interface PipelineKpis {
@@ -289,7 +291,7 @@ export async function fetchDeals(pipelineId: string): Promise<Deal[]> {
 export async function fetchHistorique(dealId: string): Promise<DealStageHistory[]> {
   const { data, error } = await supabase
     .from('deal_stage_history')
-    .select('id,deal_id,from_stage_id,to_stage_id,actor_type,actor_id,created_at')
+    .select('id,deal_id,from_stage_id,to_stage_id,actor_type,actor_id,created_at,motif')
     .eq('deal_id', dealId)
     .order('created_at');
   if (error) throw error;

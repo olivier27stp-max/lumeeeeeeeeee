@@ -78,6 +78,14 @@ export interface DeclencheurCatalogue {
    * composant les affiche et la même validation les contrôle.
    */
   champs?: ChampAction[];
+  /**
+   * Réglages posés D'OFFICE quand on choisit ce déclencheur.
+   *
+   * « Soumission ouverte par le client » se déclenche par défaut à la
+   * PREMIÈRE ouverture seulement : sans ce défaut, une règle neuve partirait
+   * à chaque rechargement de page du client.
+   */
+  conditions_defaut?: Record<string, unknown>;
 }
 
 /**
@@ -91,6 +99,49 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     aide_fr: 'Quand un devis part chez le client.',
     aide_en: 'When a quote is sent to the client.',
     famille: 'devis', entite: 'quote',
+  },
+  {
+    cle: 'quote.viewed', fr: 'Devis ouvert par le client', en: 'Quote opened by client',
+    aide_fr: 'Quand le client ouvre le lien de son devis. Les ouvertures par votre équipe, les aperçus et les robots de messagerie ne comptent pas.',
+    aide_en: 'When the client opens their quote link. Opens by your team, previews and email scanners don’t count.',
+    famille: 'devis', entite: 'quote',
+    conditions_defaut: { ouverture: 'premiere' },
+    champs: [
+      {
+        cle: 'ouverture', fr: 'Quand déclencher', en: 'When to trigger',
+        obligatoire: false, type: 'choix',
+        options: [
+          { cle: 'premiere', fr: 'Première ouverture seulement', en: 'First open only' },
+          { cle: 'chaque', fr: 'Chaque ouverture', en: 'Every open' },
+        ],
+        aide_fr: 'Une même visite ne compte qu’une fois par 30 minutes.',
+        aide_en: 'A single visit only counts once per 30 minutes.',
+      },
+      {
+        cle: 'montant__gte', fr: 'Montant minimum ($)', en: 'Minimum amount ($)',
+        obligatoire: false, type: 'nombre', min_valeur: 0,
+        aide_fr: 'Total du devis, taxes comprises. Vide = aucun minimum.',
+        aide_en: 'Quote total, taxes included. Empty = no minimum.',
+      },
+      {
+        cle: 'montant__lte', fr: 'Montant maximum ($)', en: 'Maximum amount ($)',
+        obligatoire: false, type: 'nombre', min_valeur: 0,
+      },
+      {
+        cle: 'service_id', fr: 'Contient le service', en: 'Includes service',
+        obligatoire: false, type: 'service',
+      },
+      {
+        cle: 'stage_id', fr: 'L’opportunité est à l’étape', en: 'Deal is at stage',
+        obligatoire: false, type: 'etape_pipeline',
+        aide_fr: 'L’étape de l’opportunité liée, au moment de l’ouverture.',
+        aide_en: 'The linked deal’s stage when the quote is opened.',
+      },
+      {
+        cle: 'etiquette', fr: 'Le client a l’étiquette', en: 'Client has tag',
+        obligatoire: false, type: 'etiquette',
+      },
+    ],
   },
   {
     cle: 'quote.approved', fr: 'Devis accepté', en: 'Quote approved',
@@ -350,6 +401,8 @@ export type TypeChamp =
    * entreprise a les siens — fin de contrat, garantie, entretien annuel.
    */
   | 'champ_date'
+  /** Un service du catalogue de l'entreprise (Réglages → Services). */
+  | 'service'
   /**
    * Une AUTRE automatisation de l'organisation.
    *
@@ -529,8 +582,8 @@ export const ACTIONS: ActionCatalogue[] = [
       {
         cle: 'destinataire', fr: 'Pour qui', en: 'For whom',
         obligatoire: false, type: 'choix', options: DESTINATAIRES_NOTIF,
-        aide_fr: 'Vide = le propriétaire.',
-        aide_en: 'Empty = the owner.',
+        aide_fr: 'Vide = toute l’équipe.',
+        aide_en: 'Empty = the whole team.',
       },
       {
         cle: 'membre_id', fr: 'Le membre', en: 'The member',
@@ -724,9 +777,23 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_fr: 'Change l’étape de l’opportunité dans son pipeline.',
     aide_en: 'Moves the deal to another stage of its pipeline.',
     famille: 'vente', vers_client: false, ecriture: true,
-    entites: ['deal'],
+    // Depuis une soumission, c'est l'opportunité LIÉE qui avance.
+    entites: ['deal', 'quote'],
     champs: [
-      { cle: 'stage_id', fr: 'L’étape visée', en: 'Target stage', obligatoire: true, type: 'texte', max: 40 },
+      {
+        cle: 'cible', fr: 'Vers', en: 'To',
+        obligatoire: false, type: 'choix',
+        options: [
+          { cle: 'etape', fr: 'Une étape précise', en: 'A specific stage' },
+          { cle: 'role', fr: 'L’étape « Soumission ouverte » (depuis « Soumission envoyée »)', en: 'The “Quote opened” stage (from “Quote sent”)' },
+        ],
+        aide_fr: 'La seconde option suit l’étape même si vous la renommez, et ne fait jamais reculer une opportunité déjà plus loin.',
+        aide_en: 'The second option follows the stage even if renamed, and never moves a deal backwards.',
+      },
+      {
+        cle: 'stage_id', fr: 'L’étape visée', en: 'Target stage', obligatoire: true, type: 'texte', max: 40,
+        visible_si: { champ: 'cible', valeurs: ['', 'etape'] },
+      },
     ],
   },
   {
@@ -873,6 +940,7 @@ export const CLES_ACTIONS = ACTIONS.map((a) => a.cle);
  */
 export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   'quote.sent': 'quote',
+  'quote.viewed': 'quote',
   'quote.approved': 'quote',
   'quote.declined': 'quote',
   'quote.changes_requested': 'quote',

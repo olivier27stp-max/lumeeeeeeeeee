@@ -98,6 +98,15 @@ let engineConfig: EngineConfig | null = null;
  */
 function memeValeur(a: unknown, b: unknown): boolean {
   if (a === b) return true;
+  /*
+   * Une métadonnée LISTE correspond si l'une de ses valeurs correspond.
+   * C'est ce qui permet à un événement d'appartenir à plusieurs catégories :
+   * la première ouverture d'une soumission est à la fois « première » et
+   * « chaque » (`ouverture: ['premiere', 'chaque']`), les suivantes
+   * seulement « chaque ». Même principe pour les étiquettes d'un client ou
+   * les services d'une soumission. Avant, une liste ne correspondait jamais.
+   */
+  if (Array.isArray(a)) return a.some((x) => memeValeur(x, b));
   if (a === null || a === undefined || b === null || b === undefined) return false;
   if (typeof a === 'object' || typeof b === 'object') return false;
   return String(a) === String(b);
@@ -161,10 +170,22 @@ export function evaluateConditions(
   if (!conditions || Object.keys(conditions).length === 0) return true;
 
   // Simple condition matching against event metadata
-  for (const [key, expected] of Object.entries(conditions)) {
+  for (const [cleBrute, attenduBrut] of Object.entries(conditions)) {
     // Champs personnalisés : jugés à part, sur les valeurs actuelles
     // (conditionsChampsOk, asynchrone) — pas contre les métadonnées.
-    if (key === CLE_CONDITIONS_CHAMPS) continue;
+    if (cleBrute === CLE_CONDITIONS_CHAMPS) continue;
+    // Réglage VIDE d'un déclencheur (« montant minimum » laissé vide) : ce
+    // n'est pas une condition, c'est l'absence de filtre.
+    if (attenduBrut === '' || attenduBrut === null || attenduBrut === undefined) continue;
+    /*
+     * Une borne écrite par un champ de déclencheur : `montant__gte: 500`
+     * veut dire « montant >= 500 ». Un champ de formulaire ne stocke qu'une
+     * valeur à plat ; le suffixe porte l'opérateur. Aucune clé existante ne
+     * contient « __ », rien ne change pour les règles déjà écrites.
+     */
+    const suffixe = /^(.+)__(gt|gte|lt|lte)$/.exec(cleBrute);
+    const key = suffixe ? suffixe[1] : cleBrute;
+    const expected = suffixe ? { [suffixe[2]]: attenduBrut } : attenduBrut;
     const actual = event.metadata[key];
 
     // Support operators
