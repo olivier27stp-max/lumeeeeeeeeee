@@ -18,7 +18,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  Archive, ArrowDown, ArrowUp, Briefcase, Columns3, Copy, FileText, FolderOpen, FolderPlus, GitBranch, Home, Lock, MoreHorizontal, MoreVertical,
+  Archive, ArrowDown, ArrowUp, Briefcase, Columns3, Copy, FileText, FolderOpen, FolderPlus, GitBranch, GripVertical, Home, Lock, MoreHorizontal, MoreVertical,
   Pencil, Plus, Receipt, RotateCcw, Search, Trash2, Layers, Sparkles, Users, X, type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -29,7 +29,7 @@ import DatePickerInput from '../../components/ui/DatePickerInput';
 import { confirmer } from '../../components/ui/ConfirmDialog';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import {
-  archiverChamp, listerChamps, lireFuseau, renommerDossier, supprimerDossier, modifierChamp,
+  archiverChamp, listerChamps, lireFuseau, placerDossier, renommerDossier, supprimerDossier, modifierChamp,
   type ChampPerso, type ObjetChamp,
 } from '../../lib/champsPersoApi';
 import { OBJETS, LIBELLES_OBJET, LIBELLES_TYPE, TYPES_CHAMP, variableAffichee, type TypeChamp } from '../../lib/champs/types';
@@ -38,6 +38,11 @@ import {
   type Operateur, type UniteDuree,
 } from '../../lib/champs/filtres';
 import { nomDossier, nomSection, type ChampStandard } from '../../lib/champs/standard';
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { ICONE_TYPE } from '../../components/champs/icones';
 import ModaleChamp from '../../components/champs/reglages/ModaleChamp';
 import { ModaleCherchables, ModaleDossier, ModaleSuppression, ModaleUniques } from '../../components/champs/reglages/ModalesReglages';
@@ -688,10 +693,14 @@ export default function ChampsPersoSettings() {
 
 /** Vue « Dossiers » : renommer, supprimer (les champs passent « Sans dossier »), ajouter un champ dedans. */
 function VueDossiers({ dossiers, champs, fr, onNouveauChamp, onChange }: {
-  dossiers: { id: string; name: string; object_type: ObjetChamp; cle_systeme?: string | null }[]; champs: ChampPerso[]; fr: boolean;
+  dossiers: { id: string; name: string; object_type: ObjetChamp; cle_systeme?: string | null; position: number }[]; champs: ChampPerso[]; fr: boolean;
   onNouveauChamp: (dossierId: string) => void; onChange: () => void;
 }) {
   const [edition, setEdition] = useState<Record<string, string>>({});
+  const idsPerso = dossiers.filter((d) => !d.cle_systeme).map((d) => d.id).join(',');
+  const [ordre, setOrdre] = useState<string[]>(() => (idsPerso ? idsPerso.split(',') : []));
+  useEffect(() => { setOrdre(idsPerso ? idsPerso.split(',') : []); }, [idsPerso]);
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   if (dossiers.length === 0) {
     return <EmptyState icon={FolderOpen} title={fr ? 'Aucun dossier' : 'No folders'} description={fr ? 'Un dossier regroupe plusieurs champs, comme un gabarit.' : 'A folder groups several fields, like a template.'} />;
   }
@@ -722,37 +731,88 @@ function VueDossiers({ dossiers, champs, fr, onNouveauChamp, onChange }: {
       toast.error(err instanceof Error ? err.message : String(err));
     }
   };
+  // Ordre : les sections du formulaire (système) restent en tête, dans l'ordre de
+  // l'écran ; les dossiers de l'entreprise se glissent entre eux — c'est l'ordre
+  // des sections ajoutées en fin de formulaire. Seulement pour un objet à la fois.
+  const glissable = new Set(dossiers.map((d) => d.object_type)).size === 1;
+  const systeme = dossiers.filter((d) => d.cle_systeme);
+  const perso = ordre.map((id) => dossiers.find((d) => d.id === id)).filter((d): d is (typeof dossiers)[number] => !!d);
+  const surDrag = async (e: DragEndEvent) => {
+    if (!e.over || e.active.id === e.over.id) return;
+    const ids = ordre;
+    const nouvel = arrayMove(ids, ids.indexOf(String(e.active.id)), ids.indexOf(String(e.over.id)));
+    setOrdre(nouvel);
+    try {
+      await Promise.all(nouvel.map((id, i) => {
+        const d = dossiers.find((x) => x.id === id);
+        return d && d.position !== 100 + i ? placerDossier(id, d.name, 100 + i) : null;
+      }));
+      onChange();
+    } catch (err) {
+      console.error('[ChampsPerso] ordre des dossiers', err);
+      toast.error(err instanceof Error ? err.message : String(err));
+      setOrdre(ids);
+    }
+  };
+  const ligne = (d: (typeof dossiers)[number]) => (
+    <LigneDossier key={d.id} d={d} fr={fr} glissable={glissable && !d.cle_systeme}
+      nb={champs.filter((c) => c.folder_id === d.id).length} edition={edition[d.id]}
+      onEdition={(v) => setEdition((x) => {
+        if (v === undefined) { const { [d.id]: _y, ...r } = x; return r; }
+        return { ...x, [d.id]: v };
+      })}
+      onRenommer={() => { void renommer(d.id); }} onSupprimer={(nb) => { void supprimer(d.id, d.name, nb); }}
+      onNouveauChamp={() => onNouveauChamp(d.id)} />
+  );
   return (
     <ul className="divide-y divide-outline/40 rounded-md border border-outline">
-      {dossiers.map((d) => {
-        const nb = champs.filter((c) => c.folder_id === d.id).length;
-        const enEdition = edition[d.id] !== undefined;
-        return (
-          <li key={d.id} className="flex items-center gap-3 px-3 py-2.5">
-            <FolderOpen size={15} className="text-text-tertiary" aria-hidden />
-            {enEdition ? (
-              <input aria-label={fr ? 'Nom du dossier' : 'Folder name'} autoFocus value={edition[d.id]} maxLength={100}
-                onChange={(e) => setEdition((x) => ({ ...x, [d.id]: e.target.value }))}
-                onKeyDown={(e) => { if (e.key === 'Enter') void renommer(d.id); if (e.key === 'Escape') setEdition((x) => { const { [d.id]: _y, ...r } = x; return r; }); }}
-                onBlur={() => { void renommer(d.id); }} className="glass-input h-8 flex-1 text-[13px]" />
-            ) : (
-              <span className="flex flex-1 items-center gap-1.5 text-[13px] font-medium text-text-primary">{nomDossier(d, fr)}
-                {d.cle_systeme && <Lock size={12} className="text-text-tertiary" aria-label={fr ? 'Section du formulaire : ni renommée ni supprimée' : 'Form section: cannot be renamed or deleted'} />}
-                <span className="ml-1 text-[12px] font-normal text-text-tertiary">{fr ? LIBELLES_OBJET[d.object_type].fr : LIBELLES_OBJET[d.object_type].en} · {nb} {fr ? 'champ(s)' : 'field(s)'}</span>
-              </span>
-            )}
-            <button type="button" onClick={() => onNouveauChamp(d.id)} className="text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded">
-              {fr ? '+ Champ' : '+ Field'}
-            </button>
-            {!d.cle_systeme && <>
-            <button type="button" aria-label={fr ? `Renommer ${d.name}` : `Rename ${d.name}`} onClick={() => setEdition((x) => ({ ...x, [d.id]: d.name }))}
-              className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Pencil size={13} aria-hidden /></button>
-            <button type="button" aria-label={fr ? `Supprimer ${d.name}` : `Delete ${d.name}`} onClick={() => { void supprimer(d.id, d.name, nb); }}
-              className="rounded p-1 text-text-tertiary hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Trash2 size={13} aria-hidden /></button>
-            </>}
-          </li>
-        );
-      })}
+      {systeme.map(ligne)}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => { void surDrag(e); }}>
+        <SortableContext items={perso.map((d) => d.id)} strategy={verticalListSortingStrategy}>
+          {perso.map(ligne)}
+        </SortableContext>
+      </DndContext>
     </ul>
+  );
+}
+
+function LigneDossier({ d, fr, glissable, nb, edition, onEdition, onRenommer, onSupprimer, onNouveauChamp }: {
+  d: { id: string; name: string; object_type: ObjetChamp; cle_systeme?: string | null };
+  fr: boolean; glissable: boolean; nb: number; edition: string | undefined;
+  onEdition: (v: string | undefined) => void; onRenommer: () => void; onSupprimer: (nb: number) => void; onNouveauChamp: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: d.id, disabled: !glissable });
+  const enEdition = edition !== undefined;
+  return (
+    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="flex items-center gap-3 bg-surface-card px-3 py-2.5">
+      {glissable ? (
+        <button type="button" {...attributes} {...listeners} aria-label={fr ? `Déplacer ${d.name}` : `Move ${d.name}`}
+          className="cursor-grab rounded p-0.5 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+          <GripVertical size={14} aria-hidden />
+        </button>
+      ) : <span className="w-[18px]" aria-hidden />}
+      <FolderOpen size={15} className="text-text-tertiary" aria-hidden />
+      {enEdition ? (
+        <input aria-label={fr ? 'Nom du dossier' : 'Folder name'} autoFocus value={edition} maxLength={100}
+          onChange={(e) => onEdition(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') onRenommer(); if (e.key === 'Escape') onEdition(undefined); }}
+          onBlur={onRenommer} className="glass-input h-8 flex-1 text-[13px]" />
+      ) : (
+        <span className="flex flex-1 items-center gap-1.5 text-[13px] font-medium text-text-primary">{nomDossier(d, fr)}
+          {d.cle_systeme && <Lock size={12} className="text-text-tertiary" aria-label={fr ? 'Section du formulaire : ni renommée ni supprimée' : 'Form section: cannot be renamed or deleted'} />}
+          <span className="ml-1 text-[12px] font-normal text-text-tertiary">{fr ? LIBELLES_OBJET[d.object_type].fr : LIBELLES_OBJET[d.object_type].en} · {nb} {fr ? 'champ(s)' : 'field(s)'}</span>
+        </span>
+      )}
+      <button type="button" onClick={onNouveauChamp} className="text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded">
+        {fr ? '+ Champ' : '+ Field'}
+      </button>
+      {!d.cle_systeme && <>
+        <button type="button" aria-label={fr ? `Renommer ${d.name}` : `Rename ${d.name}`} onClick={() => onEdition(d.name)}
+          className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Pencil size={13} aria-hidden /></button>
+        <button type="button" aria-label={fr ? `Supprimer ${d.name}` : `Delete ${d.name}`} onClick={() => onSupprimer(nb)}
+          className="rounded p-1 text-text-tertiary hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Trash2 size={13} aria-hidden /></button>
+      </>}
+    </li>
   );
 }
