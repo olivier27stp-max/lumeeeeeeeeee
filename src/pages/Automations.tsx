@@ -45,6 +45,7 @@ import {
   type DossierAutomatisation,
 } from '../lib/automationBuilderApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
+import { useModuleAccess } from '../hooks/useModuleAccess';
 import {
   type AutomationRule,
   getAutomationRules,
@@ -356,6 +357,7 @@ export default function Automations() {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
+  const { isEnabled: sortieParcoursActive } = useModuleAccess('auto_sortie_parcours');
 
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -608,6 +610,9 @@ export default function Automations() {
         delay_seconds: 0,
         actions: [{ type: 'send_sms', config: { body: fr ? 'À compléter' : 'To complete' } }],
         steps: [],
+        // Sortie automatique du parcours : une NOUVELLE automatisation naît
+        // avec la case cochée. Drapeau coupé = rien d'écrit, comme avant.
+        ...(sortieParcoursActive ? { settings: { arreter_si_resolu: true } } : {}),
       });
       navigate(`/automations/${creee.id}${avecLumi ? '?lumi=1' : ''}`);
     } catch (e: unknown) {

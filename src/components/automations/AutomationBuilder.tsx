@@ -38,6 +38,7 @@ import {
 import { VARIABLES_PROPOSEES, variablesInconnues } from '../../lib/emailBodyText';
 import SequenceCanvas from './SequenceCanvas';
 import ChampActionUI from './ChampAction';
+import { useModuleAccess } from '../../hooks/useModuleAccess';
 import { champVisible } from '../../lib/automationCatalogue';
 import {
   useChampsTous, objetDuDeclencheur, variablesDesChamps, SelecteurChamp, BoutonsVariablesChamps, ConditionsChampsEtape,
@@ -80,6 +81,8 @@ const FAMILLES: Array<{ cle: string; fr: string; en: string }> = [
 export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnregistre }: Props) {
   const ids = useId();
   const enModification = Boolean(regle);
+  // Sortie automatique du parcours : une NOUVELLE règle naît case cochée.
+  const { isEnabled: sortieParcoursActive } = useModuleAccess('auto_sortie_parcours');
   // Sur un préréglage, le déclencheur appartient au moteur : les conditions
   // d'arrêt s'appuient dessus. Tout le reste — nom, délai, textes — se
   // personnalise librement, et c'est bien le but.
@@ -279,7 +282,9 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
         await modifierAutomatisation(regle.id, patch);
         toast.success(fr ? 'Automatisation modifiée' : 'Automation updated');
       } else {
-        await creerAutomatisation(brouillon);
+        await creerAutomatisation(sortieParcoursActive
+          ? { ...brouillon, settings: { arreter_si_resolu: true } }
+          : brouillon);
         toast.success(
           fr
             ? 'Automatisation créée — elle est en pause, activez-la quand vous êtes prêt'

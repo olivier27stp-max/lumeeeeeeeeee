@@ -89,6 +89,23 @@ export interface DeclencheurCatalogue {
 }
 
 /**
+ * La case « Arrêter si… » de la sortie automatique du parcours
+ * (drapeau `auto_sortie_parcours`, `settings.arreter_si_resolu`).
+ *
+ * `defaut` = ce que faisait le moteur AVANT la case, quand la règle ne la
+ * porte pas : l'arrêt était en dur pour la soumission, la facture et le
+ * rendez-vous ; il n'existait pas pour l'opportunité. Même table que
+ * `server/lib/sortie-parcours.ts` — un test les compare.
+ */
+export const CASE_SORTIE: Record<string, { fr: string; en: string; defaut: boolean }> = {
+  'quote.sent': { fr: 'Arrêter si la soumission est acceptée, refusée ou annulée', en: 'Stop if the quote is accepted, declined or cancelled', defaut: true },
+  'invoice.sent': { fr: 'Arrêter si la facture est payée ou annulée', en: 'Stop if the invoice is paid or cancelled', defaut: true },
+  'invoice.overdue': { fr: 'Arrêter si la facture est payée ou annulée', en: 'Stop if the invoice is paid or cancelled', defaut: true },
+  'appointment.created': { fr: 'Arrêter si le rendez-vous est annulé', en: 'Stop if the appointment is cancelled', defaut: true },
+  'deal.stage_entered': { fr: 'Arrêter si l’opportunité change d’étape', en: 'Stop if the deal changes stage', defaut: false },
+};
+
+/**
  * Les 17 déclencheurs offerts. Chacun a été vérifié comme réellement émis
  * par le serveur — voir la cartographie du 2026-09-23.
  */

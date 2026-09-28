@@ -16,16 +16,19 @@
    ici du même coup, sans code en double.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { X, Zap } from 'lucide-react';
 import type { DeclencheurCatalogue } from '../../lib/automationCatalogue';
-import { champVisible } from '../../lib/automationCatalogue';
+import { champVisible, CASE_SORTIE } from '../../lib/automationCatalogue';
+import { useModuleAccess } from '../../hooks/useModuleAccess';
 import ChampActionUI from './ChampAction';
 
 interface Props {
   declencheur: DeclencheurCatalogue;
   /** Les `conditions` de la règle — là où vivent ces réglages. */
   conditions: Record<string, unknown> | null;
+  /** Les `settings` de la règle — là où vit la case « Arrêter si… ». */
+  reglages?: Record<string, unknown> | null;
   fr: boolean;
   /** Champs date de la fiche client, pour le type `champ_date`. */
   champsDate: Array<{ id: string; label: string }>;
@@ -35,13 +38,24 @@ interface Props {
   etiquettes?: string[];
   /** Services du catalogue, pour le type `service`. */
   services?: Array<{ id: string; label: string }>;
-  onEnregistrer: (conditions: Record<string, unknown>) => void;
+  /** `arreterSiResolu` n'est fourni que si la case est affichée. */
+  onEnregistrer: (conditions: Record<string, unknown>, arreterSiResolu?: boolean) => void;
   onFermer: () => void;
 }
 
 export default function PanneauDeclencheur({
-  declencheur, conditions, fr, champsDate, etapesPipeline = [], etiquettes = [], services = [], onEnregistrer, onFermer,
+  declencheur, conditions, reglages, fr, champsDate, etapesPipeline = [], etiquettes = [], services = [], onEnregistrer, onFermer,
 }: Props) {
+  const idCase = useId();
+  // La case « Arrêter si… » : seulement pour les 4 déclencheurs concernés,
+  // et seulement si l'entreprise a le drapeau. Absente de la règle = ce que
+  // faisait le moteur avant (CASE_SORTIE.defaut).
+  const { isEnabled: sortieActive } = useModuleAccess('auto_sortie_parcours');
+  const caseSortie = sortieActive ? CASE_SORTIE[declencheur.cle] : undefined;
+  const [arreterSiResolu, setArreterSiResolu] = useState<boolean>(() => {
+    const v = reglages?.arreter_si_resolu;
+    return typeof v === 'boolean' ? v : (CASE_SORTIE[declencheur.cle]?.defaut ?? true);
+  });
   /*
    * Le brouillon : toutes les valeurs en TEXTE, comme les champs d'action.
    * La conversion vers le type final se fait à l'enregistrement, au même
@@ -87,7 +101,7 @@ export default function PanneauDeclencheur({
       // chaîne vide y devient 0 sans qu'on s'en aperçoive.
       sortie[champ.cle] = champ.type === 'nombre' ? Number(brut) : brut;
     }
-    onEnregistrer(sortie);
+    onEnregistrer(sortie, caseSortie ? arreterSiResolu : undefined);
   };
 
   return (
@@ -132,6 +146,28 @@ export default function PanneauDeclencheur({
               services={services}
             />
           ) : null,
+        )}
+
+        {caseSortie && (
+          <div className="rounded-lg border border-border px-3 py-2.5">
+            <label htmlFor={idCase} className="flex cursor-pointer items-start gap-2.5">
+              <input
+                id={idCase}
+                type="checkbox"
+                checked={arreterSiResolu}
+                onChange={(e) => setArreterSiResolu(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+              />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-text-primary">{fr ? caseSortie.fr : caseSortie.en}</span>
+                <span className="block text-[11px] text-text-secondary">
+                  {fr
+                    ? 'Vérifié avant chaque étape qui suit un délai. Le motif de l’arrêt apparaît dans l’historique.'
+                    : 'Checked before every step that follows a delay. The reason appears in the history.'}
+                </span>
+              </span>
+            </label>
+          </div>
         )}
 
         {manquants.length > 0 && (
