@@ -629,6 +629,10 @@ export default function AutomationBuilderPage() {
     // toast) : les écritures doivent la viser, elle.
     idReel.current = estNouvelle ? null : (id ?? null);
     creationEnVol.current = null;
+    // La langue au moment du chargement, lue par ref : changer de langue en
+    // cours d'édition ne doit PAS relancer ce chargement — il remplaçait les
+    // étapes non enregistrées par la version du serveur (audit 2026-09-28).
+    const frChargement = frBascule.current;
     let vivant = true;
     /*
      * Un échec passager (serveur occupé, 429, réseau) ne doit pas laisser
@@ -651,9 +655,9 @@ export default function AutomationBuilderPage() {
         // `/nouvelle` : un brouillon LOCAL, rien en base (voir `ecrire`).
         const trouvee = estNouvelle
           ? {
-            id: '', org_id: '', name: fr ? 'Nouvelle automatisation' : 'New automation', description: null,
+            id: '', org_id: '', name: frChargement ? 'Nouvelle automatisation' : 'New automation', description: null,
             trigger_event: 'quote.sent', conditions: {}, delay_seconds: 0,
-            actions: [{ type: 'send_sms', config: { body: TEXTES_ACTION_PROVISOIRE[fr ? 0 : 1] } }],
+            actions: [{ type: 'send_sms', config: { body: TEXTES_ACTION_PROVISOIRE[frChargement ? 0 : 1] } }],
             steps: [], settings: null, is_active: false, is_preset: false, preset_key: null,
             created_at: '', updated_at: '', lumi_conversation: [],
           } satisfies AutomationRule
@@ -672,7 +676,7 @@ export default function AutomationBuilderPage() {
          * son nom à lui, puisque la table ne connaît que les libellés
          * d'origine.
          */
-        setNom(localizeAutomationName(trouvee?.name ?? '', language));
+        setNom(localizeAutomationName(trouvee?.name ?? '', frChargement ? 'fr' : 'en'));
         const etapes = (trouvee?.steps as Etape[] | undefined) ?? [];
         // Le fil avec Lumi est gardé avec l'automatisation : il survit à la
         // fermeture de l'éditeur, et Lumi s'en souvient.
@@ -688,7 +692,7 @@ export default function AutomationBuilderPage() {
       })
       .catch((e: unknown) => {
         console.error('[builder] chargement échoué', e instanceof Error ? e.message : String(e));
-        toast.error(fr ? 'Impossible de charger cette automatisation' : 'Could not load this automation');
+        toast.error(frChargement ? 'Impossible de charger cette automatisation' : 'Could not load this automation');
       })
       .finally(() => { if (vivant) setChargement(false); });
 
@@ -702,7 +706,7 @@ export default function AutomationBuilderPage() {
       .catch((e: unknown) => console.error('[builder] etiquettes', e instanceof Error ? e.message : String(e)));
 
     return () => { vivant = false; };
-  }, [id, fr]);
+  }, [id]);
 
   /*
    * « Construire avec Lumi » ouvre l'éditeur avec `?lumi=1` : le curseur

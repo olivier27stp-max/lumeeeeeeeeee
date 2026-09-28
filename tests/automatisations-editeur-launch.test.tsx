@@ -86,7 +86,13 @@ vi.mock('../src/components/automations/OngletJournaux', () => ({
 }));
 
 import AutomationBuilderPage from '../src/pages/AutomationBuilderPage';
-import { LanguageProvider } from '../src/i18n';
+import { LanguageProvider, useTranslation } from '../src/i18n';
+
+/** Change la langue de l'interface, comme le sélecteur de l'app. */
+function ChangerLangue() {
+  const { language, setLanguage } = useTranslation();
+  return <button type="button" data-testid="langue" onClick={() => setLanguage(language === 'fr' ? 'en' : 'fr')}>langue</button>;
+}
 
 function Lieu() {
   const l = useLocation();
@@ -133,7 +139,7 @@ async function ouvrir(chemin: string) {
       <MemoryRouter initialEntries={[chemin]}>
         <LanguageProvider>
           <Routes>
-            <Route path="/automations/:id" element={<><AutomationBuilderPage /><Lieu /></>} />
+            <Route path="/automations/:id" element={<><AutomationBuilderPage /><Lieu /><ChangerLangue /></>} />
             <Route path="/automations" element={<Lieu />} />
           </Routes>
         </LanguageProvider>
@@ -253,5 +259,23 @@ describe('déclencheur proposé par Lumi : un échec d’écriture n’est plus 
     // Le catalogue du test est vide : le libellé affiché est la clé brute.
     expect(container.textContent).toContain('quote.sent');
     expect(container.textContent).not.toContain('invoice.sent');
+  });
+});
+
+// ─── Bloc 5 : changer de langue ne recharge plus l'éditeur ──────
+
+describe('changer de langue en cours d’édition', () => {
+  it('ne relit pas la base et garde ce qui n’est pas encore enregistré', async () => {
+    await ouvrir(`/automations/${ID}`);
+    expect(api.charger).toHaveBeenCalledTimes(1);
+    // Une modification locale, pas encore enregistrée (l'enregistrement
+    // automatique attend 3 s).
+    cliquer(bouton('Relance devis'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Mon nom à moi');
+    cliquer(container.querySelector('[data-testid="langue"]'));
+    await attendre();
+    expect(api.charger).toHaveBeenCalledTimes(1);
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Automation name"]')?.value
+      ?? container.textContent).toContain('Mon nom à moi');
   });
 });
