@@ -431,7 +431,7 @@ describe('réglages par automatisation — le moteur les respecte vraiment', () 
     // Sans cette colonne dans le select, la fenêtre personnalisée ne
     // s'appliquerait qu'aux envois immédiats — et personne ne le verrait.
     const moteur = lire('server/lib/automationEngine.ts');
-    expect(moteur).toContain('conditions, steps, settings)');
+    expect(moteur).toContain('conditions, steps, settings, is_active, deleted_at)');
   });
 });
 

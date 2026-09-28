@@ -155,11 +155,41 @@ function parcoursRelances(relances: Relance[], parCanal: boolean): Etape[] {
   return p.etapes;
 }
 
+/**
+ * Ajoute le LIEN utile à un message : voir la soumission, payer la facture.
+ * Sans lui, le client devait répondre ou retrouver le courriel d'origine
+ * pour agir (relevé par Rafba le 2026-09-28).
+ * Texto : une ligne à la fin. Courriel : un paragraphe avant la fermeture.
+ */
+function avecLien(a: Action, variable: string, fr: string, en: string): Action {
+  const c = { ...a.config };
+  if (a.type === 'send_sms') {
+    c.body = `${String(c.body ?? '')}
+${fr} : [${variable}]`;
+    if (c.body_en) c.body_en = `${String(c.body_en)}
+${en}: [${variable}]`;
+  } else if (a.type === 'send_email') {
+    const bloc = (texte: string) => `<p><a href="[${variable}]">${texte}</a></p>`;
+    // Avant la SIGNATURE (le dernier paragraphe), pas après elle.
+    const inserer = (html: unknown, texte: string) => {
+      const h = String(html ?? '');
+      const i = h.lastIndexOf('<p>');
+      return i >= 0 ? `${h.slice(0, i)}${bloc(texte)}${h.slice(i)}` : `${h}${bloc(texte)}`;
+    };
+    c.body = inserer(c.body, fr);
+    if (c.body_en) c.body_en = inserer(c.body_en, en);
+  }
+  return { ...a, config: c };
+}
+const lienDevis = (a: Action) => avecLien(a, 'quote_link', 'Voir votre soumission', 'View your quote');
+const lienFacture = (a: Action) => avecLien(a, 'invoice_link', 'Payer en ligne', 'Pay online');
+const lienDepot = (a: Action) => avecLien(a, 'quote_link', 'Voir la soumission et payer le dépôt', 'View the quote and pay the deposit');
+
 const notif = (title: string, title_en: string): Action => ({ type: 'create_notification', config: { title, title_en } });
 const tache = (title: string, title_en: string): Action => ({ type: 'create_task', config: { title, title_en } });
 
 function parcoursRelanceDevis(): Etape[] {
-  return parcoursRelances([
+  return relancesAvecLien(lienDevis, [
     { apres: 1 * JOUR, nom: 'Relance 1 jour', sms: une('quote_followup_1d', 'send_sms'), courriel: une('quote_followup_1d', 'send_email') },
     { apres: 2 * JOUR, nom: 'Relance 2 jours', sms: une('quote_followup_3d', 'send_sms'), courriel: une('quote_followup_3d', 'send_email') },
     {
@@ -191,12 +221,21 @@ function parcoursRelanceDevis(): Etape[] {
   ], true);
 }
 
+/** Les mêmes relances, chaque texto et courriel portant le lien utile. */
+function relancesAvecLien(lien: (a: Action) => Action, relances: Relance[], parCanal: boolean): Etape[] {
+  return parcoursRelances(relances.map((r) => ({
+    ...r,
+    sms: r.sms ? lien(r.sms) : r.sms,
+    courriel: r.courriel ? lien(r.courriel) : r.courriel,
+  })), parCanal);
+}
+
 function parcoursRelanceFacture(): Etape[] {
   const relance = (jours: number, cle: string, equipe?: Action[]): Relance => ({
     apres: jours * JOUR, nom: `Rappel ${jours} jours`, sms: une(cle, 'send_sms'), courriel: une(cle, 'send_email'),
     equipe: equipe ?? actionsDe(cle).filter((a) => a.type === 'create_notification' || a.type === 'create_task'),
   });
-  return parcoursRelances([
+  return relancesAvecLien(lienFacture, [
     relance(3, 'invoice_sent_reminder_3d'),
     relance(7, 'invoice_sent_reminder_7d'),
     relance(14, 'invoice_sent_reminder_14d'),
@@ -237,12 +276,12 @@ function parcoursDepot(): Etape[] {
   const p = new Parcours();
   const a1: Etape = { id: p.id(), type: 'attendre', delai_secondes: 3600 };
   p.ajouter(a1);
-  const demande = enchainer(p, actionsDe('deposit_reminder'), 'Demande de dépôt');
+  const demande = enchainer(p, actionsDe('deposit_reminder').map(lienDepot), 'Demande de dépôt');
   a1.suivant = demande[0].id;
   const a2: Etape = { id: p.id(), type: 'attendre', delai_secondes: 2 * JOUR };
   demande[demande.length - 1].suivant = a2.id;
   p.ajouter(a2);
-  const rappel = enchainer(p, actionsDe('deposit_followup_2d'), 'Rappel de dépôt — 2 jours');
+  const rappel = enchainer(p, actionsDe('deposit_followup_2d').map(lienDepot), 'Rappel de dépôt — 2 jours');
   a2.suivant = rappel[0].id;
   rappel[rappel.length - 1].suivant = null;
   return p.etapes;
