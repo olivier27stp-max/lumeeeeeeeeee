@@ -25,7 +25,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Undo2, Redo2, Cloud, Check, Loader2,
   Play, Plus, Hand, Maximize2, ZoomIn, ZoomOut, Sparkles, X, AlertTriangle,
@@ -58,6 +58,7 @@ import {
 import SequenceCanvas from '../components/automations/SequenceCanvas';
 import PanneauEtape from '../components/automations/PanneauEtape';
 import TiroirChoix, { type ChoixTiroir } from '../components/automations/TiroirChoix';
+import ClavardageLumi from '../components/automations/ClavardageLumi';
 import PanneauDeclencheur from '../components/automations/PanneauDeclencheur';
 import { listerChamps } from '../lib/champsPersoApi';
 import { fetchPipelines, fetchStages } from '../lib/pipelineVentesApi';
@@ -88,6 +89,7 @@ const ZOOM_PAS = 0.1;
 export default function AutomationBuilderPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [parametres] = useSearchParams();
   const { language } = useTranslation();
   const fr = language === 'fr';
 
@@ -125,6 +127,10 @@ export default function AutomationBuilderPage() {
    * l'enregistrement, comme avant — donnerait un fil qui oublie en silence.
    */
   const [echangesLumi, setEchangesLumi] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  /** Le panneau de Lumi, replié par l'utilisateur (le fil est gardé). */
+  const [lumiReduit, setLumiReduit] = useState(false);
+  /** Le champ de Lumi : « Construire avec Lumi » y place le curseur. */
+  const champLumi = useRef<HTMLTextAreaElement>(null);
 
   // ── Le parcours ──
   const [steps, setSteps] = useState<Etape[]>([]);
@@ -343,6 +349,7 @@ export default function AutomationBuilderPage() {
         // 6 derniers tours seulement : c'est ce que la route accepte, et
         // l'historique complet gonflerait le prompt sans rien apporter.
         echanges: echangesLumi.slice(-6),
+        ruleId: regle?.id ?? null,
         parcoursActuel: steps.length > 0
           ? { trigger_event: regle?.trigger_event, steps }
           : null,
@@ -377,16 +384,12 @@ export default function AutomationBuilderPage() {
        * code, lui, le dit toujours.
        */
       /*
-       * Le coût de CETTE génération (P2-10). Moins d'un cent la plupart du
-       * temps : on l'arrondit au dixième pour ne pas afficher « 0 ¢ », qui
-       * ferait croire que c'est gratuit.
+       * Plus de coût affiché (P2-10) : construire une automatisation est
+       * OFFERT depuis le 2026-09-28, hors budget Lumi — le champ le dit.
        */
-      const cout = typeof propose.cout_cents === 'number'
-        ? ` (${(Math.max(0.1, Math.round(propose.cout_cents * 10) / 10)).toLocaleString(fr ? 'fr-CA' : 'en-CA')} ¢ ${fr ? 'de ton budget Lumi' : 'of your Lumi budget'})`
-        : '';
       toast.success(fr
-        ? `Lumi a construit le parcours — en pause, à publier quand tu es prêt.${cout}`
-        : `Lumi built the path — paused, publish it when you are ready.${cout}`);
+        ? 'Lumi a construit le parcours — en pause, à publier quand tu es prêt.'
+        : 'Lumi built the path — paused, publish it when you are ready.');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -418,6 +421,9 @@ export default function AutomationBuilderPage() {
          */
         setNom(localizeAutomationName(trouvee?.name ?? '', language));
         const etapes = (trouvee?.steps as Etape[] | undefined) ?? [];
+        // Le fil avec Lumi est gardé avec l'automatisation : il survit à la
+        // fermeture de l'éditeur, et Lumi s'en souvient.
+        setEchangesLumi(Array.isArray(trouvee?.lumi_conversation) ? trouvee.lumi_conversation : []);
         setSteps(etapes);
         setHistorique([etapes]);
         setPosition(0);
@@ -444,6 +450,22 @@ export default function AutomationBuilderPage() {
 
     return () => { vivant = false; };
   }, [id, fr]);
+
+  /*
+   * « Construire avec Lumi » ouvre l'éditeur avec `?lumi=1` : le curseur
+   * va DANS le champ de Lumi. Avant, le paramètre n'était lu nulle part et
+   * ce départ était identique à « Partir de zéro ».
+   */
+  const veutLumi = parametres.get('lumi') === '1';
+  useEffect(() => {
+    if (chargement || !veutLumi) return;
+    setLumiReduit(false);
+    const t = window.setTimeout(() => champLumi.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, [chargement, veutLumi]);
+
+  /** Dès le premier message, le fil s'ouvre en panneau à gauche. */
+  const lumiLateral = echangesLumi.length > 0 || genere;
 
   /** Empile une version du parcours — c'est ce que « annuler » remontera. */
   const memoriser = useCallback((nouvelles: Etape[]) => {
@@ -1251,7 +1273,31 @@ export default function AutomationBuilderPage() {
           panneau s'ouvre, plutot que de passer dessous : on doit pouvoir
           lire la carte qu'on est en train de modifier. */}
       <div className="flex flex-1 overflow-hidden">
+      {onglet === 'parcours' && lumiLateral && !lumiReduit && (
+        <ClavardageLumi
+          fr={fr}
+          variante="lateral"
+          echanges={echangesLumi}
+          genere={genere}
+          prompt={prompt}
+          onPrompt={setPrompt}
+          onEnvoyer={() => void construireAvecLumi()}
+          textareaId={`${idsPage}-prompt`}
+          textareaRef={champLumi}
+          onReduire={() => setLumiReduit(true)}
+        />
+      )}
       <div className="relative flex-1 overflow-hidden">
+        {onglet === 'parcours' && lumiLateral && lumiReduit && (
+          <button
+            type="button"
+            onClick={() => { setLumiReduit(false); window.setTimeout(() => champLumi.current?.focus(), 0); }}
+            className="absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-card px-3 py-1.5 text-xs font-medium text-text-primary shadow-sm transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
+            {fr ? 'Lumi' : 'Lumi'}
+          </button>
+        )}
         {onglet === 'parcours' && (
           <>
             {/* Le fond quadrillé : il donne l'échelle et dit « ceci est un
@@ -1326,100 +1372,23 @@ export default function AutomationBuilderPage() {
                   </div>
                 )}
 
-                <div className="mx-auto mb-4 flex max-w-xl flex-col items-center px-4">
-                    <div className="w-full rounded-2xl border border-border bg-surface-card p-5 shadow-sm">
-                      <p className="mb-3 flex items-center justify-center gap-2 text-center text-sm font-medium text-text-primary">
-                        <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" />
-                        {echangesLumi.length > 0
-                          ? (fr ? 'Continue avec Lumi' : 'Keep going with Lumi')
-                          : (fr ? 'Décris ton automatisation à Lumi' : 'Describe your automation to Lumi')}
-                      </p>
-                      {/*
-                        * Le fil. `aria-live` parce que la réponse de Lumi
-                        * arrive sans que le focus bouge : sans ça, un lecteur
-                        * d'écran ne l'annonce jamais.
-                        *
-                        * Hauteur bornée et défilement : une conversation de
-                        * dix tours ne doit pas pousser le champ de saisie
-                        * hors de l'écran.
-                        */}
-                      {(echangesLumi.length > 0 || genere) && (
-                        <div
-                          aria-live="polite"
-                          className="mb-3 max-h-56 space-y-2 overflow-y-auto border-b border-border pb-3 text-left"
-                        >
-                          {echangesLumi.map((tour, i) => (
-                            <div
-                              key={`${i}-${tour.role}`}
-                              className={tour.role === 'user' ? 'flex justify-end' : 'flex justify-start'}
-                            >
-                              <p
-                                className={
-                                  tour.role === 'user'
-                                    ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-accent/10 px-3 py-2 text-[12px] text-text-primary'
-                                    : 'max-w-[85%] rounded-2xl rounded-bl-sm bg-surface px-3 py-2 text-[12px] text-text-secondary'
-                                }
-                              >
-                                {tour.content}
-                              </p>
-                            </div>
-                          ))}
-                          {/* Le tour en cours : on montre la demande AVANT la
-                              réponse, sinon le fil paraît figé pendant que
-                              Lumi travaille. */}
-                          {genere && prompt.trim().length > 0 && (
-                            <>
-                              <div className="flex justify-end">
-                                <p className="max-w-[85%] rounded-2xl rounded-br-sm bg-accent/10 px-3 py-2 text-[12px] text-text-primary">
-                                  {prompt.trim()}
-                                </p>
-                              </div>
-                              <div className="flex justify-start">
-                                <p className="inline-flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-surface px-3 py-2 text-[12px] text-text-muted">
-                                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                                  {fr ? 'Lumi construit…' : 'Lumi is building…'}
-                                </p>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      <label htmlFor={`${idsPage}-prompt`} className="sr-only">
-                        {fr ? 'Décris ton automatisation' : 'Describe your automation'}
-                      </label>
-                      <textarea
-                        id={`${idsPage}-prompt`}
-                        rows={3}
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder={echangesLumi.length > 0
-                          ? (fr
-                              ? 'Change le délai du deuxième message à 2 jours. Retire le courriel.'
-                              : 'Change the second message delay to 2 days. Remove the email.')
-                          : (fr
-                              ? 'Après l’envoi d’un devis, attends 24 h puis envoie un texto de suivi, attends 2 jours de plus pour un courriel, et crée une tâche d’appel après 3 jours.'
-                              : 'After sending a quote, wait 24 hours then send a text follow-up, wait 2 more days for an email, and create a call task after 3 days.')}
-                        className="w-full resize-none rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                      />
-                      <div className="mt-2 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={construireAvecLumi}
-                          disabled={prompt.trim().length < 10 || genere}
-                          className="glass-button-primary inline-flex items-center gap-1.5 disabled:opacity-40"
-                        >
-                          {genere
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                            : <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />}
-                          {genere
-                            ? (fr ? 'Lumi construit…' : 'Lumi is building…')
-                            : (fr ? 'Construire' : 'Build')}
-                        </button>
-                      </div>
-
-                      {/* Des départs tout faits : on ne part jamais de rien. */}
-                      <div className="mt-3 flex flex-wrap justify-center gap-1.5 border-t border-border pt-3">
+                {/* Avant le premier message : l'invitation au centre. Dès le
+                    premier message, le fil passe en panneau à gauche. */}
+                {!lumiLateral && (
+                  <div className="mx-auto mb-4 flex max-w-xl flex-col items-center px-4">
+                    <ClavardageLumi
+                      fr={fr}
+                      variante="carte"
+                      echanges={echangesLumi}
+                      genere={genere}
+                      prompt={prompt}
+                      onPrompt={setPrompt}
+                      onEnvoyer={() => void construireAvecLumi()}
+                      textareaId={`${idsPage}-prompt`}
+                      textareaRef={champLumi}
+                      pied={
+                        /* Des départs tout faits : on ne part jamais de rien. */
+                        <div className="mt-3 flex flex-wrap justify-center gap-1.5 border-t border-border pt-3">
                         {SUGGESTIONS.map((sg) => (
                           <button
                             key={sg.fr}
@@ -1431,8 +1400,10 @@ export default function AutomationBuilderPage() {
                           </button>
                         ))}
                       </div>
-                    </div>
-                </div>
+                      }
+                    />
+                  </div>
+                )}
 
                 {/* ── Le format d'origine, annoncé franchement ──
                     On montre le parcours RÉEL (projeté depuis `actions`) au

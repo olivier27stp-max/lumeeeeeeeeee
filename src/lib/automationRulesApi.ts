@@ -24,6 +24,8 @@ export interface AutomationRule {
    * + `actions`). Forme décrite dans src/lib/sequenceTypes.ts.
    */
   steps?: unknown[] | null;
+  /** La conversation avec Lumi qui a construit ce parcours. */
+  lumi_conversation?: Array<{ role: 'user' | 'assistant'; content: string }> | null;
   /** Réglages propres à la règle (null = les défauts du moteur). */
   settings?: Record<string, unknown> | null;
   is_active: boolean;

@@ -82,11 +82,17 @@ describe('le coût reste celui du chemin bon marché', () => {
     expect(GEN).toContain("cache_control: { type: 'ephemeral' }");
   });
 
-  it('le budget est réservé AVANT l’appel', () => {
-    const iRes = GEN.indexOf('reserverBudget');
+  it('offert au client, mais plafonné AVANT l’appel (anti-abus)', () => {
+    // Décision du 2026-09-28 : plus de budget client, un plafond par jour.
+    const iPlafond = GEN.indexOf('plafondQuotidienAutomatisations()');
     const iApp = GEN.indexOf('messages.create');
-    expect(iRes, 'reserverBudget absent').toBeGreaterThan(-1);
-    expect(iRes).toBeLessThan(iApp);
+    expect(iPlafond, 'plafond quotidien absent').toBeGreaterThan(-1);
+    expect(iPlafond).toBeLessThan(iApp);
+    expect(GEN).not.toContain('reserverBudget');
+  });
+
+  it('la dépense est journalisée sous la source OFFERTE, exclue du budget', () => {
+    expect(GEN).toContain("source: 'automatisations'");
   });
 
   it('la sortie est plafonnée', () => {

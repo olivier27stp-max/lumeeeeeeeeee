@@ -237,6 +237,8 @@ export async function genererParcoursAvecLumi(
   contexte?: {
     echanges?: Array<{ role: 'user' | 'assistant'; content: string }>;
     parcoursActuel?: { trigger_event?: string; steps?: unknown[] } | null;
+    /** L'automatisation ouverte : le serveur y garde la conversation. */
+    ruleId?: string | null;
   },
 ): Promise<ParcoursPropose> {
   const reponse = await fetch('/api/automations/rules/generer', {
@@ -247,6 +249,7 @@ export async function genererParcoursAvecLumi(
       langue,
       echanges: contexte?.echanges,
       parcours_actuel: contexte?.parcoursActuel ?? null,
+      rule_id: contexte?.ruleId ?? null,
     }),
   });
   if (!reponse.ok) throw await erreurDe(reponse, 'Lumi n’a pas pu construire ce parcours.');

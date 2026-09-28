@@ -21,7 +21,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { clientAnthropic, isLumiConfigured } from './llm';
-import { reserverBudget, journaliserUsage, estimationCoutAppel } from './budget';
+import { journaliserUsage } from './budget';
 import { coutEnCents } from './tarifs';
 import { logger } from '../logger';
 import { DECLENCHEURS, ACTIONS } from '../../../src/lib/automationCatalogue';
@@ -38,6 +38,16 @@ const MODELE = 'claude-haiku-4-5';
 
 /** Plafond de sortie : un parcours réaliste tient largement dedans. */
 const MAX_TOKENS = 1_500;
+
+/**
+ * Parcours que Lumi construit au plus, par entreprise et par 24 h.
+ * ≈ 0,3 ¢ l'appel : 60 appels ≈ 18 ¢ par jour au pire. Réglable par
+ * LUMI_AUTOMATISATIONS_PAR_JOUR sans redéployer.
+ */
+export function plafondQuotidienAutomatisations(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env.LUMI_AUTOMATISATIONS_PAR_JOUR);
+  return Number.isFinite(n) && n >= 1 && n <= 10_000 ? Math.floor(n) : 60;
+}
 
 export interface ParcoursPropose {
   /** Le nom suggéré — l'utilisateur peut le changer. */
@@ -227,19 +237,38 @@ export async function genererParcours(params: {
 
   const systeme = consignes(fr);
 
-  // Le budget d'abord : on ne lance pas un appel qu'on ne peut pas payer.
-  const estimation = estimationCoutAppel(MODELE, systeme.length + demande.length, MAX_TOKENS, 0);
-  const reservation = await reserverBudget(admin, orgId, estimation).catch((e: unknown) => {
-    logger.error('[lumi/parcours] réservation impossible', { message: e instanceof Error ? e.message : String(e) });
-    return { id: null, statut: 'indisponible' as const };
-  });
-
-  if (reservation.statut === 'capped' || reservation.statut === 'plan_sans_lumi') {
+  /*
+   * OFFERT : construire une automatisation ne coûte rien au client, sur
+   * TOUS les forfaits (décision du 2026-09-28).
+   *
+   * Avant, l'appel puisait dans le budget Lumi de l'entreprise — or Starter
+   * et Pro ont un budget de 0 : « Construire avec Lumi » répondait « budget
+   * atteint » à tous ceux qui n'avaient pas Autopilot, pour un appel Haiku
+   * d'environ 0,3 ¢. La dépense reste journalisée (source `automatisations`,
+   * exclue du budget du client par 20260929230200) : NOTRE coût reste mesuré.
+   *
+   * Le garde-fou n'est plus le budget mais un plafond d'appels par jour et
+   * par entreprise : un script ne peut pas nous faire payer sans limite.
+   */
+  const plafond = plafondQuotidienAutomatisations();
+  const depuis = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  const { count: dejaFaits, error: errCompte } = await admin
+    .from('ai_usage')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .eq('source', 'automatisations')
+    .gte('created_at', depuis);
+  if (errCompte) {
+    // Compte illisible : on laisse passer. Refuser à tous parce qu'une
+    // lecture a échoué punirait les clients pour une panne de notre côté.
+    logger.error('[lumi/parcours] plafond quotidien illisible', { message: errCompte.message, org_id: orgId });
+  } else if ((dejaFaits ?? 0) >= plafond) {
+    logger.warn('[lumi/parcours] plafond quotidien atteint', { org_id: orgId, plafond });
     return {
       parcours: null,
       erreur: fr
-        ? 'Le budget Lumi du mois est atteint. Le parcours peut être construit à la main avec le « + ».'
-        : 'This month’s Lumi budget is used up. You can still build the path by hand with “+”.',
+        ? `Lumi a déjà construit ${plafond} parcours pour vous dans les dernières 24 h. Réessayez demain, ou construisez celui-ci avec le « + ».`
+        : `Lumi already built ${plafond} paths for you in the last 24 hours. Try again tomorrow, or build this one with “+”.`,
     };
   }
 
@@ -266,9 +295,8 @@ export async function genererParcours(params: {
       cache_creation_input_tokens: u?.cache_creation_input_tokens ?? 0,
       cache_read_input_tokens: u?.cache_read_input_tokens ?? 0,
       cost_cents: coutGeneration,
-      // `source` est borné par une contrainte CHECK en base : 'lumi' est la
-      // valeur juste ici, c'est bien lui qui génère.
-      source: 'lumi',
+      // Offert au client : exclu de son budget, mais mesuré (voir plus haut).
+      source: 'automatisations',
     });
 
     const texte = reponse.content

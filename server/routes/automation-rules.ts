@@ -48,7 +48,7 @@ import {
 const router = Router();
 
 /** Colonnes renvoyées au navigateur. `org_id` n'a aucun intérêt côté client. */
-const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, folder_id, modele_id, deleted_at, created_at, updated_at';
+const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, folder_id, modele_id, deleted_at, created_at, updated_at, lumi_conversation';
 
 /** Champs dont la modification change le CONTENU d'une règle (pas son interrupteur ni son dossier). */
 const CHAMPS_CONTENU = ['name', 'description', 'trigger_event', 'conditions', 'delay_seconds', 'actions', 'steps', 'settings'] as const;
@@ -255,6 +255,43 @@ router.post('/automations/rules/generer', async (req, res) => {
         ? 'Lumi a choisi un déclencheur qui n’existe pas. Reformule ta demande.'
         : 'Lumi picked a trigger that does not exist. Rephrase your request.',
     });
+  }
+
+  /*
+   * La conversation est gardée AVEC l'automatisation : fermer l'éditeur ne
+   * fait plus oublier à Lumi ce qui a été dit (« plus poli », « jamais le
+   * dimanche »). Écrite par le client de l'UTILISATEUR — la RLS décide qui
+   * peut modifier cette règle — et bornée aux 40 derniers tours.
+   * Un échec ici n'annule pas la génération : on le journalise.
+   */
+  const ruleId = typeof (req.body as { rule_id?: unknown })?.rule_id === 'string'
+    ? String((req.body as { rule_id: string }).rule_id)
+    : null;
+  if (ruleId && /^[0-9a-f-]{36}$/i.test(ruleId)) {
+    const { data: actuelle, error: lectureErr } = await auth.client
+      .from('automation_rules')
+      .select('lumi_conversation')
+      .eq('id', ruleId)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+    if (lectureErr || !actuelle) {
+      logger.error('[lumi/parcours] conversation non lue', { rule_id: ruleId, message: lectureErr?.message ?? 'règle introuvable' });
+    } else {
+      const avant = Array.isArray(actuelle.lumi_conversation) ? actuelle.lumi_conversation : [];
+      const conversation = [
+        ...avant,
+        { role: 'user', content: demande.slice(0, 2000) },
+        { role: 'assistant', content: (resultat.parcours.resume || (langue === 'fr' ? 'Parcours construit.' : 'Path built.')).slice(0, 2000) },
+      ].slice(-40);
+      const { error: ecritureErr } = await auth.client
+        .from('automation_rules')
+        .update({ lumi_conversation: conversation })
+        .eq('id', ruleId)
+        .eq('org_id', auth.orgId);
+      if (ecritureErr) {
+        logger.error('[lumi/parcours] conversation non gardée', { rule_id: ruleId, message: ecritureErr.message });
+      }
+    }
   }
 
   return res.json({
