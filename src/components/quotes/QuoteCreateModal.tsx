@@ -568,7 +568,11 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
         salesperson_id: salespersonId || null,
         context_type: leadId ? 'lead' : 'client',
         notes: notes || null,
-        contract_disclaimer: contractDisclaimer || null,
+        // Section désactivée = pas de clause : la page publique et le PDF lisent
+        // cette colonne, pas la section (audit 2026-09-28, D5).
+        contract_disclaimer: disclaimerEnabled ? (contractDisclaimer || null) : null,
+        // « Valide pendant (jours) » n'était jamais envoyé : toujours 30 jours (D4).
+        valid_days: validDays,
         deposit_required: depositRequired,
         deposit_type: depositRequired ? depositType : null,
         deposit_value: depositRequired ? (parseFloat(depositValue) || 0) : 0,
