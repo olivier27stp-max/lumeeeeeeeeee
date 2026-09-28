@@ -50,6 +50,7 @@ const CAS: Array<{ cle: string; entite: string; metadata?: Record<string, unknow
   { cle: 'lead.status_changed', entite: 'client', metadata: { new_status: 'qualified' } },
   { cle: 'client.replied', entite: 'client' },
   { cle: 'client.tagged', entite: 'client', metadata: { tag: 'VIP' } },
+  { cle: 'client.untagged', entite: 'client', metadata: { tag: 'VIP' } },
   { cle: 'agreement.signed', entite: 'job' },
   { cle: 'task.completed', entite: 'task' },
   { cle: 'note.added', entite: 'client' },

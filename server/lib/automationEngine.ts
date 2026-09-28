@@ -13,6 +13,7 @@ import {
   resolveEntityVariables,
 } from './actions';
 import { logger } from './logger';
+import { regleDansLaChaine } from './etiquettes';
 import { conditionsChampsOk, CLE_CONDITIONS_CHAMPS } from './champs/automatisations';
 import {
   type Etape,
@@ -580,6 +581,7 @@ async function executeRuleActions(
     baseUrl: config.baseUrl,
     langue: await langueOrg(config.supabase, event.orgId),
     ruleId: rule.id,
+    chaine: Array.isArray(event.metadata?.chaine) ? (event.metadata!.chaine as string[]) : undefined,
   };
 
   // La fenêtre d'envoi se calcule dans le fuseau de l'ENTREPRISE, pas dans
@@ -848,6 +850,12 @@ async function handleEvent(event: CRMEvent) {
         // Rejeu d'un orphelin de l'outbox : cette règle avait déjà agi avant
         // l'arrêt du processus. La repasser renverrait ses messages.
         if (event.reglesTraitees?.includes(rule.id)) continue;
+        // Anti-boucle : une règle ne se relance jamais par une chaîne
+        // d'événements qu'elle a elle-même produite (server/lib/etiquettes.ts).
+        if (regleDansLaChaine(event.metadata, rule.id)) {
+          logger.info(`[automationEngine] règle "${rule.name}" déjà dans la chaîne de cet événement — ignorée (anti-boucle)`);
+          continue;
+        }
         let aAgi = false;
         try {
         if (!regleViseCetEvenement(rule, event)) continue;
@@ -1479,6 +1487,9 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         commercial: true,
         langue: await langueOrg(supabase, task.org_id),
         ruleId: task.automation_rule_id,
+        // Étape de séquence : la chaîne voyage dans son contexte (anti-boucle des étiquettes).
+        chaine: Array.isArray((task.sequence_context as Record<string, unknown> | null)?.chaine)
+          ? ((task.sequence_context as Record<string, unknown>).chaine as string[]) : undefined,
       };
       // Désabonnement par canal : « différé » ne veut plus dire « commercial ».
       // Un rappel de rendez-vous ou de facture est transactionnel même s'il

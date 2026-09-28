@@ -10,9 +10,10 @@
    operation successfully, purely to trigger automation rules.
    ═══════════════════════════════════════════════════════════════ */
 
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { eventBus } from '../lib/eventBus';
+import { annoncerEtiquette } from '../lib/etiquettes';
 import { validate, automationEventSchema } from '../lib/validation';
 
 const router = Router();
@@ -546,16 +547,14 @@ router.post('/automations/events/lead-status-changed', validate(automationEventS
   }
 });
 
-// ── POST /automations/events/client-tagged ──
-// Appelée après qu'une étiquette a été posée sur un client.
+// ── POST /automations/events/client-tagged ── et ── client-untagged ──
+// Appelées après qu'une étiquette a été posée ou retirée sur un client.
 //
 // L'écriture des étiquettes se fait DEPUIS LE NAVIGATEUR (`client_tags`,
-// protégée par la RLS) : le serveur ne la voit pas passer. Ce point de
-// contact est le pont prévu pour ces cas — le front écrit, puis prévient.
-//
-// Le RETRAIT d'étiquette n'a volontairement pas d'équivalent : retirer un
-// marqueur ne devrait jamais déclencher un envoi au client.
-router.post('/automations/events/client-tagged', validate(automationEventSchema), async (req, res) => {
+// protégée par la RLS) : le serveur ne la voit pas passer. Ces points de
+// contact sont le pont — le front écrit, puis prévient. L'annonce elle-même
+// passe par server/lib/etiquettes.ts, comme celle des automatisations.
+async function prevenirEtiquette(req: express.Request, res: express.Response, sens: 'ajoutee' | 'retiree') {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
@@ -564,45 +563,29 @@ router.post('/automations/events/client-tagged', validate(automationEventSchema)
     if (!tag || typeof tag !== 'string') return res.status(400).json({ error: 'tag is required' });
 
     const admin = getServiceClient();
-    // L'étiquette doit VRAIMENT être posée, et sur un client de CETTE org.
-    // Sans cette vérification, n'importe qui pourrait déclencher les
-    // automatisations d'un tag qu'il n'a pas posé — ou d'une autre
-    // entreprise.
+    // Le client doit être de CETTE org, et l'état annoncé doit être VRAI
+    // (posée pour « ajoutée », absente pour « retirée ») : sinon n'importe
+    // qui pourrait déclencher les automatisations d'une étiquette qu'il n'a
+    // pas touchée — ou d'une autre entreprise.
     const { data: client } = await admin
-      .from('clients')
-      .select('first_name, last_name, email, phone')
-      .eq('id', clientId)
-      .eq('org_id', auth.orgId)
-      .maybeSingle();
+      .from('clients').select('id').eq('id', clientId).eq('org_id', auth.orgId).maybeSingle();
     if (!client) return res.status(404).json({ error: 'Client introuvable.' });
 
     const { data: pose } = await admin
-      .from('client_tags')
-      .select('id')
-      .eq('client_id', clientId)
-      .eq('tag', tag)
-      .maybeSingle();
-    if (!pose) return res.status(409).json({ error: "Cette étiquette n'est pas posée sur ce client." });
+      .from('client_tags').select('id').eq('client_id', clientId).eq('tag', tag).maybeSingle();
+    if (sens === 'ajoutee' && !pose) return res.status(409).json({ error: "Cette étiquette n'est pas posée sur ce client." });
+    if (sens === 'retiree' && pose) return res.status(409).json({ error: 'Cette étiquette est toujours posée sur ce client.' });
 
-    await eventBus.emit('client.tagged', {
-      orgId: auth.orgId,
-      entityType: 'client',
-      entityId: clientId,
-      actorId: auth.user.id,
-      metadata: {
-        // `tag` sert aux conditions : « quand l'étiquette est “À rappeler” ».
-        tag,
-        client_name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
-        email: client.email || '',
-        phone: client.phone || '',
-      },
-    });
+    await annoncerEtiquette(admin, { orgId: auth.orgId, clientId, tag, sens, actorId: auth.user.id });
     return res.json({ ok: true });
   } catch (err: any) {
-    console.error('[automation-events] client.tagged error:', err.message);
+    console.error(`[automation-events] étiquette ${sens} :`, err.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
-});
+}
+
+router.post('/automations/events/client-tagged', validate(automationEventSchema), (req, res) => prevenirEtiquette(req, res, 'ajoutee'));
+router.post('/automations/events/client-untagged', validate(automationEventSchema), (req, res) => prevenirEtiquette(req, res, 'retiree'));
 
 // ── POST /automations/events/task-completed ──
 // Appelée après qu'une tâche a été marquée terminée.

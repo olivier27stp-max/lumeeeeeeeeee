@@ -289,8 +289,14 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
   },
   {
     cle: 'client.tagged', fr: 'Étiquette ajoutée', en: 'Tag added',
-    aide_fr: 'Quand une étiquette est posée sur un client — le passage de relais manuel.',
-    aide_en: 'When a tag is added to a client — the manual handoff.',
+    aide_fr: 'Quand une étiquette est posée sur un client — à la main ou par une autre automatisation.',
+    aide_en: 'When a tag is added to a client — by hand or by another automation.',
+    famille: 'client', entite: 'lead',
+  },
+  {
+    cle: 'client.untagged', fr: 'Étiquette retirée', en: 'Tag removed',
+    aide_fr: 'Quand une étiquette est retirée d’un client — à la main ou par une autre automatisation.',
+    aide_en: 'When a tag is removed from a client — by hand or by another automation.',
     famille: 'client', entite: 'lead',
   },
   {
@@ -1082,6 +1088,7 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   'custom_field.changed': '*',
   'client.replied': 'client',
   'client.tagged': 'client',
+  'client.untagged': 'client',
   'task.completed': 'client',
   'note.added': 'client',
   'date.reached': 'client',

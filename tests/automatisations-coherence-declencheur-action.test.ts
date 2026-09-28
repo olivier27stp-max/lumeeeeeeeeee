@@ -53,6 +53,7 @@ const ENTITE_DU_DECLENCHEUR: Record<string, string> = {
   'custom_field.changed': '*',
   'client.replied': 'client',
   'client.tagged': 'client',
+  'client.untagged': 'client',
   'task.completed': 'client',
   'note.added': 'client',
   'date.reached': 'client',

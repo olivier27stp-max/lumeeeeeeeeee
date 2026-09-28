@@ -131,9 +131,11 @@ export async function enregistrerOuverture(
     const [dealQ, clientQ, lignesQ] = await Promise.all([
       admin.from('deals').select('pipeline_id, stage_id').eq('org_id', quote.org_id)
         .eq('quote_id', quote.id).is('deleted_at', null).limit(1).maybeSingle(),
+      // Les étiquettes vivent dans `client_tags` — `clients.tags` est une
+      // colonne morte, toujours vide : la condition ne pouvait jamais matcher.
       contactId
-        ? admin.from('clients').select('tags').eq('id', contactId).maybeSingle()
-        : Promise.resolve({ data: null }),
+        ? admin.from('client_tags').select('tag').eq('client_id', contactId)
+        : Promise.resolve({ data: [] }),
       admin.from('quote_line_items').select('source_service_id').eq('quote_id', quote.id),
     ]);
     let deal = dealQ.data as { pipeline_id: string; stage_id: string } | null;
@@ -144,7 +146,7 @@ export async function enregistrerOuverture(
         .eq('pipeline_stages.kind', 'open').order('created_at', { ascending: false }).limit(1);
       deal = ((ouvert ?? [])[0] as { pipeline_id: string; stage_id: string } | undefined) ?? null;
     }
-    const tags = ((clientQ.data as { tags?: string[] | null } | null)?.tags ?? []).filter(Boolean);
+    const tags = ((clientQ.data ?? []) as Array<{ tag: string | null }>).map((r) => r.tag).filter((x): x is string => !!x);
     const services = [...new Set(((lignesQ.data ?? []) as Array<{ source_service_id: string | null }>)
       .map((l) => l.source_service_id).filter((x): x is string => !!x))];
 

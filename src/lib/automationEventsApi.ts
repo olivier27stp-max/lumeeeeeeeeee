@@ -151,11 +151,15 @@ export function emitLeadStatusChanged(params: {
  * navigateur (`client_tags`, protégée par la RLS), donc le serveur ne les
  * voit pas passer — d'où cet appel, à faire APRÈS l'écriture réussie.
  *
- * Le RETRAIT d'étiquette n'a pas d'équivalent, volontairement : enlever un
- * marqueur ne devrait jamais déclencher un envoi au client.
+ * Le retrait a son pendant, `emitClientUntagged`.
  */
 export function emitClientTagged(params: { clientId: string; tag: string }) {
   fireEvent('client-tagged', params);
+}
+
+/** Prévient le moteur qu'une étiquette vient d'être RETIRÉE (déclencheur « Étiquette retirée »). */
+export function emitClientUntagged(params: { clientId: string; tag: string }) {
+  fireEvent('client-untagged', params);
 }
 
 /**

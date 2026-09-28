@@ -1316,7 +1316,8 @@
      },
      "result_success": true,
      "result_data": {
-      "etiquette": "vip"
+      "etiquette": "vip",
+      "deja_posee": true
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -1433,7 +1434,8 @@
      },
      "result_success": true,
      "result_data": {
-      "etiquette": "vip"
+      "etiquette": "vip",
+      "deja_posee": true
      },
      "result_error": null,
      "duration_ms": "<ms>"

@@ -9,7 +9,7 @@ import { L, col, LABELS, optionsFrom, eqFilter, applySearch, centsOf } from '../
 import { lookupMembers, clientDisplayName } from '../lookups';
 
 const CLIENT_COLS = 'id,client_number,first_name,last_name,company,display_as_company,status,email,phone,phones,address,city,province,postal_code,' +
-  'source,lead_source,tags,created_at,created_by,last_client_activity_at,archived_at';
+  'source,lead_source,client_tags(tag),created_at,created_by,last_client_activity_at,archived_at';
 
 /** Téléphones : colonne scalaire + tableau jsonb (objets ou chaînes). */
 function phonesOf(raw: Row): string {
@@ -68,7 +68,7 @@ const clients: ReportDefinition = {
       id: raw.id, client_number: raw.client_number || '', name: clientDisplayName(raw as any),
       company: raw.company || '', status: raw.status, email: raw.email || '', phones: phonesOf(raw),
       address: raw.address || '', city: raw.city || '', province: raw.province || '', postal_code: raw.postal_code || '',
-      source: raw.lead_source || raw.source || '', tags: Array.isArray(raw.tags) ? raw.tags.join(', ') : (raw.tags || ''),
+      source: raw.lead_source || raw.source || '', tags: (Array.isArray(raw.client_tags) ? raw.client_tags : []).map((r: { tag?: string | null }) => r.tag).filter(Boolean).join(', '),
       created_at: raw.created_at, created_by: raw.created_by, created_by_name: '',
       last_client_activity_at: raw.last_client_activity_at, jobs_count: 0, invoiced_cents: 0,
     }),

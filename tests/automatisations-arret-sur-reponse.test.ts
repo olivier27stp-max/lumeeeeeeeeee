@@ -163,41 +163,40 @@ describe('le déclencheur « le client répond » part au bon moment', () => {
 });
 
 describe('le déclencheur « étiquette ajoutée » ne part pas dans le vide', () => {
-  const route = hooks.slice(hooks.indexOf("'/automations/events/client-tagged'"));
+  // Les deux routes (posée / retirée) partagent `prevenirEtiquette`.
+  const route = hooks.slice(hooks.indexOf('async function prevenirEtiquette'));
+  const annonce = readFileSync(resolve(RACINE, 'server/lib/etiquettes.ts'), 'utf8');
 
-  it('l’étiquette doit VRAIMENT être posée', () => {
+  it('l’étiquette doit VRAIMENT être posée (ou vraiment retirée)', () => {
     /*
      * Ce point de contact est appelé par le NAVIGATEUR : sans vérification,
      * n'importe qui pourrait déclencher les automatisations d'une étiquette
      * qu'il n'a jamais posée. On relit donc `client_tags` avant d'émettre.
      */
-    expect(route.slice(0, 2000), 'la route doit relire `client_tags` avant d’émettre')
+    expect(route.slice(0, 2500), 'la route doit relire `client_tags` avant d’émettre')
       .toMatch(/from\('client_tags'\)/);
-    expect(route.slice(0, 2000)).toMatch(/status\(409\)/);
+    expect(route.slice(0, 2500)).toMatch(/status\(409\)/);
   });
 
   it('le client doit appartenir à l’organisation de l’appelant', () => {
     // Sans ce filtre, on pourrait faire partir une séquence chez un
     // concurrent en devinant un identifiant.
-    expect(route.slice(0, 2000)).toMatch(/eq\('org_id',\s*auth\.orgId\)/);
-    expect(route.slice(0, 2000)).toMatch(/status\(404\)/);
+    expect(route.slice(0, 2500)).toMatch(/eq\('org_id',\s*auth\.orgId\)/);
+    expect(route.slice(0, 2500)).toMatch(/status\(404\)/);
   });
 
-  it('le RETRAIT d’étiquette n’existe pas comme déclencheur', () => {
-    // Décision assumée : enlever un marqueur ne doit jamais déclencher un
-    // envoi au client. Si quelqu'un ajoute la route, ce test le force à
-    // relire ce choix.
-    expect(hooks).not.toMatch(/client-untagged|tag-removed/);
+  it('le retrait a sa propre route et son propre déclencheur (décision du 2026-09-28)', () => {
+    // Choix revu avec Rafba : « Étiquette retirée » existe, comme chez GHL.
+    expect(hooks).toMatch(/'\/automations\/events\/client-untagged'/);
+    expect(annonce).toMatch(/'client\.untagged'/);
   });
 
   it('l’étiquette voyage dans les métadonnées', () => {
     // Sans elle, impossible d'écrire « quand l'étiquette est À rappeler » :
     // toutes les étiquettes déclencheraient la même règle.
-    const emission = route.slice(route.indexOf("emit('client.tagged'"), route.indexOf("emit('client.tagged'") + 700);
-    // Deux vérifications simples plutôt qu'une expression alambiquée : un
-    // test illisible se fait contourner au premier échec.
+    const emission = annonce.slice(annonce.indexOf('eventBus.emit('), annonce.indexOf('eventBus.emit(') + 900);
     expect(emission, 'l’étiquette doit voyager dans les métadonnées').toContain('metadata:');
-    expect(emission, '`tag` doit être dans les métadonnées, pour les conditions').toMatch(/^\s*tag,$/m);
+    expect(emission, '`tag` doit être dans les métadonnées, pour les conditions').toMatch(/^\s*tag: a\.tag,$/m);
     expect(emission).toMatch(/entityType:\s*'client'/);
   });
 });

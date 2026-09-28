@@ -247,6 +247,7 @@ const TRIGGER_DISPLAY: Record<string, { en: string; fr: string }> = {
   // arriver sans son nom.
   'client.replied':        { en: 'Client replied',        fr: 'Le client répond' },
   'client.tagged':         { en: 'Tag added',             fr: 'Étiquette ajoutée' },
+  'client.untagged':       { en: 'Tag removed',           fr: 'Étiquette retirée' },
   'task.completed':        { en: 'Task completed',        fr: 'Tâche terminée' },
   'note.added':            { en: 'Note added',            fr: 'Note ajoutée' },
   'webhook.received':      { en: 'Incoming webhook',      fr: 'Appel reçu de l’extérieur' },
