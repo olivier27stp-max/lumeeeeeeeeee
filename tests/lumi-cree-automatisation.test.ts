@@ -82,17 +82,17 @@ describe('le coût reste celui du chemin bon marché', () => {
     expect(GEN).toContain("cache_control: { type: 'ephemeral' }");
   });
 
-  it('offert au client, mais plafonné AVANT l’appel (anti-abus)', () => {
-    // Décision du 2026-09-28 : plus de budget client, un plafond par jour.
-    const iPlafond = GEN.indexOf('plafondQuotidienAutomatisations()');
+  it('le budget Lumi est réservé AVANT l’appel, et un forfait sans Lumi est refusé', () => {
+    // Décision du 2026-09-28 : Construire avec Lumi = Autopilot, facturé au budget.
+    const iRes = GEN.indexOf('reserverBudget(admin, orgId, estimation)');
     const iApp = GEN.indexOf('messages.create');
-    expect(iPlafond, 'plafond quotidien absent').toBeGreaterThan(-1);
-    expect(iPlafond).toBeLessThan(iApp);
-    expect(GEN).not.toContain('reserverBudget');
+    expect(iRes, 'reserverBudget absent').toBeGreaterThan(-1);
+    expect(iRes).toBeLessThan(iApp);
+    expect(GEN).toMatch(/reservation\.statut === 'plan_sans_lumi'/);
   });
 
-  it('la dépense est journalisée sous la source OFFERTE, exclue du budget', () => {
-    expect(GEN).toContain("source: 'automatisations'");
+  it('la réservation est RÉGLÉE au coût réel (elle restait en vol avant)', () => {
+    expect(GEN).toMatch(/reglerBudget\(admin, reservation\.id, coutGeneration\)/);
   });
 
   it('la sortie est plafonnée', () => {

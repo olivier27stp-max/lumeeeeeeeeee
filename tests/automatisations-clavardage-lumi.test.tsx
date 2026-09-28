@@ -41,11 +41,11 @@ const touche = (el: Element, key: string, shiftKey = false) =>
   act(() => { el.dispatchEvent(new KeyboardEvent('keydown', { key, shiftKey, bubbles: true })); });
 
 describe('avant le premier message : la carte au centre', () => {
-  it('invite à décrire, sans panneau latéral, et dit que c’est offert', () => {
+  it('invite à décrire, sans panneau latéral, et dit que c’est déduit du budget Lumi', () => {
     const { hote } = rendre();
     expect(hote.textContent).toContain('Décris ton automatisation à Lumi');
     expect(hote.querySelector('aside')).toBeNull();
-    expect(hote.textContent).toContain('Offert');
+    expect(hote.textContent).toContain('Déduit de ton budget Lumi');
   });
 
   it('Entrée envoie une demande assez longue ; Maj+Entrée non', () => {
@@ -97,12 +97,17 @@ describe('l’éditeur', () => {
   const editeur = readFileSync(resolve(__dirname, '../src/pages/AutomationBuilderPage.tsx'), 'utf8');
 
   it('ouvre le panneau dès le premier message (ou pendant qu’il part)', () => {
-    expect(editeur).toMatch(/const lumiLateral = echangesLumi\.length > 0 \|\| genere;/);
+    expect(editeur).toMatch(/const lumiLateral = lumiDisponible && \(echangesLumi\.length > 0 \|\| genere\);/);
     expect(editeur).toMatch(/variante="lateral"/);
   });
 
   it('recharge la conversation gardée avec l’automatisation', () => {
     expect(editeur).toMatch(/setEchangesLumi\(Array\.isArray\(trouvee\?\.lumi_conversation\)/);
+  });
+
+  it('réserve Lumi aux forfaits qui l’incluent (Autopilot) et propose Autopilot aux autres', () => {
+    expect(editeur).toMatch(/usePlanFeature\('includes_ai'\)/);
+    expect(editeur).toMatch(/Construire avec Lumi — inclus dans Autopilot/);
   });
 
   it('lit ?lumi=1 et place le curseur dans le champ', () => {
