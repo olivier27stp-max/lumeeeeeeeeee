@@ -11,7 +11,7 @@
    plus le SMS de rappel de l'automatisation review_reminder_7d.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Star,
@@ -146,6 +146,8 @@ export default function SettingsReviews() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [rules, setRules] = useState<AutomationRule[]>([]);
+  /** Valeur ENREGISTRÉE de l'interrupteur — pour savoir, au save, s'il a basculé. */
+  const avisEnregistres = useRef(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [ruleDraft, setRuleDraft] = useState('');
@@ -188,6 +190,7 @@ export default function SettingsReviews() {
           company_name: data.company_name || '',
         });
       }
+      avisEnregistres.current = data?.review_enabled ?? false;
       setRules(allRules.filter((r) => r.preset_key && REVIEW_PRESET_KEYS.includes(r.preset_key)));
       setDirty(false);
     } catch (e: any) {
@@ -255,6 +258,10 @@ export default function SettingsReviews() {
       }
 
       setForm((prev) => ({ ...prev, google_review_url: google, facebook_review_url: facebook }));
+      if (form.review_enabled !== avisEnregistres.current) {
+        await synchroniserReglesAvis(form.review_enabled);
+        avisEnregistres.current = form.review_enabled;
+      }
       setSaved(true);
       setDirty(false);
       toast.success(isFr ? 'Réglages d’avis enregistrés.' : 'Review settings saved.');
@@ -264,6 +271,40 @@ export default function SettingsReviews() {
     } finally {
       setSaving(false);
     }
+  }
+
+  /**
+   * L'interrupteur des avis et la règle qui les envoie vont ENSEMBLE.
+   *
+   * Le préréglage « Demander un avis » naissait publié alors que les demandes
+   * étaient désactivées et sans lien : chaque job terminée donnait un échec
+   * (« Review requests are disabled ») et l'entrepreneur croyait ses avis
+   * partis. Activer les avis — ce qui exige un lien, vérifié plus haut —
+   * publie la demande ; les désactiver remet en brouillon les règles d'avis.
+   * Le rappel à 7 jours n'est jamais allumé d'office : c'est un second
+   * message, il reste un choix.
+   */
+  async function synchroniserReglesAvis(actives: boolean) {
+    const cibles = rules.filter((r) => (actives
+      ? r.preset_key === 'google_review' && !r.is_active
+      : r.is_active));
+    const basculees: string[] = [];
+    for (const r of cibles) {
+      try {
+        await toggleAutomationRule(r.id, actives);
+        basculees.push(r.id);
+      } catch (e: any) {
+        console.error('[avis] règle non basculée', r.id, e?.message);
+        toast.error(isFr
+          ? `L’automatisation « ${r.name} » n’a pas pu être ${actives ? 'publiée' : 'mise en brouillon'} — faites-le ci-dessous.`
+          : `Automation “${r.name}” could not be ${actives ? 'published' : 'set to draft'} — do it below.`);
+      }
+    }
+    if (basculees.length === 0) return;
+    setRules((prev) => prev.map((r) => (basculees.includes(r.id) ? { ...r, is_active: actives } : r)));
+    toast.info(actives
+      ? (isFr ? 'La demande d’avis après chaque job est maintenant active.' : 'The review request after each job is now active.')
+      : (isFr ? 'Les automatisations d’avis sont en brouillon.' : 'Review automations are now drafts.'));
   }
 
   async function handleToggleRule(rule: AutomationRule) {
