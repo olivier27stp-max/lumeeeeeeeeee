@@ -30,6 +30,8 @@ const ENTITE_DU_DECLENCHEUR: Record<string, string> = {
   'quote.sent': 'quote',
   // vuesSoumission.ts : emit('quote.viewed', { entityType: 'quote' }) (2026-09-28).
   'quote.viewed': 'quote',
+  // vuesFacture.ts : emit('invoice.viewed', { entityType: 'invoice' }).
+  'invoice.viewed': 'invoice',
   'quote.approved': 'quote',
   'quote.declined': 'quote',
   'quote.changes_requested': 'quote',

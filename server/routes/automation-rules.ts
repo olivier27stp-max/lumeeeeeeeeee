@@ -39,10 +39,12 @@ import {
 import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie } from '../lib/automatisations-bureaux';
 import { logger } from '../lib/logger';
 import { oublierPause } from '../lib/automations-pause-org';
+import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
 import {
   DECLENCHEURS,
   ACTIONS,
   trouverDeclencheur,
+  declencheurOffert,
   DELAI_NEGATIF_MAX_SECONDES,
 } from '../../src/lib/automationCatalogue';
 
@@ -123,9 +125,16 @@ router.get('/automations/rules', async (req, res) => {
 
   // Le catalogue voyage avec les règles : l'interface n'a pas à le dupliquer,
   // et une clé retirée ici disparaît du sélecteur sans redéploiement du front.
+  // Un déclencheur réservé à une capacité en rodage n'est offert qu'aux
+  // entreprises qui ont son drapeau : ailleurs, son événement n'est jamais émis.
+  // Client de l'UTILISATEUR (RLS de org_features), comme tout ce fichier.
+  const actifs = new Set<string>();
+  for (const d of DECLENCHEURS) {
+    if (d.drapeau && !actifs.has(d.drapeau) && await drapeauActif(auth.client, auth.orgId, d.drapeau as CleDrapeauAutomatisation)) actifs.add(d.drapeau);
+  }
   return res.json({
     rules: data ?? [],
-    catalogue: { declencheurs: DECLENCHEURS, actions: ACTIONS },
+    catalogue: { declencheurs: DECLENCHEURS.filter((d) => declencheurOffert(d, actifs)), actions: ACTIONS },
   });
 });
 

@@ -18,6 +18,8 @@
  */
 import { Router } from 'express';
 import { empreinte } from '../lib/vuesSoumission';
+import { enregistrerOuvertureFacture } from '../lib/vuesFacture';
+import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../lib/automations-drapeaux';
 import { getServiceClient } from '../lib/supabase';
 import { documentTaxLines } from '../lib/taxResolve';
 import { getCompanyBranding } from '../lib/companyBranding';
@@ -177,7 +179,16 @@ router.get('/invoices/public/:token', async (req, res) => {
 
     // Suivi de vue — après avoir résolu et servi la facture, jamais avant.
     // Tâche de fond : l'affichage ne dépend pas de cette écriture.
-    void enregistrerVueFacture(admin, invoice, req);
+    // Drapeau « consultation des documents » : filtres (équipe, aperçu,
+    // robots, doublons) + déclencheur « Facture consultée ». Sans lui,
+    // l'ancien suivi, inchangé.
+    void (async () => {
+      if (await drapeauActif(admin, invoice.org_id, DRAPEAUX_AUTOMATISATIONS.consultationDocuments)) {
+        await enregistrerOuvertureFacture(admin, req, invoice);
+      } else {
+        await enregistrerVueFacture(admin, invoice, req);
+      }
+    })();
 
     // Ventilation TPS / TVQ… (applied_taxes, sinon taxes résolues pour le client).
     const [taxLines, champsDocument] = await Promise.all([

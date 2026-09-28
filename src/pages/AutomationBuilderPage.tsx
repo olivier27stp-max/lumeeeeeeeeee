@@ -74,6 +74,7 @@ import {
   actionCompatible,
   champVisible,
   configParDefaut,
+  declencheurOffert,
   problemesAvantPublication,
   trouverAction,
 } from '../lib/automationCatalogue';
@@ -290,9 +291,20 @@ export default function AutomationBuilderPage() {
     return [...actions, ...logique];
   }, [regle, fr]);
 
+  /*
+   * Les déclencheurs réservés à une capacité en rodage (`drapeau`) ne sont
+   * offerts qu'aux entreprises qui l'ont : ailleurs, l'événement n'est
+   * jamais émis et l'automatisation ne partirait jamais.
+   */
+  const { isEnabled: consultationDocumentsActive } = useModuleAccess('auto_consultation_documents');
+  const drapeauxActifs = useMemo(
+    () => new Set<string>(consultationDocumentsActive ? ['auto_consultation_documents'] : []),
+    [consultationDocumentsActive],
+  );
+
   /** Les déclencheurs offerts, ceux qui ne partent pas encore étant grisés. */
   const choixDeclencheurs = useMemo<ChoixTiroir[]>(
-    () => DECLENCHEURS.map((d) => ({
+    () => DECLENCHEURS.filter((d) => declencheurOffert(d, drapeauxActifs)).map((d) => ({
       cle: d.cle,
       titre: fr ? d.fr : d.en,
       aide: fr ? d.aide_fr : d.aide_en,
@@ -301,7 +313,7 @@ export default function AutomationBuilderPage() {
         ? (fr ? 'Bientôt disponible' : 'Coming soon')
         : undefined,
     })),
-    [fr],
+    [fr, drapeauxActifs],
   );
 
   /** Changer le déclencheur de la règle depuis le tiroir. */

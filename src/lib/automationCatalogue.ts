@@ -86,6 +86,17 @@ export interface DeclencheurCatalogue {
    * à chaque rechargement de page du client.
    */
   conditions_defaut?: Record<string, unknown>;
+  /**
+   * N'offrir ce déclencheur que si ce drapeau d'entreprise (`org_features`)
+   * est actif. Sans lui, l'événement n'est jamais émis : l'offrir ferait
+   * bâtir une automatisation qui ne part jamais.
+   */
+  drapeau?: string;
+}
+
+/** Le déclencheur est-il offert à cette entreprise ? */
+export function declencheurOffert(d: DeclencheurCatalogue, drapeauxActifs: ReadonlySet<string>): boolean {
+  return !d.drapeau || drapeauxActifs.has(d.drapeau);
 }
 
 /**
@@ -197,6 +208,27 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     aide_fr: 'Quand une facture dépasse sa date d\'échéance.',
     aide_en: 'When an invoice passes its due date.',
     famille: 'facture', entite: 'invoice',
+  },
+  {
+    // Même mécanique que « Devis ouvert par le client » (server/lib/vuesFacture.ts).
+    cle: 'invoice.viewed', fr: 'Facture consultée par le client', en: 'Invoice viewed by client',
+    aide_fr: 'Quand le client ouvre le lien de sa facture. Les ouvertures par votre équipe, les aperçus et les robots de messagerie ne comptent pas.',
+    aide_en: 'When the client opens their invoice link. Opens by your team, previews and email scanners don’t count.',
+    famille: 'facture', entite: 'invoice',
+    drapeau: 'auto_consultation_documents',
+    conditions_defaut: { ouverture: 'premiere' },
+    champs: [
+      {
+        cle: 'ouverture', fr: 'Quand déclencher', en: 'When to trigger',
+        obligatoire: false, type: 'choix',
+        options: [
+          { cle: 'premiere', fr: 'Première consultation seulement', en: 'First view only' },
+          { cle: 'chaque', fr: 'Chaque consultation', en: 'Every view' },
+        ],
+        aide_fr: 'Une même visite ne compte qu’une fois par 30 minutes.',
+        aide_en: 'A single visit only counts once per 30 minutes.',
+      },
+    ],
   },
 
   // ── Rendez-vous ──
@@ -994,6 +1026,7 @@ export const CLES_ACTIONS = ACTIONS.map((a) => a.cle);
 export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   'quote.sent': 'quote',
   'quote.viewed': 'quote',
+  'invoice.viewed': 'invoice',
   'quote.approved': 'quote',
   'quote.declined': 'quote',
   'quote.changes_requested': 'quote',

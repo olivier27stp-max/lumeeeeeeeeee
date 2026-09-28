@@ -258,6 +258,7 @@ const TRIGGER_DISPLAY: Record<string, { en: string; fr: string }> = {
   'estimate.sent':         { en: 'Quote sent',            fr: 'Devis envoyé' },
   'quote.sent':            { en: 'Quote sent',            fr: 'Devis envoyé' },
   'quote.viewed':          { en: 'Quote opened by client', fr: 'Devis ouvert par le client' },
+  'invoice.viewed':        { en: 'Invoice viewed by client', fr: 'Facture consultée par le client' },
   'quote.approved':        { en: 'Quote approved',        fr: 'Devis accepté' },
   'quote.declined':        { en: 'Quote declined',        fr: 'Devis refusé' },
   'invoice.sent':          { en: 'Invoice sent',          fr: 'Facture envoyée' },
