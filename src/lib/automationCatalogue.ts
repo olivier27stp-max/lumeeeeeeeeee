@@ -210,6 +210,15 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     famille: 'facture', entite: 'invoice',
   },
   {
+    // server/lib/paiement-echoue.ts — paiements des CLIENTS de l'entreprise
+    // seulement, jamais l'abonnement Lume ; une fois par événement Stripe.
+    cle: 'payment.failed', fr: 'Paiement échoué', en: 'Payment failed',
+    aide_fr: 'Quand le paiement d’une facture par votre client échoue (carte refusée, fonds insuffisants, carte expirée…), en ligne ou par carte au dossier.',
+    aide_en: 'When your client’s payment on an invoice fails (card declined, insufficient funds, expired card…), online or with a card on file.',
+    famille: 'facture', entite: 'invoice',
+    drapeau: 'auto_paiement_echoue',
+  },
+  {
     // Même mécanique que « Devis ouvert par le client » (server/lib/vuesFacture.ts).
     cle: 'invoice.viewed', fr: 'Facture consultée par le client', en: 'Invoice viewed by client',
     aide_fr: 'Quand le client ouvre le lien de sa facture. Les ouvertures par votre équipe, les aperçus et les robots de messagerie ne comptent pas.',
@@ -1028,6 +1037,7 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   'quote.sent': 'quote',
   'quote.viewed': 'quote',
   'invoice.viewed': 'invoice',
+  'payment.failed': 'invoice',
   'quote.approved': 'quote',
   'quote.declined': 'quote',
   'quote.changes_requested': 'quote',

@@ -31,6 +31,8 @@ export type CRMEventType =
   | 'quote.viewed'
   /** Le client final a ouvert la page publique de sa facture (drapeau auto_consultation_documents). */
   | 'invoice.viewed'
+  /** Le paiement d'un client final a échoué (drapeau auto_paiement_echoue). */
+  | 'payment.failed'
   | 'quote.approved'
   | 'quote.declined'
   | 'quote.changes_requested'
@@ -140,6 +142,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'quote.sent': 'quote_sent',
   'quote.viewed': 'quote_viewed',
   'invoice.viewed': 'invoice_viewed',
+  'payment.failed': 'payment_failed',
   'quote.approved': 'quote_approved',
   'quote.declined': 'quote_declined',
   'quote.changes_requested': 'quote_changes_requested',

@@ -12,6 +12,7 @@ import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
 import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegale } from '../consentement/base-legale';
 import { motifSaut } from '../desabonnement';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../automations-drapeaux';
+import { raisonLisible } from '../paiement-echoue';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -752,6 +753,32 @@ export async function resolveEntityVariables(
       // page publique lit VRAIMENT (`view_token`) ; `[invoice_link]`, lui,
       // lit `public_token` (toujours vide) — laissé tel quel pour ne rien
       // changer aux règles existantes, voir le rapport de phase 0 (bug 3).
+      // « Paiement échoué » : le dernier échec de cette facture (hors litige),
+      // la raison en mots de client, et le lien pour payer. Drapeau seulement,
+      // pour la même raison que plus bas (charge du webhook).
+      if (await drapeauActif(supabase, orgId, DRAPEAUX_AUTOMATISATIONS.paiementEchoue)) {
+        const [{ data: echec }, { data: demande }] = await Promise.all([
+          supabase.from('payments')
+            .select('amount_cents, failure_reason')
+            .eq('org_id', orgId).eq('invoice_id', entityId).eq('status', 'failed')
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false }).limit(5),
+          supabase.from('payment_requests')
+            .select('public_token')
+            .eq('org_id', orgId).eq('invoice_id', entityId).in('status', ['pending', 'sent'])
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        ]);
+        const dernier = ((echec ?? []) as Array<{ amount_cents: number | null; failure_reason: string | null }>)
+          .find((p) => !String(p.failure_reason ?? '').startsWith('dispute'));
+        vars['paiement.montant'] = dernier ? argent(dernier.amount_cents ?? 0) : '';
+        vars['paiement.raison'] = dernier ? raisonLisible(dernier.failure_reason, locale === 'en-CA' ? 'en' : 'fr') : '';
+        vars['paiement.facture'] = inv.invoice_number || '';
+        const jetonPaiement = (demande as { public_token?: string } | null)?.public_token;
+        vars['paiement.lien'] = jetonPaiement
+          ? `${resolvePublicBaseUrl()}/pay/${jetonPaiement}`
+          : (inv.view_token ? `${resolvePublicBaseUrl()}/invoice/${inv.view_token}` : '');
+      }
       // Drapeau seulement : l'action « webhook » envoie TOUTES les variables,
       // en ajouter changerait sa charge utile chez les entreprises sans drapeau.
       if (await drapeauActif(supabase, orgId, DRAPEAUX_AUTOMATISATIONS.consultationDocuments)) {

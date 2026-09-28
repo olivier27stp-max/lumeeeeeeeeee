@@ -103,6 +103,9 @@ const DECLENCHEURS_TRANSACTIONNELS = new Set([
   'invoice.sent', 'invoice.paid', 'invoice.overdue',
   'quote.approved', 'quote.declined', 'quote.changes_requested',
   'agreement.signed', 'job.ready_for_invoicing',
+  // Suivre une facture consultée ou un paiement refusé, c'est encaisser une
+  // dette existante — pas solliciter.
+  'invoice.viewed', 'payment.failed',
 ]);
 
 /** Au-delà, un message après un job terminé n'est plus un suivi : c'est une sollicitation. */

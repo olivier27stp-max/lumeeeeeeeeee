@@ -297,9 +297,13 @@ export default function AutomationBuilderPage() {
    * jamais émis et l'automatisation ne partirait jamais.
    */
   const { isEnabled: consultationDocumentsActive } = useModuleAccess('auto_consultation_documents');
+  const { isEnabled: paiementEchoueActif } = useModuleAccess('auto_paiement_echoue');
   const drapeauxActifs = useMemo(
-    () => new Set<string>(consultationDocumentsActive ? ['auto_consultation_documents'] : []),
-    [consultationDocumentsActive],
+    () => new Set<string>([
+      ...(consultationDocumentsActive ? ['auto_consultation_documents'] : []),
+      ...(paiementEchoueActif ? ['auto_paiement_echoue'] : []),
+    ]),
+    [consultationDocumentsActive, paiementEchoueActif],
   );
 
   /** Les déclencheurs offerts, ceux qui ne partent pas encore étant grisés. */
