@@ -28,6 +28,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { Router } from 'express';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { genererParcours } from '../lib/lumi/generer-parcours';
 import { sequenceEtapes } from '../lib/validation';
@@ -258,6 +259,45 @@ router.post('/automations/rules/generer', async (req, res) => {
   }
 
   /*
+   * Une étape qui désigne une AUTRE automatisation doit viser une règle qui
+   * existe dans ce bureau. Lumi en a inventé une (« calendly_reply ») le
+   * 2026-09-28 : l'étape était enregistrée et ne pouvait rien faire.
+   */
+  const inventee = await refAutomatisationInventee(auth.client, auth.orgId, verdict.data);
+  if (inventee) {
+    logger.error('[lumi/parcours] référence à une automatisation inexistante', { org_id: auth.orgId, rule_id: inventee });
+    return res.status(422).json({
+      error: langue === 'fr'
+        ? 'Lumi a voulu relier une automatisation qui n’existe pas. Redemande-le autrement (ex. : « quand le client répond, envoie mon lien Calendly »).'
+        : 'Lumi tried to link an automation that does not exist. Ask again differently.',
+    });
+  }
+
+  /*
+   * La deuxième automatisation (autre déclencheur) passe les MÊMES gardes.
+   * Invalide : on la laisse tomber et on garde la première — refuser tout
+   * ferait perdre un parcours correct pour un ajout raté.
+   */
+  let autre: {
+    nom: string; trigger_event: string; resume: string; steps: unknown[]; une_fois_par_client_jours?: number;
+  } | null = null;
+  const a = resultat.parcours.autre;
+  if (a) {
+    const verdictAutre = sequenceEtapes.safeParse(a.steps);
+    const inventeeAutre = verdictAutre.success
+      ? await refAutomatisationInventee(auth.client, auth.orgId, verdictAutre.data)
+      : null;
+    if (verdictAutre.success && trouverDeclencheur(a.trigger_event) && !inventeeAutre) {
+      autre = { nom: a.nom, trigger_event: a.trigger_event, resume: a.resume, steps: verdictAutre.data, une_fois_par_client_jours: a.une_fois_par_client_jours };
+    } else {
+      logger.error('[lumi/parcours] deuxième automatisation écartée', {
+        org_id: auth.orgId,
+        motif: !verdictAutre.success ? verdictAutre.error.issues[0]?.message : (inventeeAutre ? 'référence inventée' : 'déclencheur inconnu'),
+      });
+    }
+  }
+
+  /*
    * La conversation est gardée AVEC l'automatisation : fermer l'éditeur ne
    * fait plus oublier à Lumi ce qui a été dit (« plus poli », « jamais le
    * dimanche »). Écrite par le client de l'UTILISATEUR — la RLS décide qui
@@ -281,7 +321,13 @@ router.post('/automations/rules/generer', async (req, res) => {
       const conversation = [
         ...avant,
         { role: 'user', content: demande.slice(0, 2000) },
-        { role: 'assistant', content: (resultat.parcours.resume || (langue === 'fr' ? 'Parcours construit.' : 'Path built.')).slice(0, 2000) },
+        {
+          role: 'assistant',
+          content: (
+            (resultat.parcours.resume || (langue === 'fr' ? 'Parcours construit.' : 'Path built.'))
+            + (autre ? (langue === 'fr' ? ` — Et une 2e automatisation, « ${autre.nom} » : ${autre.resume}` : ` — And a second automation, “${autre.nom}”: ${autre.resume}`) : '')
+          ).slice(0, 2000),
+        },
       ].slice(-40);
       const { error: ecritureErr } = await auth.client
         .from('automation_rules')
@@ -300,8 +346,31 @@ router.post('/automations/rules/generer', async (req, res) => {
     trigger_event: resultat.parcours.trigger_event,
     resume: resultat.parcours.resume,
     steps: verdict.data,
+    autre,
   });
 });
+
+/**
+ * Renvoie l'identifiant d'une automatisation citée par une étape
+ * (démarrer / arrêter) qui n'existe pas dans ce bureau, ou `null`.
+ * Lu avec le client de l'utilisateur : la RLS borne au bureau.
+ */
+async function refAutomatisationInventee(
+  client: SupabaseClient,
+  orgId: string,
+  etapes: unknown[],
+): Promise<string | null> {
+  const cibles = etapes
+    .map((e) => (e as { action?: { type?: string; config?: { rule_id?: unknown } } }).action)
+    .filter((act) => act?.type === 'demarrer_automatisation' || act?.type === 'arreter_automatisation')
+    .map((act) => String(act?.config?.rule_id ?? ''));
+  for (const id of cibles) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return id || '(vide)';
+    const { data } = await client.from('automation_rules').select('id').eq('id', id).eq('org_id', orgId).is('deleted_at', null).maybeSingle();
+    if (!data) return id;
+  }
+  return null;
+}
 
 // ── Modifier ────────────────────────────────────────────────
 

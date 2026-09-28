@@ -215,6 +215,18 @@ export interface ParcoursPropose {
   steps: unknown[];
   /** Coût de CETTE génération, en cents (null si inconnu). */
   cout_cents?: number | null;
+  /**
+   * Une deuxième automatisation sur un AUTRE déclencheur (ex. « quand le
+   * client répond, envoie mon lien Calendly »). L'éditeur la crée à part,
+   * en brouillon.
+   */
+  autre?: {
+    nom: string;
+    trigger_event: string;
+    resume: string;
+    steps: unknown[];
+    une_fois_par_client_jours?: number;
+  } | null;
 }
 
 /**

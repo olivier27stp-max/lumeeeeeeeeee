@@ -1125,6 +1125,12 @@ export const automationSettingsSchema = z
       .optional(),
     /** Lundi au vendredi seulement. */
     jours_ouvrables: z.boolean().optional(),
+    /**
+     * Une fois par client tous les N jours. Pour un déclencheur qui revient
+     * souvent — « Le client répond » part à CHAQUE texto — : sans lui, la
+     * même réponse automatique repartirait à chaque message.
+     */
+    delai_entre_passages_jours: z.number().int().min(1).max(365).optional(),
     /*
      * RETIRÉ de l'interface le 2026-09-25 : le moteur ne l'a jamais lu, et
      * le problème qu'il prétendait régler n'existe pas (les non-lus

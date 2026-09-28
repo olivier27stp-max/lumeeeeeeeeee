@@ -309,6 +309,8 @@ export interface ReglagesRegle {
   jours_ouvrables?: boolean;
   /** Accepté mais IGNORÉ — voir validation.ts (retiré de l'interface le 2026-09-25). */
   marquer_lu?: boolean;
+  /** Une fois par client tous les N jours (voir `dejaPasseRecemment`). */
+  delai_entre_passages_jours?: number;
 }
 
 export function isQuietHours(d: Date = new Date(), tz: string = QUIET_TZ): boolean {
@@ -846,6 +848,13 @@ async function handleEvent(event: CRMEvent) {
         if (!evaluateConditions(rule.conditions, event)) continue;
         if (!(await conditionsChampsOk(engineConfig.supabase, event.orgId, event.entityType, event.entityId,
           rule.conditions?.[CLE_CONDITIONS_CHAMPS]))) continue;
+        // « Une fois par client tous les N jours » : une réponse automatique
+        // sur « Le client répond » ne repart pas à chaque texto.
+        const jours = rule.settings?.delai_entre_passages_jours;
+        if (jours && await dejaPasseRecemment(engineConfig.supabase, rule, event, jours)) {
+          logger.info(`[automationEngine] règle "${rule.name}" déjà passée pour ce client il y a moins de ${jours} j — ignorée`);
+          continue;
+        }
         aAgi = true;
         // Une SÉQUENCE se parcourt étape par étape : on ne planifie que la
         // première, chacune ouvrant la suivante une fois faite. Rien n'est
@@ -912,6 +921,36 @@ async function handleEvent(event: CRMEvent) {
   } catch (err: any) {
     console.error('[automationEngine] error handling event:', err.message);
   }
+}
+
+/**
+ * La règle a-t-elle déjà agi pour ce client dans les `jours` derniers jours ?
+ *
+ * On regarde les DEUX traces : une exécution immédiate laisse une ligne de
+ * journal, un parcours qui commence par « attendre » une tâche planifiée.
+ * En cas de lecture impossible, on laisse passer : taire une réponse attendue
+ * pour une panne de notre côté serait pire qu'un doublon.
+ */
+async function dejaPasseRecemment(
+  supabase: SupabaseClient,
+  rule: AutomationRule,
+  event: CRMEvent,
+  jours: number,
+): Promise<boolean> {
+  const depuis = new Date(Date.now() - jours * 86_400_000).toISOString();
+  const [journaux, taches] = await Promise.all([
+    supabase.from('automation_execution_logs').select('id', { count: 'exact', head: true })
+      .eq('org_id', event.orgId).eq('automation_rule_id', rule.id).eq('entity_id', event.entityId)
+      .gte('created_at', depuis),
+    supabase.from('automation_scheduled_tasks').select('id', { count: 'exact', head: true })
+      .eq('org_id', event.orgId).eq('automation_rule_id', rule.id).eq('entity_id', event.entityId)
+      .gte('created_at', depuis),
+  ]);
+  if (journaux.error || taches.error) {
+    console.error('[automationEngine] délai entre passages illisible — exécution quand même:', journaux.error?.message ?? taches.error?.message);
+    return false;
+  }
+  return (journaux.count ?? 0) + (taches.count ?? 0) > 0;
 }
 
 // ── Scheduled task processor (called by scheduler) ──────────

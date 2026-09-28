@@ -209,6 +209,23 @@ export function retirerEtape(steps: Etape[], id: string): Etape[] {
 // touchée tant que l'utilisateur n'a pas explicitement demandé la
 // conversion.
 
+/**
+ * Le texte de l'action provisoire qu'on met dans une automatisation NEUVE.
+ *
+ * Le serveur exige au moins une action à la création ; « Partir de zéro » et
+ * « Construire avec Lumi » posaient donc un texto « À compléter ». Mais sans
+ * étapes, cette règle neuve ressemblait à une vieille règle au format
+ * d'origine : l'éditeur l'affichait EN LECTURE SEULE, avec ce texto bidon
+ * (constaté en prod le 2026-09-28). On la reconnaît pour ce qu'elle est.
+ */
+export const TEXTES_ACTION_PROVISOIRE: readonly string[] = ['À compléter', 'To complete'];
+
+function estActionProvisoire(actions: unknown[]): boolean {
+  if (actions.length !== 1) return false;
+  const a = actions[0] as { type?: string; config?: { body?: unknown } } | null;
+  return a?.type === 'send_sms' && TEXTES_ACTION_PROVISOIRE.includes(String(a.config?.body ?? ''));
+}
+
 /** Une règle au format d'origine a-t-elle quelque chose à montrer ? */
 export function estFormatOrigine(regle: {
   steps?: unknown;
@@ -216,7 +233,9 @@ export function estFormatOrigine(regle: {
 }): boolean {
   const steps = Array.isArray(regle.steps) ? regle.steps : [];
   const actions = Array.isArray(regle.actions) ? regle.actions : [];
-  return steps.length === 0 && actions.length > 0;
+  // Une automatisation NEUVE (action provisoire) est un parcours vide à
+  // dessiner, pas une vieille règle à montrer en lecture seule.
+  return steps.length === 0 && actions.length > 0 && !estActionProvisoire(actions);
 }
 
 /**
