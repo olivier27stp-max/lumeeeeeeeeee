@@ -694,6 +694,16 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
       console.error('[scheduler] scheduled tasks processing failed:', err.message);
     }
 
+    // Les événements émis juste avant un redémarrage, jamais traités : sans
+    // ce rejeu, leurs confirmations et relances ne partaient jamais.
+    try {
+      const { rejouerEvenementsOrphelins, menageOutbox } = await import('./outbox');
+      await rejouerEvenementsOrphelins(supabase);
+      await menageOutbox(supabase);
+    } catch (err: any) {
+      console.error('[scheduler] outbox replay failed:', err.message);
+    }
+
     // Le pipeline de ventes : sa file d'événements, puis les deals qui dorment.
     //
     // La file AVANT la détection, volontairement : un deal qui vient de
