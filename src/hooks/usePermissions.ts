@@ -84,7 +84,14 @@ export function usePermissions(): UserPermissionContext {
     if (!company) return { ...EMPTY, loading: true };
 
     if (company.loading) return { ...EMPTY, loading: true };
-    if (!company.current) return EMPTY;
+    /*
+     * Pas encore de bureau (session pas encore lue, lecture en reprise) :
+     * c'est un CHARGEMENT, pas un refus. Avant, ce cas rendait « aucun rôle,
+     * chargement fini » et PermissionGate affichait « Accès restreint » à un
+     * propriétaire. Seul un compte qui n'a vraiment aucune compagnie est
+     * traité comme sans droits.
+     */
+    if (!company.current) return company.hasNoCompany ? EMPTY : { ...EMPTY, loading: true };
 
     return {
       permissions: company.currentPermissions,
