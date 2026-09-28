@@ -8,9 +8,14 @@
 // L'« envoi » de la soumission est simulé en posant `status = 'awaiting_response'` et
 // `sent_via_email_at` : l'envoi réel partirait chez un client.
 //
+// Courriels : si SINK_FILE est posé, le serveur visé envoie à un faux SMTP
+// local (COURRIEL_FOURNISSEUR=smtp, SMTP_HOST=127.0.0.1) qui les capte dans ce
+// fichier — rien ne sort. Sans SINK_FILE, la vérification est sautée.
+//
 // Crée ses propres données (préfixe ZZSonde) et les supprime à la fin, et
 // remet les automatisations par défaut dans leur état d'origine.
 import { createClient } from '@supabase/supabase-js';
+import { readFileSync } from 'node:fs';
 import puppeteer from 'puppeteer';
 
 const BASE = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -122,6 +127,17 @@ try {
     `${n1.length} personne(s), attendu ${attendus1.size}`);
   verif('le texte porte le client, le numéro et le total', /ZZSonde Ouverture/.test(n1[0]?.title ?? '') && /ZZSONDE-OUV/.test(n1[0]?.title ?? '') && /1\s?250/.test(n1[0]?.title ?? ''));
   verif('le bouton mène à la soumission dans l’app', n1[0]?.link === `/quotes/${q.id}`);
+  if (process.env.SINK_FILE) {
+    const adresses = new Set();
+    for (const uid of attendus1) adresses.add((await admin.auth.admin.getUserById(uid)).data.user.email.toLowerCase());
+    await attendre(async () => JSON.parse(readFileSync(process.env.SINK_FILE, 'utf8')).length >= adresses.size);
+    const recus = JSON.parse(readFileSync(process.env.SINK_FILE, 'utf8'));
+    const destinataires = new Set(recus.flatMap((m) => m.rcpt.map((r) => String(r).toLowerCase())));
+    verif('courriel : un par personne prévenue, aux mêmes personnes que la cloche',
+      recus.length === adresses.size && memeEnsemble(destinataires, adresses), `${recus.length} courriel(s), attendu ${adresses.size}`);
+    verif('courriel : l’objet nomme le client et le bouton ouvre Lume',
+      recus.every((m) => /ZZSonde Ouverture/.test(m.sujet) || /=\?UTF-8\?/i.test(m.sujet)) && recus.every((m) => m.bouton));
+  }
   await attendre(async () => (await admin.from('deals').select('stage_id').eq('id', d.id).single()).data.stage_id === ouverte.id);
   const dealApres = (await admin.from('deals').select('stage_id').eq('id', d.id).single()).data;
   verif('l’opportunité passe à « Soumission ouverte »', dealApres.stage_id === ouverte.id);
@@ -153,6 +169,12 @@ try {
   await ouvrirAnonyme(URLQ);
   await attendre(async () => (await nbNotifs()) >= 2);
   verif('mode « chaque ouverture » : 2e notification reçue', (await nbNotifs()) === 2);
+  if (process.env.SINK_FILE) {
+    const total = attendus1.size + new Set([...proprios, repVendeur]).size;
+    await attendre(async () => JSON.parse(readFileSync(process.env.SINK_FILE, 'utf8')).length >= total);
+    verif('courriel : la 2e ouverture prévient aussi par courriel (sans l’admin exclu)',
+      JSON.parse(readFileSync(process.env.SINK_FILE, 'utf8')).length === total);
+  }
   const { data: n3 } = await admin.from('notifications').select('id, user_id').eq('entity_id', q.id);
   const nouveaux = new Set(n3.filter((n) => !avantRestreint.has(n.id)).map((n) => n.user_id));
   verif('pipeline réservé au vendeur : propriétaires + vendeur prévenus, admin exclu NON',
@@ -270,6 +292,7 @@ try {
     // L'outbox (#695) garde une trace durable de chaque événement émis.
     await admin.from('domain_events').delete().eq('entity_id', trace.quote);
     await admin.from('notifications').delete().eq('entity_id', trace.quote);
+    await admin.from('email_deliveries').delete().eq('entity_id', trace.quote);
     await admin.from('quote_views').delete().eq('quote_id', trace.quote);
   }
   const effacer = async (etiquette, req) => { const { error } = await req; if (error) console.log(`⚠ nettoyage ${etiquette} :`, error.message); };

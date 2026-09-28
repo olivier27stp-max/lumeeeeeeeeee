@@ -1233,13 +1233,23 @@ async function destinatairesNotification(
 }
 
 export async function executeCreateNotification(
-  config: { title: string; body: string; reference_id?: string; destinataire?: string; membre_id?: string; lien?: string },
+  config: { title: string; body: string; reference_id?: string; destinataire?: string; membre_id?: string; lien?: string; par_courriel?: string },
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
   const title = resolveTemplate(config.title, vars);
   const body = resolveTemplate(config.body ?? '', vars);
   const lien = config.lien ? resolveTemplate(config.lien, vars) : null;
+  const entityId = config.reference_id || ctx.entityId;
+  // « Aussi par courriel » : les mêmes personnes que la cloche, à leur adresse
+  // de connexion. Le téléphone, lui, suit la notification (relais push web).
+  const parCourriel = async (destinataires: Map<string, 'fr' | 'en'>): Promise<number> => {
+    if (config.par_courriel !== 'true' || destinataires.size === 0) return 0;
+    const { getServiceClient } = await import('../supabase');
+    const { envoyerNotificationParCourriel } = await import('../notificationCourriel');
+    return envoyerNotificationParCourriel(getServiceClient(), ctx.orgId, destinataires, { title, body, lien },
+      { entityType: ctx.entityType, entityId });
+  };
 
   // « Pour qui » laissé vide : comportement HISTORIQUE, inchangé — une
   // notification pour toute l'équipe. Les règles existantes sans
@@ -1255,7 +1265,17 @@ export async function executeCreateNotification(
       link: lien,
     });
     if (error) return { success: false, error: error.message };
-    return { success: true, data: { title, destinataires: 'equipe' } };
+    let courriels = 0;
+    if (config.par_courriel === 'true') {
+      const { data: membres } = await ctx.supabase.from('memberships')
+        .select('user_id, status, language').eq('org_id', ctx.orgId);
+      const equipe = new Map<string, 'fr' | 'en'>();
+      for (const m of (membres ?? []) as Array<{ user_id: string; status: string | null; language: string | null }>) {
+        if (m.user_id && (!m.status || m.status === 'active')) equipe.set(m.user_id, m.language === 'en' ? 'en' : 'fr');
+      }
+      courriels = await parCourriel(equipe);
+    }
+    return { success: true, data: { title, destinataires: 'equipe', courriels } };
   }
 
   const destinataires = await destinatairesNotification(config, ctx);
@@ -1270,12 +1290,13 @@ export async function executeCreateNotification(
     {
       type: 'automation',
       entityType: ctx.entityType,
-      entityId: config.reference_id || ctx.entityId,
+      entityId,
       link: lien,
       icon: ctx.entityType === 'quote' ? 'eye' : null,
     },
   );
-  return { success: true, data: { title, destinataires: destinataires.size } };
+  const courriels = await parCourriel(destinataires);
+  return { success: true, data: { title, destinataires: destinataires.size, courriels } };
 }
 
 // ── Action: Create Task ─────────────────────────────────────
