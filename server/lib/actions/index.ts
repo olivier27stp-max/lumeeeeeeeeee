@@ -1847,13 +1847,27 @@ export async function executeRequestReview(
   }
 
   // 9. Envoi : courriel si on a l'adresse, SMS si on a le numéro.
-  const emailResult = vars.client_email
-    ? await executeSendEmail({ subject, body }, vars, ctx)
-    : { success: false, error: 'Client has no email address.' };
+  //
+  // F7 (launch 2026-09-28) : une demande d'avis est une SOLLICITATION. Même
+  // partie tout de suite (donc « non commerciale » pour le moteur), elle
+  // compte dans le plafond de messages commerciaux par destinataire — sinon
+  // un client déjà à 3 messages en 24 h recevait en plus courriel + texto.
+  const ctxPlafond: ActionContext = { ...ctx, commercial: true };
+  const auPlafond = (canal: 'sms' | 'email', dest: string) => ({
+    success: false as const,
+    error: `Frequency cap reached for ${dest} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — ${canal === 'sms' ? 'SMS' : 'email'} review request skipped`,
+  });
+  const emailResult: ActionResult = !vars.client_email
+    ? { success: false, error: 'Client has no email address.' }
+    : await depassePlafondFrequence(ctxPlafond, 'email', vars.client_email)
+      ? auPlafond('email', vars.client_email)
+      : await executeSendEmail({ subject, body }, vars, ctx);
 
-  const smsResult = vars.client_phone
-    ? await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx)
-    : { success: false, error: 'Client has no phone number.' };
+  const smsResult: ActionResult = !vars.client_phone
+    ? { success: false, error: 'Client has no phone number.' }
+    : await depassePlafondFrequence(ctxPlafond, 'sms', vars.client_phone)
+      ? auPlafond('sms', vars.client_phone)
+      : await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx);
 
   // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
   const sent = estEnvoye(emailResult) || estEnvoye(smsResult);
