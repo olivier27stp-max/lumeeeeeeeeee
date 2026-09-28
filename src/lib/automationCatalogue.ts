@@ -456,7 +456,34 @@ export interface ChampAction {
    * désactive le sélecteur d'étiquettes).
    */
   visible_si?: { champ: string; valeurs: string[] };
+  /**
+   * N'afficher ce champ que si ce drapeau d'entreprise (`org_features`) est
+   * actif. Sert aux capacités en rodage : drapeau coupé = panneau inchangé.
+   */
+  drapeau?: string;
+  /** Libellé de l'option vide d'un `choix` (défaut : « — Inchangé — »). */
+  vide_fr?: string;
+  vide_en?: string;
 }
+
+/**
+ * Le type d'un envoi au client — transactionnel ou marketing.
+ *
+ * Vide = « automatique » : le serveur le déduit de l'usage
+ * (`server/lib/desabonnement` → `typeEnvoi`). Un client désabonné d'un canal
+ * ne reçoit plus le marketing de ce canal ; le transactionnel part toujours.
+ */
+const CHAMP_TYPE_ENVOI: ChampAction = {
+  cle: 'type_envoi', fr: 'Type d’envoi', en: 'Message type',
+  obligatoire: false, type: 'choix', drapeau: 'auto_desabonnement_canal',
+  vide_fr: 'Automatique (selon l’usage)', vide_en: 'Automatic (based on use)',
+  options: [
+    { cle: 'transactionnel', fr: 'Transactionnel — part même si le client s’est désabonné', en: 'Transactional — sent even if the client unsubscribed' },
+    { cle: 'marketing', fr: 'Marketing — pas envoyé à un client désabonné', en: 'Marketing — not sent to an unsubscribed client' },
+  ],
+  aide_fr: 'Soumission, facture, rappel de rendez-vous, reçu = transactionnel. Relance, promotion, demande d’avis = marketing.',
+  aide_en: 'Quote, invoice, appointment reminder, receipt = transactional. Follow-up, promotion, review request = marketing.',
+};
 
 /** Le regroupement des actions dans le sélecteur, comme les sections de GHL. */
 export type FamilleAction = 'communication' | 'client' | 'travail' | 'vente' | 'argent' | 'technique';
@@ -553,6 +580,7 @@ export const ACTIONS: ActionCatalogue[] = [
         defaut_fr: 'Bonjour [client_name],\n\nMerci de faire affaire avec [company_name].\n\nAu plaisir,\n[company_name]',
         defaut_en: 'Hi [client_name],\n\nThank you for choosing [company_name].\n\nBest,\n[company_name]',
       },
+      CHAMP_TYPE_ENVOI,
     ],
   },
   {
@@ -566,6 +594,7 @@ export const ACTIONS: ActionCatalogue[] = [
         defaut_fr: 'Bonjour [client_name], c’est [company_name]. Merci !',
         defaut_en: 'Hi [client_name], this is [company_name]. Thank you!',
       },
+      CHAMP_TYPE_ENVOI,
     ],
   },
   {

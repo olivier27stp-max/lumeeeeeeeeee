@@ -74,7 +74,7 @@ export async function lireJournaux(f: FiltresJournal): Promise<LigneJournal[]> {
 
   let q = supabase
     .from('automation_execution_logs')
-    .select('id, action_type, result_success, result_error, duration_ms, entity_type, entity_id, trigger_event, created_at')
+    .select('id, action_type, result_success, result_error, result_data, duration_ms, entity_type, entity_id, trigger_event, created_at')
     .eq('org_id', orgId)
     .eq('automation_rule_id', f.ruleId)
     .gte('created_at', depuis)
@@ -286,6 +286,12 @@ export function libelleAction(type: string, fr: boolean): string {
 }
 
 /** Le statut d'une inscription, en mots du métier. */
+/** Le motif d'un envoi SAUTÉ (`result_data.saute`), ou `null` si l'envoi est parti. */
+export function motifSaut(ligne: { result_success: boolean; result_data?: Record<string, unknown> | null }): string | null {
+  const m = ligne.result_success ? ligne.result_data?.saute : null;
+  return typeof m === 'string' && m ? m : null;
+}
+
 export function libelleStatut(statut: string, fr: boolean): string {
   const l: Record<string, [string, string]> = {
     pending: ['En attente', 'Pending'],
@@ -293,6 +299,8 @@ export function libelleStatut(statut: string, fr: boolean): string {
     completed: ['Terminé', 'Completed'],
     failed: ['Échoué', 'Failed'],
     cancelled: ['Annulé', 'Cancelled'],
+    // Envoi volontairement non fait (client désabonné) : le parcours continue.
+    skipped: ['Sauté', 'Skipped'],
   };
   const p = l[statut];
   return p ? (fr ? p[0] : p[1]) : statut;

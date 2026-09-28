@@ -55,6 +55,7 @@ import sendingDomainsRouter from './routes/sending-domains';
 import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
 import unsubscribeRouter from './routes/unsubscribe';
+import desabonnementRouter from './routes/desabonnement';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
@@ -821,6 +822,8 @@ app.use('/api', paymentRequestsRouter);
 app.use('/api', publicPayRouter);
 // Désinscription courriel — publique, authentifiée par le jeton de l'URL.
 app.use('/api', unsubscribeRouter);
+// Désabonnement par canal — état et historique pour la fiche client.
+app.use('/api', desabonnementRouter);
 app.use('/api', featureFlagsRouter);
 app.use('/api', authRouter);
 app.use('/api', dsrRouter);

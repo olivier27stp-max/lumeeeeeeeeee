@@ -25,11 +25,15 @@ import { automatisationsActivesAvecTrace } from './automations-interrupteur';
 import { orgEnPause } from './automations-pause-org';
 import { fuseauOrg, FUSEAU_DEFAUT } from './automations-fuseau-org';
 import { noterRegleTraitee } from './outbox';
+import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
+import { typeEnvoi } from './desabonnement';
 
 interface AutomationRule {
   id: string;
   org_id: string;
   name: string;
+  /** Clé du preset d'origine — sert à classer ses envois (désabonnement par canal). */
+  preset_key?: string | null;
   trigger_event: string;
   conditions: Record<string, any>;
   delay_seconds: number;
@@ -574,6 +578,18 @@ async function executeRuleActions(
   // celui du serveur (Railway tourne en UTC) ni dans un fuseau figé.
   const fuseau = await fuseauOrg(config.supabase, event.orgId);
 
+  // Désabonnement par canal : chaque envoi porte son type. Drapeau OFF =
+  // contexte inchangé (une action immédiate n'est pas commerciale).
+  const parCanal = await drapeauActif(config.supabase, event.orgId, DRAPEAUX_AUTOMATISATIONS.desabonnementCanal);
+  const contextePour = (action: { type: ActionType; config: Record<string, any> }): ActionContext =>
+    parCanal
+      ? {
+          ...ctx,
+          parCanal: true,
+          commercial: typeEnvoi({ actionType: action.type, config: action.config, declencheur: event.type, delaiSecondes: rule.delay_seconds, presetKey: rule.preset_key }) === 'marketing',
+        }
+      : ctx;
+
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
     const executionKey = buildExecutionKey(rule.id, event.entityId, i, rule.settings?.reentree === true);
@@ -610,7 +626,7 @@ async function executeRuleActions(
     const startTime = Date.now();
 
     try {
-      const result = await executeAction(action.type, action.config, vars, ctx);
+      const result = await executeAction(action.type, action.config, vars, contextePour(action));
       const durationMs = Date.now() - startTime;
 
       await journaliserAction(config.supabase, reservation, rule, event, i, {
@@ -1121,7 +1137,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // (org_id, automation_rule_id) qui porte l'isolation multi-tenant).
     // PostgREST répondait PGRST201 et AUCUNE tâche d'automatisation planifiée
     // n'était plus exécutée.
-    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, conditions, steps, settings)')
+    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, trigger_event, delay_seconds, preset_key, conditions, steps, settings)')
     .eq('status', 'pending')
     .lte('execute_at', now)
     .order('execute_at', { ascending: true })
@@ -1403,6 +1419,20 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         langue: await langueOrg(supabase, task.org_id),
         ruleId: task.automation_rule_id,
       };
+      // Désabonnement par canal : « différé » ne veut plus dire « commercial ».
+      // Un rappel de rendez-vous ou de facture est transactionnel même s'il
+      // part plus tard ; c'est le TYPE de l'envoi qui décide.
+      if (await drapeauActif(supabase, task.org_id, DRAPEAUX_AUTOMATISATIONS.desabonnementCanal)) {
+        ctx.parCanal = true;
+        ctx.commercial = typeEnvoi({
+          actionType,
+          config,
+          declencheur: actionConfig.trigger_event ?? task.automation_rules?.trigger_event,
+          // Une étape de séquence est planifiée : elle compte comme différée.
+          delaiSecondes: task.step_id ? Math.max(1, Number(task.automation_rules?.delay_seconds ?? 0)) : Number(task.automation_rules?.delay_seconds ?? 0),
+          presetKey: task.automation_rules?.preset_key ?? null,
+        }) === 'marketing';
+      }
 
       const startTime = Date.now();
       const result = await avecDelaiMax(

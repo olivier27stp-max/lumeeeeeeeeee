@@ -24,6 +24,7 @@ import { ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import { definirConsentement, type ClientRecord } from '../lib/clientsApi';
+import { lireDesabonnement, libelleSourceDesabonnement, type EtatDesabonnement } from '../lib/desabonnementApi';
 import { confirmer } from './ui/ConfirmDialog';
 
 /** Mêmes fenêtres que le serveur (`server/lib/consentement/base-legale.ts`). */
@@ -45,6 +46,20 @@ export default function ClientConsentement({ client, fr, onChange }: Props) {
   const [tacite, setTacite] = useState<Tacite>(null);
   const [chargement, setChargement] = useState(true);
   const [enCours, setEnCours] = useState<'email' | 'sms' | null>(null);
+  // Désabonnement par canal : `{ actif: false }` tant que le drapeau de
+  // l'entreprise est coupé — la carte reste alors exactement comme avant.
+  const [desabonnement, setDesabonnement] = useState<EtatDesabonnement>({ actif: false });
+
+  useEffect(() => {
+    let vivant = true;
+    lireDesabonnement(client.id)
+      .then((etat) => { if (vivant) setDesabonnement(etat); })
+      .catch((e) => {
+        // Lecture seule : la carte garde son affichage d'avant.
+        console.error('[ClientConsentement] état de désabonnement illisible', e);
+      });
+    return () => { vivant = false; };
+  }, [client.id]);
 
   // Le tacite se calcule à partir des jobs, factures et devis du client. On
   // lit les mêmes données que le serveur pour montrer le MÊME verdict : un
@@ -151,11 +166,28 @@ export default function ClientConsentement({ client, fr, onChange }: Props) {
       etat = fr ? 'Aucune base — les envois commerciaux sont bloqués' : 'No legal basis — commercial sending is blocked';
       ton = 'text-text-tertiary';
     }
+    const parCanal = desabonnement.actif ? desabonnement[canal === 'email' ? 'courriel' : 'texto'] : null;
     return (
       <div className="flex items-center justify-between gap-3 py-2.5">
         <div className="min-w-0">
-          <p className="text-[12px] font-medium text-text-primary">{titre}</p>
+          <p className="text-[12px] font-medium text-text-primary flex items-center gap-2">
+            {titre}
+            {parCanal && (
+              <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${parCanal.desabonne ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}
+              >
+                {parCanal.desabonne ? (fr ? 'Désabonné' : 'Unsubscribed') : (fr ? 'Abonné' : 'Subscribed')}
+              </span>
+            )}
+          </p>
           <p className={`text-[11px] mt-0.5 ${ton}`}>{etat}</p>
+          {parCanal?.desabonne && (
+            <p className="text-[11px] mt-0.5 text-text-tertiary">
+              {fr
+                ? `Promotions coupées${parCanal.depuis ? ` depuis le ${dateCourte(parCanal.depuis)}` : ''} (${libelleSourceDesabonnement(parCanal.source, fr)}). Les factures, soumissions et rappels continuent.`
+                : `Promotions stopped${parCanal.depuis ? ` since ${dateCourte(parCanal.depuis)}` : ''} (${libelleSourceDesabonnement(parCanal.source, fr)}). Invoices, quotes and reminders continue.`}
+            </p>
+          )}
         </div>
         <button
           type="button"
@@ -190,6 +222,19 @@ export default function ClientConsentement({ client, fr, onChange }: Props) {
         <Ligne canal="email" consenti={client.email_consent_at} />
         <Ligne canal="sms" consenti={client.sms_consent_at} />
       </div>
+      {desabonnement.actif && desabonnement.historique.length > 0 && (
+        <div className="px-5 py-3 border-t border-outline">
+          <p className="text-[11px] font-semibold text-text-secondary mb-1.5">{fr ? 'Historique' : 'History'}</p>
+          <ul className="space-y-1">
+            {desabonnement.historique.map((l, i) => (
+              <li key={`${l.date}-${i}`} className="text-[11px] text-text-tertiary">
+                {dateCourte(l.date)} — {l.canal === 'texto' ? (fr ? 'Texto' : 'Text') : (fr ? 'Courriel' : 'Email')} :{' '}
+                {l.accorde ? (fr ? 'abonné' : 'subscribed') : (fr ? 'désabonné' : 'unsubscribed')} ({libelleSourceDesabonnement(l.source, fr)})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

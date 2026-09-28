@@ -14,6 +14,7 @@
 
 import { useId } from 'react';
 import type { ChampAction as ModeleChamp } from '../../lib/automationCatalogue';
+import { useModuleAccess } from '../../hooks/useModuleAccess';
 
 interface Props {
   champ: ModeleChamp;
@@ -34,7 +35,21 @@ interface Props {
   services?: Array<{ id: string; label: string }>;
 }
 
-export default function ChampActionUI({
+/**
+ * Un champ réservé à une capacité en rodage (`champ.drapeau`) n'apparaît que
+ * si l'entreprise a ce drapeau. Le test est ici, pas dans chaque panneau :
+ * les trois écrans qui affichent des champs d'action en héritent.
+ */
+export default function ChampActionUI(props: Props) {
+  return props.champ.drapeau ? <ChampSousDrapeau {...props} drapeau={props.champ.drapeau} /> : <ChampActionRendu {...props} />;
+}
+
+function ChampSousDrapeau({ drapeau, ...props }: Props & { drapeau: string }) {
+  const { isEnabled } = useModuleAccess(drapeau);
+  return isEnabled ? <ChampActionRendu {...props} /> : null;
+}
+
+function ChampActionRendu({
   champ, valeur, onChange, fr, membres = [], etiquettes = [], champsDate = [],
   automatisations = [], etapesPipeline = [], services = [],
 }: Props) {
@@ -92,7 +107,7 @@ export default function ChampActionUI({
       case 'choix':
         return (
           <select id={id} value={valeur} onChange={(e) => onChange(e.target.value)} className={classeChamp}>
-            <option value="">{fr ? '— Inchangé —' : '— Unchanged —'}</option>
+            <option value="">{fr ? (champ.vide_fr ?? '— Inchangé —') : (champ.vide_en ?? '— Unchanged —')}</option>
             {(champ.options ?? []).map((o) => (
               <option key={o.cle} value={o.cle}>
                 {fr ? o.fr : o.en}

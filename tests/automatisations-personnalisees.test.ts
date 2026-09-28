@@ -108,6 +108,9 @@ describe('catalogue — il ne peut pas dériver du moteur', () => {
     const moteur = [
       'server/lib/actions/index.ts',
       'server/lib/champs/automatisations.ts',
+      // `type_envoi` (transactionnel / marketing) est lu par le classement
+      // du désabonnement par canal, que le moteur appelle avant d'exécuter.
+      'server/lib/desabonnement/index.ts',
     ].map(lire).join('\n');
     for (const a of ACTIONS) {
       for (const champ of a.champs) {
