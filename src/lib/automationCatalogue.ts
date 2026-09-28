@@ -496,6 +496,7 @@ export interface ActionCatalogue {
 const DESTINATAIRES_NOTIF = [
   { cle: 'proprietaire', fr: 'Le propriétaire', en: 'The owner' },
   { cle: 'responsable', fr: 'Le responsable du client', en: 'The client owner' },
+  { cle: 'equipe_du_deal', fr: 'Le rep assigné + propriétaires et admins', en: 'Assigned rep + owners and admins' },
   { cle: 'membre', fr: 'Un membre précis', en: 'A specific member' },
 ];
 

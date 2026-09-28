@@ -40,7 +40,7 @@
   "src/pages/EmailOAuthCallback.tsx": "aed3c0a2d1519fde",
   "src/pages/FieldSales.tsx": "235550451e2eb906",
   "src/pages/Finances.tsx": "c2e513eba64df466",
-  "src/pages/InvoiceDetails.tsx": "e14052d403b2908d",
+  "src/pages/InvoiceDetails.tsx": "4a055a8460b9cecb",
   "src/pages/InvoiceEdit.tsx": "991fe69805d857bf",
   "src/pages/InvoiceView.tsx": "3d07cd34d5180ac0",
   "src/pages/Invoices.tsx": "515d9f1b7eafbae9",

@@ -57,7 +57,15 @@ async function remettreLangue() {
 }
 const nav = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
 const nbNotifs = async () => (await admin.from('notifications').select('id', { count: 'exact', head: true })
-  .eq('org_id', ORG).eq('entity_type', 'quote').eq('entity_id', trace.quote)).count;
+  .eq('org_id', ORG).eq('entity_type', 'quote').eq('entity_id', trace.quote).eq('user_id', uidProprio)).count;
+const prevenus = async () => new Set(((await admin.from('notifications').select('user_id')
+  .eq('entity_id', trace.quote)).data ?? []).map((n) => n.user_id));
+const { data: equipe } = await admin.from('memberships').select('user_id, role').eq('org_id', ORG).eq('status', 'active');
+const proprios = equipe.filter((m) => m.role === 'owner').map((m) => m.user_id);
+const admins = equipe.filter((m) => m.role === 'admin').map((m) => m.user_id);
+const repVendeur = equipe.find((m) => m.role === 'sales_rep')?.user_id;
+const memeEnsemble = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
+let accesPoses = false;
 const etatQuote = async () => (await admin.from('quotes').select('view_count, is_viewed, viewed_at').eq('id', trace.quote).single()).data;
 /** Ouvre la page publique dans un navigateur NEUF (nouvelle session), anonyme. */
 async function ouvrirAnonyme(url, opts = {}) {
@@ -92,7 +100,7 @@ try {
   if (eQ) throw eQ; trace.quote = q.id;
   const { data: d, error: eD } = await admin.from('deals').insert({
     org_id: ORG, pipeline_id: pip.id, stage_id: envoyee.id, client_id: c.id, quote_id: q.id,
-    source: 'manual', created_by: uidProprio,
+    source: 'manual', created_by: uidProprio, assigned_user_id: repVendeur,
   }).select('id').single();
   if (eD) throw eD; trace.deal = d.id;
   const URLQ = `${BASE}/quote/${q.view_token}`;
@@ -108,8 +116,10 @@ try {
     vues.length === 1 && vues[0].org_id === ORG && vues[0].is_first_view === true && !!vues[0].session_hash
     && !!vues[0].user_agent_hash && vues[0].ip_address === null && vues[0].user_agent === null);
   const { data: n1 } = await admin.from('notifications').select('user_id, title, link').eq('entity_id', q.id);
-  verif('notification ciblée sur le responsable (c’est ce que la base pousse sur SES appareils)',
-    n1.length === 1 && n1[0].user_id === uidProprio, n1[0]?.title);
+  const attendus1 = new Set([...proprios, ...admins, repVendeur]);
+  verif('prévenus : le rep assigné + tous les propriétaires + les admins (pipeline ouvert)',
+    memeEnsemble(new Set(n1.map((n) => n.user_id)), attendus1) && n1.every((n) => n.user_id),
+    `${n1.length} personne(s), attendu ${attendus1.size}`);
   verif('le texte porte le client, le numéro et le total', /ZZSonde Ouverture/.test(n1[0]?.title ?? '') && /ZZSONDE-OUV/.test(n1[0]?.title ?? '') && /1\s?250/.test(n1[0]?.title ?? ''));
   verif('le bouton mène à la soumission dans l’app', n1[0]?.link === `/quotes/${q.id}`);
   await attendre(async () => (await admin.from('deals').select('stage_id').eq('id', d.id).single()).data.stage_id === ouverte.id);
@@ -130,6 +140,11 @@ try {
 
   // ── 3. « Chaque ouverture » : une 2e notification arrive ──
   await admin.from('automation_rules').update({ conditions: { ouverture: 'chaque' } }).eq('id', notif.id);
+  // Le pipeline est réservé au seul vendeur : l'admin n'y a plus accès.
+  const { error: eAcc } = await admin.from('pipeline_acces').insert({ org_id: ORG, pipeline_id: pip.id, user_id: repVendeur });
+  if (eAcc) throw eAcc;
+  accesPoses = true;
+  const avantRestreint = new Set(((await admin.from('notifications').select('id').eq('entity_id', q.id)).data ?? []).map((n) => n.id));
   // Le moteur ignore une 2e exécution de la même règle sur le même devis à
   // moins de 2 minutes (anti-double envoi, #698 : double clic, reprise
   // réseau). Une vraie réouverture arrive plus tard : on attend la fenêtre.
@@ -138,6 +153,13 @@ try {
   await ouvrirAnonyme(URLQ);
   await attendre(async () => (await nbNotifs()) >= 2);
   verif('mode « chaque ouverture » : 2e notification reçue', (await nbNotifs()) === 2);
+  const { data: n3 } = await admin.from('notifications').select('id, user_id').eq('entity_id', q.id);
+  const nouveaux = new Set(n3.filter((n) => !avantRestreint.has(n.id)).map((n) => n.user_id));
+  verif('pipeline réservé au vendeur : propriétaires + vendeur prévenus, admin exclu NON',
+    memeEnsemble(nouveaux, new Set([...proprios, repVendeur])) && admins.every((a) => !nouveaux.has(a)),
+    `${nouveaux.size} prévenu(s)`);
+  await admin.from('pipeline_acces').delete().eq('pipeline_id', pip.id).eq('user_id', repVendeur);
+  accesPoses = false;
 
   // ── 4. Robot / scanner de liens : rien ──
   const avantRobot = (await etatQuote()).view_count;
@@ -242,6 +264,7 @@ try {
 } finally {
   await nav.close();
   await remettreLangue();
+  if (accesPoses) await admin.from('pipeline_acces').delete().eq('pipeline_id', pip.id).eq('user_id', repVendeur);
   for (const r of etatRegles) await admin.from('automation_rules').update({ conditions: r.conditions, is_active: r.is_active }).eq('id', r.id);
   if (trace.quote) {
     // L'outbox (#695) garde une trace durable de chaque événement émis.

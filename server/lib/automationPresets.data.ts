@@ -23,7 +23,7 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
   {
     "preset_key": "quote_opened_notify",
     "name": "Me notifier quand un client ouvre sa soumission",
-    "description": "Notification (et push) au responsable de la soumission — à défaut, au propriétaire — dès la première ouverture.",
+    "description": "Notification (et push) au rep assigné, aux propriétaires et aux admins qui ont accès au pipeline — dès la première ouverture.",
     "trigger_event": "quote.viewed",
     "conditions": {
       "ouverture": "premiere"
@@ -33,7 +33,7 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
       {
         "type": "create_notification",
         "config": {
-          "destinataire": "responsable",
+          "destinataire": "equipe_du_deal",
           "title": "👀 {{client.nom}} vient d'ouvrir la soumission #{{soumission.numero}} ({{soumission.total}}). Bon moment pour appeler.",
           "body": "Ouverte le {{soumission.ouverte_le}} · {{soumission.nb_vues}} vue(s)",
           "lien": "{{soumission.lien_interne}}"
