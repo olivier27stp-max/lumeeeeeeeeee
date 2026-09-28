@@ -16,13 +16,18 @@
    ici du même coup, sans code en double.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { X, Zap } from 'lucide-react';
 import type { DeclencheurCatalogue } from '../../lib/automationCatalogue';
 import { champVisible, CASE_SORTIE } from '../../lib/automationCatalogue';
 import { useModuleAccess } from '../../hooks/useModuleAccess';
 import { apercuClientsInactifs } from '../../lib/reservationApi';
 import ChampActionUI from './ChampAction';
+import {
+  ConditionsChampsEtape, SaisieValeurChamp, SelecteurChamp, champComparable, champSurveille, objetDeLaRegle,
+  saisieDepuisValeurCondition, sansConditionsIncompletes, valeurConditionDepuisSaisie,
+} from '../champs/automatisations';
+import { LIBELLES_OBJET, type ChampPerso } from '../../lib/champs/types';
 
 interface Props {
   declencheur: DeclencheurCatalogue;
@@ -39,15 +44,49 @@ interface Props {
   etiquettes?: string[];
   /** Services du catalogue, pour le type `service`. */
   services?: Array<{ id: string; label: string }>;
+  /**
+   * Tous les champs personnalisés actifs : « quel champ ? » de « Champ
+   * modifié », et les FILTRES de la règle (`conditions.champs_perso`).
+   */
+  champsPerso?: ChampPerso[];
+  /** Ouvrir le tiroir pour changer de déclencheur (le clic sur la carte ouvre ce panneau). */
+  onChanger?: () => void;
   /** `arreterSiResolu` n'est fourni que si la case est affichée. */
   onEnregistrer: (conditions: Record<string, unknown>, arreterSiResolu?: boolean) => void;
   onFermer: () => void;
 }
 
 export default function PanneauDeclencheur({
-  declencheur, conditions, reglages, fr, champsDate, etapesPipeline = [], etiquettes = [], services = [], onEnregistrer, onFermer,
+  declencheur, conditions, reglages, fr, champsDate, etapesPipeline = [], etiquettes = [], services = [],
+  champsPerso = [], onChanger, onEnregistrer, onFermer,
 }: Props) {
   const idCase = useId();
+  const idChamp = useId();
+  const estChampModifie = declencheur.cle === 'custom_field.changed';
+  /*
+   * « Champ modifié » : QUEL champ, et « quand il devient … ». Le champ
+   * part en `{ field_id: { eq } }`, la valeur en `{ new_value: { eq } }` —
+   * deux clés que `evaluateConditions` compare déjà aux métadonnées de
+   * l'événement, sans code de plus côté moteur.
+   */
+  const [champId, setChampId] = useState(() => champSurveille(conditions));
+  const [devient, setDevientBrut] = useState('');
+  /*
+   * La valeur relue dépend du TYPE du champ (un montant stocké en cents
+   * s'affiche en dollars) — or les champs arrivent après le premier rendu.
+   * On la relit donc quand ils arrivent, tant que personne n'y a touché.
+   */
+  const devientTouche = useRef(false);
+  const setDevient = (v: string) => { devientTouche.current = true; setDevientBrut(v); };
+  useEffect(() => {
+    if (devientTouche.current) return;
+    const v = conditions?.new_value;
+    const brut = v && typeof v === 'object' && !Array.isArray(v) ? (v as { eq?: unknown }).eq : v;
+    setDevientBrut(saisieDepuisValeurCondition(champsPerso.find((c) => c.id === champSurveille(conditions)), brut));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- même raison que l'effet suivant : suivre la règle, pas l'objet.
+  }, [declencheur.cle, champsPerso]);
+  /** Les filtres de la règle : conditions sur les champs, jugées sur les valeurs ACTUELLES. */
+  const [filtres, setFiltres] = useState<Record<string, unknown>>({});
   // La case « Arrêter si… » : seulement pour les 4 déclencheurs concernés,
   // et seulement si l'entreprise a le drapeau. Absente de la règle = ce que
   // faisait le moteur avant (CASE_SORTIE.defaut).
@@ -74,6 +113,8 @@ export default function PanneauDeclencheur({
       init[champ.cle] = v === undefined || v === null ? '' : String(v);
     }
     setBrouillon(init);
+    setChampId(champSurveille(conditions));
+    setFiltres(Array.isArray(conditions?.champs_perso) ? { champs_perso: conditions?.champs_perso } : {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [declencheur.cle]);
 
@@ -121,7 +162,28 @@ export default function PanneauDeclencheur({
       // chaîne vide y devient 0 sans qu'on s'en aperçoive.
       sortie[champ.cle] = champ.type === 'nombre' ? Number(brut) : brut;
     }
-    onEnregistrer(sortie, caseSortie ? arreterSiResolu : undefined);
+    if (estChampModifie) {
+      delete sortie.field_id;
+      delete sortie.new_value;
+      if (champId) {
+        sortie.field_id = { eq: champId };
+        const champ = champsPerso.find((c) => c.id === champId);
+        const v = champ && champComparable(champ) ? valeurConditionDepuisSaisie(champ, devient) : null;
+        if (v !== null) sortie.new_value = { eq: v };
+      }
+    }
+    // Les filtres : une ligne incomplète est retirée, jamais enregistrée —
+    // elle bloquerait la règle pour toujours, sans un mot.
+    // Un filtre sur un champ d'un AUTRE objet que celui de l'événement (le
+    // champ surveillé a changé d'objet) ne serait jamais vrai : retiré aussi.
+    delete sortie.champs_perso;
+    const objet = objetDeLaRegle(declencheur.cle, sortie, champsPerso);
+    const gardes = (Array.isArray(filtres.champs_perso) ? filtres.champs_perso as Array<{ field_id: string }> : [])
+      .filter((c) => objet && champsPerso.find((x) => x.id === c.field_id)?.object_type === objet);
+    onEnregistrer(
+      sansConditionsIncompletes(gardes.length ? { ...sortie, champs_perso: gardes } : sortie),
+      caseSortie ? arreterSiResolu : undefined,
+    );
   };
 
   return (
@@ -152,6 +214,72 @@ export default function PanneauDeclencheur({
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        {onChanger && (
+          <button
+            type="button"
+            onClick={onChanger}
+            className="w-full rounded-lg border border-border px-3 py-2 text-left text-[12px] text-text-secondary transition-colors hover:border-accent hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Changer de déclencheur…' : 'Change trigger…'}
+          </button>
+        )}
+
+        {estChampModifie && (
+          <>
+            <div>
+              <label htmlFor={`${idChamp}-champ`} className="mb-1 block text-xs font-medium text-text-primary">
+                {fr ? 'Quel champ' : 'Which field'}
+                <span className="font-normal text-text-tertiary"> {fr ? '(facultatif)' : '(optional)'}</span>
+              </label>
+              <SelecteurChamp
+                id={`${idChamp}-champ`}
+                valeur={champId}
+                champs={champsPerso}
+                fr={fr}
+                onChange={(v) => { setChampId(v); setDevient(''); }}
+                className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              />
+              <p className="mt-1 text-[11px] text-text-tertiary">
+                {fr ? 'Vide = n’importe quel champ, sur n’importe quelle fiche.' : 'Empty = any field, on any record.'}
+              </p>
+            </div>
+            {(() => {
+              const champ = champsPerso.find((c) => c.id === champId);
+              if (!champ) {
+                return champId && champsPerso.length > 0 ? (
+                  <p className="text-[11px] text-danger">
+                    {fr ? 'Ce champ n’existe plus : choisissez-en un autre.' : 'This field no longer exists: pick another one.'}
+                  </p>
+                ) : null;
+              }
+              if (!champComparable(champ)) return null;
+              return (
+                <div>
+                  <label htmlFor={`${idChamp}-devient`} className="mb-1 block text-xs font-medium text-text-primary">
+                    {champ.field_type === 'dropdown_multi'
+                      ? (fr ? 'Quand il contient' : 'When it contains')
+                      : (fr ? 'Quand il devient' : 'When it becomes')}
+                    <span className="font-normal text-text-tertiary"> {fr ? '(facultatif)' : '(optional)'}</span>
+                  </label>
+                  <SaisieValeurChamp
+                    id={`${idChamp}-devient`}
+                    champ={champ}
+                    valeur={devient}
+                    onChange={setDevient}
+                    fr={fr}
+                    libelleVide={fr ? '— N’importe quelle valeur —' : '— Any value —'}
+                  />
+                  <p className="mt-1 text-[11px] text-text-tertiary">
+                    {fr
+                      ? `Fiche : ${LIBELLES_OBJET[champ.object_type].fr}. Vide = à chaque changement.`
+                      : `Record: ${LIBELLES_OBJET[champ.object_type].en}. Empty = on every change.`}
+                  </p>
+                </div>
+              );
+            })()}
+          </>
+        )}
+
         {champs.map((champ) =>
           champVisible(champ, brouillon) ? (
             <ChampActionUI
@@ -175,6 +303,32 @@ export default function PanneauDeclencheur({
               : `${nbInactifs} client${nbInactifs > 1 ? 's' : ''} match${nbInactifs > 1 ? '' : 'es'} today.`}
           </p>
         )}
+
+        {/*
+          FILTRES — « seulement si Nombre de fenêtres > 20 ». Conditions sur
+          les champs de la fiche de l'événement, jugées sur ses valeurs
+          ACTUELLES (conditionsChampsOk). Tant que l'objet n'est pas connu
+          (« Champ modifié » sans champ choisi), il n'y a rien à filtrer.
+        */}
+        {(() => {
+          const objet = objetDeLaRegle(
+            declencheur.cle,
+            { ...(conditions ?? {}), ...brouillon, ...(estChampModifie ? { field_id: champId } : {}) },
+            champsPerso,
+          );
+          if (!objet || !champsPerso.some((c) => c.object_type === objet)) return null;
+          return (
+            <section aria-label={fr ? 'Filtres' : 'Filters'} className="rounded-lg border border-border px-3 py-2.5">
+              <h3 className="text-xs font-semibold text-text-primary">{fr ? 'Filtres' : 'Filters'}</h3>
+              <p className="mt-0.5 text-[11px] text-text-tertiary">
+                {fr
+                  ? `Seulement si les champs de la fiche (${LIBELLES_OBJET[objet].fr}) remplissent ces conditions au moment de l’événement.`
+                  : `Only if the record’s fields (${LIBELLES_OBJET[objet].en}) meet these conditions when the event happens.`}
+              </p>
+              <ConditionsChampsEtape conditions={filtres} onChange={setFiltres} champs={champsPerso} objet={objet} fr={fr} />
+            </section>
+          );
+        })()}
 
         {caseSortie && (
           <div className="rounded-lg border border-border px-3 py-2.5">

@@ -472,11 +472,21 @@ export async function ecrireValeurs(
       // automatisations (« quand X change → mettre X à jour » bouclerait).
       if (r.changed && opts.source !== 'automation') {
         const ancien = r.old ? lireValeur(champ.field_type, r.old, (r.old.options as string[] | undefined) ?? []) : null;
+        /*
+         * La NOUVELLE valeur, normalisée comme l'ancienne (`lireValeur`) :
+         * « quand il devient … » (`conditions.new_value`) se compare à elle.
+         * Brute, elle dépendait de l'appelant — « true » ou true, « 12 » ou
+         * 12, un nombre non arrondi à ses décimales — et une règle pouvait
+         * rater un changement pourtant identique.
+         */
+        const nouveau = prep.colonnes || prep.options.length
+          ? lireValeur(champ.field_type, prep.colonnes ?? {}, prep.options)
+          : null;
         void eventBus.emit('custom_field.changed', {
           orgId, entityType: objet === 'deal' ? 'deal' : objet, entityId: entite, actorId: opts.acteur ?? undefined,
           metadata: {
             field_id: champ.id, field_key: champ.key, field_label: champ.label, object_type: objet,
-            old_value: ancien, new_value: e.value ?? null, source: opts.source ?? 'app',
+            old_value: ancien, new_value: nouveau, source: opts.source ?? 'app',
           },
         }).catch((err: unknown) => logger.error('[champs] événement custom_field.changed', { message: String(err) }));
       }

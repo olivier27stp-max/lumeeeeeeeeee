@@ -41,7 +41,9 @@ describe('P0-1 — le champ « Conditions » accepte le clavier', () => {
     // Afficher le texte brut ne suffit pas : ce qui part au serveur doit
     // rester à jour, sinon on tape et rien ne s'enregistre.
     expect(panneau).toMatch(/setConditionsTexte\(e\.target\.value\)/);
-    expect(panneau).toMatch(/conditions: analyserConditions\(e\.target\.value\)/);
+    // Les conditions de champs personnalisés (`champs_perso`) ne vivent pas
+    // dans le texte : elles sont reportées, sinon chaque frappe les effaçait.
+    expect(panneau).toMatch(/conditions: \{ \.\.\.analyserConditions\(e\.target\.value\), \.\.\.champsPersoDe\(brouillon\) \}/);
   });
 
   it('des exemples cliquables disent QUOI écrire', () => {

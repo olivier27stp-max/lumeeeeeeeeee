@@ -224,8 +224,8 @@ function ChampActionRendu({
           return (
             <p className="rounded-lg border border-dashed border-border px-3 py-2.5 text-[13px] text-text-secondary">
               {fr
-                ? 'Aucun champ date sur la fiche client. Créez-en un dans Paramètres → Champs personnalisés.'
-                : 'No date field on the client record. Create one in Settings → Custom fields.'}
+                ? 'Aucun champ date sur le client ni sur le pipeline. Créez-en un dans Paramètres → Champs personnalisés.'
+                : 'No date field on the client or the pipeline. Create one in Settings → Custom fields.'}
             </p>
           );
         }

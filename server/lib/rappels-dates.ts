@@ -131,12 +131,18 @@ export async function balayerRappelsDates(
         logger.warn('[rappels-dates] champ archivé — règle ignorée', { rule_id: regle.id });
         continue;
       }
-      if (champ.object_type !== 'client') {
-        logger.warn('[rappels-dates] champ date hors des fiches clients — règle ignorée', {
+      /*
+       * Client OU deal. Un deal porte ses propres dates (« Date de
+       * fermeture prévue ») : 3 jours avant → tâche de relance au rep.
+       * Les autres objets (job, devis, facture) ne sont pas balayés.
+       */
+      if (champ.object_type !== 'client' && champ.object_type !== 'deal') {
+        logger.warn('[rappels-dates] champ date hors des fiches clients et deals — règle ignorée', {
           rule_id: regle.id, object_type: champ.object_type,
         });
         continue;
       }
+      const surDeal = champ.object_type === 'deal';
       if (champ.field_type !== 'date') {
         // Un champ texte n'alimente pas `value_date` : la règle ne trouverait
         // jamais rien, sans erreur. On le dit plutôt que de balayer pour rien.
@@ -157,7 +163,8 @@ export async function balayerRappelsDates(
        * contre la vraie base avant correction — 0 émis sur une donnée
        * pourtant présente.
        */
-      const jourVise = jourDecale(decalageDeLaRegle(conditions), maintenant);
+      const decalage = decalageDeLaRegle(conditions);
+      const jourVise = jourDecale(decalage, maintenant);
 
       /*
        * Les valeurs qui tombent sur le jour visé.
@@ -168,7 +175,7 @@ export async function balayerRappelsDates(
        */
       const { data: valeurs, error: errVal } = await supabase
         .from('custom_field_values')
-        .select('client_id, value_date')
+        .select('client_id, deal_id, value_date')
         .eq('org_id', regle.org_id)
         .eq('field_id', champId)
         .eq('value_date', jourVise)
@@ -184,6 +191,43 @@ export async function balayerRappelsDates(
       if (!valeurs || valeurs.length === 0) continue;
 
       for (const v of valeurs) {
+        /*
+         * Sur un champ du DEAL, l'entité est le deal (ses actions et ses
+         * variables {{deal.cle}} marchent) — seulement s'il est encore
+         * OUVERT : un deal gagné, perdu ou supprimé n'a plus de relance à
+         * faire. Le client du message se résout depuis le deal (moteur).
+         */
+        if (surDeal) {
+          if (!v.deal_id) continue;
+          const { data: deal } = await supabase
+            .from('deals')
+            .select('id, deleted_at, pipeline_stages!deals_stage_same_org(kind)')
+            .eq('id', v.deal_id)
+            .eq('org_id', regle.org_id)
+            .maybeSingle();
+          const etape = (deal as { pipeline_stages?: { kind?: string } | Array<{ kind?: string }> | null } | null)?.pipeline_stages;
+          const kind = Array.isArray(etape) ? etape[0]?.kind : etape?.kind;
+          if (!deal || deal.deleted_at || kind !== 'open') continue;
+
+          await eventBus.emit('date.reached', {
+            orgId: regle.org_id,
+            entityType: 'deal',
+            entityId: v.deal_id,
+            metadata: {
+              champ_id: champId,
+              // Le moteur compare TOUTES les conditions de la règle aux
+              // métadonnées (`evaluateConditions`) : sans `jours_avant` ici,
+              // une règle « 3 jours avant » ne partait jamais.
+              jours_avant: decalage,
+              date: v.value_date,
+              // Même anti-doublon que pour un client : le jour du balayage.
+              jour: jourLocal(maintenant),
+            },
+          });
+          resume.emis += 1;
+          continue;
+        }
+
         /*
          * L'entité est le CLIENT : `custom_field_values.client_id` pointe la
          * fiche, et c'est elle que les messages décrivent.
@@ -207,6 +251,8 @@ export async function balayerRappelsDates(
           entityId: v.client_id,
           metadata: {
             champ_id: champId,
+            // Voir plus haut : la règle porte `jours_avant`, l'événement aussi.
+            jours_avant: decalage,
             date: v.value_date,
             // Le jour du balayage entre dans l'anti-doublon du moteur :
             // rejouer le cron le même jour ne renvoie rien.

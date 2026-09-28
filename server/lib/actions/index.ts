@@ -931,6 +931,8 @@ export async function resolveEntityVariables(
       if (r.job_id) refs.job = r.job_id;
       if (r.quote_id) refs.quote = r.quote_id;
     }
+    // {{deal.cle}} depuis un devis, une job ou un client : le deal LIÉ.
+    if (!refs.deal) refs.deal = await dealLie(supabase, orgId, entityType, entityId, refs.client ?? null);
     Object.assign(vars, await variablesChamps(supabase, orgId, refs, company?.default_language === 'en' ? 'en' : 'fr'));
   } catch (err) {
     console.error('[resolveEntityVariables] champs personnalisés illisibles :', err instanceof Error ? err.message : err);
@@ -938,6 +940,61 @@ export async function resolveEntityVariables(
   if (vars.client_name && vars['client.nom'] === undefined) vars['client.nom'] = vars.client_name;
 
   return vars;
+}
+
+/**
+ * Le deal LIÉ à l'entité d'un événement, pour que {{deal.cle}} (et les
+ * variables système du deal) marchent aussi depuis un devis, une job ou un
+ * client — pas seulement depuis une automatisation qui part du deal.
+ *
+ *   · devis : le deal qui le porte (`deals.quote_id`, quel que soit son
+ *     stade), sinon le deal OUVERT le plus récent de son client — même règle
+ *     que `dealDeLaSoumission` ;
+ *   · job : le deal qui la porte (`deals.job_id`) ;
+ *   · client : son deal OUVERT le plus récent.
+ *
+ * UNE requête, toujours bornée à l'org (client service_role : pas de RLS).
+ * `null` = aucun deal, jamais une erreur : les variables restent vides.
+ */
+export async function dealLie(
+  supabase: SupabaseClient, orgId: string, entityType: string, entityId: string, clientId: string | null,
+): Promise<string | null> {
+  const estUuid = (x: string | null): x is string => !!x && /^[0-9a-f-]{36}$/i.test(x);
+  let filtre: string;
+  if (entityType === 'quote' && estUuid(entityId)) {
+    filtre = estUuid(clientId) ? `quote_id.eq.${entityId},client_id.eq.${clientId}` : `quote_id.eq.${entityId}`;
+  } else if (entityType === 'job' && estUuid(entityId)) {
+    filtre = `job_id.eq.${entityId}`;
+  } else if ((entityType === 'client' || entityType === 'lead') && estUuid(entityId)) {
+    filtre = `client_id.eq.${entityId}`;
+  } else {
+    return null;
+  }
+  let data: unknown[] | null = null;
+  try {
+    const r = await supabase
+      .from('deals')
+      .select('id, quote_id, job_id, pipeline_stages!deals_stage_same_org(kind)')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .or(filtre)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (r.error) throw new Error(r.error.message);
+    data = r.data;
+  } catch (err) {
+    // Jamais au point de priver le message des AUTRES variables de champs.
+    console.error('[dealLie] deal lié illisible :', err instanceof Error ? err.message : err);
+    return null;
+  }
+  type Ligne = { id: string; quote_id: string | null; job_id: string | null; pipeline_stages: { kind?: string } | Array<{ kind?: string }> | null };
+  const lignes = (data ?? []) as unknown as Ligne[];
+  const ouvert = (l: Ligne) => (Array.isArray(l.pipeline_stages) ? l.pipeline_stages[0]?.kind : l.pipeline_stages?.kind) === 'open';
+  if (entityType === 'quote') {
+    return lignes.find((l) => l.quote_id === entityId)?.id ?? lignes.find(ouvert)?.id ?? null;
+  }
+  if (entityType === 'job') return lignes.find((l) => l.job_id === entityId)?.id ?? null;
+  return lignes.find(ouvert)?.id ?? null;
 }
 
 // ── Action: Send Email ──────────────────────────────────────
