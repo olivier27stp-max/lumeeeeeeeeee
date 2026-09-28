@@ -20,7 +20,7 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ChevronDown, Columns3, GripVertical, Lock, Paperclip, Plus, Search, X } from 'lucide-react';
+import { ChevronRight, Columns3, GripVertical, Lock, Paperclip, Search, X } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core';
@@ -237,18 +237,19 @@ function LigneTableau({ id, libelle, verrouillee, fr, onRetirer }: {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: verrouillee });
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
-      className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-secondary">
+      className="flex items-center gap-2.5 rounded-md px-2 py-2 hover:bg-surface-secondary">
       {verrouillee ? (
-        <span className="p-0.5 text-text-tertiary" title={fr ? 'Toujours affichée' : 'Always shown'}><Lock size={14} aria-hidden /></span>
+        <span className="p-0.5 text-text-tertiary/40" aria-hidden><GripVertical size={14} /></span>
       ) : (
         <button type="button" {...attributes} {...listeners} aria-label={fr ? `Déplacer ${libelle}` : `Move ${libelle}`}
           className="cursor-grab rounded p-0.5 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
           <GripVertical size={14} aria-hidden />
         </button>
       )}
-      <input type="checkbox" checked disabled={verrouillee} onChange={onRetirer} className="h-4 w-4 accent-primary disabled:opacity-60"
+      <input type="checkbox" checked disabled={verrouillee} onChange={onRetirer} className="h-4 w-4 accent-primary disabled:opacity-40"
         aria-label={verrouillee ? (fr ? `${libelle} (toujours affichée)` : `${libelle} (always shown)`) : (fr ? `Retirer ${libelle} du tableau` : `Remove ${libelle} from the table`)} />
       <span className="min-w-0 flex-1 truncate text-[14px] text-text-primary">{libelle}</span>
+      {verrouillee && <span className="text-text-secondary" title={fr ? 'Toujours affichée' : 'Always shown'}><Lock size={14} aria-hidden /></span>}
     </li>
   );
 }
@@ -263,7 +264,8 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
   const ids = useId();
   const [brouillon, setBrouillon] = useState<IdColonne[]>(colonnes);
   const [recherche, setRecherche] = useState('');
-  const [replies, setReplies] = useState<Set<string>>(new Set());
+  // Comme GHL : groupes repliés à l'ouverture ; une recherche les déplie tous.
+  const [ouverts, setOuverts] = useState<Set<string>>(new Set());
   const [creation, setCreation] = useState(false);
   const [envoi, setEnvoi] = useState(false);
   // Un champ créé ici n'est pas encore dans `champs` (la liste se recharge) : gardé à part.
@@ -314,7 +316,7 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
     setEnvoi(true);
     try { await onAppliquer(brouillon); } catch { /* signalé par le hook (toast), le panneau reste ouvert */ } finally { setEnvoi(false); }
   };
-  const basculer = (cle: string) => setReplies((r) => { const n = new Set(r); if (n.has(cle)) n.delete(cle); else n.add(cle); return n; });
+  const basculer = (cle: string) => setOuverts((r) => { const n = new Set(r); if (n.has(cle)) n.delete(cle); else n.add(cle); return n; });
 
   // La fenêtre de création est une SŒUR du panneau, pas un enfant : un clic sur
   // son fond ne doit pas remonter jusqu'au fond du panneau et le fermer aussi.
@@ -322,9 +324,9 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
     <>
     <div className="fixed inset-0 z-[80] flex justify-end bg-black/30" role="presentation" tabIndex={-1} onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-labelledby={`${ids}-titre`} tabIndex={-1} onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full flex-col bg-surface shadow-xl sm:w-[420px]">
+        className="flex h-full w-full flex-col bg-surface shadow-xl sm:w-[460px]">
         <div className="flex items-center justify-between border-b border-outline px-5 py-4">
-          <h2 id={`${ids}-titre`} className="text-[16px] font-semibold text-text-primary">{fr ? 'Gérer les champs' : 'Manage fields'}</h2>
+          <h2 id={`${ids}-titre`} className="text-[18px] font-semibold text-text-primary">{fr ? 'Gérer les champs' : 'Manage fields'}</h2>
           <button type="button" onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'}
             className="rounded p-1 text-text-tertiary hover:bg-surface-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><X size={18} aria-hidden /></button>
         </div>
@@ -338,10 +340,10 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
           </div>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-          <section aria-labelledby={`${ids}-tableau`}>
-            <h3 id={`${ids}-tableau`} className="mb-1 px-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">
-              {fr ? 'Champs dans le tableau' : 'Fields in table'} ({brouillon.length})
+        <div className="flex-1 space-y-5 overflow-y-auto py-4">
+          <section aria-labelledby={`${ids}-tableau`} className="px-3">
+            <h3 id={`${ids}-tableau`} className="mb-2 px-2 text-[15px] font-semibold text-text-primary">
+              {fr ? 'Champs dans le tableau' : 'Fields in table'}
             </h3>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={surDrag}
               accessibility={{ screenReaderInstructions: { draggable: fr
@@ -360,28 +362,28 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
           </section>
 
           <section aria-labelledby={`${ids}-ajouter`}>
-            <h3 id={`${ids}-ajouter`} className="mb-1 px-2 text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">
+            <h3 id={`${ids}-ajouter`} className="mb-2 px-5 text-[15px] font-semibold text-text-primary">
               {fr ? 'Ajouter des champs' : 'Add fields'}
             </h3>
             {groupes.length === 0 && (
-              <p className="px-2 text-[13px] text-text-tertiary">
+              <p className="px-5 text-[13px] text-text-tertiary">
                 {q ? (fr ? 'Aucun champ ne correspond.' : 'No matching field.') : (fr ? 'Tous les champs sont déjà dans le tableau.' : 'Every field is already in the table.')}
               </p>
             )}
             {groupes.map((g) => {
-              const replie = replies.has(g.cle);
+              const replie = !q && !ouverts.has(g.cle);
               return (
-                <div key={g.cle} className="mb-1">
+                <div key={g.cle} className="border-b border-outline first-of-type:border-t">
                   <button type="button" aria-expanded={!replie} onClick={() => basculer(g.cle)}
-                    className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[13px] font-medium text-text-primary hover:bg-surface-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-                    <span>{g.titre} <span className="font-normal text-text-tertiary">({g.elements.length})</span></span>
-                    <ChevronDown size={14} aria-hidden className={cn('text-text-tertiary transition-transform', replie && '-rotate-90')} />
+                    className="flex w-full items-center gap-2 bg-surface-secondary/60 px-5 py-3.5 text-left text-[14px] text-text-primary hover:bg-surface-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40">
+                    <ChevronRight size={15} aria-hidden className={cn('text-text-secondary transition-transform', !replie && 'rotate-90')} />
+                    <span>{g.titre}</span>
                   </button>
                   {!replie && (
-                    <ul>
+                    <ul className="py-1">
                       {g.elements.map((e) => (
                         <li key={e.id}>
-                          <label htmlFor={`${ids}-${e.id}`} className="flex items-center gap-2 rounded-md py-1.5 pl-8 pr-2 text-[14px] text-text-primary hover:bg-surface-secondary">
+                          <label htmlFor={`${ids}-${e.id}`} className="flex items-center gap-2.5 py-2 pl-11 pr-5 text-[14px] text-text-primary hover:bg-surface-secondary">
                             <input id={`${ids}-${e.id}`} type="checkbox" checked={false} className="h-4 w-4 accent-primary"
                               onChange={() => setBrouillon((b) => [...b, e.id])} />
                             <span className="truncate">{e.libelle}</span>
@@ -396,14 +398,14 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
           </section>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-outline px-5 py-3">
+        <div className="flex items-center justify-between gap-2 border-t border-outline px-5 py-3">
           {peutCreer ? (
             <button type="button" onClick={() => setCreation(true)}
-              className="inline-flex items-center gap-1 rounded text-[13px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-              <Plus size={14} aria-hidden />{fr ? 'Ajouter un champ personnalisé' : 'Add custom field'}
+              className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap rounded text-[13px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+              {fr ? 'Ajouter un champ personnalisé' : 'Add custom field'}
             </button>
           ) : <span />}
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-2">
             <button type="button" onClick={onClose} className="glass-button px-4 py-2 text-[13px]">{fr ? 'Annuler' : 'Cancel'}</button>
             <button type="button" onClick={() => { void appliquer(); }} disabled={!change || envoi}
               className="glass-button-primary px-4 py-2 text-[13px] disabled:opacity-50">{fr ? 'Appliquer' : 'Apply'}</button>
