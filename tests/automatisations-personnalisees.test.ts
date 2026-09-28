@@ -426,7 +426,10 @@ describe('permissions et RLS', () => {
   it('la route est montée et limitée en débit', () => {
     const index = lire('server/index.ts');
     expect(index).toMatch(/automationRulesRouter/);
-    expect(index).toMatch(/app\.use\('\/api\/automations\/rules', automationLimiter\)/);
+    expect(index).toMatch(/app\.use\('\/api\/automations\/rules', reglesLimiter\)/);
+    // Plafonds par usage : la génération (coûteuse) reste à 30 / min.
+    expect(index).toMatch(/regleGenerationLimiter = rateLimit\(\{ windowMs: 60_000, max: 30/);
+    expect(index).toMatch(/if \(req\.path\.startsWith\('\/generer'\)\) return regleGenerationLimiter/);
   });
 });
 

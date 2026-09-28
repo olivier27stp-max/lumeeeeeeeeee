@@ -499,7 +499,21 @@ export default function AutomationBuilderPage() {
   // ── Chargement ──
   useEffect(() => {
     let vivant = true;
-    chargerAutomatisations()
+    /*
+     * Un échec passager (serveur occupé, 429, réseau) ne doit pas laisser
+     * l'éditeur vide : on réessaie deux fois (1,5 s puis 3 s) avant de le
+     * dire. Signalé le 2026-09-28 : « y en a qui s'ouvrent pas ».
+     */
+    const chargerAvecReprise = async (essai = 1): Promise<Awaited<ReturnType<typeof chargerAutomatisations>>> => {
+      try {
+        return await chargerAutomatisations();
+      } catch (e) {
+        if (essai >= 3 || !vivant) throw e;
+        await new Promise((r) => setTimeout(r, 1500 * essai));
+        return chargerAvecReprise(essai + 1);
+      }
+    };
+    chargerAvecReprise()
       .then((d) => {
         if (!vivant) return;
         setCatalogue(d.catalogue);
