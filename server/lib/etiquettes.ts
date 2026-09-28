@@ -58,6 +58,33 @@ export async function annoncerEtiquette(admin: SupabaseClient, a: AnnonceEtiquet
   }
 }
 
+/**
+ * Filtres « le client a / n'a pas l'étiquette » d'une règle, jugés sur les
+ * étiquettes ACTUELLES du client de la fiche. Sans filtre : vrai. Un filtre
+ * posé sur une fiche sans client : faux (on ne prévient pas au hasard).
+ */
+export async function conditionsEtiquettesOk(
+  admin: SupabaseClient,
+  clientId: () => Promise<string | null>,
+  conditions: Record<string, unknown> | null | undefined,
+): Promise<boolean> {
+  const texte = (v: unknown) => (typeof v === 'string' ? v.trim().toLowerCase() : '');
+  const a = texte(conditions?.client_a_etiquette);
+  const sans = texte(conditions?.client_sans_etiquette);
+  if (!a && !sans) return true;
+  const id = await clientId();
+  if (!id) return false;
+  const { data, error } = await admin.from('client_tags').select('tag').eq('client_id', id);
+  if (error) {
+    logger.error('[etiquettes] filtre illisible — règle retenue', { clientId: id, error: error.message });
+    return false;
+  }
+  const posees = new Set(((data ?? []) as Array<{ tag: string }>).map((r) => r.tag.toLowerCase()));
+  if (a && !posees.has(a)) return false;
+  if (sans && posees.has(sans)) return false;
+  return true;
+}
+
 /** La règle `ruleId` doit-elle être ignorée pour cet événement (boucle) ? */
 export function regleDansLaChaine(metadata: Record<string, unknown> | undefined, ruleId: string): boolean {
   const chaine = Array.isArray(metadata?.chaine) ? (metadata!.chaine as unknown[]) : [];

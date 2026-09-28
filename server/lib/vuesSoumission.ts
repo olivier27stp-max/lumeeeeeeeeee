@@ -141,7 +141,7 @@ export async function enregistrerOuverture(
     let deal = dealQ.data as { pipeline_id: string; stage_id: string } | null;
     if (!deal && contactId) {
       const { data: ouvert } = await admin
-        .from('deals').select('pipeline_id, stage_id, pipeline_stages!inner(kind)')
+        .from('deals').select('pipeline_id, stage_id, pipeline_stages!deals_stage_same_org!inner(kind)')
         .eq('org_id', quote.org_id).eq('client_id', contactId).is('deleted_at', null)
         .eq('pipeline_stages.kind', 'open').order('created_at', { ascending: false }).limit(1);
       deal = ((ouvert ?? [])[0] as { pipeline_id: string; stage_id: string } | undefined) ?? null;
