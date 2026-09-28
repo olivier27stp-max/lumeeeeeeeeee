@@ -1100,3 +1100,36 @@ export async function fetchLeadJobLineItems(leadId: string): Promise<Array<{
 export function formatQuoteMoney(cents: number, currency = 'CAD'): string {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency }).format(cents / 100);
 }
+
+/**
+ * En-têtes de la page PUBLIQUE d'une soumission — ce que le serveur lit pour
+ * décider si l'ouverture compte (server/lib/vuesSoumission.ts) :
+ *   · `x-lume-session` : un identifiant tiré au hasard pour cet onglet, qui
+ *     ne quitte pas le navigateur autrement. Un rechargement dans les 30
+ *     minutes ne compte pas une seconde vue. Rien d'identifiant : il n'est
+ *     lié à aucun compte, et le serveur n'en garde qu'une empreinte.
+ *   · `Authorization` : si la personne est CONNECTÉE à Lume (un membre qui
+ *     vérifie ce qu'il a envoyé), le serveur ne compte pas l'ouverture.
+ */
+export async function enTetesVueSoumission(): Promise<Record<string, string>> {
+  const tetes: Record<string, string> = {};
+  try {
+    let id = sessionStorage.getItem('lume-vue-session');
+    if (!id) {
+      id = crypto.randomUUID();
+      sessionStorage.setItem('lume-vue-session', id);
+    }
+    tetes['x-lume-session'] = id;
+  } catch (e) {
+    // Navigation privée stricte : pas de session, le serveur compte quand même.
+    console.warn('[quotes] session de vue indisponible', e);
+  }
+  try {
+    const { data } = await supabase.auth.getSession();
+    const jeton = data.session?.access_token;
+    if (jeton) tetes.Authorization = `Bearer ${jeton}`;
+  } catch (e) {
+    console.warn('[quotes] session Lume illisible', e);
+  }
+  return tetes;
+}

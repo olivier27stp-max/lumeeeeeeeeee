@@ -31,12 +31,16 @@ interface Props {
   champsDate: Array<{ id: string; label: string }>;
   /** Étapes des pipelines, pour le type `etape_pipeline`. */
   etapesPipeline?: Array<{ id: string; label: string }>;
+  /** Étiquettes existantes (suggestions), pour le type `etiquette`. */
+  etiquettes?: string[];
+  /** Services du catalogue, pour le type `service`. */
+  services?: Array<{ id: string; label: string }>;
   onEnregistrer: (conditions: Record<string, unknown>) => void;
   onFermer: () => void;
 }
 
 export default function PanneauDeclencheur({
-  declencheur, conditions, fr, champsDate, etapesPipeline = [], onEnregistrer, onFermer,
+  declencheur, conditions, fr, champsDate, etapesPipeline = [], etiquettes = [], services = [], onEnregistrer, onFermer,
 }: Props) {
   /*
    * Le brouillon : toutes les valeurs en TEXTE, comme les champs d'action.
@@ -124,6 +128,8 @@ export default function PanneauDeclencheur({
               fr={fr}
               champsDate={champsDate}
               etapesPipeline={etapesPipeline}
+              etiquettes={etiquettes}
+              services={services}
             />
           ) : null,
         )}

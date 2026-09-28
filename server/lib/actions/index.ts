@@ -4,6 +4,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { insertTargetedNotifications } from '../notificationHelpers';
 import { executerMajChamp } from '../champs/automatisations';
 import { variablesChamps } from '../champs/service';
 import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
@@ -388,7 +389,10 @@ export function resolveTemplate(
   // Support both {var} and [var] syntax for backward compatibility, normalize to {var}
   // Champs personnalisés : {{client.cle}} (format GoHighLevel) = {client_cf_cle}.
   return template
-    .replace(/\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g, (_, objet, cle) => vars[`${objet}_cf_${cle}`] ?? '')
+    // Variables intégrées pointées ({{client.nom}}, {{soumission.total}}…)
+    // AVANT les champs personnalisés : un champ perso nommé « nom » ne doit
+    // pas masquer le nom du client.
+    .replace(/\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g, (_, objet, cle) => vars[`${objet}.${cle}`] ?? vars[`${objet}_cf_${cle}`] ?? '')
     .replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '')
     .replace(/\[(\w+)\]/g, (_, key) => vars[key] ?? '');
 }
@@ -633,7 +637,7 @@ export async function resolveEntityVariables(
   if (entityType === 'quote') {
     const { data: quote } = await supabase
       .from('quotes')
-      .select('quote_number, total_cents, currency, valid_until, client_id, lead_id, job_id, view_token')
+      .select('quote_number, total_cents, currency, valid_until, client_id, lead_id, job_id, view_token, view_count, viewed_at')
       .eq('id', entityId)
       .eq('org_id', orgId)
       .maybeSingle();
@@ -667,6 +671,21 @@ export async function resolveEntityVariables(
         const { data: j } = await supabase.from('jobs').select('title').eq('id', quote.job_id).eq('org_id', orgId).maybeSingle();
         if (j) vars.job_name = j.title || '';
       }
+
+      // Variables « à la GoHighLevel » du déclencheur « Soumission ouverte
+      // par le client » (mission 2026-09-28) — utilisables partout.
+      vars['soumission.numero'] = vars.quote_number;
+      vars['soumission.total'] = vars.quote_total;
+      vars['soumission.lien'] = vars.quote_link ?? '';
+      // Lien INTERNE (la fiche dans l'app) : c'est lui qu'ouvre le bouton
+      // d'une notification à l'équipe, pas la page publique du client.
+      vars['soumission.lien_interne'] = `/quotes/${entityId}`;
+      vars['soumission.nb_vues'] = String(quote.view_count ?? 0);
+      vars['soumission.ouverte_le'] = quote.viewed_at
+        ? new Intl.DateTimeFormat(locale, {
+          dateStyle: 'medium', timeStyle: 'short', timeZone: company?.timezone || 'America/Montreal',
+        }).format(new Date(quote.viewed_at))
+        : '';
     }
   }
 
@@ -806,6 +825,8 @@ export async function resolveEntityVariables(
   } catch (err) {
     console.error('[resolveEntityVariables] champs personnalisés illisibles :', err instanceof Error ? err.message : err);
   }
+  if (vars.client_name && vars['client.nom'] === undefined) vars['client.nom'] = vars.client_name;
+
   return vars;
 }
 
@@ -1099,24 +1120,110 @@ export async function executeSendSms(
 
 // ── Action: Create Notification ─────────────────────────────
 
+/**
+ * « Pour qui » d'une notification d'automatisation.
+ *
+ * L'éditeur proposait ce choix (propriétaire / responsable / un membre) mais
+ * le serveur l'IGNORAIT : chaque notification partait à toute l'entreprise,
+ * sans push ciblé (constaté le 2026-09-28). Désormais :
+ *   · membre       → ce membre (s'il est actif) ;
+ *   · responsable  → le responsable de l'entité (soumission : vendeur, sinon
+ *                    créateur ; deal : assigné ; client : responsable) ;
+ *   · proprietaire → les propriétaires.
+ * Personne de résolu → repli sur les propriétaires, jamais le vide.
+ */
+async function destinatairesNotification(
+  config: { destinataire?: string; membre_id?: string },
+  ctx: ActionContext,
+): Promise<Map<string, 'fr' | 'en'>> {
+  const { data: membres } = await ctx.supabase
+    .from('memberships')
+    .select('user_id, role, status, language')
+    .eq('org_id', ctx.orgId);
+  const actifs = ((membres ?? []) as Array<{ user_id: string; role: string | null; status: string | null; language: string | null }>)
+    .filter((m) => m.user_id && (!m.status || m.status === 'active'));
+  const langue = (m: { language: string | null }) => (m.language === 'en' ? 'en' : 'fr') as 'fr' | 'en';
+  const pour = (ids: Array<string | null | undefined>) => {
+    const out = new Map<string, 'fr' | 'en'>();
+    for (const m of actifs) if (ids.includes(m.user_id)) out.set(m.user_id, langue(m));
+    return out;
+  };
+  const proprietaires = () => {
+    const out = new Map<string, 'fr' | 'en'>();
+    for (const m of actifs) if (m.role === 'owner') out.set(m.user_id, langue(m));
+    return out;
+  };
+
+  let choisis = new Map<string, 'fr' | 'en'>();
+  if (config.destinataire === 'membre' && config.membre_id) {
+    choisis = pour([config.membre_id]);
+  } else if (config.destinataire === 'responsable') {
+    let responsable: string | null = null;
+    if (ctx.entityType === 'quote') {
+      const { data } = await ctx.supabase.from('quotes').select('salesperson_id, created_by')
+        .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
+      responsable = (data?.salesperson_id as string | null) ?? (data?.created_by as string | null) ?? null;
+    } else if (ctx.entityType === 'deal') {
+      const { data } = await ctx.supabase.from('deals').select('assigned_user_id')
+        .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
+      responsable = (data?.assigned_user_id as string | null) ?? null;
+    } else {
+      const clientId = await clientDeLEntite(ctx);
+      if (clientId) {
+        const { data } = await ctx.supabase.from('clients').select('assigned_to')
+          .eq('id', clientId).eq('org_id', ctx.orgId).maybeSingle();
+        responsable = (data as { assigned_to?: string | null } | null)?.assigned_to ?? null;
+      }
+    }
+    choisis = pour([responsable]);
+  }
+  return choisis.size > 0 ? choisis : proprietaires();
+}
+
 export async function executeCreateNotification(
-  config: { title: string; body: string; reference_id?: string },
+  config: { title: string; body: string; reference_id?: string; destinataire?: string; membre_id?: string; lien?: string },
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
   const title = resolveTemplate(config.title, vars);
-  const body = resolveTemplate(config.body, vars);
+  const body = resolveTemplate(config.body ?? '', vars);
+  const lien = config.lien ? resolveTemplate(config.lien, vars) : null;
 
-  const { error } = await ctx.supabase.from('notifications').insert({
-    org_id: ctx.orgId,
-    type: 'automation',
-    title,
-    body,
-    reference_id: config.reference_id || ctx.entityId,
-  });
+  // « Pour qui » laissé vide : comportement HISTORIQUE, inchangé — une
+  // notification pour toute l'équipe. Les règles existantes sans
+  // destinataire (« Nouveau prospect »…) continuent de prévenir les mêmes
+  // personnes qu'avant.
+  if (!config.destinataire) {
+    const { error } = await ctx.supabase.from('notifications').insert({
+      org_id: ctx.orgId,
+      type: 'automation',
+      title,
+      body,
+      reference_id: config.reference_id || ctx.entityId,
+      link: lien,
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: { title, destinataires: 'equipe' } };
+  }
 
-  if (error) return { success: false, error: error.message };
-  return { success: true, data: { title } };
+  const destinataires = await destinatairesNotification(config, ctx);
+  // Une ligne PAR destinataire : chacun son non-lu, la RLS ne montre la ligne
+  // qu'à lui, et le déclencheur fn_push_on_notification pousse sur SES
+  // appareils — c'est ce qui fait le push ciblé.
+  await insertTargetedNotifications(
+    ctx.supabase,
+    ctx.orgId,
+    destinataires,
+    () => ({ title, body }),
+    {
+      type: 'automation',
+      entityType: ctx.entityType,
+      entityId: config.reference_id || ctx.entityId,
+      link: lien,
+      icon: ctx.entityType === 'quote' ? 'eye' : null,
+    },
+  );
+  return { success: true, data: { title, destinataires: destinataires.size } };
 }
 
 // ── Action: Create Task ─────────────────────────────────────
@@ -1530,38 +1637,95 @@ export async function executeLogActivity(
  * automatisation produit donc exactement le même résultat qu'un
  * glisser-déposer à l'écran.
  */
+/**
+ * Le deal LIÉ à une soumission : celui qui la porte (`deals.quote_id`),
+ * sinon le deal ouvert le plus récent de son client. `null` = aucun — pas
+ * une erreur : une soumission faite hors pipeline n'a rien à déplacer.
+ */
+async function dealDeLaSoumission(ctx: ActionContext): Promise<{ id: string; pipeline_id: string; stage_id: string } | null> {
+  const { data: direct } = await ctx.supabase
+    .from('deals').select('id, pipeline_id, stage_id')
+    .eq('org_id', ctx.orgId).eq('quote_id', ctx.entityId).is('deleted_at', null)
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (direct) return direct as { id: string; pipeline_id: string; stage_id: string };
+
+  const { data: q } = await ctx.supabase.from('quotes').select('client_id, lead_id')
+    .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
+  const client = (q?.client_id as string | null) ?? (q?.lead_id as string | null) ?? null;
+  if (!client) return null;
+  const { data: ouverts } = await ctx.supabase
+    .from('deals').select('id, pipeline_id, stage_id, pipeline_stages!inner(kind)')
+    .eq('org_id', ctx.orgId).eq('client_id', client).is('deleted_at', null)
+    .eq('pipeline_stages.kind', 'open')
+    .order('created_at', { ascending: false }).limit(1);
+  const d = (ouverts ?? [])[0] as { id: string; pipeline_id: string; stage_id: string } | undefined;
+  return d ?? null;
+}
+
 export async function executeMoveDealStage(
-  config: { stage_id: string },
+  config: { stage_id?: string; depuis_role?: string; vers_role?: string; cible?: string },
   _vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  if (ctx.entityType !== 'deal') {
-    return { success: false, error: `move_deal_stage ne s'applique qu'à un deal (reçu : ${ctx.entityType}).` };
+  // « Vers : l'étape Soumission ouverte » choisi dans l'éditeur.
+  if (config?.cible === 'role') {
+    config = { ...config, depuis_role: 'soumission_envoyee', vers_role: 'soumission_ouverte' };
   }
-  if (!config?.stage_id) {
-    return { success: false, error: 'move_deal_stage : stage_id manquant.' };
+  if (ctx.entityType !== 'deal' && ctx.entityType !== 'quote') {
+    return { success: false, error: `move_deal_stage s'applique à un deal ou à une soumission (reçu : ${ctx.entityType}).` };
+  }
+  if (!config?.stage_id && !config?.vers_role) {
+    return { success: false, error: 'move_deal_stage : stage_id (ou vers_role) manquant.' };
   }
 
-  const { data: deal, error: dealErr } = await ctx.supabase
-    .from('deals')
-    .select('id, pipeline_id, stage_id')
-    .eq('id', ctx.entityId)
-    .eq('org_id', ctx.orgId)
-    .is('deleted_at', null)
-    .maybeSingle();
-
-  if (dealErr) return { success: false, error: dealErr.message };
+  let deal: { id: string; pipeline_id: string; stage_id: string } | null;
+  if (ctx.entityType === 'quote') {
+    deal = await dealDeLaSoumission(ctx);
+    // Aucune opportunité liée : rien à déplacer, et ce n'est pas un échec.
+    if (!deal) return { success: true, data: { aucun_deal: true } };
+  } else {
+    const { data, error: dealErr } = await ctx.supabase
+      .from('deals')
+      .select('id, pipeline_id, stage_id')
+      .eq('id', ctx.entityId)
+      .eq('org_id', ctx.orgId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (dealErr) return { success: false, error: dealErr.message };
+    deal = data as typeof deal;
+  }
   if (!deal) return { success: false, error: 'Deal introuvable dans cette organisation.' };
 
-  if (deal.stage_id === config.stage_id) {
+  // Étapes repérées par RÔLE, dans le pipeline DU DEAL : l'entreprise peut
+  // les renommer ou les réordonner, la règle suit.
+  if (config.vers_role) {
+    const { data: roles } = await ctx.supabase
+      .from('pipeline_stages').select('id, role_systeme, position')
+      .eq('pipeline_id', deal.pipeline_id).eq('org_id', ctx.orgId).is('archived_at', null)
+      .in('role_systeme', [config.vers_role, config.depuis_role].filter(Boolean) as string[]);
+    const vers = (roles ?? []).find((r) => r.role_systeme === config.vers_role);
+    if (!vers) return { success: true, data: { pas_d_etape_cible: true } };
+    if (config.depuis_role) {
+      const depuis = (roles ?? []).find((r) => r.role_systeme === config.depuis_role);
+      // Seulement depuis l'étape prévue : un deal déjà plus loin (ou
+      // ailleurs) ne recule JAMAIS.
+      if (!depuis || deal.stage_id !== depuis.id) {
+        return { success: true, data: { deja_ailleurs: true } };
+      }
+    }
+    config = { ...config, stage_id: vers.id as string };
+  }
+  const cible = config.stage_id as string;
+
+  if (deal.stage_id === cible) {
     // Pas une erreur : la règle a déjà produit son effet.
-    return { success: true, data: { deja_dans_l_etape: true, stage_id: config.stage_id } };
+    return { success: true, data: { deja_dans_l_etape: true, stage_id: cible } };
   }
 
   const { data: etape, error: etapeErr } = await ctx.supabase
     .from('pipeline_stages')
     .select('id, pipeline_id, archived_at, name_fr')
-    .eq('id', config.stage_id)
+    .eq('id', cible)
     .eq('org_id', ctx.orgId)
     .maybeSingle();
 
@@ -1576,8 +1740,8 @@ export async function executeMoveDealStage(
 
   const { data, error } = await ctx.supabase
     .from('deals')
-    .update({ stage_id: config.stage_id })
-    .eq('id', ctx.entityId)
+    .update({ stage_id: cible })
+    .eq('id', deal.id)
     .eq('org_id', ctx.orgId)
     .select('id');
 
@@ -1585,7 +1749,23 @@ export async function executeMoveDealStage(
   if (!data || data.length === 0) {
     return { success: false, error: "Aucun deal touché — l'écriture a été refusée." };
   }
-  return { success: true, data: { stage_id: config.stage_id, etape: etape.name_fr } };
+
+  // L'historique dit QUI et POURQUOI : sans ça, le déplacement apparaît
+  // comme « Système », sans explication. Le déclencheur d'historique vient
+  // d'écrire la ligne ; on la complète.
+  const motif = config.cible === 'role'
+    ? 'Déplacée automatiquement — le client a ouvert la soumission'
+    : 'Déplacée automatiquement par une automatisation';
+  const { data: derniere } = await ctx.supabase
+    .from('deal_stage_history').select('id')
+    .eq('deal_id', deal.id).eq('to_stage_id', cible)
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (derniere?.id) {
+    const { error: eHist } = await ctx.supabase.from('deal_stage_history')
+      .update({ actor_type: 'automation', motif }).eq('id', derniere.id);
+    if (eHist) console.error('[actions/move_deal_stage] motif non écrit', eHist.message);
+  }
+  return { success: true, data: { stage_id: cible, etape: etape.name_fr } };
 }
 
 // ── Le client concerné, quelle que soit l'entité ────────────

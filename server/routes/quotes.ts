@@ -15,6 +15,7 @@ import { getPaymentSettings } from '../lib/payment-settings';
 import { decryptSecret } from '../lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
+import { empreinte, enregistrerOuverture } from '../lib/vuesSoumission';
 import { resolveQuoteRecipients, insertTargetedNotifications } from '../lib/notificationHelpers';
 import { getCompanyBranding } from '../lib/companyBranding';
 import { senderForOrg, marqueDepuis, langueEntreprise, getCompanySettings } from './emails';
@@ -154,72 +155,13 @@ router.post('/quotes/:id/track-view', async (req, res) => {
         return res.status(404).json({ error: 'Invoice not found' });
       }
 
-      const firstQuoteView = !quote.is_viewed;
-      const nowIso = new Date().toISOString();
-
-      await serviceClient
-        .from('quotes')
-        .update({
-          is_viewed: true,
-          viewed_at: firstQuoteView ? nowIso : undefined,
-          view_count: (quote.view_count || 0) + 1,
-          last_viewed_at: nowIso,
-        })
-        .eq('id', quote.id);
-
-      const contactId = quote.client_id || quote.lead_id;
-      // Journal détaillé : un échec ici ne doit jamais empêcher la notification.
-      const { error: viewLogError } = await serviceClient
-        .from('quote_views')
-        .insert({
-          quote_id: quote.id,
-          client_id: contactId,
-          ip_address: req.ip || req.headers['x-forwarded-for'] || null,
-          user_agent: req.headers['user-agent'] || null,
-        });
-      if (viewLogError) console.error('[quotes/track-view] quote_views insert failed:', viewLogError.message);
-
-      if (contactId) void recordClientActivity(serviceClient, contactId);
-
-      if (firstQuoteView) {
-        let contactName = 'Client';
-        if (contactId) {
-          const { data: contact } = await serviceClient
-            .from('clients')
-            .select('first_name, last_name')
-            .eq('id', contactId)
-            .is('deleted_at', null)
-            .maybeSingle();
-          if (contact) {
-            contactName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Client';
-          }
-        }
-
-        // Première ouverture seulement (is_viewed passe à true ci-dessus).
-        // Destinataires : owners + admins + vendeur assigné — une ligne
-        // chacun, localisée, visible par eux seuls (RLS) et poussée sur
-        // leurs appareils mobiles via le trigger fn_push_on_notification.
-        const recipients = await resolveQuoteRecipients(serviceClient, quote.org_id, quote);
-        const num = quote.quote_number != null ? `#${quote.quote_number}` : '';
-        await insertTargetedNotifications(
-          serviceClient,
-          quote.org_id,
-          recipients,
-          (lang) => lang === 'fr'
-            ? { title: `${contactName} a ouvert le devis ${num}`.trim(), body: `Première ouverture du devis ${num}`.trim() }
-            : { title: `${contactName} opened quote ${num}`.trim(), body: `First time quote ${num} was opened`.trim() },
-          {
-            type: 'quote_opened',
-            entityType: 'quote',
-            entityId: quote.id,
-            link: `/quotes/${quote.id}`,
-            icon: 'eye',
-            actorName: contactName,
-          },
-        );
-      }
-
-      return res.json({ tracked: true, first_view: firstQuoteView });
+      // Une soumission se compte désormais quand sa page est SERVIE
+      // (GET /quotes/public/:token, vuesSoumission.ts). Cet appel venait de
+      // l'ancienne page : le compter aussi doublerait chaque vue pour un
+      // client qui a encore l'ancienne version en cache. La notification
+      // « le client a ouvert » est devenue une automatisation par défaut,
+      // visible et désactivable (preset quote_opened_notify).
+      return res.json({ tracked: false, raison: 'suivi_au_chargement' });
     }
 
     const isFirstView = !invoice.is_viewed;
@@ -240,8 +182,9 @@ router.post('/quotes/:id/track-view', async (req, res) => {
       .insert({
         invoice_id: invoice.id,
         client_id: invoice.client_id,
-        ip_address: req.ip || req.headers['x-forwarded-for'] || null,
-        user_agent: req.headers['user-agent'] || null,
+        org_id: invoice.org_id,
+        // Loi 25 : ni IP ni navigateur en clair (voir vuesSoumission.ts).
+        user_agent_hash: empreinte(req.headers['user-agent'] as string | undefined),
       });
 
     // Client opened a quote/invoice link — stamp last activity (fire-and-forget).
@@ -817,12 +760,17 @@ router.get('/quotes/public/:token', async (req, res) => {
 
     const { data: quote, error: qErr } = await admin
       .from('quotes')
-      .select('id, quote_number, title, status, valid_until, created_at, subtotal_cents, discount_cents, tax_rate_label, tax_cents, total_cents, currency, notes, contract_disclaimer, deposit_required, deposit_type, deposit_value, deposit_cents, deposit_status, require_payment_method, approved_at, declined_at, org_id, view_token, client_id, lead_id')
+      .select('id, quote_number, title, status, valid_until, created_at, subtotal_cents, discount_cents, tax_rate_label, tax_cents, total_cents, currency, notes, contract_disclaimer, deposit_required, deposit_type, deposit_value, deposit_cents, deposit_status, require_payment_method, approved_at, declined_at, org_id, view_token, client_id, lead_id, sent_via_email_at, sent_via_sms_at')
       .eq('view_token', token)
       .is('deleted_at', null)
       .maybeSingle();
 
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
+
+    // L'ouverture par le CLIENT se compte ICI, quand la page est servie
+    // (équipe connectée, aperçu, robots et rechargements écartés — voir
+    // vuesSoumission.ts). En arrière-plan : la page ne l'attend pas.
+    void enregistrerOuverture(admin, req, quote);
 
     // Company branding
     const companyData = await getCompanyBranding(

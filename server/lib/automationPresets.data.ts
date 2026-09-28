@@ -21,6 +21,47 @@ export interface AutomationPresetDef {
 
 export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
   {
+    "preset_key": "quote_opened_notify",
+    "name": "Me notifier quand un client ouvre sa soumission",
+    "description": "Notification (et push) au responsable de la soumission — à défaut, au propriétaire — dès la première ouverture.",
+    "trigger_event": "quote.viewed",
+    "conditions": {
+      "ouverture": "premiere"
+    },
+    "delay_seconds": 0,
+    "actions": [
+      {
+        "type": "create_notification",
+        "config": {
+          "destinataire": "responsable",
+          "title": "👀 {{client.nom}} vient d'ouvrir la soumission #{{soumission.numero}} ({{soumission.total}}). Bon moment pour appeler.",
+          "body": "Ouverte le {{soumission.ouverte_le}} · {{soumission.nb_vues}} vue(s)",
+          "lien": "{{soumission.lien_interne}}"
+        }
+      }
+    ]
+  },
+  {
+    "preset_key": "quote_opened_move_deal",
+    "name": "Avancer le deal quand le client ouvre sa soumission",
+    "description": "À la première ouverture, le deal lié passe de « Soumission envoyée » à « Soumission ouverte ». Jamais de retour en arrière.",
+    "trigger_event": "quote.viewed",
+    "conditions": {
+      "ouverture": "premiere"
+    },
+    "delay_seconds": 0,
+    "actions": [
+      {
+        "type": "move_deal_stage",
+        "config": {
+          "cible": "role",
+          "depuis_role": "soumission_envoyee",
+          "vers_role": "soumission_ouverte"
+        }
+      }
+    ]
+  },
+  {
     "preset_key": "agreement_signed",
     "name": "Contract Signed",
     "description": "Confirm to the client that their contract is signed",

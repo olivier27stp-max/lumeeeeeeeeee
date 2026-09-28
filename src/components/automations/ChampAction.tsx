@@ -30,11 +30,13 @@ interface Props {
   automatisations?: Array<{ id: string; nom: string }>;
   /** Étapes des pipelines, pour le type `etape_pipeline`. */
   etapesPipeline?: Array<{ id: string; label: string }>;
+  /** Services du catalogue, pour le type `service`. */
+  services?: Array<{ id: string; label: string }>;
 }
 
 export default function ChampActionUI({
   champ, valeur, onChange, fr, membres = [], etiquettes = [], champsDate = [],
-  automatisations = [], etapesPipeline = [],
+  automatisations = [], etapesPipeline = [], services = [],
 }: Props) {
   // `useId` plutôt qu'un littéral : ce composant est rendu plusieurs fois
   // sur la même page (une par étape), et deux `id` identiques casseraient
@@ -219,6 +221,17 @@ export default function ChampActionUI({
               <option key={c.id} value={c.id}>
                 {c.label}
               </option>
+            ))}
+          </select>
+        );
+
+      case 'service':
+        // Facultatif : vide = « n'importe quel service ».
+        return (
+          <select id={id} value={valeur} onChange={(e) => onChange(e.target.value)} className={classeChamp}>
+            <option value="">{fr ? '— N’importe quel service —' : '— Any service —'}</option>
+            {services.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
             ))}
           </select>
         );

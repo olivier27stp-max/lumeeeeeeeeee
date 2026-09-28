@@ -1830,6 +1830,7 @@ export default function DealDrawer({
                         <p className="text-[12px] text-text-primary">
                           {nomEtape(h.from_stage_id)} → <span className="font-semibold">{nomEtape(h.to_stage_id)}</span>
                         </p>
+                        {h.motif && <p className="text-[11px] text-text-secondary">{h.motif}</p>}
                         <p className="text-[10.5px] text-text-muted">
                           {h.actor_type === 'automation' && (fr ? 'Automatisation' : 'Automation')}
                           {h.actor_type === 'lumi' && 'Lumi'}
