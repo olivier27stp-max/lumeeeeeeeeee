@@ -2422,7 +2422,7 @@
      "step_id": "e1",
      "action_config": {
       "type": "create_notification",
-      "config": "#53d09b403d36",
+      "config": "#ab27f1dcaebc",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
        "client_id": "aaaaaaaa-0000-4000-8000-000000000001"

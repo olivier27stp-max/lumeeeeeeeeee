@@ -56,6 +56,7 @@ export interface Regle {
   steps?: unknown[] | null;
   settings?: Record<string, unknown> | null;
   name?: string;
+  preset_key?: string | null;
 }
 
 export interface Evenement { entityType: string; entityId: string; metadata: Record<string, unknown> }
@@ -66,7 +67,7 @@ export function monde(regle: Regle & { id: string }, surcharges: Record<string, 
     id: regle.id, org_id: ORG, name: regle.name ?? regle.id, trigger_event: regle.trigger_event,
     conditions: regle.conditions ?? {}, delay_seconds: regle.delay_seconds ?? 0, actions: regle.actions ?? [],
     steps: regle.steps ?? null, settings: regle.settings ?? null, is_active: true, deleted_at: null,
-    pipeline_id: null, stage_id: null,
+    pipeline_id: null, stage_id: null, preset_key: regle.preset_key ?? null,
   };
   return {
     automation_rules: { data: [ligneRegle] },
@@ -314,7 +315,11 @@ export async function jouer(
         id: `tache-${n}`, org_id: ORG, automation_rule_id: t.automation_rule_id, entity_type: t.entity_type, entity_id: t.entity_id,
         attempts: 0, status: 'pending', execute_at: echeance, execution_key: t.execution_key, action_config: t.action_config,
         step_id: t.step_id ?? null, sequence_context: t.sequence_context ?? null,
-        automation_rules: { name: regle.name ?? regle.id, actions: regle.actions ?? [], conditions: regle.conditions ?? {}, steps: regle.steps ?? null, settings: regle.settings ?? null },
+        // Mêmes colonnes que la jointure du moteur (processScheduledTasks).
+        automation_rules: {
+          name: regle.name ?? regle.id, actions: regle.actions ?? [], conditions: regle.conditions ?? {}, steps: regle.steps ?? null, settings: regle.settings ?? null,
+          trigger_event: regle.trigger_event, delay_seconds: regle.delay_seconds ?? 0, preset_key: regle.preset_key ?? null,
+        },
       };
       const { client: c2, journal: j2 } = clientEnregistreur({
         ...monde(regle, { ...surcharges, ...surchargesFile }),

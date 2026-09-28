@@ -91,8 +91,10 @@ function casPourDeclencheur(cle: string): Cas[] {
     regle: {
       id: `regle-${cle}-sequence`, trigger_event: cle, delay_seconds: 0, actions: [],
       steps: [
-        { id: 'e1', type: 'action', action: { type: 'create_notification', config: configPour('create_notification') } },
-        { id: 'e2', type: 'attendre', delai_secondes: 86400 },
+        // `suivant` explicite : c'est ce que le builder enregistre, et le
+        // moteur n'enchaîne QUE par lui (pas par l'ordre du tableau).
+        { id: 'e1', type: 'action', action: { type: 'create_notification', config: { ...configPour('create_notification'), body: 'Suivi du parcours' } }, suivant: 'e2' },
+        { id: 'e2', type: 'attendre', delai_secondes: 86400, suivant: 'e3' },
         { id: 'e3', type: 'action', action: { type: 'send_sms', config: configPour('send_sms') } },
       ],
     },
@@ -151,7 +153,7 @@ describe('filet de régression — presets', () => {
       let ev;
       try { ev = evenementPour(p.trigger_event); } catch { sorties[p.preset_key] = `déclencheur sans événement de test : ${p.trigger_event}`; continue; }
       sorties[p.preset_key] = await jouer(
-        { id: `preset-${p.preset_key}`, name: p.name, trigger_event: p.trigger_event, conditions: p.conditions, delay_seconds: p.delay_seconds, actions: p.actions as any },
+        { id: `preset-${p.preset_key}`, name: p.name, preset_key: p.preset_key, trigger_event: p.trigger_event, conditions: p.conditions, delay_seconds: p.delay_seconds, actions: p.actions as any },
         { ...ev, metadata: { ...ev.metadata, ...(p.trigger_event === 'invoice.paid' && p.preset_key === 'deposit_received' ? { payment_type: 'deposit' } : {}) } },
         etat.e,
         etatApres(p.trigger_event),

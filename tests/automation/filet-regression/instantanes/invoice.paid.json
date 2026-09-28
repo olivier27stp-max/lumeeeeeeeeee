@@ -2430,7 +2430,7 @@
      "step_id": "e1",
      "action_config": {
       "type": "create_notification",
-      "config": "#53d09b403d36",
+      "config": "#ab27f1dcaebc",
       "event_metadata": {
        "invoice_number": "INV-000042",
        "amount_cents": 162690,
