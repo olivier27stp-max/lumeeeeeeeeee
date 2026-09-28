@@ -22,6 +22,7 @@ import {
   Settings, FolderPlus, Filter, Building2, Link2, Eye, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { localizeAutomationName } from '../lib/automationNames';
+import { TEXTES_ACTION_PROVISOIRE } from '../lib/sequenceTypes';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
@@ -606,7 +607,9 @@ export default function Automations() {
         name: fr ? 'Nouvelle automatisation' : 'New automation',
         trigger_event: 'quote.sent',
         delay_seconds: 0,
-        actions: [{ type: 'send_sms', config: { body: fr ? 'À compléter' : 'To complete' } }],
+        // Action PROVISOIRE (le serveur en exige une) : l'éditeur la reconnaît
+        // et ouvre un parcours vide — voir TEXTES_ACTION_PROVISOIRE.
+        actions: [{ type: 'send_sms', config: { body: TEXTES_ACTION_PROVISOIRE[fr ? 0 : 1] } }],
         steps: [],
       });
       navigate(`/automations/${creee.id}${avecLumi ? '?lumi=1' : ''}`);

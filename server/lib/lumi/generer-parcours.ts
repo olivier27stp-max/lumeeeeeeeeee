@@ -56,6 +56,66 @@ export interface ParcoursPropose {
   steps: Array<Record<string, unknown>>;
   /** Ce que Lumi a compris, en une phrase, affiché au-dessus du canevas. */
   resume: string;
+  /**
+   * Une DEUXIÈME automatisation, sur un autre déclencheur.
+   *
+   * Un parcours n'a qu'un déclencheur. « Quand le client répond, envoie mon
+   * lien Calendly » en est un autre (`client.replied`) : faute de pouvoir le
+   * dire, Lumi inventait une étape « démarrer l'automatisation
+   * calendly_reply » qui pointait vers rien (constaté en prod le 2026-09-28).
+   * L'éditeur la crée à part, en brouillon.
+   */
+  autre?: {
+    nom: string;
+    trigger_event: string;
+    resume: string;
+    steps: Array<Record<string, unknown>>;
+    /** Une fois par client tous les N jours (voir settings.delai_entre_passages_jours). */
+    une_fois_par_client_jours?: number;
+    /** Ce qui manque au modèle pour l'écrire (ex. « le lien Calendly ») — jamais créée alors. */
+    manque?: string | null;
+  } | null;
+}
+
+/**
+ * Actions que Lumi ne propose JAMAIS : elles désignent une autre automatisation
+ * par son identifiant, qu'il ne connaît pas — il en inventait un.
+ */
+const ACTIONS_HORS_LUMI = new Set(['demarrer_automatisation', 'arreter_automatisation']);
+
+/**
+ * Un TROU que le modèle a laissé à la place d'une donnée qu'il n'a pas :
+ * `[CALENDLY_LINK]`, `[lien_calendly]`, `[URL]`. Les vraies variables sont en
+ * minuscules et ne désignent jamais un lien à fournir. Un trou part VIDE au
+ * client (une variable inconnue devient une chaîne vide) : « Réserve ton
+ * créneau ici : » sans rien après. Constaté sur le vrai modèle le 2026-09-28,
+ * malgré la consigne — c'est donc le code qui tranche.
+ */
+export function contientTrou(etapes: unknown): boolean {
+  const texte = JSON.stringify(etapes ?? '');
+  for (const m of texte.matchAll(/\[([^\]\[]{1,60})\]/g)) {
+    const nom = m[1];
+    // Des MOTS entiers : « client » contient « lien », et [client_first_name]
+    // est une vraie variable.
+    const mots = nom.toLowerCase().split(/[_\s-]+/);
+    if (/[A-Z]/.test(nom) || mots.some((m) => ['lien', 'link', 'url', 'calendly', 'site', 'http', 'https'].includes(m))) return true;
+  }
+  /*
+   * Deuxième forme, vue sur le vrai modèle : il écrit sa QUESTION à
+   * l'utilisateur DANS le texto au client (« Quel est ton lien Calendly ? Je
+   * crée la réponse automatique… »). Un message qui parle d'un lien à
+   * suivre sans contenir d'adresse ne peut être qu'un trou.
+   */
+  return textesDesMessages(etapes).some((corps) =>
+    /calendly|\blien\b|\blink\b|réserv|book/i.test(corps) && !/https?:\/\//i.test(corps));
+}
+
+/** Les textes (objet, corps) de tous les messages d'un parcours. */
+function textesDesMessages(valeur: unknown): string[] {
+  if (Array.isArray(valeur)) return valeur.flatMap(textesDesMessages);
+  if (!valeur || typeof valeur !== 'object') return [];
+  return Object.entries(valeur as Record<string, unknown>).flatMap(([cle, v]) =>
+    ((cle === 'body' || cle === 'subject') && typeof v === 'string' ? [v] : textesDesMessages(v)));
 }
 
 /** Le prompt système : le catalogue, la forme, et les interdits. */
@@ -64,6 +124,7 @@ export function consignes(fr: boolean): string {
     .map((d) => `- ${d.cle} : ${fr ? d.aide_fr : d.aide_en}`)
     .join('\n');
   const actions = ACTIONS
+    .filter((a) => !ACTIONS_HORS_LUMI.has(a.cle))
     .map((a) => {
       const champs = a.champs.map((c) => `${c.cle}${c.obligatoire ? '' : '?'}`).join(', ');
       return `- ${a.cle} (${champs}) : ${fr ? a.aide_fr : a.aide_en}`;
@@ -88,8 +149,33 @@ FORME DE LA RÉPONSE — un objet JSON, rien autour :
     { "id": "e2", "type": "attendre", "delai_secondes": 259200, "suivant": "e3" },
     { "id": "e3", "type": "si", "conditions": { "status": { "eq": "sent" } }, "alors": "e4", "sinon": null },
     { "id": "e4", "type": "action", "action": { "type": "send_email", "config": { "subject": "...", "body": "..." } } }
-  ]
+  ],
+  "autre": null
 }
+
+UNE DEUXIÈME AUTOMATISATION ("autre") :
+- Un parcours a UN SEUL déclencheur. Si la demande ajoute une réaction à un
+  AUTRE événement — typiquement « quand le client répond, envoie-lui mon lien
+  Calendly » (déclencheur "client.replied") —, ne la mets PAS dans "steps" :
+  garde le parcours actuel tel quel et décris la nouvelle réaction dans
+  "autre" : { "nom", "trigger_event", "resume", "steps", "une_fois_par_client_jours", "manque" }.
+  Sinon, "autre" vaut null.
+- "manque" : null, ou ce qui te manque pour l'écrire (ex. "le lien Calendly").
+  Les messages de "steps" partent au CLIENT : n'y écris JAMAIS une question
+  à l'utilisateur. Si une information manque, mets "manque" et pose la
+  question dans le "resume" PRINCIPAL.
+- Pour "client.replied", mets TOUJOURS "une_fois_par_client_jours": 7 : ce
+  déclencheur part à CHAQUE texto du client, et sans limite le même message
+  repartirait à chaque réponse. Dis-le dans le "resume" de "autre".
+- On ne peut PAS filtrer sur le contenu de la réponse (« s'il dit qu'il
+  n'est pas dispo ») : n'invente aucune condition, la réaction vaut pour
+  toute réponse. Dis-le simplement dans "resume".
+- Un lien que l'utilisateur n'a pas donné (Calendly, site, formulaire) ne
+  s'invente pas et ne se remplace pas par un crochet. S'il manque, mets
+  "autre": null et demande-le dans "resume" : « Quel est ton lien Calendly ?
+  Je crée la réponse automatique dès que je l'ai. »
+- "demarrer_automatisation" et "arreter_automatisation" n'existent pas pour
+  toi : n'y fais jamais référence.
 
 RÈGLES ABSOLUES :
 - Les identifiants d'étape sont e1, e2, e3… et ne contiennent ni ":" ni espace.
@@ -350,12 +436,37 @@ export async function genererParcours(params: {
       };
     }
 
+    const a = brut.autre;
+    /*
+     * Un lien manquant (trou) : on ne crée PAS la deuxième automatisation, et
+     * on pose la question nous-mêmes — le modèle, lui, ne l'a pas posée.
+     */
+    const trou = !!a && (contientTrou(a.steps) || (typeof a.manque === 'string' && a.manque.trim().length > 0));
+    if (trou) {
+      brut.resume = `${String(brut.resume ?? '').trim()} ${fr
+        ? 'Quel lien veux-tu envoyer (ton lien Calendly, par exemple) ? Je crée la réponse automatique dès que je l’ai.'
+        : 'Which link should I send (your Calendly link, for instance)? I will create the automatic reply as soon as I have it.'}`.trim();
+    }
+    const autre = !trou && a && typeof a === 'object' && typeof a.trigger_event === 'string'
+      && Array.isArray(a.steps) && a.steps.length > 0
+      ? {
+        nom: String(a.nom ?? (fr ? 'Automatisation liée' : 'Linked automation')).slice(0, 120),
+        trigger_event: String(a.trigger_event),
+        resume: String(a.resume ?? '').slice(0, 300),
+        steps: a.steps as Array<Record<string, unknown>>,
+        une_fois_par_client_jours: Number.isInteger(a.une_fois_par_client_jours)
+          ? Math.min(365, Math.max(1, Number(a.une_fois_par_client_jours)))
+          : (a.trigger_event === 'client.replied' ? 7 : undefined),
+      }
+      : null;
+
     return {
       parcours: {
         nom: String(brut.nom ?? (fr ? 'Nouvelle automatisation' : 'New automation')).slice(0, 120),
         trigger_event: String(brut.trigger_event),
         resume: String(brut.resume ?? '').slice(0, 300),
         steps: brut.steps as Array<Record<string, unknown>>,
+        autre,
       },
       coutCents: coutGeneration,
     };

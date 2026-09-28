@@ -20,6 +20,8 @@ export interface ReglagesAutomatisation {
   arret_sur_reponse?: boolean;
   fenetre?: { debut: number; fin: number };
   jours_ouvrables?: boolean;
+  /** Une fois par client tous les N jours (absent = aucune limite). */
+  delai_entre_passages_jours?: number;
 }
 
 interface Props {
@@ -157,6 +159,30 @@ export default function OngletReglages({ ruleId, reglages, fr, onChange }: Props
           valeur={local.arret_sur_reponse === true}
           onBascule={(v) => appliquer({ arret_sur_reponse: v })}
         />
+
+        {/* « Le client répond » part à CHAQUE texto : sans cette limite, une
+            réponse automatique (lien Calendly…) repartirait à chaque message. */}
+        <div className="py-3.5">
+          <label htmlFor={`${ids}-passages`} className="text-[13px] font-medium text-text-primary">
+            {fr ? 'Une fois par client tous les…' : 'Once per client every…'}
+          </label>
+          <p className="mt-0.5 text-[12px] text-text-secondary">
+            {fr
+              ? 'Le même client ne reçoit pas ce parcours deux fois dans ce délai. Indispensable sur « Le client répond », qui part à chaque texto.'
+              : 'The same client does not get this path twice within this delay. Essential on “Client replies”, which fires on every text.'}
+          </p>
+          <select
+            id={`${ids}-passages`}
+            value={local.delai_entre_passages_jours ?? 0}
+            onChange={(e) => appliquer({ delai_entre_passages_jours: Number(e.target.value) || undefined })}
+            className="glass-input mt-2 py-1 text-[12px]"
+          >
+            <option value={0}>{fr ? 'Pas de limite' : 'No limit'}</option>
+            {[1, 3, 7, 14, 30, 90].map((j) => (
+              <option key={j} value={j}>{fr ? `${j} jour${j > 1 ? 's' : ''}` : `${j} day${j > 1 ? 's' : ''}`}</option>
+            ))}
+          </select>
+        </div>
       </section>
 
       {/* ── Quand les messages partent ── */}

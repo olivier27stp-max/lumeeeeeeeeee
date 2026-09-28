@@ -36,6 +36,7 @@ import { useTranslation } from '../i18n';
 import type { AutomationRule } from '../lib/automationRulesApi';
 import {
   chargerAutomatisations,
+  creerAutomatisation,
   modifierAutomatisation,
   genererParcoursAvecLumi,
   chargerMembres,
@@ -129,6 +130,12 @@ export default function AutomationBuilderPage() {
   const [echangesLumi, setEchangesLumi] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   /** Le panneau de Lumi, replié par l'utilisateur (le fil est gardé). */
   const [lumiReduit, setLumiReduit] = useState(false);
+  /**
+   * La 2e automatisation déjà créée dans cette conversation : quand Lumi la
+   * corrige (« voici mon lien Calendly »), on la MET À JOUR au lieu d'en
+   * créer une autre copie.
+   */
+  const autreCreee = useRef<{ id: string; trigger_event: string } | null>(null);
   /** Le champ de Lumi : « Construire avec Lumi » y place le curseur. */
   const champLumi = useRef<HTMLTextAreaElement>(null);
 
@@ -365,10 +372,51 @@ export default function AutomationBuilderPage() {
       }
       // La conversation se poursuit : le tour suivant saura ce qui
       // vient d'être demandé et ce que Lumi a répondu.
+      /*
+       * Une DEUXIÈME automatisation, sur un autre déclencheur (« quand le
+       * client répond, envoie mon lien Calendly »). Un parcours n'a qu'un
+       * déclencheur : elle est créée à part, EN BROUILLON, comme toute
+       * règle née d'une conversation — rien ne part avant publication.
+       */
+      let noteAutre = '';
+      if (propose.autre) {
+        try {
+          const premiere = (propose.autre.steps as Etape[]).find((e) => e.type === 'action');
+          const contenu = {
+            name: propose.autre.nom,
+            trigger_event: propose.autre.trigger_event,
+            delay_seconds: 0,
+            // Reflet de la première action : le serveur exige au moins une
+            // action ; le moteur, lui, suit les étapes.
+            actions: premiere && premiere.type === 'action' ? [premiere.action as never] : [],
+            steps: propose.autre.steps,
+            settings: propose.autre.une_fois_par_client_jours
+              ? { delai_entre_passages_jours: propose.autre.une_fois_par_client_jours }
+              : null,
+          };
+          const dejaLa = autreCreee.current?.trigger_event === propose.autre.trigger_event ? autreCreee.current : null;
+          const creee = dejaLa
+            ? await modifierAutomatisation(dejaLa.id, contenu)
+            : await creerAutomatisation({ ...contenu, is_active: false });
+          autreCreee.current = { id: creee.id, trigger_event: propose.autre.trigger_event };
+          noteAutre = fr
+            ? ` — ${dejaLa ? 'J’ai mis à jour' : 'Et j’ai créé'} une 2e automatisation, « ${propose.autre.nom} » (en brouillon) : ${propose.autre.resume}`
+            : ` — ${dejaLa ? 'I updated' : 'And I created'} a second automation, “${propose.autre.nom}” (draft): ${propose.autre.resume}`;
+          toast.success(fr
+            ? `« ${propose.autre.nom} » ${dejaLa ? 'mise à jour' : 'créée en brouillon'}`
+            : `“${propose.autre.nom}” ${dejaLa ? 'updated' : 'created as a draft'}`, {
+            action: { label: fr ? 'Ouvrir' : 'Open', onClick: () => navigate(`/automations/${creee.id}`) },
+            duration: 10_000,
+          });
+        } catch (e: unknown) {
+          console.error('[builder] 2e automatisation non créée', e instanceof Error ? e.message : String(e));
+          toast.error(fr ? 'La 2e automatisation n’a pas pu être créée.' : 'The second automation could not be created.');
+        }
+      }
       setEchangesLumi((e) => [
         ...e,
         { role: 'user' as const, content: demande },
-        { role: 'assistant' as const, content: propose.resume || (fr ? 'Parcours construit.' : 'Path built.') },
+        { role: 'assistant' as const, content: (propose.resume || (fr ? 'Parcours construit.' : 'Path built.')) + noteAutre },
       ]);
       setPrompt('');
       /*
