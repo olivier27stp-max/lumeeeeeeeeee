@@ -256,6 +256,7 @@ export default function QuoteNew() {
   const champsPerso = useChampsCreation('quote', language === 'fr', {
     sections: ['contact', 'details', 'photos', ...(introEnabled ? ['introduction'] : []), 'produits',
       ...(disclaimerEnabled ? ['contrat'] : []), ...(clientMessageEnabled ? ['message'] : []), 'notes'],
+    rangees: true,
   });
 
   // ── Init ──
@@ -992,6 +993,7 @@ export default function QuoteNew() {
               placeholder={tq.titlePlaceholder}
               aria-label={tq.titlePlaceholder}
             />}
+            {champsPerso.apres('quote_type')}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
               <div>
                 <span className={FIELD}>{tq.clientLabel}</span>
@@ -1310,6 +1312,7 @@ export default function QuoteNew() {
                 className={TEXTAREA} placeholder={tq.notesPlaceholder} />
               <p className={HINT}>{tq.notesVisibleToClient}</p>
             </>}
+            {champsPerso.apres('notes')}
             {vis('specific_notes') && <div className="mt-3">
               <SpecificNotesInline ref={specificNotesRef} tempEntityType="quote" />
             </div>}

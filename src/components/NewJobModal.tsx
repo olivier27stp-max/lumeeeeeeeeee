@@ -383,6 +383,7 @@ export default function NewJobModal({
   // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
   const champsPerso = useChampsCreation('job', language === 'fr', {
     sections: ['details', 'client', 'type', 'visites', 'assignation', 'facturation', 'produits', 'contrat', 'notes'],
+    rangees: true,
   });
   // Champs de base décochés dans « Gérer les champs » : retirés du formulaire de CRÉATION
   // pour toute l'entreprise (la modification d'une job existante les montre toujours).
@@ -2384,6 +2385,7 @@ export default function NewJobModal({
                     {t.modals.jobTitle}
                   </label>
                 </div>
+                {!isEditMode && champsPerso.apres('title')}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {vis('job_number') && <div className="space-y-2">
                     <label htmlFor={`${id}-job-number`} className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>
@@ -2412,6 +2414,7 @@ export default function NewJobModal({
                     </select>
                   </div>}
                 </div>
+                {!isEditMode && champsPerso.apres('job_number')}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {vis('sale_date') && <div className="space-y-2">
                     <label htmlFor={`${id}-sale-date`} className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Date de création' : 'Date of creation'}</label>
@@ -2448,6 +2451,7 @@ export default function NewJobModal({
                     </label>
                   </div>}
                 </div>
+                {!isEditMode && champsPerso.apres('sale_date')}
                 {vis('ask_for_review') && <label className="flex items-start gap-3 cursor-pointer">
                   <input type="checkbox" checked={askForReview} onChange={(e) => setAskForReview(e.target.checked)} className="h-4 w-4 mt-0.5 rounded" />
                   <span>
@@ -2595,6 +2599,7 @@ export default function NewJobModal({
                   </div>
                 )}
 
+                {!isEditMode && champsPerso.apres('client')}
                 {/* Property — a job must be assigned to one of the client's properties */}
                 {(clientId || isCreatingNewClient) && (
                   <div className="space-y-3 pt-4 border-t border-border">
@@ -3239,6 +3244,7 @@ export default function NewJobModal({
                   />
                   <span className="text-sm">{t.modals.remindInvoice}</span>
                 </label>}
+                {!isEditMode && champsPerso.apres('requires_invoicing')}
                 {vis('billing_split') && <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -3248,6 +3254,7 @@ export default function NewJobModal({
                   />
                   <span className="text-sm">{t.modals.splitInvoices}</span>
                 </label>}
+                {!isEditMode && champsPerso.apres('billing_split')}
                 {vis('deposit_required') && <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={jobDepositRequired} onChange={e => setJobDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
                   <span className="text-sm">{t.modals.requireDeposit}</span>
@@ -3278,6 +3285,7 @@ export default function NewJobModal({
                     </p>
                   </div>
                 )}
+                {!isEditMode && champsPerso.apres('deposit_required')}
                 {vis('require_payment_method') && <label className="flex items-start gap-3 cursor-pointer">
                   <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 mt-0.5 rounded" />
                   <span>
@@ -3672,7 +3680,7 @@ export default function NewJobModal({
                       </div>
                     )}
                   </div>}
-                {!isEditMode && champsPerso.section('facturation')}
+                {!isEditMode && champsPerso.section('facturation', { tout: true })}
               </Box>
               )}
 

@@ -162,6 +162,8 @@ function configPour(type: TypeChamp, c: ConfigChamp = {}): ConfigChamp {
     ...(c.show_on_documents ? { show_on_documents: true } : {}),
     ...(c.masque_creation ? { masque_creation: true } : {}),
     ...(c.masque_fiche ? { masque_fiche: true } : {}),
+    // Place dans le formulaire (après une rangée de base) ; null l'efface.
+    ...(typeof c.apres === 'string' && c.apres ? { apres: c.apres } : {}),
   };
   if (type === 'number') return { decimals: c.decimals ?? null, min: c.min ?? null, max: c.max ?? null, ...doc };
   if (type === 'monetary') return { currency: (c.currency || 'CAD').toUpperCase(), ...doc };

@@ -250,6 +250,64 @@ export function champsSysteme(objet: ObjetChamp): ChampStandard[] {
   return CHAMPS_STANDARD[objet].filter((c) => c.section);
 }
 
+/**
+ * Rangées des formulaires de base, dans l'ordre de l'écran : les champs d'une même
+ * ligne (prénom + nom, numéro + type…) forment une rangée. Une custom key se glisse
+ * APRÈS une rangée (`config.apres` = 1re clé de la rangée) ; chaque formulaire pose
+ * un emplacement `apres(clé)` sous chaque rangée qui n'est pas la dernière de sa
+ * section (après la dernière = fin de section, déjà couvert par `section()`).
+ * Objet absent : une rangée par section (on ne place qu'en fin de section).
+ */
+export const RANGEES_FORMULAIRE: Partial<Record<ObjetChamp, string[][]>> = {
+  client: [
+    ['first_name', 'last_name'], ['client_number'], ['company', 'display_as_company'],
+    ['phone', 'phone_label', 'other_phones'], ['email', 'email_label'],
+    ['lead_source'],
+    ['address'], ['taxes'], ['billing_same_as_service', 'billing_address'],
+  ],
+  quote: [
+    ['client'],
+    ['quote_type', 'title'], ['property', 'quote_number', 'salesperson', 'valid_days'],
+    ['photos'], ['introduction'], ['line_items'], ['contract_disclaimer'], ['client_message'],
+    ['notes'], ['specific_notes'],
+    ['subtotal', 'discount', 'tax', 'total'],
+    ['deposit_required', 'deposit_type', 'deposit_value', 'require_payment_method'],
+  ],
+  job: [
+    ['title'], ['job_number', 'salesperson'], ['sale_date', 'show_on_leaderboard'], ['ask_for_review'],
+    ['client'], ['property'],
+    ['job_type'],
+    ['visits', 'visit_start_time', 'visit_end_time'],
+    ['team'],
+    ['requires_invoicing'], ['billing_split'], ['deposit_required', 'deposit_type', 'deposit_value'], ['require_payment_method'],
+    ['line_items', 'taxes', 'subtotal', 'total'],
+    ['agreement'],
+    ['notes'],
+  ],
+};
+
+export interface RangeeFormulaire { section: string; cles: string[] }
+
+/** Rangées d'un formulaire (champs de base, hors morceaux d'un autre champ), par section. */
+export function rangeesFormulaire(objet: ObjetChamp): RangeeFormulaire[] {
+  const base = champsSysteme(objet).filter((c) => !c.suit);
+  const declarees = RANGEES_FORMULAIRE[objet];
+  if (declarees) {
+    const sectionDe = new Map(base.map((c) => [c.key, c.section as string]));
+    return declarees.map((cles) => ({ section: sectionDe.get(cles[0]) ?? '', cles }));
+  }
+  return SECTIONS_SYSTEME[objet].flatMap((s) => {
+    const cles = base.filter((c) => c.section === s.cle).map((c) => c.key);
+    return cles.length ? [{ section: s.cle, cles }] : [];
+  });
+}
+
+/** Ancres posées dans les formulaires : 1re clé de chaque rangée qui n'est pas la dernière de sa section. */
+export function ancresFormulaire(objet: ObjetChamp): Set<string> {
+  const r = rangeesFormulaire(objet);
+  return new Set(r.filter((x, i) => r.slice(i + 1).some((y) => y.section === x.section)).map((x) => x.cles[0]));
+}
+
 /** Nom affiché d'un dossier système (la base garde le nom français). */
 export function nomSection(objet: ObjetChamp, cle: string, fr: boolean): string | null {
   const s = SECTIONS_SYSTEME[objet].find((x) => x.cle === cle);

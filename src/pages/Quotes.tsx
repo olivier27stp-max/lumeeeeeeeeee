@@ -29,7 +29,8 @@ import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import type { QuotePreset } from '../types';
 import { CirclePlus, ArrowUpDown, Ruler, Eye } from 'lucide-react';
 import { useChampsListe, useValeursPage } from '../components/champs/liste';
-import { useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
+import { colonnesDuFormulaire, useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
+import { produitsDesDevis } from '../lib/colonnesFormulaireApi';
 
 const PAGE_SIZE = 20;
 type StatusTab = 'all' | QuoteStatus;
@@ -292,7 +293,15 @@ export default function Quotes() {
   // Colonnes de la liste (« Gérer les champs ») : le client est verrouillé.
   const enteteTexte = (label: string) => <span className="inline-flex items-center gap-1">{label} {IconSort}</span>;
   const vide = <span className="text-[14px] text-text-tertiary">—</span>;
-  const colonnesStandard: ColonneStandard<Quote>[] = [
+  // Produits et services du formulaire : lus pour la page affichée seulement.
+  const idsPage = rows.map((q) => q.id);
+  const { data: produits } = useQuery({ queryKey: ['colonnes', 'devis-produits', idsPage], queryFn: () => produitsDesDevis(idsPage), enabled: idsPage.length > 0, staleTime: 60_000 });
+  const texteCase = (v: string | null | undefined) => (v ? <span className="text-[14px] text-text-primary truncate" title={v}>{v}</span> : vide);
+  const acompte = (q: Quote) => [
+    q.deposit_required ? `${fr ? 'Acompte' : 'Deposit'} ${q.deposit_value ?? ''}${q.deposit_type === 'percentage' ? ' %' : ' $'}` : null,
+    q.require_payment_method ? (fr ? 'Carte au dossier' : 'Card on file') : null,
+  ].filter(Boolean).join(' · ') || null;
+  const colonnesBrutes: ColonneStandard<Quote>[] = [
     {
       id: 'client', libelle: 'Client', largeur: 'minmax(180px, 1.2fr)', verrouillee: true, entete: enteteTexte('Client'),
       cellule: (q) => (
@@ -324,7 +333,19 @@ export default function Quotes() {
     { id: 'titre', libelle: fr ? 'Titre' : 'Title', largeur: 'minmax(140px, 1.2fr)', cellule: (q) => (q.title ? <span className="text-[14px] text-text-primary truncate" title={q.title}>{q.title}</span> : vide) },
     { id: 'valide', libelle: fr ? 'Valide jusqu’au' : 'Valid until', largeur: '130px', cellule: (q) => (q.valid_until ? <span className="text-[14px] text-text-primary tabular-nums">{formatDate(q.valid_until)}</span> : vide) },
     { id: 'approuve', libelle: fr ? 'Approuvé le' : 'Approved', largeur: '120px', cellule: (q) => (q.approved_at ? <span className="text-[14px] text-text-primary tabular-nums">{formatDate(q.approved_at)}</span> : vide) },
+    { id: 'type', libelle: fr ? 'Type de devis' : 'Quote type', largeur: 'minmax(110px, 1fr)',
+      cellule: (q) => texteCase(q.quote_type === 'service_plan' ? (fr ? 'Plan de service' : 'Service plan') : (fr ? 'Ponctuel' : 'One-off')) },
+    { id: 'vendeur', libelle: fr ? 'Vendeur' : 'Salesperson', largeur: 'minmax(120px, 1fr)',
+      cellule: (q) => texteCase((salespeople || []).find((p) => p.id === q.salesperson_id)?.label ?? null) },
+    { id: 'produits', libelle: fr ? 'Produits et services' : 'Products & services', largeur: 'minmax(160px, 1.4fr)',
+      cellule: (q) => texteCase(produits?.[q.id]?.join(', ') ?? null) },
+    { id: 'acompte', libelle: fr ? 'Acompte et paiement' : 'Deposit & payment', largeur: 'minmax(140px, 1.1fr)', cellule: (q) => texteCase(acompte(q)) },
+    { id: 'notes', libelle: 'Notes', largeur: 'minmax(150px, 1.3fr)', cellule: (q) => texteCase(q.notes) },
   ];
+  // Colonnes = formulaire Nouveau devis (verrouillées, dans son ordre) ; Créé le, Statut,
+  // Ouverture et Approuvé le s'enlèvent.
+  const colonnesStandard = colonnesDuFormulaire(colonnesBrutes,
+    ['client', 'type', 'titre', 'propriete', 'numero', 'vendeur', 'valide', 'produits', 'total', 'acompte', 'notes']);
   const colonnes = useColonnesTableau<Quote>('quote', colonnesStandard, fr, { tri: triChamp, setTri: setTriChamp });
   const valeursChamps = useValeursPage('quote', rows.map((q) => q.id), colonnes.avecChamps);
 
