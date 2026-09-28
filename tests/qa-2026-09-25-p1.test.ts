@@ -114,6 +114,7 @@ describe('P1-6 / P1-7 — Lumi doit MODIFIER, pas tout refaire', () => {
   const gen = lire('server/lib/lumi/generer-parcours.ts');
   const route = lire('server/routes/automation-rules.ts');
   const editeur = lire(EDITEUR);
+  const clavardage = lire('src/components/automations/ClavardageLumi.tsx');
 
   it('le modèle reçoit la CONVERSATION, plus seulement la dernière phrase', () => {
     /*
@@ -170,8 +171,11 @@ describe('P1-6 / P1-7 — Lumi doit MODIFIER, pas tout refaire', () => {
    * Lumi avait répondu. Lumi était conversationnel sans que ça se voie.
    */
   it('le fil des échanges est AFFICHÉ, pas seulement envoyé', () => {
-    expect(editeur, 'les tours doivent être rendus').toMatch(/echangesLumi\.map\(/);
-    expect(editeur, 'les deux rôles doivent se distinguer à l’œil')
+    // Le fil vit dans ClavardageLumi (carte au centre, puis panneau à gauche)
+    // et l'éditeur lui passe BIEN la conversation.
+    expect(editeur, 'l’éditeur passe le fil au clavardage').toMatch(/echanges=\{echangesLumi\}/);
+    expect(clavardage, 'les tours doivent être rendus').toMatch(/echanges\.map\(/);
+    expect(clavardage, 'les deux rôles doivent se distinguer à l’œil')
       .toMatch(/tour\.role === 'user'/);
   });
 
@@ -180,7 +184,7 @@ describe('P1-6 / P1-7 — Lumi doit MODIFIER, pas tout refaire', () => {
      * La réponse arrive sans que le focus bouge : sans `aria-live`, un
      * lecteur d'écran ne l'annonce jamais et la conversation est muette.
      */
-    expect(editeur).toMatch(/aria-live="polite"/);
+    expect(clavardage).toMatch(/aria-live="polite"/);
   });
 
   it('le fil montre le tour EN COURS pendant que Lumi travaille', () => {
@@ -190,7 +194,7 @@ describe('P1-6 / P1-7 — Lumi doit MODIFIER, pas tout refaire', () => {
      * construit… » : celui-ci existe aussi sur le bouton, donc l'assertion
      * serait passée même sans fil — un test qui ne peut pas échouer.
      */
-    expect(editeur).toMatch(/\{genere && prompt\.trim\(\)\.length > 0 && \(/);
+    expect(clavardage).toMatch(/\{genere && prompt\.trim\(\)\.length > 0 && \(/);
   });
 
   it('l’affichage garde TOUT l’historique ; seul l’envoi est borné', () => {
