@@ -15,7 +15,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { AUTOMATION_PRESETS } from './automationPresets.data';
+import { AUTOMATION_PRESETS, type AutomationPresetDef } from './automationPresets.data';
+import { PACK_PARCOURS, PACK_ACTIF } from './automationPack.data';
 
 /**
  * Presets de SOLLICITATION commerciale — jamais activés d'office (F7, audit
@@ -104,7 +105,9 @@ export async function ensureAutomationPresets(
   if (exErr) throw exErr;
 
   const have = new Set((existing || []).map((r: { preset_key: string }) => r.preset_key));
-  const missing = AUTOMATION_PRESETS.filter((p) => !have.has(p.preset_key));
+  const catalogue: Array<AutomationPresetDef & { steps?: unknown[]; settings?: Record<string, unknown> | null }> = [...AUTOMATION_PRESETS, ...PACK_PARCOURS];
+  const packCles = new Set(PACK_PARCOURS.map((p) => p.preset_key));
+  const missing = catalogue.filter((p) => !have.has(p.preset_key));
 
   if (missing.length > 0) {
     const { error: insErr } = await admin.from('automation_rules').insert(
@@ -116,8 +119,15 @@ export async function ensureAutomationPresets(
         conditions: p.conditions,
         delay_seconds: p.delay_seconds,
         actions: p.actions,
-        // Une sollicitation commerciale n'est jamais activée d'office (F7).
-        is_active: !PRESETS_SOLLICITATION.has(p.preset_key),
+        ...(p.steps ? { steps: p.steps, settings: p.settings ?? null } : {}),
+        /*
+         * Une sollicitation commerciale n'est jamais activée d'office (F7).
+         * Les parcours du PACK ne sont publiés qu'à la CRÉATION (étape 3) :
+         * ajoutés à une entreprise existante, ils doubleraient ses relances
+         * déjà actives (5 relances de devis + le parcours = messages en
+         * double). Ils y arrivent en brouillon, donc dans Modèles.
+         */
+        is_active: !PRESETS_SOLLICITATION.has(p.preset_key) && !packCles.has(p.preset_key),
         is_preset: true,
         preset_key: p.preset_key,
       })),
@@ -130,14 +140,28 @@ export async function ensureAutomationPresets(
   // PRESETS_SOLLICITATION : on n'active pas d'office une relance publicitaire
   // au nom d'une entreprise qui vient de s'inscrire et n'a rien demandé.
   if (opts.activateAll) {
+    /*
+     * LE PACK DE BASE (décidé le 2026-09-28) : seuls ses parcours et
+     * préréglages sont publiés ; tout le reste — y compris les anciennes
+     * relances séparées que le trigger SQL `seed_automation_presets` insère
+     * publiées — passe en brouillon, donc dans l'onglet Modèles. Mesuré en
+     * prod : 21 à 27 préréglages publiés jamais déclenchés par entreprise.
+     */
+    const actifs = [...PACK_ACTIF].filter((k) => !PRESETS_SOLLICITATION.has(k));
     const { error: actErr } = await admin
       .from('automation_rules')
       .update({ is_active: true })
       .eq('org_id', orgId)
       .eq('is_preset', true)
-      .eq('is_active', false)
-      .not('preset_key', 'in', `(${[...PRESETS_SOLLICITATION].join(',')})`);
+      .in('preset_key', actifs);
     if (actErr) throw actErr;
+    const { error: brouillonErr } = await admin
+      .from('automation_rules')
+      .update({ is_active: false })
+      .eq('org_id', orgId)
+      .eq('is_preset', true)
+      .not('preset_key', 'in', `(${actifs.join(',')})`);
+    if (brouillonErr) throw brouillonErr;
 
     // Les demandes d'avis ne peuvent RIEN envoyer tant que l'entreprise ne les
     // a pas activées avec un lien Google ou Facebook (`review_enabled` vaut

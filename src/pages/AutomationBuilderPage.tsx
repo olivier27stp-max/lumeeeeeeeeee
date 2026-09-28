@@ -122,12 +122,12 @@ export default function AutomationBuilderPage() {
   const [etatSauvegarde, setEtatSauvegarde] = useState<'a_jour' | 'en_cours' | 'modifie' | 'incomplet'>('a_jour');
 
   /*
-   * Le serveur refuse au-delà de 20 étapes (`ETAPES_MAX`, validation.ts) :
+   * Le serveur refuse au-delà de 30 étapes (`ETAPES_MAX`, validation.ts) :
    * un parcours plus long n'est jamais enregistré. Sans garde ici, on
    * laissait l'utilisateur en ajouter puis échouer — il croyait avoir
    * perdu son travail. On refuse AVANT, avec la raison. QA du 2026-09-25.
    */
-  const ETAPES_MAX = 20;
+  const ETAPES_MAX = 30;
 
   /** Les échanges avec Lumi, pour qu'une correction porte sur le contexte. */
   /*

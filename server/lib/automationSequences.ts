@@ -72,13 +72,29 @@ export interface EtapeAttendre {
    * une fois le délai écoulé.
    *
    * Absent = `duree` : les parcours déjà enregistrés ne changent pas.
+   *
+   * `avant_date` : on attend jusqu'à `secondes_avant` AVANT la date du
+   * rendez-vous (« 7 jours avant », « la veille », « 2 h avant »). Un délai
+   * fixe depuis la réservation ne peut pas le faire : un rendez-vous pris
+   * trois semaines d'avance recevrait son « rappel de la veille » le
+   * lendemain de la réservation. La date est RELUE à l'échéance : un
+   * rendez-vous déplacé replanifie l'attente, un rendez-vous annulé arrête
+   * le parcours, et un moment déjà passé (réservé 3 jours avant) mène à
+   * `si_depasse` au lieu d'envoyer « dans une semaine » deux jours avant.
    */
-  mode?: 'duree' | 'reponse';
+  mode?: 'duree' | 'reponse' | 'avant_date';
   /**
    * Où aller si le client a répondu. Absent = le parcours s'arrête —
    * c'est le cas le plus fréquent : il a répondu, on ne relance plus.
    */
   si_reponse?: string | null;
+  /** Mode `avant_date` : combien de secondes AVANT le début du rendez-vous. */
+  secondes_avant?: number;
+  /**
+   * Mode `avant_date` : où aller si ce moment est déjà passé. Absent = le
+   * parcours s'arrête. Typiquement l'attente du rappel suivant.
+   */
+  si_depasse?: string | null;
 }
 
 export interface EtapeSi {
@@ -141,7 +157,7 @@ export function cleEtape(ruleId: string, entityId: string, stepId: string): stri
 function suitesDe(etape: Etape): Array<string | null | undefined> {
   if (etape.type === 'si') return [etape.alors, etape.sinon];
   if (etape.type === 'arreter') return [];
-  if (etape.type === 'attendre') return [etape.suivant, etape.si_reponse];
+  if (etape.type === 'attendre') return [etape.suivant, etape.si_reponse, etape.si_depasse];
   return [(etape as EtapeAction).suivant];
 }
 
@@ -205,6 +221,40 @@ export function problemesDuGraphe(steps: Etape[]): string[] {
 
 // ── Parcours ────────────────────────────────────────────────
 
+/**
+ * Un rappel « avant la date » en retard de moins de 30 min part encore : le
+ * décalage vient alors du tick de 5 min, pas d'une date dépassée. Même
+ * tolérance que les rappels des règles simples (RETARD_TOLERE_MS du moteur).
+ */
+export const RETARD_TOLERE_AVANT_DATE_MS = 30 * 60 * 1000;
+
+/**
+ * Le début du rendez-vous visé par le parcours, relu en base.
+ *
+ * `annule` : le rendez-vous n'existe plus, est supprimé ou annulé — le
+ * parcours n'a plus rien à rappeler. `debut` null sans annulation : pas de
+ * date connue (entité qui n'est pas un rendez-vous) — le rappel est sauté.
+ */
+export async function debutRendezVous(
+  supabase: SupabaseClient,
+  orgId: string,
+  entityType: string,
+  entityId: string,
+): Promise<{ debut: number | null; annule: boolean }> {
+  if (entityType !== 'schedule_event' && entityType !== 'appointment') return { debut: null, annule: false };
+  const { data, error } = await supabase
+    .from('schedule_events')
+    .select('start_at, start_time, status, deleted_at')
+    .eq('id', entityId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (error) throw new Error(`lecture du rendez-vous : ${error.message}`);
+  const r = data as { start_at?: string | null; start_time?: string | null; status?: string | null; deleted_at?: string | null } | null;
+  if (!r || r.deleted_at || /cancel|annul/i.test(String(r.status ?? ''))) return { debut: null, annule: true };
+  const d = r.start_at || r.start_time;
+  return { debut: d ? Date.parse(d) : null, annule: false };
+}
+
 export interface ContextePlanification {
   supabase: SupabaseClient;
   orgId: string;
@@ -246,7 +296,7 @@ export async function planifierEtape(
    * vérification — l'attente se comporterait comme une attente ordinaire, et
    * le réglage ne servirait à rien.
    */
-  while (courante && courante.type === 'attendre' && courante.mode !== 'reponse') {
+  while (courante && courante.type === 'attendre' && courante.mode !== 'reponse' && courante.mode !== 'avant_date') {
     delaiCumule += Math.max(0, courante.delai_secondes || 0);
     courante = trouverEtape(steps, courante.suivant);
     if (++sauts > ETAPES_MAX_PAR_PARCOURS) {
@@ -266,7 +316,32 @@ export async function planifierEtape(
     return null;
   }
 
-  const executeAt = new Date(Date.now() + delaiCumule * 1000).toISOString();
+  let executeAtMs = Date.now() + delaiCumule * 1000;
+
+  /*
+   * Attente « avant la date » : la tâche est datée à partir du rendez-vous.
+   * Moment déjà passé (ou pas de date) : on ne rappelle pas « dans une
+   * semaine » deux jours avant — on suit `si_depasse`.
+   */
+  if (courante.type === 'attendre' && courante.mode === 'avant_date') {
+    let rdv: { debut: number | null; annule: boolean };
+    try {
+      rdv = await debutRendezVous(ctx.supabase, ctx.orgId, ctx.entityType, ctx.entityId);
+    } catch (e) {
+      logger.error('[sequences] date du rendez-vous illisible — rappel sauté', {
+        rule_id: ctx.ruleId, step_id: courante.id, message: e instanceof Error ? e.message : String(e),
+      });
+      rdv = { debut: null, annule: false };
+    }
+    if (rdv.annule) return null;
+    const cible = rdv.debut === null ? null : rdv.debut - Math.max(0, courante.secondes_avant ?? 0) * 1000;
+    if (cible === null || cible < Math.max(executeAtMs, Date.now()) - RETARD_TOLERE_AVANT_DATE_MS) {
+      return planifierEtape(ctx, steps, courante.si_depasse ?? null);
+    }
+    executeAtMs = Math.max(executeAtMs, cible);
+  }
+
+  const executeAt = new Date(executeAtMs).toISOString();
 
   const { error } = await ctx.supabase.from('automation_scheduled_tasks').insert({
     org_id: ctx.orgId,
@@ -285,6 +360,9 @@ export async function planifierEtape(
         // saurait pas qu'il doit vérifier la réponse du client à l'échéance.
         ...(courante.type === 'attendre' && courante.mode === 'reponse'
           ? { mode: 'reponse', si_reponse: courante.si_reponse ?? null, suivant: courante.suivant ?? null }
+          : {}),
+        ...(courante.type === 'attendre' && courante.mode === 'avant_date'
+          ? { mode: 'avant_date', secondes_avant: courante.secondes_avant ?? 0, si_depasse: courante.si_depasse ?? null, suivant: courante.suivant ?? null }
           : {}),
         event_metadata: ctx.contexte,
       },
@@ -310,6 +388,75 @@ export async function planifierEtape(
   }
 
   return courante.id;
+}
+
+/**
+ * Une ATTENTE « X avant le rendez-vous », arrivée à échéance.
+ *
+ * La date est RELUE : entre la réservation et maintenant, le rendez-vous a pu
+ * bouger ou être annulé.
+ *   · annulé / supprimé → le parcours s'arrête ;
+ *   · déplacé plus tard → l'attente est replanifiée à la bonne heure ;
+ *   · moment dépassé (déplacé plus tôt) → `si_depasse` (on ne dit pas « dans
+ *     une semaine » à quelqu'un qu'on voit demain) ;
+ *   · sinon → le rappel qui suit.
+ * Une lecture ratée LÈVE, pour que la tâche passe par la reprise normale.
+ */
+export async function echeanceAvantDate(
+  supabase: SupabaseClient,
+  task: {
+    id: string; org_id: string; automation_rule_id: string; entity_type: string; entity_id: string;
+    sequence_context?: Record<string, unknown> | null;
+  },
+  etape: EtapeAttendre,
+  etapes: Etape[],
+  maintenant: number = Date.now(),
+): Promise<'annule' | 'replanifie' | 'depasse' | 'suite'> {
+  const contexte = (task.sequence_context ?? {}) as Record<string, unknown>;
+  const suite = (id: string | null | undefined) => planifierEtape(
+    {
+      supabase,
+      orgId: task.org_id,
+      ruleId: task.automation_rule_id,
+      entityType: task.entity_type,
+      entityId: task.entity_id,
+      contexte,
+      franchies: Number(contexte.franchies ?? 0),
+    },
+    etapes,
+    id ?? null,
+  );
+  const terminer = async (note: string) => {
+    const { error } = await supabase
+      .from('automation_scheduled_tasks')
+      .update({ status: 'completed', completed_at: new Date().toISOString(), last_error: note })
+      .eq('id', task.id);
+    if (error) logger.error('[sequences] attente « avant la date » non close', { task_id: task.id, message: error.message });
+  };
+
+  const rdv = await debutRendezVous(supabase, task.org_id, task.entity_type, task.entity_id);
+  const cible = rdv.debut === null ? null : rdv.debut - Math.max(0, etape.secondes_avant ?? 0) * 1000;
+
+  if (rdv.annule) {
+    await terminer('Rendez-vous annulé ou supprimé : le parcours s’arrête.');
+    return 'annule';
+  }
+  if (cible !== null && cible > maintenant + 2 * 60_000) {
+    const { error } = await supabase
+      .from('automation_scheduled_tasks')
+      .update({ status: 'pending', execute_at: new Date(cible).toISOString(), last_error: 'Rendez-vous déplacé : rappel replanifié.' })
+      .eq('id', task.id);
+    if (error) throw new Error(`replanification impossible : ${error.message}`);
+    return 'replanifie';
+  }
+  if (cible === null || maintenant > cible + RETARD_TOLERE_AVANT_DATE_MS) {
+    await suite(etape.si_depasse);
+    await terminer('Moment du rappel dépassé : rappel sauté.');
+    return 'depasse';
+  }
+  await suite(etape.suivant);
+  await terminer('Moment atteint : le rappel a été planifié.');
+  return 'suite';
 }
 
 /**
