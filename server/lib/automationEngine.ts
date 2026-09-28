@@ -24,6 +24,7 @@ import {
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
 import { orgEnPause } from './automations-pause-org';
 import { fuseauOrg, FUSEAU_DEFAUT } from './automations-fuseau-org';
+import { noterRegleTraitee } from './outbox';
 
 interface AutomationRule {
   id: string;
@@ -799,11 +800,16 @@ async function handleEvent(event: CRMEvent) {
          * cassée dans une org pouvait ainsi faire taire ses confirmations de
          * rendez-vous, et rien ne disait laquelle.
          */
+        // Rejeu d'un orphelin de l'outbox : cette règle avait déjà agi avant
+        // l'arrêt du processus. La repasser renverrait ses messages.
+        if (event.reglesTraitees?.includes(rule.id)) continue;
+        let aAgi = false;
         try {
         if (!regleViseCetEvenement(rule, event)) continue;
         if (!evaluateConditions(rule.conditions, event)) continue;
         if (!(await conditionsChampsOk(engineConfig.supabase, event.orgId, event.entityType, event.entityId,
           rule.conditions?.[CLE_CONDITIONS_CHAMPS]))) continue;
+        aAgi = true;
         // Une SÉQUENCE se parcourt étape par étape : on ne planifie que la
         // première, chacune ouvrant la suivante une fois faite. Rien n'est
         // planifié d'avance, pour qu'une branche « si » soit évaluée sur
@@ -848,6 +854,10 @@ async function handleEvent(event: CRMEvent) {
             `[automationEngine] règle "${rule.name}" (${rule.id}) a échoué sur ${event.type} — les autres règles continuent :`,
             err?.message || err,
           );
+        } finally {
+          // Même une règle en échec est notée : la rejouer ne la réparerait
+          // pas, et elle a pu envoyer avant d'échouer.
+          if (aAgi) await noterRegleTraitee(engineConfig.supabase, event, rule.id);
         }
       }
     }
