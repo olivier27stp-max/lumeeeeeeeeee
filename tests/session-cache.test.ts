@@ -5,8 +5,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-let getUser: ReturnType<typeof vi.fn>;
-let rpc: ReturnType<typeof vi.fn>;
+type Fn = (...a: unknown[]) => Promise<unknown>;
+let getUser: ReturnType<typeof vi.fn<Fn>>;
+let rpc: ReturnType<typeof vi.fn<Fn>>;
 let utilisateurValide = true;
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -35,10 +36,10 @@ function res() {
 beforeEach(() => {
   vi.resetModules();
   utilisateurValide = true;
-  getUser = vi.fn(async () => (utilisateurValide
+  getUser = vi.fn<Fn>(async () => (utilisateurValide
     ? { data: { user: { id: 'u1', email: 'a@b.c' } }, error: null }
     : { data: { user: null }, error: { message: 'invalid' } }));
-  rpc = vi.fn(async () => ({ data: true, error: null }));
+  rpc = vi.fn<Fn>(async () => ({ data: true, error: null }));
 });
 
 describe('requireAuthedClient — cache de session', () => {
@@ -55,7 +56,7 @@ describe('requireAuthedClient — cache de session', () => {
   it('un autre bureau est revérifié (anti-IDOR intact)', async () => {
     const { requireAuthedClient } = await import('../server/lib/supabase');
     await requireAuthedClient(req('jeton-2', ORG_A), res());
-    rpc = vi.fn(async () => ({ data: false, error: null }));
+    rpc = vi.fn<Fn>(async () => ({ data: false, error: null }));
     const r = res();
     const b = await requireAuthedClient(req('jeton-2', ORG_B), r);
     expect(b).toBeNull();
