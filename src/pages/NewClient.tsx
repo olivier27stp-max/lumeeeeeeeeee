@@ -40,7 +40,8 @@ export default function NewClient() {
   const navigate = useNavigate();
   const { t, language } = useTranslation();
   const fr = language === 'fr';
-  const champsPerso = useChampsCreation('client', fr);
+  // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
+  const champsPerso = useChampsCreation('client', fr, { sections: ['coordonnees', 'lead', 'adresse'] });
   const id = useId();
 
   // ── Form state ──
@@ -479,6 +480,7 @@ export default function NewClient() {
                 </p>
               )}
             </div>
+            {champsPerso.section('coordonnees')}
           </section>
 
           {/* Lead information */}
@@ -532,6 +534,7 @@ export default function NewClient() {
                 )}
               </AnimatePresence>
             </div>
+            {champsPerso.section('lead')}
           </section>
 
           {/* Property address */}
@@ -626,6 +629,7 @@ export default function NewClient() {
                 </motion.div>
               )}
             </AnimatePresence>
+            {champsPerso.section('adresse')}
           </section>
           {champsPerso.bloc && <section className="space-y-3">{champsPerso.bloc}</section>}
         </div>

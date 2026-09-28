@@ -244,7 +244,15 @@ export default function QuoteNew() {
   const [showPreview, setShowPreview] = useState(false);
   const [companySettings, setCompanySettings] = useState<any>(null);
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
-  const champsPerso = useChampsCreation('quote', language === 'fr');
+  // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
+  // Sections désactivables (introduction, contrat, message) : branchées seulement
+  // si elles sont affichées — sinon leurs champs vont en fin de formulaire, pour
+  // qu'un champ obligatoire ne soit jamais caché. Même chose pour le rail de droite
+  // (Résumé, Acompte), masqué sous lg.
+  const champsPerso = useChampsCreation('quote', language === 'fr', {
+    sections: ['contact', 'details', 'photos', ...(introEnabled ? ['introduction'] : []), 'produits',
+      ...(disclaimerEnabled ? ['contrat'] : []), ...(clientMessageEnabled ? ['message'] : []), 'notes'],
+  });
 
   // ── Init ──
   useEffect(() => {
@@ -943,6 +951,7 @@ export default function QuoteNew() {
                 )}
               </div>
             )}
+            {champsPerso.section('contact')}
           </div>
 
           {/* Détails + type */}
@@ -996,6 +1005,7 @@ export default function QuoteNew() {
                 <input id={`${id}-valid-days`} type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={INPUT} /></div>
             </div>
 
+            {champsPerso.section('details')}
           </div>
 
           {/* Plan de service — calendrier (même modèle que le formulaire de job) */}
@@ -1114,6 +1124,7 @@ export default function QuoteNew() {
                 ? "Affichées en haut du devis dans la vue client, sous l'en-tête de l'entreprise."
                 : 'Shown at the top of the quote in the client view, under the company header.'}
             </p>
+            {champsPerso.section('photos')}
           </div>
 
           {/* Sections optionnelles */}
@@ -1143,6 +1154,7 @@ export default function QuoteNew() {
               <textarea value={introContent} onChange={e => setIntroContent(e.target.value)}
                 aria-label={tq.introduction}
                 className={TEXTAREA} placeholder={tq.introPlaceholder} />
+              {champsPerso.section('introduction')}
             </div>
           )}
 
@@ -1239,6 +1251,7 @@ export default function QuoteNew() {
                 <Plus size={13} strokeWidth={2.5} /> {tq.addLineItem}
               </button>
             </div>
+            {champsPerso.section('produits')}
           </div>
 
           {/* Contrat / avis */}
@@ -1253,6 +1266,7 @@ export default function QuoteNew() {
               <textarea value={contractDisclaimer} onChange={e => setContractDisclaimer(e.target.value)}
                 aria-label={fr ? 'Avis contractuel' : 'Contract disclaimer'}
                 className={TEXTAREA} placeholder={tq.descriptionPlaceholder} />
+              {champsPerso.section('contrat')}
             </div>
           )}
 
@@ -1263,6 +1277,7 @@ export default function QuoteNew() {
               <textarea value={clientMessage} onChange={e => setClientMessage(e.target.value)}
                 aria-label={tq.clientMessageHeading}
                 className={TEXTAREA} placeholder={tq.clientMessagePlaceholder} />
+              {champsPerso.section('message')}
             </div>
           )}
 
@@ -1276,6 +1291,7 @@ export default function QuoteNew() {
             <div className="mt-3">
               <SpecificNotesInline ref={specificNotesRef} tempEntityType="quote" />
             </div>
+            {champsPerso.section('notes')}
             {champsPerso.bloc && <div className="mt-4">{champsPerso.bloc}</div>}
           </div>
 

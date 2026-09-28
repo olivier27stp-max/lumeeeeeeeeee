@@ -587,7 +587,8 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
   // '' = pas encore touché : on suit le pipeline affiché.
   const [pipelineId, setPipelineId] = useState('');
   const [envoi, setEnvoi] = useState(false);
-  const champsPerso = useChampsCreation('deal', fr);
+  // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
+  const champsPerso = useChampsCreation('deal', fr, { sections: ['depart', 'contact', 'previsions'] });
   const idPipeline = useId();
   const idRecherche = useId();
   const idPrenom = useId();
@@ -799,6 +800,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
             </button>
           ))}
         </div>
+        {champsPerso.section('depart')}
 
         {/* ── Client existant ── */}
         {mode === 'client' && (client ? (
@@ -988,6 +990,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
           </>
         )}
 
+        {champsPerso.section('contact')}
         {/*
           Ce qui fait vivre les prévisions. Rien n'est obligatoire : rendre le
           montant requis ferait saisir des chiffres inventés, et une prévision
@@ -1065,6 +1068,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
           </div>
         </div>
 
+        {champsPerso.section('previsions')}
         {champsPerso.bloc}
 
         <div className="mt-1 flex items-center justify-end gap-2.5">
