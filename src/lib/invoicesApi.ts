@@ -935,67 +935,31 @@ export interface MarkInvoicePaidInput {
   notes?: string | null;
 }
 
-/** `YYYY-MM-DD` local → ISO à midi local (évite de glisser au jour d'avant en UTC). */
-function localDateToIso(date: string | null | undefined): string {
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return new Date().toISOString();
-  const [y, m, d] = date.split('-').map(Number);
-  return new Date(y, m - 1, d, 12, 0, 0).toISOString();
-}
-
 export async function markInvoicePaidManually(invoiceId: string, input: MarkInvoicePaidInput = {}) {
   const orgId = await getCurrentOrgIdOrThrow();
-  // Get current invoice to know total
-  const { data: inv, error: fetchErr } = await supabase
-    .from('invoices')
-    .select('total_cents, balance_cents, client_id, job_id, currency')
-    .eq('id', invoiceId)
-    .eq('org_id', orgId)
-    .maybeSingle();
-  if (fetchErr) throw fetchErr;
-  if (!inv) throw new Error('Invoice not found');
-
-  const paidAtIso = localDateToIso(input.paymentDate);
-  const amountCents = Math.max(0, Number(inv.balance_cents ?? inv.total_cents) || 0);
-
-  // Paiement manuel réel : alimente Paiements/rapports et, via le trigger
-  // payments_recalculate_invoice, le solde de la facture.
-  if (amountCents > 0) {
-    const payment: Record<string, unknown> = {
-      org_id: orgId,
-      invoice_id: invoiceId,
-      client_id: inv.client_id ?? null,
-      job_id: inv.job_id ?? null,
-      provider: 'manual',
-      status: 'succeeded',
+  // Écriture par le serveur : le navigateur n'a plus le droit d'insérer dans
+  // `payments` (durcissement 20260730140000) — l'insertion directe échouait
+  // avec « permission denied for table payments ».
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Session expirée — reconnectez-vous.');
+  const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/invoices/${encodeURIComponent(invoiceId)}/mark-paid`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+      'x-org-id': orgId,
+    },
+    body: JSON.stringify({
+      paymentDate: input.paymentDate ?? null,
       method: input.method ?? null,
-      amount_cents: amountCents,
-      currency: inv.currency || 'CAD',
-      payment_date: paidAtIso,
-      paid_at: paidAtIso,
-      reference: input.reference?.trim() || null,
-      notes: input.notes?.trim() || null,
-    };
-    let { error: payErr } = await supabase.from('payments').insert(payment);
-    // Colonnes reference/notes absentes (migration 20260928120000 pas encore appliquée).
-    if (payErr && (payErr.code === 'PGRST204' || /reference|notes/i.test(payErr.message || ''))) {
-      const { reference: _r, notes: _n, ...legacy } = payment;
-      ({ error: payErr } = await supabase.from('payments').insert(legacy));
-    }
-    if (payErr) throw payErr;
+      reference: input.reference ?? null,
+      notes: input.notes ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || `Impossible de marquer la facture payée (HTTP ${res.status}).`);
   }
-
-  const { error } = await supabase
-    .from('invoices')
-    .update({
-      paid_cents: inv.total_cents,
-      balance_cents: 0,
-      status: 'paid',
-      paid_at: paidAtIso,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', invoiceId)
-    .eq('org_id', orgId);
-  if (error) throw error;
 
   // Emit automation event to stop invoice reminders and trigger payment workflows
   emitInvoicePaidManually({ invoiceId });
