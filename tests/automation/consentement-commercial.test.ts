@@ -21,6 +21,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const envois: Array<{ to: string }> = [];
 vi.mock('../../server/lib/mailer', () => ({
   isMailerConfigured: () => true,
+  adresseInjoignable: async () => false,
   sendEmail: vi.fn(async (p: any) => { envois.push({ to: p?.to }); return { sent: true, messageId: 'x' }; }),
 }));
 vi.mock('../../server/routes/emails', () => ({

@@ -1078,8 +1078,16 @@ export async function executeSendEmail(
   const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
 
   try {
-    const { sendEmail, isMailerConfigured } = await import('../mailer');
+    const { sendEmail, isMailerConfigured, adresseInjoignable } = await import('../mailer');
     if (!isMailerConfigured()) return { success: false, error: 'SMTP not configured' };
+
+    // Launch M7 : une adresse qui a rebondi (ou porté plainte) ne reçoit plus
+    // rien — comme les relances de factures (reminders-cron). Écrire à une
+    // adresse morte abîme la réputation d'envoi de TOUTES les entreprises, et
+    // le journal affichait « succès ». Étape sautée, le parcours continue.
+    if (await adresseInjoignable(ctx.orgId, to)) {
+      return saute('Adresse courriel injoignable (rebond ou plainte)', 'adresse_injoignable');
+    }
 
     // Identité de l'ORG, pas de Lume.
     //
