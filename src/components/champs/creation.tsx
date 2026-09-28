@@ -177,7 +177,7 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sectio
   ) : null;
   const panneau = gerer ? (
     <GererChampsFenetre objet={objet} titreFenetre={fr ? TITRE_FENETRE[objet].fr : TITRE_FENETRE[objet].en}
-      champs={tousActifs} dossiers={data?.folders ?? []} fr={fr} onClose={() => setGerer(false)} masquesSysteme={masquesSysteme} />
+      champs={tousActifs} dossiers={data?.folders ?? []} fr={fr} onClose={() => setGerer(false)} />
   ) : null;
 
   const dossiers = data?.folders ?? [];
