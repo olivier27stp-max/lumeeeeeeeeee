@@ -370,8 +370,8 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
       {
         cle: 'champ_id', fr: 'Quelle date surveiller', en: 'Which date to watch',
         obligatoire: true, type: 'champ_date',
-        aide_fr: 'Un champ date de la fiche client — fin de contrat, garantie, entretien annuel.',
-        aide_en: 'A date field on the client record — contract end, warranty, yearly service.',
+        aide_fr: 'Un champ date du client (fin de contrat, garantie) ou du pipeline (date de fermeture prévue — deals ouverts seulement).',
+        aide_en: 'A date field on the client (contract end, warranty) or the pipeline (expected close date — open deals only).',
       },
       {
         cle: 'jours_avant', fr: 'Combien de jours avant', en: 'How many days before',
@@ -430,7 +430,10 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
   // Émis par customFieldsService (server/lib/champs/service.ts) quand une
   // valeur change VRAIMENT — jamais sur un rejeu identique, jamais pour une
   // écriture faite par une automatisation (pas de boucle). Le champ visé se
-  // choisit dans le builder et devient la condition {field_id: {eq}}.
+  // choisit dans le panneau du déclencheur et devient la condition
+  // {field_id: {eq}} ; « quand il devient … » devient {new_value: {eq}},
+  // comparé à la valeur NORMALISÉE émise (id d'option, booléen, nombre,
+  // cents, AAAA-MM-JJ).
   {
     cle: 'custom_field.changed', fr: 'Champ personnalisé modifié', en: 'Custom field changed',
     aide_fr: 'Quand la valeur d’un champ personnalisé change sur une fiche.',
@@ -1091,6 +1094,9 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   'client.untagged': 'client',
   'task.completed': 'client',
   'note.added': 'client',
+  // Le client — ou le DEAL quand le champ date surveillé est un champ du
+  // pipeline (`server/lib/rappels-dates.ts`). L'éditeur, qui connaît le
+  // champ choisi, le précise via `actionCompatible(…, entiteConnue)`.
   'date.reached': 'client',
   'deal.stage_entered': 'deal',
   'deal.stage_idle': 'deal',
@@ -1106,9 +1112,19 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
  * Répondre AVANT la publication, dans le menu, plutôt qu'après, dans un
  * journal d'échec que personne ne lit.
  */
-export function actionCompatible(action: ActionCatalogue, cleDeclencheur: string): boolean {
+export function actionCompatible(
+  action: ActionCatalogue,
+  cleDeclencheur: string,
+  /**
+   * L'entité RÉELLE quand la règle la fixe par ses réglages : « Date
+   * atteinte » sur un champ du deal émet un deal, « Champ modifié » sur un
+   * champ de devis émet un devis. L'éditeur la connaît (objet du champ
+   * choisi) ; le serveur, non.
+   */
+  entiteConnue?: string | null,
+): boolean {
   if (!action.entites) return true;
-  const entite = ENTITE_PAR_DECLENCHEUR[cleDeclencheur];
+  const entite = entiteConnue || ENTITE_PAR_DECLENCHEUR[cleDeclencheur];
   // Déclencheur inconnu : on n'invente pas de refus, le serveur tranchera.
   if (!entite) return true;
   /*

@@ -39,6 +39,10 @@ import {
 } from '../../lib/automationCatalogue';
 import type { Etape, EtapeAction, EtapeAttendre, EtapeSi } from '../../lib/sequenceTypes';
 import ChampActionUI from './ChampAction';
+import {
+  BoutonsVariablesChamps, ConditionsChampsEtape, EditeurMajChamp, sansConditionsIncompletes,
+} from '../champs/automatisations';
+import type { ChampPerso, ObjetChamp } from '../../lib/champs/types';
 
 /** Les conditions d'une étape « si », en texte modifiable. */
 /** L'opérateur, tel qu'on l'ecrit : `montant > 5000`. */
@@ -50,6 +54,9 @@ function texteDesConditions(etape: Etape): string {
   if (etape.type !== 'si') return '';
   const lignes: string[] = [];
   for (const [cle, v] of Object.entries(etape.conditions ?? {})) {
+    // Les conditions de champs personnalisés ont leur propre éditeur : les
+    // écrire ici donnerait « champs_perso = [object Object] ».
+    if (cle === 'champs_perso') continue;
     if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
       // Un intervalle (`{ gte, lt }`) s'ecrit sur DEUX lignes : c'est ce
       // qu'on relit le mieux, et l'analyse les recolle sur la meme cle.
@@ -101,6 +108,16 @@ function analyserConditions(texte: string): Record<string, unknown> {
   return out;
 }
 
+/**
+ * Les conditions de champs d'une étape « si », à GARDER quand le texte est
+ * réanalysé : le texte ne les porte pas, les perdre à chaque frappe
+ * effacerait ce que l'éditeur de champs vient d'ajouter.
+ */
+function champsPersoDe(etape: Etape): Record<string, unknown> {
+  const liste = etape.type === 'si' ? etape.conditions?.champs_perso : undefined;
+  return Array.isArray(liste) ? { champs_perso: liste } : {};
+}
+
 /** Les variables offertes, insérables d'un clic dans un champ de texte. */
 const VARIABLES = [
   { cle: 'client_name', fr: 'Nom du client', en: 'Client name' },
@@ -127,6 +144,14 @@ interface Props {
   etiquettes: string[];
   /** Autres automatisations publiées, pour « Démarrer une automatisation ». */
   automatisations?: Array<{ id: string; nom: string }>;
+  /** Champs personnalisés actifs : action « Mettre à jour un champ », conditions, variables. */
+  champsPerso?: ChampPerso[];
+  /**
+   * L'objet de la fiche que l'événement fera arriver (client, deal…), déduit
+   * du déclencheur ET de ses réglages (« Date atteinte » sur un champ du
+   * deal → deal). `null` = inconnu.
+   */
+  objetChamps?: ObjetChamp | null;
   /** Statistiques de l'étape, pour l'onglet du même nom. */
   stats?: { envois: number; succes: number; echecs: number } | null;
   onEnregistrer: (etape: Etape) => void;
@@ -149,7 +174,8 @@ function decomposer(secondes: number): { valeur: number; unite: string } {
 }
 
 export default function PanneauEtape({
-  etape, fr, declencheur, membres, etiquettes, automatisations = [], stats, onEnregistrer, onSupprimer, onFermer,
+  etape, fr, declencheur, membres, etiquettes, automatisations = [], champsPerso = [], objetChamps = null, stats,
+  onEnregistrer, onSupprimer, onFermer,
 }: Props) {
   const ids = useId();
   const [onglet, setOnglet] = useState<'edition' | 'stats'>('edition');
@@ -204,7 +230,7 @@ export default function PanneauEtape({
      * arrivera est devenue un devis. Le dire ICI, pas dans un journal
      * d'échec après publication.
      */
-    if (declencheur && !actionCompatible(modele, declencheur)) {
+    if (declencheur && !actionCompatible(modele, declencheur, objetChamps)) {
       out.push(
         fr
           ? `« ${modele.fr} » ne peut pas suivre ce déclencheur : choisissez-en une autre.`
@@ -219,8 +245,21 @@ export default function PanneauEtape({
         out.push(fr ? `« ${champ.fr} » est vide.` : `“${champ.en}” is empty.`);
       }
     }
+    /*
+     * « Mettre à jour un champ » n'écrit QUE sur la fiche de l'événement
+     * (executerMajChamp) : un champ d'un autre objet échouerait à chaque
+     * passage, dans un journal que personne ne lit.
+     */
+    if (modele.cle === 'update_custom_field' && objetChamps && config.field_id) {
+      const champ = champsPerso.find((c) => c.id === config.field_id);
+      if (champ && champ.object_type !== objetChamps) {
+        out.push(fr
+          ? `« ${champ.label} » n’est pas un champ de la fiche que ce déclencheur fait arriver.`
+          : `“${champ.label}” is not a field of the record this trigger brings.`);
+      }
+    }
     return out;
-  }, [brouillon, modele, fr, declencheur]);
+  }, [brouillon, modele, fr, declencheur, objetChamps, champsPerso]);
 
   const majConfig = (cle: string, valeur: string) => {
     setBrouillon((b) => {
@@ -387,7 +426,7 @@ export default function PanneauEtape({
                       // que d'afficher un groupe vide.
                       const offertes = ACTIONS.filter(
                         (a) => a.famille === famille.cle
-                          && (!declencheur || actionCompatible(a, declencheur)),
+                          && (!declencheur || actionCompatible(a, declencheur, objetChamps)),
                       );
                       if (!offertes.length) return null;
                       return (
@@ -403,8 +442,21 @@ export default function PanneauEtape({
                   </select>
                 </div>
 
+                {/* « Mettre à jour un champ » : une liste des champs et une
+                    valeur adaptée au type, plus un identifiant à taper. */}
+                {modele?.cle === 'update_custom_field' && (
+                  <EditeurMajChamp
+                    fieldId={(brouillon.action.config as Record<string, string | undefined>).field_id ?? ''}
+                    valeur={(brouillon.action.config as Record<string, string | undefined>).value ?? ''}
+                    onChange={majConfig}
+                    champs={champsPerso}
+                    objet={objetChamps}
+                    fr={fr}
+                  />
+                )}
+
                 {/* Les champs de l'action choisie. */}
-                {modele?.champs
+                {modele?.cle !== 'update_custom_field' && modele?.champs
                   .filter((champ) => champVisible(champ, brouillon.action.config as Record<string, unknown>))
                   .map((champ) => (
                     <ChampActionUI
@@ -442,6 +494,25 @@ export default function PanneauEtape({
                           {fr ? v.fr : v.en}
                         </button>
                       ))}
+                    </div>
+                    {/* « Insérer un champ » : {{client.cle}}, {{deal.cle}}… —
+                        résolus par le serveur (resolveTemplate). */}
+                    <p className="mb-1.5 mt-3 text-[11px] font-medium text-text-secondary">
+                      {fr ? 'Insérer un champ' : 'Insert a field'}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <BoutonsVariablesChamps
+                        champs={champsPerso}
+                        fr={fr}
+                        onInserer={(variable) => {
+                          const champ = modele.champs.find((c) => c.type === 'zone');
+                          if (!champ) return;
+                          const actuel =
+                            (brouillon.action.config as Record<string, string | undefined>)[champ.cle] ?? '';
+                          // La variable arrive déjà écrite ({{client.cle}}) : pas de crochets par-dessus.
+                          majConfig(champ.cle, `${actuel}${variable}`);
+                        }}
+                      />
                     </div>
                   </div>
                 )}
@@ -571,7 +642,7 @@ export default function PanneauEtape({
                         setConditionsTexte(ajout);
                         setBrouillon({
                           ...(brouillon as EtapeSi),
-                          conditions: analyserConditions(ajout),
+                          conditions: { ...analyserConditions(ajout), ...champsPersoDe(brouillon) },
                         });
                       }}
                       className="rounded-md border border-border px-1.5 py-0.5 font-mono text-[10px] text-text-secondary transition-colors hover:border-accent hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -593,10 +664,19 @@ export default function PanneauEtape({
                     setConditionsTexte(e.target.value);
                     setBrouillon({
                       ...(brouillon as EtapeSi),
-                      conditions: analyserConditions(e.target.value),
+                      conditions: { ...analyserConditions(e.target.value), ...champsPersoDe(brouillon) },
                     });
                   }}
                   className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 font-mono text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                />
+                {/* Conditions sur les champs personnalisés de la fiche,
+                    jugées sur les valeurs ACTUELLES quand on arrive ici. */}
+                <ConditionsChampsEtape
+                  conditions={(brouillon as EtapeSi).conditions as Record<string, unknown> | undefined}
+                  onChange={(c) => setBrouillon({ ...(brouillon as EtapeSi), conditions: c })}
+                  champs={champsPerso}
+                  objet={objetChamps}
+                  fr={fr}
                 />
               </div>
             )}
@@ -659,7 +739,10 @@ export default function PanneauEtape({
         </button>
         <button
           type="button"
-          onClick={() => onEnregistrer(brouillon)}
+          onClick={() => onEnregistrer(brouillon.type === 'si'
+            // Une ligne de champ incomplète bloquerait la branche pour toujours.
+            ? { ...brouillon, conditions: sansConditionsIncompletes((brouillon.conditions ?? {}) as Record<string, unknown>) }
+            : brouillon)}
           disabled={problemes.length > 0}
           className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >

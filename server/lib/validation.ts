@@ -1268,10 +1268,26 @@ export const automationCopieBureauxSchema = z.object({
   lier: z.boolean().optional(),
 });
 
+const majAutomatisation = corpsAutomatisation.partial().superRefine(plafondActions);
 export const automationRuleUpdateSchema = z
   .record(z.string(), z.unknown())
   .refine((o) => Object.keys(o).length > 0, 'Nothing to update.')
-  .pipe(corpsAutomatisation.partial().superRefine(plafondActions));
+  .transform((brut, ctx) => {
+    const r = majAutomatisation.safeParse(brut);
+    if (!r.success) {
+      for (const i of r.error.issues) ctx.addIssue({ ...i, code: 'custom', message: i.message, path: i.path });
+      return z.NEVER;
+    }
+    /*
+     * Seules les clés ENVOYÉES. Les `.default()` du corps (`conditions: {}`,
+     * `is_active: false`) ne valent qu'à la création : `.partial()` les
+     * appliquait aussi à une modification. Chaque enregistrement du parcours
+     * ({ name, steps }) effaçait donc les réglages du déclencheur (champ
+     * surveillé, date, filtres) et DÉPUBLIAIT la règle — vu dans un vrai
+     * navigateur contre staging le 2026-09-28.
+     */
+    return Object.fromEntries(Object.entries(r.data).filter(([k]) => k in brut)) as typeof r.data;
+  });
 
 // ─── Champs personnalisés v2 (server/routes/custom-fields.ts) ───
 // `nullable()` partout où le client peut envoyer null (règle du projet).

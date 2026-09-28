@@ -62,7 +62,8 @@ import TiroirChoix, { type ChoixTiroir } from '../components/automations/TiroirC
 import ClavardageLumi from '../components/automations/ClavardageLumi';
 import { usePlanFeature } from '../hooks/usePlanFeature';
 import PanneauDeclencheur from '../components/automations/PanneauDeclencheur';
-import { listerChamps } from '../lib/champsPersoApi';
+import { useChampsTous, objetDeLaRegle, champSurveille, saisieDepuisValeurCondition } from '../components/champs/automatisations';
+import { LIBELLES_OBJET } from '../lib/champs/types';
 import { fetchPipelines, fetchStages } from '../lib/pipelineVentesApi';
 import { listPredefinedServices } from '../lib/servicesApi';
 import { localizeAutomationName } from '../lib/automationNames';
@@ -193,12 +194,31 @@ export default function AutomationBuilderPage() {
   /** Le panneau de RÉGLAGE du déclencheur (« quelle date surveiller ? »). */
   const [reglageDeclencheur, setReglageDeclencheur] = useState(false);
   /**
-   * Les champs date de la fiche client, pour le déclencheur « Date atteinte ».
-   *
-   * Chargés une fois à l'ouverture de l'éditeur : chaque entreprise a les
-   * siens, et une liste vide doit se distinguer d'une liste pas encore lue.
+   * Les champs personnalisés actifs de l'entreprise (tous objets) : « quel
+   * champ ? » de « Champ modifié », « Mettre à jour un champ », les filtres
+   * et conditions, les variables. Une seule requête, partagée (react-query).
    */
-  const [champsDate, setChampsDate] = useState<Array<{ id: string; label: string }>>([]);
+  const champsPerso = useChampsTous();
+  /**
+   * L'objet de la fiche que l'événement fera arriver — celui dont on peut
+   * lire et écrire les champs. Pour « Champ modifié » et « Date atteinte »,
+   * il dépend du champ choisi (client ou deal).
+   */
+  const objetRegle = useMemo(
+    () => objetDeLaRegle(regle?.trigger_event, (regle?.conditions ?? null) as Record<string, unknown> | null, champsPerso),
+    [regle?.trigger_event, regle?.conditions, champsPerso],
+  );
+  /**
+   * Les champs DATE du client ET du pipeline (deal), pour « Date atteinte ».
+   * Un champ archivé ne doit plus déclencher d'envoi (`useChampsTous` les
+   * écarte déjà). Le nom de l'objet préfixe : « Pipeline · Fermeture prévue ».
+   */
+  const champsDate = useMemo(
+    () => champsPerso
+      .filter((c) => c.field_type === 'date' && (c.object_type === 'client' || c.object_type === 'deal'))
+      .map((c) => ({ id: c.id, label: `${fr ? LIBELLES_OBJET[c.object_type].fr : LIBELLES_OBJET[c.object_type].en} · ${c.label}` })),
+    [champsPerso, fr],
+  );
   /**
    * Les étapes des pipelines, pour « Opportunité entre dans une étape ».
    *
@@ -281,7 +301,7 @@ export default function AutomationBuilderPage() {
       titre: fr ? a.fr : a.en,
       aide: fr ? a.aide_fr : a.aide_en,
       famille: a.famille,
-      indisponible: actionCompatible(a, decl)
+      indisponible: actionCompatible(a, decl, objetRegle)
         ? undefined
         : (fr
           ? 'Ne va pas avec ce déclencheur'
@@ -299,7 +319,7 @@ export default function AutomationBuilderPage() {
         aide: fr ? 'Le client sort du parcours.' : 'The client leaves the journey.' },
     ];
     return [...actions, ...logique];
-  }, [regle, fr]);
+  }, [regle, fr, objetRegle]);
 
   /*
    * Les déclencheurs réservés à une capacité en rodage (`drapeau`) ne sont
@@ -1060,40 +1080,12 @@ export default function AutomationBuilderPage() {
   const { isEnabled: sortieParcoursActive } = useModuleAccess('auto_sortie_parcours');
   const declencheurReglable = Boolean(
     declencheurCourant
-    && ((declencheurCourant.champs?.length ?? 0) > 0 || (sortieParcoursActive && CASE_SORTIE[declencheurCourant.cle])),
+    && ((declencheurCourant.champs?.length ?? 0) > 0 || (sortieParcoursActive && CASE_SORTIE[declencheurCourant.cle])
+      // « Champ modifié » se règle (quel champ, quelle valeur) ; tout
+      // déclencheur dont la fiche a des champs offre ses FILTRES.
+      || declencheurCourant.cle === 'custom_field.changed'
+      || (objetRegle !== null && champsPerso.some((c) => c.object_type === objetRegle))),
   );
-
-  /**
-   * Les champs date de la fiche client — chargés seulement si un
-   * déclencheur en a besoin.
-   *
-   * Inutile de demander la liste des champs personnalisés sur un parcours
-   * « facture payée » : un appel réseau de plus à chaque ouverture de
-   * l'éditeur, pour rien.
-   */
-  const besoinChampsDate = !!declencheurCourant?.champs?.some((c) => c.type === 'champ_date');
-  useEffect(() => {
-    if (!besoinChampsDate) return;
-    let vivant = true;
-    (async () => {
-      try {
-        const liste = await listerChamps('client');
-        if (!vivant) return;
-        setChampsDate(
-          liste.fields
-            // Seuls les champs DATE alimentent `value_date`, et un champ
-            // archivé ne doit plus déclencher d'envoi.
-            .filter((c) => c.field_type === 'date' && !c.archived_at)
-            .map((c) => ({ id: c.id, label: c.label })),
-        );
-      } catch (e: unknown) {
-        // Une liste vide se distingue mal d'un échec : on le journalise
-        // plutôt que de laisser croire qu'aucun champ date n'existe.
-        console.error('[automations] champs date illisibles', e);
-      }
-    })();
-    return () => { vivant = false; };
-  }, [besoinChampsDate]);
 
   /** Le déclencheur demande-t-il un service du catalogue ? */
   const [servicesCatalogue, setServicesCatalogue] = useState<Array<{ id: string; label: string }>>([]);
@@ -1142,10 +1134,24 @@ export default function AutomationBuilderPage() {
    * une règle qui ne partirait jamais.
    */
   const declencheurDetail = useMemo(() => {
-    const champs = declencheurCourant?.champs;
-    if (!champs?.length) return null;
+    const champs = declencheurCourant?.champs ?? [];
     const conditions = (regle?.conditions ?? {}) as Record<string, unknown>;
     const bouts: string[] = [];
+    // « Champ modifié » : le champ surveillé, et la valeur attendue.
+    if (declencheurCourant?.cle === 'custom_field.changed') {
+      const id = champSurveille(conditions);
+      const champ = champsPerso.find((c) => c.id === id);
+      if (!id) bouts.push(fr ? 'N’importe quel champ' : 'Any field');
+      else if (!champ) bouts.push(fr ? 'champ supprimé' : 'deleted field');
+      else {
+        const nv = conditions.new_value;
+        const brut = nv && typeof nv === 'object' && !Array.isArray(nv) ? (nv as { eq?: unknown }).eq : nv;
+        const opt = champ.options.find((o) => o.id === brut)?.label;
+        const valeur = brut === undefined || brut === null ? ''
+          : opt ?? (typeof brut === 'boolean' ? (brut ? (fr ? 'oui' : 'yes') : (fr ? 'non' : 'no')) : saisieDepuisValeurCondition(champ, brut));
+        bouts.push(valeur ? `${champ.label} → ${valeur}` : champ.label);
+      }
+    }
     for (const champ of champs) {
       const v = conditions[champ.cle];
       if (v === undefined || v === null || String(v).trim() === '') {
@@ -1170,8 +1176,10 @@ export default function AutomationBuilderPage() {
         bouts.push(`${fr ? champ.fr : champ.en} : ${v}`);
       }
     }
+    const nbFiltres = Array.isArray(conditions.champs_perso) ? conditions.champs_perso.length : 0;
+    if (nbFiltres) bouts.push(fr ? `${nbFiltres} filtre${nbFiltres > 1 ? 's' : ''}` : `${nbFiltres} filter${nbFiltres > 1 ? 's' : ''}`);
     return bouts.length ? bouts.join(' · ') : null;
-  }, [declencheurCourant, regle?.conditions, champsDate, etapesPipeline, servicesCatalogue, fr]);
+  }, [declencheurCourant, regle?.conditions, champsDate, etapesPipeline, servicesCatalogue, champsPerso, fr]);
 
   /** Enregistrer les réglages du déclencheur. */
   const enregistrerDeclencheur = useCallback(async (conditions: Record<string, unknown>, arreterSiResolu?: boolean) => {
@@ -1918,6 +1926,8 @@ export default function AutomationBuilderPage() {
           etapesPipeline={etapesPipeline}
           etiquettes={etiquettes}
           services={servicesCatalogue}
+          champsPerso={champsPerso}
+          onChanger={() => { setReglageDeclencheur(false); setTiroirDeclencheur(true); }}
           onEnregistrer={enregistrerDeclencheur}
           onFermer={() => setReglageDeclencheur(false)}
         />
@@ -1947,6 +1957,8 @@ export default function AutomationBuilderPage() {
           membres={membres}
           etiquettes={etiquettes}
           automatisations={autresAutomatisations}
+          champsPerso={champsPerso}
+          objetChamps={objetRegle}
           stats={null}
           onEnregistrer={enregistrerEtape}
           onSupprimer={supprimerEtape}
