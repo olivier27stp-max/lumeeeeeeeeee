@@ -1337,6 +1337,12 @@ export const champsCherchablesSchema = z.object({
   field_ids: z.array(z.string().uuid()).max(500),
 }).strict();
 
+/** Champs de base masqués dans le formulaire de création d'un objet (clés de CHAMPS_STANDARD). */
+export const affichageSystemeSchema = z.object({
+  object_type: objetChamp,
+  hidden: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,49}$/)).max(100),
+}).strict();
+
 export const champUniqueSchema = z.object({
   field_id: z.string().uuid(),
   unique: z.boolean(),

@@ -171,6 +171,7 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'DELETE /api/custom-fields/:id': 'settings.update',
   'PUT /api/custom-fields/searchable': 'settings.update',
   'PUT /api/custom-fields/unique': 'settings.update',
+  'PUT /api/custom-fields/system-display': 'settings.update',
   'PUT /api/custom-fields/pipeline-cards/:id': 'settings.update',
   'POST /api/custom-field-folders': 'settings.update',
   'PATCH /api/custom-field-folders/:id': 'settings.update',

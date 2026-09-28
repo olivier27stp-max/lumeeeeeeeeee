@@ -42,6 +42,8 @@ export default function NewClient() {
   const fr = language === 'fr';
   // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
   const champsPerso = useChampsCreation('client', fr, { sections: ['coordonnees', 'lead', 'adresse'] });
+  // Champs de base décochés dans « Gérer les champs » : retirés du formulaire pour toute l'entreprise.
+  const vis = champsPerso.systeme;
   const id = useId();
 
   // ── Form state ──
@@ -350,7 +352,7 @@ export default function NewClient() {
                 <input id={`${id}-last-name`} value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full" />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {vis('client_number') && <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label htmlFor={`${id}-client-number`} className={fieldLabel}>{fr ? 'Numéro de client' : 'Client number'}</label>
                 <input
@@ -366,12 +368,12 @@ export default function NewClient() {
                   disabled={!nextClientNumber}
                 />
               </div>
-            </div>
-            <div className="space-y-2">
+            </div>}
+            {vis('company') && <div className="space-y-2">
               <label htmlFor={`${id}-company`} className={fieldLabel}>{fr ? 'Nom de la compagnie' : 'Company name'}</label>
               <input id={`${id}-company`} value={company} onChange={(e) => setCompany(e.target.value)} className="glass-input w-full" />
               <AnimatePresence initial={false}>
-                {company.trim() && (
+                {company.trim() && vis('display_as_company') && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
@@ -399,8 +401,8 @@ export default function NewClient() {
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
-            <div className="space-y-2">
+            </div>}
+            {vis('phone') && <div className="space-y-2">
               <span className={fieldLabel}>{fr ? 'Numéro de téléphone' : 'Phone number'}</span>
               {/* Same bar as the email one below — the add/remove controls live
                   inside the bar so both bars stay pixel-identical in width. */}
@@ -415,7 +417,7 @@ export default function NewClient() {
                       placeholder={fr ? 'Numéro de téléphone' : 'Phone number'}
                       aria-label={fr ? 'Numéro de téléphone' : 'Phone number'}
                     />
-                    {row.number.trim() && (
+                    {row.number.trim() && vis('phone_label') && (
                       <div className="relative flex items-center shrink-0 border-l border-border pl-2 my-1.5">
                         <select
                           value={row.label}
@@ -443,8 +445,8 @@ export default function NewClient() {
                   </div>
                 ))}
               </div>
-            </div>
-            <div className="space-y-2">
+            </div>}
+            {vis('email') && <div className="space-y-2">
               <label htmlFor={`${id}-email`} className={fieldLabel}>{fr ? 'Courriel' : 'Email'}</label>
               <div className={inlineBar} style={inlineBarStyle}>
                 <input
@@ -456,7 +458,7 @@ export default function NewClient() {
                   className="flex-1 min-w-0 bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 py-[0.5625rem] text-[13px]"
                   placeholder={fr ? 'courriel@exemple.com' : 'email@example.com'}
                 />
-                {email.trim() && (
+                {email.trim() && vis('email_label') && (
                   <div className="relative flex items-center shrink-0 border-l border-border pl-2 my-1.5">
                     <select
                       value={emailLabel}
@@ -479,14 +481,14 @@ export default function NewClient() {
                     : `${emailDupCount} client${emailDupCount > 1 ? 's' : ''} already ${emailDupCount > 1 ? 'have' : 'has'} this email — the new client will still be created.`}
                 </p>
               )}
-            </div>
+            </div>}
             {champsPerso.section('coordonnees')}
           </section>
 
           {/* Lead information */}
-          <section className="space-y-4 border-t border-border pt-6">
+          {(vis('lead_source') || champsPerso.section('lead')) && <section className="space-y-4 border-t border-border pt-6">
             <h3 className={sectionTitle}>{fr ? 'Informations du lead' : 'Lead information'}</h3>
-            <div className="space-y-2">
+            {vis('lead_source') && <div className="space-y-2">
               <label htmlFor={`${id}-lead-source`} className={fieldLabel}>{fr ? 'Source du lead' : 'Lead source'}</label>
               <select
                 id={`${id}-lead-source`}
@@ -533,14 +535,14 @@ export default function NewClient() {
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
+            </div>}
             {champsPerso.section('lead')}
-          </section>
+          </section>}
 
           {/* Property address */}
           <section className="space-y-4 border-t border-border pt-6">
             <h3 className={sectionTitle}>{fr ? 'Adresse de la propriété' : 'Property address'}</h3>
-            <div className="space-y-2">
+            {vis('address') && <div className="space-y-2">
               <span className={fieldLabel}>{fr ? 'Adresse' : 'Address'}</span>
               <AddressAutocomplete
                 value={addressSearch}
@@ -548,10 +550,10 @@ export default function NewClient() {
                 onSelect={(addr) => { setStructured(addr); setAddressSearch(addr.formatted_address); }}
                 placeholder={fr ? 'Commencez à taper une adresse…' : 'Start typing an address...'}
               />
-            </div>
+            </div>}
 
             {/* Taxes — org defaults pre-checked */}
-            <div className="space-y-2">
+            {vis('taxes') && <div className="space-y-2">
               <span className={fieldLabel}>Taxes</span>
               {taxesLoading ? (
                 <div className="h-5 w-40 bg-surface-tertiary rounded animate-pulse" />
@@ -590,10 +592,10 @@ export default function NewClient() {
                   ? 'Appliquées par défaut aux soumissions et factures de ce client. Présélection : les taxes de votre entreprise.'
                   : "Applied by default to this client's quotes and invoices. Preselected: your company's taxes."}
               </p>
-            </div>
+            </div>}
 
             {/* Billing address */}
-            <label className="flex items-start gap-3 cursor-pointer pt-1">
+            {vis('billing_same_as_service') && <label className="flex items-start gap-3 cursor-pointer pt-1">
               <input
                 type="checkbox"
                 checked={billingSame}
@@ -605,9 +607,9 @@ export default function NewClient() {
                   ? "L'adresse de facturation est identique à l'adresse de la propriété"
                   : 'Billing address is the same as property address'}
               </span>
-            </label>
+            </label>}
             <AnimatePresence initial={false}>
-              {!billingSame && (
+              {!billingSame && vis('billing_address') && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}

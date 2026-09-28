@@ -22,6 +22,8 @@ const MIG_TYPES = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '
 const MIG_PROPRIETE = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260929180000_champs_objet_propriete.sql'), 'utf8');
 // Champs système (audit des formulaires) : cf_cles_standard en vigueur + cf_sections_systeme.
 const MIG_SYSTEME = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260930100000_champs_dossiers_systeme.sql'), 'utf8');
+// Clés réservées en vigueur (champs manquants ajoutés, 2026-09-28).
+const MIG_CLES = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260930110000_champs_systeme_affichage.sql'), 'utf8');
 
 describe('parité SQL ↔ TypeScript', () => {
   it('objets', () => {
@@ -40,7 +42,7 @@ describe('parité SQL ↔ TypeScript', () => {
   });
   it('clés standard réservées (cf_cles_standard) = registre CHAMPS_STANDARD', () => {
     for (const objet of OBJETS) {
-      const m = new RegExp(`when '${objet}'\\s+then array\\[([^\\]]*)\\]`).exec(MIG_SYSTEME);
+      const m = new RegExp(`when '${objet}'\\s+then array\\[([^\\]]*)\\]`).exec(MIG_CLES);
       expect(m, objet).not.toBeNull();
       expect(liste(m![1]), objet).toEqual(CHAMPS_STANDARD[objet].map((c) => c.key));
     }

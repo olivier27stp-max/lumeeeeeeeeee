@@ -41,6 +41,23 @@ const nomClient = (c: Ligne | null | undefined) => {
   const personne = `${txt(c.first_name)} ${txt(c.last_name)}`.trim();
   return c.display_as_company && txt(c.company) ? txt(c.company) : personne || txt(c.company);
 };
+const TYPES_NUMERO: Record<string, [string, string]> = {
+  work: ['Travail', 'Work'], mobile: ['Mobile', 'Mobile'], home: ['Maison', 'Home'], fax: ['Fax', 'Fax'], other: ['Autre', 'Other'],
+};
+const TYPES_COURRIEL: Record<string, [string, string]> = {
+  main: ['Principal', 'Main'], work: ['Travail', 'Work'], personal: ['Personnel', 'Personal'], other: ['Autre', 'Other'],
+};
+const libelleDe = (table: Record<string, [string, string]>, v: unknown, f: Format) => {
+  const t = table[txt(v)];
+  return t ? (f.langue === 'fr' ? t[0] : t[1]) : txt(v);
+};
+const heure = (iso: unknown, f: Format) => {
+  const s = txt(iso);
+  if (!s) return '';
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat(f.langue === 'fr' ? 'fr-CA' : 'en-CA', { hour: '2-digit', minute: '2-digit', timeZone: f.fuseau }).format(d);
+};
 const typeDepot = (v: unknown, f: Format) => (v === 'fixed' ? (f.langue === 'fr' ? 'Montant fixe' : 'Fixed amount')
   : v === 'percentage' ? (f.langue === 'fr' ? 'Pourcentage' : 'Percentage') : '');
 const valeurDepot = (type: unknown, valeur: unknown, f: Format) => {
@@ -64,7 +81,7 @@ async function client(db: SupabaseClient, id: unknown, orgId: string): Promise<L
 }
 
 async function valeursClient(db: SupabaseClient, orgId: string, id: string, f: Format): Promise<Valeurs> {
-  const c = await une(db, 'clients', 'first_name, last_name, client_number, company, display_as_company, phone, email, lead_source, address, tax_ids, billing_same_as_service, billing_address', id, orgId);
+  const c = await une(db, 'clients', 'first_name, last_name, client_number, company, display_as_company, phone, phones, email, email_label, lead_source, address, tax_ids, billing_same_as_service, billing_address', id, orgId);
   if (!c) return {};
   const taxIds = Array.isArray(c.tax_ids) ? (c.tax_ids as string[]) : [];
   let taxes = '';
@@ -74,26 +91,28 @@ async function valeursClient(db: SupabaseClient, orgId: string, id: string, f: F
   }
   return {
     first_name: txt(c.first_name), last_name: txt(c.last_name), client_number: txt(c.client_number), company: txt(c.company),
-    display_as_company: ouiNon(c.display_as_company, f), phone: txt(c.phone), email: txt(c.email), lead_source: txt(c.lead_source),
+    display_as_company: ouiNon(c.display_as_company, f), phone: txt(c.phone),
+    phone_label: libelleDe(TYPES_NUMERO, Array.isArray(c.phones) ? (c.phones as Ligne[])[0]?.label : null, f),
+    email: txt(c.email), email_label: libelleDe(TYPES_COURRIEL, c.email_label, f), lead_source: txt(c.lead_source),
     address: txt(c.address), taxes, billing_same_as_service: ouiNon(c.billing_same_as_service, f),
     billing_address: c.billing_same_as_service ? txt(c.address) : txt(c.billing_address),
   };
 }
 
 async function valeursJob(db: SupabaseClient, orgId: string, id: string, f: Format): Promise<Valeurs> {
-  const j = await une(db, 'jobs', 'title, job_number, salesperson_id, sale_date, show_on_leaderboard, ask_for_review, client_id, client_name, property_address, job_type, team_id, requires_invoicing, billing_split, deposit_required, deposit_type, deposit_value, require_payment_method, tax_lines, notes', id, orgId);
+  const j = await une(db, 'jobs', 'title, job_number, salesperson_id, sale_date, show_on_leaderboard, ask_for_review, client_id, client_name, property_address, job_type, team_id, requires_invoicing, billing_split, deposit_required, deposit_type, deposit_value, require_payment_method, tax_lines, notes, subtotal_cents, total_cents', id, orgId);
   if (!j) return {};
   const [vendeur, equipe, lignes, visites, contrat, cli] = await Promise.all([
     nomProfil(db, j.salesperson_id),
     j.team_id ? db.from('teams').select('name').eq('id', String(j.team_id)).maybeSingle().then((r) => txt(r.data?.name)) : Promise.resolve(''),
     db.from('job_line_items').select('name').eq('job_id', id).is('deleted_at', null).order('created_at').then((r) => (r.data ?? []).map((x) => txt(x.name)).filter(Boolean).join(', ')),
-    db.from('schedule_events').select('start_at').eq('job_id', id).is('deleted_at', null).order('start_at').then((r) => (r.data ?? []).map((x) => txt(x.start_at))),
+    db.from('schedule_events').select('start_at, end_at').eq('job_id', id).is('deleted_at', null).order('start_at').then((r) => (r.data ?? []) as Ligne[]),
     db.from('job_agreements').select('id').eq('job_id', id).is('deleted_at', null).limit(1).then((r) => (r.data ?? []).length > 0),
     client(db, j.client_id, orgId),
   ]);
   // La prochaine visite ; à défaut, la dernière.
   const maintenant = new Date().toISOString();
-  const visite = visites.find((v) => v >= maintenant) ?? visites[visites.length - 1] ?? '';
+  const visite = visites.find((v) => txt(v.start_at) >= maintenant) ?? visites[visites.length - 1] ?? null;
   const taxes = Array.isArray(j.tax_lines) ? (j.tax_lines as Ligne[]).filter((t) => t.enabled !== false).map((t) => txt(t.name)).filter(Boolean).join(', ') : '';
   const recurrent = j.job_type === 'recurring';
   return {
@@ -101,16 +120,17 @@ async function valeursJob(db: SupabaseClient, orgId: string, id: string, f: Form
     show_on_leaderboard: ouiNon(j.show_on_leaderboard, f), ask_for_review: ouiNon(j.ask_for_review, f),
     client: nomClient(cli) || txt(j.client_name), property: txt(j.property_address) === '-' ? '' : txt(j.property_address),
     job_type: recurrent ? (f.langue === 'fr' ? 'Forfait de service' : 'Service plan') : (f.langue === 'fr' ? 'Service ponctuel' : 'One-off'),
-    visits: date(visite, f), team: equipe, requires_invoicing: ouiNon(j.requires_invoicing, f), billing_split: ouiNon(j.billing_split, f),
+    visits: date(visite?.start_at, f), visit_start_time: heure(visite?.start_at, f), visit_end_time: heure(visite?.end_at, f), team: equipe, requires_invoicing: ouiNon(j.requires_invoicing, f), billing_split: ouiNon(j.billing_split, f),
     deposit_required: ouiNon(j.deposit_required, f), deposit_type: j.deposit_required ? typeDepot(j.deposit_type, f) : '',
     deposit_value: j.deposit_required ? valeurDepot(j.deposit_type, j.deposit_value, f) : '',
     require_payment_method: ouiNon(j.require_payment_method, f), line_items: lignes, taxes,
+    subtotal: argent(j.subtotal_cents, f), total: argent(j.total_cents, f),
     agreement: ouiNon(contrat, f), notes: txt(j.notes),
   };
 }
 
 async function valeursDevis(db: SupabaseClient, orgId: string, id: string, f: Format): Promise<Valeurs> {
-  const q = await une(db, 'quotes', 'client_id, lead_id, quote_type, title, property_id, quote_number, salesperson_id, created_at, valid_until, contract_disclaimer, notes, discount_cents, tax_cents, deposit_required, deposit_type, deposit_value, require_payment_method', id, orgId);
+  const q = await une(db, 'quotes', 'client_id, lead_id, quote_type, title, property_id, quote_number, salesperson_id, created_at, valid_until, contract_disclaimer, notes, subtotal_cents, discount_cents, tax_cents, total_cents, deposit_required, deposit_type, deposit_value, require_payment_method', id, orgId);
   if (!q) return {};
   const [cli, vendeur, propriete, sections, lignes] = await Promise.all([
     client(db, q.client_id ?? q.lead_id, orgId),
@@ -119,6 +139,8 @@ async function valeursDevis(db: SupabaseClient, orgId: string, id: string, f: Fo
     db.from('quote_sections').select('section_type, content, enabled').eq('quote_id', id).then((r) => (r.data ?? []) as Ligne[]),
     db.from('quote_line_items').select('name').eq('quote_id', id).order('sort_order').then((r) => (r.data ?? []).map((x) => txt(x.name)).filter(Boolean).join(', ')),
   ]);
+  const { data: notesSpec } = await db.from('specific_notes').select('text').eq('entity_type', 'quote').eq('entity_id', id).order('created_at');
+  const specifiques = (notesSpec ?? []).map((n) => txt(n.text)).filter(Boolean).join('\n');
   const section = (type: string) => txt(sections.find((s) => s.section_type === type && s.enabled !== false)?.content);
   let photos = 0;
   try { const p: unknown = JSON.parse(section('images') || '[]'); photos = Array.isArray(p) ? p.length : 0; } catch { photos = 0; }
@@ -129,7 +151,8 @@ async function valeursDevis(db: SupabaseClient, orgId: string, id: string, f: Fo
     title: txt(q.title), property: propriete, quote_number: txt(q.quote_number), salesperson: vendeur,
     valid_days: jours !== null && jours > 0 ? String(jours) : '', photos: photos ? String(photos) : '',
     introduction: section('introduction'), line_items: lignes, contract_disclaimer: txt(q.contract_disclaimer),
-    client_message: section('client_message'), notes: txt(q.notes), discount: Number(q.discount_cents) ? argent(q.discount_cents, f) : '',
+    client_message: section('client_message'), notes: txt(q.notes), specific_notes: specifiques,
+    subtotal: argent(q.subtotal_cents, f), total: argent(q.total_cents, f), discount: Number(q.discount_cents) ? argent(q.discount_cents, f) : '',
     tax: argent(q.tax_cents, f), deposit_required: ouiNon(q.deposit_required, f), deposit_type: q.deposit_required ? typeDepot(q.deposit_type, f) : '',
     deposit_value: q.deposit_required ? valeurDepot(q.deposit_type, q.deposit_value, f) : '', require_payment_method: ouiNon(q.require_payment_method, f),
   };
