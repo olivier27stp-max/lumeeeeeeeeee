@@ -10,7 +10,7 @@
    Payments, Follow-up, Reviews, Client
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Zap, Clock, Mail, Bell, FileText, CalendarClock, MessageSquare,
@@ -49,6 +49,7 @@ import {
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { useModuleAccess } from '../hooks/useModuleAccess';
 import { apercuClientsInactifs } from '../lib/reservationApi';
+import { creerFileBascule } from '../lib/fileBascule';
 import {
   type AutomationRule,
   getAutomationRules,
@@ -369,7 +370,37 @@ export default function Automations() {
 
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
+  /*
+   * Interrupteur Brouillon / Publiée martelé (Rafba, 2026-09-28) : l'écran
+   * suit le dernier clic, le serveur reçoit les changements un à la fois
+   * (voir fileBascule.ts). `restentAffichees` : une ligne basculée RESTE à
+   * sa place tant qu'on ne change pas d'onglet ou de filtre — sinon un
+   * modèle passé en brouillon partait dans « Modèles », la ligne du dessous
+   * remontait sous la souris et le clic suivant basculait une AUTRE
+   * automatisation.
+   */
+  const [restentAffichees, setRestentAffichees] = useState<Set<string>>(() => new Set());
+  const [, setVersionBascule] = useState(0);
+  const frRef = useRef(fr);
+  useEffect(() => { frRef.current = fr; }, [fr]);
+  const confirmationOuverte = useRef(false);
+  const [fileBascule] = useState(() => creerFileBascule({
+    envoyer: toggleAutomationRule,
+    surFin: (id, actif) => {
+      setRules((prev) => prev.map((r) => (r.id === id ? { ...r, is_active: actif } : r)));
+      setVersionBascule((v) => v + 1);
+      // Un seul toast par automatisation, remplacé à chaque fin : pas une pile.
+      toast.success(actif
+        ? (frRef.current ? 'Automatisation publiée' : 'Automation published')
+        : (frRef.current ? 'Repassée en brouillon' : 'Back to draft'), { id: `bascule-${id}` });
+    },
+    surEchec: (id, retour, erreur) => {
+      console.error('[Automations] bascule publication', erreur);
+      setRules((prev) => prev.map((r) => (r.id === id ? { ...r, is_active: retour } : r)));
+      setVersionBascule((v) => v + 1);
+      toast.error(frRef.current ? 'Impossible de mettre à jour' : 'Could not update', { id: `bascule-${id}` });
+    },
+  }));
   const [search, setSearch] = useState('');
   const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
   const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
@@ -477,7 +508,8 @@ export default function Automations() {
         if (vues.has(r.preset_key)) return false;
         vues.add(r.preset_key);
         return true;
-      }));
+      // Une bascule encore en vol garde l'état du dernier clic.
+      }).map((r) => ({ ...r, is_active: fileBascule.etatAffiche(r.id, r.is_active) })));
       try {
         setFailureCounts(await getFailureCountsByRule());
       } catch (e: any) {
@@ -591,42 +623,39 @@ export default function Automations() {
 
   // Changer d'onglet ou de filtre remet à la première page : rester en page 3
   // d'une liste qui n'en a plus qu'une donne un écran vide inexplicable.
-  useEffect(() => { setPage(1); }, [onglet, search, filterCategory, filterStatut]);
+  useEffect(() => { setPage(1); setRestentAffichees(new Set()); }, [onglet, search, filterCategory, filterStatut]);
 
   const handleToggle = async (rule: AutomationRule) => {
-    const newActive = !rule.is_active;
+    // Une confirmation déjà à l'écran : les clics suivants n'en ouvrent pas d'autres.
+    if (confirmationOuverte.current) return;
+    const versActive = !fileBascule.etatAffiche(rule.id, rule.is_active);
     // « Client inactif » : dire combien de clients sont visés AVANT d'activer.
-    if (newActive && rule.trigger_event === 'client.inactive') {
-      let n: number | null = null;
+    if (versActive && rule.trigger_event === 'client.inactive') {
+      confirmationOuverte.current = true;
       try {
-        n = await apercuClientsInactifs(Number((rule.conditions as Record<string, unknown> | null)?.mois ?? 6));
-      } catch (e) {
-        console.error('[Automations] aperçu clients inactifs', e);
+        let n: number | null = null;
+        try {
+          n = await apercuClientsInactifs(Number((rule.conditions as Record<string, unknown> | null)?.mois ?? 6));
+        } catch (e) {
+          console.error('[Automations] aperçu clients inactifs', e);
+        }
+        const ok = await confirmer({
+          title: fr ? 'Activer « Client inactif » ?' : 'Activate “Inactive client”?',
+          message: n === null
+            ? (fr ? 'Les messages partiront par petits lots, en journée.' : 'Messages will go out in small batches, during the day.')
+            : (fr
+              ? `${n} client${n > 1 ? 's' : ''} correspond${n > 1 ? 'ent' : ''} aujourd’hui. Les messages partiront par petits lots, en journée.`
+              : `${n} client${n > 1 ? 's' : ''} match${n > 1 ? '' : 'es'} today. Messages will go out in small batches, during the day.`),
+          confirmLabel: fr ? 'Activer' : 'Activate',
+        });
+        if (!ok) return;
+      } finally {
+        confirmationOuverte.current = false;
       }
-      const ok = await confirmer({
-        title: fr ? 'Activer « Client inactif » ?' : 'Activate “Inactive client”?',
-        message: n === null
-          ? (fr ? 'Les messages partiront par petits lots, en journée.' : 'Messages will go out in small batches, during the day.')
-          : (fr
-            ? `${n} client${n > 1 ? 's' : ''} correspond${n > 1 ? 'ent' : ''} aujourd’hui. Les messages partiront par petits lots, en journée.`
-            : `${n} client${n > 1 ? 's' : ''} match${n > 1 ? '' : 'es'} today. Messages will go out in small batches, during the day.`),
-        confirmLabel: fr ? 'Activer' : 'Activate',
-      });
-      if (!ok) return;
     }
-    setTogglingId(rule.id);
-    setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: newActive } : r)));
-    try {
-      await toggleAutomationRule(rule.id, newActive);
-      toast.success(newActive
-        ? (fr ? 'Automatisation publiée' : 'Automation published')
-        : (fr ? 'Repassée en brouillon' : 'Back to draft'));
-    } catch {
-      toast.error(fr ? 'Impossible de mettre à jour' : 'Could not update');
-      setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: rule.is_active } : r)));
-    } finally {
-      setTogglingId(null);
-    }
+    setRestentAffichees((prev) => (prev.has(rule.id) ? prev : new Set(prev).add(rule.id)));
+    const voulu = fileBascule.basculer(rule.id, rule.is_active);
+    setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: voulu } : r)));
   };
 
   const partirDeZero = async (avecLumi: boolean) => {
@@ -791,11 +820,14 @@ export default function Automations() {
   const mesAutos = vivantes.filter((r) => !r.is_preset || r.is_active);
   const modeles = vivantes.filter((r) => r.is_preset && !r.is_active);
 
+  // Une ligne basculée sur cet onglet y reste (voir `restentAffichees`) ;
+  // les compteurs, eux, suivent l'état réel.
+  const resteIci = (r: AutomationRule) => restentAffichees.has(r.id);
   const sourceOnglet =
     onglet === 'verifier' ? aVerifier
-    : onglet === 'modeles' ? modeles
+    : onglet === 'modeles' ? vivantes.filter((r) => r.is_preset && (!r.is_active || resteIci(r)))
     : onglet === 'corbeille' ? supprimees
-    : mesAutos;
+    : vivantes.filter((r) => !r.is_preset || r.is_active || resteIci(r));
 
   const filtrees = sourceOnglet.filter((r) => {
     if (search) {
@@ -804,8 +836,8 @@ export default function Automations() {
       if (!nom.includes(q) && !(r.description || '').toLowerCase().includes(q)) return false;
     }
     if (filterCategory !== 'all' && getCategory(r) !== filterCategory) return false;
-    if (filterStatut === 'publiee' && !r.is_active) return false;
-    if (filterStatut === 'brouillon' && r.is_active) return false;
+    if (filterStatut === 'publiee' && !r.is_active && !resteIci(r)) return false;
+    if (filterStatut === 'brouillon' && r.is_active && !resteIci(r)) return false;
     // Le dossier affiché. `null` = tout, 'racine' = celles qui ne sont
     // rangées nulle part.
     if (dossierActif === 'racine' && r.folder_id) return false;
@@ -1550,7 +1582,7 @@ export default function Automations() {
                               <InterrupteurPublication
                                 actif={rule.is_active}
                                 onBascule={() => handleToggle(rule)}
-                                enCours={togglingId === rule.id}
+                                enCours={fileBascule.enCours(rule.id)}
                                 desactive={!!rule.deleted_at}
                                 libelle={rule.is_active
                                   ? (fr ? `Repasser ${rule.name} en brouillon` : `Unpublish ${rule.name}`)
