@@ -8,10 +8,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-send_email-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-send_email-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "send_email",
      "action_config": {
       "subject": "Un message de [company_name]",
@@ -19,7 +19,7 @@
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-send_email-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-send_email-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -28,8 +28,8 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
@@ -44,10 +44,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-send_email-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-send_email-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "send_email",
      "action_config": {
       "subject": "Un message de [company_name]",
@@ -69,8 +69,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Un message de Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "6d46883e6314fa8c"
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "87af4a5f627e45f1"
    }
   ],
   "annulees": []
@@ -89,21 +89,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-send_email-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-send_email-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "send_email",
       "config": "#a3a38c79afb7",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-send_email-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-send_email-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -179,8 +192,8 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
@@ -195,11 +208,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-send_email-86400",
+     "automation_rule_id": "regle-quote.viewed-send_email-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "send_email",
      "action_config": {
       "subject": "Un message de [company_name]",
@@ -238,8 +251,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Un message de Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "6d46883e6314fa8c"
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "87af4a5f627e45f1"
    }
   ],
   "annulees": []
@@ -253,17 +266,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-send_sms-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-send_sms-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "send_sms",
      "action_config": {
       "body": "Bonjour [client_name], c’est [company_name]. Merci !"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-send_sms-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-send_sms-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -287,10 +300,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-send_sms-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-send_sms-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "send_sms",
      "action_config": {
       "body": "Bonjour [client_name], c’est [company_name]. Merci !"
@@ -329,21 +342,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-send_sms-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-send_sms-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "send_sms",
       "config": "#a1e2d6f73412",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-send_sms-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-send_sms-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -424,11 +450,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-send_sms-86400",
+     "automation_rule_id": "regle-quote.viewed-send_sms-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "send_sms",
      "action_config": {
       "body": "Bonjour [client_name], c’est [company_name]. Merci !"
@@ -479,17 +505,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-create_notification-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-create_notification-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "create_notification",
      "action_config": {
       "title": "Suivi a faire pour [client_name]"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-create_notification-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-create_notification-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -501,7 +527,7 @@
      "type": "automation",
      "title": "Suivi a faire pour Marie Tremblay",
      "body": "",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "link": null
     }
    },
@@ -511,10 +537,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-create_notification-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-create_notification-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "create_notification",
      "action_config": {
       "title": "Suivi a faire pour [client_name]"
@@ -546,21 +572,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-create_notification-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-create_notification-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "create_notification",
       "config": "#53d09b403d36",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-create_notification-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-create_notification-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -615,7 +654,7 @@
      "type": "automation",
      "title": "Suivi a faire pour Marie Tremblay",
      "body": "",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "link": null
     }
    },
@@ -625,11 +664,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-create_notification-86400",
+     "automation_rule_id": "regle-quote.viewed-create_notification-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "create_notification",
      "action_config": {
       "title": "Suivi a faire pour [client_name]"
@@ -673,17 +712,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-request_review-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-request_review-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "request_review",
      "action_config": {
       "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-request_review-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-request_review-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -703,8 +742,8 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
@@ -748,8 +787,8 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "related_entity_type": "client",
      "related_entity_id": null,
      "event_type": "review_requested",
@@ -767,10 +806,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-request_review-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-request_review-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "request_review",
      "action_config": {
       "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
@@ -799,8 +838,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer votre projet et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "182a0cb16e0ff715"
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "b16b9eecbb6c683a"
    }
   ],
   "annulees": []
@@ -819,21 +858,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-request_review-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-request_review-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "request_review",
       "config": "#7da2d3b10aed",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-request_review-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-request_review-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -920,8 +972,8 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
@@ -979,8 +1031,8 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "related_entity_type": "client",
      "related_entity_id": null,
      "event_type": "review_requested",
@@ -998,11 +1050,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-request_review-86400",
+     "automation_rule_id": "regle-quote.viewed-request_review-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "request_review",
      "action_config": {
       "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
@@ -1048,8 +1100,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer votre projet et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "182a0cb16e0ff715"
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "b16b9eecbb6c683a"
    }
   ],
   "annulees": []
@@ -1063,17 +1115,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-envoyer_slack-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-envoyer_slack-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "envoyer_slack",
      "action_config": {
       "body": "[client_name] — suivi a faire"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-envoyer_slack-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-envoyer_slack-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -1082,10 +1134,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-envoyer_slack-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-envoyer_slack-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "envoyer_slack",
      "action_config": {
       "body": "[client_name] — suivi a faire"
@@ -1122,21 +1174,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-envoyer_slack-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-envoyer_slack-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "envoyer_slack",
       "config": "#55f014bdd1f1",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-envoyer_slack-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-envoyer_slack-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -1188,11 +1253,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-envoyer_slack-86400",
+     "automation_rule_id": "regle-quote.viewed-envoyer_slack-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "envoyer_slack",
      "action_config": {
       "body": "[client_name] — suivi a faire"
@@ -1241,17 +1306,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-ajouter_etiquette-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-ajouter_etiquette-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "ajouter_etiquette",
      "action_config": {
       "etiquette": "vip"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-ajouter_etiquette-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-ajouter_etiquette-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -1269,10 +1334,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-ajouter_etiquette-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-ajouter_etiquette-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "ajouter_etiquette",
      "action_config": {
       "etiquette": "vip"
@@ -1303,21 +1368,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-ajouter_etiquette-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-ajouter_etiquette-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "ajouter_etiquette",
       "config": "#2d8b10f3737a",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-ajouter_etiquette-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-ajouter_etiquette-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -1378,11 +1456,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-ajouter_etiquette-86400",
+     "automation_rule_id": "regle-quote.viewed-ajouter_etiquette-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "ajouter_etiquette",
      "action_config": {
       "etiquette": "vip"
@@ -1425,17 +1503,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-retirer_etiquette-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-retirer_etiquette-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "retirer_etiquette",
      "action_config": {
       "etiquette": "vip"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-retirer_etiquette-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-retirer_etiquette-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -1461,10 +1539,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-retirer_etiquette-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-retirer_etiquette-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "retirer_etiquette",
      "action_config": {
       "etiquette": "vip"
@@ -1495,21 +1573,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-retirer_etiquette-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-retirer_etiquette-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "retirer_etiquette",
       "config": "#2d8b10f3737a",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-retirer_etiquette-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-retirer_etiquette-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -1578,11 +1669,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-retirer_etiquette-86400",
+     "automation_rule_id": "regle-quote.viewed-retirer_etiquette-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "retirer_etiquette",
      "action_config": {
       "etiquette": "vip"
@@ -1625,10 +1716,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-modifier_client-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-modifier_client-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "modifier_client",
      "action_config": {
       "statut": "active",
@@ -1636,7 +1727,7 @@
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-modifier_client-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-modifier_client-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -1666,10 +1757,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-modifier_client-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-modifier_client-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "modifier_client",
      "action_config": {
       "statut": "active",
@@ -1702,21 +1793,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-modifier_client-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-modifier_client-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "modifier_client",
       "config": "#ed5009044ce8",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-modifier_client-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-modifier_client-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -1789,11 +1893,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-modifier_client-86400",
+     "automation_rule_id": "regle-quote.viewed-modifier_client-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "modifier_client",
      "action_config": {
       "statut": "active",
@@ -1838,17 +1942,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-assigner_responsable-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-assigner_responsable-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "assigner_responsable",
      "action_config": {
       "membre_id": "aaaaaaaa-0000-4000-8000-000000000006"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-assigner_responsable-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-assigner_responsable-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -1877,10 +1981,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-assigner_responsable-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-assigner_responsable-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "assigner_responsable",
      "action_config": {
       "membre_id": "aaaaaaaa-0000-4000-8000-000000000006"
@@ -1911,21 +2015,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-assigner_responsable-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-assigner_responsable-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "assigner_responsable",
       "config": "#d1e2bb013481",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-assigner_responsable-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-assigner_responsable-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -1997,11 +2114,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-assigner_responsable-86400",
+     "automation_rule_id": "regle-quote.viewed-assigner_responsable-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "assigner_responsable",
      "action_config": {
       "membre_id": "aaaaaaaa-0000-4000-8000-000000000006"
@@ -2044,17 +2161,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-ajouter_note-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-ajouter_note-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "ajouter_note",
      "action_config": {
       "body": "Note automatique pour [client_name]."
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-ajouter_note-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-ajouter_note-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -2074,10 +2191,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-ajouter_note-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-ajouter_note-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "ajouter_note",
      "action_config": {
       "body": "Note automatique pour [client_name]."
@@ -2108,21 +2225,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-ajouter_note-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-ajouter_note-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "ajouter_note",
       "config": "#adb1dea6cd43",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-ajouter_note-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-ajouter_note-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -2185,11 +2315,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-ajouter_note-86400",
+     "automation_rule_id": "regle-quote.viewed-ajouter_note-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "ajouter_note",
      "action_config": {
       "body": "Note automatique pour [client_name]."
@@ -2232,17 +2362,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-create_task-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-create_task-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "create_task",
      "action_config": {
       "title": "Rappeler [client_name]"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-create_task-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-create_task-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -2256,8 +2386,8 @@
      "status": "open",
      "priority": "medium",
      "assignee_user_id": null,
-     "linked_entity_type": "client",
-     "linked_entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "linked_entity_type": "quote",
+     "linked_entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "created_by": "aaaaaaaa-0000-4000-8000-000000000006",
      "due_date": null
     }
@@ -2268,10 +2398,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-create_task-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-create_task-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "create_task",
      "action_config": {
       "title": "Rappeler [client_name]"
@@ -2302,21 +2432,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-create_task-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-create_task-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "create_task",
       "config": "#a9b25e94286f",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-create_task-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-create_task-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -2373,8 +2516,8 @@
      "status": "open",
      "priority": "medium",
      "assignee_user_id": null,
-     "linked_entity_type": "client",
-     "linked_entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "linked_entity_type": "quote",
+     "linked_entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "created_by": "aaaaaaaa-0000-4000-8000-000000000006",
      "due_date": null
     }
@@ -2385,11 +2528,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-create_task-86400",
+     "automation_rule_id": "regle-quote.viewed-create_task-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "create_task",
      "action_config": {
       "title": "Rappeler [client_name]"
@@ -2423,6 +2566,474 @@
   "envois": [],
   "annulees": []
  },
+ "move_deal_stage@0": {
+  "planifie": [],
+  "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.viewed-move_deal_stage-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "move_deal_stage",
+     "action_config": {
+      "stage_id": "aaaaaaaa-0000-4000-8000-00000000000a"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.viewed-move_deal_stage-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "deals",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "aaaaaaaa-0000-4000-8000-000000000007"
+     ],
+     [
+      "eq",
+      "org_id",
+      "11111111-1111-4111-8111-111111111111"
+     ]
+    ],
+    "valeur": {
+     "stage_id": "aaaaaaaa-0000-4000-8000-00000000000a"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.viewed-move_deal_stage-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "move_deal_stage",
+     "action_config": {
+      "stage_id": "aaaaaaaa-0000-4000-8000-00000000000a"
+     },
+     "result_success": true,
+     "result_data": {
+      "stage_id": "aaaaaaaa-0000-4000-8000-00000000000a"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   }
+  ],
+  "envois": [],
+  "annulees": []
+ },
+ "move_deal_stage@86400": {
+  "planifie": [
+   {
+    "action": "move_deal_stage",
+    "execute_at": "2026-09-14T15:00:00.000Z"
+   }
+  ],
+  "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_scheduled_tasks",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.viewed-move_deal_stage-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_config": {
+      "type": "move_deal_stage",
+      "config": "#d7ee451a74c7",
+      "trigger_event": "quote.viewed",
+      "event_metadata": {
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
+      }
+     },
+     "execute_at": "2026-09-14T15:00:00.000Z",
+     "status": "pending",
+     "execution_key": "regle-quote.viewed-move_deal_stage-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
+    }
+   },
+   {
+    "moment": "differe:move_deal_stage",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "status",
+      "running"
+     ],
+     [
+      "lt",
+      "execute_at",
+      "2026-09-14T14:45:00.000Z"
+     ]
+    ],
+    "valeur": {
+     "status": "pending",
+     "execute_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:move_deal_stage",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "tache-1"
+     ],
+     [
+      "eq",
+      "status",
+      "pending"
+     ]
+    ],
+    "valeur": {
+     "status": "running",
+     "attempts": 1,
+     "execute_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:move_deal_stage",
+    "table": "deals",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "aaaaaaaa-0000-4000-8000-000000000007"
+     ],
+     [
+      "eq",
+      "org_id",
+      "11111111-1111-4111-8111-111111111111"
+     ]
+    ],
+    "valeur": {
+     "stage_id": "aaaaaaaa-0000-4000-8000-00000000000a"
+    }
+   },
+   {
+    "moment": "differe:move_deal_stage",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.viewed-move_deal_stage-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "move_deal_stage",
+     "action_config": {
+      "stage_id": "aaaaaaaa-0000-4000-8000-00000000000a"
+     },
+     "result_success": true,
+     "result_data": {
+      "stage_id": "aaaaaaaa-0000-4000-8000-00000000000a"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:move_deal_stage",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "tache-1"
+     ]
+    ],
+    "valeur": {
+     "status": "completed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": null
+    }
+   }
+  ],
+  "envois": [],
+  "annulees": []
+ },
+ "envoyer_soumission@0": {
+  "planifie": [],
+  "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.viewed-envoyer_soumission-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "envoyer_soumission",
+     "action_config": {},
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.viewed-envoyer_soumission-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "event_type": "email_sent",
+     "metadata": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Soumission Q-2026-042",
+      "source": "automation"
+     }
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.viewed-envoyer_soumission-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "envoyer_soumission",
+     "action_config": {},
+     "result_success": true,
+     "result_data": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Soumission Q-2026-042"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   }
+  ],
+  "envois": [
+   {
+    "moment": "immediat",
+    "canal": "courriel",
+    "to": "marie.tremblay@example.test",
+    "subject": "Soumission Q-2026-042",
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Voici votre soumission Q-2026-042. https://app.lume.test/quote/bbbbbbbb-0000-4000-8000-000000000001 Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "729e528497c8d394"
+   }
+  ],
+  "annulees": []
+ },
+ "envoyer_soumission@86400": {
+  "planifie": [
+   {
+    "action": "envoyer_soumission",
+    "execute_at": "2026-09-14T15:00:00.000Z"
+   }
+  ],
+  "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_scheduled_tasks",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.viewed-envoyer_soumission-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_config": {
+      "type": "envoyer_soumission",
+      "config": "#44136fa355b3",
+      "trigger_event": "quote.viewed",
+      "event_metadata": {
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
+      }
+     },
+     "execute_at": "2026-09-14T15:00:00.000Z",
+     "status": "pending",
+     "execution_key": "regle-quote.viewed-envoyer_soumission-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
+    }
+   },
+   {
+    "moment": "differe:envoyer_soumission",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "status",
+      "running"
+     ],
+     [
+      "lt",
+      "execute_at",
+      "2026-09-14T14:45:00.000Z"
+     ]
+    ],
+    "valeur": {
+     "status": "pending",
+     "execute_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:envoyer_soumission",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "tache-1"
+     ],
+     [
+      "eq",
+      "status",
+      "pending"
+     ]
+    ],
+    "valeur": {
+     "status": "running",
+     "attempts": 1,
+     "execute_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:envoyer_soumission",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "email-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:envoyer_soumission",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
+    }
+   },
+   {
+    "moment": "differe:envoyer_soumission",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "event_type": "email_sent",
+     "metadata": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Soumission Q-2026-042",
+      "source": "automation"
+     }
+    }
+   },
+   {
+    "moment": "differe:envoyer_soumission",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.viewed-envoyer_soumission-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "envoyer_soumission",
+     "action_config": {},
+     "result_success": true,
+     "result_data": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Soumission Q-2026-042"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:envoyer_soumission",
+    "table": "automation_scheduled_tasks",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "tache-1"
+     ]
+    ],
+    "valeur": {
+     "status": "completed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": null
+    }
+   }
+  ],
+  "envois": [
+   {
+    "moment": "differe:envoyer_soumission",
+    "canal": "courriel",
+    "to": "marie.tremblay@example.test",
+    "subject": "Soumission Q-2026-042",
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Voici votre soumission Q-2026-042. https://app.lume.test/quote/bbbbbbbb-0000-4000-8000-000000000001 Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "729e528497c8d394"
+   }
+  ],
+  "annulees": []
+ },
  "webhook@0": {
   "planifie": [],
   "ecritures": [
@@ -2432,17 +3043,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-webhook-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-webhook-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "webhook",
      "action_config": {
       "url": "https://hooks.example.test/lume"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-webhook-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-webhook-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -2451,10 +3062,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-webhook-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-webhook-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "webhook",
      "action_config": {
       "url": "https://hooks.example.test/lume"
@@ -2473,7 +3084,7 @@
     "moment": "immediat",
     "canal": "webhook",
     "to": "https://hooks.example.test/lume",
-    "texte": "{\"org_id\":\"11111111-1111-4111-8111-111111111111\",\"entity_type\":\"client\",\"entity_id\":\"aaaaaaaa-0000-4000-8000-000000000001\",\"data\":{\"company_name\":\"Plomberie Tremblay inc.\",\"company_phone\":\"+14505550199\",\"google_review_url\":\"https://g.page/r/plomberie-tremblay/review\",\"facebook_review_url\":\"\",\"review_page_url\":\"https://g.page/r/plomberie-tremblay/review\",\"client_first_name\":\"Marie\",\"client_last_name\":\"Tremblay\",\"client_name\":\"Marie Tremblay\",\"client_email\":\"marie.tremblay@example.test\",\"client_phone\":\"+15145550142\",\"client.nom\":\"Marie Tremblay\"},\"sent_at\":\"2026-09-13T15:00:00.000Z\"}"
+    "texte": "{\"org_id\":\"11111111-1111-4111-8111-111111111111\",\"entity_type\":\"quote\",\"entity_id\":\"aaaaaaaa-0000-4000-8000-000000000004\",\"data\":{\"company_name\":\"Plomberie Tremblay inc.\",\"company_phone\":\"+14505550199\",\"google_review_url\":\"https://g.page/r/plomberie-tremblay/review\",\"facebook_review_url\":\"\",\"review_page_url\":\"https://g.page/r/plomberie-tremblay/review\",\"quote_number\":\"Q-2026-042\",\"quote_total\":\"1 626,90 $\",\"quote_valid_until\":\"2026-09-30\",\"quote_link\":\"https://app.lume.test/quote/bbbbbbbb-0000-4000-8000-000000000001\",\"client_first_name\":\"Marie\",\"client_last_name\":\"Tremblay\",\"client_name\":\"Marie Tremblay\",\"client_email\":\"marie.tremblay@example.test\",\"client_phone\":\"+15145550142\",\"job_name\":\"Nettoyage de gouttières\",\"soumission.numero\":\"Q-2026-042\",\"soumission.total\":\"1 626,90 $\",\"soumission.lien\":\"https://app.lume.test/quote/bbbbbbbb-0000-4000-8000-000000000001\",\"soumission.lien_interne\":\"/quotes/aaaaaaaa-0000-4000-8000-000000000004\",\"soumission.nb_vues\":\"0\",\"soumission.ouverte_le\":\"\",\"client.nom\":\"Marie Tremblay\"},\"sent_at\":\"2026-09-13T15:00:00.000Z\"}"
    }
   ],
   "annulees": []
@@ -2492,21 +3103,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-webhook-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-webhook-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "webhook",
       "config": "#b00540570a83",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-webhook-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-webhook-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -2558,11 +3182,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-webhook-86400",
+     "automation_rule_id": "regle-quote.viewed-webhook-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "webhook",
      "action_config": {
       "url": "https://hooks.example.test/lume"
@@ -2598,7 +3222,7 @@
     "moment": "differe:webhook",
     "canal": "webhook",
     "to": "https://hooks.example.test/lume",
-    "texte": "{\"org_id\":\"11111111-1111-4111-8111-111111111111\",\"entity_type\":\"client\",\"entity_id\":\"aaaaaaaa-0000-4000-8000-000000000001\",\"data\":{\"company_name\":\"Plomberie Tremblay inc.\",\"company_phone\":\"+14505550199\",\"google_review_url\":\"https://g.page/r/plomberie-tremblay/review\",\"facebook_review_url\":\"\",\"review_page_url\":\"https://g.page/r/plomberie-tremblay/review\",\"client_first_name\":\"Marie\",\"client_last_name\":\"Tremblay\",\"client_name\":\"Marie Tremblay\",\"client_email\":\"marie.tremblay@example.test\",\"client_phone\":\"+15145550142\",\"client.nom\":\"Marie Tremblay\"},\"sent_at\":\"2026-09-14T15:00:00.000Z\"}"
+    "texte": "{\"org_id\":\"11111111-1111-4111-8111-111111111111\",\"entity_type\":\"quote\",\"entity_id\":\"aaaaaaaa-0000-4000-8000-000000000004\",\"data\":{\"company_name\":\"Plomberie Tremblay inc.\",\"company_phone\":\"+14505550199\",\"google_review_url\":\"https://g.page/r/plomberie-tremblay/review\",\"facebook_review_url\":\"\",\"review_page_url\":\"https://g.page/r/plomberie-tremblay/review\",\"quote_number\":\"Q-2026-042\",\"quote_total\":\"1 626,90 $\",\"quote_valid_until\":\"2026-09-30\",\"quote_link\":\"https://app.lume.test/quote/bbbbbbbb-0000-4000-8000-000000000001\",\"client_first_name\":\"Marie\",\"client_last_name\":\"Tremblay\",\"client_name\":\"Marie Tremblay\",\"client_email\":\"marie.tremblay@example.test\",\"client_phone\":\"+15145550142\",\"job_name\":\"Nettoyage de gouttières\",\"soumission.numero\":\"Q-2026-042\",\"soumission.total\":\"1 626,90 $\",\"soumission.lien\":\"https://app.lume.test/quote/bbbbbbbb-0000-4000-8000-000000000001\",\"soumission.lien_interne\":\"/quotes/aaaaaaaa-0000-4000-8000-000000000004\",\"soumission.nb_vues\":\"0\",\"soumission.ouverte_le\":\"\",\"client.nom\":\"Marie Tremblay\"},\"sent_at\":\"2026-09-14T15:00:00.000Z\"}"
    }
   ],
   "annulees": []
@@ -2713,17 +3337,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -2732,9 +3356,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -2742,7 +3366,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -2751,17 +3375,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -2817,9 +3441,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -2827,7 +3451,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -2836,18 +3460,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-1",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -2920,9 +3544,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -2930,7 +3554,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -2939,18 +3563,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-2",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -3023,9 +3647,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -3033,7 +3657,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -3042,18 +3666,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-3",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -3126,9 +3750,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -3136,7 +3760,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -3145,18 +3769,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-4",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -3229,9 +3853,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -3239,7 +3863,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -3248,18 +3872,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-5",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -3332,9 +3956,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -3342,7 +3966,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -3351,18 +3975,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-6",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -3435,9 +4059,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -3445,7 +4069,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -3454,18 +4078,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-7",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -3538,9 +4162,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -3548,7 +4172,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -3557,18 +4181,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-8",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -3641,9 +4265,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -3651,7 +4275,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -3660,18 +4284,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-9",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -3744,9 +4368,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -3754,7 +4378,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -3763,18 +4387,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-10",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -3847,9 +4471,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -3857,7 +4481,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -3866,18 +4490,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-11",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -3950,9 +4574,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -3960,7 +4584,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -3969,18 +4593,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-12",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -4053,9 +4677,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -4063,7 +4687,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -4072,18 +4696,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-13",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -4156,9 +4780,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -4166,7 +4790,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -4175,18 +4799,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-14",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -4259,9 +4883,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -4269,7 +4893,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -4278,18 +4902,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-15",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -4362,9 +4986,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -4372,7 +4996,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -4381,18 +5005,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-16",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -4465,9 +5089,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -4475,7 +5099,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -4484,18 +5108,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-17",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -4568,9 +5192,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -4578,7 +5202,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -4587,18 +5211,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-18",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -4671,9 +5295,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -4681,7 +5305,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -4690,18 +5314,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-19",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -4774,9 +5398,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -4784,7 +5408,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -4793,18 +5417,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-20",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -4877,9 +5501,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -4887,7 +5511,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -4896,18 +5520,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-21",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -4980,9 +5604,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -4990,7 +5614,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -4999,18 +5623,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-22",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -5083,9 +5707,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -5093,7 +5717,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -5102,18 +5726,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-23",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -5186,9 +5810,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -5196,7 +5820,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -5205,18 +5829,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-24",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -5289,9 +5913,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -5299,7 +5923,7 @@
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -5308,18 +5932,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-0",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-0",
      "scheduled_task_id": "tache-25",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-0",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-0",
       "inscrites": 1
      },
      "result_error": null,
@@ -5457,21 +6081,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -5523,9 +6160,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -5533,7 +6170,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -5542,18 +6179,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -5626,9 +6263,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -5636,7 +6273,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -5645,18 +6282,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-2",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -5729,9 +6366,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -5739,7 +6376,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -5748,18 +6385,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-3",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -5832,9 +6469,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -5842,7 +6479,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -5851,18 +6488,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-4",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -5935,9 +6572,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -5945,7 +6582,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -5954,18 +6591,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-5",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -6038,9 +6675,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -6048,7 +6685,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -6057,18 +6694,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-6",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -6141,9 +6778,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -6151,7 +6788,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -6160,18 +6797,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-7",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -6244,9 +6881,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -6254,7 +6891,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -6263,18 +6900,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-8",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -6347,9 +6984,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -6357,7 +6994,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -6366,18 +7003,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-9",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -6450,9 +7087,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -6460,7 +7097,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -6469,18 +7106,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-10",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -6553,9 +7190,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -6563,7 +7200,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -6572,18 +7209,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-11",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -6656,9 +7293,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -6666,7 +7303,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -6675,18 +7312,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-12",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -6759,9 +7396,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -6769,7 +7406,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -6778,18 +7415,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-13",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -6862,9 +7499,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -6872,7 +7509,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -6881,18 +7518,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-14",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -6965,9 +7602,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -6975,7 +7612,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -6984,18 +7621,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-15",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -7068,9 +7705,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -7078,7 +7715,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -7087,18 +7724,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-16",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -7171,9 +7808,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -7181,7 +7818,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -7190,18 +7827,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-17",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -7274,9 +7911,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -7284,7 +7921,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -7293,18 +7930,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-18",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -7377,9 +8014,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -7387,7 +8024,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -7396,18 +8033,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-19",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -7480,9 +8117,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -7490,7 +8127,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -7499,18 +8136,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-20",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -7583,9 +8220,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -7593,7 +8230,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -7602,18 +8239,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-21",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -7686,9 +8323,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -7696,7 +8333,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -7705,18 +8342,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-22",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -7789,9 +8426,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -7799,7 +8436,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -7808,18 +8445,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-23",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -7892,9 +8529,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -7902,7 +8539,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -7911,18 +8548,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-24",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -7995,9 +8632,9 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "demarrer_automatisation",
       "config": "#7973af01168d",
@@ -8005,7 +8642,7 @@
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-demarrer_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -8014,18 +8651,18 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-demarrer_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-demarrer_automatisation-86400",
      "scheduled_task_id": "tache-25",
      "trigger_event": "automation.started",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "demarrer_automatisation",
      "action_config": {
       "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-task.completed-demarrer_automatisation-86400",
+      "automatisation": "regle-quote.viewed-demarrer_automatisation-86400",
       "inscrites": 1
      },
      "result_error": null,
@@ -8062,17 +8699,17 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-arreter_automatisation-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-arreter_automatisation-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "arreter_automatisation",
      "action_config": {
       "portee": "courante"
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-arreter_automatisation-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-arreter_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -8088,7 +8725,7 @@
      [
       "eq",
       "entity_id",
-      "aaaaaaaa-0000-4000-8000-000000000001"
+      "aaaaaaaa-0000-4000-8000-000000000004"
      ],
      [
       "eq",
@@ -8098,7 +8735,7 @@
      [
       "eq",
       "automation_rule_id",
-      "regle-task.completed-arreter_automatisation-0"
+      "regle-quote.viewed-arreter_automatisation-0"
      ]
     ],
     "valeur": {
@@ -8111,10 +8748,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-arreter_automatisation-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-arreter_automatisation-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "arreter_automatisation",
      "action_config": {
       "portee": "courante"
@@ -8145,21 +8782,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-arreter_automatisation-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-arreter_automatisation-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "arreter_automatisation",
       "config": "#51bd67fafc36",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-arreter_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-arreter_automatisation-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -8218,7 +8868,7 @@
      [
       "eq",
       "entity_id",
-      "aaaaaaaa-0000-4000-8000-000000000001"
+      "aaaaaaaa-0000-4000-8000-000000000004"
      ],
      [
       "eq",
@@ -8228,7 +8878,7 @@
      [
       "eq",
       "automation_rule_id",
-      "regle-task.completed-arreter_automatisation-86400"
+      "regle-quote.viewed-arreter_automatisation-86400"
      ]
     ],
     "valeur": {
@@ -8241,11 +8891,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-arreter_automatisation-86400",
+     "automation_rule_id": "regle-quote.viewed-arreter_automatisation-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "arreter_automatisation",
      "action_config": {
       "portee": "courante"
@@ -8290,10 +8940,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-update_custom_field-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-update_custom_field-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "update_custom_field",
      "action_config": {
       "field_id": "aaaaaaaa-0000-4000-8000-00000000000c",
@@ -8301,7 +8951,7 @@
      },
      "result_success": false,
      "result_error": "en cours",
-     "execution_key": "regle-task.completed-update_custom_field-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+     "execution_key": "regle-quote.viewed-update_custom_field-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
     }
    },
    {
@@ -8310,10 +8960,10 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-update_custom_field-0",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-update_custom_field-0",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "update_custom_field",
      "action_config": {
       "field_id": "aaaaaaaa-0000-4000-8000-00000000000c",
@@ -8343,21 +8993,34 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-update_custom_field-86400",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-update_custom_field-86400",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "update_custom_field",
       "config": "#1202742ba8b1",
-      "trigger_event": "task.completed",
+      "trigger_event": "quote.viewed",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-update_custom_field-86400:aaaaaaaa-0000-4000-8000-000000000001:0"
+     "execution_key": "regle-quote.viewed-update_custom_field-86400:aaaaaaaa-0000-4000-8000-000000000004:0"
     }
    },
    {
@@ -8409,11 +9072,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-update_custom_field-86400",
+     "automation_rule_id": "regle-quote.viewed-update_custom_field-86400",
      "scheduled_task_id": "tache-1",
-     "trigger_event": "task.completed",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "update_custom_field",
      "action_config": {
       "field_id": "aaaaaaaa-0000-4000-8000-00000000000c",
@@ -8466,26 +9129,52 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-sequence",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-sequence",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "step_id": "e1",
      "action_config": {
       "type": "create_notification",
       "config": "#ab27f1dcaebc",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler"
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": []
       }
      },
      "sequence_context": {
-      "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-      "title": "Rappeler",
+      "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+      "quote_number": "Q-2026-042",
+      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "is_first_view": true,
+      "view_count": 1,
+      "ouverture": [
+       "premiere",
+       "chaque"
+      ],
+      "total_cents": 162690,
+      "montant": 1626.9,
+      "pipeline_id": null,
+      "stage_id": null,
+      "etiquette": [],
+      "service_id": [],
       "franchies": 1
      },
      "execute_at": "2026-09-13T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-sequence:aaaaaaaa-0000-4000-8000-000000000001:step:e1"
+     "execution_key": "regle-quote.viewed-sequence:aaaaaaaa-0000-4000-8000-000000000004:step:e1"
     }
    },
    {
@@ -8540,7 +9229,7 @@
      "type": "automation",
      "title": "Suivi a faire pour Marie Tremblay",
      "body": "Suivi du parcours",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "link": null
     }
    },
@@ -8550,11 +9239,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-sequence",
+     "automation_rule_id": "regle-quote.viewed-sequence",
      "scheduled_task_id": "tache-1",
      "trigger_event": "scheduled",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "create_notification",
      "action_config": {
       "title": "Suivi a faire pour [client_name]",
@@ -8592,27 +9281,53 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-sequence",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "automation_rule_id": "regle-quote.viewed-sequence",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "step_id": "e3",
      "action_config": {
       "type": "send_sms",
       "config": "#a1e2d6f73412",
       "event_metadata": {
-       "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-       "title": "Rappeler",
+       "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+       "quote_number": "Q-2026-042",
+       "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+       "is_first_view": true,
+       "view_count": 1,
+       "ouverture": [
+        "premiere",
+        "chaque"
+       ],
+       "total_cents": 162690,
+       "montant": 1626.9,
+       "pipeline_id": null,
+       "stage_id": null,
+       "etiquette": [],
+       "service_id": [],
        "franchies": 1
       }
      },
      "sequence_context": {
-      "task_id": "aaaaaaaa-0000-4000-8000-00000000000f",
-      "title": "Rappeler",
+      "quote_id": "aaaaaaaa-0000-4000-8000-000000000004",
+      "quote_number": "Q-2026-042",
+      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "is_first_view": true,
+      "view_count": 1,
+      "ouverture": [
+       "premiere",
+       "chaque"
+      ],
+      "total_cents": 162690,
+      "montant": 1626.9,
+      "pipeline_id": null,
+      "stage_id": null,
+      "etiquette": [],
+      "service_id": [],
       "franchies": 2
      },
      "execute_at": "2026-09-14T15:00:00.000Z",
      "status": "pending",
-     "execution_key": "regle-task.completed-sequence:aaaaaaaa-0000-4000-8000-000000000001:step:e3"
+     "execution_key": "regle-quote.viewed-sequence:aaaaaaaa-0000-4000-8000-000000000004:step:e3"
     }
    },
    {
@@ -8693,11 +9408,11 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-task.completed-sequence",
+     "automation_rule_id": "regle-quote.viewed-sequence",
      "scheduled_task_id": "tache-2",
      "trigger_event": "scheduled",
-     "entity_type": "client",
-     "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "send_sms",
      "action_config": {
       "body": "Bonjour [client_name], c’est [company_name]. Merci !"

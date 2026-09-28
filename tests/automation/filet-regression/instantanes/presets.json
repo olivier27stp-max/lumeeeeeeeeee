@@ -1,4 +1,132 @@
 {
+ "quote_opened_notify": {
+  "planifie": [],
+  "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-quote_opened_notify",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "create_notification",
+     "action_config": {
+      "destinataire": "responsable",
+      "title": "👀 {{client.nom}} vient d'ouvrir la soumission #{{soumission.numero}} ({{soumission.total}}). Bon moment pour appeler.",
+      "body": "Ouverte le {{soumission.ouverte_le}} · {{soumission.nb_vues}} vue(s)",
+      "lien": "{{soumission.lien_interne}}"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "preset-quote_opened_notify:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": [
+     {
+      "org_id": "11111111-1111-4111-8111-111111111111",
+      "type": "automation",
+      "entity_type": "quote",
+      "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+      "reference_id": "aaaaaaaa-0000-4000-8000-000000000004",
+      "link": "/quotes/aaaaaaaa-0000-4000-8000-000000000004",
+      "icon": "eye",
+      "actor_name": null,
+      "user_id": "aaaaaaaa-0000-4000-8000-000000000006",
+      "title": "👀 Marie Tremblay vient d'ouvrir la soumission #Q-2026-042 (1 626,90 $). Bon moment pour appeler.",
+      "body": "Ouverte le  · 0 vue(s)",
+      "message": "Ouverte le  · 0 vue(s)"
+     }
+    ]
+   },
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-quote_opened_notify",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "create_notification",
+     "action_config": {
+      "destinataire": "responsable",
+      "title": "👀 {{client.nom}} vient d'ouvrir la soumission #{{soumission.numero}} ({{soumission.total}}). Bon moment pour appeler.",
+      "body": "Ouverte le {{soumission.ouverte_le}} · {{soumission.nb_vues}} vue(s)",
+      "lien": "{{soumission.lien_interne}}"
+     },
+     "result_success": true,
+     "result_data": {
+      "title": "👀 Marie Tremblay vient d'ouvrir la soumission #Q-2026-042 (1 626,90 $). Bon moment pour appeler.",
+      "destinataires": 1
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   }
+  ],
+  "envois": [],
+  "annulees": []
+ },
+ "quote_opened_move_deal": {
+  "planifie": [],
+  "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-quote_opened_move_deal",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "move_deal_stage",
+     "action_config": {
+      "cible": "role",
+      "depuis_role": "soumission_envoyee",
+      "vers_role": "soumission_ouverte"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "preset-quote_opened_move_deal:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "preset-quote_opened_move_deal",
+     "trigger_event": "quote.viewed",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "move_deal_stage",
+     "action_config": {
+      "cible": "role",
+      "depuis_role": "soumission_envoyee",
+      "vers_role": "soumission_ouverte"
+     },
+     "result_success": true,
+     "result_data": {
+      "pas_d_etape_cible": true
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   }
+  ],
+  "envois": [],
+  "annulees": []
+ },
  "agreement_signed": {
   "planifie": [],
   "ecritures": [
@@ -1507,7 +1635,8 @@
      "type": "automation",
      "title": "Dépôt reçu — Marie Tremblay",
      "body": "Le dépôt de la facture INV-000042 est confirmé. La job peut être planifiée.",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "link": null
     }
    },
    {
@@ -1527,7 +1656,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Dépôt reçu — Marie Tremblay"
+      "title": "Dépôt reçu — Marie Tremblay",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -2785,7 +2915,8 @@
      "type": "automation",
      "title": "Facture INV-000042 — 14 jours de retard",
      "body": "Une tâche de relance a été créée.",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "link": null
     }
    },
    {
@@ -2806,7 +2937,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Facture INV-000042 — 14 jours de retard"
+      "title": "Facture INV-000042 — 14 jours de retard",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -3674,7 +3806,8 @@
      "type": "automation",
      "title": "Facture INV-000042 — 30 jours de retard",
      "body": "Cette facture demande une intervention rapide.",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "link": null
     }
    },
    {
@@ -3695,7 +3828,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Facture INV-000042 — 30 jours de retard"
+      "title": "Facture INV-000042 — 30 jours de retard",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -4786,7 +4920,8 @@
      "type": "automation",
      "title": "Facture INV-000042 — 7 jours impayée",
      "body": "Marie Tremblay n'a pas encore payé cette facture.",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "link": null
     }
    },
    {
@@ -4807,7 +4942,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Facture INV-000042 — 7 jours impayée"
+      "title": "Facture INV-000042 — 7 jours impayée",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -6522,7 +6658,8 @@
      "type": "automation",
      "title": "Prospect sans réponse — 14 jours",
      "body": "Marie Tremblay ne répond plus. Une tâche de suivi a été créée.",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000001"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "link": null
     }
    },
    {
@@ -6543,7 +6680,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Prospect sans réponse — 14 jours"
+      "title": "Prospect sans réponse — 14 jours",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -7696,7 +7834,8 @@
      "type": "automation",
      "title": "Paiement reçu",
      "body": "Marie Tremblay a payé la facture INV-000042.",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000005",
+     "link": null
     }
    },
    {
@@ -7716,7 +7855,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Paiement reçu"
+      "title": "Paiement reçu",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -8611,7 +8751,8 @@
      "type": "automation",
      "title": "Soumission sans réponse — 14 jours",
      "body": "La soumission de Marie Tremblay date de 14 jours. Une tâche de relance a été créée.",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000004"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "link": null
     }
    },
    {
@@ -8632,7 +8773,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Soumission sans réponse — 14 jours"
+      "title": "Soumission sans réponse — 14 jours",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -9485,7 +9627,8 @@
      "type": "automation",
      "title": "Soumission close — aucune réponse",
      "body": "Marie Tremblay n'a jamais répondu après 21 jours. Le dossier est clos.",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000004"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "link": null
     }
    },
    {
@@ -9506,7 +9649,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Soumission close — aucune réponse"
+      "title": "Soumission close — aucune réponse",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -10495,7 +10639,8 @@
      "type": "automation",
      "title": "Soumission sans réponse — 7 jours",
      "body": "Marie Tremblay n'a pas répondu à sa soumission depuis 7 jours.",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000004"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "link": null
     }
    },
    {
@@ -10516,7 +10661,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Soumission sans réponse — 7 jours"
+      "title": "Soumission sans réponse — 7 jours",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -12075,7 +12221,8 @@
      "type": "automation",
      "title": "Prospect inactif — 7 jours",
      "body": "Aucune activité sur le dossier de Marie Tremblay depuis 7 jours.",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000001"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "link": null
     }
    },
    {
@@ -12096,7 +12243,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Prospect inactif — 7 jours"
+      "title": "Prospect inactif — 7 jours",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -12659,7 +12807,8 @@
      "type": "automation",
      "title": "Nouveau prospect",
      "body": "Marie Tremblay — +15145550142",
-     "reference_id": "aaaaaaaa-0000-4000-8000-000000000001"
+     "reference_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "link": null
     }
    },
    {
@@ -12679,7 +12828,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Nouveau prospect"
+      "title": "Nouveau prospect",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
