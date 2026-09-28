@@ -218,9 +218,21 @@ function stabiliser(v: unknown): unknown {
 
 const texteDe = (html: string) => html.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 
+/**
+ * Retire les écritures du BUS lui-même : son `activity_log` d'émission (la
+ * première de la table) et l'outbox `domain_events` (consignation, puis
+ * coche). Elles sont constantes quel que soit le cas joué, et leur ordre
+ * dépend d'un `Promise.all` : les garder rendrait l'instantané fragile sans
+ * rien dire du moteur. L'outbox a ses propres tests (outbox-evenements).
+ */
+function sansEcrituresDuBus(journal: Requete[]): Requete[] {
+  const premierJournal = journal.findIndex((r) => r.table === 'activity_log' && r.op === 'insert');
+  return journal.filter((r, i) => i !== premierJournal && r.table !== 'domain_events');
+}
+
 function collecterEcritures(journal: Requete[], moment: string, sortie: Sortie) {
   for (const r of journal) {
-    if (r.op === 'select') continue;
+    if (r.op === 'select' || r.table === 'domain_events') continue;
     // L'insertion de l'événement lui-même dans activity_log (le bus) : bruit constant.
     sortie.ecritures.push({ moment, table: r.table, op: r.op, ...(r.filtres.length ? { filtres: r.filtres } : {}), ...(r.valeur !== undefined ? { valeur: r.valeur } : {}) });
   }
@@ -296,8 +308,7 @@ export async function jouer(
   await eventBus.emit(regle.trigger_event as any, { orgId: ORG, actorId: IDS.owner, ...evenement });
   while (enCours.length) await enCours.shift();
   await auRepos(journal, e);
-  // La 1re écriture est l'activity_log du bus : constante, on l'écarte.
-  collecterEcritures(journal.slice(1), 'immediat', sortie);
+  collecterEcritures(sansEcrituresDuBus(journal), 'immediat', sortie);
   collecterEnvois(e, { sms: 0, courriels: 0, appels: 0, slack: 0 }, 'immediat', sortie);
 
   // File : tâches insérées, dépilées à leur échéance ; une étape de séquence
