@@ -48,6 +48,13 @@ verif('le pipeline par défaut a « Soumission ouverte » juste après « Soumis
   !!envoyee && !!ouverte && ouverte.position === envoyee.position + 1, etapes.map((e) => e.name_fr).join(' › '));
 
 const trace = { client: null, quote: null, deal: null };
+let langueARemettre = null;
+async function remettreLangue() {
+  if (!langueARemettre) return;
+  const { data: u } = await admin.auth.admin.getUserById(uidProprio);
+  await admin.auth.admin.updateUserById(uidProprio, { user_metadata: { ...(u.user.user_metadata ?? {}), language: langueARemettre } });
+  langueARemettre = null;
+}
 const nav = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
 const nbNotifs = async () => (await admin.from('notifications').select('id', { count: 'exact', head: true })
   .eq('org_id', ORG).eq('entity_type', 'quote').eq('entity_id', trace.quote)).count;
@@ -123,6 +130,11 @@ try {
 
   // ── 3. « Chaque ouverture » : une 2e notification arrive ──
   await admin.from('automation_rules').update({ conditions: { ouverture: 'chaque' } }).eq('id', notif.id);
+  // Le moteur ignore une 2e exécution de la même règle sur le même devis à
+  // moins de 2 minutes (anti-double envoi, #698 : double clic, reprise
+  // réseau). Une vraie réouverture arrive plus tard : on attend la fenêtre.
+  console.log('   (attente de la fenêtre anti-doublon du moteur : 2 min 5 s)');
+  await pause(125_000);
   await ouvrirAnonyme(URLQ);
   await attendre(async () => (await nbNotifs()) >= 2);
   verif('mode « chaque ouverture » : 2e notification reçue', (await nbNotifs()) === 2);
@@ -191,11 +203,14 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
   await page.waitForFunction(() => /Quote opened by client/.test(document.body.innerText), { timeout: 20000 }).catch(() => {});
   await pause(1000);
-  await admin.auth.admin.updateUserById(uidProprio, { user_metadata: metaAvant });
+  langueARemettre = metaAvant.language ?? 'fr';
   const editeurEn = await page.evaluate(() => document.body.innerText);
   verif('EN : « Quote opened by client »', /Quote opened by client/.test(editeurEn));
   if (OUT) await page.screenshot({ path: `${OUT}/declencheur-soumission-ouverte-en.png` });
   await ctxConnecte.close();
+  // Remise APRÈS fermeture : tant que la page connectée vit, l'app
+  // resynchronise la langue choisie sur le compte et écraserait la remise.
+  await remettreLangue();
 
   // ── 6. Automatisation par défaut désactivée : plus de notification, le suivi continue ──
   await admin.from('automation_rules').update({ is_active: false }).eq('id', notif.id);
@@ -226,6 +241,7 @@ try {
   ko++; console.log('💥', e.message ?? e);
 } finally {
   await nav.close();
+  await remettreLangue();
   for (const r of etatRegles) await admin.from('automation_rules').update({ conditions: r.conditions, is_active: r.is_active }).eq('id', r.id);
   if (trace.quote) {
     await admin.from('notifications').delete().eq('entity_id', trace.quote);
