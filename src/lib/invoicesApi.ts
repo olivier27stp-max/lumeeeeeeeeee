@@ -925,24 +925,72 @@ export async function duplicateInvoice(invoiceId: string): Promise<string> {
   return draft.id;
 }
 
-export async function markInvoicePaidManually(invoiceId: string) {
+export type ManualPaymentMethod = 'card' | 'e-transfer' | 'cash' | 'check';
+
+export interface MarkInvoicePaidInput {
+  /** Date de transaction, `YYYY-MM-DD` (jour local). Défaut : aujourd'hui. */
+  paymentDate?: string | null;
+  method?: ManualPaymentMethod | null;
+  reference?: string | null;
+  notes?: string | null;
+}
+
+/** `YYYY-MM-DD` local → ISO à midi local (évite de glisser au jour d'avant en UTC). */
+function localDateToIso(date: string | null | undefined): string {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return new Date().toISOString();
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0).toISOString();
+}
+
+export async function markInvoicePaidManually(invoiceId: string, input: MarkInvoicePaidInput = {}) {
   const orgId = await getCurrentOrgIdOrThrow();
   // Get current invoice to know total
   const { data: inv, error: fetchErr } = await supabase
     .from('invoices')
-    .select('total_cents')
+    .select('total_cents, balance_cents, client_id, job_id, currency')
     .eq('id', invoiceId)
     .eq('org_id', orgId)
     .maybeSingle();
   if (fetchErr) throw fetchErr;
   if (!inv) throw new Error('Invoice not found');
 
+  const paidAtIso = localDateToIso(input.paymentDate);
+  const amountCents = Math.max(0, Number(inv.balance_cents ?? inv.total_cents) || 0);
+
+  // Paiement manuel réel : alimente Paiements/rapports et, via le trigger
+  // payments_recalculate_invoice, le solde de la facture.
+  if (amountCents > 0) {
+    const payment: Record<string, unknown> = {
+      org_id: orgId,
+      invoice_id: invoiceId,
+      client_id: inv.client_id ?? null,
+      job_id: inv.job_id ?? null,
+      provider: 'manual',
+      status: 'succeeded',
+      method: input.method ?? null,
+      amount_cents: amountCents,
+      currency: inv.currency || 'CAD',
+      payment_date: paidAtIso,
+      paid_at: paidAtIso,
+      reference: input.reference?.trim() || null,
+      notes: input.notes?.trim() || null,
+    };
+    let { error: payErr } = await supabase.from('payments').insert(payment);
+    // Colonnes reference/notes absentes (migration 20260928120000 pas encore appliquée).
+    if (payErr && (payErr.code === 'PGRST204' || /reference|notes/i.test(payErr.message || ''))) {
+      const { reference: _r, notes: _n, ...legacy } = payment;
+      ({ error: payErr } = await supabase.from('payments').insert(legacy));
+    }
+    if (payErr) throw payErr;
+  }
+
   const { error } = await supabase
     .from('invoices')
     .update({
       paid_cents: inv.total_cents,
       balance_cents: 0,
-      paid_at: new Date().toISOString(),
+      status: 'paid',
+      paid_at: paidAtIso,
       updated_at: new Date().toISOString(),
     })
     .eq('id', invoiceId)

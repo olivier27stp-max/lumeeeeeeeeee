@@ -13,10 +13,11 @@ import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
 import {
   deleteInvoice, duplicateInvoice, formatMoneyFromCents, getCompanySettings, getInvoiceById,
-  getInvoiceRowUiStatus, getInvoiceAppliedTaxes, markInvoicePaidManually,
+  getInvoiceRowUiStatus, getInvoiceAppliedTaxes,
   sendInvoice, toClientDisplayName, voidInvoice,
 } from '../lib/invoicesApi';
 import InvoicePaymentModal from '../components/InvoicePaymentModal';
+import MarkInvoicePaidModal from '../components/MarkInvoicePaidModal';
 import { downloadInvoicePdf } from '../lib/generateInvoicePdf';
 import EntityHubHeader from '../components/EntityHubHeader';
 import EntityNumberEditor from '../components/EntityNumberEditor';
@@ -46,7 +47,7 @@ export default function InvoiceDetails() {
   const [sendLoading, setSendLoading] = useState(false);
   const [showVisualPreview, setShowVisualPreview] = useState(false);
   // Must stay here (before any conditional return) — React error #310 otherwise.
-  const [markingPaid, setMarkingPaid] = useState(false);
+  const [markPaidOpen, setMarkPaidOpen] = useState(false);
 
   const companyQuery = useQuery({ queryKey: ['companySettings'], queryFn: getCompanySettings });
   // Visual templates removed — single fixed invoice layout
@@ -185,21 +186,9 @@ export default function InvoiceDetails() {
     }
   }
 
-  async function handleMarkPaid() {
-    if (markingPaid) return; // prevent double-click race
-    if (!(await confirmer({ message: t.invoiceDetails.markAsPaid }))) return;
-    setMarkingPaid(true);
-    try {
-      await markInvoicePaidManually(invoice.id);
-      invalidateAll();
-      queryClient.invalidateQueries({ queryKey: ['paymentsOverview'] });
-      toast.success(t.invoiceDetails.invoiceMarkedAsPaid);
-    } catch (err: any) {
-      toast.error(err?.message || (language === 'fr' ? 'Échec de l\'opération' : 'Failed'));
-    } finally {
-      setMarkingPaid(false);
-    }
+  function handleMarkPaid() {
     setActionsOpen(false);
+    setMarkPaidOpen(true);
   }
 
   return (
@@ -362,7 +351,6 @@ export default function InvoiceDetails() {
                         <button
                           type="button"
                           onClick={handleMarkPaid}
-                          disabled={markingPaid}
                           className="flex w-full items-center gap-2 px-3 py-2 text-xs text-green-600 hover:bg-surface-secondary disabled:opacity-40"
                         >
                           <CheckCircle2 size={12} />
@@ -655,6 +643,20 @@ export default function InvoiceDetails() {
       )}
 
       <ActivityTimeline entityType="invoice" entityId={invoiceId} />
+
+      <MarkInvoicePaidModal
+        open={markPaidOpen}
+        onClose={() => setMarkPaidOpen(false)}
+        invoiceId={invoice.id}
+        invoiceNumber={invoice.invoice_number}
+        balanceCents={invoice.balance_cents}
+        currency={invoice.currency || 'CAD'}
+        onPaid={() => {
+          invalidateAll();
+          queryClient.invalidateQueries({ queryKey: ['paymentsOverview'] });
+          queryClient.invalidateQueries({ queryKey: ['paymentsTable'] });
+        }}
+      />
 
       <InvoicePaymentModal
         open={isPaymentModalOpen}

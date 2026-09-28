@@ -45,6 +45,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
+import MarkInvoicePaidModal from '../components/MarkInvoicePaidModal';
 import { versDate } from '../lib/dateSeule';
 import { useChampsListe, useIdsFiltresChamps, useValeursPage } from '../components/champs/liste';
 import { useColonnesTableau, type ColonneStandard, type TriChamp } from '../components/champs/colonnes';
@@ -118,6 +119,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   const [searchParams, setSearchParams] = useSearchParams();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [markPaidRow, setMarkPaidRow] = useState<InvoiceRow | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>('invoices');
   const actionMenuRef = useRef<HTMLDivElement>(null);
@@ -382,9 +384,14 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     }
   };
 
-  const handleMarkPaid = async (row: InvoiceRow) => {
+  const handleMarkPaid = (row: InvoiceRow) => {
+    setMarkPaidRow(row);
+    setActionMenuId(null);
+  };
+
+  // Après la modale « Marquer payée » : ferme le job lié.
+  const afterMarkPaid = async (row: InvoiceRow) => {
     try {
-      await markInvoicePaidManually(row.id);
       if (row.job_id) {
         const orgId = await getCurrentOrgIdOrThrow();
         const { error: jobErr } = await supabase.from('jobs')
@@ -398,13 +405,12 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
           .in('status', ['completed', 'in_progress']);
         if (jobErr) console.error('[Invoices] Failed to update job status:', jobErr.message);
       }
-      invalidateAll();
-      queryClient.invalidateQueries({ queryKey: ['jobsTable'] });
-      toast.success(fr ? 'Facture marquée payée' : 'Invoice marked as paid');
     } catch (err: any) {
-      toast.error(err?.message || (fr ? 'Erreur' : 'Error'));
+      console.error('[Invoices] Failed to update job status:', err?.message);
     }
-    setActionMenuId(null);
+    invalidateAll();
+    queryClient.invalidateQueries({ queryKey: ['jobsTable'] });
+    queryClient.invalidateQueries({ queryKey: ['paymentsTable'] });
   };
 
   const handleDuplicate = async (row: InvoiceRow) => {
@@ -878,6 +884,18 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
           invalidateAll();
         }}
       />
+
+      {markPaidRow && (
+        <MarkInvoicePaidModal
+          open={!!markPaidRow}
+          onClose={() => setMarkPaidRow(null)}
+          invoiceId={markPaidRow.id}
+          invoiceNumber={markPaidRow.invoice_number}
+          balanceCents={markPaidRow.balance_cents}
+          currency={markPaidRow.currency || 'CAD'}
+          onPaid={() => afterMarkPaid(markPaidRow)}
+        />
+      )}
     </>
   );
 }
