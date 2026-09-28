@@ -67,6 +67,7 @@ import { listPredefinedServices } from '../lib/servicesApi';
 import { localizeAutomationName } from '../lib/automationNames';
 import {
   ACTIONS,
+  CASE_SORTIE,
   DECLENCHEURS,
   FAMILLES_ACTIONS,
   FAMILLES_DECLENCHEURS,
@@ -76,6 +77,7 @@ import {
   problemesAvantPublication,
   trouverAction,
 } from '../lib/automationCatalogue';
+import { useModuleAccess } from '../hooks/useModuleAccess';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
 import OngletReglages, { type ReglagesAutomatisation } from '../components/automations/OngletReglages';
 import { confirmer } from '../components/ui/ConfirmDialog';
@@ -1009,6 +1011,17 @@ export default function AutomationBuilderPage() {
     [catalogue, regle?.trigger_event],
   );
 
+  /*
+   * Le déclencheur a-t-il un panneau de réglages ? Ses champs, OU la case
+   * « Arrêter si… » de la sortie automatique du parcours — drapeau coupé,
+   * seuls les champs comptent, comme avant.
+   */
+  const { isEnabled: sortieParcoursActive } = useModuleAccess('auto_sortie_parcours');
+  const declencheurReglable = Boolean(
+    declencheurCourant
+    && ((declencheurCourant.champs?.length ?? 0) > 0 || (sortieParcoursActive && CASE_SORTIE[declencheurCourant.cle])),
+  );
+
   /**
    * Les champs date de la fiche client — chargés seulement si un
    * déclencheur en a besoin.
@@ -1120,10 +1133,14 @@ export default function AutomationBuilderPage() {
   }, [declencheurCourant, regle?.conditions, champsDate, etapesPipeline, servicesCatalogue, fr]);
 
   /** Enregistrer les réglages du déclencheur. */
-  const enregistrerDeclencheur = useCallback(async (conditions: Record<string, unknown>) => {
+  const enregistrerDeclencheur = useCallback(async (conditions: Record<string, unknown>, arreterSiResolu?: boolean) => {
     if (!regle) return;
     try {
-      const maj = await modifierAutomatisation(regle.id, { conditions });
+      // La case « Arrêter si… » vit dans `settings` : on la fusionne avec les
+      // réglages existants (fenêtre, réentrée…) au lieu de les écraser.
+      const maj = await modifierAutomatisation(regle.id, arreterSiResolu === undefined
+        ? { conditions }
+        : { conditions, settings: { ...((regle.settings ?? {}) as Record<string, unknown>), arreter_si_resolu: arreterSiResolu } });
       setRegle(maj);
       setReglageDeclencheur(false);
       toast.success(fr ? 'Réglages enregistrés' : 'Settings saved');
@@ -1531,7 +1548,7 @@ export default function AutomationBuilderPage() {
                       manquant est bloquant à la publication : on se serait
                       retrouvé coincé sans savoir où cliquer.
                     */}
-                    {declencheurCourant?.champs?.length ? (
+                    {declencheurReglable ? (
                       <button
                         type="button"
                         onClick={() => setReglageDeclencheur(true)}
@@ -1581,7 +1598,7 @@ export default function AutomationBuilderPage() {
                        * depuis le tiroir que le panneau propose.
                        */
                       onDeclencheur={() => {
-                        if (declencheurCourant?.champs?.length) setReglageDeclencheur(true);
+                        if (declencheurReglable) setReglageDeclencheur(true);
                         else setTiroirDeclencheur(true);
                       }}
                       declencheurDetail={declencheurDetail}
@@ -1828,10 +1845,11 @@ export default function AutomationBuilderPage() {
 
       {/* Les réglages du déclencheur — « quelle date surveiller ? ».
           Avant le tiroir d'ajout : un seul panneau à droite à la fois. */}
-      {onglet === 'parcours' && !tiroirDeclencheur && reglageDeclencheur && declencheurCourant?.champs?.length && (
+      {onglet === 'parcours' && !tiroirDeclencheur && reglageDeclencheur && declencheurCourant && declencheurReglable && (
         <PanneauDeclencheur
           declencheur={declencheurCourant}
           conditions={(regle?.conditions ?? null) as Record<string, unknown> | null}
+          reglages={(regle?.settings ?? null) as Record<string, unknown> | null}
           fr={fr}
           champsDate={champsDate}
           etapesPipeline={etapesPipeline}

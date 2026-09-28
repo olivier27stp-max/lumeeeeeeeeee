@@ -27,6 +27,7 @@ import { fuseauOrg, FUSEAU_DEFAUT } from './automations-fuseau-org';
 import { noterRegleTraitee } from './outbox';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
 import { typeEnvoi } from './desabonnement';
+import { verdictSortie } from './sortie-parcours';
 
 interface AutomationRule {
   id: string;
@@ -311,6 +312,11 @@ export interface ReglagesRegle {
   marquer_lu?: boolean;
   /** Une fois par client tous les N jours (voir `dejaPasseRecemment`). */
   delai_entre_passages_jours?: number;
+  /**
+   * « Arrêter si la soumission est acceptée… » (drapeau `auto_sortie_parcours`).
+   * Absent = comportement d'avant la case — voir server/lib/sortie-parcours.ts.
+   */
+  arreter_si_resolu?: boolean;
 }
 
 export function isQuietHours(d: Date = new Date(), tz: string = QUIET_TZ): boolean {
@@ -1287,8 +1293,24 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
       const actionType = actionConfig.type as ActionType;
       const config = actionConfig.config || {};
 
+      // Sortie automatique du parcours (drapeau par entreprise) : la
+      // vérification connaît le déclencheur, suit la case de la règle et
+      // écrit son motif. Elle ne tranche pas pour un prospect : l'ancienne
+      // vérification s'en charge, comme avant.
+      const declencheurTache = actionConfig.trigger_event ?? task.automation_rules?.trigger_event;
+      const verdict = await drapeauActif(supabase, task.org_id, DRAPEAUX_AUTOMATISATIONS.sortieParcours)
+        ? await verdictSortie(supabase, {
+          orgId: task.org_id,
+          entityType: task.entity_type,
+          entityId: task.entity_id,
+          declencheur: declencheurTache,
+          metadonnees: actionConfig.event_metadata ?? task.sequence_context,
+          reglages: reglagesRegle,
+        })
+        : null;
+
       // Check stop conditions before executing
-      const shouldStop = await checkStopConditions(
+      const shouldStop = verdict ? verdict.arreter : await checkStopConditions(
         supabase,
         task.entity_type,
         task.entity_id,
@@ -1328,7 +1350,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
             // explication est la plainte n°1 sur ce genre d'écran.
             last_error: stopReponse
               ? 'Annulée : le client a répondu.'
-              : 'Annulée : la condition d’arrêt de la règle est remplie.',
+              : verdict?.motif ?? 'Annulée : la condition d’arrêt de la règle est remplie.',
           })
           .eq('id', task.id);
         if (cancelError) {

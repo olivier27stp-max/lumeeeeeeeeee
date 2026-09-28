@@ -1141,6 +1141,12 @@ export const automationSettingsSchema = z
      * existante qui la porte encore. Elle est ignorée, pas honorée.
      */
     marquer_lu: z.boolean().optional(),
+    /**
+     * Sortie automatique du parcours : arrêter les étapes qui suivent un
+     * délai quand l'entité est résolue (soumission acceptée, facture payée,
+     * rendez-vous annulé, opportunité déplacée). Absent = comportement d'avant.
+     */
+    arreter_si_resolu: z.boolean().optional(),
   })
   .strict();
 
