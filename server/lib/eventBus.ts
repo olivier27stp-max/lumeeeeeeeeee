@@ -172,6 +172,16 @@ const TYPES_DEJA_DURABLES = new Set<CRMEventType>([
   'deal.stage_idle',
 ]);
 
+/**
+ * Types qui ne doivent exister qu'UNE fois dans `activity_log` pour une même
+ * entité et un même palier — garanti par un index unique en base
+ * (20261001100000_activity_log_retard_unique.sql). Pour eux, le journal passe
+ * en premier : s'il refuse le doublon, l'événement n'est ni consigné ni
+ * diffusé. Ainsi un redéploiement ou une 2e instance ne peut plus répéter
+ * « Facture en retard J+x » dans l'historique.
+ */
+const TYPES_UNIQUES = new Set<CRMEventType>(['invoice.overdue']);
+
 // ── Bus singleton ───────────────────────────────────────────────
 
 class CRMEventBus extends EventEmitter {
@@ -188,7 +198,10 @@ class CRMEventBus extends EventEmitter {
     // Le journal et l'outbox en parallèle : l'appelant (une route HTTP, le
     // plus souvent) n'attend pas une écriture de plus qu'avant.
     let outboxId: number | null = null;
-    if (this.supabase) {
+    if (this.supabase && TYPES_UNIQUES.has(event)) {
+      if ((await this.journaliser(this.supabase, fullEvent)) === 'doublon') return false;
+      outboxId = await this.consigner(this.supabase, fullEvent);
+    } else if (this.supabase) {
       [, outboxId] = await Promise.all([
         this.journaliser(this.supabase, fullEvent),
         TYPES_DEJA_DURABLES.has(event) ? Promise.resolve(null) : this.consigner(this.supabase, fullEvent),
@@ -257,7 +270,7 @@ class CRMEventBus extends EventEmitter {
     return { aDesEcouteurs: ecouteurs.length > 0, fin };
   }
 
-  private async journaliser(supabase: SupabaseClient, fullEvent: CRMEvent): Promise<void> {
+  private async journaliser(supabase: SupabaseClient, fullEvent: CRMEvent): Promise<'ok' | 'doublon'> {
     const event = fullEvent.type;
     // supabase-js retourne l'erreur, il ne la lève pas : le try/catch seul
     // laissait passer toute écriture refusée sans une ligne de log.
@@ -272,12 +285,16 @@ class CRMEventBus extends EventEmitter {
         actor_id: fullEvent.actorId || null,
         metadata: fullEvent.metadata,
       });
+      // 23505 = l'index unique a refusé une entrée déjà présente : c'est
+      // voulu, pas un incident.
+      if (error?.code === '23505') return 'doublon';
       if (error) {
         console.error(`[eventBus] activity_log insert failed for ${event} (org ${fullEvent.orgId}, ${fullEvent.entityType} ${fullEvent.entityId}):`, error.message);
       }
     } catch (err: any) {
       console.error('[eventBus] activity_log insert threw:', err.message);
     }
+    return 'ok';
   }
 
   /**

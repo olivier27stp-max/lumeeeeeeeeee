@@ -28,6 +28,12 @@ function fauxSupabase(opts: { insertionOutboxEchoue?: boolean } = {}) {
         if (table === 'domain_events' && opts.insertionOutboxEchoue) {
           return { data: null, error: { message: 'insertion refusée' } };
         }
+        // Miroir de l'index unique activity_log_invoice_overdue_unique.
+        if (table === 'activity_log' && charge?.event_type === 'invoice_overdue' && lignes.some((l) =>
+          l.event_type === 'invoice_overdue' && l.entity_id === charge!.entity_id
+          && String(l.metadata?.days_overdue) === String(charge!.metadata?.days_overdue))) {
+          return { data: null, error: { code: '23505', message: 'duplicate key value' } };
+        }
         const l = { id: prochainId++, processed_at: null, attempts: 0, last_error: null,
           created_at: new Date().toISOString(), ...charge };
         lignes.push(l);
@@ -283,5 +289,36 @@ describe('diffusion', () => {
     bus.onEvent('invoice.paid', vi.fn());
     expect(await bus.emit('invoice.paid', EVT)).toBe(true);
     expect(bus).toBeInstanceOf(EventEmitter);
+  });
+});
+
+describe('emit — « Facture en retard » unique par facture et palier', () => {
+  const RETARD = { orgId: 'org-1', entityType: 'invoice', entityId: 'inv-1', metadata: { days_overdue: 3 } };
+
+  it('un 2e émis du même palier (redéploiement, 2e instance) n\'écrit rien et ne diffuse rien', async () => {
+    const { client, tables } = fauxSupabase();
+    bus.init(client);
+    const ecouteur = vi.fn();
+    bus.onEvent('invoice.overdue', ecouteur);
+
+    expect(await bus.emit('invoice.overdue', RETARD)).toBe(true);
+    expect(await bus.emit('invoice.overdue', RETARD)).toBe(false);
+    await vider();
+
+    expect(tables.activity_log).toHaveLength(1);
+    expect(tables.domain_events).toHaveLength(1);
+    expect(ecouteur).toHaveBeenCalledOnce();
+  });
+
+  it('un autre palier de la même facture passe', async () => {
+    const { client, tables } = fauxSupabase();
+    bus.init(client);
+    bus.onEvent('invoice.overdue', vi.fn());
+
+    await bus.emit('invoice.overdue', RETARD);
+    await bus.emit('invoice.overdue', { ...RETARD, metadata: { days_overdue: 5 } });
+    await vider();
+
+    expect(tables.activity_log).toHaveLength(2);
   });
 });
