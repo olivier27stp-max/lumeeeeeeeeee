@@ -11,6 +11,7 @@ import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '.
 import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
 import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegale } from '../consentement/base-legale';
 import { motifSaut } from '../desabonnement';
+import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../automations-drapeaux';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -741,11 +742,30 @@ export async function resolveEntityVariables(
   if (entityType === 'invoice') {
     const { data: inv } = await supabase
       .from('invoices')
-      .select('invoice_number, due_date, total_cents, client_id, job_id, public_token')
+      .select('invoice_number, due_date, total_cents, client_id, job_id, public_token, view_token, view_count, viewed_at, last_viewed_at')
       .eq('id', entityId)
       .eq('org_id', orgId)
       .maybeSingle();
     if (inv) {
+      // Variables du déclencheur « Facture consultée par le client », même
+      // forme que celles de la soumission. `facture.lien` part du jeton que la
+      // page publique lit VRAIMENT (`view_token`) ; `[invoice_link]`, lui,
+      // lit `public_token` (toujours vide) — laissé tel quel pour ne rien
+      // changer aux règles existantes, voir le rapport de phase 0 (bug 3).
+      // Drapeau seulement : l'action « webhook » envoie TOUTES les variables,
+      // en ajouter changerait sa charge utile chez les entreprises sans drapeau.
+      if (await drapeauActif(supabase, orgId, DRAPEAUX_AUTOMATISATIONS.consultationDocuments)) {
+        vars['facture.numero'] = inv.invoice_number || '';
+        vars['facture.total'] = argent(inv.total_cents);
+        vars['facture.lien'] = inv.view_token ? `${resolvePublicBaseUrl()}/invoice/${inv.view_token}` : '';
+        vars['facture.lien_interne'] = `/invoices/${entityId}`;
+        vars['facture.nb_vues'] = String(inv.view_count ?? 0);
+        vars['facture.consultee_le'] = inv.viewed_at
+          ? new Intl.DateTimeFormat(locale, {
+            dateStyle: 'medium', timeStyle: 'short', timeZone: company?.timezone || 'America/Montreal',
+          }).format(new Date(inv.viewed_at))
+          : '';
+      }
       vars.invoice_number = inv.invoice_number || '';
       vars.invoice_due_date = inv.due_date || '';
       vars.invoice_total = argent(inv.total_cents);

@@ -57,7 +57,7 @@ export function tropTotApresEnvoi(
 }
 
 /** Le visiteur est-il un membre ACTIF de l'entreprise, connecté ? */
-async function visiteurInterne(admin: SupabaseClient, req: Request, orgId: string): Promise<boolean> {
+export async function visiteurInterne(admin: SupabaseClient, req: Request, orgId: string): Promise<boolean> {
   if (String(req.headers['x-lume-apercu'] ?? '') === '1') return true;
   const auth = String(req.headers.authorization ?? '');
   if (!auth.toLowerCase().startsWith('bearer ')) return false;

@@ -66,7 +66,11 @@ export interface PublicInvoiceData {
 }
 
 export async function fetchPublicInvoice(token: string): Promise<PublicInvoiceData> {
-  const res = await fetch(`${API_BASE}/api/invoices/public/${encodeURIComponent(token)}`);
+  // Mêmes en-têtes que la soumission : une session d'onglet (un rechargement
+  // dans les 30 min ne compte pas) et, si la personne est connectée à Lume,
+  // son jeton — un membre de l'équipe qui vérifie sa facture ne compte pas.
+  const { enTetesVueSoumission } = await import('./quotesApi');
+  const res = await fetch(`${API_BASE}/api/invoices/public/${encodeURIComponent(token)}`, { headers: await enTetesVueSoumission() });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const err = new Error(body?.error || `HTTP ${res.status}`) as Error & { status?: number };

@@ -29,6 +29,8 @@ export type CRMEventType =
   | 'quote.sent'
   /** Le client final a ouvert la page publique de sa soumission (mission 2026-09-28). */
   | 'quote.viewed'
+  /** Le client final a ouvert la page publique de sa facture (drapeau auto_consultation_documents). */
+  | 'invoice.viewed'
   | 'quote.approved'
   | 'quote.declined'
   | 'quote.changes_requested'
@@ -137,6 +139,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'quote.created': 'quote_created',
   'quote.sent': 'quote_sent',
   'quote.viewed': 'quote_viewed',
+  'invoice.viewed': 'invoice_viewed',
   'quote.approved': 'quote_approved',
   'quote.declined': 'quote_declined',
   'quote.changes_requested': 'quote_changes_requested',

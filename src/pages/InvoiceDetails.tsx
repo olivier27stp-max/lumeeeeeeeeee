@@ -30,9 +30,16 @@ import InvoiceRenderer from '../components/invoice/InvoiceRenderer';
 import { buildRenderData } from '../components/invoice/buildRenderData';
 import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
 import { useChampsDocument } from '../components/champs/document';
+import { useModuleAccess } from '../hooks/useModuleAccess';
+import { formatDistanceToNow } from 'date-fns';
+import { fr as dfFr, enUS as dfEn } from 'date-fns/locale';
 
 export default function InvoiceDetails() {
   const { t, language } = useTranslation();
+  // « Consultée il y a 2 h · 3 vues » : la fraîcheur d'abord (c'est ce qui
+  // dit s'il faut relancer maintenant). Drapeau de la consultation des
+  // documents seulement — sinon la carte reste comme avant.
+  const { isEnabled: consultationActive } = useModuleAccess('auto_consultation_documents');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const params = useParams<{ id: string }>();
@@ -437,6 +444,14 @@ export default function InvoiceDetails() {
                   ? (t.invoiceDetails.openedByClient)
                   : (t.invoiceDetails.notOpenedYet)}
               </p>
+              {invoice.is_viewed && consultationActive && invoice.last_viewed_at && (
+                <p className="text-[12px] font-medium text-success" data-testid="facture-vues">
+                  {language === 'fr' ? 'Consultée ' : 'Viewed '}
+                  {formatDistanceToNow(new Date(invoice.last_viewed_at), { addSuffix: true, locale: language === 'fr' ? dfFr : dfEn })}
+                  {' · '}{invoice.view_count || 1}{' '}
+                  {language === 'fr' ? ((invoice.view_count || 1) > 1 ? 'vues' : 'vue') : ((invoice.view_count || 1) > 1 ? 'views' : 'view')}
+                </p>
+              )}
               {invoice.is_viewed && (
                 <p className="text-[11px] text-text-tertiary">
                   {t.invoiceDetails.firstOpened}: {formatDate(invoice.viewed_at || '')}
