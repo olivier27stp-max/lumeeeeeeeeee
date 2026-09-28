@@ -26,9 +26,12 @@ import { confirmer } from '../ui/ConfirmDialog';
 import { usePermissions } from '../../hooks/usePermissions';
 import ActionsRapides from './ActionsRapides';
 import {
-  useChampsPipeline, useFiltreChamps, comparerParChamp, ChampsSurCarte, PanneauChamps, type TriChamp,
+  useChampsPipeline, useFiltreChamps, comparerParChamp, ChampsSurCarte, PanneauChamps, nbFiltresChamps, estTriable, sensParDefaut,
+  type TriChamp,
 } from '../champs/pipeline';
+import { useColonnesTableau, type ColonneStandard } from '../champs/colonnes';
 import type { Condition } from '../../lib/champs/filtres';
+import type { ValeurEnregistree } from '../../lib/champs/types';
 import Modal from '../ui/Modal';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
@@ -671,12 +674,20 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
         quoteId: mode === 'devis' ? devis?.id ?? null : null,
         pipelineId: pipelineCible || null,
       });
-      // Un deal DÉJÀ ouvert pour ce contact garde ses valeurs : on n'écrase pas.
-      if (!r.dealExistant) await champsPerso.enregistrer(r.dealId);
+      // Un deal DÉJÀ ouvert pour ce contact garde ses valeurs : les champs
+      // tapés ne complètent que ses champs VIDES, jamais n'écrasent. Avant,
+      // ils étaient perdus sans un mot.
+      let completes = 0;
+      if (r.dealExistant) completes = await champsPerso.completerVides(r.dealId);
+      else await champsPerso.enregistrer(r.dealId);
       if (r.dealExistant) {
-        toast.success(fr
-          ? 'Ce client avait déjà un deal ouvert dans ce pipeline : on l\'a gardé plutôt que d\'en créer un second.'
-          : 'This client already had an open deal in this pipeline: it was kept instead of creating a second one.');
+        toast.success(completes > 0
+          ? (fr
+            ? 'Ce contact avait déjà un deal ouvert dans ce pipeline : les champs vides y ont été complétés.'
+            : 'This contact already had an open deal in this pipeline: its empty fields were filled in.')
+          : (fr
+            ? 'Ce client avait déjà un deal ouvert dans ce pipeline : on l\'a gardé plutôt que d\'en créer un second.'
+            : 'This client already had an open deal in this pipeline: it was kept instead of creating a second one.'));
       } else if (r.fusionne && mode === 'nouveau') {
         toast.success(fr
           ? 'Un client existant a été retrouvé : le deal lui est rattaché.'
@@ -1495,6 +1506,134 @@ function ModalEnregistrerVue({
   );
 }
 
+/** Classes des cellules standard de la vue Liste (la 1re colonne en gras). */
+const CLASSE_TD = 'border-t border-border-subtle px-3.5 py-2.5';
+const CLASSES_COLONNE: Record<string, string> = {
+  client: 'font-semibold text-text-primary',
+  etape: 'text-text-secondary',
+  montant: 'tabular-nums text-text-secondary',
+  source: 'text-text-secondary',
+  assigne: '',
+  inactif: 'tabular-nums text-text-secondary',
+};
+
+/**
+ * Vue Liste du board. Les colonnes passent par le MÊME « Gérer les champs »
+ * que les listes Clients, Jobs, Devis et Factures : colonnes standard à
+ * cocher, champs d'opportunité à ajouter, réglage gardé PAR UTILISATEUR en
+ * base (table_view_preferences, objet « deal »). Le client reste verrouillé
+ * en première colonne.
+ *
+ * Cliquer l'en-tête d'un champ trie par ce champ : c'est le même tri que
+ * « Trier par champ » du panneau de filtres (une seule source, `triChamp`).
+ */
+function ListeDeals({ fr, deals, etapes, montants, membres, maintenant, valeurs, triChamp, onTriChamp, onOuvrir }: {
+  fr: boolean;
+  deals: Deal[];
+  etapes: PipelineStage[];
+  montants: Record<string, number>;
+  membres: Membre[];
+  maintenant: number;
+  valeurs: Record<string, Record<string, ValeurEnregistree>>;
+  triChamp: TriChamp | null;
+  onTriChamp: (t: TriChamp | null) => void;
+  onOuvrir: (deal: Deal) => void;
+}) {
+  const standard = useMemo<ColonneStandard<Deal>[]>(() => [
+    { id: 'client', libelle: 'Client', largeur: 'auto', verrouillee: true, cellule: (d) => nomClient(d) },
+    {
+      id: 'etape', libelle: fr ? 'Étape' : 'Stage', largeur: 'auto', parDefaut: true,
+      cellule: (d) => {
+        const etape = etapes.find((e) => e.id === d.stage_id);
+        return etape ? (fr ? etape.name_fr : etape.name_en) : '—';
+      },
+    },
+    {
+      id: 'montant', libelle: fr ? 'Montant' : 'Amount', largeur: 'auto', parDefaut: true,
+      cellule: (d) => (montants[d.id] === undefined ? '—' : argent(montants[d.id], fr)),
+    },
+    { id: 'source', libelle: 'Source', largeur: 'auto', parDefaut: true, cellule: (d) => libelleSource(d.source, fr) },
+    {
+      id: 'assigne', libelle: fr ? 'Assigné' : 'Assignee', largeur: 'auto', parDefaut: true,
+      cellule: (d) => {
+        const assigne = d.assigned_user_id ? membres.find((x) => x.id === d.assigned_user_id)?.name ?? null : null;
+        return assigne ?? (
+          <span className="font-semibold" style={{ color: 'var(--color-warning)' }}>
+            {fr ? 'Non assigné' : 'Unassigned'}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'inactif', libelle: fr ? 'Inactif' : 'Inactive', largeur: 'auto', parDefaut: true,
+      cellule: (d) => (priorite(d, etapes) ? `${joursDepuis(d.last_activity_at, maintenant)} ${fr ? 'j' : 'd'}` : '—'),
+    },
+  ], [fr, etapes, montants, membres, maintenant]);
+  const colonnes = useColonnesTableau<Deal>('deal', standard, fr);
+  const classeTh = 'border-b border-outline px-3.5 py-2.5 text-left text-[10.5px] font-semibold uppercase tracking-wider text-text-tertiary';
+
+  return (
+    <>
+      <div className="mt-4 flex justify-end">{colonnes.bouton}</div>
+      {colonnes.panneau}
+      <div className="mt-2 overflow-x-auto rounded-xl border border-outline bg-surface-card">
+        <table className="w-full min-w-[620px] border-collapse text-[12.5px]">
+          <thead>
+            <tr>
+              {colonnes.visibles.map((c) => {
+                const champ = c.champ;
+                if (!champ) return <th key={c.id} className={classeTh}>{c.libelle}</th>;
+                const etat = triChamp?.field_id === champ.id ? triChamp.sens : null;
+                return (
+                  <th key={c.id} className={classeTh}
+                    aria-sort={etat === 'asc' ? 'ascending' : etat === 'desc' ? 'descending' : undefined}>
+                    {estTriable(champ) ? (
+                      <button
+                        type="button"
+                        onClick={() => onTriChamp(etat
+                          ? { field_id: champ.id, sens: etat === 'asc' ? 'desc' : 'asc' }
+                          : { field_id: champ.id, sens: sensParDefaut(champ) })}
+                        aria-label={fr ? `Trier par ${champ.label}` : `Sort by ${champ.label}`}
+                        className="-mx-1 inline-flex items-center gap-1 rounded px-1 uppercase hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+                      >
+                        {champ.label}
+                        <ArrowUpDown size={11} aria-hidden="true" className={etat ? 'text-text-primary' : undefined} />
+                      </button>
+                    ) : champ.label}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {deals.map((d) => (
+              <tr
+                key={d.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onOuvrir(d)}
+                onKeyDown={(e) => {
+                  if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    onOuvrir(d);
+                  }
+                }}
+                className="cursor-pointer hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-text-primary"
+              >
+                {colonnes.visibles.map((c) => (
+                  <td key={c.id} className={cn(CLASSE_TD, c.champ ? 'max-w-[240px]' : CLASSES_COLONNE[c.id])}>
+                    {c.rendu(d, valeurs[d.id])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 export default function PipelineBoard({
   deals, etapes, montants, membres, chargement, onOuvrir, onDeplacer, onAssigner, onChangement,
   pipelines, pipelineActif, onChangerPipeline, modeCouleur = 'dot', onCreerPipeline,
@@ -1665,9 +1804,11 @@ export default function PipelineBoard({
   // Seul un patron peut créer une vue d'ÉQUIPE : elle s'impose à tout le
   // monde. La RLS le refuse aussi — l'écran ne fait que ne pas le proposer.
   const estPatron = perms.role === 'owner' || perms.role === 'admin';
+  // Les conditions de champs (et le tri par champ) comptent aussi : une vue
+  // « Type de service = Commercial » est une vraie vue à enregistrer.
   const nbFiltresActifs = useMemo(
-    () => Object.values(filtres).filter((v) => v !== '').length,
-    [filtres],
+    () => Object.values(filtres).filter((v) => v !== '').length + nbFiltresChamps(conditionsChamps, triChamp),
+    [filtres, conditionsChamps, triChamp],
   );
 
   // Les vues enregistrées vivent en base : elles doivent suivre le vendeur
@@ -1797,8 +1938,9 @@ export default function PipelineBoard({
     };
     const tries = [...retenus].sort(parTri[tri]);
     // Tri par champ personnalisé : stable, il départage selon le tri habituel.
-    return triChamp ? tries.sort(comparerParChamp(triChamp, champsPipeline.valeurs)) : tries;
-  }, [deals, etapes, filtres, montants, tri, filtreChamps.ids, triChamp, champsPipeline.valeurs]);
+    const champTrie = triChamp ? champsPipeline.champsDeal.find((c) => c.id === triChamp.field_id) : undefined;
+    return triChamp ? tries.sort(comparerParChamp(triChamp, champsPipeline.valeurs, champTrie)) : tries;
+  }, [deals, etapes, filtres, montants, tri, filtreChamps.ids, triChamp, champsPipeline.valeurs, champsPipeline.champsDeal]);
 
   const parEtape = useMemo(() => {
     const g: Record<string, Deal[]> = {};
@@ -2218,77 +2360,18 @@ export default function PipelineBoard({
           </div>
         </div>
       ) : affichage === 'liste' ? (
-        <div className="mt-4 overflow-x-auto rounded-xl border border-outline bg-surface-card">
-          <table className="w-full min-w-[620px] border-collapse text-[12.5px]">
-            <thead>
-              <tr>
-                {[
-                  fr ? 'Client' : 'Client',
-                  fr ? 'Étape' : 'Stage',
-                  fr ? 'Montant' : 'Amount',
-                  fr ? 'Source' : 'Source',
-                  fr ? 'Assigné' : 'Assignee',
-                  fr ? 'Inactif' : 'Inactive',
-                ].map((t) => (
-                  <th
-                    key={t}
-                    className="border-b border-outline px-3.5 py-2.5 text-left text-[10.5px] font-semibold uppercase tracking-wider text-text-tertiary"
-                  >
-                    {t}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtres_.map((d) => {
-                const etape = etapes.find((e) => e.id === d.stage_id);
-                const m = montants[d.id];
-                const assigne = d.assigned_user_id
-                  ? membres.find((x) => x.id === d.assigned_user_id)?.name ?? null
-                  : null;
-                const p = priorite(d, etapes);
-                return (
-                  <tr
-                    key={d.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onOuvrir(d)}
-                    onKeyDown={(e) => {
-                      if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-                        e.preventDefault();
-                        onOuvrir(d);
-                      }
-                    }}
-                    className="cursor-pointer hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-text-primary"
-                  >
-                    <td className="border-t border-border-subtle px-3.5 py-2.5 font-semibold text-text-primary">
-                      {nomClient(d)}
-                    </td>
-                    <td className="border-t border-border-subtle px-3.5 py-2.5 text-text-secondary">
-                      {etape ? (fr ? etape.name_fr : etape.name_en) : '—'}
-                    </td>
-                    <td className="border-t border-border-subtle px-3.5 py-2.5 tabular-nums text-text-secondary">
-                      {m === undefined ? '—' : argent(m, fr)}
-                    </td>
-                    <td className="border-t border-border-subtle px-3.5 py-2.5 text-text-secondary">
-                      {libelleSource(d.source, fr)}
-                    </td>
-                    <td className="border-t border-border-subtle px-3.5 py-2.5">
-                      {assigne ?? (
-                        <span className="font-semibold" style={{ color: 'var(--color-warning)' }}>
-                          {fr ? 'Non assigné' : 'Unassigned'}
-                        </span>
-                      )}
-                    </td>
-                    <td className="border-t border-border-subtle px-3.5 py-2.5 tabular-nums text-text-secondary">
-                      {p ? `${joursDepuis(d.last_activity_at, maintenant)} ${fr ? 'j' : 'd'}` : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ListeDeals
+          fr={fr}
+          deals={filtres_}
+          etapes={etapes}
+          montants={montants}
+          membres={membres}
+          maintenant={maintenant}
+          valeurs={champsPipeline.valeurs}
+          triChamp={triChamp}
+          onTriChamp={setTriChamp}
+          onOuvrir={onOuvrir}
+        />
       ) : (
         <DndContext
           sensors={sensors}

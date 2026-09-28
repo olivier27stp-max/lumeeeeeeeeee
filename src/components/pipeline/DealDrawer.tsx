@@ -18,7 +18,7 @@
  */
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, ExternalLink, FileText, Hammer, MapPin, Pencil, Trash2, User, X } from 'lucide-react';
+import { Briefcase, ChevronDown, ExternalLink, FileText, Hammer, MapPin, Pencil, Trash2, User, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import Modal from '../ui/Modal';
@@ -26,6 +26,10 @@ import { confirmer } from '../ui/ConfirmDialog';
 import { deleteTask, updateTask } from '../../lib/tasksApi';
 import SpecificNotes from '../SpecificNotes';
 import CustomFieldsPanel from '../champs/CustomFieldsPanel';
+import { lireValeurs } from '../../lib/champsPersoApi';
+import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
+import { usePermissions } from '../../hooks/usePermissions';
+import { hasPermission } from '../../lib/permissions';
 import ActivityTimeline from '../ActivityTimeline';
 import { useTranslation } from '../../i18n';
 import { versDate } from '../../lib/dateSeule';
@@ -949,7 +953,55 @@ function OngletPaiements({ deal, fr }: { deal: Deal; fr: boolean }) {
   );
 }
 
-function OngletLie({ deal, fr }: { deal: Deal; fr: boolean }) {
+/**
+ * Les champs du deal, DÈS l'ouverture de la fiche (elle s'ouvre sur l'onglet
+ * Client) : repliable, et seulement s'il existe au moins un champ — une
+ * section vide ferait croire à un écran cassé.
+ *
+ * Même requête (même clé) que le panneau : les deux instances — ici et dans
+ * l'onglet Deal — lisent le même cache, et un seul onglet est monté à la
+ * fois ; une écriture dans l'un invalide la clé, l'autre relit la version
+ * à jour. Pas de verrou optimiste qui se contredit.
+ */
+function SectionInformations({ dealId, fr, lectureSeule }: { dealId: string; fr: boolean; lectureSeule: boolean }) {
+  const { isEnabled } = useChampsPersoActifs();
+  const idContenu = useId();
+  const [ouverte, setOuverte] = useState(true);
+  const { data } = useQuery({
+    queryKey: ['champs-perso-valeurs', 'deal', dealId],
+    queryFn: () => lireValeurs('deal', dealId),
+    enabled: isEnabled,
+    staleTime: 30_000,
+  });
+  if (!isEnabled || !data || !data.fields.some((c) => !c.config?.masque_fiche)) return null;
+  return (
+    <section className="mt-5 first:mt-0" data-section-informations="">
+      <button
+        type="button"
+        aria-expanded={ouverte}
+        aria-controls={idContenu}
+        onClick={() => setOuverte((o) => !o)}
+        className="mb-2 flex w-full items-center justify-between rounded text-[11px] font-semibold uppercase tracking-wide text-text-tertiary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+      >
+        {fr ? 'Informations' : 'Details'}
+        <ChevronDown size={13} aria-hidden="true" className={ouverte ? 'transition-transform' : '-rotate-90 transition-transform'} />
+      </button>
+      {ouverte && (
+        <div id={idContenu}>
+          <CustomFieldsPanel objet="deal" entityId={dealId} fr={fr} lectureSeule={lectureSeule}
+            titre={fr ? 'Champs du deal' : 'Deal fields'} />
+          {lectureSeule && (
+            <p className="mt-2 text-[11px] text-text-tertiary">
+              {fr ? 'Lecture seule : ton rôle ne permet pas de modifier les deals.' : 'Read-only: your role cannot edit deals.'}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function OngletLie({ deal, fr, lectureSeule }: { deal: Deal; fr: boolean; lectureSeule: boolean }) {
   const { data, isLoading } = useQuery({
     queryKey: ['deal-lies', deal.id, deal.job_id, deal.quote_id],
     queryFn: () => fetchElementsLies(deal),
@@ -998,6 +1050,8 @@ function OngletLie({ deal, fr }: { deal: Deal; fr: boolean }) {
           <Vide texte={fr ? 'Aucun client rattaché.' : 'No client linked.'} />
         )}
       </Section>
+
+      <SectionInformations dealId={deal.id} fr={fr} lectureSeule={lectureSeule} />
 
       {/* Tout ce que ce client a fait avec l'entreprise — pas seulement ce
           que CE deal a produit. */}
@@ -1114,6 +1168,10 @@ export default function DealDrawer({
   const idDateFermeture = useId();
   const idOnglets = useId();
   const [onglet, setOnglet] = useState<Onglet>('lie');
+  // La RLS des valeurs d'un deal exige « leads.update » : sans ce droit, les
+  // champs s'affichent en lecture seule plutôt que de refuser à l'enregistrement.
+  const perms = usePermissions();
+  const champsEnLecture = !hasPermission(perms.permissions, 'leads.update', perms.role ?? undefined);
   const listeMembres = useMemo(() => membres ?? [], [membres]);
 
   // Étape « en attente d'une raison » : un passage vers une étape `lost` n'est
@@ -1792,7 +1850,7 @@ export default function DealDrawer({
                     {/* Champs personnalisés v2 : même panneau que client, job, devis,
                         facture (groupés par dossier, validés par type). */}
                     <CustomFieldsPanel objet="deal" entityId={deal.id} fr={fr} className="mt-3 border-t border-border-subtle pt-3"
-                      titre={fr ? 'Informations du métier' : 'Business details'} />
+                      titre={fr ? 'Informations du métier' : 'Business details'} lectureSeule={champsEnLecture} />
 
                     {/* Le deal est DÉJÀ perdu : la raison se corrige sans changer d'étape. */}
                     {etapePerdue && !etapePerdueVisee && (
@@ -1927,7 +1985,7 @@ export default function DealDrawer({
             </>
           )}
 
-          {onglet === 'lie' && <OngletLie deal={deal} fr={fr} />}
+          {onglet === 'lie' && <OngletLie deal={deal} fr={fr} lectureSeule={champsEnLecture} />}
 
             {onglet === 'rdv' && <OngletRendezVous deal={deal} fr={fr} />}
 

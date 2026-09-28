@@ -19,6 +19,8 @@ export interface SearchEntityItem {
   clientName: string | null;
   // property → owner client id, agreement → job id
   refId?: string | null;
+  // valeur de champ personnalisé trouvée sur une opportunité (suggestions)
+  dealId?: string | null;
   createdAt: string;
   rank: number;
 }

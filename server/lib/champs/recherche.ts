@@ -4,7 +4,8 @@
  * cf_rechercher (SQL, index trigramme sur la forme normalisée) trouve les
  * valeurs ; on les rattache ici à la fiche que la recherche sait ouvrir :
  * client/prospect, job, devis, facture. Une valeur trouvée sur une
- * OPPORTUNITÉ mène à son client — c'est lui que la barre de recherche ouvre.
+ * OPPORTUNITÉ est présentée sous son client, mais porte `dealId` : la barre
+ * de recherche ouvre alors LE DEAL (/ventes?deal=…), pas la fiche client.
  *
  * Appelé avec le client À L'IDENTITÉ de l'utilisateur : la RLS décide de ce
  * qu'il voit (montants masqués, pipelines non partagés…).
@@ -25,6 +26,8 @@ export interface ResultatRechercheChamp {
   clientId: string | null;
   clientName: string | null;
   refId: null;
+  /** Valeur trouvée sur une opportunité : c'est elle qu'on ouvre. */
+  dealId?: string | null;
   createdAt: string;
   rank: number;
 }
@@ -71,8 +74,10 @@ export async function rechercherDansChamps(db: SupabaseClient, orgId: string, q:
         const c = cid ? mc.get(cid) : undefined;
         if (!c || dejaVus.has(c.id)) continue;
         dejaVus.add(c.id);
-        res.push({ ...base, type: c.status === 'lead' ? 'lead' : 'client', id: c.id, title: nomClient(c), subtitle: sousTitre,
-          status: c.status, clientId: c.id, clientName: nomClient(c), createdAt: c.created_at });
+        const dealId = t.object_type === 'deal' ? t.entity_id : null;
+        res.push({ ...base, type: c.status === 'lead' ? 'lead' : 'client', id: c.id, title: nomClient(c),
+          subtitle: dealId ? `Deal · ${sousTitre}` : sousTitre,
+          status: c.status, clientId: c.id, clientName: nomClient(c), createdAt: c.created_at, ...(dealId ? { dealId } : {}) });
       } else if (t.object_type === 'job') {
         const j = mj.get(t.entity_id);
         if (!j || dejaVus.has(j.id)) continue;

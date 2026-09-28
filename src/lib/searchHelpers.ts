@@ -21,9 +21,13 @@ export interface SearchItemRefs {
   clientId?: string | null;
   // property → owner client id, agreement → job id
   refId?: string | null;
+  // valeur de champ trouvée sur une opportunité : on ouvre le deal
+  dealId?: string | null;
 }
 
 export function getSearchItemHref(type: SearchEntityType, id: string, refs?: SearchItemRefs) {
+  // Trouvé dans un champ du deal : la fiche du deal, dans le pipeline.
+  if (refs?.dealId) return `/ventes?deal=${encodeURIComponent(refs.dealId)}`;
   switch (type) {
     case 'client': return `/clients/${id}`;
     // property lives on the owner client hub, in the properties section

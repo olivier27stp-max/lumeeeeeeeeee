@@ -1349,7 +1349,9 @@ export const valeursEcrireSchema = z.object({
   values: z.array(z.object({
     field_id: z.string().uuid(),
     value: valeurChamp,
-    version: z.number().int().min(1).nullable().optional(),
+    // Verrou optimiste. 0 = « ce champ doit encore être vide » (une valeur
+    // existante est en version 1 ou plus) : compléter sans jamais écraser.
+    version: z.number().int().min(0).nullable().optional(),
   }).strict()).min(1).max(100),
 }).strict();
 

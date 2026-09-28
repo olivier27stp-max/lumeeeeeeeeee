@@ -89,7 +89,7 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
           <button
             key={`${item.type}-${item.id}`}
             type="button"
-            onClick={() => navigate(getSearchItemHref(item.type, item.id, { clientId: item.clientId, refId: item.refId }))}
+            onClick={() => navigate(getSearchItemHref(item.type, item.id, { clientId: item.clientId, refId: item.refId, dealId: item.dealId }))}
             className="w-full rounded-xl border border-outline bg-surface px-3 py-3 text-left transition-colors hover:bg-surface-secondary"
           >
             <div className="flex items-start gap-3">
