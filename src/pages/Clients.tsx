@@ -6,7 +6,7 @@ import StatusBadge from '../components/ui/status-badge';
 import { statusDotColor } from '../components/ui/StatusBadge';
 import FilterPill from '../components/ui/FilterPill';
 import BatchMessageModal from '../components/BatchMessageModal';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import {
@@ -29,6 +29,9 @@ import { useColonnesTableau, type ColonneStandard, type TriChamp } from '../comp
 import { correspondancesImport, ecrireValeurs } from '../lib/champsPersoApi';
 import { valeurDepuisTexte } from '../lib/champs/valeurs';
 import { messageChamps } from '../lib/champs/messages';
+import { BoutonFiltreEtiquettes } from '../components/etiquettes/FiltreEtiquettes';
+import { EtiquettesCompactes } from '../components/etiquettes/SelecteurEtiquettes';
+import { FILTRE_ETIQUETTES_VIDE, etiquettesDepuisUrl, type FiltreEtiquettes } from '../lib/etiquettesFiltre';
 
 type ClientSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc' | 'activity_desc' | 'activity_asc';
 type ClientSortColumn = 'name' | 'activity';
@@ -97,6 +100,7 @@ function formatLastActivity(iso: string, fr: boolean): string {
 export default function Clients() {
   const navigate = useNavigate();
   const { id: clientIdFromRoute } = useParams();
+  const location = useLocation();
   const { t, language } = useTranslation();
   const [items, setItems] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
@@ -122,6 +126,25 @@ export default function Clients() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBatchArchiving, setIsBatchArchiving] = useState(false);
   const [showBatchMessage, setShowBatchMessage] = useState(false);
+  // Filtre « Étiquettes », appliqué EN BASE (jointure client_tags) pour que la
+  // pagination et le total restent justes. `?etiquette=VIP` (lien de
+  // Réglages → Étiquettes) le pré-remplit ; le paramètre peut se répéter.
+  const [filtreEtiquettes, setFiltreEtiquettesBrut] = useState<FiltreEtiquettes>(() => {
+    const noms = etiquettesDepuisUrl(location.search);
+    return noms.length ? { ...FILTRE_ETIQUETTES_VIDE, avec: noms } : FILTRE_ETIQUETTES_VIDE;
+  });
+  const setFiltreEtiquettes = (f: FiltreEtiquettes) => {
+    setFiltreEtiquettesBrut(f);
+    setPage(1);
+    // Le lien d'arrivée ne doit pas « revenir » au rechargement une fois le filtre changé.
+    if (etiquettesDepuisUrl(location.search).length) navigate({ pathname: location.pathname, search: '' }, { replace: true });
+  };
+  // Un nouveau lien `?etiquette=` pendant que la page est ouverte (autre onglet de réglages, historique).
+  useEffect(() => {
+    const noms = etiquettesDepuisUrl(location.search);
+    if (noms.length) { setFiltreEtiquettesBrut({ ...FILTRE_ETIQUETTES_VIDE, avec: noms }); setPage(1); }
+  }, [location.search]);
+  const cleEtiquettes = filtreEtiquettes.avec.length ? `${filtreEtiquettes.mode}|${filtreEtiquettes.avec.join('\u0001')}` : '';
 
 
   // Escape key closes drawers/modals
@@ -183,7 +206,7 @@ export default function Clients() {
 
   useEffect(() => {
     void loadClients(page > 1 ? 'append' : 'refresh');
-  }, [page, statusFilter, sortBy, debouncedSearch, champsListe.cle, triChamp]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, statusFilter, sortBy, debouncedSearch, champsListe.cle, triChamp, cleEtiquettes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for command palette create event
   useEffect(() => {
@@ -321,6 +344,7 @@ export default function Clients() {
         sort: sortBy,
         champs: champsListe.filtre,
         triChamp: triChamp ? { ...triChamp, cle: champsListe.cle } : null,
+        etiquettes: filtreEtiquettes.avec.length ? { noms: filtreEtiquettes.avec, mode: filtreEtiquettes.mode } : null,
       });
 
       // Statut dérivé des jobs : un client avec ≥1 job (non supprimé) est
@@ -669,13 +693,9 @@ export default function Clients() {
     },
     {
       id: 'etiquettes', libelle: fr ? 'Étiquettes' : 'Tags', largeur: 'minmax(120px, 1.3fr)', parDefaut: true,
+      // Pastilles aux couleurs de Réglages → Étiquettes, deux puis « +N ».
       cellule: (item) => (item.tags && item.tags.length > 0 ? (
-        <div className="flex items-center gap-1 overflow-hidden">
-          {item.tags.slice(0, 2).map((tag: string) => (
-            <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded-full bg-[var(--color-surface-tertiary)] text-[11px] font-medium text-[var(--color-text-secondary)] border border-[var(--color-outline)] whitespace-nowrap">{tag}</span>
-          ))}
-          {item.tags.length > 2 && <span className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">+{item.tags.length - 2}</span>}
-        </div>
+        <div className="overflow-hidden"><EtiquettesCompactes noms={item.tags} fr={fr} /></div>
       ) : vide),
     },
     { id: 'statut', libelle: fr ? 'Statut' : 'Status', largeur: '200px', parDefaut: true, cellule: (item) => <Badge status={item.status} /> },
@@ -735,6 +755,8 @@ export default function Clients() {
             { value: 'oldest', label: fr ? 'Le plus ancien' : 'Oldest first' },
           ]}
         />
+
+        <BoutonFiltreEtiquettes valeur={filtreEtiquettes} onChange={setFiltreEtiquettes} fr={fr} />
 
         {champsListe.bouton}
         {colonnes.bouton}

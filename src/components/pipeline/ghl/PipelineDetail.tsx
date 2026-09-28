@@ -316,7 +316,7 @@ export default function PipelineDetail({ fr, pipeline, onRetour, onChangement }:
   const idNom = useId();
   const idNouvelle = useId();
   const { sauver, indicateur } = useSauvegarde(fr);
-  const [onglet, setOnglet] = useState<'etapes' | 'cartes' | 'tags'>('etapes');
+  const [onglet, setOnglet] = useState<'etapes' | 'cartes'>('etapes');
   const [renommage, setRenommage] = useState(false);
   const [nom, setNom] = useState(pipeline.name);
   const [recherche, setRecherche] = useState('');
@@ -433,7 +433,7 @@ export default function PipelineDetail({ fr, pipeline, onRetour, onChangement }:
       </div>
 
       <div role="tablist" aria-label={fr ? 'Sections du pipeline' : 'Pipeline sections'} className="flex gap-4 border-b border-outline">
-        {([['etapes', fr ? 'Étapes' : 'Stages'], ['cartes', fr ? 'Cartes' : 'Cards'], ['tags', 'Smart tags']] as const).map(([cle, libelle]) => (
+        {([['etapes', fr ? 'Étapes' : 'Stages'], ['cartes', fr ? 'Cartes' : 'Cards']] as const).map(([cle, libelle]) => (
           <button
             key={cle}
             type="button"
@@ -449,13 +449,6 @@ export default function PipelineDetail({ fr, pipeline, onRetour, onChangement }:
 
       {onglet === 'cartes' ? (
         <OngletCartes fr={fr} pipelineId={pipeline.id} />
-      ) : onglet === 'tags' ? (
-        <div className="rounded-xl border border-dashed border-outline bg-surface-card px-6 py-12 text-center">
-          <p className="text-[14px] font-semibold text-text-primary">Smart tags</p>
-          <p className="mt-1 text-[12.5px] text-text-tertiary">
-            {fr ? 'Bientôt : des étiquettes posées automatiquement sur les deals selon des règles.' : 'Coming soon: tags applied automatically to deals by rules.'}
-          </p>
-        </div>
       ) : (
         <>
           <CarteProbabilite

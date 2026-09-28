@@ -745,7 +745,7 @@ export async function creerDealManuel(champs: {
   clientId?: string | null;
   quoteId?: string | null;
   pipelineId?: string | null;
-}): Promise<{ dealId: string; fusionne: boolean; dealExistant: boolean; pipelineId: string | null }> {
+}): Promise<{ dealId: string; fusionne: boolean; dealExistant: boolean; pipelineId: string | null; clientId: string | null }> {
   // `pipeline_creer_deal` ne prend PAS d'organisation : elle la dérive de la
   // session et vérifie la permission « leads.create ». `ingest_lead` reste
   // réservée au serveur — elle accepte un org_id en paramètre, ce qui n'a rien
@@ -771,17 +771,21 @@ export async function creerDealManuel(champs: {
   // pipeline sans étape ouverte fait retomber `ingest_lead` sur le pipeline
   // par défaut. Sans cette relecture, le compteur restait à zéro et le bug
   // passait pour un défaut de rafraîchissement (QA 2026-09-24, P1-6).
+  // Le client aussi : un « nouveau contact » peut avoir été rapproché d'une
+  // fiche existante, et « Nouveau deal » y pose ensuite les étiquettes.
   let pipelineId: string | null = null;
+  let clientId: string | null = null;
   if (r.deal_id) {
     const { data: place } = await supabase
       .from('deals')
-      .select('pipeline_id')
+      .select('pipeline_id,client_id')
       .eq('id', r.deal_id)
       .maybeSingle();
     pipelineId = (place as { pipeline_id?: string } | null)?.pipeline_id ?? null;
+    clientId = (place as { client_id?: string | null } | null)?.client_id ?? null;
   }
 
-  return { dealId: r.deal_id, fusionne: r.fusionne, dealExistant: r.deal_existant, pipelineId };
+  return { dealId: r.deal_id, fusionne: r.fusionne, dealExistant: r.deal_existant, pipelineId, clientId };
 }
 
 /** Un client proposé dans « Nouveau deal ». */

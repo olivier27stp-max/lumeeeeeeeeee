@@ -9,14 +9,14 @@
  *   finit avec « VIP », « vip » et « V.I.P. ».
  */
 import { useId, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { hasPermission } from '../../lib/permissions';
 import { usePermissions } from '../../hooks/usePermissions';
 import { captureClientException } from '../../lib/sentry';
-import { listerEtiquettes, creerEtiquette, couleurDe, type Etiquette } from '../../lib/etiquettesApi';
+import { listerEtiquettes, creerEtiquette, couleurDe, etiquettesDesClients, type Etiquette } from '../../lib/etiquettesApi';
 
 /** Défaut hors composant : `data = []` dans le rendu recréerait un tableau à chaque passe. */
 const AUCUNE: Etiquette[] = [];
@@ -24,6 +24,31 @@ const AUCUNE: Etiquette[] = [];
 export function useEtiquettes() {
   const q = useQuery({ queryKey: ['etiquettes'], queryFn: listerEtiquettes, staleTime: 60_000 });
   return { ...q, etiquettes: q.data ?? AUCUNE };
+}
+
+/** Défaut hors composant, pour la même raison que `AUCUNE`. */
+const AUCUNE_PAR_CLIENT: Record<string, string[]> = {};
+
+/** Préfixe de la clé : l'invalider rafraîchit TOUTES les listes (cartes, fiche du deal). */
+export const CLE_ETIQUETTES_CLIENTS = 'etiquettes-clients';
+
+/**
+ * Étiquettes de plusieurs clients en UNE requête (cartes de la pipeline,
+ * fiche du deal). La clé porte la liste triée des ids : même ensemble =
+ * même cache, quel que soit l'ordre des deals.
+ */
+export function useEtiquettesDesClients(clientIds: readonly string[]) {
+  const ids = useMemo(() => [...new Set(clientIds.filter(Boolean))].sort(), [clientIds]);
+  const q = useQuery({
+    queryKey: [CLE_ETIQUETTES_CLIENTS, ids],
+    queryFn: () => etiquettesDesClients(ids),
+    enabled: ids.length > 0,
+    staleTime: 30_000,
+    // Garder les pastilles pendant qu'un nouvel ensemble se charge (un deal
+    // qui change d'étape ne doit pas faire clignoter toutes les cartes).
+    placeholderData: keepPreviousData,
+  });
+  return { ...q, parClient: q.data ?? AUCUNE_PAR_CLIENT };
 }
 
 export function usePeutGererEtiquettes(): boolean {
@@ -58,17 +83,42 @@ export function PastilleEtiquette({ nom, couleur, onRetirer, fr, petite }: {
   );
 }
 
-export default function SelecteurEtiquettes({ valeurs, onAjouter, onRetirer, fr, lectureSeule }: {
+/**
+ * Pastilles compactes (carte de deal, liste) : `max` pastilles, puis « +N »
+ * dont le survol et le lecteur d'écran nomment le reste.
+ */
+export function EtiquettesCompactes({ noms, fr, max = 2 }: { noms: readonly string[]; fr: boolean; max?: number }) {
+  const { etiquettes } = useEtiquettes();
+  if (noms.length === 0) return null;
+  const montrees = noms.slice(0, max);
+  const reste = noms.slice(max);
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1" aria-label={fr ? `Étiquettes : ${noms.join(', ')}` : `Tags: ${noms.join(', ')}`} role="group">
+      {montrees.map((n) => <PastilleEtiquette key={n} nom={n} couleur={couleurDe(etiquettes, n)} fr={fr} petite />)}
+      {reste.length > 0 && (
+        <span className="whitespace-nowrap rounded-full bg-surface-tertiary px-1.5 py-px text-[10.5px] font-medium text-text-secondary"
+          title={reste.join(', ')}>
+          +{reste.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export default function SelecteurEtiquettes({ valeurs, onAjouter, onRetirer, fr, lectureSeule, sansCreation }: {
   valeurs: string[];
   onAjouter: (tag: string) => Promise<void> | void;
   onRetirer: (tag: string) => Promise<void> | void;
   fr: boolean;
   lectureSeule?: boolean;
+  /** Choisir parmi les étiquettes EXISTANTES seulement (ex. « Retirer une étiquette » en lot). */
+  sansCreation?: boolean;
 }) {
   const id = useId();
   const qc = useQueryClient();
   const { etiquettes } = useEtiquettes();
-  const peutCreer = usePeutGererEtiquettes();
+  const peutGerer = usePeutGererEtiquettes();
+  const peutCreer = peutGerer && !sansCreation;
   const [ouvert, setOuvert] = useState(false);
   const [saisie, setSaisie] = useState('');
   const [actif, setActif] = useState(0);
@@ -151,7 +201,7 @@ export default function SelecteurEtiquettes({ valeurs, onAjouter, onRetirer, fr,
             onBlur={() => setTimeout(() => { setOuvert(false); setSaisie(''); }, 150)}
             className="h-7 w-44 rounded-full border border-outline bg-surface-card px-2.5 text-[12px] text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           />
-          {(options.length > 0 || (texte && !existe && !dejaPosee && !peutCreer)) && (
+          {(options.length > 0 || (texte && !existe && !dejaPosee && !peutGerer)) && (
             <ul id={`${id}-liste`} role="listbox" aria-label={fr ? 'Étiquettes' : 'Tags'}
               className="absolute left-0 top-8 z-30 w-60 overflow-hidden rounded-xl border border-outline bg-surface-card py-1 shadow-lg">
               {options.map((o, i) => (
@@ -166,7 +216,7 @@ export default function SelecteurEtiquettes({ valeurs, onAjouter, onRetirer, fr,
                   )}
                 </li>
               ))}
-              {texte && !existe && !dejaPosee && !peutCreer && (
+              {texte && !existe && !dejaPosee && !peutGerer && (
                 <li role="option" aria-selected={false} aria-disabled="true" className="px-3 py-1.5 text-[11.5px] text-text-tertiary">
                   {fr ? 'Seuls les administrateurs créent de nouvelles étiquettes (Réglages → Étiquettes).' : 'Only admins create new tags (Settings → Tags).'}
                 </li>
