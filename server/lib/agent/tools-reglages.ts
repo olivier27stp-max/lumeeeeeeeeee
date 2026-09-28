@@ -358,15 +358,12 @@ const toggleAutomationRule: AgentTool = {
       const id = champRequis(args.rule_id, 'L’automatisation');
       if (typeof args.is_active !== 'boolean') throw new Error('Précise si l’automatisation doit être activée (true) ou mise en pause (false).');
       const actif = args.is_active;
-      const { data, error } = await ctx.client
-        .from('automation_rules')
-        .update({ is_active: actif, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .eq('org_id', ctx.orgId)
-        .select('id, name, is_active');
-      if (error) throw error;
-      const row = ligneTouchee(data, 'L’automatisation');
-      if (row.is_active !== actif) throw new Error('La modification n’a pas été appliquée — réessaie.');
+      // Le même chemin que l'interface (audit M8) : un parcours cassé n'est
+      // pas publié, et Lumi reçoit la liste des problèmes à expliquer.
+      const { changerPublication } = await import('../automations-publication');
+      const r = await changerPublication(ctx.client, ctx.orgId, id, actif);
+      if (!r.ok) throw new Error(r.erreur);
+      const row = { id: r.id, name: r.name };
       return {
         updated: true,
         rule_id: row.id,

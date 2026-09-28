@@ -121,6 +121,38 @@ export async function modifierAutomatisation(
   return reponse.json();
 }
 
+/**
+ * Publier (`true`) ou repasser en brouillon (`false`) — par le serveur, qui
+ * refuse un parcours cassé et NOMME les problèmes dans le message d'erreur
+ * (audit M8). Plus aucune écriture directe du statut depuis le navigateur.
+ */
+export async function changerPublication(id: string, actif: boolean): Promise<void> {
+  const reponse = await fetch(`/api/automations/rules/${id}/publication`, {
+    method: 'POST',
+    headers: await entetes(),
+    body: JSON.stringify({ actif }),
+  });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de changer le statut de l’automatisation.');
+}
+
+export interface ResultatPublicationLot {
+  id: string;
+  ok: boolean;
+  erreur?: string;
+}
+
+/** Le même contrôle, pour plusieurs automatisations d'un coup (barre de lot). */
+export async function changerPublicationEnLot(ids: string[], actif: boolean): Promise<ResultatPublicationLot[]> {
+  const reponse = await fetch('/api/automations/rules/publication', {
+    method: 'POST',
+    headers: await entetes(),
+    body: JSON.stringify({ ids, actif }),
+  });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de changer le statut des automatisations.');
+  const corps = await reponse.json() as { resultats?: ResultatPublicationLot[] };
+  return corps.resultats ?? [];
+}
+
 export async function dupliquerAutomatisation(id: string): Promise<AutomationRule> {
   const reponse = await fetch(`/api/automations/rules/${id}/duplicate`, {
     method: 'POST',

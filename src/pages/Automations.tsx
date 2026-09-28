@@ -42,6 +42,8 @@ import {
   rangerDansDossier,
   chargerBureauxCibles,
   renommerDossier,
+  changerPublication,
+  changerPublicationEnLot,
   type BureauCible,
   type CatalogueAutomatisations,
   type DossierAutomatisation,
@@ -53,7 +55,6 @@ import { creerFileBascule } from '../lib/fileBascule';
 import {
   type AutomationRule,
   getAutomationRules,
-  toggleAutomationRule,
   getFailureCountsByRule,
   getRecentAutomationFailures,
   type AutomationFailure,
@@ -385,7 +386,9 @@ export default function Automations() {
   useEffect(() => { frRef.current = fr; }, [fr]);
   const confirmationOuverte = useRef(false);
   const [fileBascule] = useState(() => creerFileBascule({
-    envoyer: toggleAutomationRule,
+    // La route serveur de publication (M8) : un parcours cassé est refusé,
+    // avec la liste de ses problèmes dans le message.
+    envoyer: changerPublication,
     surFin: (id, actif) => {
       setRules((prev) => prev.map((r) => (r.id === id ? { ...r, is_active: actif } : r)));
       setVersionBascule((v) => v + 1);
@@ -398,7 +401,11 @@ export default function Automations() {
       console.error('[Automations] bascule publication', erreur);
       setRules((prev) => prev.map((r) => (r.id === id ? { ...r, is_active: retour } : r)));
       setVersionBascule((v) => v + 1);
-      toast.error(frRef.current ? 'Impossible de mettre à jour' : 'Could not update', { id: `bascule-${id}` });
+      // Le message du serveur NOMME ce qui empêche de publier : c'est lui
+      // qu'on montre, pas un « impossible » qui n'aide personne.
+      toast.error(erreur instanceof Error && erreur.message
+        ? erreur.message
+        : (frRef.current ? 'Impossible de mettre à jour' : 'Could not update'), { id: `bascule-${id}`, duration: 10_000 });
     },
   }));
   const [search, setSearch] = useState('');
@@ -917,17 +924,41 @@ export default function Automations() {
    * Publier ou dépublier ne concerne que les règles VIVANTES : une règle à
    * la corbeille est ignorée par le moteur, la publier ne changerait rien.
    */
-  const publierLot = () => agirEnLot(
-    (r) => (r.is_active ? Promise.resolve() : toggleAutomationRule(r.id, true)),
-    { fr: (n) => `${n} automatisation(s) publiée(s)`, en: (n) => `${n} automation(s) published` },
-    reglesCochees.filter((r) => !r.deleted_at),
-  );
-
-  const depublierLot = () => agirEnLot(
-    (r) => (r.is_active ? toggleAutomationRule(r.id, false) : Promise.resolve()),
-    { fr: (n) => `${n} automatisation(s) repassée(s) en brouillon`, en: (n) => `${n} automation(s) unpublished` },
-    reglesCochees.filter((r) => !r.deleted_at),
-  );
+  /*
+   * Le lot passe par la MÊME route serveur que l'interrupteur (M8) : chaque
+   * parcours cassé est refusé, nommé, avec ses problèmes.
+   */
+  const publierEnLot = async (actif: boolean) => {
+    const cibles = reglesCochees.filter((r) => !r.deleted_at && r.is_active !== actif);
+    if (cibles.length === 0) { setCochees(new Set()); return; }
+    setLotEnCours(true);
+    try {
+      const resultats = await changerPublicationEnLot(cibles.map((r) => r.id), actif);
+      const reussis = resultats.filter((r) => r.ok).length;
+      const echecs = resultats.filter((r) => !r.ok);
+      if (reussis > 0) {
+        toast.success(actif
+          ? (fr ? `${reussis} automatisation(s) publiée(s)` : `${reussis} automation(s) published`)
+          : (fr ? `${reussis} automatisation(s) repassée(s) en brouillon` : `${reussis} automation(s) unpublished`));
+      }
+      if (echecs.length > 0) {
+        const nomDe = (id: string) => {
+          const r = rules.find((x) => x.id === id);
+          return r ? localizeAutomationName(r.name, language) : id;
+        };
+        toast.error(echecs.map((e) => `« ${nomDe(e.id)} » — ${e.erreur ?? ''}`).join('\n'), { duration: 15_000 });
+      }
+      setCochees(new Set());
+      await load();
+    } catch (e: unknown) {
+      console.error('[automations] publication en lot échouée', e);
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLotEnCours(false);
+    }
+  };
+  const publierLot = () => publierEnLot(true);
+  const depublierLot = () => publierEnLot(false);
 
   const supprimerLot = async () => {
     /*

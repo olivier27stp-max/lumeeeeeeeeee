@@ -119,6 +119,9 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'DELETE /api/automations/rules/:id': 'automations.update',
   'POST /api/automations/rules/:id/duplicate': 'automations.update',
   'POST /api/automations/rules/:id/copier-bureaux': 'automations.update',
+  // Publier / repasser en brouillon, un par un ou en lot (audit M8).
+  'POST /api/automations/rules/:id/publication': 'automations.update',
+  'POST /api/automations/rules/publication': 'automations.update',
   'GET /api/automations/bureaux-cibles': 'automations.update',
   // Générer coûte un appel au modèle : même droit que créer à la main.
   'POST /api/automations/rules/generer': 'automations.update',

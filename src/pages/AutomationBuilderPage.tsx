@@ -42,6 +42,7 @@ import {
   chargerMembres,
   chargerEtiquettes,
   apercuAutomatisation,
+  changerPublication,
   type CatalogueAutomatisations,
   type ApercuAutomatisation,
 } from '../lib/automationBuilderApi';
@@ -78,9 +79,9 @@ import {
   champVisible,
   configParDefaut,
   declencheurOffert,
-  problemesAvantPublication,
   trouverAction,
 } from '../lib/automationCatalogue';
+import { problemesPublication } from '../lib/publicationAutomatisation';
 import { useModuleAccess } from '../hooks/useModuleAccess';
 import { apercuClientsInactifs } from '../lib/reservationApi';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
@@ -122,7 +123,8 @@ export default function AutomationBuilderPage() {
   const confirmationPublication = useRef(false);
   const [, setVersionBascule] = useState(0);
   const [fileBascule] = useState(() => creerFileBascule({
-    envoyer: async (id, actif) => { await modifierAutomatisation(id, { is_active: actif }); },
+    // La route serveur de publication (M8), la même que la liste.
+    envoyer: changerPublication,
     surFin: (id, actif) => {
       setRegle((r) => (r && r.id === id ? { ...r, is_active: actif } : r));
       setVersionBascule((v) => v + 1);
@@ -751,14 +753,17 @@ export default function AutomationBuilderPage() {
    * ne va pas avec son déclencheur, c'est le découvrir après avoir tout monté.
    */
   const problemesVivants = useMemo(
-    () => problemesAvantPublication({
+    // Le module PARTAGÉ avec la route serveur de publication (M8) : ce que
+    // l'éditeur annonce est exactement ce que le serveur refusera.
+    () => problemesPublication({
       trigger_event: regle?.trigger_event,
       steps,
       actions: regle?.actions,
       conditions: (regle?.conditions ?? null) as Record<string, unknown> | null,
+      is_preset: regle?.is_preset,
       fr,
     }),
-    [regle?.trigger_event, regle?.actions, regle?.conditions, steps, fr],
+    [regle?.trigger_event, regle?.actions, regle?.conditions, regle?.is_preset, steps, fr],
   );
   /** Les étapes fautives, pour les signaler SUR le canevas (§6.5). */
   const etapesEnErreur = useMemo(
@@ -894,7 +899,7 @@ export default function AutomationBuilderPage() {
        * qu'on peut cliquer se corrige, une erreur qu'on doit chercher se
        * contourne.
        */
-      const problemes = problemesAvantPublication({
+      const problemes = problemesPublication({
         trigger_event: regle.trigger_event,
         steps,
         actions: regle.actions,
@@ -902,6 +907,7 @@ export default function AutomationBuilderPage() {
         // du déclencheur manque — la règle se publierait pour ne jamais
         // partir.
         conditions: (regle.conditions ?? null) as Record<string, unknown> | null,
+        is_preset: regle.is_preset,
         fr,
       });
       const bloquants = problemes.filter((p) => p.gravite === 'bloquant');
@@ -942,6 +948,20 @@ export default function AutomationBuilderPage() {
         confirmLabel: fr ? 'Publier' : 'Publish',
       }).finally(() => { confirmationPublication.current = false; });
       if (!ok) return;
+      /*
+       * Le serveur vérifie la version ENREGISTRÉE : les dernières
+       * secondes de modifications partent d'abord, sinon il jugerait
+       * (et publierait) l'avant-dernière version du parcours.
+       */
+      if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours') {
+        try {
+          await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
+          setEtatSauvegarde('a_jour');
+        } catch (e: unknown) {
+          toast.error(e instanceof Error ? e.message : String(e));
+          return;
+        }
+      }
     }
     const voulu = fileBascule.basculer(regle.id, regle.is_active);
     setRegle((r) => (r ? { ...r, is_active: voulu } : r));
