@@ -846,8 +846,8 @@ export async function resolveEntityVariables(
       // Variables du déclencheur « Facture consultée par le client », même
       // forme que celles de la soumission. `facture.lien` part du jeton que la
       // page publique lit VRAIMENT (`view_token`) ; `[invoice_link]`, lui,
-      // lit `public_token` (toujours vide) — laissé tel quel pour ne rien
-      // changer aux règles existantes, voir le rapport de phase 0 (bug 3).
+      // lisait `public_token` (toujours vide) : corrigé au launch (bug 3 de
+      // la phase 0), il porte maintenant `view_token` lui aussi.
       // « Paiement échoué » : le dernier échec de cette facture (hors litige),
       // la raison en mots de client, et le lien pour payer. Drapeau seulement,
       // pour la même raison que plus bas (charge du webhook).
@@ -891,11 +891,13 @@ export async function resolveEntityVariables(
       vars.invoice_number = inv.invoice_number || '';
       vars.invoice_due_date = inv.due_date || '';
       vars.invoice_total = argent(inv.total_cents);
-      // `invoices` utilise `public_token` la ou `quotes` utilise
-      // `view_token` — deux noms pour la meme idee, verifie dans le schema
-      // de production. La page servie est `/invoice/:token`.
-      if (inv.public_token) {
-        vars.invoice_link = `${resolvePublicBaseUrl()}/invoice/${inv.public_token}`;
+      // La page servie est `/invoice/:token`, et GET /api/invoices/public/:token
+      // cherche la facture par `view_token`. `[invoice_link]` lisait
+      // `public_token`, toujours vide : les relances de facture du pack
+      // partaient SANS lien (launch 2026-09-28, bug 3 de la phase 0).
+      const jetonFacture = inv.view_token || inv.public_token;
+      if (jetonFacture) {
+        vars.invoice_link = `${resolvePublicBaseUrl()}/invoice/${jetonFacture}`;
       }
       if (inv.client_id) {
         const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
