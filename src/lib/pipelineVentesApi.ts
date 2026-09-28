@@ -635,6 +635,24 @@ export async function lierJob(
   if (error) throw error;
 }
 
+/**
+ * Rattache au deal le devis créé depuis sa fiche (« Faire un devis »).
+ *
+ * Seulement si le devis est pour le MÊME client que le deal : si le vendeur
+ * a changé de client dans le formulaire, ce devis n'est plus celui du deal.
+ * Le dernier devis fait depuis la fiche devient celui du deal (une révision
+ * remplace la précédente). Retourne vrai si le lien est posé.
+ */
+export async function lierDevis(dealId: string, quoteId: string, clientId: string | null): Promise<boolean> {
+  if (!clientId) return false;
+  const { data, error } = await supabase.from('deals')
+    .update({ quote_id: quoteId })
+    .eq('id', dealId).eq('client_id', clientId)
+    .select('id');
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
 /** Canal d'acquisition du deal. `deals.source` est du texte libre : on écrit ce qu'on reçoit. */
 export async function majSourceDuDeal(dealId: string, source: string): Promise<void> {
   const { error } = await supabase.from('deals').update({ source }).eq('id', dealId);

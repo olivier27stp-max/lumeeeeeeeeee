@@ -487,7 +487,22 @@ function LigneDossier({ vers, numero, titre, statut, cents, alerte, fr }: {
  * alors qu'un vendeur qui le rappelle a besoin de savoir qu'il doit encore
  * 1 200 $, ou qu'on lui a déjà posé trois devis sans suite.
  */
-function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolean }) {
+/** « Faire un devis » depuis le deal : client pré-rempli, et le devis sera rattaché au deal. */
+export function lienNouveauDevis(clientId: string | null, dealId: string): string {
+  const p = new URLSearchParams({ dealId });
+  if (clientId) p.set('clientId', clientId);
+  return `/quotes/new?${p.toString()}`;
+}
+
+/** « Facturer » depuis le deal : le client, et la job du deal si elle existe (la facture s'y rattache). */
+export function lienNouvelleFacture(deal: Pick<Deal, 'client_id' | 'job_id'>): string {
+  const p = new URLSearchParams();
+  if (deal.client_id) p.set('clientId', deal.client_id);
+  if (deal.job_id) p.set('jobId', deal.job_id);
+  return `/invoices/new?${p.toString()}`;
+}
+
+function DossierDuClient({ clientId, dealId, fr }: { clientId: string | null; dealId: string; fr: boolean }) {
   const { data, isLoading } = useQuery({
     queryKey: ['deal-dossier-client', clientId],
     queryFn: () => fetchDossierClient(clientId),
@@ -555,7 +570,7 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
         nous on ne pouvait que les LIRE.
       */}
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link to={`/quotes/new?clientId=${clientId}`} className="btn-secondary text-[12px]">
+        <Link to={lienNouveauDevis(clientId, dealId)} className="btn-secondary text-[12px]">
           {fr ? 'Faire un devis' : 'New quote'}
         </Link>
         <Link to={`/invoices/new?clientId=${clientId}`} className="btn-secondary text-[12px]">
@@ -823,10 +838,10 @@ function OngletPaiements({ deal, fr }: { deal: Deal; fr: boolean }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link to={`/quotes/new?clientId=${deal.client_id}`} className="btn-secondary text-[12.5px]">
+          <Link to={lienNouveauDevis(deal.client_id, deal.id)} className="btn-secondary text-[12.5px]">
             {fr ? 'Cr\u00e9er un devis' : 'Create estimate'}
           </Link>
-          <Link to={`/invoices/new?clientId=${deal.client_id}`} className="btn-primary text-[12.5px]">
+          <Link to={lienNouvelleFacture(deal)} className="btn-primary text-[12.5px]">
             {fr ? 'Cr\u00e9er une facture' : 'Create invoice'}
           </Link>
         </div>
@@ -986,7 +1001,7 @@ function OngletLie({ deal, fr }: { deal: Deal; fr: boolean }) {
 
       {/* Tout ce que ce client a fait avec l'entreprise — pas seulement ce
           que CE deal a produit. */}
-      <DossierDuClient clientId={deal.client_id} fr={fr} />
+      <DossierDuClient clientId={deal.client_id} dealId={deal.id} fr={fr} />
 
       <Section titre={fr ? 'Job' : 'Job'}>
         {isLoading && <Vide texte={fr ? 'Chargement…' : 'Loading…'} />}
@@ -1351,40 +1366,53 @@ export default function DealDrawer({
         </header>
 
         {/*
-          Créer la job ne doit pas attendre que le deal soit gagné : en service
-          terrain, on planifie souvent le travail AVANT de clore la vente. Le
-          bouton reste donc offert tant qu'aucune job n'est liée — sur un deal
-          déjà gagné, c'est l'encart ambre ci-dessous qui prend le relais.
+          Le parcours d'une vente sans quitter la pipeline : devis → job →
+          facture. « Faire un devis » rattache le devis à CE deal (?dealId) ;
+          quand il part chez le client, le deal passe tout seul à « Soumission
+          envoyée », puis à « Soumission ouverte » quand le client l'ouvre.
+          Créer la job n'attend pas que le deal soit gagné : en service
+          terrain, on planifie souvent AVANT de clore — sur un deal déjà
+          gagné sans job, c'est l'encart ambre ci-dessous qui prend le relais.
         */}
-        {!deal.job_id && !jobACreer && (
+        {!jobACreer && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline bg-surface-secondary p-3.5">
             <p className="text-[12px] text-text-secondary">
-              {fr
-                ? 'Aucune job rattachée à ce deal.'
-                : 'No job linked to this deal yet.'}
+              {deal.quote_id
+                ? (deal.job_id
+                  ? (fr ? 'Devis et job rattachés à ce deal.' : 'Quote and job linked to this deal.')
+                  : (fr ? 'Devis rattaché à ce deal. Aucune job pour l’instant.' : 'Quote linked to this deal. No job yet.'))
+                : (deal.job_id
+                  ? (fr ? 'Job rattachée à ce deal.' : 'Job linked to this deal.')
+                  : (fr ? 'Aucun devis ni job rattaché à ce deal.' : 'No quote or job linked to this deal yet.'))}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              {/*
-                Le devis AVANT la job : en service terrain, on chiffre d'abord
-                et on planifie une fois que c'est accepté. Le client arrive
-                pré-rempli — sans ça le vendeur devrait rechercher à la main
-                quelqu'un qu'il vient de désigner.
-              */}
-              {deal.client_id && (
-                <Link
-                  to={`/quotes/new?clientId=${deal.client_id}`}
-                  className="btn-secondary text-[12px]"
-                >
+              {deal.quote_id ? (
+                <Link to={`/quotes/${deal.quote_id}`} className="btn-secondary text-[12px]">
+                  {fr ? 'Voir le devis' : 'View quote'}
+                </Link>
+              ) : deal.client_id && (
+                <Link to={lienNouveauDevis(deal.client_id, deal.id)} className="btn-primary text-[12px]">
                   {fr ? 'Faire un devis' : 'Create a quote'}
                 </Link>
               )}
-              <button
-                type="button"
-                onClick={() => onCreerJob(deal)}
-                className="btn-secondary text-[12px]"
-              >
-                {fr ? 'Créer une job' : 'Create a job'}
-              </button>
+              {deal.job_id ? (
+                <Link to={`/jobs/${deal.job_id}`} className="btn-secondary text-[12px]">
+                  {fr ? 'Voir la job' : 'View job'}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onCreerJob(deal)}
+                  className="btn-secondary text-[12px]"
+                >
+                  {fr ? 'Créer une job' : 'Create a job'}
+                </button>
+              )}
+              {deal.client_id && (
+                <Link to={lienNouvelleFacture(deal)} className="btn-secondary text-[12px]">
+                  {fr ? 'Facturer' : 'Invoice'}
+                </Link>
+              )}
             </div>
           </div>
         )}
