@@ -263,7 +263,12 @@ export default function PanneauEtape({
     return fr ? 'Le parcours se termine ici.' : 'The journey ends here.';
   })();
 
-  const delai = brouillon.type === 'attendre' ? decomposer(brouillon.delai_secondes) : null;
+  // « Avant la date » : le délai saisi est « combien avant », pas une durée.
+  const avantDate = brouillon.type === 'attendre' && brouillon.mode === 'avant_date';
+  const champDelai: 'delai_secondes' | 'secondes_avant' = avantDate ? 'secondes_avant' : 'delai_secondes';
+  const delai = brouillon.type === 'attendre'
+    ? decomposer((avantDate ? brouillon.secondes_avant : brouillon.delai_secondes) ?? 0)
+    : null;
 
   return (
     <aside
@@ -460,7 +465,7 @@ export default function PanneauEtape({
                     onChange={(e) => {
                       const n = Math.max(0, Number(e.target.value) || 0);
                       const u = UNITES.find((x) => x.cle === delai.unite) ?? UNITES[0];
-                      setBrouillon({ ...(brouillon as EtapeAttendre), delai_secondes: n * u.secondes });
+                      setBrouillon({ ...(brouillon as EtapeAttendre), [champDelai]: n * u.secondes });
                     }}
                     className="w-24 rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   />
@@ -469,7 +474,7 @@ export default function PanneauEtape({
                     value={delai.unite}
                     onChange={(e) => {
                       const u = UNITES.find((x) => x.cle === e.target.value) ?? UNITES[0];
-                      setBrouillon({ ...(brouillon as EtapeAttendre), delai_secondes: delai.valeur * u.secondes });
+                      setBrouillon({ ...(brouillon as EtapeAttendre), [champDelai]: delai.valeur * u.secondes });
                     }}
                     className="flex-1 rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
@@ -496,19 +501,34 @@ export default function PanneauEtape({
                   <select
                     id={`${ids}-mode`}
                     value={(brouillon as EtapeAttendre).mode ?? 'duree'}
-                    onChange={(e) => setBrouillon({
-                      ...(brouillon as EtapeAttendre),
-                      mode: e.target.value as 'duree' | 'reponse',
-                    })}
+                    onChange={(e) => {
+                      const mode = e.target.value as 'duree' | 'reponse' | 'avant_date';
+                      const actuelle = brouillon as EtapeAttendre;
+                      // Passer à « avant la date » reprend le délai saisi comme
+                      // « combien avant », et la durée propre de l'attente tombe à 0.
+                      setBrouillon(mode === 'avant_date'
+                        ? { ...actuelle, mode, secondes_avant: actuelle.secondes_avant ?? actuelle.delai_secondes, delai_secondes: 0 }
+                        : { ...actuelle, mode, delai_secondes: actuelle.mode === 'avant_date' ? (actuelle.secondes_avant ?? 86400) : actuelle.delai_secondes });
+                    }}
                     className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
                     <option value="duree">{fr ? 'Simplement ce délai' : 'Just this delay'}</option>
                     <option value="reponse">
                       {fr ? 'La réponse du client (au plus ce délai)' : 'The client’s reply (at most this delay)'}
                     </option>
+                    {/* Seul « Rendez-vous planifié » porte une date à venir. */}
+                    {(declencheur === 'appointment.created' || avantDate) && (
+                      <option value="avant_date">
+                        {fr ? 'Ce délai AVANT le rendez-vous' : 'This long BEFORE the appointment'}
+                      </option>
+                    )}
                   </select>
                   <p className="mt-1 text-[11px] text-text-tertiary">
-                    {(brouillon as EtapeAttendre).mode === 'reponse'
+                    {avantDate
+                      ? (fr
+                        ? 'Le rappel part ce délai avant le rendez-vous. Rendez-vous déplacé : le rappel suit. Moment déjà passé : ce rappel est sauté.'
+                        : 'The reminder goes out this long before the appointment. Moved appointment: the reminder follows. Already past: this reminder is skipped.')
+                      : (brouillon as EtapeAttendre).mode === 'reponse'
                       ? (fr
                         ? 'S’il répond, le parcours s’arrête ici. Sinon, la suite part une fois le délai écoulé.'
                         : 'If they reply, the journey stops here. Otherwise the next step runs once the delay is up.')

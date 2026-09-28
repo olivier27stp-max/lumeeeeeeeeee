@@ -117,6 +117,13 @@ function titreEtape(etape: Etape, fr: boolean): string {
 /** Le détail d'une étape, en une ligne — ce qu'on veut lire sans ouvrir. */
 function detailEtape(etape: Etape, fr: boolean): string {
   if (etape.type === 'attendre') {
+    // « 7 jour(s) avant le rendez-vous » — sinon la carte afficherait
+    // « tout de suite », le délai propre de cette attente étant 0.
+    if (etape.mode === 'avant_date') {
+      const a = etape.secondes_avant || 0;
+      const duree = a % 86400 === 0 ? `${a / 86400} ${fr ? 'jour(s)' : 'day(s)'}` : `${Math.round(a / 3600)} ${fr ? 'heure(s)' : 'hour(s)'}`;
+      return fr ? `${duree} avant le rendez-vous` : `${duree} before the appointment`;
+    }
     const s = etape.delai_secondes || 0;
     if (s === 0) return fr ? 'tout de suite' : 'right away';
     if (s % 86400 === 0) return `${s / 86400} ${fr ? 'jour(s)' : 'day(s)'}`;

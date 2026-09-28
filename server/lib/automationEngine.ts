@@ -21,6 +21,7 @@ import {
   trouverEtape,
   etapeSuivante,
   premiereEtape,
+  echeanceAvantDate,
 } from './automationSequences';
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
 import { orgEnPause } from './automations-pause-org';
@@ -1465,6 +1466,27 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
           });
           continue;
         }
+
+        /*
+         * Une ATTENTE « X avant le rendez-vous », arrivée à échéance.
+         *
+         * La date est RELUE : entre la réservation et maintenant, le
+         * rendez-vous a pu bouger ou être annulé.
+         *   · annulé / supprimé → le parcours s'arrête ;
+         *   · déplacé plus tard → l'attente est replanifiée à la bonne heure ;
+         *   · déplacé plus tôt et moment dépassé → `si_depasse` (on ne dit
+         *     pas « dans une semaine » à quelqu'un qu'on voit demain) ;
+         *   · sinon → le rappel qui suit.
+         */
+        if (etape && etape.type === 'attendre' && etape.mode === 'avant_date') {
+          // Une lecture ratée LÈVE : la tâche repasse par la reprise normale
+          // (5 min, 30 min, 2 h) plutôt que de sauter un rappel à tort.
+          const issue = await echeanceAvantDate(supabase, task, etape, etapesRegle);
+          logger.info('[sequences] attente « avant la date » traitée', {
+            rule_id: task.automation_rule_id, step_id: task.step_id, issue,
+          });
+          continue;
+        }
       }
 
       const vars = await resolveEntityVariables(
@@ -1666,7 +1688,32 @@ async function metadonneesFraiches(
 
   // `data` est typé `unknown` par PostgREST quand les colonnes sont choisies
   // dynamiquement : la forme est garantie par `source` juste au-dessus.
-  return { ...base, ...(data as unknown as Record<string, unknown>) };
+  const frais = { ...(data as unknown as Record<string, unknown>) };
+  if (typeof frais.status === 'string') frais.status = statutAvecAlias(task.entity_type, frais.status);
+  return { ...base, ...frais };
+}
+
+/**
+ * Le statut réel ET son nom simple, pour les conditions « si ».
+ *
+ * Les conditions s'écrivent avec des mots simples — « sent » (toujours sans
+ * réponse), « approved », « unpaid », « paid » : c'est ce que proposent
+ * l'éditeur et les consignes de Lumi. Mais un devis envoyé a le statut
+ * `awaiting_response` et une facture impayée `sent` ou `partial` : la
+ * condition n'était JAMAIS vraie, et une relance « si le devis est toujours
+ * sans réponse » s'arrêtait à la première étape sans rien envoyer (constaté
+ * le 2026-09-28 ; aucune règle de prod ne l'utilisait encore).
+ *
+ * Une LISTE : `memeValeur` accepte une métadonnée liste, donc la condition
+ * écrite avec le statut réel continue de fonctionner.
+ */
+export function statutAvecAlias(entityType: string, statut: string): string | string[] {
+  if (entityType === 'quote') {
+    if (statut === 'awaiting_response') return [statut, 'sent'];
+    if (statut === 'converted') return [statut, 'approved'];
+  }
+  if (entityType === 'invoice' && (statut === 'sent' || statut === 'partial')) return [statut, 'unpaid'];
+  return statut;
 }
 
 /**

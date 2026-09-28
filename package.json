@@ -64,6 +64,7 @@
     "qa:actions": "tsx --env-file=.env.local scripts/qa/eprouver-actions.mts",
     "qa:anti-doublon": "tsx --env-file=.env.local scripts/qa/eprouver-anti-doublon.mts",
     "qa:outbox": "tsx --env-file=.env.local scripts/qa/eprouver-outbox.mts",
+    "qa:pack": "tsx --env-file=.env.local scripts/qa/eprouver-pack-base.mts",
     "qa:lumi": "node --env-file=.env.local scripts/qa/evaluer-lumi.mjs",
     "qa:paywall": "node --env-file=.env.local scripts/qa/verifier-paywall.mjs",
     "qa:workflow-bout-en-bout": "tsx --env-file=.env.local scripts/qa/verifier-workflow-bout-en-bout.mjs",

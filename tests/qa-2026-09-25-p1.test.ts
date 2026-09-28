@@ -53,15 +53,16 @@ describe('P1-8 — un parcours long ne perd plus la moitié de ses étapes', () 
       .toMatch(/JSON\.stringify\(steps\) === envoye \? 'a_jour' : 'modifie'/);
   });
 
-  it('la limite de 20 étapes est annoncée AVANT la perte', () => {
+  it('la limite d’étapes est annoncée AVANT la perte', () => {
     /*
-     * Le serveur refuse au-delà de 20 (`ETAPES_MAX`, validation.ts) :
+     * Le serveur refuse au-delà de ETAPES_MAX (validation.ts ; 30 depuis le
+     * 2026-09-28, 20 avant) :
      * un parcours plus long n'était jamais enregistré, et l'utilisateur
      * croyait avoir perdu son travail. Le rapport l'exige :
      * « si une limite volontaire existe, elle doit être affichée ET
      * bloquer avant la perte ».
      */
-    expect(src).toMatch(/const ETAPES_MAX = 20/);
+    expect(src).toMatch(/const ETAPES_MAX = \d+/);
     const ajouts = [...src.matchAll(/if \(steps\.length >= ETAPES_MAX\)/g)];
     expect(ajouts.length, 'les DEUX chemins (ajout et duplication) doivent refuser')
       .toBe(2);
@@ -70,7 +71,10 @@ describe('P1-8 — un parcours long ne perd plus la moitié de ses étapes', () 
   it('la limite du client suit celle du serveur', () => {
     // Deux chiffres différents = soit on refuse trop tôt, soit on laisse
     // passer ce que le serveur rejettera.
-    expect(lire('server/lib/validation.ts')).toMatch(/const ETAPES_MAX = 20/);
+    const serveur = Number(/const ETAPES_MAX = (\d+)/.exec(lire('server/lib/validation.ts'))?.[1]);
+    const client = Number(/const ETAPES_MAX = (\d+)/.exec(src)?.[1]);
+    expect(serveur).toBe(30);
+    expect(client).toBe(serveur);
   });
 });
 

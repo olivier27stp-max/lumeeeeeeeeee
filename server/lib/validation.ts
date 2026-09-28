@@ -1069,9 +1069,15 @@ const etapeSequence = z.discriminatedUnion('type', [
      * comporterait comme une attente ordinaire — le réglage ne servirait à
      * rien, sans le moindre message d'erreur.
      */
-    mode: z.enum(['duree', 'reponse']).optional(),
+    mode: z.enum(['duree', 'reponse', 'avant_date']).optional(),
     si_reponse: ID_ETAPE.nullable().optional(),
-  }),
+    /** Mode `avant_date` : combien de secondes avant le début du rendez-vous (au plus 30 jours). */
+    secondes_avant: z.number().int().min(0).max(30 * 86_400, 'At most 30 days before.').optional(),
+    si_depasse: ID_ETAPE.nullable().optional(),
+  }).refine(
+    (e) => e.mode !== 'avant_date' || typeof e.secondes_avant === 'number',
+    'A « before the date » wait needs how long before.',
+  ),
   z.object({
     id: ID_ETAPE,
     type: z.literal('si'),
@@ -1095,7 +1101,10 @@ const etapeSequence = z.discriminatedUnion('type', [
  * ici est la première des trois protections (les deux autres bornent le
  * parcours à l'exécution).
  */
-const ETAPES_MAX = 20;
+// 30 (était 20, relevé le 2026-09-28) : une relance de devis en 5 temps
+// qui suit le canal d'envoi compte 23 étapes. Le moteur borne à 50
+// (ETAPES_MAX_PAR_PARCOURS) : la marge reste.
+const ETAPES_MAX = 30;
 
 export const sequenceEtapes = z
   .array(etapeSequence)

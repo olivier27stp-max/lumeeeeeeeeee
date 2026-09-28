@@ -48,13 +48,20 @@ export interface EtapeAttendre {
    * une fois le délai écoulé.
    *
    * Absent = `duree` : les parcours déjà enregistrés ne changent pas.
+   *
+   * `avant_date` : jusqu'à `secondes_avant` avant le début du rendez-vous
+   * (« 7 jours avant », « la veille »). Voir automationSequences.ts.
    */
-  mode?: 'duree' | 'reponse';
+  mode?: 'duree' | 'reponse' | 'avant_date';
   /**
    * Où aller si le client a répondu. Absent = le parcours s'arrête —
    * c'est le cas le plus fréquent : il a répondu, on ne relance plus.
    */
   si_reponse?: string | null;
+  /** Mode `avant_date` : combien de secondes avant le début du rendez-vous. */
+  secondes_avant?: number;
+  /** Mode `avant_date` : où aller si ce moment est déjà passé (absent = fin). */
+  si_depasse?: string | null;
 }
 
 export interface EtapeSi {
@@ -86,7 +93,7 @@ export function nouvelIdEtape(existants: Etape[]): string {
     const candidat = `e${i}`;
     if (!pris.has(candidat)) return candidat;
   }
-  // Inatteignable en pratique : une séquence est bornée à 20 étapes côté
+  // Inatteignable en pratique : une séquence est bornée à 30 étapes côté
   // serveur. Le repli garantit malgré tout un identifiant unique.
   return `e${Date.now()}`;
 }
