@@ -54,7 +54,6 @@ import { creerFileBascule } from '../lib/fileBascule';
 import {
   type AutomationRule,
   getAutomationRules,
-  getFailureCountsByRule,
   getRecentAutomationFailures,
   type AutomationFailure,
   getAutomationLanguage,
@@ -81,8 +80,13 @@ import {
 function raisonLisible(erreur: string | null, fr: boolean): string | null {
   const e = (erreur || '').toLowerCase();
   if (!e) return null;
-  if (e.includes('no recipient phone')) return fr ? 'Ce client n’a pas de numéro de téléphone.' : 'This client has no phone number.';
-  if (e.includes('no recipient email')) return fr ? 'Ce client n’a pas d’adresse courriel.' : 'This client has no email address.';
+  // Les causes de M1 (audit 2026-09-28), telles que la base les porte encore
+  // pour les échecs d'avant le correctif du moteur.
+  if (e.includes('no sms number') || e.includes('no active twilio sms number')) return fr ? 'Aucun numéro texto n’est configuré pour ce bureau.' : 'No texting number is set up for this office.';
+  if (e.includes('no recipient phone') || e.includes('no phone number')) return fr ? 'Ce client n’a pas de numéro de téléphone.' : 'This client has no phone number.';
+  if (e.includes('no recipient email') || e.includes('no email address')) return fr ? 'Ce client n’a pas d’adresse courriel.' : 'This client has no email address.';
+  if (e.includes('injoignable') || e.includes('bounce')) return fr ? 'L’adresse courriel de ce client est injoignable.' : 'This client’s email address bounces.';
+  if (e.includes('review link')) return fr ? 'Aucun lien d’avis Google ou Facebook n’est configuré.' : 'No Google or Facebook review link is set up.';
   if (e.includes('opted out') || e.includes('unsubscribed')) return fr ? 'Ce client s’est désabonné.' : 'This client unsubscribed.';
   if (e.includes('frequency cap')) return fr ? 'Plafond atteint : ce client a déjà reçu plusieurs messages aujourd’hui.' : 'Cap reached: this client already got several messages today.';
   if (e.includes('consentement') || e.includes('consent')) return fr ? 'Le consentement de ce client n’est pas enregistré.' : 'This client’s consent is not recorded.';
@@ -408,6 +412,8 @@ export default function Automations() {
   }));
   const [search, setSearch] = useState('');
   const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
+  /** La cause brute du DERNIER échec (7 j), traduite par `raisonLisible`. */
+  const [derniereCause, setDerniereCause] = useState<Record<string, string | null>>({});
   /** Chiffres réels par automatisation (60 j) — `null` = illisibles. */
   const [stats, setStats] = useState<Record<string, StatsRegle> | null>(null);
   const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
@@ -518,7 +524,18 @@ export default function Automations() {
       // Une bascule encore en vol garde l'état du dernier clic.
       }).map((r) => ({ ...r, is_active: fileBascule.etatAffiche(r.id, r.is_active) })));
       try {
-        setFailureCounts(await getFailureCountsByRule());
+        // Une seule lecture : le compte ET la dernière cause par automatisation
+        // (la liste est triée du plus récent au plus ancien).
+        const recents = await getRecentAutomationFailures(200);
+        const compte: Record<string, number> = {};
+        const causes: Record<string, string | null> = {};
+        for (const f of recents) {
+          if (!f.automation_rule_id) continue;
+          compte[f.automation_rule_id] = (compte[f.automation_rule_id] ?? 0) + 1;
+          if (!(f.automation_rule_id in causes)) causes[f.automation_rule_id] = f.result_error;
+        }
+        setFailureCounts(compte);
+        setDerniereCause(causes);
       } catch (e: any) {
         console.error('Failed to load automation failures:', e.message);
       }
@@ -1570,6 +1587,8 @@ export default function Automations() {
                                   <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-danger">
                                     <AlertTriangle size={11} aria-hidden="true" />
                                     {echecs} {fr ? 'échec(s) dans les 7 derniers jours' : 'failure(s) in the last 7 days'}
+                                    {/* POURQUOI, en mots du métier — jamais le message technique brut. */}
+                                    {raisonLisible(derniereCause[rule.id] ?? null, fr) && ` — ${raisonLisible(derniereCause[rule.id] ?? null, fr)}`}
                                   </span>
                                 )}
                               </span>
@@ -1796,8 +1815,21 @@ export default function Automations() {
                                       : fr
                                         ? `60 derniers jours : ${s?.declenches ?? 0} déclenchement(s), ${s?.envoyes ?? 0} envoi(s), ${s?.sautes ?? 0} étape(s) sautée(s), ${s?.echecs ?? 0} échec(s). ${s?.en_cours ?? 0} en cours.`
                                         : `Last 60 days: ${s?.declenches ?? 0} enrolled, ${s?.envoyes ?? 0} sent, ${s?.sautes ?? 0} skipped step(s), ${s?.echecs ?? 0} failure(s). ${s?.en_cours ?? 0} active.`}
-                                    {' '}
-                                    {fr ? 'Le détail est dans l’onglet « Journaux » de l’automatisation.' : 'Details are in the automation’s “Logs” tab.'}
+                                    {raisonLisible(derniereCause[rule.id] ?? null, fr) && (
+                                      <span className="mt-1 block">
+                                        {fr ? 'Dernier échec : ' : 'Last failure: '}{raisonLisible(derniereCause[rule.id] ?? null, fr)}
+                                      </span>
+                                    )}
+                                    {/* Une étape sautée n'est pas un échec : son motif est
+                                        déjà en français (moteur), affiché tel quel. */}
+                                    {s?.dernier_saut && (
+                                      <span className="mt-1 block">
+                                        {fr ? 'Dernière étape sautée : ' : 'Last skipped step: '}{s.dernier_saut}
+                                      </span>
+                                    )}
+                                    <span className="mt-1 block">
+                                      {fr ? 'Le détail est dans l’onglet « Journaux » de l’automatisation.' : 'Details are in the automation’s “Logs” tab.'}
+                                    </span>
                                   </p>
                                 );
                               })()}

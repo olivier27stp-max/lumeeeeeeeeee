@@ -40,6 +40,8 @@ export interface StatsRegle {
   envoyes: number;
   sautes: number;
   echecs: number;
+  /** Le motif (en français, prêt à afficher) de la dernière étape sautée. */
+  dernier_saut: string | null;
 }
 
 export interface StatsEtape {
@@ -64,6 +66,7 @@ interface LigneJournal {
   result_success: boolean;
   result_error: string | null;
   saute: string | null;
+  created_at?: string;
 }
 
 /** Lit toutes les pages d'une requête (bornée à MAX_LIGNES). */
@@ -115,7 +118,7 @@ export async function calculerStatistiques(
   const journaux = await toutLire<LigneJournal>((de, a) => {
     let q = client
       .from('automation_execution_logs')
-      .select('automation_rule_id, entity_id, scheduled_task_id, result_success, result_error, saute:result_data->>saute')
+      .select('automation_rule_id, entity_id, scheduled_task_id, result_success, result_error, created_at, saute:result_data->>saute')
       .eq('org_id', orgId)
       .gte('created_at', depuis)
       .order('id')
@@ -124,7 +127,8 @@ export async function calculerStatistiques(
     return q;
   });
 
-  const vide = (): StatsRegle => ({ declenches: 0, en_cours: 0, envoyes: 0, sautes: 0, echecs: 0 });
+  const vide = (): StatsRegle => ({ declenches: 0, en_cours: 0, envoyes: 0, sautes: 0, echecs: 0, dernier_saut: null });
+  const dateDernierSaut = new Map<string, string>();
   const par_regle: Record<string, StatsRegle> = {};
   const fiches = new Map<string, Set<string>>();
   const enCours = new Map<string, Set<string>>();
@@ -143,8 +147,14 @@ export async function calculerStatistiques(
     const s = (par_regle[l.automation_rule_id] ??= vide());
     const c = classerJournal(l);
     if (c === 'envoye') s.envoyes += 1;
-    else if (c === 'saute') s.sautes += 1;
-    else if (c === 'echec') s.echecs += 1;
+    else if (c === 'saute') {
+      s.sautes += 1;
+      const quand = l.created_at ?? '';
+      if (quand >= (dateDernierSaut.get(l.automation_rule_id) ?? '')) {
+        dateDernierSaut.set(l.automation_rule_id, quand);
+        s.dernier_saut = l.saute;
+      }
+    } else if (c === 'echec') s.echecs += 1;
   }
   for (const [regle, ens] of fiches) (par_regle[regle] ??= vide()).declenches = ens.size;
   for (const [regle, ens] of enCours) (par_regle[regle] ??= vide()).en_cours = ens.size;

@@ -84,8 +84,8 @@ beforeEach(() => {
 describe('par automatisation', () => {
   it('compte les fiches déclenchées, celles en cours, et sépare envois / sauts / échecs', async () => {
     const { par_regle, par_etape } = await calculerStatistiques(fauxClient() as never, ORG, null);
-    expect(par_regle[R1]).toEqual({ declenches: 4, en_cours: 1, envoyes: 1, sautes: 1, echecs: 1 });
-    expect(par_regle[R2]).toEqual({ declenches: 2, en_cours: 1, envoyes: 1, sautes: 0, echecs: 0 });
+    expect(par_regle[R1]).toEqual({ declenches: 4, en_cours: 1, envoyes: 1, sautes: 1, echecs: 1, dernier_saut: 'Aucun numéro texto configuré' });
+    expect(par_regle[R2]).toEqual({ declenches: 2, en_cours: 1, envoyes: 1, sautes: 0, echecs: 0, dernier_saut: null });
     expect(par_etape).toBeNull();
   });
 
@@ -95,6 +95,19 @@ describe('par automatisation', () => {
     tables.automation_execution_logs = [];
     const { par_regle } = await calculerStatistiques(fauxClient() as never, ORG, null);
     expect(par_regle[R1].declenches).toBe(2500);
+  });
+});
+
+describe('le motif de la dernière étape sautée', () => {
+  it('est celui de la PLUS RÉCENTE, tel quel (déjà en français)', async () => {
+    tables.automation_execution_logs = [
+      { automation_rule_id: R1, entity_id: 'c1', scheduled_task_id: null, result_success: true, result_error: null, saute: 'Déjà envoyé lors d’une tentative précédente', created_at: '2026-09-27T10:00:00Z' },
+      { automation_rule_id: R1, entity_id: 'c2', scheduled_task_id: null, result_success: true, result_error: null, saute: 'Aucun numéro texto configuré', created_at: '2026-09-20T10:00:00Z' },
+    ];
+    const { par_regle } = await calculerStatistiques(fauxClient() as never, ORG, null);
+    expect(par_regle[R1].sautes).toBe(2);
+    expect(par_regle[R1].envoyes).toBe(0);
+    expect(par_regle[R1].dernier_saut).toBe('Déjà envoyé lors d’une tentative précédente');
   });
 });
 

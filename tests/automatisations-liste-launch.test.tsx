@@ -30,6 +30,7 @@ const publierMock = vi.fn(async (_id: string, _actif: boolean) => undefined);
 const publierLotMock = vi.fn(async (ids: string[], _actif: boolean) => ids.map((id) => ({ id, ok: true })));
 const creerMock = vi.fn(async (_b: unknown) => regle({ id: 'neuve' }));
 const statsMock = vi.fn(async (): Promise<any> => ({ par_regle: {}, par_etape: null }));
+const echecsMock = vi.fn(async (): Promise<any[]> => []);
 const naviguer = vi.fn();
 const toasts = { erreur: [] as string[], succes: [] as string[] };
 
@@ -50,7 +51,7 @@ vi.mock('../src/lib/automationRulesApi', () => ({
   getAutomationRules: vi.fn(async () => reglesServies),
   toggleAutomationRule: (...a: any[]) => toggleMock(a[0], a[1]),
   getFailureCountsByRule: vi.fn(async () => ({})),
-  getRecentAutomationFailures: vi.fn(async () => []),
+  getRecentAutomationFailures: () => echecsMock(),
   getAutomationLanguage: vi.fn(async () => 'fr'),
   setAutomationLanguage: vi.fn(async () => undefined),
   avisActives: vi.fn(async () => true),
@@ -96,6 +97,8 @@ beforeEach(() => {
   publierMock.mockImplementation(async () => undefined);
   publierLotMock.mockClear();
   creerMock.mockClear();
+  echecsMock.mockReset();
+  echecsMock.mockImplementation(async () => []);
   statsMock.mockReset();
   statsMock.mockImplementation(async () => ({ par_regle: {}, par_etape: null }));
   naviguer.mockClear();
@@ -312,5 +315,39 @@ describe('statistiques — « Total déclenché » et « En cours » sur de vrai
     await attendre();
     cliquer(container.querySelector('button[aria-label="Statistiques de Relance A"]'));
     expect(container.textContent).toContain('5 envoi(s), 1 étape(s) sautée(s), 1 échec(s)');
+  });
+});
+
+// ─── Bloc 5 : raisonLisible ─────────────────────────────────────
+
+describe('raisonLisible — la cause d’un échec et le motif d’un saut, en clair', () => {
+  it('la ligne dit POURQUOI ça a échoué, jamais le message technique brut', async () => {
+    reglesServies = [regle({ id: 'a', name: 'Relance A' })];
+    echecsMock.mockImplementation(async () => [
+      { id: 'l1', automation_rule_id: 'a', action_type: 'send_sms', result_error: 'Organization has no SMS number provisioned (unknown)', entity_type: 'lead', created_at: '2026-09-27T10:00:00Z' },
+      { id: 'l2', automation_rule_id: 'a', action_type: 'send_sms', result_error: 'No recipient phone', entity_type: 'lead', created_at: '2026-09-26T10:00:00Z' },
+    ]);
+    await rendre();
+    await attendre();
+    const texte = container.textContent ?? '';
+    expect(texte).toContain('2 échec(s) dans les 7 derniers jours — Aucun numéro texto n’est configuré pour ce bureau.');
+    expect(texte).not.toContain('Organization has no SMS number');
+  });
+
+  it('le détail › donne la dernière cause d’échec et le motif de la dernière étape sautée', async () => {
+    reglesServies = [regle({ id: 'a', name: 'Relance A' })];
+    echecsMock.mockImplementation(async () => [
+      { id: 'l1', automation_rule_id: 'a', action_type: 'send_email', result_error: 'No recipient email', entity_type: 'lead', created_at: '2026-09-27T10:00:00Z' },
+    ]);
+    statsMock.mockImplementation(async () => ({
+      par_regle: { a: { declenches: 3, en_cours: 0, envoyes: 1, sautes: 1, echecs: 1, dernier_saut: 'Déjà envoyé lors d’une tentative précédente' } },
+      par_etape: null,
+    }));
+    await rendre();
+    await attendre();
+    cliquer(container.querySelector('button[aria-label="Statistiques de Relance A"]'));
+    const texte = container.textContent ?? '';
+    expect(texte).toContain('Dernier échec : Ce client n’a pas d’adresse courriel.');
+    expect(texte).toContain('Dernière étape sautée : Déjà envoyé lors d’une tentative précédente');
   });
 });

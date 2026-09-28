@@ -161,6 +161,8 @@ export interface StatsRegle {
   /** Étapes sautées (pas de numéro, pas de courriel…) : ni envoi ni échec. */
   sautes: number;
   echecs: number;
+  /** Motif en français de la dernière étape sautée (affiché tel quel). */
+  dernier_saut: string | null;
 }
 
 export interface StatsEtape {
