@@ -704,13 +704,13 @@ export default function Clients() {
       entete: <TriEntete label={fr ? 'Dernière activité' : 'Last activity'} col="activity" />,
       cellule: (item) => <span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span>,
     },
-    { id: 'courriel', libelle: fr ? 'Courriel' : 'Email', largeur: 'minmax(160px, 1.4fr)', cellule: (item) => texte(item.email) },
-    { id: 'telephone', libelle: fr ? 'Téléphone' : 'Phone', largeur: '150px', cellule: (item) => texte(item.phone) },
-    { id: 'entreprise', libelle: fr ? 'Entreprise' : 'Company', largeur: 'minmax(120px, 1.2fr)', cellule: (item) => texte(item.company) },
-    { id: 'numero', libelle: fr ? 'N° de client' : 'Client #', largeur: '110px', cellule: (item) => texte(item.client_number) },
-    { id: 'source', libelle: fr ? 'Source' : 'Lead source', largeur: 'minmax(110px, 1fr)', cellule: (item) => texte(item.lead_source) },
-    { id: 'ville', libelle: fr ? 'Ville' : 'City', largeur: 'minmax(110px, 1fr)', cellule: (item) => texte(item.city) },
-    { id: 'cree', libelle: fr ? 'Créé le' : 'Created', largeur: '120px', cellule: (item) => texte(item.created_at ? formatDate(item.created_at) : null) },
+    { id: 'courriel', libelle: fr ? 'Courriel' : 'Email', parDefaut: true, largeur: 'minmax(160px, 1.4fr)', cellule: (item) => texte(item.email) },
+    { id: 'telephone', libelle: fr ? 'Téléphone' : 'Phone', parDefaut: true, largeur: '150px', cellule: (item) => texte(item.phone) },
+    { id: 'entreprise', libelle: fr ? 'Entreprise' : 'Company', parDefaut: true, largeur: 'minmax(120px, 1.2fr)', cellule: (item) => texte(item.company) },
+    { id: 'numero', libelle: fr ? 'N° de client' : 'Client #', parDefaut: true, largeur: '110px', cellule: (item) => texte(item.client_number) },
+    { id: 'source', libelle: fr ? 'Source' : 'Lead source', parDefaut: true, largeur: 'minmax(110px, 1fr)', cellule: (item) => texte(item.lead_source) },
+    { id: 'ville', libelle: fr ? 'Ville' : 'City', parDefaut: true, largeur: 'minmax(110px, 1fr)', cellule: (item) => texte(item.city) },
+    { id: 'cree', libelle: fr ? 'Créé le' : 'Created', parDefaut: true, largeur: '120px', cellule: (item) => texte(item.created_at ? formatDate(item.created_at) : null) },
   ];
   const colonnes = useColonnesTableau<LigneClient>('client', colonnesStandard, fr, { tri: triChamp, setTri: setTriChamp });
   const valeursChamps = useValeursPage('client', items.map((c) => c.id as string), colonnes.avecChamps);
