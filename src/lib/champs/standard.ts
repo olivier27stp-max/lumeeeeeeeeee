@@ -36,6 +36,11 @@ export interface ChampStandard {
    * champs »). Les autres se décochent — cochés par défaut (décision de Rafba, 2026-09-28).
    */
   verrouille?: boolean;
+  /**
+   * Morceau d'un autre champ du formulaire (ville, code postal… remplis par l'adresse) :
+   * a sa clé et son dossier, mais s'affiche et se retire avec ce champ-là.
+   */
+  suit?: string;
 }
 
 /** Sections des formulaires, dans l'ordre de l'écran. */
@@ -88,6 +93,7 @@ export const SECTIONS_SYSTEME: Record<ObjetChamp, SectionSysteme[]> = {
 const s = (key: string, fr: string, en: string, field_type: TypeChamp, section?: string, cherchable = false): ChampStandard =>
   ({ key, label: { fr, en }, field_type, cherchable, ...(section ? { section } : {}) });
 const verrou = (c: ChampStandard): ChampStandard => ({ ...c, verrouille: true });
+const suit = (parent: string, c: ChampStandard): ChampStandard => ({ ...c, suit: parent });
 
 export const CHAMPS_STANDARD: Record<ObjetChamp, ChampStandard[]> = {
   client: [
@@ -98,17 +104,20 @@ export const CHAMPS_STANDARD: Record<ObjetChamp, ChampStandard[]> = {
     s('display_as_company', 'Utiliser le nom de la compagnie comme nom du client', 'Use company name as client name', 'checkbox', 'coordonnees'),
     s('phone', 'Numéro de téléphone', 'Phone number', 'phone', 'coordonnees', true),
     s('phone_label', 'Type de numéro', 'Phone type', 'dropdown_single', 'coordonnees'),
+    s('other_phones', 'Autres numéros de téléphone', 'Other phone numbers', 'multi_line', 'coordonnees'),
     s('email', 'Courriel', 'Email', 'email', 'coordonnees', true),
     s('email_label', 'Type de courriel', 'Email type', 'dropdown_single', 'coordonnees'),
     s('lead_source', 'Source du lead', 'Lead source', 'dropdown_single', 'lead'),
     s('address', 'Adresse', 'Address', 'single_line', 'adresse', true),
+    suit('address', s('street', 'Numéro et rue', 'Street', 'single_line', 'adresse')),
+    suit('address', s('city', 'Ville', 'City', 'single_line', 'adresse')),
+    suit('address', s('province', 'Province', 'Province', 'single_line', 'adresse')),
+    suit('address', s('postal_code', 'Code postal', 'Postal code', 'single_line', 'adresse')),
+    suit('address', s('country', 'Pays', 'Country', 'single_line', 'adresse')),
     s('taxes', 'Taxes', 'Taxes', 'dropdown_multi', 'adresse'),
     s('billing_same_as_service', 'L’adresse de facturation est identique à l’adresse de la propriété', 'Billing address is the same as property address', 'checkbox', 'adresse'),
     s('billing_address', 'Adresse de facturation', 'Billing address', 'single_line', 'adresse'),
     s('name', 'Nom complet', 'Full name', 'single_line', undefined, true),
-    s('city', 'Ville', 'City', 'single_line'),
-    s('province', 'Province', 'Province', 'single_line'),
-    s('postal_code', 'Code postal', 'Postal code', 'single_line'),
     s('status', 'Statut', 'Status', 'dropdown_single'),
     s('source', 'Source', 'Source', 'dropdown_single'),
     s('notes', 'Notes', 'Notes', 'multi_line'),

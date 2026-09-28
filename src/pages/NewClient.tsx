@@ -432,7 +432,7 @@ export default function NewClient() {
                         <ChevronDown size={12} className="absolute right-0 pointer-events-none text-text-tertiary" />
                       </div>
                     )}
-                    {row.number.trim() && index === phones.length - 1 && (
+                    {row.number.trim() && index === phones.length - 1 && vis('other_phones') && (
                       <button type="button" onClick={addPhone} className={inlineIconButton} title={fr ? 'Ajouter un numéro' : 'Add another number'}>
                         <Plus size={14} />
                       </button>
