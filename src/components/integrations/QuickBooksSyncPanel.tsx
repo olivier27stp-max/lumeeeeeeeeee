@@ -2,7 +2,7 @@
 // parti, ce qui attend, ce qui a échoué, et les correspondances comptables.
 // Tout choix laissé à « Automatique » est résolu par le worker serveur
 // (server/lib/quickbooks/sync.ts).
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import { AlertTriangle, Check, ChevronDown, ChevronRight, Clock, History, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -34,6 +34,7 @@ function firstOfYear(): string {
 }
 
 export default function QuickBooksSyncPanel({ isFr }: { isFr: boolean }) {
+  const idActive = useId();
   const [status, setStatus] = useState<QboSyncStatus | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [forbidden, setForbidden] = useState(false);
@@ -142,8 +143,9 @@ export default function QuickBooksSyncPanel({ isFr }: { isFr: boolean }) {
         <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">
           {isFr ? 'Synchronisation' : 'Sync'}
         </p>
-        <label className="flex items-center gap-2 text-[12px] text-text-secondary cursor-pointer">
+        <label htmlFor={idActive} className="flex items-center gap-2 text-[12px] text-text-secondary cursor-pointer">
           <input
+            id={idActive}
             type="checkbox"
             checked={settings.enabled}
             disabled={busy === 'save'}
@@ -249,6 +251,7 @@ export default function QuickBooksSyncPanel({ isFr }: { isFr: boolean }) {
         <div className="flex items-center gap-2">
           <input
             type="date"
+            aria-label={isFr ? 'Date de départ de l’historique' : 'History start date'}
             value={historyFrom}
             onChange={(e) => setHistoryFrom(e.target.value)}
             className="glass-input !text-[12px] !py-1.5"
@@ -288,6 +291,7 @@ export default function QuickBooksSyncPanel({ isFr }: { isFr: boolean }) {
               <>
                 <Field label={isFr ? 'Produit/service des lignes' : 'Line product/service'}>
                   <select
+                    aria-label={isFr ? 'Produit/service des lignes' : 'Line product/service'}
                     className={selectCls}
                     value={settings.item_id || ''}
                     disabled={busy === 'save'}
@@ -300,6 +304,7 @@ export default function QuickBooksSyncPanel({ isFr }: { isFr: boolean }) {
 
                 <Field label={isFr ? 'Dépôt des paiements manuels' : 'Deposit for manual payments'}>
                   <select
+                    aria-label={isFr ? 'Dépôt des paiements manuels' : 'Deposit for manual payments'}
                     className={selectCls}
                     value={settings.deposit_account_id || ''}
                     disabled={busy === 'save'}
@@ -312,6 +317,7 @@ export default function QuickBooksSyncPanel({ isFr }: { isFr: boolean }) {
 
                 <Field label={isFr ? 'Dépôt des paiements en ligne (Stripe, PayPal)' : 'Deposit for online payments (Stripe, PayPal)'}>
                   <select
+                    aria-label={isFr ? 'Dépôt des paiements en ligne (Stripe, PayPal)' : 'Deposit for online payments (Stripe, PayPal)'}
                     className={selectCls}
                     value={settings.deposit_account_online_id || ''}
                     disabled={busy === 'save'}
@@ -326,6 +332,7 @@ export default function QuickBooksSyncPanel({ isFr }: { isFr: boolean }) {
                   <>
                     <Field label={isFr ? 'Code de taxe des factures taxables' : 'Tax code for taxable invoices'}>
                       <select
+                        aria-label={isFr ? 'Code de taxe des factures taxables' : 'Tax code for taxable invoices'}
                         className={selectCls}
                         value={settings.tax_code_taxable_id || ''}
                         disabled={busy === 'save'}
@@ -337,6 +344,7 @@ export default function QuickBooksSyncPanel({ isFr }: { isFr: boolean }) {
                     </Field>
                     <Field label={isFr ? 'Code de taxe des factures sans taxe' : 'Tax code for untaxed invoices'}>
                       <select
+                        aria-label={isFr ? 'Code de taxe des factures sans taxe' : 'Tax code for untaxed invoices'}
                         className={selectCls}
                         value={settings.tax_code_exempt_id || ''}
                         disabled={busy === 'save'}
@@ -358,6 +366,7 @@ export default function QuickBooksSyncPanel({ isFr }: { isFr: boolean }) {
                       <div key={m.key} className="flex items-center gap-2">
                         <span className="text-[12px] text-text-secondary w-36 shrink-0">{isFr ? m.fr : m.en}</span>
                         <select
+                          aria-label={isFr ? m.fr : m.en}
                           className={selectCls}
                           value={settings.payment_methods?.[m.key]?.id || ''}
                           disabled={busy === 'save'}
@@ -385,11 +394,13 @@ export default function QuickBooksSyncPanel({ isFr }: { isFr: boolean }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/** Une étiquette RELIÉE à son champ (htmlFor + id), comme l'exige l'accessibilité. */
+function Field({ label, children }: { label: string; children: React.ReactElement<{ id?: string }> }) {
+  const id = useId();
   return (
-    <label className="block">
-      <span className="text-[11px] font-semibold text-text-secondary">{label}</span>
-      <div className="mt-1">{children}</div>
-    </label>
+    <div className="block">
+      <label htmlFor={id} className="text-[11px] font-semibold text-text-secondary">{label}</label>
+      <div className="mt-1">{React.cloneElement(children, { id })}</div>
+    </div>
   );
 }
