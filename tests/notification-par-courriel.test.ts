@@ -5,6 +5,9 @@
 // par le client » l'a cochée par défaut.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Le lien du bouton est absolu : il faut l'adresse publique (posée en prod, absente en CI).
+process.env.PUBLIC_URL = 'https://lumecrm.net';
+
 const envois: Array<{ to: string; subject: string; html: string }> = [];
 vi.mock('../server/lib/mailer', () => ({
   sendEmail: vi.fn(async (p: { to: string; subject: string; html: string }) => { envois.push(p); return { sent: true }; }),
@@ -58,11 +61,16 @@ describe('Notifier l’équipe — aussi par courriel', () => {
     expect(envois).toHaveLength(0);
   });
 
-  it('le lien interne devient absolu, un lien étranger ou relatif est ignoré', () => {
+  it('le lien interne devient absolu ; un lien non http est ignoré', () => {
     expect(lienAbsolu('/quotes/q', 'https://lumecrm.net/')).toBe('https://lumecrm.net/quotes/q');
     expect(lienAbsolu('https://lumecrm.net/x', 'https://a.b')).toBe('https://lumecrm.net/x');
     expect(lienAbsolu('javascript:alert(1)', 'https://lumecrm.net')).toBeNull();
     expect(lienAbsolu(null)).toBeNull();
+    const cles = ['PUBLIC_URL', 'PUBLIC_BASE_URL', 'FRONTEND_URL', 'APP_URL'] as const;
+    const avant = cles.map((k) => process.env[k]);
+    for (const k of cles) delete process.env[k];
+    expect(lienAbsolu('/quotes/q')).toBeNull(); // pas d'adresse publique : pas de bouton, pas d'échec
+    cles.forEach((k, i) => { if (avant[i] !== undefined) process.env[k] = avant[i]; });
     const { html } = courrielNotification({ title: 'T', body: '<b>x</b>', lien: null }, 'fr', 'https://lumecrm.net');
     expect(html).not.toContain('<b>x</b>');
     expect(html).not.toContain('Ouvrir dans Lume');

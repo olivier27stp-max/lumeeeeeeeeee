@@ -21,11 +21,19 @@ export interface ContenuNotification {
 }
 
 /** Lien absolu vers l'app : un courriel ne connaît pas l'origine. */
-export function lienAbsolu(lien: string | null, base = resolvePublicBaseUrl()): string | null {
+export function lienAbsolu(lien: string | null, base?: string): string | null {
   if (!lien) return null;
   if (/^https?:\/\//i.test(lien)) return lien;
   if (!lien.startsWith('/')) return null;
-  return `${base.replace(/\/+$/, '')}${lien}`;
+  let racine = base;
+  if (!racine) {
+    // Sans adresse publique configurée, le courriel part sans bouton plutôt que pas du tout.
+    try { racine = resolvePublicBaseUrl(); } catch (err: any) {
+      logger.warn('[notifications/courriel] adresse publique absente — courriel sans bouton', { error: err?.message });
+      return null;
+    }
+  }
+  return `${racine.replace(/\/+$/, '')}${lien}`;
 }
 
 export function courrielNotification(c: ContenuNotification, langue: 'fr' | 'en', base?: string): { sujet: string; html: string } {
