@@ -47,6 +47,17 @@ describe('buildOrgInsert / buildCompanySettingsInsert — champs facultatifs', (
     expect(cs.website).toBe('https://example.com');
   });
 
+  it('la ville des opérations garde ses coordonnées pour la météo', () => {
+    const cs = buildCompanySettingsInsert(
+      { name: 'Bureau de Laval', address: { city: 'Laval', weather_lat: 45.57, weather_lng: -73.69 } },
+      'org-1',
+      CREATOR,
+    );
+    expect(cs).toMatchObject({ city: 'Laval', weather_lat: 45.57, weather_lng: -73.69 });
+    const sans = buildCompanySettingsInsert({ name: 'B', address: { city: 'Laval', weather_lat: null } }, 'org-1', CREATOR);
+    expect(sans).not.toHaveProperty('weather_lat');
+  });
+
   it('formatAddressLine ignore les morceaux vides', () => {
     expect(formatAddressLine({ city: 'Laval', province: ' ' })).toBe('Laval');
     expect(formatAddressLine(null)).toBe('');

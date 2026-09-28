@@ -2035,20 +2035,28 @@ router.post('/billing/complete-setup', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
-    const b = req.body as Record<string, string | undefined>;
+    const b = req.body as Record<string, string | number | null | undefined>;
+    const txt = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 
     const payload: Record<string, unknown> = {
       org_id: auth.orgId,
-      company_name: (b.company_name || '').trim(),
-      phone: (b.phone || '').trim(),
-      email: (b.email || '').trim(),
-      address: (b.address || '').trim(),
-      city: (b.city || '').trim(),
-      province: (b.province || '').trim(),
-      postal_code: (b.postal_code || '').trim(),
-      country: (b.country || '').trim(),
+      company_name: txt(b.company_name),
+      phone: txt(b.phone),
+      email: txt(b.email),
+      // company_settings n'a pas de colonne `address` : la rue va dans street1
+      // (écrire `address` faisait échouer toute la sauvegarde du profil).
+      street1: txt(b.address),
+      city: txt(b.city),
+      province: txt(b.province),
+      postal_code: txt(b.postal_code),
+      country: txt(b.country),
     };
-    if (b.logo_url) payload.logo_url = b.logo_url;
+    if (txt(b.logo_url)) payload.logo_url = txt(b.logo_url);
+    // Coordonnées de la ville des opérations (météo de l'accueil).
+    if (typeof b.weather_lat === 'number' && typeof b.weather_lng === 'number') {
+      payload.weather_lat = b.weather_lat;
+      payload.weather_lng = b.weather_lng;
+    }
 
     const { data: existing } = await admin.from('company_settings').select('id').eq('org_id', auth.orgId).maybeSingle();
     if (existing?.id) {

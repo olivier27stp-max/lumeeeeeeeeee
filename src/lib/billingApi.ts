@@ -383,6 +383,7 @@ export async function setInitialPassword(sessionId: string, password: string): P
 export async function completeSetup(data: {
   company_name: string; phone: string; email: string; address: string;
   city: string; province: string; postal_code: string; country: string; logo_url?: string;
+  weather_lat?: number | null; weather_lng?: number | null;
 }): Promise<void> {
   const res = await fetch(`${API_BASE}/billing/complete-setup`, {
     method: 'POST',

@@ -27,17 +27,18 @@ const createOfficeSchema = z.object({
   phone: optionalText(40),
   email: z.string().trim().email().max(200).nullable().optional().or(z.literal('')),
   website: optionalText(300),
-  address: z
-    .object({
-      street1: optionalText(200),
-      street2: optionalText(200),
-      city: optionalText(120),
-      province: optionalText(120),
-      postal_code: optionalText(20),
-      country: optionalText(60),
-    })
-    .nullable()
-    .optional(),
+  // La ville des opérations est obligatoire (météo de l'accueil, secteur du
+  // bureau) ; l'adresse exacte reste facultative.
+  address: z.object({
+    street1: optionalText(200),
+    street2: optionalText(200),
+    city: z.string().trim().min(1, 'Operations city is required.').max(120),
+    province: optionalText(120),
+    postal_code: optionalText(20),
+    country: optionalText(60),
+    weather_lat: z.number().min(-90).max(90).nullable().optional(),
+    weather_lng: z.number().min(-180).max(180).nullable().optional(),
+  }),
   inherit: z
     .object({
       branding: z.boolean().default(false),
@@ -523,7 +524,7 @@ router.post('/orgs/create-office', validate(createOfficeSchema), async (req, res
         console.warn('[orgs/create-office] company_settings full insert failed, retrying minimal:', csErr.message);
         await admin
           .from('company_settings')
-          .insert({ org_id: newOrg.id, created_by: auth.user.id, company_name: newOrg.name });
+          .insert({ org_id: newOrg.id, created_by: auth.user.id, company_name: newOrg.name, city: body.address.city });
       }
     }
 

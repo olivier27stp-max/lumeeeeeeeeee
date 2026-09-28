@@ -85,6 +85,8 @@ export interface OfficeAddressInput {
   province?: string;
   postal_code?: string;
   country?: string;
+  weather_lat?: number | null;
+  weather_lng?: number | null;
 }
 
 export interface OfficeInherit {
@@ -101,7 +103,8 @@ export interface CreateOfficeInput {
   phone?: string;
   email?: string;
   website?: string;
-  address?: OfficeAddressInput | null;
+  /** Obligatoire : au minimum la ville des opérations. */
+  address: OfficeAddressInput & { city: string };
   inherit?: OfficeInherit;
   grant_user_ids?: string[];
 }

@@ -2,8 +2,9 @@
  * OfficeNew — formulaire pleine page de création d'un bureau (/offices/new).
  *
  * Même chrome que Nouveau client (en-tête + pied de page, une boîte blanche).
- * Seul le nom est obligatoire ; coordonnées, héritage des réglages du bureau
- * actif et accès immédiat pour d'autres owners/admins sont facultatifs.
+ * Obligatoires : le nom et la ville des opérations (météo de l'accueil,
+ * secteur du bureau). Adresse exacte, héritage des réglages du bureau actif et
+ * accès immédiat pour d'autres owners/admins sont facultatifs.
  * Réservé au propriétaire ; bloqué au quota de bureaux du workspace (1 par
  * défaut, relevé par Lume seulement).
  */
@@ -55,6 +56,7 @@ export default function OfficeNew() {
   const [province, setProvince] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [country, setCountry] = useState('');
+  const [cityCoords, setCityCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [inherit, setInherit] = useState<OfficeInherit>(DEFAULT_INHERIT);
   const [members, setMembers] = useState<GrantableMember[]>([]);
   const [grant, setGrant] = useState<Set<string>>(new Set());
@@ -100,10 +102,21 @@ export default function OfficeNew() {
   const onAddressSelect = (a: StructuredAddress) => {
     setAddressSearch(a.formatted_address);
     setStreet1([a.street_number, a.street_name].filter(Boolean).join(' '));
-    setCity(a.city);
-    setProvince(a.province);
+    if (a.city) setCity(a.city);
+    if (a.province) setProvince(a.province);
     setPostalCode(a.postal_code);
-    setCountry(a.country);
+    if (a.country) setCountry(a.country);
+    if (a.latitude != null && a.longitude != null) setCityCoords({ lat: a.latitude, lng: a.longitude });
+    setDirty(true);
+  };
+
+  // Ville des opérations : autocomplétion limitée aux villes, qui capture les
+  // coordonnées exactes (la météo n'a plus à géocoder un nom ambigu).
+  const onCitySelect = (a: StructuredAddress) => {
+    setCity(a.city || a.formatted_address);
+    if (a.province) setProvince(a.province);
+    if (a.country) setCountry(a.country);
+    setCityCoords(a.latitude != null && a.longitude != null ? { lat: a.latitude, lng: a.longitude } : null);
     setDirty(true);
   };
 
@@ -153,25 +166,28 @@ export default function OfficeNew() {
       setInlineError(fr ? 'Le nom du bureau est requis.' : 'Office name is required.');
       return;
     }
+    if (!city.trim()) {
+      setInlineError(fr ? 'La ville des opérations est requise.' : 'Operations city is required.');
+      return;
+    }
     if (!canSubmit) return;
     setSaving(true);
     try {
-      const hasAddress = [street1, street2, city, province, postalCode, country].some((v) => v.trim());
       const { office } = await createOffice({
         name: name.trim(),
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
         website: website.trim() || undefined,
-        address: hasAddress
-          ? {
-            street1: street1.trim(),
-            street2: street2.trim(),
-            city: city.trim(),
-            province: province.trim(),
-            postal_code: postalCode.trim(),
-            country: country.trim(),
-          }
-          : null,
+        address: {
+          street1: street1.trim(),
+          street2: street2.trim(),
+          city: city.trim(),
+          province: province.trim(),
+          postal_code: postalCode.trim(),
+          country: country.trim(),
+          weather_lat: cityCoords?.lat ?? null,
+          weather_lng: cityCoords?.lng ?? null,
+        },
         inherit,
         grant_user_ids: Array.from(grant),
       });
@@ -255,6 +271,22 @@ export default function OfficeNew() {
                 maxLength={120}
               />
             </div>
+            <div className="space-y-2">
+              <label htmlFor={`${ids}-city`} className={fieldLabel}>{fr ? 'Ville des opérations' : 'Operations city'} <span className="text-danger">*</span></label>
+              <AddressAutocomplete id={`${ids}-city`}
+                value={city}
+                onChange={(v) => { setCity(v); setCityCoords(null); }}
+                onSelect={onCitySelect}
+                primaryTypes={['locality']}
+                className="glass-input w-full"
+                placeholder="Drummondville"
+              />
+              <p className="text-[11px] text-text-tertiary">
+                {fr
+                  ? 'La région où ce bureau travaille — sert à la météo de l\'accueil. L\'adresse exacte reste facultative.'
+                  : 'The area this office works in — used for the home weather. The exact address stays optional.'}
+              </p>
+            </div>
           </section>
 
           {/* Coordonnées (facultatif) */}
@@ -281,10 +313,6 @@ export default function OfficeNew() {
               <div className="space-y-2">
                 <label htmlFor={`${ids}-street2`} className={fieldLabel}>{fr ? 'Bureau / suite' : 'Unit / suite'}</label>
                 <input id={`${ids}-street2`} value={street2} onChange={(e) => setStreet2(e.target.value)} className="glass-input w-full" />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor={`${ids}-city`} className={fieldLabel}>{fr ? 'Ville' : 'City'}</label>
-                <input id={`${ids}-city`} value={city} onChange={(e) => setCity(e.target.value)} className="glass-input w-full" />
               </div>
               <div className="space-y-2">
                 <label htmlFor={`${ids}-province`} className={fieldLabel}>{fr ? 'Province / État' : 'Province / State'}</label>

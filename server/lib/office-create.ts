@@ -8,6 +8,8 @@ export interface OfficeAddress {
   province?: string | null;
   postal_code?: string | null;
   country?: string | null;
+  weather_lat?: number | null;
+  weather_lng?: number | null;
 }
 
 export interface CreateOfficeInput {
@@ -58,6 +60,12 @@ export function buildCompanySettingsInsert(input: CreateOfficeInput, orgId: stri
     if (clean(a.province)) row.province = clean(a.province);
     if (clean(a.postal_code)) row.postal_code = clean(a.postal_code);
     if (clean(a.country)) row.country = clean(a.country);
+    // Coordonnées de la ville choisie dans l'autocomplétion : la météo lit ce
+    // point exact au lieu de géocoder le nom (homonymes).
+    if (typeof a.weather_lat === 'number' && typeof a.weather_lng === 'number') {
+      row.weather_lat = a.weather_lat;
+      row.weather_lng = a.weather_lng;
+    }
   }
   return row;
 }

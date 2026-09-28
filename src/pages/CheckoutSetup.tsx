@@ -85,6 +85,7 @@ export default function CheckoutSetup({
   const [companyEmail, setCompanyEmail] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
+  const [cityCoords, setCityCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [postal, setPostal] = useState('');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [taxKey, setTaxKey] = useState('QC');
@@ -109,6 +110,7 @@ export default function CheckoutSetup({
     if (password.length < 10) { setError(isFr ? 'Ton mot de passe doit faire au moins 10 caractères.' : 'Your password must be at least 10 characters.'); return; }
     if (!companyName.trim()) { setError(isFr ? "Le nom de l'entreprise est requis." : 'Company name is required.'); return; }
     if (!phone.trim()) { setError(isFr ? 'Le téléphone est requis.' : 'Phone number is required.'); return; }
+    if (!city.trim()) { setError(isFr ? 'La ville des opérations est requise.' : 'Operations city is required.'); return; }
     setBusy(true);
 
     // ── Critical: password + sign-in. If either fails, stop and show why. ──
@@ -141,6 +143,7 @@ export default function CheckoutSetup({
       await completeSetup({
         company_name: companyName.trim(), phone: phone.trim(), email: companyEmail.trim() || email,
         address: address.trim(), city: city.trim(), province, postal_code: postal.trim(), country,
+        weather_lat: cityCoords?.lat ?? null, weather_lng: cityCoords?.lng ?? null,
         logo_url: logoUrl || undefined,
       });
       try { await setupTaxRegion(taxKey); } catch { /* taxes editable in Settings */ }
@@ -206,7 +209,7 @@ export default function CheckoutSetup({
               <div><label htmlFor={`${id}-phone`}>{isFr ? 'Téléphone' : 'Phone'} <span className="cs-req">*</span></label><div className="cs-field"><input id={`${id}-phone`} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(514) 555-0199" /></div></div>
               <div><label htmlFor={`${id}-company-email`}>{isFr ? 'Courriel entreprise' : 'Company email'}</label><div className="cs-field"><input id={`${id}-company-email`} value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} placeholder="info@..." /></div></div>
             </div>
-            <div><span className="cs-label">{isFr ? 'Adresse' : 'Address'}</span>
+            <div><span className="cs-label">{isFr ? 'Adresse' : 'Address'} <span className="cs-opt">{isFr ? '— optionnel' : '— optional'}</span></span>
               <div className="cs-field cs-addr">
                 <AddressAutocomplete
                   value={address}
@@ -216,6 +219,7 @@ export default function CheckoutSetup({
                     setAddress(line || a.formatted_address);
                     if (a.city) setCity(a.city);
                     if (a.postal_code) setPostal(a.postal_code);
+                    if (a.latitude != null && a.longitude != null) setCityCoords({ lat: a.latitude, lng: a.longitude });
                   }}
                   placeholder={isFr ? '1234 rue Sainte-Catherine' : '1234 Sainte-Catherine St'}
                   hideStatusHint
@@ -223,7 +227,22 @@ export default function CheckoutSetup({
               </div>
             </div>
             <div className="cs-row2">
-              <div><label htmlFor={`${id}-city`}>{isFr ? 'Ville' : 'City'}</label><div className="cs-field"><input id={`${id}-city`} value={city} onChange={(e) => setCity(e.target.value)} placeholder={isFr ? 'Montréal' : 'Montreal'} /></div></div>
+              <div><label htmlFor={`${id}-city`}>{isFr ? 'Ville des opérations' : 'Operations city'} <span className="cs-req">*</span></label>
+                <div className="cs-field cs-addr">
+                  <AddressAutocomplete id={`${id}-city`}
+                    value={city}
+                    onChange={(v) => { setCity(v); setCityCoords(null); }}
+                    onSelect={(a: StructuredAddress) => {
+                      setCity(a.city || a.formatted_address);
+                      setCityCoords(a.latitude != null && a.longitude != null ? { lat: a.latitude, lng: a.longitude } : null);
+                    }}
+                    primaryTypes={['locality']}
+                    placeholder={isFr ? 'Montréal' : 'Montreal'}
+                    hideStatusHint
+                  />
+                </div>
+                <div className="cs-hint">{isFr ? 'La région où tu travailles (météo de l’accueil).' : 'The area you work in (home weather).'}</div>
+              </div>
               <div><label htmlFor={`${id}-postal`}>{isFr ? 'Code postal' : 'Postal code'}</label><div className="cs-field"><input id={`${id}-postal`} value={postal} onChange={(e) => setPostal(e.target.value)} placeholder="H2X 1K4" /></div></div>
             </div>
             <div>
