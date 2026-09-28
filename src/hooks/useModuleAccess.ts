@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { abonnerBureauActif, bureauActifSync } from '../lib/orgApi';
+import { lireFlagsModules, oublierFlagsModules } from '../lib/featuresApi';
 
 interface ModuleFlag {
   enabled: boolean;
@@ -53,20 +54,13 @@ export function useModuleAccess(moduleKey: string): UseModuleAccessReturn {
     // 2026-09-25). On attend : l'abonnement plus bas relit dès qu'il est posé.
     if (!bureauActifSync()) { setEchecLecture(true); return; }
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      // Session pas encore restauree : l'etat est INCONNU, pas « desactive ».
-      // Sans ce marquage, un rafraichissement de page ou un jeton en cours de
-      // renouvellement suffisait a faire reapparaitre l'ecran d'activation.
-      if (!session?.access_token) { setEchecLecture(true); setLoading(false); return; }
+      // Lecture PARTAGÉE entre toutes les instances (une par module du menu) :
+      // avant, chacune lançait son propre GET /api/features (lib/featuresApi.ts).
+      // Session absente, 401, 500… : l'état reste INCONNU, jamais « désactivé ».
+      const lecture = await lireFlagsModules();
 
-      const res = await fetch('/api/features', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        signal: AbortSignal.timeout(8000),
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        const flags = json.flags || {};
+      if (lecture.ok) {
+        const flags = lecture.flags as Record<string, ModuleFlag>;
         setFlag(flags[moduleKey] || { enabled: false, metadata: { absent: true } });
         setEchecLecture(false);
         fetchedRef.current = true;
@@ -119,6 +113,7 @@ export function useModuleAccess(moduleKey: string): UseModuleAccessReturn {
       });
 
       if (res.ok) {
+        oublierFlagsModules();
         setFlag({ enabled: true, metadata: {} });
         // Notify all other hook instances
         window.dispatchEvent(new CustomEvent(MODULE_ACTIVATED_EVENT, { detail: { moduleKey } }));

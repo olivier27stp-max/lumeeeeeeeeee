@@ -55,7 +55,11 @@ describe('le hook distingue « inconnu » de « désactivé »', () => {
   });
 
   it('une session pas encore prête ne vaut pas « désactivé »', () => {
-    expect(hook).toMatch(/!session\?\.access_token.*setEchecLecture\(true\)/);
+    // La lecture est partagée (lib/featuresApi.ts) : sans session elle rend
+    // « pas ok », et le hook traite « pas ok » comme INCONNU.
+    const lecture = read('src/lib/featuresApi.ts');
+    expect(lecture).toMatch(/!session\?\.access_token\) return \{ ok: false/);
+    expect(hook).toMatch(/if \(lecture\.ok\)[\s\S]*\}\s*else\s*\{[\s\S]*setEchecLecture\(true\)/);
   });
 
   it('un échec après une lecture réussie n’efface pas l’état connu', () => {
