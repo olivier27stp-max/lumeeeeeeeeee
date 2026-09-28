@@ -68,10 +68,12 @@ export type CRMEventType =
    * Une étiquette vient d'être posée sur un client.
    *
    * C'est le « handoff manuel » : un vendeur marque une fiche « À rappeler »
-   * et une séquence part. Le retrait d'étiquette N'EST PAS émis — retirer un
-   * marqueur ne devrait jamais déclencher un envoi au client.
+   * et une séquence part. Émis par server/lib/etiquettes.ts, quelle que soit
+   * l'origine (fiche client, automatisation).
    */
   | 'client.tagged'
+  /** Une étiquette vient d'être retirée d'un client (même point d'émission). */
+  | 'client.untagged'
   /**
    * Une tâche vient d'être marquée terminée.
    *
@@ -164,6 +166,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'custom_field.changed': 'custom_field_changed',
   'client.replied': 'client_replied',
   'client.tagged': 'client_tagged',
+  'client.untagged': 'client_untagged',
   'task.completed': 'task_completed',
   'note.added': 'note_added',
   'date.reached': 'date_reached',

@@ -5,6 +5,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { insertTargetedNotifications } from '../notificationHelpers';
+import { annoncerEtiquette } from '../etiquettes';
 import { executerMajChamp } from '../champs/automatisations';
 import { variablesChamps } from '../champs/service';
 import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
@@ -43,6 +44,12 @@ export interface ActionContext {
    * qui ne viennent pas du moteur (un test, un rejeu manuel).
    */
   ruleId?: string;
+  /**
+   * Règles qui ont produit l'événement en cours (anti-boucle des étiquettes,
+   * voir server/lib/etiquettes.ts). Une étiquette posée ici l'annonce avec
+   * cette chaîne + la règle courante.
+   */
+  chaine?: string[];
   /**
    * Drapeau `auto_desabonnement_canal` actif pour cette entreprise.
    *
@@ -2063,6 +2070,11 @@ async function membreDeLOrg(ctx: ActionContext, userId: string): Promise<boolean
 
 // ── Action : ajouter une étiquette ──────────────────────────
 
+/** La chaîne à porter par l'événement qu'une action produit : la sienne + la règle courante. */
+function chaineSuivante(ctx: ActionContext): string[] {
+  return [...(ctx.chaine ?? []), ...(ctx.ruleId ? [ctx.ruleId] : [])];
+}
+
 /**
  * `client_tags` plutôt que `clients.tags`.
  *
@@ -2085,12 +2097,18 @@ export async function executeAjouterEtiquette(
 
   // `client_tags_client_id_tag_key` interdit le doublon : on l'absorbe au lieu
   // de faire échouer une action dont le résultat voulu est déjà atteint.
-  const { error } = await ctx.supabase
+  // `ignoreDuplicates` + `select` : seule une étiquette NOUVELLE revient —
+  // c'est elle, et elle seule, qu'on annonce (« Étiquette ajoutée »).
+  const { data: posees, error } = await ctx.supabase
     .from('client_tags')
-    .upsert({ client_id: clientId, tag: etiquette }, { onConflict: 'client_id,tag' });
+    .upsert({ client_id: clientId, tag: etiquette }, { onConflict: 'client_id,tag', ignoreDuplicates: true })
+    .select('tag');
 
   if (error) return { success: false, error: error.message };
-  return { success: true, data: { etiquette } };
+  if ((posees ?? []).length > 0) {
+    await annoncerEtiquette(ctx.supabase, { orgId: ctx.orgId, clientId, tag: etiquette, sens: 'ajoutee', chaine: chaineSuivante(ctx) });
+  }
+  return { success: true, data: { etiquette, deja_posee: (posees ?? []).length === 0 } };
 }
 
 // ── Action : retirer une étiquette ──────────────────────────
@@ -2107,17 +2125,24 @@ export async function executeRetirerEtiquette(
   if (!toutes) {
     const etiquette = resolveTemplate(config.etiquette || '', vars).trim();
     if (!etiquette) return { success: false, error: 'Aucune étiquette à retirer.' };
-    const { error } = await ctx.supabase
+    const { data: retirees, error } = await ctx.supabase
       .from('client_tags')
       .delete()
       .eq('client_id', clientId)
-      .eq('tag', etiquette);
+      .eq('tag', etiquette)
+      .select('tag');
     if (error) return { success: false, error: error.message };
+    for (const r of (retirees ?? []) as Array<{ tag: string }>) {
+      await annoncerEtiquette(ctx.supabase, { orgId: ctx.orgId, clientId, tag: r.tag, sens: 'retiree', chaine: chaineSuivante(ctx) });
+    }
     return { success: true, data: { etiquette } };
   }
 
-  const { error } = await ctx.supabase.from('client_tags').delete().eq('client_id', clientId);
+  const { data: retirees, error } = await ctx.supabase.from('client_tags').delete().eq('client_id', clientId).select('tag');
   if (error) return { success: false, error: error.message };
+  for (const r of (retirees ?? []) as Array<{ tag: string }>) {
+    await annoncerEtiquette(ctx.supabase, { orgId: ctx.orgId, clientId, tag: r.tag, sens: 'retiree', chaine: chaineSuivante(ctx) });
+  }
   return { success: true, data: { toutes: true } };
 }
 

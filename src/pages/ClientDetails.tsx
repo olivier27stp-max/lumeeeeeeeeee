@@ -61,7 +61,7 @@ import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
 import SpecificNotes from '../components/SpecificNotes';
 import { getQuoteById, formatQuoteMoney, type QuoteDetail, type Quote } from '../lib/quotesApi';
 import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
-import { emitClientTagged } from '../lib/automationEventsApi';
+import { emitClientTagged, emitClientUntagged } from '../lib/automationEventsApi';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface JobRecord {
@@ -486,6 +486,7 @@ export default function ClientDetails() {
       // de l'écran tout en restant en base.
       const { error } = await supabase.from('client_tags').delete().eq('client_id', client.id).eq('tag', tag);
       if (error) throw error;
+      emitClientUntagged({ clientId: client.id, tag });
     } catch {
       setTags(previous);
       toast.error(t.clientDetails.failedToRemoveTag);

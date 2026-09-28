@@ -129,6 +129,7 @@ export function evenementPour(cle: string): Evenement {
     'lead.status_changed': { entityType: 'lead', entityId: IDS.client, metadata: { old_status: 'new', new_status: 'contacted' } },
     'client.replied': { entityType: 'client', entityId: IDS.client, metadata: { conversation_id: 'conv-1', body: 'Oui merci' } },
     'client.tagged': { entityType: 'client', entityId: IDS.client, metadata: { tag: 'vip' } },
+    'client.untagged': { entityType: 'client', entityId: IDS.client, metadata: { tag: 'vip' } },
     'agreement.signed': { entityType: 'job', entityId: IDS.job, metadata: { signer_name: 'Marie Tremblay' } },
     'task.completed': { entityType: 'client', entityId: IDS.client, metadata: { task_id: IDS.tache, title: 'Rappeler' } },
     'note.added': { entityType: 'client', entityId: IDS.client, metadata: { note_id: 'note-1', entity_type: 'client' } },
