@@ -408,7 +408,8 @@
      "result_success": true,
      "result_data": {
       "title": "Suivi a faire pour ",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -526,7 +527,8 @@
      "result_success": true,
      "result_data": {
       "title": "Suivi a faire pour ",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -9092,7 +9094,8 @@
      "result_success": true,
      "result_data": {
       "title": "Suivi a faire pour ",
-      "destinataires": "equipe"
+      "destinataires": "equipe",
+      "courriels": 0
      },
      "result_error": null,
      "duration_ms": "<ms>"

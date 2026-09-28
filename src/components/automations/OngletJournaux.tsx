@@ -19,7 +19,7 @@ import React, { useCallback, useEffect, useId, useState } from 'react';
 import { Loader2, CheckCircle2, XCircle, Clock, Ban } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
-  lireJournaux, lireInscriptions, libelleAction, libelleStatut, raisonLisible,
+  lireJournaux, lireInscriptions, libelleAction, libelleStatut, raisonLisible, motifSaut,
   FENETRE_JOURS,
   type LigneJournal, type LigneInscription,
 } from '../../lib/automationJournauxApi';
@@ -42,6 +42,7 @@ function Pastille({ statut, fr }: { statut: string; fr: boolean }) {
     running: 'bg-info-light text-info',
     failed: 'bg-danger-light text-danger',
     cancelled: 'bg-surface-tertiary text-text-tertiary',
+    skipped: 'bg-surface-tertiary text-text-secondary',
   };
   const Icone = statut === 'completed' ? CheckCircle2
     : statut === 'failed' ? XCircle
@@ -259,7 +260,10 @@ export function OngletJournaux({ ruleId, fr }: { ruleId: string; fr: boolean }) 
                       </td>
                       <td className="px-4 py-2.5 text-text-secondary">{libelleAction(l.action_type, fr)}</td>
                       <td className="px-4 py-2.5">
-                        <Pastille statut={l.result_success ? 'completed' : 'failed'} fr={fr} />
+                        <Pastille statut={motifSaut(l) ? 'skipped' : l.result_success ? 'completed' : 'failed'} fr={fr} />
+                        {motifSaut(l) && (
+                          <span className="mt-0.5 block text-[11px] text-text-tertiary">{motifSaut(l)}</span>
+                        )}
                         {/* La RAISON, pas seulement « échoué » : c'est ce qui
                             dit à l'entrepreneur quoi corriger. */}
                         {!l.result_success && raison && (
