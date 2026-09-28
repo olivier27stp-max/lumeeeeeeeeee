@@ -74,6 +74,24 @@ describe('requireAuthedClient — cache de session', () => {
     expect(getUser).toHaveBeenCalledTimes(2);
   });
 
+  it('dix appels SIMULTANÉS (jeton neuf) → une seule vérification', async () => {
+    const { requireAuthedClient } = await import('../server/lib/supabase');
+    const r = await Promise.all(Array.from({ length: 10 }, () => requireAuthedClient(req('jeton-6', ORG_A), res())));
+    expect(r.every((x) => x?.orgId === ORG_A)).toBe(true);
+    expect(getUser).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('un refus simultané est rendu à chacun, puis revérifié', async () => {
+    const { requireAuthedClient } = await import('../server/lib/supabase');
+    utilisateurValide = false;
+    const reps = [res(), res(), res()];
+    await Promise.all(reps.map((x) => requireAuthedClient(req('jeton-7', ORG_A), x)));
+    expect(reps.map((x) => x.statut)).toEqual([401, 401, 401]);
+    await requireAuthedClient(req('jeton-7', ORG_A), res());
+    expect(getUser).toHaveBeenCalledTimes(2);
+  });
+
   it('un autre jeton est revérifié', async () => {
     const { requireAuthedClient } = await import('../server/lib/supabase');
     await requireAuthedClient(req('jeton-4', ORG_A), res());

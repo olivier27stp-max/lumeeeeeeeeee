@@ -45,8 +45,11 @@ describe('requireAuthedClient — d où vient l organisation', () => {
     // modifiant un en-tête : l'IDOR le plus simple qui soit.
     // Borne de fin : l'appel dans le CORPS de la fonction, pas la ligne
     // d'import du même nom en tête de fichier.
-    const debut = src.indexOf("const headerOrg = req.header('x-org-id')");
-    const bloc = src.slice(debut, src.indexOf('setSentryRequestOrg(', debut));
+    // La vérification vit dans resoudreSession (partagée entre appels simultanés).
+    const debut = src.indexOf('async function resoudreSession(');
+    const bloc = src.slice(debut, src.indexOf('export async function requireAuthedClient(', debut));
+    expect(debut).toBeGreaterThan(-1);
+    expect(src).toMatch(/partagerSession\(cle, \(\) => resoudreSession\(authorizationHeader, headerOrg\)\)/);
     expect(bloc).toContain('has_org_membership');
     expect(bloc).toContain('shouldUseRequestedOrg');
   });

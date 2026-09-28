@@ -44,6 +44,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { companyOrgIds, getServiceClient } from './supabase';
 import { planGrants } from './platformFeatures';
 import { estBypass } from './subscription-guard';
+import { creerPartageEnVol } from './partage-en-vol';
 
 export type ModeGardeFonction = 'enforce' | 'log' | 'off';
 
@@ -120,6 +121,7 @@ export async function verdictFonctionPourOrg(
 // n'est gardé que 10 s pour qu'une montée de forfait débloque tout de suite.
 const TTL_MS = 60_000;
 const cache = new Map<string, { verdict: VerdictFonction; expire: number }>();
+const partagerVerdict = creerPartageEnVol<VerdictFonction>();
 
 export function viderCacheFonction(): void {
   cache.clear();
@@ -129,7 +131,7 @@ async function verdictEnCache(orgId: string, drapeau: string, maintenant: number
   const cle = `${orgId}:${drapeau}`;
   const hit = cache.get(cle);
   if (hit && hit.expire > maintenant) return hit.verdict;
-  const verdict = await verdictFonctionPourOrg(getServiceClient(), orgId, drapeau);
+  const verdict = await partagerVerdict(cle, () => verdictFonctionPourOrg(getServiceClient(), orgId, drapeau));
   if (cache.size >= 5_000) for (const [k, v] of cache) if (v.expire <= maintenant) cache.delete(k);
   cache.set(cle, { verdict, expire: maintenant + (verdict.autorise ? TTL_MS : 10_000) });
   return verdict;
