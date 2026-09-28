@@ -241,7 +241,8 @@ router.post('/automations/rules/generer', async (req, res) => {
   });
 
   if (!resultat.parcours) {
-    return res.status(422).json({ error: resultat.erreur ?? 'Lumi n’a rien pu construire.' });
+    // `sans_lumi` : l'écran propose Autopilot au lieu d'afficher une erreur.
+    return res.status(422).json({ error: resultat.erreur ?? 'Lumi n’a rien pu construire.', sans_lumi: resultat.sansLumi === true });
   }
 
   // Le garde-fou : ce que Lumi propose doit passer la validation humaine.

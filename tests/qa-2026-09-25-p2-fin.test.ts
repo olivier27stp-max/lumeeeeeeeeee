@@ -81,15 +81,15 @@ describe('P2-9 — la pause se voit sur chaque ligne', () => {
   });
 });
 
-describe('P2-10 (révisé le 2026-09-28) — construire avec Lumi est OFFERT, et on le dit', () => {
-  it('le serveur mesure toujours le coût (pour nous), sous la source offerte', () => {
+describe('P2-10 (révisé le 2026-09-28) — construire avec Lumi est facturé au budget Lumi, et on le dit', () => {
+  it('le serveur mesure le coût, sous une source distincte', () => {
     expect(lire('server/routes/automation-rules.ts')).toMatch(/cout_cents: resultat\.coutCents \?\? null/);
     expect(lire('server/lib/lumi/generer-parcours.ts')).toContain("source: 'automatisations'");
   });
 
-  it('l’écran dit que c’est offert, et ne parle plus de budget consommé', () => {
-    expect(lire('src/components/automations/ClavardageLumi.tsx')).toMatch(/Offert — ne compte pas dans ton budget Lumi/);
-    expect(lire('src/pages/AutomationBuilderPage.tsx')).not.toMatch(/de ton budget Lumi/);
+  it('l’écran dit que c’est déduit du budget Lumi, et réserve Lumi à Autopilot', () => {
+    expect(lire('src/components/automations/ClavardageLumi.tsx')).toMatch(/Déduit de ton budget Lumi/);
+    expect(lire('src/pages/AutomationBuilderPage.tsx')).toMatch(/usePlanFeature\('includes_ai'\)/);
   });
 });
 

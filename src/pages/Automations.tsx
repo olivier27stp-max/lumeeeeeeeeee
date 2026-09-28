@@ -914,7 +914,7 @@ export default function Automations() {
     { cle: 'zero', fr: 'Partir de zéro', en: 'Start from scratch', icone: Plus,
       aideFr: 'Un parcours vide, à construire.', aideEn: 'An empty path, to build.' },
     { cle: 'lumi', fr: 'Construire avec Lumi', en: 'Build with Lumi', icone: Sparkles,
-      aideFr: 'Décris ce que tu veux, Lumi le monte.', aideEn: 'Describe it, Lumi builds it.' },
+      aideFr: 'Décris ce que tu veux, Lumi le monte. Inclus dans Autopilot.', aideEn: 'Describe it, Lumi builds it. Included in Autopilot.' },
     { cle: 'modele', fr: 'Partir d’un modèle', en: 'Start from a template', icone: FileText,
       aideFr: `${modeles.length} modèles prêts à l’emploi.`, aideEn: `${modeles.length} ready-made templates.` },
     /*

@@ -176,8 +176,7 @@ export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<
     try {
       const jour = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Montreal', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
       const minuit = new Date(`${jour}T00:00:00-04:00`); // heure avancée ; l'écart d'une heure l'hiver est sans conséquence (borne, pas facture)
-      const { data } = await admin.from('ai_usage').select('cost_cents').in('org_id', orgIds).gte('created_at', minuit.toISOString())
-        .not('source', 'in', `(${SOURCES_OFFERTES.join(',')})`);
+      const { data } = await admin.from('ai_usage').select('cost_cents').in('org_id', orgIds).gte('created_at', minuit.toISOString());
       for (const l of (data ?? []) as Array<{ cost_cents: number | string }>) depenseJour += Number(l.cost_cents ?? 0);
     } catch { depenseJour = 0; }
   }
@@ -232,13 +231,6 @@ export async function alerterSiSeuilFranchi(admin: SupabaseClient, orgId: string
 
 /** D'où vient la dépense — la colonne `source` de `ai_usage`. */
 export type SourceUsage = 'lumi' | 'support' | 'migration' | 'briefing' | 'routeur' | 'cache' | 'automatisations';
-
-/**
- * Sources OFFERTES au client : journalisées (notre coût reste mesuré) mais
- * jamais comptées dans son budget. Même liste que le filtre des fonctions
- * SQL `lumi_depense_du_mois` et `reserve_ai_budget` (20260929230200).
- */
-export const SOURCES_OFFERTES: readonly SourceUsage[] = ['automatisations'];
 
 export async function journaliserUsage(admin: SupabaseClient, ligne: {
   orgId: string; userId: string | null; conversationId: string | null; model: string;

@@ -123,7 +123,7 @@ export default function ClavardageLumi({
       />
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-[11px] text-text-muted">
-          {fr ? 'Offert — ne compte pas dans ton budget Lumi' : 'Free — does not count toward your Lumi budget'}
+          {fr ? 'Déduit de ton budget Lumi' : 'Uses your Lumi budget'}
         </span>
         <button
           type="button"

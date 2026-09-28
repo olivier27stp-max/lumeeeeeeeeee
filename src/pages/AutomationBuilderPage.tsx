@@ -60,6 +60,7 @@ import SequenceCanvas from '../components/automations/SequenceCanvas';
 import PanneauEtape from '../components/automations/PanneauEtape';
 import TiroirChoix, { type ChoixTiroir } from '../components/automations/TiroirChoix';
 import ClavardageLumi from '../components/automations/ClavardageLumi';
+import { usePlanFeature } from '../hooks/usePlanFeature';
 import PanneauDeclencheur from '../components/automations/PanneauDeclencheur';
 import { listerChamps } from '../lib/champsPersoApi';
 import { fetchPipelines, fetchStages } from '../lib/pipelineVentesApi';
@@ -96,6 +97,14 @@ export default function AutomationBuilderPage() {
   const [parametres] = useSearchParams();
   const { language } = useTranslation();
   const fr = language === 'fr';
+  /*
+   * « Construire avec Lumi » est une fonction de Lumi, donc d'Autopilot
+   * (décision du 2026-09-28). Sans Lumi (Minimum, Scale), on montre ce que
+   * ça apporte et où l'obtenir — le serveur refuse de toute façon
+   * (`plan_sans_lumi`). Pendant le chargement, on ne cache rien.
+   */
+  const { hasFeature: aLumi, loading: planEnChargement } = usePlanFeature('includes_ai');
+  const lumiDisponible = aLumi || planEnChargement;
 
   const [regle, setRegle] = useState<AutomationRule | null>(null);
   const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
@@ -531,7 +540,7 @@ export default function AutomationBuilderPage() {
   }, [chargement, veutLumi]);
 
   /** Dès le premier message, le fil s'ouvre en panneau à gauche. */
-  const lumiLateral = echangesLumi.length > 0 || genere;
+  const lumiLateral = lumiDisponible && (echangesLumi.length > 0 || genere);
 
   /** Empile une version du parcours — c'est ce que « annuler » remontera. */
   const memoriser = useCallback((nouvelles: Etape[]) => {
@@ -1455,7 +1464,29 @@ export default function AutomationBuilderPage() {
 
                 {/* Avant le premier message : l'invitation au centre. Dès le
                     premier message, le fil passe en panneau à gauche. */}
-                {!lumiLateral && (
+                {!lumiDisponible && (
+                  <div className="mx-auto mb-4 max-w-xl px-4">
+                    <div className="rounded-2xl border border-border bg-surface-card p-5 text-center shadow-sm">
+                      <p className="flex items-center justify-center gap-2 text-sm font-medium text-text-primary">
+                        <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" />
+                        {fr ? 'Construire avec Lumi — inclus dans Autopilot' : 'Build with Lumi — included in Autopilot'}
+                      </p>
+                      <p className="mt-1.5 text-[12px] text-text-secondary">
+                        {fr
+                          ? 'Décris ton automatisation en une phrase et Lumi la monte pour toi. En attendant, bâtis-la avec « Choisir le déclencheur » et le « + ».'
+                          : 'Describe your automation in one sentence and Lumi builds it. Meanwhile, build it with “Choose the trigger” and “+”.'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/settings/billing')}
+                        className="glass-button mt-3 inline-flex items-center gap-1.5 text-[12px]"
+                      >
+                        {fr ? 'Voir Autopilot' : 'See Autopilot'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {lumiDisponible && !lumiLateral && (
                   <div className="mx-auto mb-4 flex max-w-xl flex-col items-center px-4">
                     <ClavardageLumi
                       fr={fr}

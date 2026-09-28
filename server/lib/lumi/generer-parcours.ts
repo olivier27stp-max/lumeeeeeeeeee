@@ -21,7 +21,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { clientAnthropic, isLumiConfigured } from './llm';
-import { journaliserUsage } from './budget';
+import { reserverBudget, reglerBudget, journaliserUsage, estimationCoutAppel } from './budget';
 import { coutEnCents } from './tarifs';
 import { logger } from '../logger';
 import { DECLENCHEURS, ACTIONS } from '../../../src/lib/automationCatalogue';
@@ -38,16 +38,6 @@ const MODELE = 'claude-haiku-4-5';
 
 /** Plafond de sortie : un parcours réaliste tient largement dedans. */
 const MAX_TOKENS = 1_500;
-
-/**
- * Parcours que Lumi construit au plus, par entreprise et par 24 h.
- * ≈ 0,3 ¢ l'appel : 60 appels ≈ 18 ¢ par jour au pire. Réglable par
- * LUMI_AUTOMATISATIONS_PAR_JOUR sans redéployer.
- */
-export function plafondQuotidienAutomatisations(env: NodeJS.ProcessEnv = process.env): number {
-  const n = Number(env.LUMI_AUTOMATISATIONS_PAR_JOUR);
-  return Number.isFinite(n) && n >= 1 && n <= 10_000 ? Math.floor(n) : 60;
-}
 
 export interface ParcoursPropose {
   /** Le nom suggéré — l'utilisateur peut le changer. */
@@ -247,6 +237,8 @@ export interface ResultatGeneration {
    * 2026-09-25 (P2-10).
    */
   coutCents?: number;
+  /** Le forfait n'inclut pas Lumi : l'écran propose Autopilot au lieu d'une erreur. */
+  sansLumi?: boolean;
 }
 
 /**
@@ -324,37 +316,36 @@ export async function genererParcours(params: {
   const systeme = consignes(fr);
 
   /*
-   * OFFERT : construire une automatisation ne coûte rien au client, sur
-   * TOUS les forfaits (décision du 2026-09-28).
+   * FACTURÉ au budget Lumi de l'entreprise (décision du 2026-09-28) :
+   * « Construire avec Lumi » est une fonction de Lumi, donc d'Autopilot.
+   * Un forfait sans Lumi (Minimum, Scale) reçoit `plan_sans_lumi` et bâtit
+   * ses automatisations à la main avec le « + ».
    *
-   * Avant, l'appel puisait dans le budget Lumi de l'entreprise — or Starter
-   * et Pro ont un budget de 0 : « Construire avec Lumi » répondait « budget
-   * atteint » à tous ceux qui n'avaient pas Autopilot, pour un appel Haiku
-   * d'environ 0,3 ¢. La dépense reste journalisée (source `automatisations`,
-   * exclue du budget du client par 20260929230200) : NOTRE coût reste mesuré.
-   *
-   * Le garde-fou n'est plus le budget mais un plafond d'appels par jour et
-   * par entreprise : un script ne peut pas nous faire payer sans limite.
+   * Réservé AVANT l'appel (on ne lance pas un appel qu'on ne peut pas payer),
+   * puis réglé au coût réel — l'ancienne version ne réglait jamais sa
+   * réservation, qui restait en vol jusqu'à son expiration.
    */
-  const plafond = plafondQuotidienAutomatisations();
-  const depuis = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const { count: dejaFaits, error: errCompte } = await admin
-    .from('ai_usage')
-    .select('id', { count: 'exact', head: true })
-    .eq('org_id', orgId)
-    .eq('source', 'automatisations')
-    .gte('created_at', depuis);
-  if (errCompte) {
-    // Compte illisible : on laisse passer. Refuser à tous parce qu'une
-    // lecture a échoué punirait les clients pour une panne de notre côté.
-    logger.error('[lumi/parcours] plafond quotidien illisible', { message: errCompte.message, org_id: orgId });
-  } else if ((dejaFaits ?? 0) >= plafond) {
-    logger.warn('[lumi/parcours] plafond quotidien atteint', { org_id: orgId, plafond });
+  const estimation = estimationCoutAppel(MODELE, systeme.length + demande.length, MAX_TOKENS, 0);
+  const reservation = await reserverBudget(admin, orgId, estimation).catch((e: unknown) => {
+    logger.error('[lumi/parcours] réservation impossible', { message: e instanceof Error ? e.message : String(e) });
+    return { id: null, statut: 'indisponible' as const };
+  });
+
+  if (reservation.statut === 'plan_sans_lumi') {
+    return {
+      parcours: null,
+      sansLumi: true,
+      erreur: fr
+        ? 'Construire avec Lumi est inclus dans le forfait Autopilot. Tu peux bâtir ce parcours à la main avec le « + ».'
+        : 'Building with Lumi is included in the Autopilot plan. You can build this path by hand with “+”.',
+    };
+  }
+  if (reservation.statut === 'capped') {
     return {
       parcours: null,
       erreur: fr
-        ? `Lumi a déjà construit ${plafond} parcours pour vous dans les dernières 24 h. Réessayez demain, ou construisez celui-ci avec le « + ».`
-        : `Lumi already built ${plafond} paths for you in the last 24 hours. Try again tomorrow, or build this one with “+”.`,
+        ? 'Le budget Lumi du mois est atteint. Le parcours peut être construit à la main avec le « + ».'
+        : 'This month’s Lumi budget is used up. You can still build the path by hand with “+”.',
     };
   }
 
@@ -381,9 +372,11 @@ export async function genererParcours(params: {
       cache_creation_input_tokens: u?.cache_creation_input_tokens ?? 0,
       cache_read_input_tokens: u?.cache_read_input_tokens ?? 0,
       cost_cents: coutGeneration,
-      // Offert au client : exclu de son budget, mais mesuré (voir plus haut).
+      // Source distincte pour mesurer ce poste, mais COMPTÉE dans le budget
+      // du client (20260929230300).
       source: 'automatisations',
     });
+    await reglerBudget(admin, reservation.id, coutGeneration);
 
     const texte = reponse.content
       .map((b) => (b.type === 'text' ? b.text : ''))
@@ -473,6 +466,9 @@ export async function genererParcours(params: {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     logger.error('[lumi/parcours] génération échouée', { message, org_id: orgId });
+    // Appel raté : on libère la réservation (rien n'a été consommé, ou on
+    // ne le sait pas — mieux vaut ne pas facturer).
+    await reglerBudget(admin, reservation.id, 0).catch(() => {});
     return {
       parcours: null,
       erreur: fr
