@@ -40,7 +40,7 @@ jobs:
     env:
       SEUIL_ERREUR_PCT: ${{ github.event.inputs.seuil || '15' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
