@@ -320,7 +320,10 @@ for (const cas of CAS) {
     // Depuis F3, la ligne de journal est RÉSERVÉE avant l'exécution
     // (« en cours ») puis complétée : seule la ligne complétée est un résultat.
     // Encore « en cours » au bout de 20 s = une action vraiment bloquée.
-    if (logs?.[0]) { log = logs[0] as never; if (log!.result_error !== 'en cours') break; }
+    if (logs?.[0]) {
+      log = logs[0] as { result_success: boolean; result_error: string | null };
+      if (log.result_error !== 'en cours') break;
+    }
     const { count } = await admin.from('automation_scheduled_tasks')
       .select('id', { count: 'exact', head: true }).eq('automation_rule_id', regle.id);
     if ((count ?? 0) > 0) { differee = count ?? 0; break; }
