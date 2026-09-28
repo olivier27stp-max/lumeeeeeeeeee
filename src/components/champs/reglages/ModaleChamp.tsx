@@ -33,6 +33,7 @@ import { peutAllerAuFormulaire } from '../../../lib/champs/questionsFormulaire';
 import { SECTIONS_SYSTEME, clesStandard, nomDossier } from '../../../lib/champs/standard';
 import { TITRE_FORMULAIRE, lirePlan, planFormulaire, type ElementPlan } from '../../../lib/champs/placement';
 import ApercuFormulaire from '../ApercuFormulaire';
+import ApercuVraiFormulaire, { OBJETS_VRAI_FORMULAIRE, type PlaceFormulaire } from '../ApercuVraiFormulaire';
 import { AIDE_TYPE } from '../icones';
 import ChampSaisie from '../ChampSaisie';
 
@@ -171,6 +172,10 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
   const construirePlan = (dossierId: string, apres: string | null, liste: DossierChamp[] = dossiers): ElementPlan[] =>
     (objetChoisi ? planFormulaire(objetChoisi, [...autresActifs, pseudo(objetChoisi, dossierId, apres)], liste, fr) : []);
   const [plan, setPlan] = useState<ElementPlan[]>([]);
+  // Vrai formulaire (client, devis, job) : la place se choisit en déposant le champ dedans.
+  const vraiFormulaire = !!objetChoisi && OBJETS_VRAI_FORMULAIRE.includes(objetChoisi);
+  const [apresChoisi, setApresChoisi] = useState<string | null>(champ?.config?.apres ?? null);
+  const surPlaceFormulaire = (p: PlaceFormulaire) => { setDossier(p.folder_id ?? ''); setApresChoisi(p.apres); };
   const dossiersCle = dossiers.map((d) => d.id).join();
   useEffect(() => {
     if (!open || !objetChoisi) { setPlan([]); return; }
@@ -183,7 +188,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
     }
     setPlan(construirePlan(d, edition && d === champ?.folder_id ? champ?.config?.apres ?? null : null));
   }, [open, objetChoisi, existants, dossiersCle]); // eslint-disable-line react-hooks/exhaustive-deps
-  const choisirDossier = (id: string) => { setDossier(id); setPlan(construirePlan(id, null)); };
+  const choisirDossier = (id: string) => { setDossier(id); setApresChoisi(null); setPlan(construirePlan(id, null)); };
   const surPlan = (p: ElementPlan[]) => {
     setPlan(p);
     const place = objetChoisi ? lirePlan(objetChoisi, p).get(idCible) : undefined;
@@ -191,7 +196,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
   };
   /** Après l'enregistrement : la place choisie dans l'aperçu (et l'ordre des voisins). */
   const enregistrerPlace = async (resultat: ChampPerso) => {
-    if (!plan.length) return;
+    if (vraiFormulaire || !plan.length) return;
     const final = plan.map((e) => (e.type === 'champ' && e.champ.id === idCible ? { ...e, id: `c:${resultat.id}`, champ: resultat } : e));
     try {
       await enregistrerPlan(objet, final, [...autresActifs, resultat]);
@@ -271,12 +276,16 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
       const resultat = edition
         ? await modifierChamp(champ!.id, {
           label: label.trim(), placeholder: placeholder || null, help_text: aide || null, is_required: obligatoire,
-          folder_id: dossier || null, config, options: opts, default_value: defautFinal(),
+          folder_id: dossier || null, options: opts, default_value: defautFinal(),
+          config: vraiFormulaire ? { ...config, apres: apresChoisi } : config,
+          ...(vraiFormulaire && (dossier !== (champ!.folder_id ?? '') || apresChoisi !== (champ!.config?.apres ?? null))
+            ? { position: Math.max(0, ...autresActifs.map((f) => f.position ?? 0)) + 1 } : {}),
           ...(type !== champ!.field_type ? { field_type: type } : {}),
         })
         : await creerChamp(objet, {
           label: label.trim(), field_type: type, key: cle, placeholder: placeholder || null, help_text: aide || null,
-          is_required: obligatoire, config, options: opts, folder_id: dossier || null, default_value: defautFinal(),
+          is_required: obligatoire, config: vraiFormulaire ? { ...config, apres: apresChoisi } : config,
+          options: opts, folder_id: dossier || null, default_value: defautFinal(),
           sur_formulaire: surFormulaire,
         });
       await enregistrerPlace(resultat);
@@ -363,7 +372,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
   return createPortal(
     <div className="fixed inset-0 z-[80] flex justify-end bg-black/30" role="presentation" tabIndex={-1} onClick={() => { void fermer(); }}>
       <div role="dialog" aria-modal="true" aria-labelledby={`${ids}-titre`} tabIndex={-1}
-        className="flex h-full w-full flex-col bg-surface shadow-xl sm:w-[92vw] lg:w-[70vw]" onClick={(e) => e.stopPropagation()}>
+        className={cn('flex h-full w-full flex-col bg-surface shadow-xl sm:w-[92vw]', vraiFormulaire ? 'lg:w-[94vw]' : 'lg:w-[70vw]')} onClick={(e) => e.stopPropagation()}>
         {/* En-tête */}
         <div className="flex items-start justify-between border-b border-outline px-6 py-4">
           <div>
@@ -375,7 +384,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
         </div>
 
         {/* Corps : formulaire | aperçu */}
-        <div className="grid flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[65fr_35fr]">
+        <div className={cn('grid flex-1 gap-4 overflow-y-auto p-4', vraiFormulaire ? 'lg:grid-cols-[40fr_60fr]' : 'lg:grid-cols-[65fr_35fr]')}>
           <div className="space-y-4">
             {/* Détails du champ */}
             <section className="rounded-xl border border-outline bg-surface-card">
@@ -621,7 +630,16 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
           <aside aria-label={fr ? 'Aperçu en direct' : 'Live preview'}
             className="h-fit rounded-xl border border-outline bg-surface-card p-4 lg:sticky lg:top-0 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
             <p className="mb-2 text-[14px] font-semibold text-text-primary">{fr ? 'Aperçu en direct' : 'Live preview'}</p>
-            {objetChoisi && plan.length ? (
+            {vraiFormulaire && objetChoisi ? (
+              <>
+                <p className="mb-2 text-[12px] text-text-tertiary">
+                  {fr ? `Le vrai formulaire « ${TITRE_FORMULAIRE[objetChoisi].fr} » — attrape le champ par sa poignée et dépose-le dans une zone « Déposer ici ».`
+                    : `The real “${TITRE_FORMULAIRE[objetChoisi].en}” form — grab the field by its handle and drop it on a “Drop here” zone.`}
+                </p>
+                <ApercuVraiFormulaire objet={objetChoisi} dossiers={dossiers} fr={fr} onPlace={surPlaceFormulaire}
+                  cible={pseudo(objetChoisi, dossier, apresChoisi)} rendreCible={() => cibleApercu} />
+              </>
+            ) : objetChoisi && plan.length ? (
               <ApercuFormulaire plan={plan} onPlan={surPlan} cibleId={idCible} cible={cibleApercu}
                 titre={fr ? TITRE_FORMULAIRE[objetChoisi].fr : TITRE_FORMULAIRE[objetChoisi].en} fr={fr} />
             ) : (

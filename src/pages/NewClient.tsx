@@ -21,6 +21,7 @@ import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { useTranslation } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useChampsCreation } from '../components/champs/creation';
+import { useApercuPlacement } from '../components/champs/apercuPlacement';
 
 const PHONE_LABELS: ClientPhone['label'][] = ['work', 'mobile', 'home', 'fax', 'other'];
 const EMAIL_LABELS = ['main', 'work', 'personal', 'other'] as const;
@@ -42,6 +43,8 @@ export default function NewClient() {
   const fr = language === 'fr';
   // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
   const champsPerso = useChampsCreation('client', fr, { sections: ['coordonnees', 'lead', 'adresse'], rangees: true });
+  // Monté dans l'aperçu de « Créer un champ » : Échap ne doit pas quitter les réglages.
+  const apercuPlacement = !!useApercuPlacement();
   // Champs de base décochés dans « Gérer les champs » : retirés du formulaire pour toute l'entreprise.
   const vis = champsPerso.systeme;
   const id = useId();
@@ -108,7 +111,7 @@ export default function NewClient() {
   useEscapeKey(() => {
     if (creatingSource) { setCreatingSource(false); setNewSourceName(''); return; }
     navigate('/clients');
-  }, true);
+  }, !apercuPlacement);
 
   // Org taxes — all applied by default, like on quotes/invoices.
   useEffect(() => {
