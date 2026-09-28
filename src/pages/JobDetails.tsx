@@ -1360,6 +1360,7 @@ export default function JobDetails() {
                 )}
                 <JobDetailRow label={language === 'fr' ? 'Vendeur' : 'Salesperson'} value={(job as any).salesperson_name || (job as any).salesperson?.full_name || '—'} isLast />
               </div>
+              <CustomFieldsPanel objet="job" entityId={id} fr={language === 'fr'} sections={['details', 'client', 'type', 'assignation', 'facturation', 'contrat']} />
             </div>
           </div>
         </div>
@@ -1494,6 +1495,7 @@ export default function JobDetails() {
               </div>
             )}
           </div>
+          <CustomFieldsPanel objet="job" entityId={id} fr={language === 'fr'} sections={['produits']} className="px-5 pb-4" />
         </div>
 
         {/* ═══ VISITS ═══ */}
@@ -1585,6 +1587,7 @@ export default function JobDetails() {
               </p>
             )}
           </div>
+          <CustomFieldsPanel objet="job" entityId={id} fr={language === 'fr'} sections={['visites']} className="px-5 pb-4" />
         </div>
 
         {/* ═══ SERVICE PLAN CONTRACT — one 12-month calendar per planned year,
@@ -2226,8 +2229,10 @@ export default function JobDetails() {
         {/* ═══ NOTES + CLIENT SALES-MAP PIN ═══ */}
         <div className="grid gap-4 md:grid-cols-2">
           <SpecificNotes entityType="job" entityId={id!} mode="full" legacyNote={job.notes} />
+          <CustomFieldsPanel objet="job" entityId={id} fr={language === 'fr'} sections={['notes']} className="section-card !mt-0 p-4" />
           {/* Champs personnalisés (v2) — dont ceux copiés depuis l'opportunité gagnée. */}
-          <CustomFieldsPanel objet="job" entityId={id} fr={language === 'fr'} className="section-card p-4 md:col-span-2 md:order-last" />
+          <CustomFieldsPanel objet="job" entityId={id} fr={language === 'fr'} className="section-card p-4 md:col-span-2 md:order-last"
+            exclureSections={['details', 'client', 'type', 'assignation', 'facturation', 'contrat', 'produits', 'visites', 'notes']} />
           <ClientPinMiniMap
             pin={miniMapPin}
             hasClient={Boolean(job.client_id)}

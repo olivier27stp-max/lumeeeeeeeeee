@@ -11,6 +11,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { useJobModalController } from '../../../contexts/JobModalController';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AlignLeft, ChevronUp, Copy, GripVertical, Info, Loader2, Plus, TextCursorInput, Trash2, X } from 'lucide-react';
@@ -52,8 +53,10 @@ interface Props {
 
 type OptionEdit = EntreeOption & { _cle: string };
 /** Où voir le formulaire de création de chaque objet (lien du message « Champ créé »). */
+// Job : pas de page à elle, le formulaire est une fenêtre (ouverte directement).
+// Propriété : son formulaire vit dans la fiche client (section Propriétés).
 const LIEN_FORMULAIRE: Partial<Record<ObjetChamp, string>> = {
-  client: '/clients/new', quote: '/quotes/new', invoice: '/invoices/new', job: '/jobs', deal: '/ventes',
+  client: '/clients/new', quote: '/quotes/new', invoice: '/invoices/new', deal: '/ventes', property: '/clients',
 };
 const couleurs = ['#64748b', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
 let compteur = 0;
@@ -234,10 +237,11 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
       } else {
         const d = dossiers.find((x) => x.id === dossier);
         const lien = LIEN_FORMULAIRE[objet];
+        const voir = objet === 'job' ? () => openJobModal() : lien ? () => navigate(lien) : null;
         toast.success(fr
           ? `Champ créé — ajouté à ${LIBELLES_OBJET[objet].fr} › ${d ? nomDossier(d, fr) : 'Sans dossier'}`
-          : `Field created — added to ${LIBELLES_OBJET[objet].en} › ${d ? nomDossier(d, fr) : 'No folder'}`, lien ? {
-          action: { label: fr ? 'Voir dans le formulaire' : 'See it in the form', onClick: () => navigate(lien) },
+          : `Field created — added to ${LIBELLES_OBJET[objet].en} › ${d ? nomDossier(d, fr) : 'No folder'}`, voir ? {
+          action: { label: fr ? 'Voir dans le formulaire' : 'See it in the form', onClick: voir },
         } : undefined);
       }
       onEnregistre(resultat);
@@ -263,6 +267,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
   const variable = objetChoisi ? variableAffichee(objetChoisi, cle || 'cle') : `{{${fr ? 'objet' : 'object'}.${cle || 'cle'}}}`;
 
   const navigate = useNavigate();
+  const { openJobModal } = useJobModalController();
   const [detailsOuverts, setDetailsOuverts] = useState(true);
   const [saisieOuverte, setSaisieOuverte] = useState(true);
   const modifie = !!(label || placeholder || aide || defaut !== null || (edition && champ && (label !== champ.label)));

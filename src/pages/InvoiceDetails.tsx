@@ -576,10 +576,12 @@ export default function InvoiceDetails() {
             )}
           </div>
         </div>
+        <CustomFieldsPanel objet="invoice" entityId={invoice.id} fr={language === 'fr'} sections={['client', 'details']} />
       </section>
 
       {/* Champs personnalisés (v2) */}
-      <CustomFieldsPanel objet="invoice" entityId={invoice.id} fr={language === 'fr'} className="section-card p-4" />
+      <CustomFieldsPanel objet="invoice" entityId={invoice.id} fr={language === 'fr'} className="section-card p-4"
+        exclureSections={['client', 'details', 'articles', 'totaux']} />
 
       <section className="section-card p-6">
         <h2 className="text-[15px] font-bold text-text-primary">{t.invoiceDetails.lineItems}</h2>
@@ -644,6 +646,7 @@ export default function InvoiceDetails() {
             <span className="font-semibold">{formatMoneyFromCents(invoice.balance_cents, invoice.currency || 'CAD')}</span>
           </p>
         </div>
+        <CustomFieldsPanel objet="invoice" entityId={invoice.id} fr={language === 'fr'} sections={['articles', 'totaux']} />
       </section>
 
       {/* Visual Invoice Preview */}

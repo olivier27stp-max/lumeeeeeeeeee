@@ -36,9 +36,17 @@ interface Props {
   className?: string;
   /** Lecture seule (permission manquante sur l'objet). */
   lectureSeule?: boolean;
+  /**
+   * Placement dans la fiche (mission GHL, phase 4) : seulement les champs de ces
+   * dossiers système, à poser à la fin de la section correspondante de la fiche.
+   * Rendu compact, sans titre ni bouton ; rien si aucun champ.
+   */
+  sections?: string[];
+  /** Panneau principal : sans les champs déjà placés dans une section de la fiche. */
+  exclureSections?: string[];
 }
 
-export default function CustomFieldsPanel({ objet, entityId, fr, titre, className, lectureSeule }: Props) {
+export default function CustomFieldsPanel({ objet, entityId, fr, titre, className, lectureSeule, sections, exclureSections }: Props) {
   const { isEnabled } = useChampsPersoActifs();
   const qc = useQueryClient();
   const idBase = useId();
@@ -76,8 +84,14 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
   const groupes = useMemo(() => {
     if (!data) return [];
     const parDossier = new Map<string | null, typeof data.fields>();
+    const cleDe = (folderId: string | null) => data.folders.find((d) => d.id === folderId)?.cle_systeme ?? null;
+    const garder = (folderId: string | null) => {
+      const cle = cleDe(folderId);
+      if (sections) return !!cle && sections.includes(cle);
+      return !(cle && exclureSections?.includes(cle));
+    };
     // Retirés de la fiche par « Gérer les champs » : masqués (la valeur reste en base).
-    for (const c of data.fields.filter((x) => !x.config?.masque_fiche)) {
+    for (const c of data.fields.filter((x) => !x.config?.masque_fiche).filter((x) => garder(x.folder_id ?? null))) {
       const cle = c.folder_id && data.folders.some((d) => d.id === c.folder_id) ? c.folder_id : null;
       parDossier.set(cle, [...(parDossier.get(cle) ?? []), c]);
     }
@@ -86,9 +100,11 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
       .map((d) => ({ id: d.id, nom: nomDossier(d, fr), champs: parDossier.get(d.id)! }));
     if (parDossier.has(null)) ordonnes.push({ id: '__sans', nom: fr ? 'Sans dossier' : 'No folder', champs: parDossier.get(null)! });
     return ordonnes;
-  }, [data, fr]);
+  }, [data, fr, sections, exclureSections]);
 
   if (!isEnabled || !entityId) return null;
+  // Placement dans une section : discret — ni chargement, ni erreur, ni état vide.
+  if (sections && (isLoading || error || !data || groupes.every((g) => g.champs.length === 0))) return null;
   if (isLoading) {
     return (
       <div className={cn('flex items-center gap-2 py-3 text-[12px] text-text-tertiary', className)}>
@@ -107,7 +123,7 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
   if (groupes.length === 0) {
     return (
       <div className={cn('flex flex-wrap items-center justify-between gap-2 py-2', className)}>
-        {data.fields.length === 0 ? <LienAjouterChamps fr={fr} /> : (
+        {data.fields.length === 0 ? <LienAjouterChamps fr={fr} /> : exclureSections ? <span /> : (
           <p className="text-[12px] text-text-tertiary">{fr ? 'Aucun champ personnalisé sur cette fiche.' : 'No custom fields on this record.'}</p>
         )}
         {boutonGerer}
@@ -140,6 +156,48 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
       setEnCours((e) => ({ ...e, [fieldId]: false }));
     }
   };
+
+  const saisie = (c: (typeof data.fields)[number]) => {
+    const idChamp = `${idBase}-${c.id}`;
+    const idAide = `${idChamp}-aide`;
+    const err = erreurs[c.id];
+    return (
+      <div key={c.id}>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <label htmlFor={idChamp} className="text-[12px] font-medium text-text-secondary">
+            {c.label}{c.is_required && <span className="text-red-500" aria-hidden> *</span>}
+            {c.archived_at && <span className="ml-1 text-[10px] text-text-tertiary">{fr ? '(archivé)' : '(archived)'}</span>}
+          </label>
+          {enCours[c.id] && <Loader2 size={12} className="animate-spin text-text-tertiary" aria-label={fr ? 'Enregistrement…' : 'Saving…'} />}
+          {!enCours[c.id] && c.field_type === 'url' && typeof data.values[c.id]?.value === 'string'
+            && /^https?:\/\//i.test(String(data.values[c.id]?.value)) && (
+            <a href={String(data.values[c.id]?.value)} target="_blank" rel="noopener noreferrer"
+              className="text-[11px] font-medium text-primary hover:underline">{fr ? 'Ouvrir' : 'Open'}</a>
+          )}
+        </div>
+        <ChampSaisie id={idChamp} champ={c} valeur={data.values[c.id]?.value ?? null} fr={fr}
+          disabled={lectureSeule || !!c.archived_at || enCours[c.id]} invalide={!!err}
+          describedBy={err || c.help_text ? idAide : undefined}
+          onValider={(v) => { void enregistrer(c.id, v); }} />
+        {err ? (
+          <p id={idAide} role="alert" className="mt-1 flex items-center gap-1 text-[11px] text-red-600">
+            <AlertCircle size={11} aria-hidden /> {err}
+          </p>
+        ) : c.help_text ? (
+          <p id={idAide} className="mt-1 text-[11px] text-text-tertiary">{c.help_text}</p>
+        ) : null}
+      </div>
+    );
+  };
+
+  // Dans une section de la fiche : les champs à la suite, sans titre ni cadre.
+  if (sections) {
+    return (
+      <div className={cn('mt-3 space-y-3', className)} data-champs-section={sections.join(' ')}>
+        {groupes.flatMap((g) => g.champs).map(saisie)}
+      </div>
+    );
+  }
 
   return (
     <section className={cn('space-y-3', className)} aria-label={titre ?? (fr ? 'Champs personnalisés' : 'Custom fields')}>
