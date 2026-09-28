@@ -18,16 +18,15 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  ArrowUpDown, Download, Filter, GripVertical, LayoutGrid, List, Plus, Search, Upload, X,
+  ArrowUpDown, Filter, GripVertical, LayoutGrid, List, Plus, Search, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { confirmer } from '../ui/ConfirmDialog';
 import { usePermissions } from '../../hooks/usePermissions';
 import ActionsRapides from './ActionsRapides';
-import ImportCsvModal from './ImportCsvModal';
 import {
-  useChampsPipeline, useFiltreChamps, comparerParChamp, ChampsSurCarte, PanneauChamps, valeurCsv, type TriChamp,
+  useChampsPipeline, useFiltreChamps, comparerParChamp, ChampsSurCarte, PanneauChamps, type TriChamp,
 } from '../champs/pipeline';
 import type { Condition } from '../../lib/champs/filtres';
 import Modal from '../ui/Modal';
@@ -461,39 +460,6 @@ function Colonne({
       </SortableContext>
     </div>
   );
-}
-
-// ── Export CSV ──
-
-/**
- * Une valeur qui contient le séparateur, un guillemet ou un saut de ligne casse
- * le fichier si on la pose telle quelle : on l'entoure de guillemets et on
- * double les guillemets internes (RFC 4180).
- */
-function champCsv(valeur: string): string {
-  if (!/[";\r\n]/.test(valeur)) return valeur;
-  return `"${valeur.replace(/"/g, '""')}"`;
-}
-
-/** « 2026-09-23 » — nom de fichier et colonnes de dates, sans ambiguïté de locale. */
-function jourIso(d: Date): string {
-  const mois = String(d.getMonth() + 1).padStart(2, '0');
-  const jour = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${mois}-${jour}`;
-}
-
-function telechargerCsv(lignes: string[][], nomFichier: string): void {
-  const corps = lignes.map((l) => l.map(champCsv).join(';')).join('\r\n');
-  // BOM UTF-8 : sans lui, Excel francophone lit les accents en Latin-1.
-  const blob = new Blob([`﻿${corps}`], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const lien = document.createElement('a');
-  lien.href = url;
-  lien.download = nomFichier;
-  document.body.appendChild(lien);
-  lien.click();
-  document.body.removeChild(lien);
-  URL.revokeObjectURL(url);
 }
 
 // ── Nouveau deal ──
@@ -1130,7 +1096,7 @@ const VUES: Record<VueEnregistree, { fr: string; en: string; filtres: EtatFiltre
 function BarreOutils({
   fr, total, filtres, sources, membres, panneauOuvert, tri, affichage,
   pipelines, pipelineActif, onChangerPipeline, etapesFiltrables, onCreerPipeline,
-  onFiltres, onBasculerPanneau, onTri, onAffichage, onExporter, onImporter, onNouveauDeal,
+  onFiltres, onBasculerPanneau, onTri, onAffichage, onNouveauDeal,
   extraPanneau,
 }: {
   /** Ouvre les réglages pour créer un pipeline. Absent = pas le droit. */
@@ -1155,8 +1121,6 @@ function BarreOutils({
   onTri: () => void;
   onAffichage: (a: Affichage) => void;
   /** Télécharge les deals ACTUELLEMENT filtrés en CSV. */
-  onExporter: () => void;
-  onImporter: () => void;
   onNouveauDeal: () => void;
 }) {
   // `useId()` : ce composant peut réapparaître, un id littéral se dupliquerait.
@@ -1294,17 +1258,6 @@ function BarreOutils({
               <List size={14} aria-hidden="true" />
             </button>
           </span>
-
-          <button type="button" onClick={onExporter} className={CLASSE_BOUTON}>
-            <Upload size={13} aria-hidden="true" />
-            {fr ? 'Exporter' : 'Export'}
-          </button>
-
-          {/* Le symétrique de l'export : un CSV part, un CSV revient. */}
-          <button type="button" onClick={onImporter} className={CLASSE_BOUTON}>
-            <Download size={13} aria-hidden="true" />
-            {fr ? 'Importer' : 'Import'}
-          </button>
 
           <button
             type="button"
@@ -1600,7 +1553,6 @@ export default function PipelineBoard({
   const [vue, setVue] = useState<VueEnregistree | string>('tous');
   const [nouveauDeal, setNouveauDeal] = useState(false);
   const [enregistrementVue, setEnregistrementVue] = useState(false);
-  const [importOuvert, setImportOuvert] = useState(false);
 
   /**
    * Les deals cochés, pour agir sur plusieurs d'un coup.
@@ -1906,53 +1858,6 @@ export default function PipelineBoard({
     if (v.affichage === 'kanban' || v.affichage === 'liste') setAffichage(v.affichage);
   }
 
-  /** Exporte ce qui est à l'écran — les deals filtrés, pas la base entière. */
-  function exporter() {
-    // Courriel, téléphone et adresse SONT dans l'export : sans eux le fichier
-    // ne peut pas être réimporté. L'import exige un moyen de joindre la
-    // personne (c'est ce qui rapproche un contact déjà connu au lieu d'en
-    // créer un double) — un export qui ne contient que le nom faisait donc
-    // rejeter chaque ligne avec « ni courriel ni téléphone ».
-    const entetes = fr
-      ? ['Client', 'Courriel', 'Téléphone', 'Adresse', 'Étape', 'Montant', 'Source', 'Campagne', 'Assigné', 'Créé le', 'Dernière activité']
-      : ['Client', 'Email', 'Phone', 'Address', 'Stage', 'Amount', 'Source', 'Campaign', 'Assignee', 'Created on', 'Last activity'];
-    const lignes = filtres_.map((d) => {
-      const etape = etapes.find((e) => e.id === d.stage_id);
-      const cents = montants[d.id];
-      const assigne = d.assigned_user_id
-        ? membres.find((m) => m.id === d.assigned_user_id)?.name ?? ''
-        : '';
-      return [
-        nomClient(d),
-        d.client?.email ?? '',
-        d.client?.phone ?? '',
-        d.client?.address ?? '',
-        etape ? (fr ? etape.name_fr : etape.name_en) : '',
-        // Nombre brut : un « 4 990 $ » avec espace insécable ne s'additionne pas
-        // dans un tableur. La virgule décimale suit la locale francophone.
-        cents === undefined ? '' : (fr ? (cents / 100).toFixed(2).replace('.', ',') : (cents / 100).toFixed(2)),
-        libelleSource(d.source, fr),
-        d.utm_campaign ?? '',
-        assigne,
-        jourIso(new Date(d.created_at)),
-        jourIso(new Date(d.last_activity_at)),
-      ];
-    });
-    // Champs personnalisés (v2) : une colonne par champ d'opportunité, en fin
-    // de ligne — l'import lit les colonnes par leur nom, rien ne se décale.
-    const champsExport = champsPipeline.actif ? champsPipeline.champsDeal.filter((c) => !c.archived_at) : [];
-    if (champsExport.length) {
-      entetes.push(...champsExport.map((c) => c.label));
-      filtres_.forEach((d, i) => {
-        lignes[i].push(...champsExport.map((c) => valeurCsv(c, champsPipeline.valeurs[d.id]?.[c.id]?.value, fr)));
-      });
-    }
-    telechargerCsv([entetes, ...lignes], `pipeline-${jourIso(new Date())}.csv`);
-    toast.success(fr
-      ? `${lignes.length} deal(s) exporté(s).`
-      : `${lignes.length} deal(s) exported.`);
-  }
-
   function onDragEnd(event: DragEndEvent) {
     setActif(null);
     const { active, over } = event;
@@ -2061,19 +1966,11 @@ export default function PipelineBoard({
         onBasculerPanneau={() => setPanneauOuvert((o) => !o)}
         onTri={() => setTri(TRIS[(TRIS.indexOf(tri) + 1) % TRIS.length])}
         onAffichage={setAffichage}
-        onExporter={exporter}
-        onImporter={() => setImportOuvert(true)}
         onNouveauDeal={() => setNouveauDeal(true)}
         extraPanneau={champsPipeline.actif ? (
           <PanneauChamps champs={champsPipeline.champsDeal} conditions={conditionsChamps} onConditions={setConditionsChamps}
             tri={triChamp} onTri={setTriChamp} fr={fr} enCours={filtreChamps.enCours} />
         ) : null}
-      />
-
-      <ImportCsvModal
-        ouvert={importOuvert}
-        onFermer={() => setImportOuvert(false)}
-        onImporte={() => onChangement?.()}
       />
 
       <ModalNouveauDeal
