@@ -330,7 +330,7 @@ export function BoutonsVariablesChamps({ champs, fr, onInserer }: { champs: Cham
       {/* Champs des formulaires (système), repliés : une quarantaine de variables. */}
       <details className="w-full">
         <summary className="cursor-pointer text-[11px] font-medium text-text-secondary hover:text-text-primary">
-          {fr ? 'Champs des formulaires' : 'Form fields'}
+          {fr ? 'Champs de base' : 'Base fields'}
         </summary>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {variablesSysteme().map((v) => (

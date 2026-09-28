@@ -5,13 +5,15 @@
  * job, devis, facture — avec :
  *   · sélecteur d'objet (et « Tous ») avec compteurs ;
  *   · vue Champs / Dossiers ;
- *   · filtres Type, Source (standard / personnalisé), Créé le (tous les
+ *   · filtres Type, Créé le (tous les
  *     opérateurs de date, calculés dans le fuseau de l'entreprise) ;
  *   · table groupée par dossier (repliable), clé copiable au format variable ;
  *   · « ⋯ » : champs cherchables, champs uniques, afficher les archivés ;
  *   · pour les opportunités : les champs affichés sur les cartes, par pipeline.
  *
- * Les champs standard sont listés en lecture seule (cadenas).
+ * Seuls les champs personnalisés (custom keys) sont listés : les champs des
+ * formulaires de base sont toujours là, non personnalisables, et ne sont pas des
+ * custom keys (décision de Rafba, 2026-09-28). Leurs variables restent dans Insérer.
  * Actif pour toutes les entreprises (le drapeau `custom_fields_v2` a été retiré).
  */
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -139,15 +141,10 @@ export default function ChampsPersoSettings() {
 
   const toutesLignes = useMemo<Ligne[]>(() => {
     if (!data) return [];
-    const custom: Ligne[] = data.fields.map((c) => ({ sorte: 'custom', id: c.id, objet: c.object_type, champ: c }));
-    // Seuls les champs réellement affichés par un formulaire (ceux qui ont une section) ;
-    // les attributs sans section (créé le, statut…) gardent leur clé réservée, sans ligne.
-    const standard: Ligne[] = OBJETS.flatMap((o) => (data.standard[o] ?? []).filter((s) => s.section)
-      .map((s) => ({ sorte: 'standard' as const, id: `std-${o}-${s.key}`, objet: o, std: s })));
-    return [...custom, ...standard];
+    // Les champs des formulaires de base ne sont pas des custom keys : pas de ligne ici.
+    return data.fields.map((c) => ({ sorte: 'custom', id: c.id, objet: c.object_type, champ: c }));
   }, [data]);
 
-  // Comme GHL (« All 35 ») : les champs standard comptent aussi.
   const compte = (o: Onglet) => toutesLignes.filter((l) => o === 'tous' || l.objet === o).length;
 
   const lignes = useMemo(() => {
@@ -432,9 +429,6 @@ export default function ChampsPersoSettings() {
                   {creeOp === 'between' && <><span className="text-[12px] text-text-tertiary">{fr ? 'et' : 'and'}</span><span className="w-36"><DatePickerInput value={creeB} onChange={setCreeB} language={fr ? 'fr' : 'en'} /></span></>}
                 </span>
               )}
-              <FilterPill label="Source" value={source} onChange={(v) => setSource(v as Source)}
-                onClear={() => setSource('all')} clearLabel={fr ? 'Effacer le filtre Source' : 'Clear source filter'}
-                options={[{ value: 'all', label: fr ? 'Toutes' : 'All' }, { value: 'standard', label: 'Standard' }, { value: 'custom', label: fr ? 'Personnalisé' : 'Custom' }]} />
               <div className="relative ml-auto flex items-center gap-2">
                 <button type="button" aria-haspopup="menu" aria-expanded={menuColonnes} onClick={() => { setMenuColonnes((v) => !v); setMenuGlobal(false); }}
                   className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-md border border-outline bg-surface-card px-3 text-[13px] text-text-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
