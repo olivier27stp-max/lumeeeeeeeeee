@@ -404,11 +404,37 @@ function resolveClientByNameAddress(ctx: BuildContext, r: Record<string, string>
  *  clients importés) ; une clé ambiguë (homonymes) y est absente → orphelin. */
 function resolveClientId(ctx: BuildContext, r: Record<string, string>, n: Record<string, unknown> = {}): string | null {
   const address = str(n.address) || str(r.property_ref) || str(r.property_address_ref);
+  // Courriel et téléphone se partagent (employé, conjoint, secrétariat) : un document qui
+  // nomme son client n'est JAMAIS rattaché par eux à un client d'un autre nom — orphelin
+  // visible plutôt que facture chez la mauvaise personne (écoles → Alain Charret, 2026-09-28).
+  const memeNom = (id: string | null) => (id && nomCompatible(ctx, r, id) ? id : null);
   return lookupRef(ctx.clientIdByRef, r.client_ref, looseNameKey)
-    ?? lookupRef(ctx.clientIdByRef, r.client_email_ref)
+    ?? memeNom(lookupRef(ctx.clientIdByRef, r.client_email_ref))
     ?? lookupRef(ctx.clientIdByRef, r.client_name_ref, looseNameKey)
-    ?? lookupRef(ctx.clientIdByRef, r.client_phone_ref, phoneKey)
+    ?? memeNom(lookupRef(ctx.clientIdByRef, r.client_phone_ref, phoneKey))
     ?? (address ? resolveClientByNameAddress(ctx, r, address) : null);
+}
+
+/** Mots significatifs (≥ 3 lettres) d'un nom, forme relâchée. */
+function motsDuNom(v: string): string[] {
+  return looseNameKey(v).split(' ').filter((m) => m.length >= 3 && !/^\d+$/.test(m));
+}
+
+/** Nom source du document (jamais un id externe ni un courriel). */
+function nomsDuDocument(r: Record<string, string>): string[] {
+  return [r.client_name_ref, r.client_ref]
+    .map((v) => str(v).trim())
+    .filter((v) => v && !/@/.test(v) && /\p{L}/u.test(v) && !/^[\d_\-\s]+$/.test(v));
+}
+
+/** Le document ne nomme pas son client, ou le nomme d'un nom qui partage au moins un mot
+ *  (« Nic Pelletier » ≈ « Nicolas Pelletier ») avec le client trouvé. Nom du client inconnu → accepté. */
+export function nomCompatible(ctx: BuildContext, r: Record<string, string>, clientId: string): boolean {
+  const noms = nomsDuDocument(r);
+  if (noms.length === 0) return true;
+  const connus = ctx.clientNameWordsById?.get(clientId);
+  if (!connus || connus.size === 0) return true;
+  return noms.some((nom) => motsDuNom(nom).some((m) => connus.has(m)));
 }
 
 /** Motif de rejet « X introuvable » AVEC la valeur cherchée : le CSV de rejets doit permettre
@@ -428,6 +454,10 @@ export function nomAffichageClient(c: { first_name?: unknown; last_name?: unknow
 
 /** Mémorise le nom d'un client (existant ou importé) ; un nom déjà connu n'est jamais écrasé. */
 function retenirNomClient(ctx: BuildContext, clientId: string, c: { first_name?: unknown; last_name?: unknown; company?: unknown; full_name?: unknown }): void {
+  const mots = ctx.clientNameWordsById ?? (ctx.clientNameWordsById = new Map());
+  const set = mots.get(clientId) ?? new Set<string>();
+  for (const v of [`${str(c.first_name)} ${str(c.last_name)}`, str(c.company), str(c.full_name)]) for (const m of motsDuNom(v)) set.add(m);
+  mots.set(clientId, set);
   const nom = nomAffichageClient(c);
   if (!nom) return;
   const map = ctx.clientNameById ?? (ctx.clientNameById = new Map());
@@ -670,6 +700,9 @@ export interface BuildContext {
   /** client id → nom affiché (« Prénom Nom » sinon entreprise) : jobs.client_name ne doit
    *  jamais être un courriel (220 jobs de Vision Lavage l'affichaient, 2026-09-24). */
   clientNameById?: Map<string, string>;
+  /** client id → mots de tous ses noms (personne, entreprise) : garde-fou du rattachement
+   *  par courriel/téléphone (nomCompatible). */
+  clientNameWordsById?: Map<string, Set<string>>;
   /** visitDedupKey(job_id, start_at) → visit id déjà dans le CRM : une visite
    *  réimportée (2e migration, fichier repris) n'est jamais créée en double. */
   visitIdByKey?: Map<string, string>;

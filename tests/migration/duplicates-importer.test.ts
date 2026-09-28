@@ -679,3 +679,28 @@ describe('cellule à plusieurs téléphones (Alain Charret, 2026-09-28)', async 
     expect(inv.row?.client_id ?? null).not.toBe('c-alain');
   });
 });
+
+describe('garde-fou : courriel/téléphone partagés ne rattachent jamais à un autre nom', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctxAvec = (key: string) => ({
+    migration: { org_id: 'org-1' }, createdBy: 'u',
+    clientIdByRef: new Map([[key, 'c-alain']]), propertyIdByRef: new Map(), jobIdByRef: new Map(),
+    clientNameWordsById: new Map([['c-alain', new Set(['alain', 'charret'])]]),
+  }) as any;
+  const facture = (relations: Record<string, string>, ctx: any) => buildEntityRow('invoice', {
+    id: 'i', row_number: 1, entity_type: 'invoice', external_id: null, status: 'ready',
+    normalized: { invoice_number: '645', total_cents: 275940 }, relations,
+  } as any, ctx) as any;
+  it('téléphone d\'Alain mais nom « Ecole acton vale » → pas chez Alain', () => {
+    const inv = facture({ client_name_ref: 'Ecole acton vale', client_phone_ref: '8194752879' }, ctxAvec('tel:8194752879'));
+    expect(inv.row?.client_id ?? null).not.toBe('c-alain');
+  });
+  it('courriel d\'Alain mais autre nom → pas chez Alain', () => {
+    const inv = facture({ client_name_ref: 'École Sacré Coeur', client_email_ref: 'alain@x.com' }, ctxAvec('alain@x.com'));
+    expect(inv.row?.client_id ?? null).not.toBe('c-alain');
+  });
+  it('variante du même nom ou document sans nom → rattaché', () => {
+    expect(facture({ client_name_ref: 'A. Charret', client_phone_ref: '819-475-2879' }, ctxAvec('tel:8194752879')).row.client_id).toBe('c-alain');
+    expect(facture({ client_phone_ref: '819-475-2879' }, ctxAvec('tel:8194752879')).row.client_id).toBe('c-alain');
+  });
+});
