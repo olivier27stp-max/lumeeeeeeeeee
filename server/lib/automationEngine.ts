@@ -409,6 +409,122 @@ async function langueOrg(supabase: SupabaseClient, orgId: string): Promise<'fr' 
   }
 }
 
+/**
+ * Fenêtre anti-doublon des actions IMMÉDIATES (F3).
+ *
+ * Mesuré en prod le 2026-09-23 : deux confirmations de rendez-vous au même
+ * client, à UNE seconde d'écart — double clic, reprise réseau, webhook
+ * rejoué. La migration 20260923180000 a posé l'index unique
+ * `idx_execution_logs_immediat_dedup` ; rien ne l'écrivait (#486 le dit :
+ * « inoffensive seule »).
+ *
+ * Pourquoi une FENÊTRE et pas une clé unique pour toujours : une règle sur
+ * « rendez-vous modifié » doit prévenir le client à CHAQUE modification ;
+ * une clé permanente ferait taire la deuxième. Deux minutes attrapent le
+ * doublon mécanique sans toucher au redéclenchement voulu.
+ *
+ * La clé est `règle:entité:action@tranche` (tranches de 2 min) : l'index
+ * unique tranche les courses dans la même tranche, et un coup d'œil à la
+ * tranche précédente couvre deux émissions de part et d'autre d'une frontière.
+ */
+const FENETRE_ANTI_DOUBLON_MS = 2 * 60 * 1000;
+
+type LigneJournal = {
+  result_success: boolean;
+  result_data: unknown;
+  result_error: string | null;
+  duration_ms: number;
+};
+
+/**
+ * Réserve l'exécution d'une action immédiate.
+ *
+ * @returns l'id de la ligne de journal réservée ; `null` s'il ne faut PAS
+ *   exécuter (doublon) ; `undefined` si la réservation n'a pas pu s'écrire —
+ *   on exécute quand même : une confirmation vaut mieux qu'un silence.
+ */
+async function reserverActionImmediate(
+  supabase: SupabaseClient,
+  rule: AutomationRule,
+  event: CRMEvent,
+  index: number,
+  maintenant: number = Date.now(),
+): Promise<string | null | undefined> {
+  // Clé SANS le suffixe de réentrée : « laisser le client repasser » autorise
+  // un nouveau passage, pas un double envoi à la même seconde.
+  const base = buildExecutionKey(rule.id, event.entityId, index);
+  const tranche = Math.floor(maintenant / FENETRE_ANTI_DOUBLON_MS);
+  const action = rule.actions[index];
+
+  const { data: precedente, error: errLecture } = await supabase
+    .from('automation_execution_logs')
+    .select('id')
+    .eq('org_id', event.orgId)
+    .eq('execution_key', `${base}@${tranche - 1}`)
+    .gte('created_at', new Date(maintenant - FENETRE_ANTI_DOUBLON_MS).toISOString())
+    .limit(1)
+    .maybeSingle();
+  if (errLecture) {
+    console.error(`[automationEngine] anti-doublon illisible (${base}) — exécution quand même:`, errLecture.message);
+  } else if (precedente) {
+    logger.info(`[automationEngine] doublon ignoré (déjà exécutée il y a moins de 2 min) : ${base}`);
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('automation_execution_logs')
+    .insert({
+      org_id: event.orgId,
+      automation_rule_id: rule.id,
+      trigger_event: event.type,
+      entity_type: event.entityType,
+      entity_id: event.entityId,
+      action_type: action.type,
+      action_config: action.config,
+      result_success: false,
+      result_error: 'en cours',
+      execution_key: `${base}@${tranche}`,
+    })
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    if (error.code === '23505') {
+      logger.info(`[automationEngine] doublon ignoré (même action, même tranche de 2 min) : ${base}`);
+      return null;
+    }
+    console.error(`[automationEngine] réservation impossible (${base}) — exécution sans réservation:`, error.message);
+    return undefined;
+  }
+  return (data as { id: string } | null)?.id ?? undefined;
+}
+
+/** Écrit le résultat : complète la ligne réservée, ou en crée une. */
+async function journaliserAction(
+  supabase: SupabaseClient,
+  reservation: string | undefined,
+  rule: AutomationRule,
+  event: CRMEvent,
+  index: number,
+  resultat: LigneJournal,
+): Promise<void> {
+  const action = rule.actions[index];
+  const { error } = reservation
+    ? await supabase.from('automation_execution_logs').update(resultat).eq('id', reservation)
+    : await supabase.from('automation_execution_logs').insert({
+      org_id: event.orgId,
+      automation_rule_id: rule.id,
+      trigger_event: event.type,
+      entity_type: event.entityType,
+      entity_id: event.entityId,
+      action_type: action.type,
+      action_config: action.config,
+      ...resultat,
+    });
+  if (error) {
+    console.error(`[automationEngine] failed to write execution log (rule ${rule.id}, org ${event.orgId}):`, error.message);
+  }
+}
+
 async function executeRuleActions(
   rule: AutomationRule,
   event: CRMEvent,
@@ -466,29 +582,21 @@ async function executeRuleActions(
       continue;
     }
 
+    const reservation = await reserverActionImmediate(config.supabase, rule, event, i);
+    if (reservation === null) continue;
+
     const startTime = Date.now();
 
     try {
       const result = await executeAction(action.type, action.config, vars, ctx);
       const durationMs = Date.now() - startTime;
 
-      // Log execution
-      const { error: logError } = await config.supabase.from('automation_execution_logs').insert({
-        org_id: event.orgId,
-        automation_rule_id: rule.id,
-        trigger_event: event.type,
-        entity_type: event.entityType,
-        entity_id: event.entityId,
-        action_type: action.type,
-        action_config: action.config,
+      await journaliserAction(config.supabase, reservation, rule, event, i, {
         result_success: result.success,
         result_data: result.data || null,
         result_error: result.error || null,
         duration_ms: durationMs,
       });
-      if (logError) {
-        console.error(`[automationEngine] failed to write execution log (rule ${rule.id}, org ${event.orgId}):`, logError.message);
-      }
 
       if (!result.success) {
         console.error(`[automationEngine] action ${action.type} failed for rule "${rule.name}":`, result.error);
@@ -497,21 +605,12 @@ async function executeRuleActions(
       const durationMs = Date.now() - startTime;
       console.error(`[automationEngine] action ${action.type} threw for rule "${rule.name}":`, err.message);
 
-      const { error: logError } = await config.supabase.from('automation_execution_logs').insert({
-        org_id: event.orgId,
-        automation_rule_id: rule.id,
-        trigger_event: event.type,
-        entity_type: event.entityType,
-        entity_id: event.entityId,
-        action_type: action.type,
-        action_config: action.config,
+      await journaliserAction(config.supabase, reservation, rule, event, i, {
         result_success: false,
+        result_data: null,
         result_error: err.message,
         duration_ms: durationMs,
       });
-      if (logError) {
-        console.error(`[automationEngine] failed to write failure log (rule ${rule.id}, org ${event.orgId}):`, logError.message);
-      }
     }
   }
 }
