@@ -13,6 +13,9 @@ import { logger } from '../lib/logger';
 import { eventBus } from '../lib/eventBus';
 import { estNoteVocale, mediasAudio, transcrireMediaTwilio, messageEchecVocal } from '../lib/sms/note-vocale';
 import { membreParTelephone } from '../lib/sms/identifier-membre';
+import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../lib/automations-drapeaux';
+import { estStop as estStopCanal, estStart as estStartCanal } from '../lib/desabonnement';
+import { appliquerMotCleSms, orgDuNumeroSms } from '../lib/desabonnement/sms';
 import { repondreAuMembre } from '../lib/sms/fil-lumi';
 import { bureauxDeLaBoite, conversationsDesBureaux, membresAssignables } from '../lib/boite-unifiee';
 
@@ -300,7 +303,47 @@ router.post('/messages/inbound', (req, res) => {
   // lèverait un refus que la personne a peut-être posé exprès.
   const startRegex = /^(start|unstop|reprendre|resume)$/i;
   const consentementRegex = /^(yes|oui)$/i;
-  if (stopRegex.test(bodyTrim)) {
+
+  // Désabonnement par canal (drapeau par entreprise) : seule l'entreprise du
+  // numéro qui a REÇU le mot-clé est concernée, le choix est journalisé et
+  // confirmé. « oui » n'y vaut plus réabonnement. Drapeau OFF = traitement
+  // d'avant, plus bas, inchangé.
+  //
+  // Le drapeau se lit en base : seul un message qui RESSEMBLE à un mot-clé
+  // attend cette lecture, puis reprend exactement le chemin d'avant. Tout
+  // autre message part tout de suite, comme avant.
+  if (estStopCanal(bodyTrim) || estStartCanal(bodyTrim) || consentementRegex.test(bodyTrim)) {
+    void (async () => {
+      let modeCanal = false;
+      try {
+        const orgDuNumero = await orgDuNumeroSms(serviceClient, req.body?.To ? normalizeE164(String(req.body.To)) : null);
+        modeCanal = !!orgDuNumero && await drapeauActif(serviceClient, orgDuNumero, DRAPEAUX_AUTOMATISATIONS.desabonnementCanal);
+        if (modeCanal && orgDuNumero) {
+          const envoyer = async (orgId: string, telephone: string, texte: string) => {
+            const from = await getOrgSmsFromNumber(orgId);
+            await twilioClient?.messages.create({ to: telephone, from, body: texte });
+          };
+          if (estStopCanal(bodyTrim)) {
+            await appliquerMotCleSms(serviceClient, { orgId: orgDuNumero, telephone: normalizedPhone, genre: 'stop', envoyer });
+            return;
+          }
+          if (estStartCanal(bodyTrim)) {
+            await appliquerMotCleSms(serviceClient, { orgId: orgDuNumero, telephone: normalizedPhone, genre: 'start', envoyer });
+            // Comme avant : le START est aussi gardé comme message de la conversation.
+          }
+        }
+      } catch (e: any) {
+        console.error('[SMS Inbound] désabonnement par canal non déterminé — traitement d\'avant:', e?.message || e);
+        modeCanal = false;
+      }
+      poursuivre(modeCanal);
+    })();
+    return;
+  }
+  poursuivre(false);
+
+  function poursuivre(modeCanal: boolean) {
+  if (!modeCanal && stopRegex.test(bodyTrim)) {
     (async () => {
       try {
         // Find any org this phone has texted with — best-effort: all orgs with a conversation
@@ -332,7 +375,7 @@ router.post('/messages/inbound', (req, res) => {
     })();
     return;
   }
-  if (startRegex.test(bodyTrim) || consentementRegex.test(bodyTrim)) {
+  if (!modeCanal && (startRegex.test(bodyTrim) || consentementRegex.test(bodyTrim))) {
     (async () => {
       try {
         if (consentementRegex.test(bodyTrim)) {
@@ -697,6 +740,7 @@ router.post('/messages/inbound', (req, res) => {
       throw error; // bubble to withDeadLetter so it's persisted
     }
   }); // withDeadLetter fires and returns immediately
+  }
 });
 
 // POST /api/messages/status — Twilio status callback (delivery updates)

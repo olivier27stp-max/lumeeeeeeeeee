@@ -38,6 +38,9 @@ export const PLATFORM_FEATURES: readonly PlatformFeature[] = [
   // avec Lumi (includes_ai), cet interrupteur ne fait qu'ajouter ou retirer
   // la section. Coupé, le briefing est identique au mot près.
   { key: 'recu_lumi', kind: 'module', label: 'Le Reçu (briefing)', description: 'Ajoute « l’argent qui dort » au briefing du matin : devis sans suivi récent et factures échues.' },
+  // Capacités d'automatisation en rodage (server/lib/automations-drapeaux.ts).
+  // Coupé = moteur identique au mot près (filet de régression).
+  { key: 'auto_desabonnement_canal', kind: 'module', label: 'Automatisations : désabonnement par canal', description: 'STOP/REPRENDRE par texto, page de préférences courriel/texto, marketing sauté pour un client désabonné, transactionnel toujours envoyé.' },
   // Champs personnalisés v2 (modèle GoHighLevel) : Réglages → Champs
   // personnalisés, panneaux sur les fiches, cartes et filtres du pipeline.
   // Coupé = aucun écran v2 ; les outils MCP/Lumi et les automatisations

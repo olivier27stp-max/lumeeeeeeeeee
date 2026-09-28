@@ -10,6 +10,7 @@ import { variablesChamps } from '../champs/service';
 import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
 import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
 import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegale } from '../consentement/base-legale';
+import { motifSaut } from '../desabonnement';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -39,6 +40,27 @@ export interface ActionContext {
    * qui ne viennent pas du moteur (un test, un rejeu manuel).
    */
   ruleId?: string;
+  /**
+   * Drapeau `auto_desabonnement_canal` actif pour cette entreprise.
+   *
+   * Change deux choses, et seulement quand il est vrai :
+   *   - `commercial` suit le TYPE de l'envoi (transactionnel / marketing,
+   *     voir `server/lib/desabonnement`) au lieu de « différé = commercial » ;
+   *   - un envoi marketing vers un client désabonné de CE canal est SAUTÉ
+   *     (`success: true, data.saute`) au lieu d'échouer : le parcours
+   *     continue, le motif est dans le journal. Le transactionnel part.
+   */
+  parCanal?: boolean;
+}
+
+/** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
+function saute(motif: string): ActionResult {
+  return { success: true, data: { saute: motif } };
+}
+
+/** Le résultat est-il un vrai envoi (pas un saut) ? */
+export function estEnvoye(r: ActionResult): boolean {
+  return r.success && !(r.data && typeof r.data === 'object' && 'saute' in r.data);
 }
 
 /**
@@ -192,7 +214,7 @@ async function depassePlafondFrequence(
  */
 export type VerdictConsentement =
   | { autorise: true; base?: BaseLegale; clientId?: string }
-  | { autorise: false; motif: string };
+  | { autorise: false; motif: string; desabonne?: boolean };
 
 /**
  * Les dates qui peuvent fonder un tacite, pour un client donné.
@@ -286,9 +308,10 @@ async function consentementCommercial(
         : { autorise: true };
     }
 
-    // Un désabonnement vaut pour tout courriel, y compris transactionnel.
-    if (canal === 'email' && data.email_opt_out_at) {
-      return { autorise: false, motif: 'le client s\'est désabonné des courriels' };
+    // Un désabonnement vaut pour tout courriel, y compris transactionnel —
+    // sauf avec le désabonnement par canal, où il ne coupe que le marketing.
+    if (canal === 'email' && data.email_opt_out_at && !(ctx.parCanal && !ctx.commercial)) {
+      return { autorise: false, motif: 'le client s\'est désabonné des courriels', desabonne: true };
     }
     if (!ctx.commercial) return { autorise: true };
 
@@ -872,7 +895,13 @@ export async function executeSendEmail(
     // le respect de ceux qui s'en sont déjà servis.
     const { isEmailUnsubscribed, getUnsubscribeUrl } = await import('../notificationHelpers');
     if (await isEmailUnsubscribed(ctx.supabase, ctx.orgId, to)) {
-      return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails` };
+      // Désabonnement par canal : le marketing est sauté (le parcours
+      // continue), le transactionnel part quand même.
+      if (ctx.parCanal) {
+        if (ctx.commercial) return saute(motifSaut('courriel'));
+      } else {
+        return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails` };
+      }
     }
 
     // Consentement (F7) : le retrait ci-dessus traite ceux qui se sont
@@ -880,6 +909,7 @@ export async function executeSendEmail(
     // exprès, ou la relation d'affaires elle-même (LCAP).
     const consentement = await consentementCommercial(ctx, 'email', to);
     if (!consentement.autorise) {
+      if (ctx.parCanal && consentement.desabonne) return saute(motifSaut('courriel'));
       return { success: false, error: `Consentement manquant pour ${to} : ${consentement.motif}` };
     }
     // La preuve, pas seulement l'autorisation : le CRTC demande à l'expéditeur
@@ -1034,7 +1064,11 @@ export async function executeSendSms(
     .eq('phone', optOutPhone)
     .maybeSingle();
   if (optOut) {
-    return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)` };
+    // Désabonnement par canal : seul le marketing est sauté. Un texto
+    // transactionnel est tenté — si l'opérateur le bloque (STOP géré par
+    // Twilio, erreur 21610), il est sauté plus bas avec le même motif.
+    if (!ctx.parCanal) return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)` };
+    if (ctx.commercial) return saute(motifSaut('texto'));
   }
 
   // Consentement (F7) : le STOP ci-dessus traite le retrait ; ici on vérifie
@@ -1114,6 +1148,9 @@ export async function executeSendSms(
 
     return { success: true, data: { to, body } };
   } catch (err: any) {
+    // 21610 : le destinataire a répondu STOP au numéro, et Twilio bloque
+    // tout envoi vers lui. Ce n'est pas une panne à reprendre.
+    if (ctx.parCanal && Number(err?.code) === 21610) return saute(`${motifSaut('texto')} — bloqué par l'opérateur`);
     return { success: false, error: err.message };
   }
 }
@@ -1522,7 +1559,13 @@ export async function executeRequestReview(
     ? await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx)
     : { success: false, error: 'Client has no phone number.' };
 
-  const sent = emailResult.success || smsResult.success;
+  // Avec le désabonnement par canal, un canal SAUTÉ n'est pas un envoi.
+  const sent = ctx.parCanal
+    ? estEnvoye(emailResult) || estEnvoye(smsResult)
+    : emailResult.success || smsResult.success;
+  const sautes = [emailResult, smsResult]
+    .map((r) => (r.success && r.data && typeof r.data === 'object' ? (r.data as { saute?: string }).saute : undefined))
+    .filter((m): m is string => !!m);
 
   // 10. Log review request for tracking — c'est aussi ce que lit l'anti-doublon
   // de l'étape 5 : si la ligne n'est pas écrite, la même demande peut repartir.
@@ -1574,6 +1617,12 @@ export async function executeRequestReview(
   });
   if (activityError) {
     console.error(`[actions/request_review] activity_log insert failed (org ${ctx.orgId}, ${ctx.entityType} ${ctx.entityId}):`, activityError.message);
+  }
+
+  // Rien n'est parti parce que le client s'est désabonné de chaque canal
+  // joignable : un saut, pas un échec — le parcours continue.
+  if (!sent && ctx.parCanal && sautes.length > 0) {
+    return saute(sautes.join(' · '));
   }
 
   // L'action ne vaut que par l'envoi : aucun canal parti = échec.
