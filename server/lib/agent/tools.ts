@@ -118,27 +118,33 @@ const searchClients: AgentTool = {
   declaration: {
     name: 'search_clients',
     description:
-      'Search clients by name, company, email, phone or city. Returns total_matching (exact count) and the matching clients with id, contact info and city.',
+      'Search clients by name, company, email, phone, city or tag. Returns total_matching (exact count) and the matching clients with id, contact info and city.',
     parameters: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'Search text. Omit it to count ALL clients (any text filters).' },
+        tag: { type: 'string', description: 'Only clients having this tag (see list_client_tags).' },
         limit: { type: 'integer', description: 'Max results (default 10, max 25).' },
       },
     },
   },
   handler: async (args, ctx) => {
     const limit = clamp(args.limit, 10, 25);
+    const etiquette = String(args.tag || '').trim();
     let q = ctx.client
       .from('clients')
       // `count: 'exact'` : le total RÉEL voyage avec les lignes plafonnées.
       // Sans lui, « combien de clients j'ai ? » recevait 25 fiches et
       // l'assistant répondait « au moins 25, probablement plus » — faux et
       // cher (25 fiches renvoyées au modèle pour un chiffre).
-      .select('id, first_name, last_name, company, email, phone, address, city, status', { count: 'exact' })
+      // Étiquette : jointure INTERNE sur client_tags — seuls les clients qui la portent reviennent.
+      .select(etiquette
+        ? 'id, first_name, last_name, company, email, phone, address, city, status, client_tags!inner(tag)'
+        : 'id, first_name, last_name, company, email, phone, address, city, status', { count: 'exact' })
       .eq('org_id', ctx.orgId)
       .is('deleted_at', null)
       .limit(limit);
+    if (etiquette) q = q.ilike('client_tags.tag', etiquette.replace(/[\\%_]/g, (c) => `\\${c}`));
     const term = String(args.query || '').trim();
     if (term) {
       // Multi-tokens : « Marie Tremblay » cherchait cette chaîne ENTIÈRE dans
@@ -154,9 +160,15 @@ const searchClients: AgentTool = {
     }
     const { data, error, count } = await q;
     if (error) return toolError('db', error);
+    // La sélection dépend du filtre d'étiquette : le typage de supabase-js ne
+    // suit pas une sélection conditionnelle, d'où la forme écrite ici.
+    const lignes = (data ?? []) as unknown as Array<{
+      id: string; first_name: string | null; last_name: string | null; company: string | null;
+      email: string | null; phone: string | null; address: string | null; city: string | null; status: string | null;
+    }>;
     return {
-      ...enTeteListe(count, data),
-      clients: (data || []).map((c) => ({
+      ...enTeteListe(count, lignes),
+      clients: lignes.map((c) => ({
         id: c.id, // interne : pour create_job / create_quote / get_client_profile…
         name: fullName(c),
         company: c.company,

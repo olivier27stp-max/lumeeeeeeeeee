@@ -133,6 +133,9 @@ await ex('update_property', () => S.prop && { property_id: S.prop, name: 'Exec c
 await ex('delete_property', () => S.prop && { property_id: S.prop });
 S.champ = trouver(await lire('list_custom_fields'), null, 'field_id', 'id');
 if (S.champ && S.client) await ex('set_custom_field', { field_id: S.champ, record_id: S.client, value: 'exec' }); else exclu('set_custom_field', 'aucun champ personnalisé dans l’org QA (le constructeur de champs est hors périmètre du mandat)');
+// Étiquettes : posée puis retirée aussitôt (le client QA revient à son état).
+if (S.client) { await ex('add_client_tag', { client_id: S.client, tag: 'QA-exec' }); await ex('remove_client_tag', { client_id: S.client, tag: 'QA-exec' }); }
+else { exclu('add_client_tag', 'aucun client dans l’org QA'); exclu('remove_client_tag', 'aucun client dans l’org QA'); }
 await ex('create_lead', { first_name: 'Exec', last_name: 'Prospect', phone: '514-555-0113' }, (r) => { S.lead = trouver(r, null, 'lead_id', 'id'); });
 await ex('create_lead', { first_name: 'Exec', last_name: 'Prospect2', phone: '514-555-0114' }, (r) => { S.lead2 = trouver(r, null, 'lead_id', 'id'); });
 await ex('create_lead', { first_name: 'Exec', last_name: 'Prospect3', phone: '514-555-0115' }, (r) => { S.lead3 = trouver(r, null, 'lead_id', 'id'); });

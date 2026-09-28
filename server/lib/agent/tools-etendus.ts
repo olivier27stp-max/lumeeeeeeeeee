@@ -1916,7 +1916,7 @@ const getClientProfile: AgentTool = {
     if (error) return erreurOutil('profil', error);
     if (!c) return { error: 'Client introuvable — vérifiez le nom du client.' };
 
-    const [jobsR, facturesR, devisR, convR] = await Promise.all([
+    const [jobsR, facturesR, devisR, convR, etiquettesR] = await Promise.all([
       ctx.client.from('jobs_active')
         .select('job_number, title, scheduled_at, derived_status, status, total_cents', { count: 'exact' })
         .eq('org_id', ctx.orgId).eq('client_id', clientId)
@@ -1932,6 +1932,7 @@ const getClientProfile: AgentTool = {
         .select('last_message_text, last_message_at, unread_count')
         .eq('org_id', ctx.orgId).eq('client_id', clientId)
         .order('last_message_at', { ascending: false }).limit(1).maybeSingle(),
+      ctx.client.from('client_tags').select('tag').eq('client_id', clientId).order('tag'),
     ]);
     for (const r of [jobsR, facturesR, devisR]) if (r.error) return erreurOutil('profil', r.error);
 
@@ -1943,6 +1944,7 @@ const getClientProfile: AgentTool = {
       client: {
         name: nomClient(c), company: c.company, email: c.email, phone: c.phone,
         address: c.address, city: c.city, statut: traduireStatut(c.status, STATUT_CLIENT), since: c.created_at,
+        tags: ((etiquettesR.data ?? []) as Array<{ tag: string }>).map((r) => r.tag),
       },
       jobs: {
         total: jobsR.count ?? 0,

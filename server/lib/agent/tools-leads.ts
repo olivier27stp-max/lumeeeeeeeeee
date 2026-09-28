@@ -28,6 +28,9 @@ import type { AgentTool, ToolContext } from './tools';
 import type { ChampPerso, ObjetChamp, TypeChamp, ValeurChamp } from '../../../src/lib/champs/types';
 import { formaterValeur, lireBooleen } from '../../../src/lib/champs/valeurs';
 import { listerChamps, lireValeursLot, ecrireValeurs } from '../champs/service';
+import { getServiceClient } from '../supabase';
+import { getUserContext, hasPermission } from '../rbac';
+import { annoncerEtiquette } from '../etiquettes';
 import {
   executerIdempotent, champRequis, appelInterne, AppelInterneIncertain,
   traduireStatut, STATUT_LEAD, STATUT_CLIENT,
@@ -978,6 +981,12 @@ const setCustomField: AgentTool = {
       }
       const [r] = await ecrireValeurs(ctx.client, ctx.orgId, col.object_type, recordId,
         [{ field_id: col.id, value: valeur }], { acteur: ctx.userId, source: 'agent' });
+      // Un champ de DEAL se modifie avec le droit du pipeline (« leads.update », celui
+      // de la RLS), pas « clients.update » que vérifie la garde : le refus de la base
+      // devient une phrase, pas une erreur technique.
+      if (!r?.ok && col.object_type === 'deal' && /row-level security|42501|permission/i.test(r?.erreur ?? '')) {
+        throw new Error('Les accès Lume de cette personne ne lui permettent pas de modifier les deals du pipeline (réglage de l’écran des rôles).');
+      }
       // Les refus de validation sont déjà des phrases pour l'humain : on les relaie tels quels.
       if (!r?.ok) throw new Error(r?.erreur ?? `Impossible d’enregistrer « ${col.label} ».`);
       const lue = (await lireValeursLot(ctx.client, ctx.orgId, col.object_type, [recordId], [col]))[recordId]?.[col.id]?.value ?? null;
@@ -1145,6 +1154,132 @@ const deleteDeal: AgentTool = {
    EXPORTS
    ═══════════════════════════════════════════════════════════════ */
 
+/* ── Étiquettes des clients (étape 7 du plan étiquettes + champs) ──
+   Les étiquettes vivent sur le CLIENT (client_tags) ; leur couleur et leur
+   liste officielle, dans Réglages → Étiquettes. Poser ou retirer une
+   étiquette annonce « Étiquette ajoutée / retirée » au moteur
+   d'automatisations, comme depuis la fiche. Créer une étiquette NOUVELLE
+   exige « Réglages » (décision D3) — même règle que le sélecteur. */
+
+/** Le client appartient-il à l'entreprise ? (lecture sous la RLS de la personne) */
+async function clientDeLOrg(ctx: ToolContext, clientId: string): Promise<{ id: string; nom: string }> {
+  const { data, error } = await ctx.client.from('clients').select('id, first_name, last_name, company')
+    .eq('org_id', ctx.orgId).eq('id', clientId).is('deleted_at', null).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Client introuvable — cherche-le d’abord avec search_clients.');
+  const nom = `${data.first_name ?? ''} ${data.last_name ?? ''}`.trim() || data.company || 'le client';
+  return { id: data.id, nom };
+}
+
+/** Les étiquettes de l'entreprise (nom officiel + nombre de clients). */
+async function etiquettesOrg(orgId: string): Promise<Array<{ nom: string; nb_clients: number }>> {
+  const { data, error } = await getServiceClient().rpc('etiquettes_de_l_org', { p_org: orgId });
+  if (error) throw error;
+  return ((data ?? []) as Array<{ nom: string; nb_clients: number | string }>).map((e) => ({ nom: e.nom, nb_clients: Number(e.nb_clients) || 0 }));
+}
+
+const listClientTags: AgentTool = {
+  kind: 'read',
+  declaration: {
+    name: 'list_client_tags',
+    description: "List the company's client tags (name and number of clients having each). With client_id: the tags of that client only. "
+      + 'Tags are labels like « VIP » put on CLIENTS; add/remove → add_client_tag, remove_client_tag; clients having a tag → search_clients with tag.',
+    parameters: {
+      type: 'object',
+      properties: { client_id: { type: 'string', description: 'Optional client id: return only this client’s tags.' } },
+    },
+  },
+  handler: async (args, ctx) => {
+    try {
+      if (args.client_id) {
+        const c = await clientDeLOrg(ctx, String(args.client_id));
+        const { data, error } = await ctx.client.from('client_tags').select('tag').eq('client_id', c.id).order('tag');
+        if (error) throw error;
+        return { client: c.nom, tags: (data ?? []).map((r: { tag: string }) => r.tag) };
+      }
+      const liste = await etiquettesOrg(ctx.orgId);
+      return { total_matching: liste.length, tags: liste.map((e) => ({ name: e.nom, clients: e.nb_clients })) };
+    } catch (err) {
+      return erreurLecture('client_tags', err);
+    }
+  },
+};
+
+const addClientTag: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'add_client_tag',
+    description: 'Put a tag on a client (e.g. « VIP »). Prefer an EXISTING tag name from list_client_tags; creating a brand-new tag requires the Settings permission. '
+      + 'Triggers the company’s « Tag added » automations.',
+    parameters: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string', description: 'Client id (from search_clients).' },
+        tag: { type: 'string', description: 'Tag name, max 60 characters.' },
+      },
+      required: ['client_id', 'tag'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'add_client_tag', args, async () => {
+      const c = await clientDeLOrg(ctx, champRequis(args.client_id, 'Le client'));
+      const demande = champRequis(args.tag, 'L’étiquette').slice(0, 60);
+      // Nom officiel (casse comprise) si l'étiquette existe déjà dans l'entreprise.
+      const existante = (await etiquettesOrg(ctx.orgId)).find((e) => e.nom.toLowerCase() === demande.toLowerCase());
+      if (!existante) {
+        const role = ctx.userId ? await getUserContext(getServiceClient(), ctx.userId, ctx.orgId) : null;
+        if (!role || !hasPermission(role, 'settings.update')) {
+          throw new Error(`L’étiquette « ${demande} » n’existe pas encore, et seules les personnes qui ont accès aux Réglages peuvent en créer une (Réglages → Étiquettes). Propose une étiquette existante.`);
+        }
+      }
+      const tag = existante?.nom ?? demande;
+      const { data: posee, error } = await ctx.client.from('client_tags')
+        .upsert({ client_id: c.id, tag }, { onConflict: 'client_id,tag', ignoreDuplicates: true }).select('tag');
+      if (error) throw error;
+      const nouvelle = (posee ?? []).length > 0;
+      if (nouvelle) {
+        await annoncerEtiquette(getServiceClient(), { orgId: ctx.orgId, clientId: c.id, tag, sens: 'ajoutee', actorId: ctx.userId });
+      }
+      return {
+        updated: nouvelle, client: c.nom, tag,
+        note: nouvelle ? `Étiquette « ${tag} » posée sur ${c.nom}.` : `${c.nom} avait déjà l’étiquette « ${tag} ».`,
+      };
+    }),
+};
+
+const removeClientTag: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'remove_client_tag',
+    description: 'Remove a tag from a client. Triggers the company’s « Tag removed » automations.',
+    parameters: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string', description: 'Client id (from search_clients).' },
+        tag: { type: 'string', description: 'Tag name to remove (as listed by list_client_tags).' },
+      },
+      required: ['client_id', 'tag'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'remove_client_tag', args, async () => {
+      const c = await clientDeLOrg(ctx, champRequis(args.client_id, 'Le client'));
+      const demande = champRequis(args.tag, 'L’étiquette');
+      const { data: actuelles, error: eLire } = await ctx.client.from('client_tags').select('tag').eq('client_id', c.id);
+      if (eLire) throw eLire;
+      const tag = ((actuelles ?? []) as Array<{ tag: string }>).find((r) => r.tag.toLowerCase() === demande.toLowerCase())?.tag;
+      if (!tag) return { updated: false, client: c.nom, note: `${c.nom} n’a pas l’étiquette « ${demande} ».` };
+      const { data: retirees, error } = await ctx.client.from('client_tags').delete().eq('client_id', c.id).eq('tag', tag).select('tag');
+      if (error) throw error;
+      if ((retirees ?? []).length > 0) {
+        await annoncerEtiquette(getServiceClient(), { orgId: ctx.orgId, clientId: c.id, tag, sens: 'retiree', actorId: ctx.userId });
+      }
+      return { updated: true, client: c.nom, tag, note: `Étiquette « ${tag} » retirée de ${c.nom}.` };
+    }),
+};
+
 export const OUTILS_LEADS: AgentTool[] = [
   // Prospects
   createLead, updateLead, updateLeadStatus, deleteLead, convertLeadToJob,
@@ -1158,6 +1293,8 @@ export const OUTILS_LEADS: AgentTool[] = [
   listNotes, updateNote, deleteNote,
   // Champs personnalisés
   listCustomFields, setCustomField,
+  // Étiquettes des clients
+  listClientTags, addClientTag, removeClientTag,
   // Pipeline
   listDeals, updateDealStage, deleteDeal,
 ];
@@ -1178,6 +1315,8 @@ export const REGISTRE_LEADS: Record<string, { sensible: boolean; reversible: boo
   update_note:                { sensible: false, reversible: true,  vers_client: false },
   delete_note:                { sensible: true,  reversible: false, vers_client: false }, // hard delete (pas de deleted_at)
   set_custom_field:           { sensible: false, reversible: true,  vers_client: false },
+  add_client_tag:             { sensible: false, reversible: true,  vers_client: false }, // peut lancer des automatisations
+  remove_client_tag:          { sensible: false, reversible: true,  vers_client: false },
   update_deal_stage:          { sensible: false, reversible: true,  vers_client: false },
   delete_deal:                { sensible: true,  reversible: false, vers_client: false }, // soft delete
 };
@@ -1202,6 +1341,9 @@ export const PERMISSIONS_LEADS: Record<string, { cle: PermissionKey; capacite: s
   delete_note:                { cle: 'jobs.read',      capacite: 'la suppression des notes' },
   list_custom_fields:         { cle: 'clients.read',   capacite: 'la consultation des champs personnalisés' },
   set_custom_field:           { cle: 'clients.update', capacite: 'la saisie des champs personnalisés' },
+  list_client_tags:           { cle: 'clients.read',   capacite: 'la consultation des étiquettes des clients' },
+  add_client_tag:             { cle: 'clients.update', capacite: 'les étiquettes des clients' },
+  remove_client_tag:          { cle: 'clients.update', capacite: 'les étiquettes des clients' },
   list_deals:                 { cle: 'leads.read',     capacite: 'la consultation du pipeline' },
   update_deal_stage:          { cle: 'leads.update',   capacite: 'le déplacement des cartes du pipeline' },
   delete_deal:                { cle: 'leads.delete',   capacite: 'la suppression des cartes du pipeline' },
