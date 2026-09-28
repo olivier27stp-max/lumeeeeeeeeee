@@ -878,6 +878,8 @@ export default function ClientDetails() {
               </span>
             </div>
           </div>
+          {/* Champs rangés dans les sections Coordonnées / Informations du lead du formulaire */}
+          <CustomFieldsPanel objet="client" entityId={id} fr={isFr} sections={['coordonnees', 'lead']} />
         </div>
 
         {/* ──── LEFT COLUMN ──── */}
@@ -891,6 +893,8 @@ export default function ClientDetails() {
               <BillingAddressSection client={client} fr={language === 'fr'} onUpdated={setClient} />
             </div>
           </div>
+          {/* Champs rangés dans la section Adresse de la propriété du formulaire */}
+          <CustomFieldsPanel objet="client" entityId={id} fr={isFr} sections={['adresse']} className="section-card !mt-0 p-5" />
 
           {/* Overview Section with Tabs */}
           <div className="section-card">
@@ -1193,7 +1197,7 @@ export default function ClientDetails() {
           <EventsPanel entityType="client" entityId={id!} />
 
           {/* Champs personnalisés (v2) — rien ne s'affiche sans champ défini. */}
-          <CustomFieldsPanel objet="client" entityId={id} fr={isFr} className="section-card p-4" />
+          <CustomFieldsPanel objet="client" entityId={id} fr={isFr} className="section-card p-4" exclureSections={['coordonnees', 'lead', 'adresse']} />
 
           {/* Notes Section */}
           <div className="section-card">

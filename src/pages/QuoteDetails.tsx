@@ -458,6 +458,7 @@ export default function QuoteDetails() {
             <EmailDeliveryBadge entityType="quote" entityId={quote.id} />
             {/* « Envoyé le … · Vu le … · Lien cliqué » — suivi Resend (plan courriels pro) */}
             <EmailTrackingLine entityType="quote" entityId={quote.id} />
+            <CustomFieldsPanel objet="quote" entityId={quote.id} fr={language === 'fr'} sections={['contact', 'details']} />
           </div>
 
           {/* Plan de service — calendrier des visites (visible aussi par le client) */}
@@ -508,6 +509,7 @@ export default function QuoteDetails() {
             ) : (
               <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{introSection?.content || <span className="text-text-tertiary italic">{language === 'fr' ? "Cliquez sur le crayon pour ajouter une introduction..." : 'Click the pencil to add an introduction...'}</span>}</p>
             )}
+            <CustomFieldsPanel objet="quote" entityId={quote.id} fr={language === 'fr'} sections={['introduction']} />
           </div>
 
           {/* Line Items */}
@@ -619,6 +621,7 @@ export default function QuoteDetails() {
                 </div>
               </>
             )}
+            <CustomFieldsPanel objet="quote" entityId={quote.id} fr={language === 'fr'} sections={['produits', 'resume']} className="px-5 pb-4" />
           </div>
 
           {/* Contract / Disclaimer */}
@@ -633,6 +636,7 @@ export default function QuoteDetails() {
             ) : (
               <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{disclaimerSection?.content || quote.contract_disclaimer || <span className="text-text-tertiary italic">{language === 'fr' ? 'Cliquez sur le crayon pour ajouter des conditions...' : 'Click the pencil to add terms...'}</span>}</p>
             )}
+            <CustomFieldsPanel objet="quote" entityId={quote.id} fr={language === 'fr'} sections={['contrat']} />
           </div>
         </div>
 
@@ -673,6 +677,7 @@ export default function QuoteDetails() {
                 )}
               </>
             )}
+            <CustomFieldsPanel objet="quote" entityId={quote.id} fr={language === 'fr'} sections={['acompte']} />
           </div>
 
           {/* Notes */}
@@ -695,13 +700,15 @@ export default function QuoteDetails() {
                 <p className="text-[12px] text-text-tertiary">{language === 'fr' ? 'Cliquez pour ajouter des notes (visibles sur le devis)' : 'Click to add notes (visible on quote)'}</p>
               </div>
             )}
+            <CustomFieldsPanel objet="quote" entityId={quote.id} fr={language === 'fr'} sections={['notes']} />
           </div>
 
           {/* Specific Notes */}
           <SpecificNotes entityType="quote" entityId={quote.id} mode="full" />
 
           {/* Champs personnalisés (v2) */}
-          <CustomFieldsPanel objet="quote" entityId={quote.id} fr={language === 'fr'} className="section-card p-4" />
+          <CustomFieldsPanel objet="quote" entityId={quote.id} fr={language === 'fr'} className="section-card p-4"
+            exclureSections={['contact', 'details', 'introduction', 'produits', 'resume', 'contrat', 'acompte', 'notes']} />
 
           {/* Quote Preview Button */}
           <div className="section-card p-4">
