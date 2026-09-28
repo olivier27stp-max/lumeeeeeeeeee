@@ -138,6 +138,7 @@ export async function rejouerEvenementsOrphelins(
         metadata: ligne.metadata ?? {},
         outboxId: ligne.id,
         reglesTraitees: [...(ligne.regles_traitees ?? [])],
+        rejoueDepuis: ligne.created_at,
       };
       logger.warn('[outbox] rejeu d\'un événement orphelin', {
         id: ligne.id, orgId: ligne.org_id, type: ligne.type, tentative: ligne.attempts + 1,

@@ -24,6 +24,15 @@ export interface ActionContext {
   twilio: { client: any; phoneNumber: string } | null;
   baseUrl: string;
   /**
+   * Une tentative PRÉCÉDENTE a peut-être déjà envoyé ce message (délai
+   * dépassé, tâche récupérée après un arrêt, événement rejoué par l'outbox).
+   * Avant de renvoyer, on cherche le même message au même destinataire
+   * depuis cette date ; s'il est là, on ne renvoie pas (launch M5).
+   */
+  dejaEnvoyeDepuis?: string;
+  /** Clé d'idempotence du fournisseur de courriel (Resend) : `tâche:étape`. */
+  cleIdempotence?: string;
+  /**
    * true = message COMMERCIAL (relance, suivi, cross-sell — toute action
    * différée). Soumis au plafond de fréquence par destinataire. false/absent
    * = transactionnel (confirmation, reçu, rappel de RDV attendu) : toujours
@@ -106,11 +115,43 @@ export type CodeSaut =
   | 'sans_consentement'
   | 'adresse_injoignable'
   | 'date_absente'
-  | 'desabonne';
+  | 'desabonne'
+  | 'deja_envoye';
 
 /** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
 function saute(motif: string, code: CodeSaut = 'desabonne'): ActionResult {
   return { success: true, data: { saute: motif, saute_code: code } };
+}
+
+const DEJA_ENVOYE = 'Déjà envoyé lors d’une tentative précédente';
+
+/**
+ * Le même message est-il déjà parti vers ce destinataire depuis `depuis` ?
+ *
+ * Launch M5 : une action coupée à 5 s, une tâche récupérée après un arrêt
+ * brutal ou un événement rejoué par l'outbox repassaient par l'envoi — et le
+ * client recevait deux fois le même texto. `null` = impossible de le savoir
+ * (lecture ratée) : l'appelant échoue en reprise plutôt que de risquer un
+ * doublon.
+ */
+async function dejaEnvoye(
+  ctx: ActionContext,
+  canal: 'sms' | 'email',
+  cle: { destinataire: string; texte: string },
+): Promise<boolean | null> {
+  if (!ctx.dejaEnvoyeDepuis) return false;
+  const requete = canal === 'sms'
+    ? ctx.supabase.from('messages').select('id')
+      .eq('org_id', ctx.orgId).eq('direction', 'outbound')
+      .eq('phone_number', normalizeE164(cle.destinataire)).eq('message_text', cle.texte)
+    : ctx.supabase.from('email_deliveries').select('id')
+      .eq('org_id', ctx.orgId).eq('to_email', cle.destinataire).eq('subject', cle.texte.slice(0, 500));
+  const { data, error } = await requete.gte('created_at', ctx.dejaEnvoyeDepuis).limit(1);
+  if (error) {
+    console.error(`[actions] vérification « déjà envoyé » impossible (${canal}, org ${ctx.orgId}):`, error.message);
+    return null;
+  }
+  return (data?.length ?? 0) > 0;
 }
 
 /** Le résultat est-il un vrai envoi (pas un saut) ? */
@@ -1159,11 +1200,16 @@ export async function executeSendEmail(
       ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${apercuTexte.replace(/[<>]/g, '')}</div>`
       : '';
 
+    const dejaParti = await dejaEnvoye(ctx, 'email', { destinataire: to, texte: subject });
+    if (dejaParti === null) return { success: false, error: 'Vérification « déjà envoyé » impossible — envoi reporté' };
+    if (dejaParti) return saute(DEJA_ENVOYE, 'deja_envoye');
+
     const result = await sendEmail({
       ...expediteur,
       to,
       subject,
       html: buildEmailLayout(company, apercu + body + pied, bouton),
+      ...(ctx.cleIdempotence ? { cleIdempotence: ctx.cleIdempotence } : {}),
       /* Sans `suivi`, la ligne `email_deliveries` part sans entity_type, et la
          fonction de suivi en base REFUSE alors d'enregistrer l'ouverture
          (`and d.entity_type is not null`, exclusion Loi 25 des courriels de
@@ -1279,6 +1325,10 @@ export async function executeSendSms(
     const orgGelee = await destinataireGele(getServiceClient(), { phone: to }, ctx.orgId);
     if (orgGelee) { journaliserBlocage('sms', orgGelee, to, 'automatisation'); return { success: false, error: MESSAGE_GEL }; }
   }
+  const dejaParti = await dejaEnvoye(ctx, 'sms', { destinataire: to, texte: body });
+  if (dejaParti === null) return { success: false, error: 'Vérification « déjà envoyé » impossible — envoi reporté' };
+  if (dejaParti) return saute(DEJA_ENVOYE, 'deja_envoye');
+
   try {
     const { getTwilioStatusCallbackUrl } = await import('../config');
     const statusCallback = getTwilioStatusCallbackUrl();
