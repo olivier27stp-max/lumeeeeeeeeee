@@ -92,6 +92,7 @@ import { OngletJournaux, OngletHistorique } from '../components/automations/Ongl
 import OngletReglages, { type ReglagesAutomatisation } from '../components/automations/OngletReglages';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { creerFileBascule } from '../lib/fileBascule';
+import { captureClientException } from '../lib/sentry';
 
 type Onglet = 'parcours' | 'reglages' | 'historique' | 'journaux';
 
@@ -528,8 +529,21 @@ export default function AutomationBuilderPage() {
       if (propose.trigger_event && regle) {
         // Mise à jour FONCTIONNELLE : `regle` ici date d'avant la création
         // du brouillon, et l'écraser remettrait un id vide.
+        const declencheurEnBase = regle.trigger_event;
         setRegle((r) => (r ? { ...r, trigger_event: propose.trigger_event } : r));
-        ecrire({ trigger_event: propose.trigger_event }).catch(() => {});
+        /*
+         * L'échec était AVALÉ (`.catch(() => {})`, audit 2026-09-28) :
+         * l'écran montrait le déclencheur de Lumi, la base gardait l'ancien.
+         * On le dit, et l'écran revient à ce que la base contient.
+         */
+        ecrire({ trigger_event: propose.trigger_event }).catch((e: unknown) => {
+          console.error('[builder] déclencheur proposé par Lumi non enregistré', e);
+          captureClientException(e, { where: 'AutomationBuilderPage.construireAvecLumi' });
+          setRegle((r) => (r ? { ...r, trigger_event: declencheurEnBase } : r));
+          toast.error(fr
+            ? `Le déclencheur proposé par Lumi n’a pas pu être enregistré : ${e instanceof Error ? e.message : String(e)}`
+            : `Lumi’s trigger could not be saved: ${e instanceof Error ? e.message : String(e)}`);
+        });
       }
       // La conversation se poursuit : le tour suivant saura ce qui
       // vient d'être demandé et ce que Lumi a répondu.

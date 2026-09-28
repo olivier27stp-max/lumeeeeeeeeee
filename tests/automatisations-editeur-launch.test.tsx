@@ -224,3 +224,34 @@ describe('statistiques — onglet « Statistiques » d’une étape', () => {
     expect(texte).toMatch(/En attente\s*4/);
   });
 });
+
+// ─── Bloc 5 : l'écriture du déclencheur proposé par Lumi ────────
+
+/** Changer la valeur d'un champ comme l'utilisateur (setter natif). */
+function saisir(el: Element | null | undefined, v: string) {
+  if (!el) throw new Error('champ introuvable');
+  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(el, v);
+  act(() => { el.dispatchEvent(new Event('input', { bubbles: true })); });
+}
+
+describe('déclencheur proposé par Lumi : un échec d’écriture n’est plus avalé', () => {
+  it('le dit, et l’écran revient au déclencheur enregistré en base', async () => {
+    api.generer.mockImplementation(async () => ({
+      steps: [{ id: 'e1', type: 'action', nom: null, action: { type: 'send_sms', config: { body: 'Bonjour' } }, suivant: null }],
+      nom: 'Relance facture', trigger_event: 'invoice.sent', resume: 'Relance après la facture.',
+    }));
+    api.modifier.mockImplementation(async (id: string, patch: any) => {
+      if (patch.trigger_event) throw new Error('Votre rôle ne permet pas de modifier une automatisation.');
+      return { ...regle({ id }), ...patch };
+    });
+    await ouvrir(`/automations/${ID}`);
+    saisir(container.querySelector('textarea'), 'Relance mes factures envoyées après trois jours');
+    cliquer(bouton('Construire'));
+    await attendre(10);
+    expect(toasts.erreur.join('\n')).toContain('Le déclencheur proposé par Lumi n’a pas pu être enregistré');
+    // Le catalogue du test est vide : le libellé affiché est la clé brute.
+    expect(container.textContent).toContain('quote.sent');
+    expect(container.textContent).not.toContain('invoice.sent');
+  });
+});
