@@ -77,7 +77,7 @@ export function monde(regle: Regle & { id: string }, surcharges: Record<string, 
     schedule_events: { data: [{ id: IDS.visite, org_id: ORG, job_id: IDS.job, start_at: '2026-09-25T13:00:00Z', end_at: '2026-09-25T14:00:00Z', status: 'scheduled', deleted_at: null, job: { id: IDS.job, title: 'Nettoyage de gouttières', property_address: '412 rue des Érables, Longueuil', client_id: IDS.client, client_name: 'Marie Tremblay', clients: CLIENT } }] },
     quotes: { data: [{ id: IDS.devis, org_id: ORG, quote_number: 'Q-2026-042', total_cents: 162690, currency: 'CAD', valid_until: '2026-09-30', client_id: IDS.client, lead_id: null, job_id: IDS.job, status: 'sent', deleted_at: null, created_at: VEILLE, view_token: 'bbbbbbbb-0000-4000-8000-000000000001' }] },
     invoices: { data: [{ id: IDS.facture, org_id: ORG, invoice_number: 'INV-000042', due_date: '2026-09-01', total_cents: 162690, balance_cents: 162690, client_id: IDS.client, job_id: IDS.job, status: 'sent', created_at: VEILLE, deleted_at: null, view_token: 'bbbbbbbb-0000-4000-8000-000000000002', public_token: null }] },
-    deals: { data: [{ id: IDS.deal, org_id: ORG, client_id: IDS.client, pipeline_id: IDS.pipeline, stage_id: IDS.etape, title: 'Gouttières Tremblay', value_cents: 162690, source: 'site_web', owner_id: null, deleted_at: null, stage_entered_at: VEILLE }] },
+    deals: { data: [{ id: IDS.deal, org_id: ORG, client_id: IDS.client, pipeline_id: IDS.pipeline, stage_id: IDS.etape, title: 'Gouttières Tremblay', value_cents: 162690, source: 'site_web', owner_id: null, deleted_at: null, stage_entered_at: VEILLE, client: CLIENT, etape: { name_fr: 'Nouveau', name_en: 'New', kind: 'open' } }] },
     pipeline_stages: { data: [{ id: IDS.etape, org_id: ORG, pipeline_id: IDS.pipeline, name: 'Nouveau', slug: 'nouveau', position: 0 }, { id: IDS.etape2, org_id: ORG, pipeline_id: IDS.pipeline, name: 'Soumission', slug: 'soumission', position: 1 }] },
     job_agreements: { data: [] },
     memberships: { data: [{ user_id: IDS.owner, org_id: ORG, role: 'owner', status: 'active' }] },
@@ -333,7 +333,10 @@ export async function jouer(
         },
       };
       const { client: c2, journal: j2 } = clientEnregistreur({
-        ...monde(regle, { ...surcharges, ...surchargesFile }),
+        // « Pendant l'attente » : seulement pour une tâche qui part APRÈS
+        // l'événement. La 1re étape d'une séquence passe par la file mais part
+        // tout de suite — l'état n'a pas encore eu le temps de changer.
+        ...monde(regle, { ...surcharges, ...(new Date(echeance).getTime() > new Date(HORLOGE).getTime() ? surchargesFile : {}) }),
         automation_scheduled_tasks: (req) => {
           if (req.op === 'select') return { data: req.filtres.some(([, col, val]) => col === 'status' && val === 'pending') ? [tache] : [] };
           if (req.op === 'insert') return { data: [{ id: 'tache-suivante' }] };

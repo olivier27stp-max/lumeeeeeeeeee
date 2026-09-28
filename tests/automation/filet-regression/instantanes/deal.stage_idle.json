@@ -24,6 +24,22 @@
    },
    {
     "moment": "immediat",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "deal",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000007",
+     "event_type": "email_sent",
+     "metadata": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Un message de Plomberie Tremblay inc.",
+      "source": "automation"
+     }
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "automation_execution_logs",
     "op": "insert",
     "valeur": {
@@ -37,14 +53,26 @@
       "subject": "Un message de [company_name]",
       "body": "Bonjour [client_name],\n\nMerci de faire affaire avec [company_name].\n\nAu plaisir,\n[company_name]"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "No recipient email",
+     "result_success": true,
+     "result_data": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Un message de Plomberie Tremblay inc."
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    }
   ],
-  "envois": [],
+  "envois": [
+   {
+    "moment": "immediat",
+    "canal": "courriel",
+    "to": "marie.tremblay@example.test",
+    "subject": "Un message de Plomberie Tremblay inc.",
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "6d46883e6314fa8c"
+   }
+  ],
   "annulees": []
  },
  "send_email@86400": {
@@ -125,6 +153,46 @@
    },
    {
     "moment": "differe:send_email",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "email-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_email",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
+    }
+   },
+   {
+    "moment": "differe:send_email",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "deal",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000007",
+     "event_type": "email_sent",
+     "metadata": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Un message de Plomberie Tremblay inc.",
+      "source": "automation"
+     }
+    }
+   },
+   {
+    "moment": "differe:send_email",
     "table": "automation_execution_logs",
     "op": "insert",
     "valeur": {
@@ -139,9 +207,12 @@
       "subject": "Un message de [company_name]",
       "body": "Bonjour [client_name],\n\nMerci de faire affaire avec [company_name].\n\nAu plaisir,\n[company_name]"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "No recipient email",
+     "result_success": true,
+     "result_data": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Un message de Plomberie Tremblay inc."
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    },
@@ -157,25 +228,22 @@
      ]
     ],
     "valeur": {
-     "status": "failed",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "No recipient email"
-    }
-   },
-   {
-    "moment": "differe:send_email",
-    "table": "notifications",
-    "op": "insert",
-    "valeur": {
-     "org_id": "11111111-1111-4111-8111-111111111111",
-     "type": "automation_failed",
-     "title": "Échec d'envoi — regle-deal.stage_idle-send_email-86400",
-     "body": "Le courriel n'est pas parti et ne partira pas : ce client n'a pas d'adresse courriel.",
-     "reference_id": "tache-1"
+     "last_error": null
     }
    }
   ],
-  "envois": [],
+  "envois": [
+   {
+    "moment": "differe:send_email",
+    "canal": "courriel",
+    "to": "marie.tremblay@example.test",
+    "subject": "Un message de Plomberie Tremblay inc.",
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "6d46883e6314fa8c"
+   }
+  ],
   "annulees": []
  },
  "send_sms@0": {
@@ -202,6 +270,21 @@
    },
    {
     "moment": "immediat",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "automation_execution_logs",
     "op": "insert",
     "valeur": {
@@ -214,14 +297,24 @@
      "action_config": {
       "body": "Bonjour [client_name], c’est [company_name]. Merci !"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "No recipient phone",
+     "result_success": true,
+     "result_data": {
+      "to": "+15145550142",
+      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    }
   ],
-  "envois": [],
+  "envois": [
+   {
+    "moment": "immediat",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+   }
+  ],
   "annulees": []
  },
  "send_sms@86400": {
@@ -302,6 +395,35 @@
    },
    {
     "moment": "differe:send_sms",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "differe:send_sms",
     "table": "automation_execution_logs",
     "op": "insert",
     "valeur": {
@@ -315,9 +437,12 @@
      "action_config": {
       "body": "Bonjour [client_name], c’est [company_name]. Merci !"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "No recipient phone",
+     "result_success": true,
+     "result_data": {
+      "to": "+15145550142",
+      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    },
@@ -333,25 +458,20 @@
      ]
     ],
     "valeur": {
-     "status": "failed",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "No recipient phone"
-    }
-   },
-   {
-    "moment": "differe:send_sms",
-    "table": "notifications",
-    "op": "insert",
-    "valeur": {
-     "org_id": "11111111-1111-4111-8111-111111111111",
-     "type": "automation_failed",
-     "title": "Échec d'envoi — regle-deal.stage_idle-send_sms-86400",
-     "body": "Le texto n'est pas parti et ne partira pas : ce client n'a pas de numéro de téléphone.",
-     "reference_id": "tache-1"
+     "last_error": null
     }
    }
   ],
-  "envois": [],
+  "envois": [
+   {
+    "moment": "differe:send_sms",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+   }
+  ],
   "annulees": []
  },
  "create_notification@0": {
@@ -521,6 +641,81 @@
    },
    {
     "moment": "immediat",
+    "table": "satisfaction_surveys",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": null,
+     "job_id": null,
+     "token": "<jeton>"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "deal",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000007",
+     "event_type": "email_sent",
+     "metadata": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+      "source": "automation"
+     }
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "review_requests",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": null,
+     "job_id": null,
+     "survey_id": "sondage-1",
+     "subject_sent": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+     "status": "sent",
+     "sent_at": "2026-09-13T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "deal",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000007",
+     "related_entity_type": "client",
+     "related_entity_id": null,
+     "event_type": "review_requested",
+     "metadata": {
+      "client_name": "Marie",
+      "survey_token": "<jeton>",
+      "email_sent": true,
+      "sms_sent": true
+     }
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "automation_execution_logs",
     "op": "insert",
     "valeur": {
@@ -533,14 +728,34 @@
      "action_config": {
       "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "Client has no email address or phone number.",
+     "result_success": true,
+     "result_data": {
+      "token": "<jeton>",
+      "surveyUrl": "https://app.lume.test/survey/<jeton>",
+      "emailSent": true,
+      "smsSent": true
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    }
   ],
-  "envois": [],
+  "envois": [
+   {
+    "moment": "immediat",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>"
+   },
+   {
+    "moment": "immediat",
+    "canal": "courriel",
+    "to": "marie.tremblay@example.test",
+    "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer votre projet et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "182a0cb16e0ff715"
+   }
+  ],
   "annulees": []
  },
  "request_review@86400": {
@@ -621,6 +836,119 @@
    },
    {
     "moment": "differe:request_review",
+    "table": "satisfaction_surveys",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": null,
+     "job_id": null,
+     "token": "<jeton>"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "email-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "deal",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000007",
+     "event_type": "email_sent",
+     "metadata": {
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+      "source": "automation"
+     }
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "review_requests",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": null,
+     "job_id": null,
+     "survey_id": "sondage-1",
+     "subject_sent": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+     "status": "sent",
+     "sent_at": "2026-09-14T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "activity_log",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "entity_type": "deal",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000007",
+     "related_entity_type": "client",
+     "related_entity_id": null,
+     "event_type": "review_requested",
+     "metadata": {
+      "client_name": "Marie",
+      "survey_token": "<jeton>",
+      "email_sent": true,
+      "sms_sent": true
+     }
+    }
+   },
+   {
+    "moment": "differe:request_review",
     "table": "automation_execution_logs",
     "op": "insert",
     "valeur": {
@@ -634,9 +962,14 @@
      "action_config": {
       "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "Client has no email address or phone number.",
+     "result_success": true,
+     "result_data": {
+      "token": "<jeton>",
+      "surveyUrl": "https://app.lume.test/survey/<jeton>",
+      "emailSent": true,
+      "smsSent": true
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    },
@@ -652,13 +985,28 @@
      ]
     ],
     "valeur": {
-     "status": "pending",
-     "execute_at": "2026-09-14T15:05:00.000Z",
-     "last_error": "Client has no email address or phone number. — reprise 1/4 dans 5 min"
+     "status": "completed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": null
     }
    }
   ],
-  "envois": [],
+  "envois": [
+   {
+    "moment": "differe:request_review",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>"
+   },
+   {
+    "moment": "differe:request_review",
+    "canal": "courriel",
+    "to": "marie.tremblay@example.test",
+    "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer votre projet et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "182a0cb16e0ff715"
+   }
+  ],
   "annulees": []
  },
  "envoyer_slack@0": {
@@ -699,7 +1047,7 @@
      },
      "result_success": true,
      "result_data": {
-      "longueur": 15
+      "longueur": 30
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -710,7 +1058,7 @@
    {
     "moment": "immediat",
     "canal": "slack",
-    "texte": "{\"canal\":{\"channel\":\"C_FILET\",\"text\":\"— suivi a faire\"}}"
+    "texte": "{\"canal\":{\"channel\":\"C_FILET\",\"text\":\"Marie Tremblay — suivi a faire\"}}"
    }
   ],
   "annulees": []
@@ -808,7 +1156,7 @@
      },
      "result_success": true,
      "result_data": {
-      "longueur": 15
+      "longueur": 30
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -836,7 +1184,7 @@
    {
     "moment": "differe:envoyer_slack",
     "canal": "slack",
-    "texte": "{\"canal\":{\"channel\":\"C_FILET\",\"text\":\"— suivi a faire\"}}"
+    "texte": "{\"canal\":{\"channel\":\"C_FILET\",\"text\":\"Marie Tremblay — suivi a faire\"}}"
    }
   ],
   "annulees": []
@@ -1680,7 +2028,7 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "content": "Note automatique pour .",
+     "content": "Note automatique pour Marie Tremblay.",
      "entity_type": "client",
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001"
     }
@@ -1701,7 +2049,7 @@
      },
      "result_success": true,
      "result_data": {
-      "longueur": 23
+      "longueur": 37
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -1793,7 +2141,7 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "content": "Note automatique pour .",
+     "content": "Note automatique pour Marie Tremblay.",
      "entity_type": "client",
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001"
     }
@@ -1815,7 +2163,7 @@
      },
      "result_success": true,
      "result_data": {
-      "longueur": 23
+      "longueur": 37
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -1870,7 +2218,7 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "title": "Rappeler ",
+     "title": "Rappeler Marie Tremblay",
      "description": null,
      "status": "open",
      "priority": "medium",
@@ -1897,7 +2245,7 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Rappeler "
+      "title": "Rappeler Marie Tremblay"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -1989,7 +2337,7 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "title": "Rappeler ",
+     "title": "Rappeler Marie Tremblay",
      "description": null,
      "status": "open",
      "priority": "medium",
@@ -2017,7 +2365,7 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Rappeler "
+      "title": "Rappeler Marie Tremblay"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -2720,7 +3068,7 @@
     "moment": "immediat",
     "canal": "webhook",
     "to": "https://hooks.example.test/lume",
-    "texte": "{\"org_id\":\"11111111-1111-4111-8111-111111111111\",\"entity_type\":\"deal\",\"entity_id\":\"aaaaaaaa-0000-4000-8000-000000000007\",\"data\":{\"company_name\":\"Plomberie Tremblay inc.\",\"company_phone\":\"+14505550199\",\"google_review_url\":\"https://g.page/r/plomberie-tremblay/review\",\"facebook_review_url\":\"\",\"review_page_url\":\"https://g.page/r/plomberie-tremblay/review\",\"deal_stage\":\"\",\"deal_stage_en\":\"\",\"deal_source\":\"site_web\",\"deal_jours_dans_etape\":\"1\"},\"sent_at\":\"2026-09-13T15:00:00.000Z\"}"
+    "texte": "{\"org_id\":\"11111111-1111-4111-8111-111111111111\",\"entity_type\":\"deal\",\"entity_id\":\"aaaaaaaa-0000-4000-8000-000000000007\",\"data\":{\"company_name\":\"Plomberie Tremblay inc.\",\"company_phone\":\"+14505550199\",\"google_review_url\":\"https://g.page/r/plomberie-tremblay/review\",\"facebook_review_url\":\"\",\"review_page_url\":\"https://g.page/r/plomberie-tremblay/review\",\"client_first_name\":\"Marie\",\"client_last_name\":\"Tremblay\",\"client_name\":\"Marie Tremblay\",\"client_email\":\"marie.tremblay@example.test\",\"client_phone\":\"+15145550142\",\"deal_stage\":\"Nouveau\",\"deal_stage_en\":\"New\",\"deal_source\":\"site_web\",\"deal_jours_dans_etape\":\"1\"},\"sent_at\":\"2026-09-13T15:00:00.000Z\"}"
    }
   ],
   "annulees": []
@@ -2847,7 +3195,7 @@
     "moment": "differe:webhook",
     "canal": "webhook",
     "to": "https://hooks.example.test/lume",
-    "texte": "{\"org_id\":\"11111111-1111-4111-8111-111111111111\",\"entity_type\":\"deal\",\"entity_id\":\"aaaaaaaa-0000-4000-8000-000000000007\",\"data\":{\"company_name\":\"Plomberie Tremblay inc.\",\"company_phone\":\"+14505550199\",\"google_review_url\":\"https://g.page/r/plomberie-tremblay/review\",\"facebook_review_url\":\"\",\"review_page_url\":\"https://g.page/r/plomberie-tremblay/review\",\"deal_stage\":\"\",\"deal_stage_en\":\"\",\"deal_source\":\"site_web\",\"deal_jours_dans_etape\":\"2\"},\"sent_at\":\"2026-09-14T15:00:00.000Z\"}"
+    "texte": "{\"org_id\":\"11111111-1111-4111-8111-111111111111\",\"entity_type\":\"deal\",\"entity_id\":\"aaaaaaaa-0000-4000-8000-000000000007\",\"data\":{\"company_name\":\"Plomberie Tremblay inc.\",\"company_phone\":\"+14505550199\",\"google_review_url\":\"https://g.page/r/plomberie-tremblay/review\",\"facebook_review_url\":\"\",\"review_page_url\":\"https://g.page/r/plomberie-tremblay/review\",\"client_first_name\":\"Marie\",\"client_last_name\":\"Tremblay\",\"client_name\":\"Marie Tremblay\",\"client_email\":\"marie.tremblay@example.test\",\"client_phone\":\"+15145550142\",\"deal_stage\":\"Nouveau\",\"deal_stage_en\":\"New\",\"deal_source\":\"site_web\",\"deal_jours_dans_etape\":\"2\"},\"sent_at\":\"2026-09-14T15:00:00.000Z\"}"
    }
   ],
   "annulees": []
@@ -8797,7 +9145,7 @@
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
      "type": "automation",
-     "title": "Suivi a faire pour ",
+     "title": "Suivi a faire pour Marie Tremblay",
      "body": "Suivi du parcours",
      "reference_id": "aaaaaaaa-0000-4000-8000-000000000007"
     }
@@ -8820,7 +9168,7 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Suivi a faire pour "
+      "title": "Suivi a faire pour Marie Tremblay"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -8921,6 +9269,35 @@
    },
    {
     "moment": "differe:send_sms#e3",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
+    "table": "messages",
+    "op": "insert",
+    "valeur": {
+     "conversation_id": "conv-1",
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "phone_number": "+15145550142",
+     "direction": "outbound",
+     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !",
+     "status": "sent",
+     "provider_message_id": "SM_filet"
+    }
+   },
+   {
+    "moment": "differe:send_sms#e3",
     "table": "automation_execution_logs",
     "op": "insert",
     "valeur": {
@@ -8934,9 +9311,12 @@
      "action_config": {
       "body": "Bonjour [client_name], c’est [company_name]. Merci !"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "No recipient phone",
+     "result_success": true,
+     "result_data": {
+      "to": "+15145550142",
+      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    },
@@ -8952,25 +9332,20 @@
      ]
     ],
     "valeur": {
-     "status": "failed",
+     "status": "completed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": "No recipient phone"
-    }
-   },
-   {
-    "moment": "differe:send_sms#e3",
-    "table": "notifications",
-    "op": "insert",
-    "valeur": {
-     "org_id": "11111111-1111-4111-8111-111111111111",
-     "type": "automation_failed",
-     "title": "Échec d'envoi — regle-deal.stage_idle-sequence",
-     "body": "Le texto n'est pas parti et ne partira pas : ce client n'a pas de numéro de téléphone.",
-     "reference_id": "tache-2"
+     "last_error": null
     }
    }
   ],
-  "envois": [],
+  "envois": [
+   {
+    "moment": "differe:send_sms#e3",
+    "canal": "sms",
+    "to": "+15145550142",
+    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !"
+   }
+  ],
   "annulees": []
  }
 }
