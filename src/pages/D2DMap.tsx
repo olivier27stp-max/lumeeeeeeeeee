@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { MapContainer } from '../components/map-d2d/map-container';
 import type { LeadPinData, PinStatus } from '../components/map-d2d/lead-pin';
 import { pinToJobDraft, pinToQuoteLead } from '../components/map-d2d/pin-crm-actions';
@@ -50,8 +50,8 @@ function apiPinToLeadPin(pin: FieldPinLight): LeadPinData {
     lng: pin.lng,
     status: STATUS_MAP[pin.status] || 'other',
     name: pin.customer_name || pin.address || 'Pin',
-    phone: '',
-    email: '',
+    phone: pin.customer_phone || '',
+    email: pin.customer_email || '',
     address: pin.address || `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`,
     note: pin.note_preview || '',
     client_id: pin.client_id ?? null,
@@ -116,6 +116,10 @@ export default function D2DMap() {
   // Local link updates pushed into MapContainer (so popup shows "Job liée" right away)
   const [pinLinkUpdates, setPinLinkUpdates] = useState<Record<string, { job_id?: string; quote_id?: string; client_id?: string; lead_id?: string }>>({});
 
+  // Note connue de chaque pin : « Modifier le pin » n'envoie la note que si
+  // elle a changé (sinon chaque changement de statut la dupliquerait).
+  const notesConnues = useRef(new Map<string, string>());
+
   // Load pins from API on mount
   useEffect(() => {
     async function load() {
@@ -125,6 +129,7 @@ export default function D2DMap() {
         const leadPins = pins.map((p) => {
           const lp = apiPinToLeadPin(p);
           map.set(lp.id, p.house_id);
+          notesConnues.current.set(lp.id, (lp.note || '').trim());
           return lp;
         });
         setPinHouseMap(map);
@@ -192,10 +197,14 @@ export default function D2DMap() {
       return;
     }
     try {
+      const note = (pin.note || '').trim();
+      const noteChangee = !!note && note !== notesConnues.current.get(pin.id);
       await updateHouse(houseId, {
         current_status: (REVERSE_STATUS_MAP[pin.status] || 'unknown') as any,
         metadata: { customer_name: pin.name, customer_phone: pin.phone, customer_email: pin.email },
+        ...(noteChangee ? { note_text: note } : {}),
       });
+      if (noteChangee) notesConnues.current.set(pin.id, note);
     } catch (err: any) {
       console.error('[D2DMap] Failed to update pin:', err?.message);
     }

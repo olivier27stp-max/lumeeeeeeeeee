@@ -132,6 +132,8 @@ export interface FieldPinLight {
   pin_color: string;
   note_preview?: string | null;
   customer_name?: string | null;
+  customer_phone?: string | null;
+  customer_email?: string | null;
   address?: string | null;
   assigned_user_id?: string | null;
   /** « Placé par » — nom + avatar du rep assigné, résolus côté serveur */
@@ -281,6 +283,8 @@ export interface UpdateHousePayload {
   territory_id?: string;
   assigned_user_id?: string;
   metadata?: Record<string, unknown>;
+  /** Note saisie dans « Modifier le pin » : enregistrée comme événement de la maison. */
+  note_text?: string;
 }
 
 export async function updateHouse(id: string, payload: UpdateHousePayload): Promise<FieldHouse> {

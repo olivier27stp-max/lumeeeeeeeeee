@@ -1060,6 +1060,17 @@ export async function createJob(payload: {
     });
     if (finErr) throw finErr;
 
+    // « Me rappeler de facturer » / « Diviser en plusieurs factures » : la RPC de
+    // création ne les accepte pas — à la création, les cases du formulaire
+    // n'avaient aucun effet (audit 2026-09-28, D7). La modification les écrit déjà.
+    if (payload.requires_invoicing !== undefined || payload.billing_split !== undefined) {
+      const drapeaux: Record<string, boolean> = {};
+      if (payload.requires_invoicing !== undefined) drapeaux.requires_invoicing = payload.requires_invoicing;
+      if (payload.billing_split !== undefined) drapeaux.billing_split = payload.billing_split;
+      const { error: drErr } = await supabase.from('jobs').update(drapeaux).eq('id', data.id).eq('org_id', orgId);
+      if (drErr) throw drErr;
+    }
+
     // Persist deposit settings if provided
     if (payload.deposit_required !== undefined) {
       const depositCents = payload.deposit_type === 'percentage'

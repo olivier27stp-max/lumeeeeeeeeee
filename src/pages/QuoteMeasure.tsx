@@ -1010,6 +1010,9 @@ export default function QuoteMeasure() {
         source_service_id: li.source_service_id, name: li.name, description: li.description,
         quantity: li.quantity, unit_price_cents: li.unit_price_cents, sort_order: i,
         is_optional: li.is_optional, item_type: li.item_type, image_url: li.image_url,
+        // Les lignes sont supprimées puis réinsérées : sans ces deux champs, leur
+        // rabais disparaissait (audit 2026-09-28, D8).
+        discount_type: li.discount_type ?? null, discount_value: li.discount_value ?? 0,
       }));
       const items = buildMeasureItems(existing.length);
       await saveQuoteLineItems(quoteId, [...existing, ...items]);

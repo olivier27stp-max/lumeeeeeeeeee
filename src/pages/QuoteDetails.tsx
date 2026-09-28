@@ -219,7 +219,30 @@ export default function QuoteDetails() {
             item_type: 'service' as const,
           }));
         if (items.length === 0) { toast.error(language === 'fr' ? 'Au moins un item requis' : 'At least one line item required'); return; }
-        await saveQuoteLineItems(quote.id, items);
+        // saveQuoteLineItems remplace TOUTES les lignes : on remet les lignes texte /
+        // titre (non éditées ici) à leur place, et l'image des lignes modifiées —
+        // elles étaient perdues (audit 2026-09-28, D8).
+        const editees = [...items];
+        const imageDe = new Map(line_items.map((l) => [l.id, l.image_url ?? null]));
+        const idsEdites = editLineItems.map((e) => e.id);
+        const toutes: typeof items = [];
+        for (const l of line_items) {
+          if (l.item_type !== 'service') {
+            toutes.push({
+              source_service_id: l.source_service_id ?? null, name: l.name, description: l.description ?? null,
+              quantity: l.quantity, unit_price_cents: l.unit_price_cents, discount_type: l.discount_type ?? null,
+              discount_value: l.discount_value ?? 0, sort_order: 0, is_optional: l.is_optional,
+              item_type: l.item_type, image_url: l.image_url ?? null,
+            } as (typeof items)[number]);
+          } else if (editees.length) {
+            toutes.push(editees.shift()!);
+          }
+        }
+        toutes.push(...editees);
+        await saveQuoteLineItems(quote.id, toutes.map((l, idx) => ({
+          ...l, sort_order: idx,
+          image_url: (l as { image_url?: string | null }).image_url ?? imageDe.get(idsEdites[items.indexOf(l)] ?? '') ?? null,
+        })));
       }
       toast.success(t.quoteDetails.saved);
       setEditing(null);
