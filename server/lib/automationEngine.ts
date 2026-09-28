@@ -24,6 +24,7 @@ import {
   etapeSuivante,
   premiereEtape,
   premiereEtapeSansConfirmation,
+  etapesDeConfirmation,
   echeanceAvantDate,
 } from './automationSequences';
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
@@ -623,8 +624,12 @@ async function executeRuleActions(
         automation_rule_id: rule.id,
         entity_type: event.entityType,
         entity_id: event.entityId,
-        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
-        execute_at: nextSendTime(new Date(), rule.settings).toISOString(),
+        // Confirmation REPORTÉE : elle reste transactionnelle (launch M10).
+        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata, report_heures_calmes: true },
+        // Dans le fuseau de l'ENTREPRISE, comme le test « hors fenêtre » juste
+        // au-dessus : sans lui, une entreprise hors Montréal voyait son envoi
+        // reporté à 8 h heure de Montréal (launch M10).
+        execute_at: nextSendTime(new Date(), rule.settings, fuseau).toISOString(),
         status: 'pending',
         execution_key: executionKey,
       });
@@ -756,8 +761,40 @@ async function resolveExecuteAt(
     }
   }
 
+  /*
+   * Un délai NÉGATIF veut dire « X avant la date du rendez-vous ». Sans date
+   * (pas un rendez-vous, rendez-vous sans heure ou introuvable), on
+   * retombait sur Math.abs(délai) : le rappel « 7 jours avant » partait 7
+   * jours APRÈS. On ne planifie rien et on le dit (launch M10).
+   */
+  if (rule.delay_seconds < 0) {
+    logger.info(`[automationEngine] rappel « avant la date » sans date de rendez-vous — non planifié, règle "${rule.name}"`);
+    await journaliserSautSansDate(config.supabase, rule, event);
+    return null;
+  }
+
   // Normal positive delay from now
-  return new Date(Date.now() + Math.abs(rule.delay_seconds) * 1000);
+  return new Date(Date.now() + rule.delay_seconds * 1000);
+}
+
+/** Trace d'un rappel « avant » qui n'a pas de date : visible dans les Journaux. */
+async function journaliserSautSansDate(supabase: SupabaseClient, rule: AutomationRule, event: CRMEvent): Promise<void> {
+  const { error } = await supabase.from('automation_execution_logs').insert(
+    rule.actions.map((action) => ({
+      org_id: event.orgId,
+      automation_rule_id: rule.id,
+      trigger_event: event.type,
+      entity_type: event.entityType,
+      entity_id: event.entityId,
+      action_type: action.type,
+      action_config: action.config,
+      result_success: true,
+      result_data: { saute: 'Aucune date de rendez-vous : rappel « avant la date » non planifié', saute_code: 'date_absente' },
+      result_error: null,
+      duration_ms: 0,
+    })),
+  );
+  if (error) console.error(`[automationEngine] saut « sans date » non journalisé (rule ${rule.id}):`, error.message);
 }
 
 // ── Schedule delayed actions ────────────────────────────────
@@ -1563,10 +1600,14 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         entityId: task.entity_id,
         twilio: engineConfig.twilio,
         baseUrl: engineConfig.baseUrl,
-        // Toute tâche de cette file est DIFFÉRÉE, donc commerciale : soumise au
-        // plafond de fréquence. Les actions immédiates (confirmations) ne
-        // passent pas ici et restent exemptes.
-        commercial: true,
+        // Une tâche de cette file est DIFFÉRÉE, donc commerciale (plafond de
+        // fréquence, consentement)… SAUF une confirmation : celle reportée
+        // pour heures calmes, et celles qui ouvrent un parcours avant toute
+        // attente. Elles répondent à une demande du client (launch M10).
+        commercial: !(
+          actionConfig.report_heures_calmes === true
+          || (task.step_id && Array.isArray(etapesRegle) && etapesDeConfirmation(etapesRegle).has(task.step_id))
+        ),
         langue: await langueOrg(supabase, task.org_id),
         ruleId: task.automation_rule_id,
         // Une tentative a déjà eu lieu (`attempts` est incrémenté à la prise) :
