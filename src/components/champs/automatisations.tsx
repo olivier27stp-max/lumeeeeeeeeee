@@ -15,6 +15,19 @@ import { listerChamps } from '../../lib/champsPersoApi';
 import { LIBELLES_OBJET, OBJETS, variableAffichee, variableModele, type ChampPerso, type ObjetChamp } from '../../lib/champs/types';
 import type { Condition } from '../../lib/champs/filtres';
 import EditeurConditions from './EditeurConditions';
+import { champsSysteme } from '../../lib/champs/standard';
+
+/** Objets dont les champs sont citables dans un message (une propriété ne l'est pas encore). */
+const OBJETS_VARIABLES = OBJETS.filter((o) => o !== 'property');
+
+/**
+ * Champs SYSTÈME citables : ce que les formulaires enregistrent déjà
+ * ({{client.first_name}}, {{job.salesperson}}…), rempli par le serveur
+ * (server/lib/champs/variablesSysteme.ts).
+ */
+export function variablesSysteme(objets: ObjetChamp[] = OBJETS_VARIABLES) {
+  return objets.flatMap((o) => champsSysteme(o).map((c) => ({ objet: o, key: c.key, label: c.label })));
+}
 
 export function useChampsTous(): ChampPerso[] {
   const { isEnabled } = useChampsPersoActifs();
@@ -42,7 +55,10 @@ export function objetDuDeclencheur(entite: string | undefined): ObjetChamp | nul
 
 /** Variables de modèle des champs : [client_cf_superficie], … */
 export function variablesDesChamps(champs: ChampPerso[]): string[] {
-  return champs.map((c) => variableModele(c.object_type, c.key));
+  return [
+    ...champs.map((c) => variableModele(c.object_type, c.key)),
+    ...variablesSysteme().map((v) => variableModele(v.objet, v.key)),
+  ];
 }
 
 export function SelecteurChamp({ id, valeur, onChange, champs, fr, objet, className }: {
@@ -67,15 +83,29 @@ export function SelecteurChamp({ id, valeur, onChange, champs, fr, objet, classN
 }
 
 export function BoutonsVariablesChamps({ champs, fr, onInserer }: { champs: ChampPerso[]; fr: boolean; onInserer: (variable: string) => void }) {
-  if (champs.length === 0) return null;
+  const classe = 'rounded-md border border-dashed border-border px-2 py-1 text-[11px] text-text-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent';
   return (
     <>
+      {/* Champs des formulaires (système), repliés : une quarantaine de variables. */}
+      <details className="w-full">
+        <summary className="cursor-pointer text-[11px] font-medium text-text-secondary hover:text-text-primary">
+          {fr ? 'Champs des formulaires' : 'Form fields'}
+        </summary>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {variablesSysteme().map((v) => (
+            <button key={`${v.objet}.${v.key}`} type="button" onClick={() => onInserer(variableAffichee(v.objet, v.key))}
+              title={variableAffichee(v.objet, v.key)} className={classe}>
+              {(fr ? LIBELLES_OBJET[v.objet].fr : LIBELLES_OBJET[v.objet].en)} · {fr ? v.label.fr : v.label.en}
+            </button>
+          ))}
+        </div>
+      </details>
       {champs.map((c) => (
         <button
           key={c.id} type="button"
           onClick={() => onInserer(variableAffichee(c.object_type, c.key))}
           title={variableAffichee(c.object_type, c.key)}
-          className="rounded-md border border-dashed border-border px-2 py-1 text-[11px] text-text-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className={classe}
         >
           {(fr ? LIBELLES_OBJET[c.object_type].fr : LIBELLES_OBJET[c.object_type].en)} · {c.label}
         </button>
@@ -122,12 +152,21 @@ export function variablesChampsPourCourriel(
     ? OBJETS.filter((o) => o !== 'property')
     : typeCourriel === 'invoice_sent' || typeCourriel === 'invoice_reminder' ? ['client', 'invoice']
     : typeCourriel === 'quote_sent' ? ['client', 'quote'] : [];
-  return champs.filter((c) => objets.includes(c.object_type)).map((c) => ({
-    cle: variableModele(c.object_type, c.key),
-    // Ce qu'on écrit dans le courriel : le format GoHighLevel. `cle` reste le
-    // nom interne, celui que le serveur résout et que la détection compare.
-    jeton: variableAffichee(c.object_type, c.key),
-    fr: `${LIBELLES_OBJET[c.object_type].fr} · ${c.label}`,
-    en: `${LIBELLES_OBJET[c.object_type].en} · ${c.label}`,
-  }));
+  return [
+    // Champs des formulaires (système) d'abord, puis les champs personnalisés.
+    ...variablesSysteme(objets).map((v) => ({
+      cle: variableModele(v.objet, v.key),
+      jeton: variableAffichee(v.objet, v.key),
+      fr: `${LIBELLES_OBJET[v.objet].fr} · ${v.label.fr}`,
+      en: `${LIBELLES_OBJET[v.objet].en} · ${v.label.en}`,
+    })),
+    ...champs.filter((c) => objets.includes(c.object_type)).map((c) => ({
+      cle: variableModele(c.object_type, c.key),
+      // Ce qu'on écrit dans le courriel : le format GoHighLevel. `cle` reste le
+      // nom interne, celui que le serveur résout et que la détection compare.
+      jeton: variableAffichee(c.object_type, c.key),
+      fr: `${LIBELLES_OBJET[c.object_type].fr} · ${c.label}`,
+      en: `${LIBELLES_OBJET[c.object_type].en} · ${c.label}`,
+    })),
+  ];
 }

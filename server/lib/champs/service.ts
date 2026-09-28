@@ -24,6 +24,7 @@ import {
   type ValeurChamp, type ValeurEnregistree,
 } from '../../../src/lib/champs/types';
 import { clesStandard } from '../../../src/lib/champs/standard';
+import { valeursSysteme } from './variablesSysteme';
 import { preparerValeur, lireValeur, formaterValeur, ErreurValeur } from '../../../src/lib/champs/valeurs';
 import type { Condition } from '../../../src/lib/champs/filtres';
 import { eventBus } from '../eventBus';
@@ -490,6 +491,11 @@ export async function variablesChamps(
   const { data: cs } = await db.from('company_settings').select('timezone').eq('org_id', orgId).maybeSingle();
   const fuseau = (cs?.timezone as string | undefined) || 'America/Toronto';
   for (const objet of objets) {
+    // Champs système (ce que le formulaire enregistre déjà) : même nom de variable,
+    // {{client.first_name}} = {client_cf_first_name}. Les clés sont réservées : un
+    // champ personnalisé ne peut pas porter la même.
+    const systeme = await valeursSysteme(db, orgId, objet, refs[objet] as string, langue, fuseau);
+    for (const [cle, valeur] of Object.entries(systeme)) vars[variableModele(objet, cle)] = valeur;
     const defs = champs.filter((c) => c.object_type === objet);
     if (defs.length === 0) continue;
     const valeurs = (await lireValeursLot(db, orgId, objet, [refs[objet] as string], defs))[refs[objet] as string] ?? {};
