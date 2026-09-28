@@ -23,6 +23,32 @@ export function normalizeDigits(v: string): string {
   return (v ?? '').replace(/\D/g, '');
 }
 
+/** 10 derniers chiffres de CHAQUE numéro d'une cellule (« (819) 475-2879;+18198179526 »).
+ *  Coller tous les chiffres puis garder les 10 derniers donnait le 2e numéro : chez Vision
+ *  Lavage, Alain Charret a hérité du numéro de William, et les factures 645/646 des deux
+ *  écoles d'Acton Vale (qui portaient ce numéro) lui ont été rattachées (2026-09-28). */
+export function telephonesDe(v: string | null | undefined): string[] {
+  const out: string[] = [];
+  for (const part of String(v ?? '').split(/[;,/|\n]+|\s+(?:ou|or|et|and)\s+/i)) {
+    const d = normalizeDigits(part);
+    if (d.length < 7) continue;
+    // Deux numéros collés sans séparateur (« 8194752879 8198179526 ») : 20 ou 22 chiffres.
+    const morceaux = d.length === 20 ? [d.slice(0, 10), d.slice(10)]
+      : d.length === 22 && d[0] === '1' && d[11] === '1' ? [d.slice(1, 11), d.slice(12)]
+      : [d];
+    for (const m of morceaux) {
+      const k = m.slice(-10);
+      if (!out.includes(k)) out.push(k);
+    }
+  }
+  return out;
+}
+
+/** Numéro principal (le premier) d'une cellule, 10 derniers chiffres ; '' si aucun. */
+export function telephonePrincipal(v: string | null | undefined): string {
+  return telephonesDe(v)[0] ?? '';
+}
+
 /**
  * Marqueurs « pas de valeur » des exports CRM/Excel (N/A, -, #REF!, s/o…).
  * Traités comme des cellules vides : jamais stockés littéralement en base
@@ -567,8 +593,8 @@ export function normalizeRow(
         continue;
       }
       normalized[field] = value.slice(0, 40);
-      const digits = normalizeDigits(value);
-      if (digits.length >= 7) normalized[`${field}_digits`] = digits.slice(-10);
+      const digits = telephonePrincipal(value);
+      if (digits) normalized[`${field}_digits`] = digits;
       continue;
     }
     if (field === 'postal_code') {

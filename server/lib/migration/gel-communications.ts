@@ -13,7 +13,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cached, cacheDelete } from '../cache';
-import { normalizeDigits } from './normalize';
+import { telephonesDe } from './normalize';
 
 export const FEATURE_GEL = 'communications_gelees';
 const CLE_CACHE = 'gel-communications:orgs';
@@ -70,10 +70,7 @@ const CLE_CACHE_CONTACTS = 'gel-communications:contacts';
 
 /** Derniers 10 chiffres de chaque numéro d'une cellule (« +1 (514) 555-1234 », « 514…;438… »). */
 function clesTelephone(brut: string | null | undefined): string[] {
-  return String(brut ?? '')
-    .split(/[;,/|]+/)
-    .map((x) => normalizeDigits(x).slice(-10))
-    .filter((d) => d.length >= 7);
+  return telephonesDe(brut);
 }
 
 /**

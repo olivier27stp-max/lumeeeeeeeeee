@@ -9,7 +9,7 @@
 
 import crypto from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { localToUtcIso, normalizeAddressKey, normalizeDigits } from './normalize';
+import { localToUtcIso, normalizeAddressKey, telephonePrincipal } from './normalize';
 import { sanitizeCellForDisplay } from './masks';
 import type {
   DryRunReport,
@@ -445,10 +445,12 @@ export function nomClientPourJob(ctx: BuildContext, clientId: string, r: Record<
   return null;
 }
 
-/** Clé téléphone : 10 derniers chiffres, préfixée pour ne jamais croiser un id externe numérique. */
+/** Clé téléphone : numéro PRINCIPAL seulement (10 derniers chiffres), préfixée pour ne jamais
+ *  croiser un id externe numérique. Un numéro secondaire n'est jamais une clé : c'est souvent
+ *  celui d'un employé ou d'un proche, partagé avec d'autres dossiers. */
 function phoneKey(v: string): string {
-  const digits = normalizeDigits(v);
-  return digits.length >= 7 ? `tel:${digits.slice(-10)}` : '';
+  const digits = telephonePrincipal(v);
+  return digits ? `tel:${digits}` : '';
 }
 
 /** Valeur brute de référence client (affichage / clé de doublon interne). */

@@ -647,3 +647,35 @@ describe('rattachement client par téléphone (repli final)', async () => {
     expect(inv.row.client_id).toBe('c-tel');
   });
 });
+
+describe('cellule à plusieurs téléphones (Alain Charret, 2026-09-28)', async () => {
+  const { refKeysOf, buildEntityRow } = await import('../../server/lib/migration/importer');
+  const { telephonesDe, telephonePrincipal } = await import('../../server/lib/migration/normalize');
+  it('découpe chaque numéro au lieu de coller les chiffres', () => {
+    expect(telephonesDe('(819) 475-2879;+18198179526')).toEqual(['8194752879', '8198179526']);
+    expect(telephonesDe('8194752879 8198179526')).toEqual(['8194752879', '8198179526']);
+    expect(telephonesDe('819-475-2879 ou 819-817-9526')).toEqual(['8194752879', '8198179526']);
+    expect(telephonePrincipal('(819) 475-2879;+18198179526')).toBe('8194752879');
+    expect(telephonePrincipal('+1 438-340-0627')).toBe('4383400627');
+  });
+  it('seul le numéro principal devient une clé de rattachement', () => {
+    const keys = refKeysOf('client', {
+      id: 'c', row_number: 1, entity_type: 'client', external_id: null, status: 'ready',
+      normalized: { first_name: 'Alain', last_name: 'Charret', phone: '(819) 475-2879;+18198179526' }, relations: {},
+    } as any);
+    expect(keys).toContain('tel:8194752879');
+    expect(keys).not.toContain('tel:8198179526');
+  });
+  it('une facture au numéro secondaire ne se rattache plus au client', () => {
+    const ctx = {
+      migration: { org_id: 'org-1' }, createdBy: 'u',
+      clientIdByRef: new Map([['tel:8194752879', 'c-alain']]), propertyIdByRef: new Map(), jobIdByRef: new Map(),
+    } as any;
+    const inv = buildEntityRow('invoice', {
+      id: 'i', row_number: 1, entity_type: 'invoice', external_id: null, status: 'ready',
+      normalized: { invoice_number: '645', total_cents: 275940 },
+      relations: { client_name_ref: 'Ecole acton vale', client_phone_ref: '8198179526' },
+    } as any, ctx) as any;
+    expect(inv.row?.client_id ?? null).not.toBe('c-alain');
+  });
+});

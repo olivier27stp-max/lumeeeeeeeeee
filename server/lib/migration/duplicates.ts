@@ -3,7 +3,7 @@
 // candidats scorés que l'humain tranche (create_new / merge / skip / review).
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { normalizeAddressKey, normalizeDigits } from './normalize';
+import { normalizeAddressKey, telephonePrincipal } from './normalize';
 import type { DuplicateMatch, TargetEntity } from './types';
 
 export interface ExistingClientLite {
@@ -44,7 +44,7 @@ export function scoreClientDuplicate(
     score = Math.max(score, 95);
     reasons.push('email');
   }
-  const exPhone = normalizeDigits(existing.phone ?? '').slice(-10);
+  const exPhone = telephonePrincipal(existing.phone);
   if (candidate.phoneDigits && exPhone && exPhone.length >= 7 && candidate.phoneDigits.slice(-10) === exPhone) {
     score = Math.max(score, 90);
     reasons.push('phone');
@@ -113,7 +113,7 @@ export async function findDuplicatesForEntity(
     for (const c of existing) {
       const email = (c.email ?? '').trim().toLowerCase();
       if (email && !byEmail.has(email)) byEmail.set(email, c);
-      const phone = normalizeDigits(c.phone ?? '').slice(-10);
+      const phone = telephonePrincipal(c.phone);
       if (phone.length >= 7 && !byPhone.has(phone)) byPhone.set(phone, c);
       const name = fullNameKey(c.first_name, c.last_name, c.company);
       if (name) {
@@ -126,7 +126,7 @@ export async function findDuplicatesForEntity(
       const n = r.normalized ?? {};
       const candidate = {
         email: str(n.email).toLowerCase() || null,
-        phoneDigits: str(n.phone_digits) || normalizeDigits(str(n.phone)).slice(-10) || null,
+        phoneDigits: str(n.phone_digits) || telephonePrincipal(str(n.phone)) || null,
         fullName: fullNameKey(str(n.first_name) || null, str(n.last_name) || null, str(n.company) || null) || null,
         addressKey: normalizeAddressKey(str(n.address)) || null,
       };
