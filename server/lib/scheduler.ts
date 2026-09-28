@@ -9,6 +9,7 @@ import {
   addDelay,
   subtractDelay,
   computeNextRecurrenceDate,
+  OVERDUE_DAYS,
 } from './scheduler-utils';
 import { logger } from './logger';
 
@@ -599,30 +600,56 @@ async function detectOverdueInvoices(supabase: SupabaseClient) {
   if (error || !invoices) return;
 
   const { eventBus } = await import('./eventBus');
+  const todayDate = new Date(today + 'T00:00:00');
+  const joursDeRetard = (inv: any) =>
+    Math.floor((todayDate.getTime() - new Date(inv.due_date + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24));
 
-  for (const inv of invoices as any[]) {
-    if (!inv.due_date) continue;
-    const dueDate = new Date(inv.due_date + 'T00:00:00');
-    const todayDate = new Date(today + 'T00:00:00');
-    const daysOverdue = Math.floor((todayDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+  // Only emit on specific days to match preset conditions
+  const candidates = (invoices as any[]).filter(
+    (inv) => inv.due_date && (OVERDUE_DAYS as readonly number[]).includes(joursDeRetard(inv)),
+  );
+  if (candidates.length === 0) return;
 
-    // Only emit on specific days to match preset conditions
-    if ([1, 3, 5, 15, 30].includes(daysOverdue)) {
-      const dedupKey = `overdue:${inv.id}:${daysOverdue}`;
-      if (hasFiredLocal('overdue-detection', dedupKey)) continue;
-      markFired('overdue-detection', dedupKey);
-
-      await eventBus.emit('invoice.overdue', {
-        orgId: inv.org_id,
-        entityType: 'invoice',
-        entityId: inv.id,
-        metadata: {
-          invoice_number: inv.invoice_number,
-          days_overdue: daysOverdue,
-          due_date: inv.due_date,
-        },
-      });
+  // Anti-doublon durable : le cache en mémoire se vide à chaque redéploiement
+  // (et n'est pas partagé entre instances). Une journée à 40 déploiements a
+  // ainsi écrit 40 « Facture en retard » identiques sur la même facture.
+  // activity_log est la preuve de ce qui a déjà été émis.
+  const dejaJournalise = new Set<string>();
+  const ids = candidates.map((inv) => inv.id);
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data: lignes, error: errLog } = await supabase
+      .from('activity_log')
+      .select('entity_id, metadata')
+      .eq('event_type', 'invoice_overdue')
+      .in('entity_id', ids.slice(i, i + 200));
+    if (errLog) {
+      // Fail-closed : l'événement est ré-émis au prochain tick, un doublon
+      // resterait par contre visible à vie dans l'historique.
+      console.error('[scheduler] anti-doublon retard illisible:', errLog.message);
+      return;
     }
+    for (const l of (lignes || []) as any[]) {
+      dejaJournalise.add(`${l.entity_id}:${l.metadata?.days_overdue}`);
+    }
+  }
+
+  for (const inv of candidates) {
+    const daysOverdue = joursDeRetard(inv);
+    if (dejaJournalise.has(`${inv.id}:${daysOverdue}`)) continue;
+    const dedupKey = `overdue:${inv.id}:${daysOverdue}`;
+    if (hasFiredLocal('overdue-detection', dedupKey)) continue;
+    markFired('overdue-detection', dedupKey);
+
+    await eventBus.emit('invoice.overdue', {
+      orgId: inv.org_id,
+      entityType: 'invoice',
+      entityId: inv.id,
+      metadata: {
+        invoice_number: inv.invoice_number,
+        days_overdue: daysOverdue,
+        due_date: inv.due_date,
+      },
+    });
   }
 }
 
