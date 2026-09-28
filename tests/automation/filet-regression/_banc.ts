@@ -107,6 +107,8 @@ export function monde(regle: Regle & { id: string }, surcharges: Record<string, 
 export function evenementPour(cle: string): Evenement {
   const par: Record<string, Evenement> = {
     'quote.sent': { entityType: 'quote', entityId: IDS.devis, metadata: { quote_number: 'Q-2026-042', channel: 'email', client_id: IDS.client } },
+    // Émis par server/lib/vuesSoumission.ts (#704) quand la page publique est servie.
+    'quote.viewed': { entityType: 'quote', entityId: IDS.devis, metadata: { quote_id: IDS.devis, quote_number: 'Q-2026-042', client_id: IDS.client, is_first_view: true, view_count: 1, ouverture: ['premiere', 'chaque'], total_cents: 162690, montant: 1626.9, pipeline_id: null, stage_id: null, etiquette: [], service_id: [] } },
     'quote.approved': { entityType: 'quote', entityId: IDS.devis, metadata: { quote_number: 'Q-2026-042', client_id: IDS.client } },
     'quote.declined': { entityType: 'quote', entityId: IDS.devis, metadata: { quote_number: 'Q-2026-042', client_id: IDS.client, reason: 'trop cher' } },
     'quote.changes_requested': { entityType: 'quote', entityId: IDS.devis, metadata: { quote_number: 'Q-2026-042', client_id: IDS.client, message: 'moins de lignes' } },

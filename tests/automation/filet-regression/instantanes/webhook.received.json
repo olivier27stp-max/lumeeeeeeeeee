@@ -380,6 +380,19 @@
    },
    {
     "moment": "immediat",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation",
+     "title": "Suivi a faire pour ",
+     "body": "",
+     "reference_id": "aaaaaaaa-0000-4000-8000-00000000000d",
+     "link": null
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "automation_execution_logs",
     "op": "insert",
     "valeur": {
@@ -392,9 +405,12 @@
      "action_config": {
       "title": "Suivi a faire pour [client_name]"
      },
-     "result_success": false,
-     "result_data": null,
-     "result_error": "Cannot read properties of undefined (reading 'replace')",
+     "result_success": true,
+     "result_data": {
+      "title": "Suivi a faire pour ",
+      "destinataires": "equipe"
+     },
+     "result_error": null,
      "duration_ms": "<ms>"
     }
    }
@@ -481,6 +497,43 @@
    },
    {
     "moment": "differe:create_notification",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation",
+     "title": "Suivi a faire pour ",
+     "body": "",
+     "reference_id": "aaaaaaaa-0000-4000-8000-00000000000d",
+     "link": null
+    }
+   },
+   {
+    "moment": "differe:create_notification",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-webhook.received-create_notification-86400",
+     "scheduled_task_id": "tache-1",
+     "trigger_event": "webhook.received",
+     "entity_type": "automation_webhook",
+     "entity_id": "aaaaaaaa-0000-4000-8000-00000000000d",
+     "action_type": "create_notification",
+     "action_config": {
+      "title": "Suivi a faire pour [client_name]"
+     },
+     "result_success": true,
+     "result_data": {
+      "title": "Suivi a faire pour ",
+      "destinataires": "equipe"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
+    }
+   },
+   {
+    "moment": "differe:create_notification",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -491,9 +544,9 @@
      ]
     ],
     "valeur": {
-     "status": "pending",
-     "execute_at": "2026-09-14T15:05:00.000Z",
-     "last_error": "Cannot read properties of undefined (reading 'replace') — reprise 1/4 dans 5 min"
+     "status": "completed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": null
     }
    }
   ],
@@ -2106,7 +2159,7 @@
      },
      "result_success": false,
      "result_data": null,
-     "result_error": "move_deal_stage ne s'applique qu'à un deal (reçu : automation_webhook).",
+     "result_error": "move_deal_stage s'applique à un deal ou à une soumission (reçu : automation_webhook).",
      "duration_ms": "<ms>"
     }
    }
@@ -2208,7 +2261,7 @@
      },
      "result_success": false,
      "result_data": null,
-     "result_error": "move_deal_stage ne s'applique qu'à un deal (reçu : automation_webhook).",
+     "result_error": "move_deal_stage s'applique à un deal ou à une soumission (reçu : automation_webhook).",
      "duration_ms": "<ms>"
     }
    },
@@ -2226,7 +2279,7 @@
     "valeur": {
      "status": "pending",
      "execute_at": "2026-09-14T15:05:00.000Z",
-     "last_error": "move_deal_stage ne s'applique qu'à un deal (reçu : automation_webhook). — reprise 1/4 dans 5 min"
+     "last_error": "move_deal_stage s'applique à un deal ou à une soumission (reçu : automation_webhook). — reprise 1/4 dans 5 min"
     }
    }
   ],
@@ -9016,7 +9069,8 @@
      "type": "automation",
      "title": "Suivi a faire pour ",
      "body": "Suivi du parcours",
-     "reference_id": "aaaaaaaa-0000-4000-8000-00000000000d"
+     "reference_id": "aaaaaaaa-0000-4000-8000-00000000000d",
+     "link": null
     }
    },
    {
@@ -9037,7 +9091,8 @@
      },
      "result_success": true,
      "result_data": {
-      "title": "Suivi a faire pour "
+      "title": "Suivi a faire pour ",
+      "destinataires": "equipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
