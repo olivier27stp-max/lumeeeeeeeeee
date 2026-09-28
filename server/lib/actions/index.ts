@@ -1155,7 +1155,53 @@ async function destinatairesNotification(
   };
 
   let choisis = new Map<string, 'fr' | 'en'>();
-  if (config.destinataire === 'membre' && config.membre_id) {
+  if (config.destinataire === 'equipe_du_deal') {
+    /*
+     * « Le rep assigné + propriétaires et admins » (décidé par Rafba le
+     * 2026-09-28) :
+     *   · le rep assigné au DEAL lié (sinon le vendeur du devis, sinon son
+     *     créateur) — seulement s'il a accès au pipeline ;
+     *   · les propriétaires, toujours ;
+     *   · les administrateurs, sauf ceux exclus de CE pipeline (Gérer les
+     *     permissions) : prévenir quelqu'un d'un deal qu'il ne peut pas
+     *     ouvrir ne sert à rien.
+     * La visibilité passe par `peut_voir_pipeline`, la même règle que la
+     * page Permissions et la RLS.
+     */
+    type DealLie = { pipeline_id: string; assigned_user_id: string | null };
+    let deal: DealLie | null = null;
+    let rep: string | null = null;
+    if (ctx.entityType === 'deal') {
+      const { data } = await ctx.supabase.from('deals').select('pipeline_id, assigned_user_id')
+        .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
+      deal = data as DealLie | null;
+    } else if (ctx.entityType === 'quote') {
+      const lie = await dealDeLaSoumission(ctx);
+      if (lie) {
+        const { data } = await ctx.supabase.from('deals').select('pipeline_id, assigned_user_id')
+          .eq('id', lie.id).maybeSingle();
+        deal = data as DealLie | null;
+      }
+      const { data: q } = await ctx.supabase.from('quotes').select('salesperson_id, created_by')
+        .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
+      rep = (q?.salesperson_id as string | null) ?? (q?.created_by as string | null) ?? null;
+    }
+    rep = deal?.assigned_user_id ?? rep;
+
+    const voit = async (uid: string): Promise<boolean> => {
+      if (!deal?.pipeline_id) return true; // aucun deal : rien à restreindre
+      const { data, error } = await ctx.supabase.rpc('peut_voir_pipeline', { p_user: uid, p_pipeline: deal.pipeline_id });
+      if (error) {
+        console.error('[actions/notification] visibilité du pipeline illisible', error.message);
+        return false;
+      }
+      return data === true;
+    };
+    for (const m of actifs) {
+      if (m.role === 'owner') choisis.set(m.user_id, langue(m));
+      else if ((m.role === 'admin' || m.user_id === rep) && await voit(m.user_id)) choisis.set(m.user_id, langue(m));
+    }
+  } else if (config.destinataire === 'membre' && config.membre_id) {
     choisis = pour([config.membre_id]);
   } else if (config.destinataire === 'responsable') {
     let responsable: string | null = null;
