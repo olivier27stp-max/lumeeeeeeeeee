@@ -22,7 +22,7 @@ function ligne(colonnes: string): Record<string, unknown> {
     else if (c === 'valid_until') r[c] = '2026-10-28T12:00:00Z';
     else if (c.endsWith('_at') || c.endsWith('_date')) r[c] = '2026-09-28T12:00:00Z';
     else if (c === 'tax_ids') r[c] = ['t1'];
-    else if (c === 'phones') r[c] = [{ number: '450-555-0100', label: 'mobile' }];
+    else if (c === 'phones') r[c] = [{ number: '450-555-0100', label: 'mobile' }, { number: '450-555-0199', label: 'work' }];
     else if (c === 'tax_lines') r[c] = [{ name: 'TPS', enabled: true }];
     else if (c.startsWith('is_') || c.includes('required') || c.includes('show_') || c.includes('ask_') || c.includes('billing_') || c === 'display_as_company') r[c] = true;
     else if (c === 'deposit_type') r[c] = 'percentage';

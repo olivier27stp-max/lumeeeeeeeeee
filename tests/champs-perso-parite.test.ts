@@ -23,7 +23,7 @@ const MIG_PROPRIETE = readFileSync(join(__dirname, '..', 'supabase', 'migrations
 // Champs système (audit des formulaires) : cf_cles_standard en vigueur + cf_sections_systeme.
 const MIG_SYSTEME = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260930100000_champs_dossiers_systeme.sql'), 'utf8');
 // Clés réservées en vigueur (champs manquants ajoutés, 2026-09-28).
-const MIG_CLES = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20261002200000_champs_facture_sous_total.sql'), 'utf8');
+const MIG_CLES = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20261002300000_champs_client_cles_completes.sql'), 'utf8');
 
 describe('parité SQL ↔ TypeScript', () => {
   it('objets', () => {

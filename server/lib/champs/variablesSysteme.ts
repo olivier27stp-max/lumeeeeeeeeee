@@ -81,7 +81,7 @@ async function client(db: SupabaseClient, id: unknown, orgId: string): Promise<L
 }
 
 async function valeursClient(db: SupabaseClient, orgId: string, id: string, f: Format): Promise<Valeurs> {
-  const c = await une(db, 'clients', 'first_name, last_name, client_number, company, display_as_company, phone, phones, email, email_label, lead_source, address, tax_ids, billing_same_as_service, billing_address', id, orgId);
+  const c = await une(db, 'clients', 'first_name, last_name, client_number, company, display_as_company, phone, phones, email, email_label, lead_source, address, street_number, street_name, city, province, postal_code, country, tax_ids, billing_same_as_service, billing_address', id, orgId);
   if (!c) return {};
   const taxIds = Array.isArray(c.tax_ids) ? (c.tax_ids as string[]) : [];
   let taxes = '';
@@ -94,7 +94,9 @@ async function valeursClient(db: SupabaseClient, orgId: string, id: string, f: F
     display_as_company: ouiNon(c.display_as_company, f), phone: txt(c.phone),
     phone_label: libelleDe(TYPES_NUMERO, Array.isArray(c.phones) ? (c.phones as Ligne[])[0]?.label : null, f),
     email: txt(c.email), email_label: libelleDe(TYPES_COURRIEL, c.email_label, f), lead_source: txt(c.lead_source),
-    address: txt(c.address), taxes, billing_same_as_service: ouiNon(c.billing_same_as_service, f),
+    other_phones: (Array.isArray(c.phones) ? (c.phones as Ligne[]).slice(1) : []).map((p) => txt(p.number)).filter(Boolean).join(', '),
+    address: txt(c.address), street: [txt(c.street_number), txt(c.street_name)].filter(Boolean).join(' '),
+    city: txt(c.city), province: txt(c.province), postal_code: txt(c.postal_code), country: txt(c.country), taxes, billing_same_as_service: ouiNon(c.billing_same_as_service, f),
     billing_address: c.billing_same_as_service ? txt(c.address) : txt(c.billing_address),
   };
 }

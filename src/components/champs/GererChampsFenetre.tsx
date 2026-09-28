@@ -159,7 +159,7 @@ export default function GererChampsFenetre({ objet, titreFenetre, champs, dossie
                   : 'Checked by default. Uncheck a field to remove it from the form; the lock means required.'}
               </p>
               {SECTIONS_SYSTEME[objet].map((sec) => {
-                const liste = champsSysteme(objet).filter((c) => c.section === sec.cle
+                const liste = champsSysteme(objet).filter((c) => c.section === sec.cle && !c.suit
                   && (!q || (fr ? c.label.fr : c.label.en).toLowerCase().includes(q)));
                 if (liste.length === 0) return null;
                 return (

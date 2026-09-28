@@ -323,7 +323,7 @@ export async function majAffichageSysteme(db: SupabaseClient, orgId: string, obj
   const connus = new Map(champsSysteme(objet).map((c) => [c.key, c]));
   for (const k of masques) {
     const c = connus.get(k);
-    if (!c) throw new ErreurChamps(`Champ de formulaire inconnu : ${k}.`);
+    if (!c || c.suit) throw new ErreurChamps(`Champ de formulaire inconnu : ${k}.`);
     if (c.verrouille) throw new ErreurChamps(`« ${c.label.fr} » est indispensable au formulaire : il ne se retire pas.`);
   }
   const { error: ed } = await db.from('cf_affichage_systeme').delete().eq('org_id', orgId).eq('object_type', objet);
