@@ -4,6 +4,26 @@
   "ecritures": [
    {
     "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-send_email-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "send_email",
+     "action_config": {
+      "subject": "Un message de [company_name]",
+      "body": "Bonjour [client_name],\n\nMerci de faire affaire avec [company_name].\n\nAu plaisir,\n[company_name]"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-send_email-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "activity_log",
     "op": "insert",
     "valeur": {
@@ -156,6 +176,25 @@
  "send_sms@0": {
   "planifie": [],
   "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-send_sms-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "send_sms",
+     "action_config": {
+      "body": "Bonjour [client_name], c’est [company_name]. Merci !"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-send_sms-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
    {
     "moment": "immediat",
     "table": "messages",
@@ -321,6 +360,26 @@
       "title": "Suivi a faire pour [client_name]"
      },
      "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-create_notification-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-create_notification-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "create_notification",
+     "action_config": {
+      "title": "Suivi a faire pour [client_name]"
+     },
+     "result_success": false,
+     "result_data": null,
      "result_error": "Cannot read properties of undefined (reading 'replace')",
      "duration_ms": "<ms>"
     }
@@ -430,6 +489,25 @@
  "request_review@0": {
   "planifie": [],
   "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-request_review-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "request_review",
+     "action_config": {
+      "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-request_review-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
    {
     "moment": "immediat",
     "table": "satisfaction_surveys",
@@ -664,6 +742,25 @@
      "action_config": {
       "body": "[client_name] — suivi a faire"
      },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-envoyer_slack-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-envoyer_slack-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "envoyer_slack",
+     "action_config": {
+      "body": "[client_name] — suivi a faire"
+     },
      "result_success": true,
      "result_data": {
       "longueur": 30
@@ -783,6 +880,25 @@
  "ajouter_etiquette@0": {
   "planifie": [],
   "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-ajouter_etiquette-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "ajouter_etiquette",
+     "action_config": {
+      "etiquette": "vip"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-ajouter_etiquette-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
    {
     "moment": "immediat",
     "table": "client_tags",
@@ -919,6 +1035,25 @@
  "retirer_etiquette@0": {
   "planifie": [],
   "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-retirer_etiquette-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "retirer_etiquette",
+     "action_config": {
+      "etiquette": "vip"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-retirer_etiquette-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
    {
     "moment": "immediat",
     "table": "client_tags",
@@ -1063,6 +1198,26 @@
  "modifier_client@0": {
   "planifie": [],
   "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-modifier_client-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "modifier_client",
+     "action_config": {
+      "statut": "active",
+      "source": "salon"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-modifier_client-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
    {
     "moment": "immediat",
     "table": "clients",
@@ -1215,6 +1370,25 @@
   "ecritures": [
    {
     "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-assigner_responsable-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "assigner_responsable",
+     "action_config": {
+      "membre_id": "aaaaaaaa-0000-4000-8000-000000000006"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-assigner_responsable-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "clients",
     "op": "update",
     "filtres": [
@@ -1362,6 +1536,25 @@
   "ecritures": [
    {
     "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-ajouter_note-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "ajouter_note",
+     "action_config": {
+      "body": "Note automatique pour [client_name]."
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-ajouter_note-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "notes",
     "op": "insert",
     "valeur": {
@@ -1498,6 +1691,25 @@
  "create_task@0": {
   "planifie": [],
   "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-create_task-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "create_task",
+     "action_config": {
+      "title": "Rappeler [client_name]"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-create_task-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
    {
     "moment": "immediat",
     "table": "tasks",
@@ -1642,6 +1854,23 @@
  "envoyer_soumission@0": {
   "planifie": [],
   "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-envoyer_soumission-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "envoyer_soumission",
+     "action_config": {},
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-envoyer_soumission-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
    {
     "moment": "immediat",
     "table": "activity_log",
@@ -1807,6 +2036,25 @@
      "action_config": {
       "url": "https://hooks.example.test/lume"
      },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-webhook-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-webhook-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "webhook",
+     "action_config": {
+      "url": "https://hooks.example.test/lume"
+     },
      "result_success": true,
      "result_data": {
       "status": 200
@@ -1932,6 +2180,25 @@
    }
   ],
   "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-demarrer_automatisation-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "demarrer_automatisation",
+     "action_config": {
+      "rule_id": "aaaaaaaa-0000-4000-8000-00000000000e"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
    {
     "moment": "immediat",
     "table": "automation_scheduled_tasks",
@@ -2143,6 +2410,25 @@
   "ecritures": [
    {
     "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-arreter_automatisation-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "arreter_automatisation",
+     "action_config": {
+      "portee": "courante"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-arreter_automatisation-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "automation_scheduled_tasks",
     "op": "update",
     "filtres": [
@@ -2298,6 +2584,26 @@
  "update_custom_field@0": {
   "planifie": [],
   "ecritures": [
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "regle-quote.declined-update_custom_field-0",
+     "trigger_event": "quote.declined",
+     "entity_type": "quote",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
+     "action_type": "update_custom_field",
+     "action_config": {
+      "field_id": "aaaaaaaa-0000-4000-8000-00000000000c",
+      "value": "2027-01-01"
+     },
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "regle-quote.declined-update_custom_field-0:aaaaaaaa-0000-4000-8000-000000000004:0@14910930"
+    }
+   },
    {
     "moment": "immediat",
     "table": "automation_execution_logs",
