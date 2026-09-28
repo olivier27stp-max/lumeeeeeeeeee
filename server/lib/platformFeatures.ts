@@ -40,6 +40,7 @@ export const PLATFORM_FEATURES: readonly PlatformFeature[] = [
   { key: 'recu_lumi', kind: 'module', label: 'Le Reçu (briefing)', description: 'Ajoute « l’argent qui dort » au briefing du matin : devis sans suivi récent et factures échues.' },
   // Capacités d'automatisation en rodage (server/lib/automations-drapeaux.ts).
   // Coupé = moteur identique au mot près (filet de régression).
+  { key: 'auto_sortie_parcours', kind: 'module', label: 'Automatisations : sortie automatique du parcours', description: 'Case « Arrêter si… » par déclencheur (soumission acceptée, facture payée, rendez-vous annulé, opportunité déplacée), motif de l’arrêt dans l’historique ; les règles déclenchées par l’acceptation ou le paiement ne s’annulent plus elles-mêmes.' },
   { key: 'auto_desabonnement_canal', kind: 'module', label: 'Automatisations : désabonnement par canal', description: 'STOP/REPRENDRE par texto, page de préférences courriel/texto, marketing sauté pour un client désabonné, transactionnel toujours envoyé.' },
   // Champs personnalisés v2 (modèle GoHighLevel) : Réglages → Champs
   // personnalisés, panneaux sur les fiches, cartes et filtres du pipeline.
