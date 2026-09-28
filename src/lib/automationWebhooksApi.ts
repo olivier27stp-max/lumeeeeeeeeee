@@ -101,11 +101,15 @@ export async function lireEtatPause(): Promise<EtatPause> {
   return reponse.json();
 }
 
-export async function basculerPause(paused: boolean): Promise<void> {
+/** Rend l'état RÉEL relu de la base après la bascule (pas celui demandé). */
+export async function basculerPause(paused: boolean): Promise<EtatPause> {
   const reponse = await fetch('/api/automations/pause', {
     method: 'POST',
     headers: await entetes(),
     body: JSON.stringify({ paused }),
   });
   if (!reponse.ok) throw await erreur(reponse);
+  await reponse.json().catch(() => null);
+  // Relecture : l'écran affiche ce que la base dit, jamais ce qu'on a supposé.
+  return lireEtatPause();
 }
