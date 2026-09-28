@@ -3,8 +3,9 @@
  * devis, opportunité) — comme GoHighLevel, on les remplit avant que la fiche
  * existe.
  *
- *   const champs = useChampsCreation('client', fr);
- *   // rendu : {champs.bloc}
+ *   const champs = useChampsCreation('client', fr, { sections: ['coordonnees', 'adresse'] });
+ *   // à la fin de chaque section branchée : {champs.section('coordonnees')}
+ *   // en fin de formulaire : {champs.bloc}
  *   // avant de créer : const err = champs.valider(); if (err) { toast.error(err); return; }
  *   // après : await champs.enregistrer(nouvelId);
  *
@@ -12,6 +13,12 @@
  * un champ obligatoire vide ou une valeur invalide bloque la création AVANT
  * qu'une fiche à moitié remplie n'existe. Coupé par le drapeau, `bloc` est
  * null et les deux fonctions ne font rien.
+ *
+ * Placement (mission GHL, phase 4) : un champ rangé dans un dossier SYSTÈME
+ * (section du formulaire) s'affiche à la fin de cette section, si le
+ * formulaire l'a branchée (`sections`) ; sinon dans `bloc`, sous le nom de la
+ * section. Un dossier créé par l'entreprise devient une section à la fin du
+ * formulaire, titrée par son nom ; les champs sans dossier suivent.
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -26,6 +33,8 @@ import LienAjouterChamps from './LienAjouterChamps';
 import GererChampsFenetre from './GererChampsFenetre';
 import { usePermissions } from '../../hooks/usePermissions';
 import { Settings2 } from 'lucide-react';
+import { nomDossier } from '../../lib/champs/standard';
+import type { ChampPerso } from '../../lib/champs/types';
 
 /** Titre de la fenêtre de création, par objet (panneau « Gérer les champs »). */
 const TITRE_FENETRE: Record<ObjetChamp, { fr: string; en: string }> = {
@@ -37,7 +46,7 @@ const TITRE_FENETRE: Record<ObjetChamp, { fr: string; en: string }> = {
   property: { fr: 'Nouvelle propriété', en: 'New property' },
 };
 
-export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
+export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sections?: string[] } = {}) {
   const { isEnabled } = useChampsPersoActifs();
   const idBase = useId();
   const { data } = useQuery({
@@ -139,41 +148,64 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
       champs={tousActifs} dossiers={data?.folders ?? []} fr={fr} onClose={() => setGerer(false)} />
   ) : null;
 
+  const dossiers = data?.folders ?? [];
+  const cleSysteme = (c: ChampPerso) => dossiers.find((d) => d.id === c.folder_id)?.cle_systeme ?? null;
+  const branchees = new Set(opts.sections ?? []);
+  const saisie = (c: ChampPerso) => {
+    const id = `${idBase}-${c.id}`;
+    return (
+      <div key={c.id} className={c.field_type === 'multi_line' || c.field_type === 'dropdown_multi' ? 'sm:col-span-2' : undefined}>
+        <label htmlFor={id} className="mb-1 block text-[12px] font-medium text-text-secondary">
+          {c.label}{c.is_required && <span className="text-red-500" aria-hidden> *</span>}
+        </label>
+        <ChampSaisie id={id} champ={c} valeur={valeurs[c.id] ?? null} fr={fr}
+          onValider={(v) => poser(c.id, v)} />
+        {c.help_text && <p className="mt-1 text-[11px] text-text-tertiary">{c.help_text}</p>}
+      </div>
+    );
+  };
+
+  /** Les champs d'un dossier système, à poser à la fin de la section du formulaire. */
+  const section = (cle: string) => {
+    if (!isEnabled) return null;
+    const liste = champs.filter((c) => cleSysteme(c) === cle);
+    if (liste.length === 0) return null;
+    return <div className="mt-3 grid gap-3 sm:grid-cols-2" data-champs-section={cle}>{liste.map(saisie)}</div>;
+  };
+
+  // Hors des sections branchées : dossiers dans leur ordre (système non branchés,
+  // puis ceux de l'entreprise), chacun titré ; les champs sans dossier à la fin.
+  const groupes = [
+    ...dossiers.filter((d) => !(d.cle_systeme && branchees.has(d.cle_systeme)))
+      .map((d) => ({ id: d.id, titre: nomDossier(d, fr), champs: champs.filter((c) => c.folder_id === d.id) })),
+    { id: '__sans', titre: fr ? 'Champs personnalisés' : 'Custom fields',
+      champs: champs.filter((c) => !c.folder_id || !dossiers.some((d) => d.id === c.folder_id)) },
+  ].filter((g) => g.champs.length > 0);
+  const nbHorsSections = groupes.reduce((n, g) => n + g.champs.length, 0);
+
   // Aucun champ affiché (liste chargée) : on le dit, avec de quoi en ajouter, plutôt qu'un silence.
-  const bloc = !isEnabled ? null : champs.length === 0 ? (data ? (
+  const bloc = !isEnabled ? null : nbHorsSections === 0 ? (data ? (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      {tousActifs.length === 0 ? <LienAjouterChamps fr={fr} /> : (
+      {tousActifs.length === 0 ? <LienAjouterChamps fr={fr} /> : champs.length === 0 ? (
         <p className="text-[12px] text-text-tertiary">{fr ? 'Aucun champ personnalisé dans cette fenêtre.' : 'No custom fields in this window.'}</p>
-      )}
+      ) : <span />}
       {boutonGerer}
       {panneau}
     </div>
   ) : null) : (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
-          {fr ? 'Champs personnalisés' : 'Custom fields'}
-        </p>
-        {boutonGerer}
-      </div>
+    <div className="space-y-4">
       {panneau}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {champs.map((c) => {
-          const id = `${idBase}-${c.id}`;
-          return (
-            <div key={c.id} className={c.field_type === 'multi_line' || c.field_type === 'dropdown_multi' ? 'sm:col-span-2' : undefined}>
-              <label htmlFor={id} className="mb-1 block text-[12px] font-medium text-text-secondary">
-                {c.label}{c.is_required && <span className="text-red-500" aria-hidden> *</span>}
-              </label>
-              <ChampSaisie id={id} champ={c} valeur={valeurs[c.id] ?? null} fr={fr}
-                onValider={(v) => poser(c.id, v)} />
-              {c.help_text && <p className="mt-1 text-[11px] text-text-tertiary">{c.help_text}</p>}
-            </div>
-          );
-        })}
-      </div>
+      {groupes.map((g, i) => (
+        <div key={g.id} className="space-y-3" data-champs-dossier={g.id}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">{g.titre}</p>
+            {i === 0 && boutonGerer}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">{g.champs.map(saisie)}</div>
+        </div>
+      ))}
     </div>
   );
 
-  return { bloc, valider, enregistrer, actif: champs.length > 0 };
+  return { bloc, section, valider, enregistrer, actif: champs.length > 0 };
 }

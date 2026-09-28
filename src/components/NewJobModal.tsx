@@ -380,7 +380,10 @@ export default function NewJobModal({
   const navigate = useNavigate();
   const isEditMode = Boolean(initialValues?.id);
   // Champs personnalisés : remplis à la création ; en modification, le panneau de la fiche.
-  const champsPerso = useChampsCreation('job', language === 'fr');
+  // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
+  const champsPerso = useChampsCreation('job', language === 'fr', {
+    sections: ['details', 'client', 'type', 'visites', 'assignation', 'facturation', 'produits', 'contrat', 'notes'],
+  });
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
   // Navigation guard: route where the form was opened + leave-confirmation state.
   const openedPathRef = useRef<string | null>(null);
@@ -2449,6 +2452,7 @@ export default function NewJobModal({
                     <span className="text-[12px] text-text-tertiary">{language === 'fr' ? "Envoyer une demande d'avis au client une fois le job terminé." : 'Send the client a review request once the job is complete.'}</span>
                   </span>
                 </label>
+                {!isEditMode && champsPerso.section('details')}
               </Box>
 
               <Box title="Client">
@@ -2717,6 +2721,7 @@ export default function NewJobModal({
                     )}
                   </div>
                 )}
+                {!isEditMode && champsPerso.section('client')}
               </Box>
 
               <Box title={t.modals.jobType}>
@@ -2742,6 +2747,7 @@ export default function NewJobModal({
                       {t.modals.recurring}
                     </button>
                   </div>
+                {!isEditMode && champsPerso.section('type')}
               </Box>
 
               {isServicePlan && (
@@ -3028,6 +3034,7 @@ export default function NewJobModal({
                       <span className="block text-xs text-text-tertiary mt-0.5">{t.modals.servicePlanCreateContractHint}</span>
                     </span>
                   </label>
+                {!isEditMode && champsPerso.section('visites')}
               </Box>
               )}
 
@@ -3155,6 +3162,7 @@ export default function NewJobModal({
                     <Plus size={14} />
                     {language === 'fr' ? 'Ajouter une visite' : 'Add a visit'}
                   </button>
+                {!isEditMode && champsPerso.section('visites')}
               </Box>
               )}
 
@@ -3214,6 +3222,7 @@ export default function NewJobModal({
                     </p>
                   )}
                 </div>
+                {!isEditMode && champsPerso.section('assignation')}
               </Box>
 
               {!isServicePlan && (
@@ -3277,6 +3286,7 @@ export default function NewJobModal({
                     </span>
                   </span>
                 </label>
+                {!isEditMode && champsPerso.section('facturation')}
               </Box>
               )}
 
@@ -3451,6 +3461,7 @@ export default function NewJobModal({
                     </p>
                   </div>
                 </div>
+                {!isEditMode && champsPerso.section('produits')}
               </Box>
 
               {/* ═══ BILLING AND PAYMENTS — comment le plan de service se facture ═══ */}
@@ -3658,6 +3669,7 @@ export default function NewJobModal({
                       </div>
                     )}
                   </div>
+                {!isEditMode && champsPerso.section('facturation')}
               </Box>
               )}
 
@@ -3807,6 +3819,7 @@ export default function NewJobModal({
                       />
                     </>
                   )}
+                  {!isEditMode && champsPerso.section('contrat')}
                 </Box>
               )}
 
@@ -3820,6 +3833,7 @@ export default function NewJobModal({
                 ) : (
                   <SpecificNotesInline ref={specificNotesRef} tempEntityType="job" />
                 )}
+                {!isEditMode && champsPerso.section('notes')}
               </Box>
 
               {isEditMode && initialValues?.id

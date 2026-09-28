@@ -82,7 +82,8 @@ export default function InvoiceEdit() {
   const champsDocument = useChampsDocument('invoice', draftId, language === 'fr');
   // Nouvelle facture : les champs se saisissent avant le premier enregistrement
   // (même bloc que job, devis, deal, client) puis s'écrivent sur le brouillon créé.
-  const champsCreation = useChampsCreation('invoice', language === 'fr');
+  // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
+  const champsCreation = useChampsCreation('invoice', language === 'fr', { sections: ['details', 'articles', 'totaux', 'notes'] });
 
   // Form state
   const [clientId, setClientId] = useState(prefillClientId || '');
@@ -659,6 +660,7 @@ export default function InvoiceEdit() {
                 )}
               </div>
             </div>
+            {!draftId && champsCreation.section('details')}
 
             {/* Line Items */}
             <div className="space-y-2">
@@ -738,6 +740,7 @@ export default function InvoiceEdit() {
                 </div>
               ))}
             </div>
+            {!draftId && champsCreation.section('articles')}
 
             {/* Totals & Tax/Discount */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -792,6 +795,7 @@ export default function InvoiceEdit() {
                 </div>
               </div>
             </div>
+            {!draftId && champsCreation.section('totaux')}
 
             {/* Notes */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -822,6 +826,7 @@ export default function InvoiceEdit() {
                 />
               </div>
             </div>
+            {!draftId && champsCreation.section('notes')}
 
             {/* Champs personnalisés (v2) — brouillon existant : enregistrement en place ;
                 nouvelle facture : saisis ici, écrits au premier enregistrement. */}
