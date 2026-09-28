@@ -23,6 +23,7 @@ import {
   trouverEtape,
   etapeSuivante,
   premiereEtape,
+  premiereEtapeSansConfirmation,
   echeanceAvantDate,
 } from './automationSequences';
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
@@ -894,7 +895,10 @@ async function handleEvent(event: CRMEvent) {
         // l'état du devis AU MOMENT où on y arrive, pas sur celui d'il y a
         // trois jours.
         if (Array.isArray(rule.steps) && rule.steps.length > 0) {
-          const debut = premiereEtape(rule.steps);
+          // Visite créée en lot : la confirmation ne part qu'à la première (M6).
+          const enLot = event.metadata?.suppress_immediate === true;
+          const debut = enLot ? premiereEtapeSansConfirmation(rule.steps) : premiereEtape(rule.steps);
+          if (enLot) logger.info(`[automationEngine] confirmation du parcours supprimée (visite en lot) — règle "${rule.name}"`);
           if (debut) {
             await planifierEtape(
               {
