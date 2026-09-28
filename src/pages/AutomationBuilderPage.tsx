@@ -190,8 +190,8 @@ export default function AutomationBuilderPage() {
    * Ce sont les quatre besoins qui reviennent chez une entreprise de services.
    */
   const SUGGESTIONS = [
-    { fr: 'Relance de soumission', en: 'Quote follow-up',
-      promptFr: 'Après l’envoi d’une soumission, attends 3 jours puis envoie un texto de suivi si le client n’a pas répondu.',
+    { fr: 'Relance de devis', en: 'Quote follow-up',
+      promptFr: 'Après l’envoi d’un devis, attends 3 jours puis envoie un texto de suivi si le client n’a pas répondu.',
       promptEn: 'After sending a quote, wait 3 days then text a follow-up if the client has not replied.' },
     { fr: 'Rappel de rendez-vous', en: 'Appointment reminder',
       promptFr: 'La veille d’un rendez-vous, envoie un texto de rappel au client avec l’heure.',
@@ -1186,7 +1186,9 @@ export default function AutomationBuilderPage() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-accent px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <Play className="h-3.5 w-3.5" aria-hidden="true" />
-            {fr ? 'Tester' : 'Test'}
+            {/* « Aperçu », pas « Tester » : rien ne part. Le QA du 25 a relevé
+                qu'un « Tester » laisse croire à un envoi réel. */}
+            {fr ? 'Aperçu' : 'Preview'}
           </button>
 
           {/* Brouillon ⚪—— Publier : l'interrupteur dit l'état ET l'action. */}
@@ -1372,7 +1374,7 @@ export default function AutomationBuilderPage() {
                               ? 'Change le délai du deuxième message à 2 jours. Retire le courriel.'
                               : 'Change the second message delay to 2 days. Remove the email.')
                           : (fr
-                              ? 'Après l’envoi d’une soumission, attends 24 h puis envoie un texto de suivi, attends 2 jours de plus pour un courriel, et crée une tâche d’appel après 3 jours.'
+                              ? 'Après l’envoi d’un devis, attends 24 h puis envoie un texto de suivi, attends 2 jours de plus pour un courriel, et crée une tâche d’appel après 3 jours.'
                               : 'After sending a quote, wait 24 hours then send a text follow-up, wait 2 more days for an email, and create a call task after 3 days.')}
                         className="w-full resize-none rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                       />
@@ -1605,6 +1607,9 @@ export default function AutomationBuilderPage() {
                       <h2 className="text-sm font-semibold text-text-primary">
                         {fr ? 'Ce qui partirait' : 'What would go out'}
                       </h2>
+                      <p className="mt-0.5 text-[11px] font-medium text-text-secondary">
+                        {fr ? 'Aperçu seulement — rien n’est envoyé.' : 'Preview only — nothing is sent.'}
+                      </p>
                       {apercu.client ? (
                         <p className="mt-0.5 text-[11px] text-text-tertiary">
                           {fr ? 'Exemple avec ' : 'Example with '}

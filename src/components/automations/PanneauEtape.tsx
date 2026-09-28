@@ -104,10 +104,10 @@ function analyserConditions(texte: string): Record<string, unknown> {
 /** Les variables offertes, insérables d'un clic dans un champ de texte. */
 const VARIABLES = [
   { cle: 'client_name', fr: 'Nom du client', en: 'Client name' },
-  { cle: 'company_name', fr: 'Votre entreprise', en: 'Your company' },
+  { cle: 'company_name', fr: 'Nom de votre entreprise', en: 'Your business name' },
   { cle: 'invoice_total', fr: 'Total', en: 'Total' },
   { cle: 'invoice_link', fr: 'Lien facture', en: 'Invoice link' },
-  { cle: 'quote_link', fr: 'Lien soumission', en: 'Quote link' },
+  { cle: 'quote_link', fr: 'Lien du devis', en: 'Quote link' },
   { cle: 'appointment_date', fr: 'Date du rendez-vous', en: 'Appointment date' },
 ];
 

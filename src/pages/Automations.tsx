@@ -121,7 +121,7 @@ const CATEGORY_META: Record<CategoryKey, {
   Quotes: {
     icon: FileText,
     labelEn: 'Quotes & Estimates',
-    labelFr: 'Devis et soumissions',
+    labelFr: 'Devis',
     descEn: 'Follow-ups after sending quotes',
     descFr: 'Relances après envoi de devis',
   },
