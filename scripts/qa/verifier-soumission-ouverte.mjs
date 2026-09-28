@@ -244,6 +244,8 @@ try {
   await remettreLangue();
   for (const r of etatRegles) await admin.from('automation_rules').update({ conditions: r.conditions, is_active: r.is_active }).eq('id', r.id);
   if (trace.quote) {
+    // L'outbox (#695) garde une trace durable de chaque événement émis.
+    await admin.from('domain_events').delete().eq('entity_id', trace.quote);
     await admin.from('notifications').delete().eq('entity_id', trace.quote);
     await admin.from('quote_views').delete().eq('quote_id', trace.quote);
   }
