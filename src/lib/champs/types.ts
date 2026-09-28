@@ -62,6 +62,8 @@ export interface DossierChamp {
   name: string;
   position: number;
   created_at: string;
+  /** Section du formulaire (dossier système) ; null = dossier créé par l'entreprise. */
+  cle_systeme?: string | null;
 }
 
 export interface ChampPerso {

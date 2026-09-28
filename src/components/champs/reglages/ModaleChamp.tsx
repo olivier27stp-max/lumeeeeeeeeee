@@ -27,7 +27,7 @@ import {
 import { OBJETS, TYPES_CHAMP, LIBELLES_OBJET, LIBELLES_TYPE, conversionPermise, variableAffichee, type ConfigChamp, type ValeurChamp } from '../../../lib/champs/types';
 import { slugCle } from '../../../lib/champs/valeurs';
 import { peutAllerAuFormulaire } from '../../../lib/champs/questionsFormulaire';
-import { clesStandard } from '../../../lib/champs/standard';
+import { clesStandard, nomDossier } from '../../../lib/champs/standard';
 import { AIDE_TYPE } from '../icones';
 import ChampSaisie from '../ChampSaisie';
 
@@ -323,7 +323,7 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                           onChange={(e) => { if (e.target.value === '__nouveau__') setNouveauDossier(''); else setDossier(e.target.value); }}
                           className="glass-input h-9 w-full text-[13px]">
                           <option value="">{fr ? 'Sans dossier' : 'No folder'}</option>
-                          {dossiers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                          {dossiers.map((d) => <option key={d.id} value={d.id}>{nomDossier(d, fr)}</option>)}
                           <option value="__nouveau__">{fr ? '+ Créer un dossier' : '+ Create folder'}</option>
                         </select>
                       ) : (
