@@ -185,3 +185,58 @@ describe('M8 — la liste publie par la route serveur, qui peut refuser', () => 
     expect(toasts.erreur.join('\n')).toContain('« Objet » est vide');
   });
 });
+
+// ─── M9 ─────────────────────────────────────────────────────────
+
+function cocher(nom: string) {
+  cliquer(container.querySelector(`input[aria-label="Cocher ${nom}"]`));
+}
+
+function saisirRecherche(v: string) {
+  const champ = container.querySelector<HTMLInputElement>('#rech-automations');
+  if (!champ) throw new Error('recherche introuvable');
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(champ, v);
+  act(() => { champ.dispatchEvent(new Event('input', { bubbles: true })); });
+}
+
+describe('M9 — le lot n’agit que sur ce qui est à l’écran', () => {
+  it('cocher dans « Toutes » puis dans « Modèles » : « Publier » ne touche QUE la ligne visible', async () => {
+    reglesServies = [
+      regle({ id: 'a', name: 'Mienne A' }),
+      regle({ id: 'b', name: 'Mienne B' }),
+      regle({ id: 'm', name: 'Modèle M', is_preset: true, preset_key: 'lead_followup_1d' }),
+    ];
+    await rendre();
+    cocher('Mienne A');
+    cocher('Mienne B');
+    cliquer(Array.from(container.querySelectorAll('button[role="tab"]')).find((b) => b.textContent?.includes('Modèles')));
+    await attendre();
+    cocher('Modèle M');
+    await attendre();
+    expect(container.textContent).toContain('1 sélectionnée(s)');
+    // Le bouton annonce le nombre exact de ce qu'il va toucher.
+    expect(bouton('Publier (')?.textContent).toContain('Publier (1)');
+    cliquer(bouton('Publier ('));
+    await attendre();
+    expect(publierLotMock).toHaveBeenCalledWith(['m'], true);
+  });
+
+  it('changer de page ou chercher vide la sélection', async () => {
+    reglesServies = Array.from({ length: 12 }, (_, i) => regle({ id: `r${i}`, name: `Auto ${String(i).padStart(2, '0')}` }));
+    await rendre();
+    cocher('Auto 00');
+    expect(container.textContent).toContain('1 sélectionnée(s)');
+    cliquer(bouton('Suivant'));
+    await attendre();
+    expect(container.textContent).not.toContain('sélectionnée(s)');
+
+    cliquer(bouton('Précédent'));
+    await attendre();
+    cocher('Auto 01');
+    expect(container.textContent).toContain('1 sélectionnée(s)');
+    saisirRecherche('Auto');
+    await attendre();
+    expect(container.textContent).not.toContain('sélectionnée(s)');
+  });
+});

@@ -632,6 +632,10 @@ export default function Automations() {
   // d'une liste qui n'en a plus qu'une donne un écran vide inexplicable.
   useEffect(() => { setPage(1); setRestentAffichees(new Set()); }, [onglet, search, filterCategory, filterStatut]);
 
+  // Une sélection ne survit à AUCUN changement de vue (M9) : onglet, dossier,
+  // page, recherche, filtres, taille de page.
+  useEffect(() => { setCochees(new Set()); }, [onglet, dossierActif, page, parPage, search, filterCategory, filterStatut]);
+
   const handleToggle = async (rule: AutomationRule) => {
     // Une confirmation déjà à l'écran : les clics suivants n'en ouvrent pas d'autres.
     if (confirmationOuverte.current) return;
@@ -878,7 +882,17 @@ export default function Automations() {
    * une coche peut survivre à un changement de filtre ou à un rechargement,
    * et agir sur un identifiant disparu échouerait ligne par ligne.
    */
-  const reglesCochees = rules.filter((r) => cochees.has(r.id));
+  /*
+   * SEULEMENT CE QUI EST À L'ÉCRAN (audit M9). Cocher 3 lignes dans
+   * « Toutes » puis 2 dans « Modèles » publiait 5 automatisations, dont 3
+   * invisibles. La sélection se vide à chaque changement de vue (voir
+   * l'effet plus haut) et le lot ne porte que sur les lignes visibles.
+   */
+  const reglesCochees = visibles.filter((r) => cochees.has(r.id));
+  /** Ce que chaque bouton du lot touchera VRAIMENT — affiché sur le bouton. */
+  const nbAPublier = reglesCochees.filter((r) => !r.deleted_at && !r.is_active).length;
+  const nbADepublier = reglesCochees.filter((r) => !r.deleted_at && r.is_active).length;
+  const nbASupprimer = reglesCochees.filter((r) => !r.is_preset).length;
 
   /**
    * Applique `action` à chaque règle cochée, en SÉQUENCE.
@@ -1392,7 +1406,7 @@ export default function Automations() {
                   className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
                 >
                   <RotateCcw size={13} aria-hidden="true" />
-                  {fr ? 'Restaurer' : 'Restore'}
+                  {fr ? `Restaurer (${reglesCochees.length})` : `Restore (${reglesCochees.length})`}
                 </button>
               ) : (
                 <>
@@ -1403,7 +1417,7 @@ export default function Automations() {
                     className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
                   >
                     <ToggleRight size={13} aria-hidden="true" />
-                    {fr ? 'Publier' : 'Publish'}
+                    {fr ? `Publier (${nbAPublier})` : `Publish (${nbAPublier})`}
                   </button>
                   <button
                     type="button"
@@ -1412,7 +1426,7 @@ export default function Automations() {
                     className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
                   >
                     <ToggleLeft size={13} aria-hidden="true" />
-                    {fr ? 'Repasser en brouillon' : 'Unpublish'}
+                    {fr ? `Repasser en brouillon (${nbADepublier})` : `Unpublish (${nbADepublier})`}
                   </button>
                   <button
                     type="button"
@@ -1421,7 +1435,7 @@ export default function Automations() {
                     className="glass-button inline-flex items-center gap-1.5 text-[12px] text-danger disabled:opacity-50"
                   >
                     <Trash2 size={13} aria-hidden="true" />
-                    {fr ? 'Supprimer' : 'Delete'}
+                    {fr ? `Supprimer (${nbASupprimer})` : `Delete (${nbASupprimer})`}
                   </button>
                 </>
               )}
