@@ -34,7 +34,7 @@ import LienAjouterChamps from './LienAjouterChamps';
 import GererChampsFenetre from './GererChampsFenetre';
 import { usePermissions } from '../../hooks/usePermissions';
 import { Settings2 } from 'lucide-react';
-import { nomDossier } from '../../lib/champs/standard';
+import { champsSysteme, nomDossier } from '../../lib/champs/standard';
 import type { ChampPerso } from '../../lib/champs/types';
 
 /** Titre de la fenêtre de création, par objet (panneau « Gérer les champs »). */
@@ -52,7 +52,7 @@ const AUCUN_MASQUE: string[] = [];
 export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sections?: string[] } = {}) {
   const { isEnabled } = useChampsPersoActifs();
   const idBase = useId();
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['champs-perso', objet],
     queryFn: () => listerChamps(objet),
     enabled: isEnabled,
@@ -60,8 +60,13 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sectio
   });
   // Champs de base décochés dans « Gérer les champs » (tous cochés par défaut).
   const masquesSysteme = useMemo(() => data?.system_hidden?.[objet] ?? AUCUN_MASQUE, [data, objet]);
-  /** Ce champ de base (clé de CHAMPS_STANDARD) est-il affiché dans le formulaire ? */
-  const systeme = (cle: string) => !masquesSysteme.includes(cle);
+  const verrouilles = useMemo(() => new Set(champsSysteme(objet).filter((c) => c.verrouille).map((c) => c.key)), [objet]);
+  /**
+   * Ce champ de base (clé de CHAMPS_STANDARD) est-il affiché dans le formulaire ?
+   * Au premier chargement, seuls les indispensables s'affichent : un champ décoché
+   * ne doit pas apparaître quelques secondes puis disparaître sous les doigts.
+   */
+  const systeme = (cle: string) => verrouilles.has(cle) || (!isLoading && !masquesSysteme.includes(cle));
   // Tous les champs actifs de l'objet (pour « Gérer les champs »), et ceux affichés dans la fenêtre.
   const tousActifs = useMemo(() => (data?.fields ?? []).filter((c) => !c.archived_at), [data]);
   const champs = useMemo(() => tousActifs.filter((c) => !c.config?.masque_creation), [tousActifs]);
