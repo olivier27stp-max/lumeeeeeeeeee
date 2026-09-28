@@ -37,6 +37,7 @@ import { formaterValeur, nomFichier } from '../../lib/champs/valeurs';
 import { ouvrirFichierChamp } from './ChampSaisie';
 import { LIBELLES_OBJET, type ChampPerso, type DossierChamp, type ObjetChamp, type ValeurEnregistree } from '../../lib/champs/types';
 import ModaleChamp from './reglages/ModaleChamp';
+import { nomDossier } from '../../lib/champs/standard';
 
 /** Une colonne standard de la liste, décrite par la page. */
 export interface ColonneStandard<T> {
@@ -299,7 +300,7 @@ export function PanneauGererChamps<T>({ objet, fr, standard, champs, dossiers, c
   for (const c of libres) parDossier.set(c.folder_id ?? '', [...(parDossier.get(c.folder_id ?? '') ?? []), c]);
   for (const d of dossiers.filter((x) => x.object_type === objet)) {
     const liste = parDossier.get(d.id);
-    if (liste?.length) groupes.push({ cle: d.id, titre: d.name, elements: liste.map((c) => ({ id: idColonneChamp(c.id), libelle: c.label })) });
+    if (liste?.length) groupes.push({ cle: d.id, titre: nomDossier(d, fr), elements: liste.map((c) => ({ id: idColonneChamp(c.id), libelle: c.label })) });
   }
   const sansDossier = [...parDossier.entries()].filter(([k]) => !k || !dossiers.some((d) => d.id === k)).flatMap(([, l]) => l);
   if (sansDossier.length) groupes.push({ cle: 'sans', titre: fr ? 'Champs personnalisés' : 'Custom fields', elements: sansDossier.map((c) => ({ id: idColonneChamp(c.id), libelle: c.label })) });

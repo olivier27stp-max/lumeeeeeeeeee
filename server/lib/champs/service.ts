@@ -88,7 +88,7 @@ export async function listerChamps(
     if (eo) traduireErreur(eo, 'lire les options');
     options = (data ?? []) as typeof options;
   }
-  let dq = db.from('custom_field_folders').select('id, object_type, name, position, created_at')
+  let dq = db.from('custom_field_folders').select('id, object_type, name, position, created_at, cle_systeme')
     .eq('org_id', orgId).order('position').order('created_at');
   if (opts.objet) dq = dq.eq('object_type', opts.objet);
   const { data: dossiers, error: ed } = await dq;

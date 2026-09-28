@@ -24,6 +24,7 @@ import GererChampsFenetre from './GererChampsFenetre';
 import { usePermissions } from '../../hooks/usePermissions';
 import { listerChamps } from '../../lib/champsPersoApi';
 import { LIBELLES_OBJET } from '../../lib/champs/types';
+import { nomDossier } from '../../lib/champs/standard';
 import { Settings2 } from 'lucide-react';
 
 interface Props {
@@ -82,7 +83,7 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
     }
     const ordonnes = data.folders
       .filter((d) => parDossier.has(d.id))
-      .map((d) => ({ id: d.id, nom: d.name, champs: parDossier.get(d.id)! }));
+      .map((d) => ({ id: d.id, nom: nomDossier(d, fr), champs: parDossier.get(d.id)! }));
     if (parDossier.has(null)) ordonnes.push({ id: '__sans', nom: fr ? 'Sans dossier' : 'No folder', champs: parDossier.get(null)! });
     return ordonnes;
   }, [data, fr]);

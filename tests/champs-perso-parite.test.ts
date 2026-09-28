@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { OBJETS, TYPES_CHAMP, TYPES_UNIQUES, CONVERSIONS_SURES } from '../src/lib/champs/types';
-import { CHAMPS_STANDARD } from '../src/lib/champs/standard';
+import { CHAMPS_STANDARD, SECTIONS_SYSTEME } from '../src/lib/champs/standard';
 import { OPERATEURS_PAR_FAMILLE } from '../src/lib/champs/filtres';
 import { slugCle } from '../src/lib/champs/valeurs';
 
@@ -20,6 +20,8 @@ const liste = (s: string) => [...s.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
 const MIG_TYPES = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260929170000_champs_types_case_url_fichier.sql'), 'utf8');
 // Objet « Propriété » : cf_cles_standard en vigueur y est redéfinie.
 const MIG_PROPRIETE = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260929180000_champs_objet_propriete.sql'), 'utf8');
+// Champs système (audit des formulaires) : cf_cles_standard en vigueur + cf_sections_systeme.
+const MIG_SYSTEME = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260930100000_champs_dossiers_systeme.sql'), 'utf8');
 
 describe('parité SQL ↔ TypeScript', () => {
   it('objets', () => {
@@ -38,9 +40,18 @@ describe('parité SQL ↔ TypeScript', () => {
   });
   it('clés standard réservées (cf_cles_standard) = registre CHAMPS_STANDARD', () => {
     for (const objet of OBJETS) {
-      const m = new RegExp(`when '${objet}'\\s+then array\\[([^\\]]*)\\]`).exec(MIG_PROPRIETE);
+      const m = new RegExp(`when '${objet}'\\s+then array\\[([^\\]]*)\\]`).exec(MIG_SYSTEME);
       expect(m, objet).not.toBeNull();
       expect(liste(m![1]), objet).toEqual(CHAMPS_STANDARD[objet].map((c) => c.key));
+    }
+  });
+  it('sections des formulaires (cf_sections_systeme) = SECTIONS_SYSTEME, chaque champ vise une section existante', () => {
+    const sql = [...MIG_SYSTEME.matchAll(/\('([a-z_]+)', '([a-z_]+)', '([^']+)', (\d+)\)/g)].map((m) => `${m[1]}:${m[2]}:${m[3]}:${m[4]}`);
+    const ts = OBJETS.flatMap((o) => SECTIONS_SYSTEME[o].map((sec, i) => `${o}:${sec.cle}:${sec.nom.fr}:${i}`));
+    expect(sql).toEqual(ts);
+    for (const o of OBJETS) {
+      const cles = new Set(SECTIONS_SYSTEME[o].map((x) => x.cle));
+      for (const c of CHAMPS_STANDARD[o]) if (c.section) expect(cles.has(c.section), `${o}.${c.key} → ${c.section}`).toBe(true);
     }
   });
   it('conversions permises (trigger) = CONVERSIONS_SURES', () => {

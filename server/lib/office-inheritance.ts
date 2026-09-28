@@ -476,11 +476,25 @@ async function copierModeles(
       const champs = await lireActifs(admin, 'custom_fields', sourceOrgId, ['archived_at']);
       if (champs.length > 0) {
         let dossierIds = new Map<string, string>();
-        if (dossiers.length > 0) {
+        // Les dossiers système (sections des formulaires) existent déjà dans le
+        // nouveau bureau (trigger trg_orgs_dossiers_systeme) : on s'y rattache
+        // au lieu de les recopier, ce que l'unicité des noms refuserait.
+        const perso = dossiers.filter((d) => !d.cle_systeme);
+        const systeme = dossiers.filter((d) => d.cle_systeme);
+        if (perso.length > 0) {
           const { data: ins, error } = await admin.from('custom_field_folders')
-            .insert(dossiers.map((d) => clonerLigne(d, targetOrgId, createdBy))).select('id');
+            .insert(perso.map((d) => clonerLigne(d, targetOrgId, createdBy))).select('id');
           if (error) throw new Error(error.message);
-          dossierIds = zipIds(dossiers, ins || []);
+          dossierIds = zipIds(perso, ins || []);
+        }
+        if (systeme.length > 0) {
+          const { data: cibles, error } = await admin.from('custom_field_folders')
+            .select('id, object_type, cle_systeme').eq('org_id', targetOrgId).not('cle_systeme', 'is', null);
+          if (error) throw new Error(error.message);
+          for (const d of systeme) {
+            const cible = (cibles || []).find((c: Row) => c.object_type === d.object_type && c.cle_systeme === d.cle_systeme);
+            if (cible) dossierIds.set(String(d.id), String(cible.id));
+          }
         }
         const { data: insChamps, error: eChamps } = await admin.from('custom_fields')
           .insert(champs.map((c) => ({

@@ -99,6 +99,8 @@ const REGLES: Array<[RegExp, (...g: string[]) => string]> = [
   [re('Conversion de type refusée : (\\S+) → (\\S+)\\.'), (a, b) => `Type conversion refused: ${a} → ${b}.`],
   [re('Un des champs n\'est pas un champ d\'opportunité actif\\.'), () => 'One of the fields is not an active opportunity field.'],
   [re('Un dossier porte déjà ce nom\\.'), () => 'A folder already has this name.'],
+  [re('Un dossier système ne se supprime pas : il correspond à une section du formulaire\\.'), () => 'A system folder cannot be deleted: it matches a section of the form.'],
+  [re('Un dossier système ne se renomme pas : il correspond à une section du formulaire\\.'), () => 'A system folder cannot be renamed: it matches a section of the form.'],
   [re('Doublon refusé\\.'), () => 'Duplicate rejected.'],
   [re('Des doublons empêchent d\'activer l\'unicité\\.'), () => 'Duplicates prevent enabling uniqueness.'],
   [re('Ce champ porte encore des valeurs : archive-le, ou purge-le depuis son rapport d\'impact\\.'), () => 'This field still holds values: archive it, or purge it from its impact report.'],

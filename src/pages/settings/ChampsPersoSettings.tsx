@@ -37,7 +37,7 @@ import {
   evaluerCondition, LIBELLES_OPERATEUR, OPERATEURS_DUREE, OPERATEURS_PAR_FAMILLE,
   type Operateur, type UniteDuree,
 } from '../../lib/champs/filtres';
-import type { ChampStandard } from '../../lib/champs/standard';
+import { nomDossier, nomSection, type ChampStandard } from '../../lib/champs/standard';
 import { ICONE_TYPE } from '../../components/champs/icones';
 import ModaleChamp from '../../components/champs/reglages/ModaleChamp';
 import { ModaleCherchables, ModaleDossier, ModaleSuppression, ModaleUniques } from '../../components/champs/reglages/ModalesReglages';
@@ -135,7 +135,10 @@ export default function ChampsPersoSettings() {
   const toutesLignes = useMemo<Ligne[]>(() => {
     if (!data) return [];
     const custom: Ligne[] = data.fields.map((c) => ({ sorte: 'custom', id: c.id, objet: c.object_type, champ: c }));
-    const standard: Ligne[] = OBJETS.flatMap((o) => (data.standard[o] ?? []).map((s) => ({ sorte: 'standard' as const, id: `std-${o}-${s.key}`, objet: o, std: s })));
+    // Seuls les champs réellement affichés par un formulaire (ceux qui ont une section) ;
+    // les attributs sans section (créé le, statut…) gardent leur clé réservée, sans ligne.
+    const standard: Ligne[] = OBJETS.flatMap((o) => (data.standard[o] ?? []).filter((s) => s.section)
+      .map((s) => ({ sorte: 'standard' as const, id: `std-${o}-${s.key}`, objet: o, std: s })));
     return [...custom, ...standard];
   }, [data]);
 
@@ -470,7 +473,7 @@ export default function ChampsPersoSettings() {
                   className="h-8 rounded-md border border-outline bg-surface-card px-2 text-[13px] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
                   <option value="">{fr ? 'Déplacer vers…' : 'Move to…'}</option>
                   <option value="__aucun">{fr ? 'Sans dossier' : 'No folder'}</option>
-                  {dossiersLot.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  {dossiersLot.map((d) => <option key={d.id} value={d.id}>{nomDossier(d, fr)}</option>)}
                 </select>
                 <button type="button" disabled={lotEnCours || !champsSelectionnes.some((c) => !c.archived_at)} onClick={() => { void archiverLot(); }}
                   className="inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface-card px-2.5 py-1 text-[13px] text-red-600 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
@@ -530,14 +533,15 @@ export default function ChampsPersoSettings() {
                   const Icone = ICONE_TYPE[type];
                   const nom = l.sorte === 'custom' ? l.champ.label : (fr ? l.std.label.fr : l.std.label.en);
                   const variable = l.sorte === 'custom' ? variableAffichee(l.objet, l.champ.key) : `${l.objet}.${l.std.key}`;
-                  const dossier = l.sorte === 'custom' ? dossiers.find((d) => d.id === l.champ.folder_id)?.name : null;
+                  const dossierTrouve = l.sorte === 'custom' ? dossiers.find((d) => d.id === l.champ.folder_id) : null;
+                  const dossier = dossierTrouve ? nomDossier(dossierTrouve, fr) : null;
                   const cell = cn('flex items-center border-b border-outline/30 px-3 py-2.5 text-[13px] text-text-primary min-w-0', l.sorte === 'custom' && l.champ.archived_at && 'opacity-60');
                   const pastille = (texte: string) => <span className="inline-flex max-w-full items-center gap-1 truncate rounded-md border border-outline-subtle px-1.5 py-0.5 text-[12px]"><FolderOpen size={11} aria-hidden className="shrink-0" /><span className="truncate">{texte}</span></span>;
                   const contenu: Record<ColonneOpt, React.ReactNode> = {
                     type: <><Icone size={13} aria-hidden className="shrink-0" /><span className="truncate">{fr ? LIBELLES_TYPE[type].fr : LIBELLES_TYPE[type].en}</span></>,
                     dossier: l.sorte === 'custom'
                       ? (dossier ? pastille(dossier) : <span className="text-text-tertiary">—</span>)
-                      : pastille(fr ? `Infos ${LIBELLES_OBJET[l.objet].fr.toLowerCase()}` : `${LIBELLES_OBJET[l.objet].en} info`),
+                      : pastille(nomSection(l.objet, l.std.section ?? '', fr) ?? '—'),
                     cle: <>
                       <code className="truncate font-mono text-[12px] text-text-secondary" title={l.sorte === 'standard' ? (fr ? 'Champ standard : pas une variable de courriel' : 'Standard field: not an email variable') : variable}>{variable}</code>
                       {l.sorte === 'custom' && (
@@ -602,7 +606,7 @@ export default function ChampsPersoSettings() {
                                 )}
                                 {!l.champ.archived_at && [{ id: null as string | null, name: fr ? 'Sans dossier' : 'No folder' }, ...dossiers.filter((d) => d.object_type === l.objet)]
                                   .filter((d) => d.id !== l.champ.folder_id).map((d) => (
-                                    <button key={d.id ?? 'aucun'} role="menuitem" type="button" onClick={() => { void deplacer(l.champ, d.id); }} className="block w-full px-5 py-1.5 text-left text-[13px] hover:bg-surface-secondary">{d.name}</button>
+                                    <button key={d.id ?? 'aucun'} role="menuitem" type="button" onClick={() => { void deplacer(l.champ, d.id); }} className="block w-full px-5 py-1.5 text-left text-[13px] hover:bg-surface-secondary">{'cle_systeme' in d ? nomDossier(d, fr) : d.name}</button>
                                   ))}
                                 {l.champ.archived_at ? (
                                   <button role="menuitem" type="button" onClick={() => { void restaurer(l.champ); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-surface-secondary">
@@ -684,7 +688,7 @@ export default function ChampsPersoSettings() {
 
 /** Vue « Dossiers » : renommer, supprimer (les champs passent « Sans dossier »), ajouter un champ dedans. */
 function VueDossiers({ dossiers, champs, fr, onNouveauChamp, onChange }: {
-  dossiers: { id: string; name: string; object_type: ObjetChamp }[]; champs: ChampPerso[]; fr: boolean;
+  dossiers: { id: string; name: string; object_type: ObjetChamp; cle_systeme?: string | null }[]; champs: ChampPerso[]; fr: boolean;
   onNouveauChamp: (dossierId: string) => void; onChange: () => void;
 }) {
   const [edition, setEdition] = useState<Record<string, string>>({});
@@ -732,17 +736,20 @@ function VueDossiers({ dossiers, champs, fr, onNouveauChamp, onChange }: {
                 onKeyDown={(e) => { if (e.key === 'Enter') void renommer(d.id); if (e.key === 'Escape') setEdition((x) => { const { [d.id]: _y, ...r } = x; return r; }); }}
                 onBlur={() => { void renommer(d.id); }} className="glass-input h-8 flex-1 text-[13px]" />
             ) : (
-              <span className="flex-1 text-[13px] font-medium text-text-primary">{d.name}
-                <span className="ml-2 text-[12px] font-normal text-text-tertiary">{fr ? LIBELLES_OBJET[d.object_type].fr : LIBELLES_OBJET[d.object_type].en} · {nb} {fr ? 'champ(s)' : 'field(s)'}</span>
+              <span className="flex flex-1 items-center gap-1.5 text-[13px] font-medium text-text-primary">{nomDossier(d, fr)}
+                {d.cle_systeme && <Lock size={12} className="text-text-tertiary" aria-label={fr ? 'Section du formulaire : ni renommée ni supprimée' : 'Form section: cannot be renamed or deleted'} />}
+                <span className="ml-1 text-[12px] font-normal text-text-tertiary">{fr ? LIBELLES_OBJET[d.object_type].fr : LIBELLES_OBJET[d.object_type].en} · {nb} {fr ? 'champ(s)' : 'field(s)'}</span>
               </span>
             )}
             <button type="button" onClick={() => onNouveauChamp(d.id)} className="text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded">
               {fr ? '+ Champ' : '+ Field'}
             </button>
+            {!d.cle_systeme && <>
             <button type="button" aria-label={fr ? `Renommer ${d.name}` : `Rename ${d.name}`} onClick={() => setEdition((x) => ({ ...x, [d.id]: d.name }))}
               className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Pencil size={13} aria-hidden /></button>
             <button type="button" aria-label={fr ? `Supprimer ${d.name}` : `Delete ${d.name}`} onClick={() => { void supprimer(d.id, d.name, nb); }}
               className="rounded p-1 text-text-tertiary hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Trash2 size={13} aria-hidden /></button>
+            </>}
           </li>
         );
       })}
