@@ -11,260 +11,272 @@
 > **Régénérer avec** `scripts/gen-schema-snapshot.mjs` après tout changement
 > structurel. Un référentiel périmé est pire qu'aucun référentiel.
 
-**Généré le 2026-09-24 depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
+**Généré le 2026-09-28 depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
 
-## 1. Tables (248)
+## 1. Tables (260)
 
 | Table | RLS | FORCE | Policies | Lignes (est.) |
 |---|---|---|---|---|
-| `a2p_registrations` | ✅ | ✅ | 1 | 0 |
-| `active_sessions` | ✅ | ✅ | 2 | 237 |
-| `activity_log` | ✅ | ✅ | 2 | 1113 |
-| `activity_notes` | ✅ | ✅ | 3 | 1 |
-| `agent_actions` | ✅ | ✅ | 2 | 3 |
-| `agent_messages` | ✅ | ✅ | 1 | 16 |
-| `ai_reservations` | ✅ | ✅ | 1 | 63 |
-| `ai_usage` | ✅ | ✅ | 2 | 204 |
-| `ai_usage_monthly` | ✅ | ✅ | 2 | 2 |
-| `alert_rules` | ✅ | ✅ | 3 | 4 |
-| `api_keys` | ✅ | ✅ | 4 | 0 |
-| `app_connections` | ✅ | ✅ | 4 | 1 |
+| `a2p_registrations` | ✅ | ✅ | 2 | 0 |
+| `active_sessions` | ✅ | ✅ | 3 | 301 |
+| `activity_log` | ✅ | ✅ | 3 | 1766 |
+| `activity_notes` | ✅ | ✅ | 4 | 1 |
+| `agent_actions` | ✅ | ✅ | 3 | 3 |
+| `agent_messages` | ✅ | ✅ | 2 | 16 |
+| `ai_reservations` | ✅ | ✅ | 2 | 84 |
+| `ai_usage` | ✅ | ✅ | 3 | 204 |
+| `ai_usage_monthly` | ✅ | ✅ | 3 | 2 |
+| `alert_rules` | ✅ | ✅ | 4 | 4 |
+| `api_keys` | ✅ | ✅ | 5 | 0 |
+| `app_connections` | ✅ | ✅ | 5 | 1 |
 | `applied_taxes` | ✅ | ✅ | 3 | 0 |
-| `audit_events` | ✅ | ✅ | 4 | 291 |
-| `automation_execution_logs` | ✅ | ✅ | 4 | 281 |
-| `automation_rules` | ✅ | ✅ | 4 | 210 |
-| `automation_scheduled_tasks` | ✅ | ✅ | 4 | 684 |
-| `automations` | ✅ | ✅ | 4 | 0 |
+| `audit_events` | ✅ | ✅ | 5 | 291 |
+| `automation_execution_logs` | ✅ | ✅ | 2 | 281 |
+| `automation_folders` | ✅ | ✅ | 5 | ? |
+| `automation_rules` | ✅ | ✅ | 5 | 668 |
+| `automation_scheduled_tasks` | ✅ | ✅ | 2 | 684 |
+| `automation_webhook_receipts` | ✅ | ✅ | 1 | ? |
+| `automation_webhooks` | ✅ | ✅ | 2 | ? |
+| `automations` | ✅ | ✅ | 5 | 0 |
 | `billing_profiles` | ✅ | ✅ | 1 | 3 |
 | `billing_receipt_log` | ✅ | ✅ | 1 | 2 |
-| `checklist_templates` | ✅ | ✅ | 5 | 0 |
-| `client_payment_profiles` | ✅ | ✅ | 1 | ? |
+| `cf_affichage_systeme` | ✅ | ✅ | 4 | ? |
+| `checklist_templates` | ✅ | ✅ | 6 | 0 |
+| `client_payment_profiles` | ✅ | ✅ | 2 | ? |
 | `client_tags` | ✅ | ✅ | 3 | 0 |
-| `clients` | ✅ | ✅ | 4 | 1784 |
-| `commission_settings` | ✅ | ✅ | 2 | 0 |
-| `communication_channels` | ✅ | ✅ | 1 | 1 |
-| `communication_messages` | ✅ | ✅ | 1 | 9 |
-| `communication_settings` | ✅ | ✅ | 1 | 2 |
-| `company_operating_profile` | ✅ | ✅ | 1 | 0 |
+| `clients` | ✅ | ✅ | 6 | 1787 |
+| `clients_inactifs_declenches` | ✅ | ✅ | 0 | ? |
+| `commission_settings` | ✅ | ✅ | 3 | 0 |
+| `communication_channels` | ✅ | ✅ | 2 | 1 |
+| `communication_messages` | ✅ | ✅ | 2 | 9 |
+| `communication_settings` | ✅ | ✅ | 2 | 2 |
+| `company_groups` | ✅ | ✅ | 2 | ? |
+| `company_operating_profile` | ✅ | ✅ | 2 | 0 |
 | `company_settings` | ✅ | ✅ | 4 | 3 |
-| `connected_accounts` | ✅ | ✅ | 4 | 1 |
-| `consents` | ✅ | ✅ | 2 | 52 |
-| `contacts` | ✅ | ✅ | 4 | 21 |
-| `conversations` | ✅ | ✅ | 4 | 6 |
+| `connected_accounts` | ✅ | ✅ | 5 | 1 |
+| `consents` | ✅ | ✅ | 3 | 52 |
+| `contacts` | ✅ | ✅ | 5 | 21 |
+| `conversations` | ✅ | ✅ | 6 | 7 |
 | `course_assignments` | ✅ | ✅ | 3 | 0 |
 | `course_lessons` | ✅ | ✅ | 7 | 5 |
 | `course_modules` | ✅ | ✅ | 7 | 7 |
 | `course_progress` | ✅ | ✅ | 3 | 5 |
-| `courses` | ✅ | ✅ | 7 | 18 |
-| `creator_space_notes` | ✅ | ✅ | 0 | ? |
+| `courses` | ✅ | ✅ | 8 | 18 |
+| `creator_space_notes` | ✅ | ✅ | 1 | ? |
 | `cron_locks` | ✅ | ✅ | 0 | 0 |
-| `custom_field_folders` | ✅ | ✅ | 4 | ? |
-| `custom_field_options` | ✅ | ✅ | 4 | ? |
-| `custom_field_pipeline_cards` | ✅ | ✅ | 4 | ? |
-| `custom_field_value_options` | ✅ | ✅ | 2 | ? |
-| `custom_field_values` | ✅ | ✅ | 4 | ? |
-| `custom_fields` | ✅ | ✅ | 4 | ? |
-| `data_export_log` | ✅ | ✅ | 4 | 0 |
-| `data_migrations` | ✅ | ✅ | 1 | 2 |
+| `custom_field_folders` | ✅ | ✅ | 5 | 279 |
+| `custom_field_options` | ✅ | ✅ | 5 | 165 |
+| `custom_field_pipeline_cards` | ✅ | ✅ | 5 | ? |
+| `custom_field_value_options` | ✅ | ✅ | 3 | ? |
+| `custom_field_values` | ✅ | ✅ | 5 | 280 |
+| `custom_fields` | ✅ | ✅ | 5 | 545 |
+| `data_export_log` | ✅ | ✅ | 5 | 0 |
+| `data_migrations` | ✅ | ✅ | 2 | 4 |
 | `dead_letters` | ✅ | ✅ | 1 | 0 |
-| `deal_stage_history` | ✅ | ✅ | 1 | 22 |
-| `deals` | ✅ | ✅ | 4 | 22 |
+| `deal_stage_history` | ✅ | ✅ | 2 | 47 |
+| `deals` | ✅ | ✅ | 5 | 29 |
 | `demo_requests` | ✅ | ✅ | 1 | 2 |
-| `dsar_requests` | ✅ | ✅ | 3 | 0 |
-| `email_accounts` | ✅ | ✅ | 4 | 2 |
-| `email_campaigns` | ✅ | ✅ | 2 | 0 |
-| `email_deliveries` | ✅ | ✅ | 2 | 47 |
+| `domain_events` | ✅ | ✅ | 0 | 351 |
+| `dsar_requests` | ✅ | ✅ | 4 | 0 |
+| `email_accounts` | ✅ | ✅ | 5 | 2 |
+| `email_campaigns` | ✅ | ✅ | 3 | 0 |
+| `email_deliveries` | ✅ | ✅ | 3 | 47 |
 | `email_messages` | ✅ | ✅ | 1 | 190 |
-| `email_oauth_states` | ✅ | ✅ | 1 | 0 |
-| `email_opt_outs` | ✅ | ✅ | 2 | 0 |
-| `email_retry_queue` | ✅ | ✅ | 1 | ? |
-| `email_templates` | ✅ | ✅ | 5 | 10 |
-| `email_threads` | ✅ | ✅ | 1 | 175 |
-| `email_unsubscribes` | ✅ | ✅ | 2 | 1 |
+| `email_oauth_states` | ✅ | ✅ | 2 | 0 |
+| `email_opt_outs` | ✅ | ✅ | 3 | 0 |
+| `email_retry_queue` | ✅ | ✅ | 2 | ? |
+| `email_templates` | ✅ | ✅ | 6 | 10 |
+| `email_threads` | ✅ | ✅ | 2 | 175 |
+| `email_unsubscribes` | ✅ | ✅ | 3 | 1 |
 | `failed_login_attempts` | ✅ | ✅ | 0 | 0 |
-| `field_daily_stats` | ✅ | ✅ | 4 | 15 |
-| `field_house_events` | ✅ | ✅ | 4 | 184 |
-| `field_house_profiles` | ✅ | ✅ | 7 | 1021 |
-| `field_pin_entity_links` | ✅ | ✅ | 1 | 47 |
-| `field_pin_templates` | ✅ | ✅ | 4 | 0 |
-| `field_pins` | ✅ | ✅ | 4 | 126 |
-| `field_rep_performance` | ✅ | ✅ | 1 | 0 |
-| `field_sales_reps` | ✅ | ✅ | 4 | 3 |
+| `field_daily_stats` | ✅ | ✅ | 5 | 29 |
+| `field_house_events` | ✅ | ✅ | 5 | 184 |
+| `field_house_profiles` | ✅ | ✅ | 8 | 1870 |
+| `field_pin_entity_links` | ✅ | ✅ | 2 | 895 |
+| `field_pin_templates` | ✅ | ✅ | 5 | 0 |
+| `field_pins` | ✅ | ✅ | 5 | 968 |
+| `field_rep_performance` | ✅ | ✅ | 2 | 0 |
+| `field_sales_reps` | ✅ | ✅ | 5 | 3 |
 | `field_sales_team_members` | ✅ | ✅ | 2 | 0 |
-| `field_sales_teams` | ✅ | ✅ | 2 | 0 |
-| `field_schedule_slots` | ✅ | ✅ | 1 | 0 |
-| `field_settings` | ✅ | ✅ | 7 | 1 |
-| `field_territories` | ✅ | ✅ | 7 | 12 |
-| `field_territory_assignments` | ✅ | ✅ | 1 | 0 |
-| `form_submissions` | ✅ | ✅ | 4 | 20 |
-| `fs_badges` | ✅ | ✅ | 4 | 0 |
-| `fs_battles` | ✅ | ✅ | 4 | 0 |
+| `field_sales_teams` | ✅ | ✅ | 3 | 0 |
+| `field_schedule_slots` | ✅ | ✅ | 2 | 0 |
+| `field_settings` | ✅ | ✅ | 8 | 1 |
+| `field_territories` | ✅ | ✅ | 8 | 12 |
+| `field_territory_assignments` | ✅ | ✅ | 2 | 0 |
+| `form_submissions` | ✅ | ✅ | 5 | 20 |
+| `fs_badges` | ✅ | ✅ | 5 | 0 |
+| `fs_battles` | ✅ | ✅ | 5 | 0 |
 | `fs_challenge_participants` | ✅ | ✅ | 3 | 0 |
-| `fs_challenges` | ✅ | ✅ | 4 | 0 |
-| `fs_check_in_records` | ✅ | ✅ | 2 | 0 |
-| `fs_commission_entries` | ✅ | ✅ | 4 | 36 |
-| `fs_commission_rules` | ✅ | ✅ | 4 | 1 |
-| `fs_field_sessions` | ✅ | ✅ | 3 | 0 |
+| `fs_challenges` | ✅ | ✅ | 5 | 0 |
+| `fs_check_in_records` | ✅ | ✅ | 3 | 0 |
+| `fs_commission_entries` | ✅ | ✅ | 5 | 36 |
+| `fs_commission_rules` | ✅ | ✅ | 5 | 1 |
+| `fs_field_sessions` | ✅ | ✅ | 4 | 0 |
 | `fs_gps_points` | ✅ | ✅ | 2 | 0 |
-| `fs_rep_badges` | ✅ | ✅ | 2 | 0 |
-| `fs_rep_stat_snapshots` | ✅ | ✅ | 4 | 0 |
-| `geofences` | ✅ | ✅ | 1 | 0 |
-| `goals` | ✅ | ✅ | 6 | 0 |
-| `gps_providers` | ✅ | ✅ | 1 | 0 |
+| `fs_rep_badges` | ✅ | ✅ | 3 | 0 |
+| `fs_rep_stat_snapshots` | ✅ | ✅ | 5 | 0 |
+| `geofences` | ✅ | ✅ | 2 | 0 |
+| `goals` | ✅ | ✅ | 7 | 0 |
+| `gps_providers` | ✅ | ✅ | 2 | 0 |
 | `incident_timeline` | ✅ | ✅ | 2 | 0 |
-| `integration_audit_logs` | ✅ | ✅ | 4 | 4 |
-| `integration_oauth_states` | ✅ | ✅ | 4 | 0 |
-| `invitations` | ✅ | ✅ | 3 | 5 |
-| `invoice_items` | ✅ | ✅ | 4 | 14 |
-| `invoice_send_events` | ✅ | ✅ | 2 | 0 |
-| `invoice_sequences` | ✅ | ✅ | 1 | 3 |
-| `invoice_templates` | ✅ | ✅ | 7 | 6 |
-| `invoices` | ✅ | ✅ | 4 | 899 |
-| `ip_blocklist` | ✅ | ✅ | 4 | 0 |
-| `job_agreements` | ✅ | ✅ | 4 | 4 |
-| `job_billing_milestones` | ✅ | ✅ | 4 | ? |
-| `job_checklists` | ✅ | ✅ | 4 | 0 |
-| `job_intents` | ✅ | ✅ | 4 | 0 |
-| `job_line_items` | ✅ | ✅ | 4 | 20 |
-| `job_materials` | ✅ | ✅ | 3 | ? |
-| `job_recurrence_rules` | ✅ | ✅ | 1 | 0 |
-| `job_tags` | ✅ | ✅ | 4 | ? |
-| `job_templates` | ✅ | ✅ | 1 | 0 |
-| `job_time_logs` | ✅ | ✅ | 1 | ? |
-| `jobs` | ✅ | ✅ | 5 | 44 |
-| `lead_lists` | ✅ | ✅ | 1 | 0 |
-| `lead_sources` | ✅ | ✅ | 4 | ? |
-| `lists` | ✅ | ✅ | 1 | 0 |
-| `location_tracking_settings` | ✅ | ✅ | 4 | 0 |
-| `login_history` | ✅ | ✅ | 4 | 224 |
-| `lumi_autorisations` | ✅ | ✅ | 2 | ? |
-| `lumi_briefings` | ✅ | ✅ | 2 | 35 |
-| `lumi_conversations` | ✅ | ✅ | 2 | 79 |
-| `lumi_messages` | ✅ | ✅ | 2 | 312 |
-| `lumi_traces` | ✅ | ❌ | 1 | 236 |
-| `memberships` | ✅ | ✅ | 5 | 41 |
-| `messages` | ✅ | ✅ | 4 | 148 |
-| `mfa_phone` | ✅ | ✅ | 1 | 1 |
+| `integration_audit_logs` | ✅ | ✅ | 5 | 4 |
+| `integration_oauth_states` | ✅ | ✅ | 5 | 0 |
+| `invitations` | ✅ | ✅ | 4 | 5 |
+| `invoice_items` | ✅ | ✅ | 5 | 1129 |
+| `invoice_send_events` | ✅ | ✅ | 3 | 0 |
+| `invoice_sequences` | ✅ | ✅ | 2 | 3 |
+| `invoice_templates` | ✅ | ✅ | 8 | 6 |
+| `invoices` | ✅ | ✅ | 6 | 901 |
+| `ip_blocklist` | ✅ | ✅ | 5 | 0 |
+| `job_agreements` | ✅ | ✅ | 5 | 4 |
+| `job_billing_milestones` | ✅ | ✅ | 5 | ? |
+| `job_checklists` | ✅ | ✅ | 5 | 0 |
+| `job_intents` | ✅ | ✅ | 5 | 0 |
+| `job_line_items` | ✅ | ✅ | 5 | 1702 |
+| `job_materials` | ✅ | ✅ | 4 | ? |
+| `job_recurrence_rules` | ✅ | ✅ | 2 | 0 |
+| `job_tags` | ✅ | ✅ | 5 | ? |
+| `job_templates` | ✅ | ✅ | 2 | 0 |
+| `job_time_logs` | ✅ | ✅ | 2 | ? |
+| `jobs` | ✅ | ✅ | 7 | 943 |
+| `lead_sources` | ✅ | ✅ | 5 | ? |
+| `liens_reservation` | ✅ | ✅ | 0 | ? |
+| `location_tracking_settings` | ✅ | ✅ | 5 | 0 |
+| `login_history` | ✅ | ✅ | 5 | 297 |
+| `lumi_autorisations` | ✅ | ✅ | 3 | ? |
+| `lumi_briefings` | ✅ | ✅ | 3 | 71 |
+| `lumi_conversations` | ✅ | ✅ | 3 | 79 |
+| `lumi_messages` | ✅ | ✅ | 3 | 312 |
+| `lumi_traces` | ✅ | ✅ | 2 | 482 |
+| `memberships` | ✅ | ✅ | 5 | 16 |
+| `messages` | ✅ | ✅ | 6 | 148 |
+| `mfa_phone` | ✅ | ✅ | 2 | 1 |
 | `mfa_sms_challenges` | ✅ | ✅ | 1 | ? |
 | `mfa_trusted_devices` | ✅ | ✅ | 1 | 1 |
 | `migration_approvals` | ✅ | ✅ | 1 | ? |
-| `migration_audit_logs` | ✅ | ✅ | 1 | 3503 |
-| `migration_duplicate_candidates` | ✅ | ✅ | 1 | 0 |
-| `migration_field_mappings` | ✅ | ✅ | 1 | 327 |
-| `migration_file_columns` | ✅ | ✅ | 1 | 307 |
+| `migration_audit_logs` | ✅ | ✅ | 1 | 4290 |
+| `migration_duplicate_candidates` | ✅ | ✅ | 1 | 263 |
+| `migration_field_mappings` | ✅ | ✅ | 1 | 424 |
+| `migration_file_columns` | ✅ | ✅ | 1 | 424 |
 | `migration_files` | ✅ | ✅ | 1 | 14 |
-| `migration_import_batches` | ✅ | ✅ | 1 | 31 |
-| `migration_import_records` | ✅ | ✅ | 1 | 2728 |
+| `migration_import_batches` | ✅ | ✅ | 1 | 41 |
+| `migration_import_records` | ✅ | ✅ | 1 | 8245 |
 | `migration_invitations` | ✅ | ✅ | 1 | 0 |
-| `migration_issues` | ✅ | ✅ | 1 | 487 |
+| `migration_issues` | ✅ | ✅ | 1 | 626 |
 | `migration_mapping_templates` | ✅ | ✅ | 1 | 1 |
 | `migration_messages` | ✅ | ✅ | 1 | ? |
 | `migration_staff_mappings` | ✅ | ✅ | 1 | ? |
-| `migration_staging_records` | ✅ | ✅ | 1 | 7807 |
+| `migration_staging_records` | ✅ | ✅ | 1 | 9037 |
 | `note_history` | ✅ | ✅ | 2 | 0 |
-| `notes` | ✅ | ✅ | 4 | 0 |
-| `notifications` | ✅ | ✅ | 4 | 931 |
-| `oauth_authorization_codes` | ✅ | ✅ | 1 | ? |
+| `notes` | ✅ | ✅ | 5 | 0 |
+| `notifications` | ✅ | ✅ | 5 | 1144 |
+| `oauth_authorization_codes` | ✅ | ✅ | 2 | ? |
 | `oauth_clients` | ✅ | ✅ | 1 | ? |
-| `oauth_tokens` | ✅ | ✅ | 3 | 263 |
+| `oauth_tokens` | ✅ | ✅ | 4 | 279 |
 | `org_billing_settings` | ✅ | ✅ | 3 | 0 |
-| `org_client_counters` | ✅ | ✅ | 1 | 6 |
+| `org_client_counters` | ✅ | ✅ | 2 | 6 |
 | `org_features` | ✅ | ✅ | 3 | 10 |
-| `org_invoice_sequences` | ✅ | ✅ | 1 | 12 |
-| `org_job_counters` | ✅ | ✅ | 1 | 3 |
-| `org_knowledge` | ✅ | ✅ | 1 | 0 |
-| `org_sending_domains` | ✅ | ✅ | 2 | ? |
-| `orgs` | ✅ | ✅ | 4 | 2 |
-| `payment_provider_secrets` | ✅ | ✅ | 4 | 1 |
-| `payment_provider_settings` | ✅ | ✅ | 4 | 1 |
-| `payment_providers` | ✅ | ✅ | 4 | 0 |
-| `payment_requests` | ✅ | ✅ | 4 | 4 |
-| `payment_requirements` | ✅ | ✅ | 3 | 2 |
-| `payment_settings` | ✅ | ✅ | 2 | ? |
-| `payments` | ✅ | ✅ | 4 | 3 |
-| `payroll_adjustments` | ✅ | ✅ | 1 | ? |
-| `payroll_payments` | ✅ | ✅ | 1 | ? |
-| `payroll_settings` | ✅ | ✅ | 7 | 0 |
-| `pipeline_acces` | ✅ | ✅ | 2 | ? |
-| `pipeline_deals` | ✅ | ✅ | 7 | 126 |
-| `pipeline_events` | ✅ | ✅ | 1 | 28 |
-| `pipeline_operations_lot` | ✅ | ✅ | 2 | ? |
-| `pipeline_raisons_perte_liste` | ✅ | ✅ | 2 | ? |
-| `pipeline_stages` | ✅ | ✅ | 2 | 36 |
-| `pipeline_vues` | ✅ | ✅ | 3 | ? |
-| `pipelines` | ✅ | ✅ | 1 | 2 |
-| `pipelines_ventes` | ✅ | ✅ | 2 | ? |
+| `org_invoice_sequences` | ✅ | ✅ | 2 | 12 |
+| `org_job_counters` | ✅ | ✅ | 2 | 7 |
+| `org_knowledge` | ✅ | ✅ | 2 | 0 |
+| `org_sending_domains` | ✅ | ✅ | 3 | ? |
+| `orgs` | ✅ | ✅ | 4 | 7 |
+| `paiements_echoues_traites` | ✅ | ✅ | 0 | ? |
+| `payment_provider_secrets` | ✅ | ✅ | 5 | 1 |
+| `payment_provider_settings` | ✅ | ✅ | 5 | 1 |
+| `payment_providers` | ✅ | ✅ | 5 | 0 |
+| `payment_requests` | ✅ | ✅ | 5 | 4 |
+| `payment_requirements` | ✅ | ✅ | 4 | 2 |
+| `payment_settings` | ✅ | ✅ | 3 | ? |
+| `payments` | ✅ | ✅ | 5 | 3 |
+| `payroll_adjustments` | ✅ | ✅ | 2 | ? |
+| `payroll_payments` | ✅ | ✅ | 2 | ? |
+| `payroll_settings` | ✅ | ✅ | 8 | 0 |
+| `pipeline_acces` | ✅ | ✅ | 3 | ? |
+| `pipeline_deals` | ✅ | ✅ | 8 | 127 |
+| `pipeline_events` | ✅ | ✅ | 2 | 60 |
+| `pipeline_operations_lot` | ✅ | ✅ | 3 | ? |
+| `pipeline_raisons_perte_liste` | ✅ | ✅ | 3 | 44 |
+| `pipeline_stages` | ✅ | ✅ | 3 | 93 |
+| `pipeline_vues` | ✅ | ✅ | 4 | ? |
+| `pipelines_ventes` | ✅ | ✅ | 5 | 12 |
 | `plans` | ✅ | ✅ | 1 | 3 |
 | `predefined_services` | ✅ | ✅ | 4 | 22 |
+| `predefined_services_bureau` | ✅ | ✅ | 3 | ? |
 | `processed_checkout_sessions` | ✅ | ✅ | 1 | 1 |
 | `profiles` | ✅ | ✅ | 3 | 22 |
 | `promo_codes` | ✅ | ✅ | 1 | 1 |
-| `proof_of_presence` | ✅ | ✅ | 1 | 0 |
-| `properties` | ✅ | ✅ | 4 | 2590 |
-| `provisioning_events` | ✅ | ✅ | 1 | 0 |
-| `push_tokens` | ✅ | ✅ | 4 | 0 |
+| `proof_of_presence` | ✅ | ✅ | 2 | 0 |
+| `properties` | ✅ | ✅ | 5 | 2590 |
+| `provisioning_events` | ✅ | ✅ | 2 | 0 |
+| `push_tokens` | ✅ | ✅ | 5 | 0 |
+| `quickbooks_entity_map` | ✅ | ✅ | 0 | ? |
+| `quickbooks_settings` | ✅ | ✅ | 0 | ? |
+| `quickbooks_sync_queue` | ✅ | ✅ | 0 | ? |
 | `quote_attachments` | ✅ | ✅ | 4 | 1 |
-| `quote_line_items` | ✅ | ✅ | 4 | 31 |
-| `quote_measurement_camera` | ✅ | ✅ | 4 | 3 |
-| `quote_measurements` | ✅ | ✅ | 4 | 0 |
+| `quote_line_items` | ✅ | ✅ | 5 | 219 |
+| `quote_measurement_camera` | ✅ | ✅ | 5 | 3 |
+| `quote_measurements` | ✅ | ✅ | 5 | 0 |
 | `quote_sections` | ✅ | ✅ | 4 | 9 |
 | `quote_send_log` | ✅ | ✅ | 2 | 0 |
-| `quote_sequences` | ✅ | ✅ | 1 | 1 |
+| `quote_sequences` | ✅ | ✅ | 2 | 1 |
 | `quote_status_history` | ✅ | ✅ | 2 | 6 |
-| `quote_templates` | ✅ | ✅ | 4 | 3 |
-| `quote_views` | ✅ | ✅ | 4 | 0 |
-| `quotes` | ✅ | ✅ | 4 | 153 |
+| `quote_templates` | ✅ | ✅ | 5 | 3 |
+| `quote_views` | ✅ | ✅ | 5 | 93 |
+| `quotes` | ✅ | ✅ | 6 | 157 |
 | `rate_limits` | ✅ | ✅ | 2 | 0 |
-| `recurring_invoice_schedules` | ✅ | ✅ | 5 | 0 |
-| `recurring_team_schedules` | ✅ | ✅ | 4 | ? |
+| `recurring_invoice_schedules` | ✅ | ✅ | 6 | 0 |
+| `recurring_team_schedules` | ✅ | ✅ | 5 | ? |
 | `referrals` | ✅ | ✅ | 1 | 1 |
-| `reminder_log` | ✅ | ✅ | 1 | 0 |
-| `reminder_settings` | ✅ | ✅ | 5 | 0 |
-| `request_forms` | ✅ | ✅ | 1 | 1 |
-| `review_requests` | ✅ | ✅ | 2 | 0 |
+| `reminder_log` | ✅ | ✅ | 2 | 0 |
+| `reminder_settings` | ✅ | ✅ | 6 | 0 |
+| `request_forms` | ✅ | ✅ | 2 | 1 |
+| `review_requests` | ✅ | ✅ | 3 | 0 |
 | `role_permission_defaults` | ✅ | ✅ | 1 | ? |
-| `role_templates` | ✅ | ✅ | 2 | ? |
-| `satisfaction_surveys` | ✅ | ✅ | 1 | 7 |
-| `schedule_events` | ✅ | ✅ | 4 | 60 |
-| `scheduled_reports` | ✅ | ✅ | 7 | 0 |
+| `role_templates` | ✅ | ✅ | 3 | ? |
+| `satisfaction_surveys` | ✅ | ✅ | 2 | 7 |
+| `schedule_events` | ✅ | ✅ | 6 | 979 |
+| `scheduled_reports` | ✅ | ✅ | 8 | 0 |
 | `secret_rotation_log` | ✅ | ✅ | 1 | 0 |
-| `security_alerts` | ✅ | ✅ | 4 | 0 |
+| `security_alerts` | ✅ | ✅ | 5 | 0 |
 | `security_canary_runs` | ✅ | ✅ | 0 | 522 |
-| `security_events` | ✅ | ✅ | 4 | 370 |
-| `security_incidents` | ✅ | ✅ | 3 | 0 |
-| `service_contracts` | ✅ | ✅ | 4 | 1 |
-| `sms_opt_outs` | ✅ | ✅ | 2 | 0 |
-| `specific_notes` | ✅ | ✅ | 4 | 6 |
-| `subscriptions` | ✅ | ✅ | 2 | 7 |
-| `support_messages` | ✅ | ✅ | 1 | ? |
+| `security_events` | ✅ | ✅ | 5 | 370 |
+| `security_incidents` | ✅ | ✅ | 4 | 0 |
+| `service_contracts` | ✅ | ✅ | 5 | 1 |
+| `sms_opt_outs` | ✅ | ✅ | 3 | 0 |
+| `specific_notes` | ✅ | ✅ | 5 | 6 |
+| `subscriptions` | ✅ | ✅ | 2 | 2 |
+| `support_messages` | ✅ | ✅ | 2 | ? |
 | `support_savoir` | ✅ | ✅ | 0 | ? |
-| `support_slack_channels` | ✅ | ✅ | 0 | ? |
-| `support_tickets` | ✅ | ✅ | 1 | 9 |
-| `tags` | ✅ | ✅ | 4 | 0 |
-| `tasks` | ✅ | ✅ | 4 | 9 |
-| `tax_configs` | ✅ | ✅ | 4 | 2 |
+| `support_slack_channels` | ✅ | ✅ | 1 | ? |
+| `support_tickets` | ✅ | ✅ | 2 | 9 |
+| `table_view_preferences` | ✅ | ✅ | 4 | ? |
+| `tags` | ✅ | ✅ | 5 | 0 |
+| `tasks` | ✅ | ✅ | 6 | 9 |
+| `tax_configs` | ✅ | ✅ | 5 | 16 |
 | `tax_group_items` | ✅ | ✅ | 4 | 4 |
-| `tax_groups` | ✅ | ✅ | 4 | 5 |
-| `team_assignments` | ✅ | ✅ | 2 | ? |
-| `team_availability` | ✅ | ✅ | 4 | 0 |
-| `team_capabilities` | ✅ | ✅ | 4 | 0 |
-| `team_date_slots` | ✅ | ✅ | 4 | 0 |
-| `team_members` | ✅ | ✅ | 4 | 1 |
-| `team_schedule_assignments` | ✅ | ✅ | 4 | 4 |
-| `team_schedule_audit` | ✅ | ✅ | 2 | 6 |
-| `teams` | ✅ | ✅ | 4 | 5 |
-| `technician_device_mappings` | ✅ | ✅ | 1 | 0 |
-| `technician_locations` | ✅ | ✅ | 1 | 0 |
-| `time_entries` | ✅ | ✅ | 4 | 8 |
-| `time_off_requests` | ✅ | ✅ | 4 | ? |
-| `tracking_events` | ✅ | ✅ | 2 | 513 |
-| `tracking_live_locations` | ✅ | ✅ | 3 | 2 |
-| `tracking_points` | ✅ | ✅ | 2 | 5960 |
-| `tracking_sessions` | ✅ | ✅ | 3 | 226 |
-| `webhook_deliveries` | ✅ | ✅ | 1 | 0 |
-| `webhook_endpoints` | ✅ | ✅ | 2 | 0 |
+| `tax_groups` | ✅ | ✅ | 5 | 5 |
+| `team_assignments` | ✅ | ✅ | 3 | ? |
+| `team_availability` | ✅ | ✅ | 5 | 0 |
+| `team_capabilities` | ✅ | ✅ | 5 | 0 |
+| `team_date_slots` | ✅ | ✅ | 5 | 0 |
+| `team_members` | ✅ | ✅ | 5 | 1 |
+| `team_schedule_assignments` | ✅ | ✅ | 5 | 4 |
+| `team_schedule_audit` | ✅ | ✅ | 3 | 6 |
+| `teams` | ✅ | ✅ | 5 | 5 |
+| `technician_device_mappings` | ✅ | ✅ | 2 | 0 |
+| `technician_locations` | ✅ | ✅ | 2 | 0 |
+| `time_entries` | ✅ | ✅ | 5 | 8 |
+| `time_off_requests` | ✅ | ✅ | 5 | ? |
+| `tracking_events` | ✅ | ✅ | 3 | 513 |
+| `tracking_live_locations` | ✅ | ✅ | 4 | 2 |
+| `tracking_points` | ✅ | ✅ | 3 | 6507 |
+| `tracking_sessions` | ✅ | ✅ | 4 | 229 |
+| `transferts_bureaux` | ✅ | ✅ | 1 | ? |
+| `webhook_deliveries` | ✅ | ✅ | 2 | 0 |
+| `webhook_endpoints` | ✅ | ✅ | 3 | 0 |
 | `webhook_events` | ✅ | ✅ | 4 | 36 |
-| `webhook_receipts` | ✅ | ✅ | 0 | 202 |
+| `webhook_receipts` | ✅ | ✅ | 0 | 274 |
 
 ## 2. Colonnes
 
@@ -504,6 +516,15 @@
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `execution_key` text
 
+### `automation_folders`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL
+- `name` text NOT NULL
+- `position` integer NOT NULL DEFAULT 0
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+
 ### `automation_rules`
 
 - `id` uuid NOT NULL DEFAULT gen_random_uuid()
@@ -523,6 +544,10 @@
 - `stage_id` uuid
 - `steps` jsonb
 - `settings` jsonb
+- `deleted_at` timestamp with time zone
+- `folder_id` uuid
+- `modele_id` uuid
+- `lumi_conversation` jsonb NOT NULL DEFAULT '[]'::jsonb
 
 ### `automation_scheduled_tasks`
 
@@ -541,6 +566,30 @@
 - `completed_at` timestamp with time zone
 - `step_id` text
 - `sequence_context` jsonb
+
+### `automation_webhook_receipts`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `webhook_id` uuid NOT NULL
+- `org_id` uuid NOT NULL
+- `statut` text NOT NULL
+- `motif` text
+- `corps` jsonb
+- `event_id` uuid
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+
+### `automation_webhooks`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL
+- `created_by` uuid
+- `name` text NOT NULL DEFAULT 'Webhook'::text
+- `api_key` text NOT NULL DEFAULT encode(gen_random_bytes(32), 'hex'::text)
+- `enabled` boolean NOT NULL DEFAULT true
+- `mode` text NOT NULL DEFAULT 'evenement'::text
+- `deleted_at` timestamp with time zone
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
 ### `automations`
 
@@ -593,6 +642,14 @@
 - `message_id` text
 - `sent_at` timestamp with time zone
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
+
+### `cf_affichage_systeme`
+
+- `org_id` uuid NOT NULL
+- `object_type` cf_object_type NOT NULL
+- `key` text NOT NULL
+- `masque_creation` boolean NOT NULL DEFAULT true
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
 ### `checklist_templates`
 
@@ -693,6 +750,14 @@
 - `tax_exempt` boolean NOT NULL DEFAULT false
 - `version` integer NOT NULL DEFAULT 1
 
+### `clients_inactifs_declenches`
+
+- `org_id` uuid NOT NULL
+- `client_id` uuid NOT NULL
+- `mois` integer NOT NULL
+- `periode` text NOT NULL
+- `declenche_at` timestamp with time zone NOT NULL DEFAULT now()
+
 ### `commission_settings`
 
 - `org_id` uuid NOT NULL
@@ -754,6 +819,15 @@
 - `booking_confirmation_sms_enabled` boolean NOT NULL DEFAULT false
 - `booking_confirmation_email_enabled` boolean NOT NULL DEFAULT true
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+
+### `company_groups`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `name` text
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `logo_url` text
+- `brand_color` text
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
 ### `company_operating_profile`
@@ -825,6 +899,11 @@
 - `review_low_rating_message` text
 - `review_thank_you_message` text
 - `social_links` jsonb NOT NULL DEFAULT '{}'::jsonb
+- `prefixe_documents` text
+- `suit_marque_entreprise` boolean NOT NULL DEFAULT false
+- `automations_paused` boolean NOT NULL DEFAULT false
+- `automations_paused_at` timestamp with time zone
+- `automations_paused_by` uuid
 
 ### `connected_accounts`
 
@@ -886,6 +965,8 @@
 - `status` text DEFAULT 'active'::text
 - `created_at` timestamp with time zone DEFAULT now()
 - `updated_at` timestamp with time zone DEFAULT now()
+- `assigned_to` uuid
+- `assigned_at` timestamp with time zone
 
 ### `course_assignments`
 
@@ -971,6 +1052,7 @@
 - `created_by` uuid DEFAULT auth.uid()
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+- `cle_systeme` text
 
 ### `custom_field_options`
 
@@ -1024,6 +1106,8 @@
 - `updated_by` uuid DEFAULT auth.uid()
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+- `value_boolean` boolean
+- `property_id` uuid
 
 ### `custom_fields`
 
@@ -1045,7 +1129,7 @@
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 - `archived_at` timestamp with time zone
-- `legacy_column_id` uuid
+- `default_value` jsonb
 
 ### `data_export_log`
 
@@ -1110,6 +1194,7 @@
 - `actor_type` deal_actor_type NOT NULL DEFAULT 'user'::deal_actor_type
 - `actor_id` uuid
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `motif` text
 
 ### `deals`
 
@@ -1169,6 +1254,23 @@
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `ip_address` text
 - `user_agent` text
+
+### `domain_events`
+
+- `id` bigint NOT NULL
+- `org_id` uuid NOT NULL
+- `type` text NOT NULL
+- `entity_type` text NOT NULL
+- `entity_id` text NOT NULL
+- `actor_id` text
+- `related_entity_type` text
+- `related_entity_id` text
+- `metadata` jsonb NOT NULL DEFAULT '{}'::jsonb
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `processed_at` timestamp with time zone
+- `attempts` integer NOT NULL DEFAULT 0
+- `last_error` text
+- `regles_traitees` uuid[] NOT NULL DEFAULT '{}'::uuid[]
 
 ### `dsar_requests`
 
@@ -1895,7 +1997,7 @@
 - `role` text NOT NULL DEFAULT 'technician'::text
 - `token` text
 - `token_hash` text
-- `scope` text NOT NULL DEFAULT 'self'::text
+- `scope` text NOT NULL DEFAULT 'company'::text
 - `team_id` uuid
 - `department_id` uuid
 - `custom_permissions` jsonb NOT NULL DEFAULT '{}'::jsonb
@@ -2249,11 +2351,6 @@
 - `billing_mode` text
 - `auto_charge` boolean NOT NULL DEFAULT false
 
-### `lead_lists`
-
-- `lead_id` uuid NOT NULL
-- `list_id` uuid NOT NULL
-
 ### `lead_sources`
 
 - `id` uuid NOT NULL DEFAULT gen_random_uuid()
@@ -2262,12 +2359,15 @@
 - `created_by` uuid DEFAULT auth.uid()
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 
-### `lists`
+### `liens_reservation`
 
 - `id` uuid NOT NULL DEFAULT gen_random_uuid()
-- `name` text NOT NULL
-- `description` text
-- `user_id` uuid NOT NULL DEFAULT auth.uid()
+- `org_id` uuid NOT NULL
+- `client_id` uuid NOT NULL
+- `jeton_hash` text NOT NULL
+- `expires_at` timestamp with time zone NOT NULL
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `derniere_demande_at` timestamp with time zone
 
 ### `location_tracking_settings`
 
@@ -2812,8 +2912,19 @@
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 - `employee_count` text
 - `logo_url` text
-- `company_group_id` uuid
+- `company_group_id` uuid NOT NULL
 - `deleted_at` timestamp with time zone
+- `archived_at` timestamp with time zone
+- `archived_by` uuid
+- `fermeture_details` jsonb
+
+### `paiements_echoues_traites`
+
+- `stripe_event_id` text NOT NULL
+- `org_id` uuid NOT NULL
+- `invoice_id` uuid NOT NULL
+- `payment_intent_id` text
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
 
 ### `payment_provider_secrets`
 
@@ -2978,6 +3089,7 @@
 - `user_id` uuid NOT NULL
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `created_by` uuid DEFAULT auth.uid()
+- `peut_modifier` boolean NOT NULL DEFAULT false
 
 ### `pipeline_deals`
 
@@ -3066,8 +3178,10 @@
 - `archived_at` timestamp with time zone
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
-- `probability` integer
+- `probability` numeric(5,2)
 - `show_in_reports` boolean NOT NULL DEFAULT true
+- `show_in_pie` boolean NOT NULL DEFAULT true
+- `role_systeme` text
 
 ### `pipeline_vues`
 
@@ -3084,12 +3198,6 @@
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
-### `pipelines`
-
-- `id` uuid NOT NULL DEFAULT gen_random_uuid()
-- `name` text NOT NULL
-- `user_id` uuid NOT NULL DEFAULT auth.uid()
-
 ### `pipelines_ventes`
 
 - `id` uuid NOT NULL DEFAULT gen_random_uuid()
@@ -3100,6 +3208,8 @@
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 - `color_mode` text NOT NULL DEFAULT 'none'::text
 - `use_deal_probability` boolean NOT NULL DEFAULT false
+- `position` integer NOT NULL DEFAULT 1
+- `archived_at` timestamp with time zone
 
 ### `plans`
 
@@ -3146,6 +3256,8 @@
 - `includes_marketplace` boolean NOT NULL DEFAULT false
 - `ai_monthly_budget_cents` integer NOT NULL DEFAULT 0
 - `includes_pipeline` boolean NOT NULL DEFAULT false
+- `stripe_installment_price_id_cad` text
+- `stripe_installment_price_id_usd` text
 
 ### `predefined_services`
 
@@ -3165,6 +3277,15 @@
 - `item_type` text NOT NULL DEFAULT 'service'::text
 - `default_cost_cents` integer
 - `taxable` boolean NOT NULL DEFAULT true
+
+### `predefined_services_bureau`
+
+- `service_id` uuid NOT NULL
+- `org_id` uuid NOT NULL
+- `prix_cents` integer
+- `offert` boolean NOT NULL DEFAULT true
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_by` uuid
 
 ### `processed_checkout_sessions`
 
@@ -3261,6 +3382,51 @@
 - `user_id` uuid NOT NULL DEFAULT auth.uid()
 - `token` text NOT NULL
 - `platform` text
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+
+### `quickbooks_entity_map`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL
+- `realm_id` text NOT NULL
+- `entity_type` text NOT NULL
+- `lume_id` uuid NOT NULL
+- `qbo_id` text NOT NULL
+- `qbo_doc_number` text
+- `last_synced_at` timestamp with time zone NOT NULL DEFAULT now()
+- `qbo_state` text NOT NULL DEFAULT 'active'::text
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+
+### `quickbooks_settings`
+
+- `org_id` uuid NOT NULL
+- `enabled` boolean NOT NULL DEFAULT true
+- `sync_from` timestamp with time zone
+- `item_id` text
+- `item_name` text
+- `deposit_account_id` text
+- `deposit_account_name` text
+- `deposit_account_online_id` text
+- `deposit_account_online_name` text
+- `tax_code_taxable_id` text
+- `tax_code_exempt_id` text
+- `payment_methods` jsonb NOT NULL DEFAULT '{}'::jsonb
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+
+### `quickbooks_sync_queue`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL
+- `entity_type` text NOT NULL
+- `entity_id` uuid NOT NULL
+- `status` text NOT NULL DEFAULT 'pending'::text
+- `reason` text
+- `attempts` integer NOT NULL DEFAULT 0
+- `next_attempt_at` timestamp with time zone NOT NULL DEFAULT now()
+- `locked_at` timestamp with time zone
+- `last_error` text
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
@@ -3410,6 +3576,10 @@
 - `user_agent` text
 - `viewed_at` timestamp with time zone DEFAULT now()
 - `quote_id` uuid
+- `org_id` uuid
+- `is_first_view` boolean
+- `user_agent_hash` text
+- `session_hash` text
 
 ### `quotes`
 
@@ -3572,6 +3742,7 @@
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 - `logo_url` text
+- `pipeline_id` uuid
 
 ### `review_requests`
 
@@ -3806,6 +3977,11 @@
 - `cancellation_feedback` text
 - `cancellation_comment` text
 - `past_due_since` timestamp with time zone
+- `installments_count` integer
+- `installments_paid` integer NOT NULL DEFAULT 0
+- `installment_amount_cents` integer
+- `commitment_end` timestamp with time zone
+- `cancel_at` timestamp with time zone
 
 ### `support_messages`
 
@@ -3866,6 +4042,14 @@
 - `closed_at` timestamp with time zone
 - `source` text NOT NULL DEFAULT 'app'::text
 - `migration_id` uuid
+
+### `table_view_preferences`
+
+- `org_id` uuid NOT NULL
+- `user_id` uuid NOT NULL
+- `object_type` text NOT NULL
+- `columns` jsonb NOT NULL DEFAULT '[]'::jsonb
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
 ### `tags`
 
@@ -4202,6 +4386,19 @@
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
+### `transferts_bureaux`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `company_group_id` uuid NOT NULL
+- `entite` text NOT NULL
+- `org_source` uuid NOT NULL
+- `id_source` uuid NOT NULL
+- `org_cible` uuid NOT NULL
+- `id_cible` uuid NOT NULL
+- `fait_par` uuid
+- `fait_le` timestamp with time zone NOT NULL DEFAULT now()
+- `details` jsonb NOT NULL DEFAULT '{}'::jsonb
+
 ### `webhook_deliveries`
 
 - `id` uuid NOT NULL DEFAULT gen_random_uuid()
@@ -4257,16 +4454,22 @@
 - `outcome` text
 - `summary` jsonb NOT NULL DEFAULT '{}'::jsonb
 
-## 3. Policies RLS (671)
+## 3. Policies RLS (880)
 
 
 ### `a2p_registrations`
 
 - **a2p_registrations_select** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `active_sessions`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **sessions_select_own** — SELECT, PERMISSIVE, roles={public}
   - USING: `(user_id = ( SELECT auth.uid() AS uid))`
 - **sessions_service_all** — ALL, PERMISSIVE, roles={service_role}
@@ -4278,6 +4481,9 @@
   - WITH CHECK: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE (m.user_id = ( SELECT auth.uid() AS uid))))`
 - **activity_log_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE (m.user_id = ( SELECT auth.uid() AS uid))))`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `activity_notes`
 
@@ -4288,6 +4494,9 @@
 - **activity_notes_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `agent_actions`
 
@@ -4296,18 +4505,27 @@
 - **agent_actions_service_all** — ALL, PERMISSIVE, roles={service_role}
   - USING: `true`
   - WITH CHECK: `true`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `agent_messages`
 
 - **agent_messages_org_policy** — ALL, PERMISSIVE, roles={public}
   - USING: `((org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid)))) OR (org_id = ( SELECT auth.uid() AS uid)))`
   - WITH CHECK: `((org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid)))) OR (org_id = ( SELECT auth.uid() AS uid)))`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `ai_reservations`
 
 - **ai_reservations_service** — ALL, PERMISSIVE, roles={service_role}
   - USING: `true`
   - WITH CHECK: `true`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `ai_usage`
 
@@ -4316,6 +4534,9 @@
 - **ai_usage_service** — ALL, PERMISSIVE, roles={service_role}
   - USING: `true`
   - WITH CHECK: `true`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `ai_usage_monthly`
 
@@ -4324,6 +4545,9 @@
 - **ai_usage_monthly_service** — ALL, PERMISSIVE, roles={service_role}
   - USING: `true`
   - WITH CHECK: `true`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `alert_rules`
 
@@ -4334,6 +4558,9 @@
 - **alert_rules_update** — UPDATE, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `api_keys`
 
@@ -4345,6 +4572,9 @@
   - USING: `(( SELECT auth.role() AS role) = 'service_role'::text)`
 - **api_keys_update_admin** — UPDATE, PERMISSIVE, roles={public}
   - USING: `(EXISTS ( SELECT 1 FROM memberships WHERE ((memberships.org_id = api_keys.org_id) AND (memberships.user_id = ( SELECT auth.uid() AS uid)) AND (memberships.role = ANY (ARRAY['owner'::text, 'admin'::text])))))`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `app_connections`
 
@@ -4357,6 +4587,9 @@
 - **app_connections_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `applied_taxes`
 
@@ -4377,18 +4610,32 @@
   - USING: `false`
 - **audit_events_select_org** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `automation_execution_logs`
 
-- **automation_execution_logs_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-- **automation_execution_logs_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
-  - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **automation_execution_logs_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-- **automation_execution_logs_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-  - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+
+### `automation_folders`
+
+- **automation_folders_delete** — DELETE, PERMISSIVE, roles={authenticated}
+  - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'automations.update'::text)`
+- **automation_folders_insert** — INSERT, PERMISSIVE, roles={authenticated}
+  - WITH CHECK: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'automations.update'::text)`
+- **automation_folders_select** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'automations.read'::text)`
+- **automation_folders_update** — UPDATE, PERMISSIVE, roles={authenticated}
+  - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'automations.update'::text)`
+  - WITH CHECK: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'automations.update'::text)`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `automation_rules`
 
@@ -4401,18 +4648,30 @@
 - **automation_rules_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
   - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'automations.update'::text)`
   - WITH CHECK: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'automations.update'::text)`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `automation_scheduled_tasks`
 
-- **automation_scheduled_tasks_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-- **automation_scheduled_tasks_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
-  - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **automation_scheduled_tasks_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-- **automation_scheduled_tasks_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-  - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+
+### `automation_webhook_receipts`
+
+- **automation_webhook_receipts_select** — SELECT, PERMISSIVE, roles={public}
+  - USING: `(has_org_membership(auth.uid(), org_id) AND member_has_permission(auth.uid(), org_id, 'automations.read'::text))`
+
+### `automation_webhooks`
+
+- **automation_webhooks_select** — SELECT, PERMISSIVE, roles={public}
+  - USING: `(has_org_membership(auth.uid(), org_id) AND member_has_permission(auth.uid(), org_id, 'automations.read'::text))`
+- **automation_webhooks_write** — ALL, PERMISSIVE, roles={public}
+  - USING: `(has_org_membership(auth.uid(), org_id) AND member_has_permission(auth.uid(), org_id, 'automations.update'::text))`
+  - WITH CHECK: `(has_org_membership(auth.uid(), org_id) AND member_has_permission(auth.uid(), org_id, 'automations.update'::text))`
 
 ### `automations`
 
@@ -4425,6 +4684,9 @@
 - **automations_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
   - USING: `(( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = automations.org_id)))`
   - WITH CHECK: `(( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = automations.org_id)))`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 
 ### `billing_profiles`
 
@@ -4436,8 +4698,23 @@
 - **billing_receipt_log_org_member_select** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
+### `cf_affichage_systeme`
+
+- **cf_affichage_systeme_delete** — DELETE, PERMISSIVE, roles={authenticated}
+  - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
+- **cf_affichage_systeme_insert** — INSERT, PERMISSIVE, roles={authenticated}
+  - WITH CHECK: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
+- **cf_affichage_systeme_select** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **cf_affichage_systeme_update** — UPDATE, PERMISSIVE, roles={authenticated}
+  - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
+  - WITH CHECK: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
+
 ### `checklist_templates`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **checklist_templates_org_read** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **checklist_templates_org_write** — ALL, PERMISSIVE, roles={public}
@@ -4453,6 +4730,9 @@
 
 ### `client_payment_profiles`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **client_payment_profiles_select** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
@@ -4467,6 +4747,9 @@
 
 ### `clients`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **clients_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND has_org_admin_role(( SELECT auth.uid() AS uid), org_id))`
 - **clients_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -4476,9 +4759,15 @@
 - **clients_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **portee_membre** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((org_id IN ( SELECT portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT portee_personnes() AS portee_personnes)) OR (assigned_to IN ( SELECT portee_personnes() AS portee_personnes)) OR (id IN ( SELECT portee_clients() AS portee_clients)))`
+  - WITH CHECK: `true`
 
 ### `commission_settings`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **commission_settings_modify** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
@@ -4487,24 +4776,44 @@
 
 ### `communication_channels`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **comm_channels_org_access** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `communication_messages`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **comm_messages_org_access** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `communication_settings`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **comm_settings_org_access** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
+### `company_groups`
+
+- **company_groups_select_membre** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `(EXISTS ( SELECT 1 FROM orgs o WHERE ((o.company_group_id = company_groups.id) AND has_org_membership(( SELECT auth.uid() AS uid), o.id))))`
+- **company_groups_update_proprietaire** — UPDATE, PERMISSIVE, roles={authenticated}
+  - USING: `(EXISTS ( SELECT 1 FROM orgs o WHERE ((o.company_group_id = company_groups.id) AND has_org_role(( SELECT auth.uid() AS uid), o.id, ARRAY['owner'::text]))))`
+  - WITH CHECK: `(EXISTS ( SELECT 1 FROM orgs o WHERE ((o.company_group_id = company_groups.id) AND has_org_role(( SELECT auth.uid() AS uid), o.id, ARRAY['owner'::text]))))`
+
 ### `company_operating_profile`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **cop_org_access** — ALL, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
@@ -4523,6 +4832,9 @@
 
 ### `connected_accounts`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **connected_accounts_delete_admin** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
 - **connected_accounts_insert_org** — INSERT, PERMISSIVE, roles={public}
@@ -4535,6 +4847,9 @@
 
 ### `consents`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **consents_insert_self** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(((subject_type = 'user'::text) AND (subject_id = ( SELECT auth.uid() AS uid))) OR ((org_id IS NOT NULL) AND has_org_membership(( SELECT auth.uid() AS uid), org_id)))`
 - **consents_select_own** — SELECT, PERMISSIVE, roles={public}
@@ -4542,6 +4857,9 @@
 
 ### `contacts`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **contacts_delete_org** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **contacts_insert_org** — INSERT, PERMISSIVE, roles={public}
@@ -4554,6 +4872,9 @@
 
 ### `conversations`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **conversations_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = conversations.org_id)))`
 - **conversations_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -4563,6 +4884,9 @@
 - **conversations_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
   - USING: `(( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = conversations.org_id)))`
   - WITH CHECK: `(( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = conversations.org_id)))`
+- **portee_membre** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((org_id IN ( SELECT portee_bureaux_complets() AS portee_bureaux_complets)) OR (assigned_to IN ( SELECT portee_personnes() AS portee_personnes)) OR (client_id IN ( SELECT portee_clients() AS portee_clients)))`
+  - WITH CHECK: `true`
 
 ### `course_assignments`
 
@@ -4623,6 +4947,9 @@
 
 ### `courses`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **courses_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
 - **courses_insert** — INSERT, PERMISSIVE, roles={public}
@@ -4640,8 +4967,17 @@
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
 
+### `creator_space_notes`
+
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+
 ### `custom_field_folders`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **custom_field_folders_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
 - **custom_field_folders_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -4654,6 +4990,9 @@
 
 ### `custom_field_options`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **custom_field_options_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
 - **custom_field_options_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -4666,6 +5005,9 @@
 
 ### `custom_field_pipeline_cards`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **custom_field_pipeline_cards_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
 - **custom_field_pipeline_cards_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -4678,6 +5020,9 @@
 
 ### `custom_field_value_options`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **custom_field_value_options_select** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(EXISTS ( SELECT 1 FROM custom_field_values v WHERE (v.id = custom_field_value_options.value_id)))`
 - **custom_field_value_options_write** — ALL, PERMISSIVE, roles={authenticated}
@@ -4686,18 +5031,24 @@
 
 ### `custom_field_values`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **custom_field_values_delete** — DELETE, PERMISSIVE, roles={authenticated}
-  - USING: `(member_has_permission(( SELECT auth.uid() AS uid), org_id, cf_cle_permission_ecriture(object_type)) AND cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id))`
+  - USING: `(member_has_permission(( SELECT auth.uid() AS uid), org_id, cf_cle_permission_ecriture(object_type)) AND cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id, property_id))`
 - **custom_field_values_insert** — INSERT, PERMISSIVE, roles={authenticated}
-  - WITH CHECK: `(member_has_permission(( SELECT auth.uid() AS uid), org_id, cf_cle_permission_ecriture(object_type)) AND cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id))`
+  - WITH CHECK: `(member_has_permission(( SELECT auth.uid() AS uid), org_id, cf_cle_permission_ecriture(object_type)) AND cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id, property_id))`
 - **custom_field_values_select** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(((client_id IS NOT NULL) AND (client_id IN ( SELECT e.id FROM clients e))) OR ((deal_id IS NOT NULL) AND (deal_id IN ( SELECT e.id FROM deals e))) OR ((job_id IS NOT NULL) AND (job_id IN ( SELECT e.id FROM jobs e))) OR ((quote_id IS NOT NULL) AND (quote_id IN ( SELECT e.id FROM quotes e))) OR ((inv`
 - **custom_field_values_update** — UPDATE, PERMISSIVE, roles={authenticated}
-  - USING: `(member_has_permission(( SELECT auth.uid() AS uid), org_id, cf_cle_permission_ecriture(object_type)) AND cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id))`
-  - WITH CHECK: `(member_has_permission(( SELECT auth.uid() AS uid), org_id, cf_cle_permission_ecriture(object_type)) AND cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id))`
+  - USING: `(member_has_permission(( SELECT auth.uid() AS uid), org_id, cf_cle_permission_ecriture(object_type)) AND cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id, property_id))`
+  - WITH CHECK: `(member_has_permission(( SELECT auth.uid() AS uid), org_id, cf_cle_permission_ecriture(object_type)) AND cf_parent_visible(org_id, client_id, deal_id, job_id, quote_id, invoice_id, property_id))`
 
 ### `custom_fields`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **custom_fields_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
 - **custom_fields_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -4710,6 +5061,9 @@
 
 ### `data_export_log`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **export_log_insert_service** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(( SELECT auth.role() AS role) = 'service_role'::text)`
 - **export_log_no_delete** — DELETE, PERMISSIVE, roles={public}
@@ -4721,6 +5075,9 @@
 
 ### `data_migrations`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **data_migrations_service** — ALL, PERMISSIVE, roles={service_role}
   - USING: `true`
   - WITH CHECK: `true`
@@ -4733,11 +5090,17 @@
 
 ### `deal_stage_history`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **deal_stage_history_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `deals`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **deals_delete_perm** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND member_has_permission(( SELECT auth.uid() AS uid), org_id, 'leads.delete'::text))`
 - **deals_insert_perm** — INSERT, PERMISSIVE, roles={authenticated}
@@ -4756,6 +5119,9 @@
 
 ### `dsar_requests`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **dsar_insert_self** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `((requested_by = ( SELECT auth.uid() AS uid)) OR has_org_membership(( SELECT auth.uid() AS uid), org_id))`
 - **dsar_select_org** — SELECT, PERMISSIVE, roles={public}
@@ -4766,6 +5132,9 @@
 
 ### `email_accounts`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **email_accounts_delete_own** — DELETE, PERMISSIVE, roles={public}
   - USING: `(user_id = ( SELECT auth.uid() AS uid))`
 - **email_accounts_insert_own** — INSERT, PERMISSIVE, roles={public}
@@ -4778,6 +5147,9 @@
 
 ### `email_campaigns`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **email_campaigns_org_read** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **email_campaigns_org_write** — ALL, PERMISSIVE, roles={public}
@@ -4786,6 +5158,9 @@
 
 ### `email_deliveries`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **email_deliveries_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `((org_id IS NOT NULL) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
 - **email_deliveries_service** — ALL, PERMISSIVE, roles={service_role}
@@ -4799,12 +5174,18 @@
 
 ### `email_oauth_states`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **email_oauth_states_deny_client** — ALL, RESTRICTIVE, roles={anon,authenticated}
   - USING: `false`
   - WITH CHECK: `false`
 
 ### `email_opt_outs`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **email_opt_outs_select_org** — SELECT, PERMISSIVE, roles={public}
   - USING: `((org_id IS NULL) OR has_org_membership(( SELECT auth.uid() AS uid), org_id))`
 - **email_opt_outs_service** — ALL, PERMISSIVE, roles={service_role}
@@ -4813,12 +5194,18 @@
 
 ### `email_retry_queue`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **email_retry_queue_service** — ALL, PERMISSIVE, roles={service_role}
   - USING: `true`
   - WITH CHECK: `true`
 
 ### `email_templates`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **email_templates_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE (m.user_id = ( SELECT auth.uid() AS uid))))`
 - **email_templates_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -4834,11 +5221,17 @@
 
 ### `email_threads`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **email_threads_select_own** — SELECT, PERMISSIVE, roles={public}
   - USING: `(user_id = ( SELECT auth.uid() AS uid))`
 
 ### `email_unsubscribes`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **email_unsubscribes_select_org** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **email_unsubscribes_service** — ALL, PERMISSIVE, roles={service_role}
@@ -4847,6 +5240,9 @@
 
 ### `field_daily_stats`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **field_daily_stats_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 - **field_daily_stats_select** — SELECT, PERMISSIVE, roles={public}
@@ -4860,6 +5256,9 @@
 
 ### `field_house_events`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **field_house_events_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 - **field_house_events_select** — SELECT, PERMISSIVE, roles={public}
@@ -4872,6 +5271,9 @@
 
 ### `field_house_profiles`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **field_house_profiles_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 - **field_house_profiles_perm_delete** — DELETE, RESTRICTIVE, roles={authenticated}
@@ -4892,12 +5294,18 @@
 
 ### `field_pin_entity_links`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fpel_org_access** — ALL, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 
 ### `field_pin_templates`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **field_pin_templates_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 - **field_pin_templates_select** — SELECT, PERMISSIVE, roles={public}
@@ -4911,6 +5319,9 @@
 
 ### `field_pins`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **field_pins_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 - **field_pins_select** — SELECT, PERMISSIVE, roles={public}
@@ -4924,12 +5335,18 @@
 
 ### `field_rep_performance`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **frp_org_access** — ALL, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 
 ### `field_sales_reps`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **field_sales_reps_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 - **field_sales_reps_select** — SELECT, PERMISSIVE, roles={public}
@@ -4951,6 +5368,9 @@
 
 ### `field_sales_teams`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **field_sales_teams_select** — SELECT, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 - **field_sales_teams_service** — ALL, PERMISSIVE, roles={service_role}
@@ -4959,12 +5379,18 @@
 
 ### `field_schedule_slots`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fss_org_access** — ALL, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 
 ### `field_settings`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **field_settings_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 - **field_settings_perm_delete** — DELETE, RESTRICTIVE, roles={authenticated}
@@ -4985,6 +5411,9 @@
 
 ### `field_territories`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **field_territories_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 - **field_territories_perm_delete** — DELETE, RESTRICTIVE, roles={authenticated}
@@ -5005,12 +5434,18 @@
 
 ### `field_territory_assignments`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fta_org_access** — ALL, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 
 ### `form_submissions`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **form_submissions_org_member** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
@@ -5024,6 +5459,9 @@
 
 ### `fs_badges`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fs_badges_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE ((memberships.user_id = ( SELECT auth.uid() AS uid)) AND (memberships.role = ANY (ARRAY['owner'::text, 'admin'::text])))))`
 - **fs_badges_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5036,6 +5474,9 @@
 
 ### `fs_battles`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fs_battles_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE ((memberships.user_id = ( SELECT auth.uid() AS uid)) AND (memberships.role = ANY (ARRAY['owner'::text, 'admin'::text])))))`
 - **fs_battles_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5058,6 +5499,9 @@
 
 ### `fs_challenges`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fs_challenges_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE ((memberships.user_id = ( SELECT auth.uid() AS uid)) AND (memberships.role = ANY (ARRAY['owner'::text, 'admin'::text])))))`
 - **fs_challenges_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5070,6 +5514,9 @@
 
 ### `fs_check_in_records`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fs_check_in_records_insert** — INSERT, PERMISSIVE, roles={authenticated}
   - WITH CHECK: `(user_id = ( SELECT auth.uid() AS uid))`
 - **fs_check_in_records_select** — SELECT, PERMISSIVE, roles={authenticated}
@@ -5077,6 +5524,9 @@
 
 ### `fs_commission_entries`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fs_commission_entries_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE ((memberships.user_id = ( SELECT auth.uid() AS uid)) AND (memberships.role = ANY (ARRAY['owner'::text, 'admin'::text])))))`
 - **fs_commission_entries_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5089,6 +5539,9 @@
 
 ### `fs_commission_rules`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fs_commission_rules_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE ((memberships.user_id = ( SELECT auth.uid() AS uid)) AND (memberships.role = ANY (ARRAY['owner'::text, 'admin'::text])))))`
 - **fs_commission_rules_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5101,6 +5554,9 @@
 
 ### `fs_field_sessions`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fs_field_sessions_insert** — INSERT, PERMISSIVE, roles={authenticated}
   - WITH CHECK: `((user_id = ( SELECT auth.uid() AS uid)) AND (org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid)))))`
 - **fs_field_sessions_select** — SELECT, PERMISSIVE, roles={authenticated}
@@ -5118,6 +5574,9 @@
 
 ### `fs_rep_badges`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fs_rep_badges_insert** — INSERT, PERMISSIVE, roles={authenticated}
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE ((memberships.user_id = ( SELECT auth.uid() AS uid)) AND (memberships.role = ANY (ARRAY['owner'::text, 'admin'::text])))))`
 - **fs_rep_badges_select** — SELECT, PERMISSIVE, roles={authenticated}
@@ -5125,6 +5584,9 @@
 
 ### `fs_rep_stat_snapshots`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **fs_rep_stat_snapshots_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE ((memberships.user_id = ( SELECT auth.uid() AS uid)) AND (memberships.role = ANY (ARRAY['owner'::text, 'admin'::text])))))`
 - **fs_rep_stat_snapshots_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5137,12 +5599,18 @@
 
 ### `geofences`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **geofences_org** — ALL, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 
 ### `goals`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **goals_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 - **goals_perm_delete** — DELETE, RESTRICTIVE, roles={authenticated}
@@ -5160,6 +5628,9 @@
 
 ### `gps_providers`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **gps_providers_org** — ALL, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
@@ -5173,6 +5644,9 @@
 
 ### `integration_audit_logs`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **integration_audit_logs_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **integration_audit_logs_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5185,6 +5659,9 @@
 
 ### `integration_oauth_states`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **integration_oauth_states_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **integration_oauth_states_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5197,6 +5674,9 @@
 
 ### `invitations`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **invitations_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **invitations_select** — SELECT, PERMISSIVE, roles={public}
@@ -5207,6 +5687,9 @@
 
 ### `invoice_items`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **invoice_items_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'invoices.update'::text)`
 - **invoice_items_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5219,6 +5702,9 @@
 
 ### `invoice_send_events`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **ise_insert_org** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **ise_select_org** — SELECT, PERMISSIVE, roles={public}
@@ -5226,12 +5712,18 @@
 
 ### `invoice_sequences`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **invoice_sequences_all** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `invoice_templates`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **invoice_templates_delete_org** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **invoice_templates_insert_org** — INSERT, PERMISSIVE, roles={public}
@@ -5251,6 +5743,9 @@
 
 ### `invoices`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **invoices_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'invoices.delete'::text)`
 - **invoices_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5260,9 +5755,15 @@
 - **invoices_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
   - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'invoices.update'::text)`
   - WITH CHECK: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'invoices.update'::text)`
+- **portee_membre** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((org_id IN ( SELECT portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT portee_personnes() AS portee_personnes)) OR (salesperson_id IN ( SELECT portee_personnes() AS portee_personnes)) OR (client_id IN ( SELECT portee_clients() AS portee_clients)) OR (job_id IN ( SELEC`
+  - WITH CHECK: `true`
 
 ### `ip_blocklist`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **ip_blocklist_admin_select** — SELECT, PERMISSIVE, roles={public}
   - USING: `((org_id IS NULL) OR (EXISTS ( SELECT 1 FROM memberships WHERE ((memberships.org_id = ip_blocklist.org_id) AND (memberships.user_id = ( SELECT auth.uid() AS uid)) AND (memberships.role = ANY (ARRAY['owner'::text, 'admin'::text]))))))`
 - **ip_blocklist_service_delete** — DELETE, PERMISSIVE, roles={public}
@@ -5274,6 +5775,9 @@
 
 ### `job_agreements`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **job_agreements_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **job_agreements_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5286,6 +5790,9 @@
 
 ### `job_billing_milestones`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **job_billing_milestones_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **job_billing_milestones_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5298,6 +5805,9 @@
 
 ### `job_checklists`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **job_checklists_org_all** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
@@ -5311,6 +5821,9 @@
 
 ### `job_intents`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **job_intents_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **job_intents_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5323,6 +5836,9 @@
 
 ### `job_line_items`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **job_line_items_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **job_line_items_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5335,6 +5851,9 @@
 
 ### `job_materials`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **job_materials_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **job_materials_insert** — INSERT, PERMISSIVE, roles={public}
@@ -5344,12 +5863,18 @@
 
 ### `job_recurrence_rules`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **job_recurrence_org** — ALL, PERMISSIVE, roles={public}
   - USING: `(EXISTS ( SELECT 1 FROM memberships m WHERE ((m.org_id = job_recurrence_rules.org_id) AND (m.user_id = ( SELECT auth.uid() AS uid)))))`
   - WITH CHECK: `(EXISTS ( SELECT 1 FROM memberships m WHERE ((m.org_id = job_recurrence_rules.org_id) AND (m.user_id = ( SELECT auth.uid() AS uid)))))`
 
 ### `job_tags`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **job_tags_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE (m.user_id = ( SELECT auth.uid() AS uid))))`
 - **job_tags_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5362,18 +5887,27 @@
 
 ### `job_templates`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **job_templates_org** — ALL, PERMISSIVE, roles={public}
   - USING: `(EXISTS ( SELECT 1 FROM memberships m WHERE ((m.org_id = job_templates.org_id) AND (m.user_id = ( SELECT auth.uid() AS uid)))))`
   - WITH CHECK: `(EXISTS ( SELECT 1 FROM memberships m WHERE ((m.org_id = job_templates.org_id) AND (m.user_id = ( SELECT auth.uid() AS uid)))))`
 
 ### `job_time_logs`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **job_time_logs_all** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `jobs`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **jobs_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND has_org_admin_role(( SELECT auth.uid() AS uid), org_id))`
 - **jobs_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5386,15 +5920,15 @@
 - **jobs_update_own** — UPDATE, PERMISSIVE, roles={public}
   - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND ((salesperson_id = ( SELECT auth.uid() AS uid)) OR (assigned_user_id = ( SELECT auth.uid() AS uid)) OR (created_by = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND ((salesperson_id = ( SELECT auth.uid() AS uid)) OR (assigned_user_id = ( SELECT auth.uid() AS uid)) OR (created_by = ( SELECT auth.uid() AS uid))))`
-
-### `lead_lists`
-
-- **lead_lists_deny_client** — ALL, RESTRICTIVE, roles={anon,authenticated}
-  - USING: `false`
-  - WITH CHECK: `false`
+- **portee_membre** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((org_id IN ( SELECT portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT portee_personnes() AS portee_personnes)) OR (salesperson_id IN ( SELECT portee_personnes() AS portee_personnes)) OR (assigned_user_id IN ( SELECT portee_personnes() AS portee_personnes)) OR (team_i`
+  - WITH CHECK: `true`
 
 ### `lead_sources`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **lead_sources_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **lead_sources_insert** — INSERT, PERMISSIVE, roles={public}
@@ -5405,14 +5939,11 @@
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
-### `lists`
-
-- **lists_owner_rw** — ALL, PERMISSIVE, roles={authenticated}
-  - USING: `(user_id = ( SELECT auth.uid() AS uid))`
-  - WITH CHECK: `(user_id = ( SELECT auth.uid() AS uid))`
-
 ### `location_tracking_settings`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **location_tracking_settings_delete_admin** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
 - **location_tracking_settings_insert_admin** — INSERT, PERMISSIVE, roles={public}
@@ -5425,6 +5956,9 @@
 
 ### `login_history`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **login_history_insert_service** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(( SELECT auth.role() AS role) = 'service_role'::text)`
 - **login_history_no_delete** — DELETE, PERMISSIVE, roles={public}
@@ -5436,6 +5970,9 @@
 
 ### `lumi_autorisations`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **lumi_autorisations_own** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `((user_id = ( SELECT auth.uid() AS uid)) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
 - **lumi_autorisations_service** — ALL, PERMISSIVE, roles={service_role}
@@ -5444,6 +5981,9 @@
 
 ### `lumi_briefings`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **lumi_briefings_own** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `((user_id = ( SELECT auth.uid() AS uid)) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
 - **lumi_briefings_service** — ALL, PERMISSIVE, roles={service_role}
@@ -5452,6 +5992,9 @@
 
 ### `lumi_conversations`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **lumi_conversations_own** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `((user_id = ( SELECT auth.uid() AS uid)) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
 - **lumi_conversations_service** — ALL, PERMISSIVE, roles={service_role}
@@ -5460,6 +6003,9 @@
 
 ### `lumi_messages`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **lumi_messages_own** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(EXISTS ( SELECT 1 FROM lumi_conversations c WHERE ((c.id = lumi_messages.conversation_id) AND (c.user_id = ( SELECT auth.uid() AS uid)))))`
 - **lumi_messages_service** — ALL, PERMISSIVE, roles={service_role}
@@ -5468,6 +6014,9 @@
 
 ### `lumi_traces`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **lumi_traces_select_membre** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `((org_id IS NOT NULL) AND (EXISTS ( SELECT 1 FROM memberships m WHERE ((m.org_id = lumi_traces.org_id) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND (m.status = 'active'::text)))))`
 
@@ -5480,13 +6029,16 @@
 - **memberships_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
   - WITH CHECK: `(has_org_admin_role(( SELECT auth.uid() AS uid), org_id) OR ((user_id = ( SELECT auth.uid() AS uid)) AND (lower(COALESCE(role, ''::text)) = 'owner'::text) AND org_has_no_members(org_id)))`
 - **memberships_select_own_org** — SELECT, PERMISSIVE, roles={authenticated}
-  - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) OR (user_id = ( SELECT auth.uid() AS uid)) OR has_org_role(( SELECT auth.uid() AS uid), org_id, ARRAY['owner'::text, 'admin'::text]))`
+  - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) OR ((user_id = ( SELECT auth.uid() AS uid)) AND (COALESCE(status, 'active'::text) = 'active'::text)) OR has_org_role(( SELECT auth.uid() AS uid), org_id, ARRAY['owner'::text, 'admin'::text]))`
 - **memberships_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
-  - USING: `((user_id = ( SELECT auth.uid() AS uid)) OR has_org_admin_role(( SELECT auth.uid() AS uid), org_id))`
+  - USING: `(((user_id = ( SELECT auth.uid() AS uid)) AND (COALESCE(status, 'active'::text) = 'active'::text)) OR has_org_admin_role(( SELECT auth.uid() AS uid), org_id))`
   - WITH CHECK: `((user_id = ( SELECT auth.uid() AS uid)) OR has_org_admin_role(( SELECT auth.uid() AS uid), org_id))`
 
 ### `messages`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **messages_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = messages.org_id)))`
 - **messages_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5496,9 +6048,15 @@
 - **messages_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
   - USING: `(( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = messages.org_id)))`
   - WITH CHECK: `(( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = messages.org_id)))`
+- **portee_membre** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((org_id IN ( SELECT portee_bureaux_complets() AS portee_bureaux_complets)) OR (conversation_id IN ( SELECT c.id FROM conversations c)))`
+  - WITH CHECK: `true`
 
 ### `mfa_phone`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **mfa_phone_select_own** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(( SELECT auth.uid() AS uid) = user_id)`
 
@@ -5606,6 +6164,9 @@
 
 ### `notes`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **notes_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE (m.user_id = ( SELECT auth.uid() AS uid))))`
 - **notes_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5618,6 +6179,9 @@
 
 ### `notifications`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **notifications_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND ((user_id IS NULL) OR (user_id = ( SELECT auth.uid() AS uid))))`
 - **notifications_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5630,6 +6194,9 @@
 
 ### `oauth_authorization_codes`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **oauth_codes_service_all** — ALL, PERMISSIVE, roles={service_role}
   - USING: `true`
   - WITH CHECK: `true`
@@ -5642,6 +6209,9 @@
 
 ### `oauth_tokens`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **oauth_tokens_select_proprietaire** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(user_id = ( SELECT auth.uid() AS uid))`
 - **oauth_tokens_service_all** — ALL, PERMISSIVE, roles={service_role}
@@ -5663,6 +6233,9 @@
 
 ### `org_client_counters`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **org_client_counters_deny_client** — ALL, RESTRICTIVE, roles={anon,authenticated}
   - USING: `false`
   - WITH CHECK: `false`
@@ -5678,23 +6251,35 @@
 
 ### `org_invoice_sequences`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **org_invoice_sequences_service** — ALL, PERMISSIVE, roles={service_role}
   - USING: `true`
   - WITH CHECK: `true`
 
 ### `org_job_counters`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **org_job_counters_deny_client** — ALL, RESTRICTIVE, roles={anon,authenticated}
   - USING: `false`
   - WITH CHECK: `false`
 
 ### `org_knowledge`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **org_knowledge_org_member_select** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `org_sending_domains`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **org_sending_domains_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **org_sending_domains_service** — ALL, PERMISSIVE, roles={service_role}
@@ -5715,6 +6300,9 @@
 
 ### `payment_provider_secrets`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **payment_secrets_service_only_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `(( SELECT auth.role() AS role) = 'service_role'::text)`
 - **payment_secrets_service_only_insert** — INSERT, PERMISSIVE, roles={public}
@@ -5726,6 +6314,9 @@
 
 ### `payment_provider_settings`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **payment_provider_settings_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
 - **payment_provider_settings_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5738,6 +6329,9 @@
 
 ### `payment_providers`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **payment_providers_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **payment_providers_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5750,6 +6344,9 @@
 
 ### `payment_requests`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **payment_requests_delete_org** — DELETE, PERMISSIVE, roles={public}
   - USING: `((org_id = ( SELECT auth.uid() AS uid)) OR (EXISTS ( SELECT 1 FROM memberships m WHERE ((m.user_id = ( SELECT auth.uid() AS uid)) AND (m.org_id = payment_requests.org_id)))))`
 - **payment_requests_insert_org** — INSERT, PERMISSIVE, roles={public}
@@ -5762,6 +6359,9 @@
 
 ### `payment_requirements`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **payment_requirements_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **payment_requirements_select** — SELECT, PERMISSIVE, roles={public}
@@ -5771,6 +6371,9 @@
 
 ### `payment_settings`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **payment_settings_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **payment_settings_service** — ALL, PERMISSIVE, roles={service_role}
@@ -5779,6 +6382,9 @@
 
 ### `payments`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **payments_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
 - **payments_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5791,16 +6397,25 @@
 
 ### `payroll_adjustments`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **payroll_adjustments_select** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `payroll_payments`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **payroll_payments_select** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `payroll_settings`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **payroll_settings_delete_org** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **payroll_settings_insert_org** — INSERT, PERMISSIVE, roles={public}
@@ -5820,14 +6435,20 @@
 
 ### `pipeline_acces`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **pipeline_acces_admin_write** — ALL, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
-  - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
+  - USING: `(has_org_admin_role(( SELECT auth.uid() AS uid), org_id) AND peut_voir_pipeline(( SELECT auth.uid() AS uid), pipeline_id))`
+  - WITH CHECK: `(has_org_admin_role(( SELECT auth.uid() AS uid), org_id) AND peut_voir_pipeline(( SELECT auth.uid() AS uid), pipeline_id))`
 - **pipeline_acces_select** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `pipeline_deals`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **pipeline_deals_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **pipeline_deals_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5846,11 +6467,17 @@
 
 ### `pipeline_events`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **pipeline_events_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `pipeline_operations_lot`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **pipeline_operations_lot_select** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **pipeline_operations_lot_write** — ALL, PERMISSIVE, roles={authenticated}
@@ -5859,6 +6486,9 @@
 
 ### `pipeline_raisons_perte_liste`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **pipeline_raisons_perte_admin_write** — ALL, PERMISSIVE, roles={authenticated}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
@@ -5867,14 +6497,20 @@
 
 ### `pipeline_stages`
 
-- **pipeline_stages_admin_write** — ALL, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
-  - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+- **pipeline_stages_modifier** — ALL, PERMISSIVE, roles={authenticated}
+  - USING: `peut_modifier_pipeline(( SELECT auth.uid() AS uid), pipeline_id)`
+  - WITH CHECK: `peut_modifier_pipeline(( SELECT auth.uid() AS uid), pipeline_id)`
 - **pipeline_stages_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND peut_voir_pipeline(( SELECT auth.uid() AS uid), pipeline_id))`
 
 ### `pipeline_vues`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **pipeline_vues_org_write** — ALL, PERMISSIVE, roles={authenticated}
   - USING: `(has_org_admin_role(( SELECT auth.uid() AS uid), org_id) AND (user_id IS NULL))`
   - WITH CHECK: `(has_org_admin_role(( SELECT auth.uid() AS uid), org_id) AND (user_id IS NULL))`
@@ -5884,17 +6520,18 @@
 - **pipeline_vues_select** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND ((user_id IS NULL) OR (user_id = ( SELECT auth.uid() AS uid))))`
 
-### `pipelines`
-
-- **pipelines_owner_rw** — ALL, PERMISSIVE, roles={authenticated}
-  - USING: `(user_id = ( SELECT auth.uid() AS uid))`
-  - WITH CHECK: `(user_id = ( SELECT auth.uid() AS uid))`
-
 ### `pipelines_ventes`
 
-- **pipelines_ventes_admin_write** — ALL, PERMISSIVE, roles={authenticated}
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+- **pipelines_ventes_admin_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
+- **pipelines_ventes_admin_insert** — INSERT, PERMISSIVE, roles={authenticated}
   - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
+- **pipelines_ventes_modifier** — UPDATE, PERMISSIVE, roles={authenticated}
+  - USING: `peut_modifier_pipeline(( SELECT auth.uid() AS uid), id)`
+  - WITH CHECK: `peut_modifier_pipeline(( SELECT auth.uid() AS uid), id)`
 - **pipelines_ventes_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND peut_voir_pipeline(( SELECT auth.uid() AS uid), id))`
 
@@ -5914,6 +6551,17 @@
 - **predefined_services_update_company** — UPDATE, PERMISSIVE, roles={authenticated}
   - USING: `has_company_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_company_membership(( SELECT auth.uid() AS uid), org_id)`
+
+### `predefined_services_bureau`
+
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+- **predefined_services_bureau_ecriture** — ALL, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
+  - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
+- **predefined_services_bureau_select** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `processed_checkout_sessions`
 
@@ -5937,12 +6585,18 @@
 
 ### `proof_of_presence`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **pop_org** — ALL, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 
 ### `properties`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **properties_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **properties_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5955,11 +6609,17 @@
 
 ### `provisioning_events`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **provisioning_events_select** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `push_tokens`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **push_tokens_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `(user_id = ( SELECT auth.uid() AS uid))`
 - **push_tokens_select** — SELECT, PERMISSIVE, roles={public}
@@ -5984,6 +6644,9 @@
 
 ### `quote_line_items`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **quote_line_items_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(EXISTS ( SELECT 1 FROM quotes q WHERE ((q.id = quote_line_items.quote_id) AND member_has_permission(( SELECT auth.uid() AS uid), q.org_id, 'quotes.update'::text))))`
 - **quote_line_items_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -5996,6 +6659,9 @@
 
 ### `quote_measurement_camera`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **qmc_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **qmc_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -6008,6 +6674,9 @@
 
 ### `quote_measurements`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **quote_measurements_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **quote_measurements_insert** — INSERT, PERMISSIVE, roles={public}
@@ -6039,6 +6708,9 @@
 
 ### `quote_sequences`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **quote_sequences_all** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
@@ -6052,6 +6724,9 @@
 
 ### `quote_templates`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **quote_templates_org_member** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
@@ -6071,12 +6746,20 @@
   - WITH CHECK: `(EXISTS ( SELECT 1 FROM invoices i WHERE ((i.id = quote_views.invoice_id) AND (( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = i.org_id))))))`
 - **quote_views_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(EXISTS ( SELECT 1 FROM invoices i WHERE ((i.id = quote_views.invoice_id) AND (( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = i.org_id))))))`
+- **quote_views_select_soumission** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `((quote_id IS NOT NULL) AND (org_id IS NOT NULL) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
 - **quote_views_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
   - USING: `(EXISTS ( SELECT 1 FROM invoices i WHERE ((i.id = quote_views.invoice_id) AND (( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = i.org_id))))))`
   - WITH CHECK: `(EXISTS ( SELECT 1 FROM invoices i WHERE ((i.id = quote_views.invoice_id) AND (( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = i.org_id))))))`
 
 ### `quotes`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+- **portee_membre** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((org_id IN ( SELECT portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT portee_personnes() AS portee_personnes)) OR (salesperson_id IN ( SELECT portee_personnes() AS portee_personnes)) OR (client_id IN ( SELECT portee_clients() AS portee_clients)) OR (job_id IN ( SELEC`
+  - WITH CHECK: `true`
 - **quotes_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'quotes.delete'::text)`
 - **quotes_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -6096,6 +6779,9 @@
 
 ### `recurring_invoice_schedules`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **recurring_invoice_schedules_perm_delete** — DELETE, RESTRICTIVE, roles={authenticated}
   - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'invoices.delete'::text)`
 - **recurring_invoice_schedules_perm_insert** — INSERT, RESTRICTIVE, roles={authenticated}
@@ -6111,6 +6797,9 @@
 
 ### `recurring_team_schedules`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **rts_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE ((m.user_id = ( SELECT auth.uid() AS uid)) AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))`
 - **rts_insert** — INSERT, PERMISSIVE, roles={public}
@@ -6128,11 +6817,17 @@
 
 ### `reminder_log`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **reminder_log_org_read** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `reminder_settings`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **reminder_settings_org_read** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **reminder_settings_org_write** — ALL, PERMISSIVE, roles={public}
@@ -6148,12 +6843,18 @@
 
 ### `request_forms`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **request_forms_admin_all** — ALL, PERMISSIVE, roles={authenticated}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
 
 ### `review_requests`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **review_requests_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE (m.user_id = ( SELECT auth.uid() AS uid))))`
 - **review_requests_service** — ALL, PERMISSIVE, roles={service_role}
@@ -6167,6 +6868,9 @@
 
 ### `role_templates`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **role_templates_modify** — ALL, PERMISSIVE, roles={authenticated}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
@@ -6175,11 +6879,20 @@
 
 ### `satisfaction_surveys`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **surveys_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE (m.user_id = ( SELECT auth.uid() AS uid))))`
 
 ### `schedule_events`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+- **portee_membre** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((org_id IN ( SELECT portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT portee_personnes() AS portee_personnes)) OR (assigned_user IN ( SELECT portee_personnes() AS portee_personnes)) OR (team_id IN ( SELECT portee_equipes() AS portee_equipes)) OR (job_id IN ( SELECT p`
+  - WITH CHECK: `true`
 - **schedule_events_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **schedule_events_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -6192,6 +6905,9 @@
 
 ### `scheduled_reports`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **scheduled_reports_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **scheduled_reports_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -6216,6 +6932,9 @@
 
 ### `security_alerts`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **security_alerts_insert_service** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(( SELECT auth.role() AS role) = 'service_role'::text)`
 - **security_alerts_no_delete** — DELETE, PERMISSIVE, roles={public}
@@ -6227,6 +6946,9 @@
 
 ### `security_events`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **security_events_insert_service** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(( SELECT auth.role() AS role) = 'service_role'::text)`
 - **security_events_no_delete** — DELETE, PERMISSIVE, roles={public}
@@ -6238,6 +6960,9 @@
 
 ### `security_incidents`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **incidents_insert_org** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **incidents_select_org** — SELECT, PERMISSIVE, roles={public}
@@ -6248,6 +6973,9 @@
 
 ### `service_contracts`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **service_contracts_delete** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **service_contracts_insert** — INSERT, PERMISSIVE, roles={authenticated}
@@ -6260,6 +6988,9 @@
 
 ### `sms_opt_outs`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **sms_opt_outs_select_org** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(EXISTS ( SELECT 1 FROM memberships m WHERE ((m.user_id = ( SELECT auth.uid() AS uid)) AND (m.org_id = sms_opt_outs.org_id))))`
 - **sms_opt_outs_service** — ALL, PERMISSIVE, roles={service_role}
@@ -6268,6 +6999,9 @@
 
 ### `specific_notes`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **specific_notes_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **specific_notes_insert** — INSERT, PERMISSIVE, roles={public}
@@ -6287,28 +7021,61 @@
 
 ### `support_messages`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **support_messages_select_own** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `(EXISTS ( SELECT 1 FROM support_tickets t WHERE ((t.id = support_messages.ticket_id) AND (t.user_id = ( SELECT auth.uid() AS uid)) AND has_org_membership(( SELECT auth.uid() AS uid), t.org_id))))`
 
+### `support_slack_channels`
+
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+
 ### `support_tickets`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **support_tickets_select_own** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `((user_id = ( SELECT auth.uid() AS uid)) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
 
+### `table_view_preferences`
+
+- **table_view_preferences_delete** — DELETE, PERMISSIVE, roles={authenticated}
+  - USING: `((user_id = ( SELECT auth.uid() AS uid)) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
+- **table_view_preferences_insert** — INSERT, PERMISSIVE, roles={authenticated}
+  - WITH CHECK: `((user_id = ( SELECT auth.uid() AS uid)) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
+- **table_view_preferences_select** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `((user_id = ( SELECT auth.uid() AS uid)) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
+- **table_view_preferences_update** — UPDATE, PERMISSIVE, roles={authenticated}
+  - USING: `((user_id = ( SELECT auth.uid() AS uid)) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
+  - WITH CHECK: `((user_id = ( SELECT auth.uid() AS uid)) AND has_org_membership(( SELECT auth.uid() AS uid), org_id))`
+
 ### `tags`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tags_org_delete** — DELETE, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+  - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
 - **tags_org_insert** — INSERT, PERMISSIVE, roles={authenticated}
-  - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+  - WITH CHECK: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
 - **tags_org_select** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **tags_org_update** — UPDATE, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-  - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+  - USING: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
+  - WITH CHECK: `member_has_permission(( SELECT auth.uid() AS uid), org_id, 'settings.update'::text)`
 
 ### `tasks`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+- **portee_membre** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((org_id IN ( SELECT portee_bureaux_complets() AS portee_bureaux_complets)) OR (created_by IN ( SELECT portee_personnes() AS portee_personnes)) OR (assignee_user_id IN ( SELECT portee_personnes() AS portee_personnes)) OR (team_id IN ( SELECT portee_equipes() AS portee_equipes)) OR (job_id IN ( SELEC`
+  - WITH CHECK: `true`
 - **tasks_delete_org** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **tasks_insert_org** — INSERT, PERMISSIVE, roles={public}
@@ -6321,6 +7088,9 @@
 
 ### `tax_configs`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tax_configs_org** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
@@ -6347,6 +7117,9 @@
 
 ### `tax_groups`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tax_groups_org** — ALL, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
@@ -6360,6 +7133,9 @@
 
 ### `team_assignments`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **team_assignments_select** — SELECT, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE (m.user_id = ( SELECT auth.uid() AS uid))))`
 - **team_assignments_write** — ALL, PERMISSIVE, roles={public}
@@ -6368,6 +7144,9 @@
 
 ### `team_availability`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **team_availability_delete_org** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **team_availability_insert_org** — INSERT, PERMISSIVE, roles={public}
@@ -6380,6 +7159,9 @@
 
 ### `team_capabilities`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **team_capabilities_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **team_capabilities_insert** — INSERT, PERMISSIVE, roles={public}
@@ -6392,6 +7174,9 @@
 
 ### `team_date_slots`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **team_date_slots_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **team_date_slots_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -6404,6 +7189,9 @@
 
 ### `team_members`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **team_members_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
 - **team_members_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -6416,6 +7204,9 @@
 
 ### `team_schedule_assignments`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tsa_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE ((m.user_id = ( SELECT auth.uid() AS uid)) AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text])))))`
 - **tsa_insert** — INSERT, PERMISSIVE, roles={public}
@@ -6428,6 +7219,9 @@
 
 ### `team_schedule_audit`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tsaud_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE (m.user_id = ( SELECT auth.uid() AS uid))))`
 - **tsaud_select** — SELECT, PERMISSIVE, roles={public}
@@ -6435,6 +7229,9 @@
 
 ### `teams`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **teams_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(org_id IN ( SELECT m.org_id FROM memberships m WHERE (m.user_id = ( SELECT auth.uid() AS uid))))`
 - **teams_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -6447,18 +7244,27 @@
 
 ### `technician_device_mappings`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tech_device_map_org** — ALL, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 
 ### `technician_locations`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tech_locations_org** — ALL, PERMISSIVE, roles={public}
   - USING: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
   - WITH CHECK: `(org_id IN ( SELECT memberships.org_id FROM memberships WHERE (memberships.user_id = ( SELECT auth.uid() AS uid))))`
 
 ### `time_entries`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **time_entries_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
   - USING: `(( SELECT auth.uid() AS uid) IN ( SELECT memberships.user_id FROM memberships WHERE (memberships.org_id = time_entries.org_id)))`
 - **time_entries_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
@@ -6471,6 +7277,9 @@
 
 ### `time_off_requests`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tor_delete** — DELETE, PERMISSIVE, roles={public}
   - USING: `((org_id IN ( SELECT m.org_id FROM memberships m WHERE ((m.user_id = ( SELECT auth.uid() AS uid)) AND (m.role = ANY (ARRAY['owner'::text, 'admin'::text]))))) OR ((user_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending'::text)))`
 - **tor_insert** — INSERT, PERMISSIVE, roles={public}
@@ -6483,6 +7292,9 @@
 
 ### `tracking_events`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tracking_events_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **tracking_events_select** — SELECT, PERMISSIVE, roles={public}
@@ -6490,6 +7302,9 @@
 
 ### `tracking_live_locations`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tracking_live_select** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **tracking_live_update** — UPDATE, PERMISSIVE, roles={public}
@@ -6500,6 +7315,9 @@
 
 ### `tracking_points`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tracking_points_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **tracking_points_select** — SELECT, PERMISSIVE, roles={public}
@@ -6507,6 +7325,9 @@
 
 ### `tracking_sessions`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **tracking_sessions_insert** — INSERT, PERMISSIVE, roles={public}
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 - **tracking_sessions_select** — SELECT, PERMISSIVE, roles={public}
@@ -6515,13 +7336,24 @@
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
+### `transferts_bureaux`
+
+- **transferts_bureaux_select** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_source) OR has_org_membership(( SELECT auth.uid() AS uid), org_cible))`
+
 ### `webhook_deliveries`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **wh_deliveries_org_read** — SELECT, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `webhook_endpoints`
 
+- **bureau_actif** — ALL, RESTRICTIVE, roles={authenticated}
+  - USING: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
+  - WITH CHECK: `((( SELECT bureau_actif_demande() AS bureau_actif_demande) IS NULL) OR (org_id IS NULL) OR (org_id = ( SELECT bureau_actif_demande() AS bureau_actif_demande)))`
 - **wh_endpoints_admin_read** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
 - **wh_endpoints_org_write** — ALL, PERMISSIVE, roles={public}
@@ -6542,7 +7374,7 @@
   - WITH CHECK: `true`
 
 
-## 4. Fonctions (394)
+## 4. Fonctions (463)
 
 Corps non inclus — ils divergent, et c'est précisément ce qui a trompé
 l'audit. Lire le corps réel avec :
@@ -6550,7 +7382,20 @@ l'audit. Lire le corps réel avec :
 
 | Fonction | SECURITY DEFINER | search_path | Droits |
 |---|---|---|---|
+| `_client_dans_bureau(p_client uuid, p_cible uuid, p_uid uuid)` → uuid | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `_membre_actif_ou_nul(p_user uuid, p_org uuid)` → uuid | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `_pipeline_copier(p_source uuid, p_org uuid, p_nom text, p_uid uuid)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `_pipeline_nom_libre(p_org uuid, p_base text)` → text | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `_point_in_zone_ring(p_lng double precision, p_lat double precision, geo jsonb)` → boolean | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `_portee_bureaux_complets(p_user uuid)` → SETOF uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `_portee_clients(p_user uuid)` → SETOF uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `_portee_equipes(p_user uuid)` → SETOF uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `_portee_jobs(p_user uuid)` → SETOF uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `_portee_personnes(p_user uuid)` → SETOF uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `_portee_restreinte(p_user uuid)` → TABLE(org_id uuid, scope text) | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `_taxe_defaut_bureau(p_org uuid, OUT taux numeric, OUT libelle text)` → record | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `_transferer_devis(p_quote uuid, p_cible uuid, p_uid uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `_transferer_job(p_job uuid, p_cible uuid, p_uid uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `ac_actor_name()` → text | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `ac_client_name(p_client uuid)` → text | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `ac_fmt_dollars(p_cents integer)` → text | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
@@ -6563,12 +7408,15 @@ l'audit. Lire le corps réel avec :
 | `ac_track_quotes()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `ac_track_specific_notes()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `ac_track_survey_reviews()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `acces_bureau(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `ai_enforce_org_scope()` → trigger | non | search_path=public | service_role=X/postgres |
 | `ai_set_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
 | `anonymize_client(p_client_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `anonymize_inactive_leads(p_months integer DEFAULT 24)` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `anonymize_lead(p_lead_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `anonymize_old_soft_deleted_clients(p_days integer DEFAULT 180)` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `appliquer_marque_entreprise_bureau()` → trigger | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `appliquer_prefixe_document()` → trigger | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `apply_appointment_contract_link(p_org_id uuid DEFAULT NULL::uuid)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `apply_automation_presets_fr(p_org_id uuid)` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `apply_invoice_payment(p_invoice_id uuid, p_org_id uuid, p_amount_cents integer)` → TABLE(id uuid, paid_cents integer, balance_cents integer, status text, total_cents integer) | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6593,31 +7441,41 @@ l'audit. Lire le corps réel avec :
 | `build_invoice_fts_vector(r invoices)` → tsvector | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `build_job_fts_vector(r jobs)` → tsvector | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `bump_row_version()` → trigger | non | search_path="" | service_role=X/postgres |
+| `bureau_actif_demande()` → uuid | non | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres | anon=X/postgres |
 | `business_days_between(p_start date, p_end date)` → integer | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `cancel_hard_delete_member(p_member_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `cf_activer_unique(p_field uuid, p_actif boolean)` → jsonb | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
+| `cf_assurer_dossiers_systeme(p_org uuid)` → void | ⚠️ oui | search_path="" | service_role=X/postgres |
 | `cf_champ_apres_maj()` → trigger | non | search_path="" | service_role=X/postgres |
 | `cf_champ_avant_ecriture()` → trigger | non | search_path="" | service_role=X/postgres |
 | `cf_cle_permission_ecriture(p_object cf_object_type)` → text | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_cles_standard(p_object cf_object_type)` → text[] | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_condition_sql(p_champ custom_fields, c jsonb, p_fuseau text, p_col text)` → text | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
+| `cf_copier_valeurs(p_org uuid, p_de text, p_de_id uuid, p_vers text, p_vers_id uuid)` → integer | ⚠️ oui | search_path="" | service_role=X/postgres |
 | `cf_copier_valeurs_deal_vers_job(p_deal uuid, p_job uuid)` → integer | ⚠️ oui | search_path="" | service_role=X/postgres |
 | `cf_creer_champ(p_org uuid, p_object cf_object_type, p_folder uuid, p_champ jsonb)` → uuid | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_creer_dossier(p_org uuid, p_object cf_object_type, p_nom text, p_champs jsonb DEFAUL)` → uuid | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_deal_job_lie()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
+| `cf_deal_suivre()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
+| `cf_devis_job_lie()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
 | `cf_doublons(p_field uuid)` → TABLE(value_normalized text, nb bigint, entites uuid[]) | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_ecrire_valeur(p_field uuid, p_entity uuid, p_cols jsonb, p_options uuid[] DEFAULT NU)` → jsonb | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
+| `cf_facture_job_liee()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
 | `cf_filtrer(p_org uuid, p_object cf_object_type, p_conditions jsonb, p_ids uuid[] )` → SETOF uuid | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
-| `cf_filtrer_brut(p_org uuid, p_object cf_object_type, p_conditions jsonb, p_ids uuid[] )` → SETOF uuid | ⚠️ oui | search_path="" | authenticated=X/postgres | service_role=X/postgres |
+| `cf_filtrer_brut(p_org uuid, p_object cf_object_type, p_conditions jsonb, p_ids uuid[] )` → SETOF uuid | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_fuseau(p_org uuid)` → text | ⚠️ oui | search_path="" | authenticated=X/postgres | service_role=X/postgres |
+| `cf_garde_dossier_systeme()` → trigger | non | search_path="" | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `cf_impact_champ(p_field uuid)` → jsonb | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_maj_options(p_field uuid, p_options jsonb)` → void | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_normaliser_telephone(p text)` → text | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_option_avant_suppression()` → trigger | non | search_path="" | service_role=X/postgres |
 | `cf_option_multiple_avant_ecriture()` → trigger | non | search_path="" | service_role=X/postgres |
+| `cf_ordre_ids(p_field uuid, p_asc boolean DEFAULT true)` → SETOF uuid | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
+| `cf_orgs_dossiers_systeme()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
 | `cf_parent_visible(p_org uuid, p_client uuid, p_deal uuid, p_job uuid, p_quote uuid, p_in)` → boolean | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_purger_champ(p_field uuid, p_valeurs_confirmees bigint)` → jsonb | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_rechercher(p_org uuid, p_q text, p_limit integer DEFAULT 20)` → TABLE(object_type cf_object_type, entity_id uuid, field_id uuid, field_label text, value_text text) | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
+| `cf_sections_systeme()` → TABLE(object_type cf_object_type, cle text, nom text, "position" integer) | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_slug(p_label text)` → text | non | search_path="" | authenticated=X/postgres | service_role=X/postgres |
 | `cf_valeur_avant_ecriture()` → trigger | non | search_path="" | service_role=X/postgres |
 | `cf_valeurs_lisibles(p_client uuid)` → jsonb | ⚠️ oui | search_path="" | service_role=X/postgres |
@@ -6630,8 +7488,8 @@ l'audit. Lire le corps réel avec :
 | `check_invoice_totals_balance()` → TABLE(invoice_id uuid, org_id uuid, invoice_number text, stored_subtotal_cents integer, computed_subtotal_cents bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `check_password_strength(p_password text)` → jsonb | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `check_public_true_policies()` → TABLE(schemaname text, tablename text, policyname text) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `check_rate_limit(p_action text, p_max_per_minute integer DEFAULT 60)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `check_rate_limit(p_key text, p_max_tokens integer DEFAULT 60, p_refill_rate integer DEF)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `check_rate_limit(p_action text, p_max_per_minute integer DEFAULT 60)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `check_rls_coverage()` → TABLE(table_name text, rls_enabled boolean, rls_forced boolean, policy_count bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `check_subscription_active(p_org_id uuid)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `check_team_schedule_assignment()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6643,14 +7501,15 @@ l'audit. Lire le corps réel avec :
 | `clients_auto_billing_property()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `clients_auto_property_from_address()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `clients_before_insert_set_org()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `clients_portal_token_hash()` → trigger | non | search_path="" | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `clients_inactifs(p_org_id uuid, p_mois integer, p_limite integer DEFAULT 1000)` → TABLE(client_id uuid, periode text, dernier_job_at timestamp with time zone) | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `clients_portal_token_hash()` → trigger | non | search_path="" | service_role=X/postgres |
 | `company_org_ids(p_org uuid)` → SETOF uuid | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `convert_currency(p_amount_cents integer, p_from_currency text, p_to_currency text, p_da)` → integer | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `create_client_with_duplicate_handling(p_org_id uuid, p_mode text, p_payload jsonb, p_merge_duplicates boolea)` → clients | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_field_pin_for_client_row(c clients)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `create_incident(p_title text, p_type text, p_severity text, p_description text DEFAULT)` → uuid | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `create_invoice_from_job(p_org_id uuid, p_job_id uuid, p_send_now boolean DEFAULT false)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_invoice_from_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `create_invoice_from_job(p_org_id uuid, p_job_id uuid, p_send_now boolean DEFAULT false)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_invoice_from_milestone(p_org_id uuid, p_job_id uuid, p_milestone_id uuid, p_send_now boolean )` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_invoice_from_visit(p_org_id uuid, p_job_id uuid, p_visit_id uuid, p_send_now boolean DEFA)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_job_from_intent(p_intent_id uuid, p_lead_id uuid, p_title text, p_address text DEFAULT)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
@@ -6671,7 +7530,7 @@ l'audit. Lire le corps réel avec :
 | `deals_deduire_statut()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `deals_ecrire_historique()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `deals_emettre_evenements()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `deals_figer_premier_contact()` → trigger | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `deals_figer_premier_contact()` → trigger | non | search_path=public | service_role=X/postgres |
 | `deals_horodater_etape()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `deals_mesurer_glissement()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `deals_verifier_etape()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6693,12 +7552,19 @@ l'audit. Lire le corps réel avec :
 | `enforce_tenant()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `enforce_tenant_consistency()` → trigger | non | search_path=public, app | service_role=X/postgres |
 | `enforce_zone_exclusivity()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `enregistrer_vue_facture(p_invoice_id uuid, p_session_hash text, p_user_agent_hash text, p_comp)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `enregistrer_vue_soumission(p_quote_id uuid, p_session_hash text, p_user_agent_hash text, p_compte)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `ensure_field_pin_for_client()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `ensure_payment_settings_row(p_org uuid)` → payment_provider_settings | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `est_proprietaire(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `etiquette_renommer(p_org uuid, p_ancien text, p_nouveau text)` → integer | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `etiquette_supprimer(p_org uuid, p_nom text)` → integer | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `etiquettes_de_l_org(p_org uuid)` → TABLE(nom text, couleur text, nb_clients bigint, catalogue boolean) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `execute_scheduled_member_deletions()` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `expire_ai_reservations(p_minutes integer DEFAULT 5)` → integer | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `export_client_data(p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `export_user_data(p_user_id uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
+| `fermer_bureau(p_org uuid, p_raison text DEFAULT NULL::text)` → jsonb | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `field_compute_house_score(p_house_id uuid)` → text | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `field_compute_next_action(p_house_id uuid)` → text | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `fill_property_id_from_job_or_client()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6724,8 +7590,8 @@ l'audit. Lire le corps réel avec :
 | `hard_delete_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_company_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_admin_role(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `has_org_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_membership(target_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `has_org_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_role(p_user uuid, p_org uuid, p_roles text[])` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `haversine_distance(lat1 double precision, lng1 double precision, lat2 double precision, l)` → double precision | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `increment_unread_count(p_conversation_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
@@ -6743,12 +7609,14 @@ l'audit. Lire le corps réel avec :
 | `is_valid_timezone(p_tz text)` → boolean | non | search_path=pg_catalog, pg_temp | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `job_agreements_enforce_job_only()` → trigger | non | search_path=public | service_role=X/postgres |
 | `job_line_items_set_totals()` → trigger | non | search_path=public | service_role=X/postgres |
+| `jobs_delier_deal()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `jobs_fill_property_id()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `jobs_set_completed_at()` → trigger | non | search_path="" | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `jobs_set_completed_at()` → trigger | non | search_path="" | service_role=X/postgres |
 | `jobs_sync_address()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `jobs_sync_client_status()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `jobs_sync_future_events_team()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `jobs_sync_totals()` → trigger | non | search_path=public, app | service_role=X/postgres |
+| `lead_converti_gagne_pipeline(p_org_id uuid, p_client_id uuid, p_job_id uuid)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `leads_before_insert_enforce_scope()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `leads_force_org_id()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `leads_set_updated_at()` → trigger | non | search_path=public, app | service_role=X/postgres |
@@ -6758,6 +7626,7 @@ l'audit. Lire le corps réel avec :
 | `log_job_created()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `log_job_updated()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `log_quote_created()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `log_tache_deal()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `lume_storage_object_org(object_name text)` → uuid | non | search_path="" | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `lumi_depense_du_mois(p_org uuid)` → numeric | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `lumi_groupe_orgs(p_org uuid)` → SETOF uuid | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
@@ -6765,6 +7634,8 @@ l'audit. Lire le corps réel avec :
 | `mark_job_geocode_pending()` → trigger | non | search_path=public | service_role=X/postgres |
 | `member_has_permission(p_user uuid, p_org uuid, p_key text)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `membre_voit_les_montants(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
+| `migration_staging_counts(p_migration_id uuid)` → TABLE(entity_type text, status text, n bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `miroir_logo_suivi_marque()` → trigger | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `next_recurrence_at(p_from timestamp with time zone, p_frequency text, p_interval integer )` → timestamp with time zone | non | search_path=public, pg_temp | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `normaliser_telephone(p_phone text)` → text | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `normalize_lead_stage_value(p_value text)` → text | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
@@ -6778,19 +7649,25 @@ l'audit. Lire le corps réel avec :
 | `payments_recalculate_invoice_trigger()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `payments_sync_dates_and_update()` → trigger | non | search_path=public | service_role=X/postgres |
 | `payments_sync_legacy_dates()` → trigger | non | search_path=public | service_role=X/postgres |
+| `peut_modifier_pipeline(p_user uuid, p_pipeline uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `peut_voir_pipeline(p_user uuid, p_pipeline uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_a_risque(p_pipeline_id uuid DEFAULT NULL::uuid, p_haut_fois integer DEFAULT 2, )` → TABLE(niveau text, deals bigint, montant_cents bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_a_traiter(p_jours integer DEFAULT 7)` → TABLE(deal_id uuid, client_nom text, raison text, stage_nom_fr text, depuis_jours integer) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_abandonner_deal(p_deal_id uuid, p_raison text DEFAULT NULL::text)` → void | non | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_bureaux_administres()` → TABLE(org_id uuid, nom text) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_chronologie(p_pipeline_id uuid DEFAULT NULL::uuid, p_mois integer DEFAULT 6)` → TABLE(mois date, deals bigint, potentiel_cents bigint, gagne_cents bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_cohortes(p_mois integer DEFAULT 6)` → TABLE(mois date, inscrits bigint, gagnes bigint, encore_ouvert bigint, taux_gagne numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `pipeline_creer_deal(p_first_name text, p_last_name text DEFAULT NULL::text, p_email text D)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_copier_vers_bureaux(p_id uuid, p_orgs uuid[])` → integer | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_creer_deal(p_first_name text, p_last_name text DEFAULT NULL::text, p_email text D)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres | authenticated=X/postgres |
 | `pipeline_deals_cascade_client_soft_delete()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `pipeline_deals_emit_job_intent()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `pipeline_deals_sync_value_columns()` → trigger | non | search_path=public, app | service_role=X/postgres |
 | `pipeline_deals_sync_values()` → trigger | non | search_path=public | service_role=X/postgres |
-| `pipeline_definir_defaut(p_pipeline_id uuid)` → void | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_definir_affichage(p_pipeline_id uuid, p_color_mode text DEFAULT NULL::text, p_use_deal_p)` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_definir_defaut(p_pipeline_id uuid)` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_detecter_stagnation()` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `pipeline_dupliquer(p_id uuid)` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_enregistrer(p_id uuid, p_nom text, p_color_mode text, p_use_deal_probability boole)` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_entonnoir(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(stage_id uuid, nom_fr text, nom_en text, rang integer, atteints bigint, taux_passage numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_ingerer_porte(p_org_id uuid, p_house_id uuid, p_client_id uuid DEFAULT NULL::uuid, p)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `pipeline_kpis(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(leads_entrants bigint, leads_precedents bigint, gagnes bigint, perdus bigint, ouverts bigint, taux_closing numeric, revenus_cents bigint, jobs_liees bigint, job_a_creer bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
@@ -6800,12 +7677,25 @@ l'audit. Lire le corps réel avec :
 | `pipeline_previsions(p_pipeline_id uuid DEFAULT NULL::uuid)` → TABLE(max_potentiel_cents bigint, attendu_cents bigint, gagne_cents bigint, ouverts bigint, sans_date bigint, sans_montant bigint, en_retard bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_previsions_groupees(p_pipeline_id uuid DEFAULT NULL::uuid, p_groupe text DEFAULT 'etape'::)` → TABLE(cle text, libelle text, nb bigint, potentiel_cents bigint, attendu_cents bigint, gagne_cents bigint, total_cents bigint, rang integer) | non | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_raisons_perte(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(raison text, etape_perdue text, etape_perdue_en text, perdus bigint, part numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_reordonner(p_ids uuid[])` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_reordonner_etapes(p_ordre jsonb)` → void | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_repartition_etapes(p_pipeline_id uuid)` → TABLE(stage_id uuid, nom_fr text, nom_en text, rang integer, deals bigint) | non | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_restaurer_lot(p_operation_id uuid)` → integer | non | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_resynchroniser_defaut(p_org uuid)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `pipeline_stages_verifier_archivage()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `pipeline_supprimer(p_id uuid, p_dest_pipeline uuid DEFAULT NULL::uuid, p_dest_etape uuid )` → integer | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_supprimer_etape(p_etape uuid, p_dest uuid DEFAULT NULL::uuid)` → integer | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_tendance(p_semaines integer DEFAULT 12)` → TABLE(semaine date, leads bigint, gagnes bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_vitesse(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(delai_contact_moyen_h numeric, jamais_contactes bigint, closing_moins_1h numeric, closing_moins_24h numeric, closing_plus_24h numeric, n_moins_1h bigint, n_moins_24h bigint, n_plus_24h bigint, cycle_moyen_jours numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipelines_ventes_position_initiale()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `portee_bureaux_complets()` → SETOF uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `portee_clients()` → SETOF uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `portee_equipes()` → SETOF uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `portee_jobs()` → SETOF uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `portee_personnes()` → SETOF uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `prevent_paid_invoice_edit()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
+| `propager_marque_entreprise()` → trigger | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `propager_proprietaires_bureaux()` → trigger | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `properties_billing_mirror_to_client()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `property_address_line(p_address text, p_street_number text, p_street_name text, p_city text,)` → text | non | ❌ aucun | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `provision_sms_channel(p_org_id uuid, p_phone_number text, p_provider text DEFAULT 'twilio'::)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6816,6 +7706,13 @@ l'audit. Lire le corps réel avec :
 | `purge_old_soft_deletes(p_org_id uuid, p_days integer DEFAULT 90)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `purge_webhook_receipts(p_days integer DEFAULT 30)` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `qmc_updated_at()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
+| `quickbooks_claim_jobs(p_limit integer DEFAULT 20)` → SETOF quickbooks_sync_queue | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `quickbooks_enqueue(p_org uuid, p_type text, p_id uuid, p_reason text DEFAULT NULL::text)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `quickbooks_enqueue_history(p_org uuid, p_from timestamp with time zone)` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `quickbooks_trg_clients()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `quickbooks_trg_invoice_items()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `quickbooks_trg_invoices()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `quickbooks_trg_payments()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `quote_line_items_set_total()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `quote_line_items_sync_org()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `quote_measurements_updated_at()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
@@ -6835,6 +7732,7 @@ l'audit. Lire le corps réel avec :
 | `restore_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `restore_lead(p_org_id uuid, p_lead_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `reverse_invoice_payment(p_invoice_id uuid, p_org_id uuid, p_amount_cents integer)` → TABLE(id uuid, paid_cents integer, balance_cents integer, status text) | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `rouvrir_bureau(p_org uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `rpc_add_visit(p_job_id uuid, p_start_at timestamp with time zone, p_end_at timestamp)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `rpc_create_invoice_draft(p_client_id uuid, p_subject text DEFAULT NULL::text, p_due_date date D)` → TABLE(id uuid, invoice_number text, status text, subject text, due_date date, total_cents integer, balance_cents integer, created_at timestamp with time zone) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `rpc_create_job_with_optional_schedule(p_lead_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
@@ -6901,7 +7799,7 @@ l'audit. Lire le corps réel avec :
 | `set_note_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `set_notes_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `set_payment_requests_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
-| `set_support_tickets_updated_at()` → trigger | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_support_tickets_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
 | `set_team_date_slots_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `set_team_schedule_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `set_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
@@ -6918,8 +7816,10 @@ l'audit. Lire le corps réel avec :
 | `sync_notification_is_read()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `sync_schedule_event_time_columns()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `sync_team_member_from_membership()` → trigger | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `table_view_preferences_touch()` → trigger | non | search_path="" | service_role=X/postgres |
 | `tasks_update_timestamp()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `touch_org_billing_settings_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
+| `transferer_vers_bureau(p_entite text, p_id uuid, p_org_cible uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `trg_agent_messages_after_insert()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `trg_agent_sessions_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `trg_auto_invoice_on_job_completed()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6932,6 +7832,7 @@ l'audit. Lire le corps réel avec :
 | `trg_normalize_lead_stage()` → trigger | non | search_path=public | service_role=X/postgres |
 | `trg_org_features_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `trg_payment_to_invoice_paid()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `trigger_payment_reminders()` → void | ⚠️ oui | search_path=public, vault, net | service_role=X/postgres |
 | `trigger_sms_number_release()` → void | ⚠️ oui | search_path=public, vault, net | service_role=X/postgres |
 | `try_advisory_lock(p_key bigint)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `unaccent(text)` → text | non | search_path=extensions | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
@@ -6942,7 +7843,7 @@ l'audit. Lire le corps réel avec :
 | `upsert_job(p_org_id uuid, p_job_id uuid, p_payload jsonb)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `user_org_ids(p_user_id uuid)` → SETOF uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `validate_e164(p_phone text)` → boolean | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `verify_org_access(p_user_id uuid, p_org_id uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
+| `verify_org_access(p_user_id uuid, p_org_id uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `webhook_payment_received(p_org_id uuid, p_invoice_id uuid, p_provider text, p_provider_payment_)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
 
 ## 5. Vues (15)
@@ -6963,7 +7864,7 @@ l'audit. Lire le corps réel avec :
 - `v_revenue_analytics` — security_invoker=true
 - `v_schedule_calendar` — security_invoker=true
 
-## 6. Contraintes (1303)
+## 6. Contraintes (1361)
 
 
 ### `a2p_registrations`
@@ -7015,7 +7916,7 @@ l'audit. Lire le corps réel avec :
 
 - `ai_usage_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `ai_usage_pkey` — PRIMARY KEY (id)
-- `ai_usage_source_check` — CHECK ((source = ANY (ARRAY['lumi'::text, 'support'::text, 'migration'::text, 'briefing'::text, 'routeur'::text, 'cache'::text])))
+- `ai_usage_source_check` — CHECK ((source = ANY (ARRAY['lumi'::text, 'support'::text, 'migration'::text, 'briefing'::text, 'routeur'::text, 'cache'::text, 'automatisations'::text])))
 
 ### `ai_usage_monthly`
 
@@ -7066,8 +7967,18 @@ l'audit. Lire le corps réel avec :
 - `automation_execution_logs_scheduled_task_id_fkey` — FOREIGN KEY (scheduled_task_id) REFERENCES automation_scheduled_tasks(id) ON DELETE SET NULL
 - `automation_execution_logs_scheduled_task_id_same_org` — FOREIGN KEY (org_id, scheduled_task_id) REFERENCES automation_scheduled_tasks(org_id, id)
 
+### `automation_folders`
+
+- `automation_folders_name_court` — CHECK ((length(name) <= 60))
+- `automation_folders_name_non_vide` — CHECK ((length(btrim(name)) > 0))
+- `automation_folders_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `automation_folders_pkey` — PRIMARY KEY (id)
+
 ### `automation_rules`
 
+- `automation_rules_folder_id_fkey` — FOREIGN KEY (folder_id) REFERENCES automation_folders(id) ON DELETE SET NULL
+- `automation_rules_modele_fk` — FOREIGN KEY (modele_id) REFERENCES automation_rules(id) ON DELETE SET NULL
+- `automation_rules_modele_pas_soi` — CHECK (((modele_id IS NULL) OR (modele_id <> id)))
 - `automation_rules_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `automation_rules_org_id_id_uq` — UNIQUE (org_id, id)
 - `automation_rules_pipeline_same_org` — FOREIGN KEY (org_id, pipeline_id) REFERENCES pipelines_ventes(org_id, id) ON DELETE CASCADE
@@ -7082,6 +7993,20 @@ l'audit. Lire le corps réel avec :
 - `automation_scheduled_tasks_org_id_id_uq` — UNIQUE (org_id, id)
 - `automation_scheduled_tasks_pkey` — PRIMARY KEY (id)
 - `automation_scheduled_tasks_status_check` — CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'completed'::text, 'failed'::text, 'cancelled'::text])))
+
+### `automation_webhook_receipts`
+
+- `automation_webhook_receipts_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `automation_webhook_receipts_pkey` — PRIMARY KEY (id)
+- `automation_webhook_receipts_statut_check` — CHECK ((statut = ANY (ARRAY['accepte'::text, 'refuse'::text])))
+- `automation_webhook_receipts_webhook_id_fkey` — FOREIGN KEY (webhook_id) REFERENCES automation_webhooks(id) ON DELETE CASCADE
+
+### `automation_webhooks`
+
+- `automation_webhooks_created_by_fkey` — FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL
+- `automation_webhooks_mode_check` — CHECK ((mode = 'evenement'::text))
+- `automation_webhooks_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `automation_webhooks_pkey` — PRIMARY KEY (id)
 
 ### `automations`
 
@@ -7104,6 +8029,12 @@ l'audit. Lire le corps réel avec :
 - `billing_receipt_log_status_check` — CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'failed'::text, 'skipped'::text])))
 - `billing_receipt_log_subscription_id_fkey` — FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)
 - `billing_receipt_log_subscription_id_same_org` — FOREIGN KEY (org_id, subscription_id) REFERENCES subscriptions(org_id, id)
+
+### `cf_affichage_systeme`
+
+- `cf_affichage_systeme_key_format` — CHECK ((key ~ '^[a-z][a-z0-9_]{0,49}$'::text))
+- `cf_affichage_systeme_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `cf_affichage_systeme_pkey` — PRIMARY KEY (org_id, object_type, key)
 
 ### `checklist_templates`
 
@@ -7149,6 +8080,12 @@ l'audit. Lire le corps réel avec :
 - `clients_street_number_len` — CHECK ((length(street_number) <= 50))
 - `clients_title_len` — CHECK ((length(title) <= 500))
 
+### `clients_inactifs_declenches`
+
+- `clients_inactifs_declenches_client_id_fkey` — FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+- `clients_inactifs_declenches_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `clients_inactifs_declenches_pkey` — PRIMARY KEY (org_id, client_id, mois, periode)
+
 ### `commission_settings`
 
 - `commission_settings_default_rule_id_fkey` — FOREIGN KEY (default_rule_id) REFERENCES fs_commission_rules(id) ON DELETE SET NULL
@@ -7189,6 +8126,11 @@ l'audit. Lire le corps réel avec :
 - `communication_settings_org_id_key` — UNIQUE (org_id)
 - `communication_settings_pkey` — PRIMARY KEY (id)
 
+### `company_groups`
+
+- `company_groups_brand_color_format` — CHECK (((brand_color IS NULL) OR (brand_color ~ '^#[0-9a-fA-F]{6}$'::text)))
+- `company_groups_pkey` — PRIMARY KEY (id)
+
 ### `company_operating_profile`
 
 - `company_operating_profile_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
@@ -7197,6 +8139,7 @@ l'audit. Lire le corps réel avec :
 
 ### `company_settings`
 
+- `company_settings_automations_paused_by_fkey` — FOREIGN KEY (automations_paused_by) REFERENCES auth.users(id) ON DELETE SET NULL
 - `company_settings_brand_color_hex` — CHECK (((brand_color IS NULL) OR (brand_color ~ '^#[0-9A-Fa-f]{6}$'::text)))
 - `company_settings_city_len` — CHECK ((length(city) <= 200))
 - `company_settings_company_name_len` — CHECK ((length(company_name) <= 200))
@@ -7211,6 +8154,7 @@ l'audit. Lire le corps réel avec :
 - `company_settings_phone_len` — CHECK ((length(phone) <= 50))
 - `company_settings_pkey` — PRIMARY KEY (id)
 - `company_settings_postal_code_len` — CHECK ((length(postal_code) <= 20))
+- `company_settings_prefixe_documents_format` — CHECK (((prefixe_documents IS NULL) OR (prefixe_documents ~ '^[A-Z]{1,5}$'::text)))
 - `company_settings_province_len` — CHECK ((length(province) <= 200))
 - `company_settings_quote_footer_text_len` — CHECK ((length(quote_footer_text) <= 20000))
 - `company_settings_social_links_objet` — CHECK ((jsonb_typeof(social_links) = 'object'::text))
@@ -7240,6 +8184,7 @@ l'audit. Lire le corps réel avec :
 
 ### `conversations`
 
+- `conversations_assigned_to_membre` — FOREIGN KEY (assigned_to, org_id) REFERENCES memberships(user_id, org_id) ON DELETE SET NULL (assigned_to)
 - `conversations_client_id_fkey` — FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
 - `conversations_client_id_same_org` — FOREIGN KEY (org_id, client_id) REFERENCES clients(org_id, id)
 - `conversations_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
@@ -7292,6 +8237,7 @@ l'audit. Lire le corps réel avec :
 
 ### `custom_field_folders`
 
+- `custom_field_folders_cle_systeme_format` — CHECK (((cle_systeme IS NULL) OR (cle_systeme ~ '^[a-z_]{1,40}$'::text)))
 - `custom_field_folders_name_len` — CHECK (((length(btrim(name)) >= 1) AND (length(btrim(name)) <= 100)))
 - `custom_field_folders_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `custom_field_folders_org_id_id_uq` — UNIQUE (org_id, id)
@@ -7324,30 +8270,31 @@ l'audit. Lire le corps réel avec :
 - `custom_field_values_client_fk` — FOREIGN KEY (org_id, client_id) REFERENCES clients(org_id, id) ON DELETE CASCADE
 - `custom_field_values_deal_fk` — FOREIGN KEY (org_id, deal_id) REFERENCES deals(org_id, id) ON DELETE CASCADE
 - `custom_field_values_entite_du_type` — CHECK (
-CASE object_type
-    WHEN 'client'::cf_object_type THEN (client_id IS NOT NULL)
-    WHEN 'deal'::cf_object_type THEN (deal_id IS NOT NULL)
-    WHEN 'job'::cf_object_type THEN (job_id IS NOT NULL)
-    WHEN 'quote'
+CASE (object_type)::text
+    WHEN 'client'::text THEN (client_id IS NOT NULL)
+    WHEN 'deal'::text THEN (deal_id IS NOT NULL)
+    WHEN 'job'::text THEN (job_id IS NOT NULL)
+    WHEN 'quote'::text THEN (quote_id 
 - `custom_field_values_field_fk` — FOREIGN KEY (org_id, object_type, field_id) REFERENCES custom_fields(org_id, object_type, id) ON DELETE RESTRICT
 - `custom_field_values_invoice_fk` — FOREIGN KEY (org_id, invoice_id) REFERENCES invoices(org_id, id) ON DELETE CASCADE
 - `custom_field_values_job_fk` — FOREIGN KEY (org_id, job_id) REFERENCES jobs(org_id, id) ON DELETE CASCADE
 - `custom_field_values_option_fk` — FOREIGN KEY (org_id, field_id, value_option_id) REFERENCES custom_field_options(org_id, field_id, id) ON DELETE RESTRICT
 - `custom_field_values_org_field_id_uq` — UNIQUE (org_id, field_id, id)
 - `custom_field_values_pkey` — PRIMARY KEY (id)
+- `custom_field_values_property_fk` — FOREIGN KEY (org_id, property_id) REFERENCES properties(org_id, id) ON DELETE CASCADE
 - `custom_field_values_quote_fk` — FOREIGN KEY (org_id, quote_id) REFERENCES quotes(org_id, id) ON DELETE CASCADE
-- `custom_field_values_une_entite` — CHECK ((num_nonnulls(client_id, deal_id, job_id, quote_id, invoice_id) = 1))
+- `custom_field_values_une_entite` — CHECK ((num_nonnulls(client_id, deal_id, job_id, quote_id, invoice_id, property_id) = 1))
 - `custom_field_values_value_text_len` — CHECK (((value_text IS NULL) OR (length(value_text) <= 5000)))
 
 ### `custom_fields`
 
 - `custom_fields_cle_uq` — UNIQUE (org_id, object_type, key)
 - `custom_fields_config_objet` — CHECK ((jsonb_typeof(config) = 'object'::text))
+- `custom_fields_default_value_type` — CHECK (((default_value IS NULL) OR (jsonb_typeof(default_value) = ANY (ARRAY['string'::text, 'number'::text, 'array'::text, 'boolean'::text]))))
 - `custom_fields_folder_fk` — FOREIGN KEY (org_id, object_type, folder_id) REFERENCES custom_field_folders(org_id, object_type, id) ON DELETE SET NULL (folder_id)
 - `custom_fields_help_text_len` — CHECK (((help_text IS NULL) OR (length(help_text) <= 200)))
 - `custom_fields_key_format` — CHECK ((key ~ '^[a-z][a-z0-9_]{0,49}$'::text))
 - `custom_fields_label_len` — CHECK (((length(btrim(label)) >= 1) AND (length(btrim(label)) <= 100)))
-- `custom_fields_legacy_column_id_key` — UNIQUE (legacy_column_id)
 - `custom_fields_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `custom_fields_org_id_id_uq` — UNIQUE (org_id, id)
 - `custom_fields_org_obj_id_uq` — UNIQUE (org_id, object_type, id)
@@ -7403,6 +8350,11 @@ CASE object_type
 - `demo_requests_converted_user_id_fkey` — FOREIGN KEY (converted_user_id) REFERENCES auth.users(id) ON DELETE SET NULL
 - `demo_requests_pkey` — PRIMARY KEY (id)
 - `demo_requests_status_check` — CHECK ((status = ANY (ARRAY['new'::text, 'contacted'::text, 'demoed'::text, 'converted'::text, 'rejected'::text])))
+
+### `domain_events`
+
+- `domain_events_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `domain_events_pkey` — PRIMARY KEY (id)
 
 ### `dsar_requests`
 
@@ -7952,21 +8904,18 @@ CASE object_type
 - `jobs_team_id_same_org` — FOREIGN KEY (org_id, team_id) REFERENCES teams(org_id, id)
 - `jobs_title_len` — CHECK ((length(title) <= 500))
 
-### `lead_lists`
-
-- `lead_lists_list_id_fkey` — FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE
-- `lead_lists_pkey` — PRIMARY KEY (lead_id, list_id)
-
 ### `lead_sources`
 
 - `lead_sources_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `lead_sources_org_id_name_key` — UNIQUE (org_id, name)
 - `lead_sources_pkey` — PRIMARY KEY (id)
 
-### `lists`
+### `liens_reservation`
 
-- `lists_pkey` — PRIMARY KEY (id)
-- `lists_user_id_fkey` — FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+- `liens_reservation_client_id_fkey` — FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+- `liens_reservation_jeton_hash_key` — UNIQUE (jeton_hash)
+- `liens_reservation_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `liens_reservation_pkey` — PRIMARY KEY (id)
 
 ### `location_tracking_settings`
 
@@ -8019,6 +8968,7 @@ CASE object_type
 - `memberships_lumi_mode_check` — CHECK ((lumi_mode = ANY (ARRAY['demander'::text, 'argent'::text, 'tout'::text])))
 - `memberships_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `memberships_pkey` — PRIMARY KEY (user_id, org_id)
+- `memberships_scope_check` — CHECK ((scope = ANY (ARRAY['self'::text, 'assigned'::text, 'team'::text, 'company'::text])))
 - `memberships_team_id_fkey` — FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL
 - `memberships_team_id_same_org` — FOREIGN KEY (org_id, team_id) REFERENCES teams(org_id, id)
 - `memberships_user_id_fkey` — FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
@@ -8237,7 +9187,13 @@ CASE object_type
 
 ### `orgs`
 
+- `orgs_company_group_id_fkey` — FOREIGN KEY (company_group_id) REFERENCES company_groups(id)
 - `orgs_pkey` — PRIMARY KEY (id)
+
+### `paiements_echoues_traites`
+
+- `paiements_echoues_traites_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `paiements_echoues_traites_pkey` — PRIMARY KEY (stripe_event_id)
 
 ### `payment_provider_secrets`
 
@@ -8385,8 +9341,8 @@ CASE object_type
 - `pipeline_stages_pipeline_same_org` — FOREIGN KEY (org_id, pipeline_id) REFERENCES pipelines_ventes(org_id, id) ON DELETE CASCADE
 - `pipeline_stages_pkey` — PRIMARY KEY (id)
 - `pipeline_stages_position_positive` — CHECK (("position" > 0))
-- `pipeline_stages_position_unique` — UNIQUE (pipeline_id, "position") DEFERRABLE INITIALLY DEFERRED
-- `pipeline_stages_probability_bornee` — CHECK (((probability IS NULL) OR ((probability >= 0) AND (probability <= 100))))
+- `pipeline_stages_probability_bornee` — CHECK (((probability IS NULL) OR ((probability >= (0)::numeric) AND (probability <= (100)::numeric))))
+- `pipeline_stages_role_systeme_check` — CHECK (((role_systeme IS NULL) OR (role_systeme = ANY (ARRAY['soumission_envoyee'::text, 'soumission_ouverte'::text]))))
 
 ### `pipeline_vues`
 
@@ -8399,11 +9355,6 @@ CASE object_type
 - `pipeline_vues_pkey` — PRIMARY KEY (id)
 - `pipeline_vues_tri_connu` — CHECK (((tri IS NULL) OR (tri = ANY (ARRAY['ancien'::text, 'recent'::text, 'montant'::text, 'inactif'::text]))))
 - `pipeline_vues_user_id_fkey` — FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
-
-### `pipelines`
-
-- `pipelines_pkey` — PRIMARY KEY (id)
-- `pipelines_user_id_fkey` — FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 
 ### `pipelines_ventes`
 
@@ -8424,6 +9375,13 @@ CASE object_type
 - `predefined_services_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `predefined_services_pkey` — PRIMARY KEY (id)
 - `predefined_services_pricing_unit_check` — CHECK ((pricing_unit = ANY (ARRAY['flat'::text, 'linear_ft'::text, 'sq_ft'::text])))
+
+### `predefined_services_bureau`
+
+- `predefined_services_bureau_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `predefined_services_bureau_pkey` — PRIMARY KEY (service_id, org_id)
+- `predefined_services_bureau_prix_cents_check` — CHECK (((prix_cents IS NULL) OR (prix_cents >= 0)))
+- `predefined_services_bureau_service_id_fkey` — FOREIGN KEY (service_id) REFERENCES predefined_services(id) ON DELETE CASCADE
 
 ### `processed_checkout_sessions`
 
@@ -8484,6 +9442,25 @@ CASE object_type
 - `push_tokens_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `push_tokens_pkey` — PRIMARY KEY (id)
 - `push_tokens_platform_check` — CHECK ((platform = ANY (ARRAY['ios'::text, 'android'::text, 'web'::text])))
+
+### `quickbooks_entity_map`
+
+- `quickbooks_entity_map_entity_type_check` — CHECK ((entity_type = ANY (ARRAY['client'::text, 'invoice'::text, 'payment'::text])))
+- `quickbooks_entity_map_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `quickbooks_entity_map_org_id_realm_id_entity_type_lume_id_key` — UNIQUE (org_id, realm_id, entity_type, lume_id)
+- `quickbooks_entity_map_pkey` — PRIMARY KEY (id)
+
+### `quickbooks_settings`
+
+- `quickbooks_settings_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `quickbooks_settings_pkey` — PRIMARY KEY (org_id)
+
+### `quickbooks_sync_queue`
+
+- `quickbooks_sync_queue_entity_type_check` — CHECK ((entity_type = ANY (ARRAY['client'::text, 'invoice'::text, 'payment'::text])))
+- `quickbooks_sync_queue_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `quickbooks_sync_queue_pkey` — PRIMARY KEY (id)
+- `quickbooks_sync_queue_status_check` — CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'done'::text, 'error'::text, 'skipped'::text, 'superseded'::text])))
 
 ### `quote_attachments`
 
@@ -8549,6 +9526,7 @@ CASE object_type
 
 - `quote_views_client_id_fkey` — FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
 - `quote_views_invoice_id_fkey` — FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+- `quote_views_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `quote_views_pkey` — PRIMARY KEY (id)
 - `quote_views_quote_id_fkey` — FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
 
@@ -8636,6 +9614,7 @@ CASE object_type
 - `request_forms_created_by_fkey` — FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL
 - `request_forms_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `request_forms_org_id_id_uq` — UNIQUE (org_id, id)
+- `request_forms_pipeline_id_fkey` — FOREIGN KEY (pipeline_id) REFERENCES pipelines_ventes(id) ON DELETE SET NULL
 - `request_forms_pkey` — PRIMARY KEY (id)
 
 ### `review_requests`
@@ -8751,11 +9730,12 @@ CASE object_type
 
 ### `subscriptions`
 
+- `subscriptions_installments_check` — CHECK (((installments_count IS NULL) OR (((installments_count >= 2) AND (installments_count <= 12)) AND ((installments_paid >= 0) AND (installments_paid <= installments_count)))))
 - `subscriptions_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE RESTRICT
 - `subscriptions_org_id_id_uq` — UNIQUE (org_id, id)
 - `subscriptions_pkey` — PRIMARY KEY (id)
 - `subscriptions_plan_id_fkey` — FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE RESTRICT
-- `subscriptions_scheduled_interval_check` — CHECK ((scheduled_interval = ANY (ARRAY['monthly'::text, 'yearly'::text])))
+- `subscriptions_scheduled_interval_check` — CHECK ((scheduled_interval = ANY (ARRAY['monthly'::text, 'quarterly'::text, 'yearly'::text])))
 - `subscriptions_scheduled_plan_id_fkey` — FOREIGN KEY (scheduled_plan_id) REFERENCES plans(id) ON DELETE SET NULL
 - `subscriptions_user_id_fkey` — FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 
@@ -8787,6 +9767,13 @@ CASE object_type
 - `support_tickets_source_check` — CHECK ((source = ANY (ARRAY['app'::text, 'migration_portal'::text, 'public'::text])))
 - `support_tickets_status_check` — CHECK ((status = ANY (ARRAY['ai'::text, 'open'::text, 'answered'::text, 'closed'::text])))
 - `support_tickets_user_id_fkey` — FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL
+
+### `table_view_preferences`
+
+- `table_view_preferences_colonnes` — CHECK (((jsonb_typeof(columns) = 'array'::text) AND (jsonb_array_length(columns) <= 80)))
+- `table_view_preferences_membre` — FOREIGN KEY (user_id, org_id) REFERENCES memberships(user_id, org_id) ON DELETE CASCADE
+- `table_view_preferences_objet` — CHECK ((object_type = ANY (ARRAY['client'::text, 'deal'::text, 'job'::text, 'quote'::text, 'invoice'::text])))
+- `table_view_preferences_pkey` — PRIMARY KEY (org_id, user_id, object_type)
 
 ### `tags`
 
@@ -8993,6 +9980,14 @@ CASE object_type
 - `tracking_sessions_time_entry_id_fkey` — FOREIGN KEY (time_entry_id) REFERENCES time_entries(id) ON DELETE SET NULL
 - `tracking_sessions_time_entry_id_same_org` — FOREIGN KEY (org_id, time_entry_id) REFERENCES time_entries(org_id, id)
 
+### `transferts_bureaux`
+
+- `transferts_bureaux_company_group_id_fkey` — FOREIGN KEY (company_group_id) REFERENCES company_groups(id)
+- `transferts_bureaux_entite_check` — CHECK ((entite = ANY (ARRAY['client'::text, 'quote'::text, 'job'::text])))
+- `transferts_bureaux_org_cible_fkey` — FOREIGN KEY (org_cible) REFERENCES orgs(id)
+- `transferts_bureaux_org_source_fkey` — FOREIGN KEY (org_source) REFERENCES orgs(id)
+- `transferts_bureaux_pkey` — PRIMARY KEY (id)
+
 ### `webhook_deliveries`
 
 - `webhook_deliveries_endpoint_id_fkey` — FOREIGN KEY (endpoint_id) REFERENCES webhook_endpoints(id) ON DELETE CASCADE
@@ -9018,7 +10013,7 @@ CASE object_type
 
 - `webhook_receipts_pkey` — PRIMARY KEY (id)
 
-## 7. Triggers (257)
+## 7. Triggers (278)
 
 - `a2p_registrations` → **trg_a2p_registrations_updated_at** (`set_updated_at()`)
 - `activity_notes` → **trg_ac_track_activity_notes** (`ac_track_activity_notes()`)
@@ -9028,7 +10023,9 @@ CASE object_type
 - `app_connections` → **trg_app_connections_updated_at** (`set_app_connections_updated_at()`)
 - `audit_events` → **audit_events_no_delete** (`audit_events_append_only()`)
 - `audit_events` → **audit_events_no_update** (`audit_events_append_only()`)
+- `automation_folders` → **automation_folders_touch** (`set_updated_at()`)
 - `automation_rules` → **trg_automation_rules_updated** (`set_automation_rules_updated_at()`)
+- `automation_webhooks` → **automation_webhooks_updated_at** (`set_updated_at()`)
 - `automations` → **set_automations_updated_at** (`set_updated_at()`)
 - `billing_profiles` → **set_billing_profiles_updated_at** (`set_updated_at()`)
 - `checklist_templates` → **set_checklist_templates_updated_at** (`set_updated_at()`)
@@ -9046,12 +10043,16 @@ CASE object_type
 - `clients` → **trg_clients_set_updated_at** (`set_updated_at()`)
 - `clients` → **trg_clients_sync_field_pin** (`sync_field_pin_from_client()`)
 - `clients` → **trg_clients_zz_assign_number** (`assign_client_number()`)
+- `clients` → **trg_quickbooks_clients** (`quickbooks_trg_clients()`)
 - `commission_settings` → **set_commission_settings_updated_at** (`set_updated_at()`)
 - `communication_channels` → **trg_comm_channels_updated** (`update_comm_updated_at()`)
 - `communication_messages` → **trg_comm_messages_updated** (`update_comm_updated_at()`)
 - `communication_settings` → **trg_comm_settings_updated** (`update_comm_updated_at()`)
+- `company_groups` → **trg_company_groups_propager_marque** (`propager_marque_entreprise()`)
 - `company_operating_profile` → **set_company_operating_profile_updated_at** (`set_updated_at()`)
 - `company_settings` → **set_company_settings_updated_at** (`set_updated_at()`)
+- `company_settings` → **trg_company_settings_miroir_logo_marque** (`miroir_logo_suivi_marque()`)
+- `company_settings` → **trg_company_settings_suit_marque** (`appliquer_marque_entreprise_bureau()`)
 - `connected_accounts` → **trg_connected_accounts_updated_at** (`set_connected_accounts_updated_at()`)
 - `contacts` → **trg_contacts_set_updated_at** (`set_updated_at()`)
 - `conversations` → **set_conversations_updated_at** (`set_updated_at()`)
@@ -9059,6 +10060,7 @@ CASE object_type
 - `course_modules` → **set_course_modules_updated_at** (`set_updated_at()`)
 - `courses` → **set_courses_updated_at** (`set_updated_at()`)
 - `custom_field_folders` → **custom_field_folders_updated_at** (`set_updated_at()`)
+- `custom_field_folders` → **trg_custom_field_folders_garde_systeme** (`cf_garde_dossier_systeme()`)
 - `custom_field_options` → **custom_field_options_avant_suppression** (`cf_option_avant_suppression()`)
 - `custom_field_options` → **custom_field_options_updated_at** (`set_updated_at()`)
 - `custom_field_value_options` → **custom_field_value_options_avant_ecriture** (`cf_option_multiple_avant_ecriture()`)
@@ -9067,6 +10069,7 @@ CASE object_type
 - `custom_fields` → **custom_fields_avant_ecriture** (`cf_champ_avant_ecriture()`)
 - `data_migrations` → **trg_data_migrations_set_updated_at** (`set_updated_at()`)
 - `deals` → **deals_cf_copier_vers_job** (`cf_deal_job_lie()`)
+- `deals` → **deals_cf_suivre** (`cf_deal_suivre()`)
 - `deals` → **trg_deals_deduire_statut** (`deals_deduire_statut()`)
 - `deals` → **trg_deals_ecrire_historique** (`deals_ecrire_historique()`)
 - `deals` → **trg_deals_emettre_evenements** (`deals_emettre_evenements()`)
@@ -9106,11 +10109,12 @@ CASE object_type
 - `invoice_items` → **trg_invoice_items_recalculate_parent_update** (`invoice_items_recalculate_parent()`)
 - `invoice_items` → **trg_invoice_items_set_line_total** (`invoice_items_set_line_total()`)
 - `invoice_items` → **trg_invoice_items_sync_org** (`invoice_items_sync_org()`)
+- `invoice_items` → **trg_quickbooks_invoice_items** (`quickbooks_trg_invoice_items()`)
 - `invoice_sequences` → **set_invoice_sequences_updated_at** (`set_updated_at()`)
 - `invoice_templates` → **trg_invoice_templates_set_updated_at** (`set_updated_at()`)
 - `invoices` → **invoices_bump_version** (`bump_row_version()`)
+- `invoices` → **invoices_cf_copier_depuis_job** (`cf_facture_job_liee()`)
 - `invoices` → **invoices_immutable** (`enforce_invoice_immutability()`)
-- `invoices` → **sync_invoices_legacy_money** (`sync_legacy_money_columns()`)
 - `invoices` → **trg_ac_track_invoices** (`ac_track_invoices()`)
 - `invoices` → **trg_automation_invoice_overdue** (`automation_invoice_overdue_check()`)
 - `invoices` → **trg_invoice_client_snapshot** (`set_invoice_client_snapshot()`)
@@ -9121,7 +10125,10 @@ CASE object_type
 - `invoices` → **trg_invoices_fts** (`trg_invoices_fts_update()`)
 - `invoices` → **trg_invoices_set_updated_at** (`set_updated_at()`)
 - `invoices` → **trg_invoices_suppression_douce** (`garde_suppression_douce()`)
+- `invoices` → **trg_invoices_zz_prefixe** (`appliquer_prefixe_document()`)
 - `invoices` → **trg_log_invoice_updated** (`log_invoice_updated()`)
+- `invoices` → **trg_quickbooks_invoices** (`quickbooks_trg_invoices()`)
+- `invoices` → **zz_sync_invoices_legacy_money** (`sync_legacy_money_columns()`)
 - `job_agreements` → **trg_job_agreements_job_only** (`job_agreements_enforce_job_only()`)
 - `job_agreements` → **trg_job_agreements_set_updated_at** (`set_updated_at()`)
 - `job_billing_milestones` → **trg_job_billing_milestones_set_updated_at** (`set_updated_at()`)
@@ -9138,6 +10145,7 @@ CASE object_type
 - `jobs` → **jobs_bump_version** (`bump_row_version()`)
 - `jobs` → **set_jobs_updated_at** (`set_jobs_updated_at()`)
 - `jobs` → **sync_jobs_legacy_money** (`sync_legacy_money_columns()`)
+- `jobs` → **trg_jobs_delier_deal** (`jobs_delier_deal()`)
 - `jobs` → **trg_jobs_fill_property_id** (`jobs_fill_property_id()`)
 - `jobs` → **trg_jobs_set_completed_at** (`jobs_set_completed_at()`)
 - `jobs` → **trg_jobs_set_updated_at** (`set_updated_at()`)
@@ -9153,6 +10161,7 @@ CASE object_type
 - `memberships` → **set_memberships_updated_at** (`set_updated_at()`)
 - `memberships` → **trg_enforce_membership_role_change** (`enforce_membership_role_change()`)
 - `memberships` → **trg_membership_security_audit** (`trg_membership_change_audit()`)
+- `memberships` → **trg_propager_proprietaires_bureaux** (`propager_proprietaires_bureaux()`)
 - `memberships` → **trg_team_members_suit_memberships** (`sync_team_member_from_membership()`)
 - `messages` → **trg_message_insert** (`update_conversation_on_message()`)
 - `mfa_phone` → **set_mfa_phone_updated_at** (`set_updated_at()`)
@@ -9178,6 +10187,7 @@ CASE object_type
 - `orgs` → **trg_auto_create_comm_settings** (`auto_create_comm_settings()`)
 - `orgs` → **trg_org_created_seed_automations** (`handle_org_created_seed_automations()`)
 - `orgs` → **trg_orgs_assign_company_group** (`assign_org_company_group()`)
+- `orgs` → **trg_orgs_dossiers_systeme** (`cf_orgs_dossiers_systeme()`)
 - `orgs` → **trg_orgs_set_updated_at** (`set_updated_at()`)
 - `payment_provider_secrets` → **trg_payment_provider_secrets_set_updated_at** (`set_updated_at()`)
 - `payment_provider_secrets` → **trg_payment_provider_secrets_updated_at** (`set_updated_at()`)
@@ -9197,6 +10207,7 @@ CASE object_type
 - `payments` → **trg_payments_set_updated_at** (`set_updated_at()`)
 - `payments` → **trg_payments_sync_dates** (`payments_sync_dates_and_update()`)
 - `payments` → **trg_payments_sync_legacy_dates** (`payments_sync_legacy_dates()`)
+- `payments` → **trg_quickbooks_payments** (`quickbooks_trg_payments()`)
 - `payroll_settings` → **set_payroll_settings_updated_at** (`set_updated_at()`)
 - `pipeline_deals` → **bump_pipeline_deals_version** (`bump_row_version()`)
 - `pipeline_deals` → **trg_pipeline_deals_emit_job_intent** (`pipeline_deals_emit_job_intent()`)
@@ -9208,6 +10219,7 @@ CASE object_type
 - `pipeline_stages` → **trg_pipeline_stages_archivage** (`pipeline_stages_verifier_archivage()`)
 - `pipeline_stages` → **trg_pipeline_stages_updated** (`set_updated_at()`)
 - `pipeline_vues` → **trg_pipeline_vues_updated_at** (`set_updated_at()`)
+- `pipelines_ventes` → **trg_pipelines_ventes_position** (`pipelines_ventes_position_initiale()`)
 - `pipelines_ventes` → **trg_pipelines_ventes_updated** (`set_updated_at()`)
 - `plans` → **set_plans_updated_at** (`set_updated_at()`)
 - `predefined_services` → **set_predefined_services_updated_at** (`set_updated_at()`)
@@ -9227,6 +10239,7 @@ CASE object_type
 - `quote_sequences` → **set_quote_sequences_updated_at** (`set_updated_at()`)
 - `quote_templates` → **set_quote_templates_updated_at** (`set_updated_at()`)
 - `quotes` → **quotes_bump_version** (`bump_row_version()`)
+- `quotes` → **quotes_cf_copier_vers_job** (`cf_devis_job_lie()`)
 - `quotes` → **trg_ac_track_quotes** (`ac_track_quotes()`)
 - `quotes` → **trg_auto_pipeline_deal_from_quote** (`auto_pipeline_deal_from_quote()`)
 - `quotes` → **trg_auto_pipeline_deal_from_quote_update** (`auto_pipeline_deal_from_quote_update()`)
@@ -9234,6 +10247,7 @@ CASE object_type
 - `quotes` → **trg_quotes_fill_property_id** (`fill_property_id_from_job_or_client()`)
 - `quotes` → **trg_quotes_set_updated_at** (`set_updated_at()`)
 - `quotes` → **trg_quotes_suppression_douce** (`garde_suppression_douce()`)
+- `quotes` → **trg_quotes_zz_prefixe** (`appliquer_prefixe_document()`)
 - `recurring_invoice_schedules` → **set_recurring_invoice_schedules_updated_at** (`set_updated_at()`)
 - `recurring_team_schedules` → **bump_recurring_team_schedules_version** (`bump_row_version()`)
 - `recurring_team_schedules` → **trg_rts_updated** (`set_team_schedule_updated_at()`)
@@ -9254,8 +10268,10 @@ CASE object_type
 - `specific_notes` → **trg_ac_track_specific_notes** (`ac_track_specific_notes()`)
 - `specific_notes` → **trg_specific_notes_updated_at** (`update_specific_notes_updated_at()`)
 - `support_tickets` → **trg_support_tickets_updated** (`set_support_tickets_updated_at()`)
+- `table_view_preferences` → **table_view_preferences_updated_at** (`table_view_preferences_touch()`)
 - `tasks` → **bump_tasks_version** (`bump_row_version()`)
 - `tasks` → **tasks_updated_at** (`set_updated_at()`)
+- `tasks` → **trg_log_tache_deal** (`log_tache_deal()`)
 - `tasks` → **trg_tasks_public_id** (`generate_task_public_id()`)
 - `tasks` → **trg_tasks_updated_at** (`tasks_update_timestamp()`)
 - `tax_configs` → **set_tax_configs_updated_at** (`set_updated_at()`)
@@ -9278,9 +10294,10 @@ CASE object_type
 - `webhook_endpoints` → **set_webhook_endpoints_updated_at** (`set_updated_at()`)
 - `webhook_events` → **set_webhook_events_updated_at** (`set_updated_at()`)
 
-## 8. Tâches planifiées (10)
+## 8. Tâches planifiées (11)
 
 - `lume_invariant_checks` — `40 4 * * *` — actif
+- `lume_payment_reminders` — `0 13 * * *` — actif
 - `lume_purge_audit_events` — `15 3 * * *` — actif
 - `lume_purge_location_data` — `30 4 * * *` — actif
 - `lume_purge_oauth_states` — `25 * * * *` — actif

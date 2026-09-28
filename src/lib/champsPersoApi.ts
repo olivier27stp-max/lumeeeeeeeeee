@@ -301,9 +301,8 @@ export async function lireFuseau(): Promise<string> {
 
 /**
  * Colonnes de champs personnalisés pour un export CSV : en-têtes (libellés)
- * et, par fiche, les valeurs dans le même ordre. Vide si le drapeau
- * `custom_fields_v2` est coupé ou si l'objet n'a aucun champ : l'export
- * sort alors exactement comme avant.
+ * et, par fiche, les valeurs dans le même ordre. Vide si l'objet n'a aucun
+ * champ : l'export sort alors exactement comme avant.
  */
 export async function colonnesChampsCsv(
   objet: ObjetChamp, ids: string[], fr: boolean,

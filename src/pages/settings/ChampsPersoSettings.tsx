@@ -12,7 +12,7 @@
  *   · pour les opportunités : les champs affichés sur les cartes, par pipeline.
  *
  * Les champs standard sont listés en lecture seule (cadenas).
- * Derrière le drapeau `custom_fields_v2`.
+ * Actif pour toutes les entreprises (le drapeau `custom_fields_v2` a été retiré).
  */
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
