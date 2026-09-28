@@ -143,7 +143,7 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
             sublabel: item.subtitle || item.clientName || undefined,
             icon: ENTITY_ICONS[item.type] || Search,
             iconClass: item.type in ENTITY_ICON_CLASS ? entityIconClass(item.type) : undefined,
-            action: () => navigate(getSearchItemHref(item.type, item.id, { clientId: item.clientId, refId: item.refId })),
+            action: () => navigate(getSearchItemHref(item.type, item.id, { clientId: item.clientId, refId: item.refId, dealId: item.dealId })),
             section: fr ? sectionLabel.fr : sectionLabel.en,
           });
         }

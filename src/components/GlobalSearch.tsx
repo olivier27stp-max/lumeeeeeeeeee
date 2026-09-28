@@ -279,7 +279,7 @@ export default function GlobalSearch() {
         entityType: entity.type,
         label: entity.title,
         subtitle: entity.subtitle,
-        destination: getSearchItemHref(entity.type, entity.id, { clientId: entity.clientId, refId: entity.refId }),
+        destination: getSearchItemHref(entity.type, entity.id, { clientId: entity.clientId, refId: entity.refId, dealId: entity.dealId }),
         status: entity.status,
         // Strip amounts for financially restricted users
         amountCents: financiallyRestricted ? null : entity.amountCents,

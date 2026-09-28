@@ -31,7 +31,7 @@ import { hasPermission } from '../lib/permissions';
 import { usePermissions } from '../hooks/usePermissions';
 import {
   assignerDeal, deplacerDeal, fetchDeals, fetchMembres, fetchMontants, fetchMontantsDetailles,
-  fetchMesPipelinesModifiables, fetchPipelineDefaut, fetchPipelines, fetchStages, lierJob, marquerPerdu, nomClient,
+  fetchMesPipelinesModifiables, fetchPipelineDefaut, fetchPipelineDuDeal, fetchPipelines, fetchStages, lierJob, marquerPerdu, nomClient,
   type Deal, type PipelineResume, type PipelineStage,
 } from '../lib/pipelineVentesApi';
 
@@ -193,6 +193,36 @@ export default function Pipeline() {
     if (!dealOuvert) return null;
     return deals.find((d) => d.id === dealOuvert.id) ?? dealOuvert;
   }, [dealOuvert, deals]);
+  /**
+   * Lien direct vers un deal : `/ventes?deal=<id>` (la recherche globale
+   * l'utilise quand la valeur trouvée est dans un champ du deal). On bascule
+   * sur SON pipeline, puis on ouvre la fiche dès que ses deals sont chargés ;
+   * le paramètre est retiré ensuite, pour qu'un retour arrière ne la rouvre pas.
+   */
+  const dealDemande = params.get('deal');
+  const pipelineDuDealQ = useQuery({
+    queryKey: ['pipeline-du-deal', dealDemande],
+    queryFn: () => fetchPipelineDuDeal(dealDemande as string),
+    enabled: !!dealDemande,
+    retry: false,
+    staleTime: 60_000,
+  });
+  useEffect(() => {
+    if (!dealDemande) return;
+    const retirer = () => setParams((sp) => { sp.delete('deal'); return sp; }, { replace: true });
+    const cible = pipelineDuDealQ.data;
+    if (pipelineDuDealQ.isError || (pipelineDuDealQ.isSuccess && !cible)) {
+      toast.error(fr ? 'Ce deal est introuvable, ou tu n’y as pas accès.' : 'This deal could not be found, or you do not have access.');
+      retirer();
+      return;
+    }
+    if (!cible) return;
+    if (cible !== pipelineId) { choisirPipeline(cible); return; }
+    const trouve = dealsQ.data?.find((d) => d.id === dealDemande);
+    if (trouve) { setDealOuvert(trouve); retirer(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealDemande, pipelineDuDealQ.data, pipelineDuDealQ.isError, pipelineDuDealQ.isSuccess, pipelineId, dealsQ.data]);
+
   const [dealAGagner, setDealAGagner] = useState<Deal | null>(null);
   const { openJobModal } = useJobModalController();
   const [dealAPerdre, setDealAPerdre] = useState<{ deal: Deal; versEtapeId: string } | null>(null);

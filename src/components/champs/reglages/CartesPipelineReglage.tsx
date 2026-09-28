@@ -3,6 +3,10 @@
  * dans quel ordre (6 au plus — une carte reste une carte). Réglage par
  * pipeline : un pipeline « Résidentiel » ne montre pas les mêmes choses
  * qu'un pipeline « Commercial ».
+ *
+ * Deux accès : Réglages → Champs personnalisés (avec le choix du pipeline),
+ * et l'onglet « Cartes » des réglages d'UN pipeline (`pipelineId` fixé, sans
+ * sélecteur).
  */
 import { useEffect, useId, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -17,11 +21,18 @@ const MAX = 6;
 const AUCUN: string[] = [];
 const AUCUN_PIPELINE: Awaited<ReturnType<typeof fetchPipelines>> = [];
 
-export default function CartesPipelineReglage({ champs, fr }: { champs: ChampPerso[]; fr: boolean }) {
+export default function CartesPipelineReglage({ champs, fr, pipelineId: pipelineFixe }: {
+  champs: ChampPerso[]; fr: boolean;
+  /** Réglages d'un pipeline : celui-là, sans sélecteur. */
+  pipelineId?: string;
+}) {
   const ids = useId();
   const qc = useQueryClient();
-  const { data: pipelines = AUCUN_PIPELINE } = useQuery({ queryKey: ['pipelines-ventes', 'liste'], queryFn: fetchPipelines, staleTime: 60_000 });
-  const [pipelineId, setPipelineId] = useState('');
+  const { data: pipelines = AUCUN_PIPELINE } = useQuery({
+    queryKey: ['pipelines-ventes', 'liste'], queryFn: fetchPipelines, staleTime: 60_000, enabled: !pipelineFixe,
+  });
+  const [pipelineChoisi, setPipelineId] = useState('');
+  const pipelineId = pipelineFixe ?? pipelineChoisi;
   useEffect(() => { if (!pipelineId && pipelines[0]) setPipelineId(pipelines[0].id); }, [pipelines, pipelineId]);
   const { data: choisis = AUCUN, isLoading } = useQuery({
     queryKey: ['champs-perso', 'cartes', pipelineId],
@@ -32,7 +43,7 @@ export default function CartesPipelineReglage({ champs, fr }: { champs: ChampPer
   useEffect(() => { setListe(choisis); }, [choisis]);
   const [envoi, setEnvoi] = useState(false);
 
-  if (champs.length === 0 || pipelines.length === 0) return null;
+  if (!pipelineFixe && (champs.length === 0 || pipelines.length === 0)) return null;
   const modifie = JSON.stringify(liste) !== JSON.stringify(choisis);
 
   const enregistrer = async () => {
@@ -65,14 +76,22 @@ export default function CartesPipelineReglage({ champs, fr }: { champs: ChampPer
           </h3>
           <p className="text-[12px] text-text-tertiary">{fr ? `Jusqu’à ${MAX} champs d’opportunité, dans l’ordre choisi. Les listes s’affichent en pastilles de couleur.` : `Up to ${MAX} opportunity fields, in the chosen order. Dropdowns show as colored badges.`}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <label htmlFor={`${ids}-pipeline`} className="text-[12px] text-text-secondary">Pipeline</label>
-          <select id={`${ids}-pipeline`} value={pipelineId} onChange={(e) => setPipelineId(e.target.value)} className="glass-input h-9 text-[13px]">
-            {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </div>
+        {!pipelineFixe && (
+          <div className="flex items-center gap-2">
+            <label htmlFor={`${ids}-pipeline`} className="text-[12px] text-text-secondary">Pipeline</label>
+            <select id={`${ids}-pipeline`} value={pipelineId} onChange={(e) => setPipelineId(e.target.value)} className="glass-input h-9 text-[13px]">
+              {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
       </div>
-      {isLoading ? (
+      {champs.length === 0 ? (
+        <p className="text-[12px] text-text-tertiary">
+          {fr
+            ? 'Aucun champ d’opportunité pour l’instant : crée-en dans Réglages → Champs personnalisés (objet « Pipeline »).'
+            : 'No opportunity fields yet: create some in Settings → Custom fields (“Pipeline” object).'}
+        </p>
+      ) : isLoading ? (
         <Loader2 size={14} className="animate-spin text-text-tertiary" aria-label={fr ? 'Chargement' : 'Loading'} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">

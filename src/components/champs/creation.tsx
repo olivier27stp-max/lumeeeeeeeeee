@@ -8,6 +8,7 @@
  *   // en fin de formulaire : {champs.bloc}
  *   // avant de créer : const err = champs.valider(); if (err) { toast.error(err); return; }
  *   // après : await champs.enregistrer(nouvelId);
+ *   // fiche retrouvée (pas créée) : const n = await champs.completerVides(id);
  *
  * La validation passe par le même module que le serveur (preparerValeur) :
  * un champ obligatoire vide ou une valeur invalide bloque la création AVANT
@@ -24,7 +25,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
-import { ecrireValeurs, listerChamps, supprimerFichierChamp } from '../../lib/champsPersoApi';
+import { ecrireValeurs, lireValeurs, listerChamps, supprimerFichierChamp } from '../../lib/champsPersoApi';
 import { preparerValeur, ErreurValeur } from '../../lib/champs/valeurs';
 import type { ObjetChamp, ValeurChamp } from '../../lib/champs/types';
 import ChampSaisie from './ChampSaisie';
@@ -122,20 +123,40 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sectio
     return null;
   };
 
-  /** Écrit les valeurs sur la fiche créée. Un refus est signalé, jamais bloquant : la fiche existe déjà. */
-  const enregistrer = async (entityId: string | null | undefined) => {
-    if (!entityId) return;
-    const ecritures = champs.filter((c) => !vide(courant.current[c.id])).map((c) => ({ field_id: c.id, value: courant.current[c.id] }));
-    if (ecritures.length === 0) return;
+  /**
+   * Écrit les valeurs sur la fiche créée. Un refus est signalé, jamais bloquant : la fiche existe déjà.
+   *
+   * `completerVides` : la fiche existait déjà (ex. le contact avait un deal
+   * ouvert) — on ne complète QUE ses champs vides, jamais on n'écrase. La
+   * version 0 dit à la base « ce champ doit encore être vide » : si quelqu'un
+   * le remplit entre la lecture et l'écriture, c'est un conflit, pas un
+   * écrasement. Renvoie le nombre de champs réellement écrits.
+   */
+  const ecrire = async (entityId: string | null | undefined, seulementVides: boolean): Promise<number> => {
+    if (!entityId) return 0;
+    let ecritures: { field_id: string; value: ValeurChamp; version?: number }[] = champs
+      .filter((c) => !vide(courant.current[c.id])).map((c) => ({ field_id: c.id, value: courant.current[c.id] }));
+    if (ecritures.length === 0) return 0;
     try {
+      if (seulementVides) {
+        const existantes = (await lireValeurs(objet, entityId)).values;
+        ecritures = ecritures
+          .filter((e) => vide(existantes[e.field_id]?.value))
+          .map((e) => ({ ...e, version: existantes[e.field_id]?.version ?? 0 }));
+        if (ecritures.length === 0) return 0;
+      }
       const resultats = await ecrireValeurs(objet, entityId, ecritures);
       const refus = resultats.filter((r) => !r.ok);
       if (refus.length) toast.error(refus.map((r) => r.erreur).filter(Boolean).join(' · '));
+      return resultats.filter((r) => r.ok).length;
     } catch (err) {
       console.error('[useChampsCreation] enregistrement des champs', err);
       toast.error(fr ? 'La fiche est créée, mais ses champs personnalisés n’ont pas pu être enregistrés.' : 'Record created, but its custom fields could not be saved.');
+      return 0;
     }
   };
+  const enregistrer = async (entityId: string | null | undefined): Promise<void> => { await ecrire(entityId, false); };
+  const completerVides = (entityId: string | null | undefined): Promise<number> => ecrire(entityId, true);
 
   const boutonGerer = peutGerer ? (
     <button type="button" onClick={() => setGerer(true)}
@@ -207,5 +228,5 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: { sectio
     </div>
   );
 
-  return { bloc, section, valider, enregistrer, actif: champs.length > 0 };
+  return { bloc, section, valider, enregistrer, completerVides, actif: champs.length > 0 };
 }

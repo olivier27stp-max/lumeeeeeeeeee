@@ -288,6 +288,21 @@ export async function fetchDeals(pipelineId: string): Promise<Deal[]> {
   return (data ?? []) as unknown as Deal[];
 }
 
+/**
+ * Le pipeline d'un deal, pour ouvrir sa fiche depuis un lien (`/ventes?deal=…`,
+ * ex. la recherche globale). `null` = introuvable ou non visible (RLS).
+ */
+export async function fetchPipelineDuDeal(dealId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('deals')
+    .select('pipeline_id')
+    .eq('id', dealId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as { pipeline_id: string } | null)?.pipeline_id ?? null;
+}
+
 export async function fetchHistorique(dealId: string): Promise<DealStageHistory[]> {
   const { data, error } = await supabase
     .from('deal_stage_history')
