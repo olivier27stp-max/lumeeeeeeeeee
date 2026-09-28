@@ -32,6 +32,8 @@ export const EVENT_TYPE_LABELS: Record<string, { en: string; fr: string; icon: s
   status_changed: { en: 'Status changed', fr: 'Statut modifié', icon: 'refresh' },
   lead_converted: { en: 'Lead converted to job', fr: 'Lead converti en travail', icon: 'arrow-right' },
   client_archived: { en: 'Client archived', fr: 'Client archivé', icon: 'archive' },
+  client_tagged: { en: 'Tag added', fr: 'Étiquette ajoutée', icon: 'plus' },
+  client_untagged: { en: 'Tag removed', fr: 'Étiquette retirée', icon: 'x' },
   client_deleted: { en: 'Client deleted', fr: 'Client supprimé', icon: 'trash' },
   estimate_sent: { en: 'Estimate sent', fr: 'Devis envoyé', icon: 'send' },
   estimate_accepted: { en: 'Estimate accepted', fr: 'Devis accepté', icon: 'check' },
