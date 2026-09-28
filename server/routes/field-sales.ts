@@ -563,6 +563,17 @@ router.put('/houses/:id', async (req: Request, res: Response) => {
     }
     updates.updated_at = new Date().toISOString();
 
+    // Métadonnées FUSIONNÉES : « Modifier le pin » envoie nom, téléphone et
+    // courriel ; remplacer le jsonb effaçait les autres clés (geocode_status…)
+    // — audit 2026-09-28, D9.
+    const { data: avant, error: avantErr } = await admin
+      .from('field_house_profiles').select('metadata, client_id')
+      .eq('id', req.params.id).eq('org_id', auth.orgId).maybeSingle();
+    if (avantErr) return sendSafeError(res, avantErr, 'Field sales operation failed.', '[field-sales]');
+    if (updates.metadata && typeof updates.metadata === 'object') {
+      updates.metadata = { ...((avant?.metadata as Record<string, unknown>) ?? {}), ...updates.metadata };
+    }
+
     const { data, error } = await admin
       .from('field_house_profiles')
       .update(updates)
@@ -572,6 +583,37 @@ router.put('/houses/:id', async (req: Request, res: Response) => {
       .single();
 
     if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
+
+    // La carte relit field_pins.status : sans ça, le statut revenait à
+    // l'ancien au rechargement (D9).
+    if (updates.current_status) {
+      const { error: pinErr } = await admin.from('field_pins')
+        .update({ status: updates.current_status, updated_at: updates.updated_at })
+        .eq('house_id', req.params.id).eq('org_id', auth.orgId);
+      if (pinErr) console.error('[field-sales] pin status sync failed:', { orgId: auth.orgId, houseId: req.params.id }, pinErr.message);
+      // Devenue prospect (lead / devis / vendu) : elle entre dans le pipeline,
+      // comme à la création — idempotent par maison.
+      await ingererPorteDansPipeline(admin, {
+        orgId: auth.orgId, houseId: req.params.id, clientId: avant?.client_id ?? null,
+        actorId: auth.user.id, statut: String(updates.current_status),
+      });
+    }
+
+    // Note saisie dans « Modifier le pin » : elle n'était jamais enregistrée (D9).
+    const note = typeof req.body.note_text === 'string' ? req.body.note_text.trim() : '';
+    if (note) {
+      const { error: noteErr } = await admin.from('field_house_events').insert({
+        org_id: auth.orgId, house_id: req.params.id, user_id: auth.user.id, event_type: 'note', note_text: note.slice(0, 5000),
+      });
+      if (noteErr) console.error('[field-sales] note insert failed:', { orgId: auth.orgId, houseId: req.params.id }, noteErr.message);
+      else {
+        const { error: hasErr } = await admin.from('field_pins').update({ has_note: true })
+          .eq('house_id', req.params.id).eq('org_id', auth.orgId);
+        if (hasErr) console.error('[field-sales] pin has_note failed:', { orgId: auth.orgId, houseId: req.params.id }, hasErr.message);
+      }
+    }
+
+    cacheDelete(`pins:${auth.orgId}`);
     return res.json(data);
   } catch (err: any) {
     return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
@@ -1361,6 +1403,10 @@ router.get('/pins', async (req: Request, res: Response) => {
         pin_color: p.pin_color,
         note_preview: noteMap[p.house_id] ?? null,
         customer_name: p.field_house_profiles?.metadata?.customer_name ?? null,
+        // Relus pour « Modifier le pin » : sans eux, le formulaire repartait vide
+        // et l'enregistrement effaçait téléphone et courriel (D9).
+        customer_phone: p.field_house_profiles?.metadata?.customer_phone ?? null,
+        customer_email: p.field_house_profiles?.metadata?.customer_email ?? null,
         address: p.field_house_profiles?.address ?? null,
         assigned_user_id: p.field_house_profiles?.assigned_user_id ?? null,
         assigned_user_name: p.field_house_profiles?.assigned_user_id ? (repNameMap[p.field_house_profiles.assigned_user_id] ?? null) : null,

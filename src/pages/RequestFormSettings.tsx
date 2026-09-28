@@ -544,7 +544,9 @@ export default function RequestFormSettings() {
     } finally {
       setSaving(false);
     }
-  }, [title, description, successMessage, enabled, logoUrl, customFields, notifyEmail, notifyInApp]);
+  // form et pipelineId en font partie : sans eux, le 2e clic après une création
+  // renvoyait `creer: true` et créait un second formulaire (audit 2026-09-28, D10).
+  }, [form, pipelineId, title, description, successMessage, enabled, logoUrl, customFields, notifyEmail, notifyInApp]);
 
   // Regenerate API key (confirmé via modal — l'ancien embed cesse de marcher)
   const handleRegenKey = async () => {

@@ -128,10 +128,16 @@ router.post('/request-forms', validate(upsertRequestFormSchema), async (req, res
       existing = data?.[0] ?? null;
     }
 
-    const save = (p: Record<string, unknown>) =>
-      existing?.id
-        ? admin.from('request_forms').update(p).eq('id', existing.id).select('*').single()
-        : admin.from('request_forms').insert(p).select('*').single();
+    // created_by = l'auteur du formulaire, destinataire du courriel « nouvelle
+    // demande » : il ne change pas à chaque sauvegarde (le dernier éditeur le
+    // devenait — audit 2026-09-28, D10).
+    const save = (p: Record<string, unknown>) => {
+      if (existing?.id) {
+        const { created_by: _auteur, ...maj } = p;
+        return admin.from('request_forms').update(maj).eq('id', existing.id).select('*').single();
+      }
+      return admin.from('request_forms').insert(p).select('*').single();
+    };
 
     let { data: form, error: saveError } = await save(payload);
     // logo_url ships with migration 20260711000000_request_form_logo — keep
