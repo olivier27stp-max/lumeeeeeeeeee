@@ -116,6 +116,8 @@ export function evenementPour(cle: string): Evenement {
     'invoice.paid': { entityType: 'invoice', entityId: IDS.facture, metadata: { invoice_number: 'INV-000042', amount_cents: 162690, payment_type: 'full', client_id: IDS.client } },
     // Émis par server/lib/vuesFacture.ts (drapeau auto_consultation_documents).
     'invoice.viewed': { entityType: 'invoice', entityId: IDS.facture, metadata: { invoice_id: IDS.facture, invoice_number: 'INV-000042', client_id: IDS.client, is_first_view: true, view_count: 1, ouverture: ['premiere', 'chaque'], total_cents: 162690, balance_cents: 162690, montant: 1626.9 } },
+    // Émis par server/lib/paiement-echoue.ts (drapeau auto_paiement_echoue).
+    'payment.failed': { entityType: 'invoice', entityId: IDS.facture, metadata: { invoice_id: IDS.facture, invoice_number: 'INV-000042', client_id: IDS.client, montant_cents: 162690, montant: 1626.9, raison_code: 'insufficient_funds', origine: 'paiement_en_ligne', payment_intent_id: 'pi_filet', stripe_event_id: 'evt_filet' } },
     'invoice.overdue': { entityType: 'invoice', entityId: IDS.facture, metadata: { invoice_number: 'INV-000042', days_overdue: 12, client_id: IDS.client } },
     'appointment.created': { entityType: 'schedule_event', entityId: IDS.visite, metadata: { job_id: IDS.job, client_id: IDS.client, start_time: '2026-09-25T13:00:00Z' } },
     'appointment.cancelled': { entityType: 'schedule_event', entityId: IDS.visite, metadata: { job_id: IDS.job, client_id: IDS.client } },

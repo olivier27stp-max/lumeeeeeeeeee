@@ -67,6 +67,7 @@ import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
 import { logDataExport } from '../lib/data-export-log';
 import { logger } from '../lib/logger';
+import { traiterPaiementEchoue } from '../lib/paiement-echoue';
 import { forfaitDepuisPrix, intervalleLu, intervalleDepuisPrix, estPrixVersements, appariementPlan, finDePeriode } from '../lib/abonnement-intervalle';
 import { repartirMontantRecu } from '../lib/payment-settings';
 import { notifierPaiementRecu, notifierLitigeOuvert } from '../lib/paiement-recu';
@@ -411,6 +412,13 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             currency: String(intent.currency || 'CAD').toUpperCase(),
             payment_date: new Date().toISOString(),
           });
+        }
+        // Déclencheur « Paiement échoué » (drapeau par entreprise). Ne lève
+        // jamais ; écarte l'abonnement Lume, les comptes connectés et une
+        // facture hors de l'entreprise ; une seule fois par événement Stripe.
+        const issueEchec = await traiterPaiementEchoue(getServiceClient(), event as any);
+        if (issueEchec !== 'drapeau_off' && issueEchec !== 'hors_facture') {
+          logger.info('[payments] paiement échoué → déclencheur', { eventId: event.id, issue: issueEchec });
         }
       }
 

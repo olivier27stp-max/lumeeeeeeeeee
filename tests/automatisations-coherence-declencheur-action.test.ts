@@ -32,6 +32,8 @@ const ENTITE_DU_DECLENCHEUR: Record<string, string> = {
   'quote.viewed': 'quote',
   // vuesFacture.ts : emit('invoice.viewed', { entityType: 'invoice' }).
   'invoice.viewed': 'invoice',
+  // paiement-echoue.ts : emit('payment.failed', { entityType: 'invoice' }).
+  'payment.failed': 'invoice',
   'quote.approved': 'quote',
   'quote.declined': 'quote',
   'quote.changes_requested': 'quote',
