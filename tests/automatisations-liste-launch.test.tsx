@@ -351,3 +351,25 @@ describe('raisonLisible — la cause d’un échec et le motif d’un saut, en c
     expect(texte).toContain('Dernière étape sautée : Déjà envoyé lors d’une tentative précédente');
   });
 });
+
+// ─── Bloc 5 : bandeau « pas de numéro texto » ───────────────────
+
+describe('bandeau quand le bureau n’a pas de numéro texto', () => {
+  const PHRASE = 'Les étapes texto sont sautées tant qu’aucun numéro n’est configuré.';
+
+  it('s’affiche quand le serveur dit qu’aucun numéro n’est configuré', async () => {
+    reglesServies = [regle({ id: 'a', name: 'Relance A' })];
+    statsMock.mockImplementation(async () => ({ par_regle: {}, par_etape: null, texto_configure: false }));
+    await rendre();
+    await attendre();
+    expect(container.textContent).toContain(PHRASE);
+  });
+
+  it('ne s’affiche pas avec un numéro, ni quand on ne sait pas', async () => {
+    reglesServies = [regle({ id: 'a', name: 'Relance A' })];
+    statsMock.mockImplementation(async () => ({ par_regle: {}, par_etape: null, texto_configure: true }));
+    await rendre();
+    await attendre();
+    expect(container.textContent).not.toContain(PHRASE);
+  });
+});

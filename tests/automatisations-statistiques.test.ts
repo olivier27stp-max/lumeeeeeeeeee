@@ -44,6 +44,11 @@ vi.mock('../server/lib/supabase', () => ({
   getServiceClient: () => fauxClient(),
 }));
 
+// Le numéro texto du bureau : même source que le moteur (getOrgSmsChannel).
+let canalSms: { phone_number: string } | null = null;
+vi.mock('../server/lib/twilioProvisioning', () => ({ getOrgSmsChannel: async () => canalSms }));
+vi.mock('../server/lib/config', () => ({ twilioClient: { messages: {} } }));
+
 const { default: routeur, calculerStatistiques } = await import('../server/routes/automation-stats');
 
 async function lire(chemin: string) {
@@ -126,6 +131,13 @@ describe('la route', () => {
     const r = await lire('/automations/rules/stats');
     expect(r.status).toBe(200);
     expect(r.json.par_regle[R1].declenches).toBe(4);
+  });
+
+  it('dit si le bureau a un numéro texto (pour le bandeau « étapes texto sautées »)', async () => {
+    canalSms = null;
+    expect((await lire('/automations/rules/stats')).json.texto_configure).toBe(false);
+    canalSms = { phone_number: '+15145550000' };
+    expect((await lire('/automations/rules/stats')).json.texto_configure).toBe(true);
   });
 
   it('?rule_id= ajoute le détail par étape, et refuse un identifiant forgé', async () => {

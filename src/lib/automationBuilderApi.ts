@@ -179,6 +179,8 @@ export interface StatsEtape {
 export async function chargerStatistiques(ruleId?: string | null): Promise<{
   par_regle: Record<string, StatsRegle>;
   par_etape: Record<string, StatsEtape> | null;
+  /** Le bureau a-t-il un numéro texto ? `null` = inconnu. */
+  texto_configure?: boolean | null;
 }> {
   const url = ruleId ? `/api/automations/rules/stats?rule_id=${encodeURIComponent(ruleId)}` : '/api/automations/rules/stats';
   const reponse = await fetch(url, { headers: await entetes() });

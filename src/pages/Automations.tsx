@@ -416,6 +416,8 @@ export default function Automations() {
   const [derniereCause, setDerniereCause] = useState<Record<string, string | null>>({});
   /** Chiffres réels par automatisation (60 j) — `null` = illisibles. */
   const [stats, setStats] = useState<Record<string, StatsRegle> | null>(null);
+  /** Le bureau a-t-il un numéro texto ? `false` = bandeau ; `null` = inconnu, rien. */
+  const [textoConfigure, setTextoConfigure] = useState<boolean | null>(null);
   const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
   const [occupeId, setOccupeId] = useState<string | null>(null);
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
@@ -541,7 +543,9 @@ export default function Automations() {
       }
       // « Total déclenché », « En cours » et le détail › : la route agrégée.
       try {
-        setStats((await chargerStatistiques()).par_regle);
+        const s = await chargerStatistiques();
+        setStats(s.par_regle);
+        setTextoConfigure(s.texto_configure ?? null);
       } catch (e: unknown) {
         console.error('[automations] statistiques illisibles', e instanceof Error ? e.message : String(e));
         setStats(null);
@@ -1109,6 +1113,22 @@ export default function Automations() {
           dorment coûte des relances pendant des jours.
         */}
         <BandeauPause fr={fr} onChange={setToutEnPause} />
+
+        {/*
+          Aucun numéro texto (bloqué tant que Trust Hub n'est pas approuvé) :
+          chaque étape texto est SAUTÉE et le parcours continue (M1). On le
+          dit ici, une fois, plutôt que de laisser croire que les textos partent.
+        */}
+        {textoConfigure === false && (
+          <div role="status" className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-light px-3 py-2.5 text-[13px] text-text-primary">
+            <MessageSquare size={15} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+            <span>
+              {fr
+                ? 'Les étapes texto sont sautées tant qu’aucun numéro n’est configuré.'
+                : 'Text message steps are skipped until a number is set up.'}
+            </span>
+          </div>
+        )}
 
         {/* ══ 2. Titre + les trois boutons ══ */}
         <div className="flex flex-wrap items-center justify-between gap-3">

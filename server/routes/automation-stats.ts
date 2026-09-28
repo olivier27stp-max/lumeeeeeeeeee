@@ -26,6 +26,8 @@ import { Router } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient } from '../lib/supabase';
 import { logger } from '../lib/logger';
+import { twilioClient } from '../lib/config';
+import { getOrgSmsChannel } from '../lib/twilioProvisioning';
 
 const router = Router();
 
@@ -179,6 +181,25 @@ export async function calculerStatistiques(
   return { par_regle, par_etape };
 }
 
+/**
+ * Le bureau peut-il envoyer des textos ? Même source que le moteur : le
+ * client Twilio du serveur ET le numéro actif du bureau (`getOrgSmsChannel`,
+ * celui que `requireOrgSmsNumber` exige avant chaque envoi). Sans l'un des
+ * deux, chaque étape texto est SAUTÉE (M1, code `sms_non_configure`) — la
+ * page l'annonce par un bandeau. `null` = inconnu : aucun bandeau plutôt
+ * qu'un faux.
+ */
+async function textoConfigure(orgId: string): Promise<boolean | null> {
+  try {
+    if (!twilioClient) return false;
+    const canal = await getOrgSmsChannel(orgId);
+    return Boolean(canal?.phone_number);
+  } catch (e: unknown) {
+    logger.error('[automation-stats] numéro texto illisible', { message: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
 router.get('/automations/rules/stats', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
@@ -189,7 +210,11 @@ router.get('/automations/rules/stats', async (req, res) => {
   }
 
   try {
-    return res.json(await calculerStatistiques(auth.client, auth.orgId, brut));
+    const [stats, texto_configure] = await Promise.all([
+      calculerStatistiques(auth.client, auth.orgId, brut),
+      textoConfigure(auth.orgId),
+    ]);
+    return res.json({ ...stats, texto_configure });
   } catch (e: unknown) {
     logger.error('[automation-stats] lecture échouée', { message: e instanceof Error ? e.message : String(e) });
     return res.status(500).json({ error: 'Impossible de lire les statistiques des automatisations.' });
