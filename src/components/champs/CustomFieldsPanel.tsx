@@ -9,7 +9,7 @@
  *   le champ entre-temps, on le dit et on recharge au lieu d'écraser ;
  * · une erreur de validation s'affiche SOUS le champ, en clair.
  *
- * Derrière le drapeau `custom_fields_v2` : coupé, le panneau ne rend rien.
+ * Actif pour toutes les entreprises (le drapeau `custom_fields_v2` a été retiré).
  */
 import { useId, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';

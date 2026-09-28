@@ -9,7 +9,7 @@
  *   · useFiltreChamps : filtre SQL (cf_filtrer) sur les deals chargés ;
  *   · PanneauChamps : conditions + tri par champ, dans le panneau de filtres ;
  *   · comparerParChamp : le tri (nombre, montant, date, liste, texte, case).
- * Derrière le drapeau `custom_fields_v2` : coupé, rien ne s'affiche ni ne filtre.
+ * Actif pour toutes les entreprises (le drapeau `custom_fields_v2` a été retiré).
  */
 import { useId, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
