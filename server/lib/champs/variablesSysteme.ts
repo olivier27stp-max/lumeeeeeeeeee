@@ -159,7 +159,7 @@ async function valeursDevis(db: SupabaseClient, orgId: string, id: string, f: Fo
 }
 
 async function valeursFacture(db: SupabaseClient, orgId: string, id: string, f: Format): Promise<Valeurs> {
-  const i = await une(db, 'invoices', 'client_id, subject, created_at, due_date, salesperson_id, discount_cents, tax_cents, notes, internal_notes', id, orgId);
+  const i = await une(db, 'invoices', 'client_id, subject, created_at, due_date, salesperson_id, subtotal_cents, discount_cents, tax_cents, total_cents, notes, internal_notes', id, orgId);
   if (!i) return {};
   const [cli, vendeur, lignes] = await Promise.all([
     client(db, i.client_id, orgId),
@@ -168,7 +168,8 @@ async function valeursFacture(db: SupabaseClient, orgId: string, id: string, f: 
   ]);
   return {
     client: nomClient(cli), subject: txt(i.subject), invoice_date: date(i.created_at, f), due_date: date(i.due_date, f), salesperson: vendeur,
-    line_items: lignes, discount: Number(i.discount_cents) ? argent(i.discount_cents, f) : '', tax: argent(i.tax_cents, f),
+    line_items: lignes, subtotal: argent(i.subtotal_cents, f), discount: Number(i.discount_cents) ? argent(i.discount_cents, f) : '', tax: argent(i.tax_cents, f),
+    total: argent(i.total_cents, f),
     notes: txt(i.notes), internal_notes: txt(i.internal_notes),
   };
 }

@@ -558,6 +558,8 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
   const [envoi, setEnvoi] = useState(false);
   // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
   const champsPerso = useChampsCreation('deal', fr, { sections: ['depart', 'contact', 'previsions'] });
+  // Champs de base décochés dans « Gérer les champs » : retirés du formulaire pour toute l'entreprise.
+  const vis = champsPerso.systeme;
   const idPipeline = useId();
   const idRecherche = useId();
   const idPrenom = useId();
@@ -705,13 +707,14 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
     }
   }
 
-  const champsTexte: { id: string; cle: keyof ChampsDeal; label: string; type: string; requis: boolean }[] = [
+  const tousChampsTexte: { id: string; cle: keyof ChampsDeal; label: string; type: string; requis: boolean }[] = [
     { id: idPrenom, cle: 'prenom', label: fr ? 'Prénom' : 'First name', type: 'text', requis: true },
     { id: idNom, cle: 'nom', label: fr ? 'Nom' : 'Last name', type: 'text', requis: false },
     { id: idCourriel, cle: 'courriel', label: fr ? 'Courriel' : 'Email', type: 'email', requis: false },
     { id: idTelephone, cle: 'telephone', label: fr ? 'Téléphone' : 'Phone', type: 'tel', requis: false },
     { id: idAdresse, cle: 'adresse', label: fr ? 'Adresse' : 'Address', type: 'text', requis: false },
   ];
+  const champsTexte = tousChampsTexte.filter((c) => vis(({ prenom: 'first_name', nom: 'last_name', courriel: 'email', telephone: 'phone', adresse: 'address' } as Record<string, string>)[c.cle] ?? ''));
 
   const MODES: { cle: ModeDeal; fr: string; en: string }[] = [
     { cle: 'client', fr: 'Client existant', en: 'Existing client' },
@@ -975,7 +978,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
           vide met simplement le deal dans « Corriger vos données ».
         */}
         <div className="mt-1 grid grid-cols-1 gap-3 border-t border-border-subtle pt-3 sm:grid-cols-2">
-          {mode !== 'devis' && (
+          {mode !== 'devis' && vis('amount') && (
             <div>
               <label htmlFor={idMontant} className="mb-1.5 block text-[11px] text-text-tertiary">
                 {fr ? 'Montant estimé ($)' : 'Estimated amount ($)'}
@@ -997,7 +1000,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
             </div>
           )}
 
-          <div>
+          {vis('expected_close_date') && <div>
             <label htmlFor={idDateVisee} className="mb-1.5 block text-[11px] text-text-tertiary">
               {fr ? 'Fermeture visée' : 'Expected close'}
             </label>
@@ -1008,9 +1011,9 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
               onChange={(e) => setChamps((v) => ({ ...v, dateVisee: e.target.value }))}
               className={CLASSE_CHAMP}
             />
-          </div>
+          </div>}
 
-          <div>
+          {vis('assigned_user') && <div>
             <label htmlFor={idAssigne} className="mb-1.5 block text-[11px] text-text-tertiary">
               {fr ? 'Responsable' : 'Assignee'}
             </label>
@@ -1025,9 +1028,9 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
-          </div>
+          </div>}
 
-          <div>
+          {vis('source') && <div>
             <label htmlFor={idSource} className="mb-1.5 block text-[11px] text-text-tertiary">
               {fr ? 'Source' : 'Source'}
             </label>
@@ -1042,7 +1045,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
               <option value="meta">Meta</option>
               <option value="d2d">{fr ? 'Porte-à-porte' : 'Door to door'}</option>
             </select>
-          </div>
+          </div>}
         </div>
 
         {champsPerso.section('previsions')}
