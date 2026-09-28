@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { lireFlagsModules } from '../../../lib/featuresApi';
 
 interface FeatureFlag {
   enabled: boolean;
@@ -23,24 +23,13 @@ export function useFeatureFlags(): UseFeatureFlagsReturn {
 
   const fetchFlags = useCallback(async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setLoading(false);
-        return;
-      }
-
-      const res = await fetch('/api/features', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        signal: AbortSignal.timeout(8000),
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        setFlags(json.flags || {});
+      // Même lecture que useModuleAccess, partagée (lib/featuresApi.ts).
+      const lecture = await lireFlagsModules();
+      if (lecture.ok) {
+        setFlags(lecture.flags as Record<string, FeatureFlag>);
         setError(false);
         fetchedRef.current = true;
       } else {
-        console.warn('[useFeatureFlags] API returned', res.status);
         setError(true);
       }
     } catch (err: any) {

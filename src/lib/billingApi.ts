@@ -159,7 +159,25 @@ export interface GraceImpaye {
   jours_restants: number;
 }
 
-export async function fetchCurrentBilling(): Promise<{
+/**
+ * L'appel `/billing/current` EN COURS, partagé : App.tsx, usePlanFeature et
+ * d'autres le demandaient en même temps au chargement — trois appels
+ * identiques mesurés en prod le 2026-09-28. Un seul part désormais par bureau ;
+ * rien n'est gardé une fois la réponse arrivée (pas de cache périmé).
+ */
+let facturationEnVol: { bureau: string | null; promesse: ReturnType<typeof lireFacturation> } | null = null;
+
+export function fetchCurrentBilling(): ReturnType<typeof lireFacturation> {
+  const bureau = bureauActifSync();
+  if (facturationEnVol && facturationEnVol.bureau === bureau) return facturationEnVol.promesse;
+  const promesse = lireFacturation();
+  facturationEnVol = { bureau, promesse };
+  const liberer = () => { if (facturationEnVol?.promesse === promesse) facturationEnVol = null; };
+  promesse.then(liberer, liberer);
+  return promesse;
+}
+
+async function lireFacturation(): Promise<{
   subscription: Subscription | null;
   billing_profile: BillingProfile | null;
   restricted?: boolean;
