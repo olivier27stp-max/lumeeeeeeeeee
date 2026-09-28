@@ -646,6 +646,26 @@ const portalLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — cl
 const quoteLimiterStrict = rateLimit({ windowMs: 60_000, max: 15 }); // per IP — quote track-view
 const agreementPublicLimiter = rateLimit({ windowMs: 60_000, max: 20 }); // per IP — public contract page (view/sign/card setup)
 const automationLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `auto:${userKey(req)}` });
+/*
+ * Les RÈGLES d'automatisation ont leurs propres plafonds, par usage.
+ *
+ * Avant, lire, enregistrer et générer passaient tous par `automationLimiter`
+ * (30 / min, et PARTAGÉ avec /api/automations/events sous la même clé) :
+ * ouvrir quelques automatisations d'affilée — chaque ouverture relit la
+ * liste — plus la sauvegarde automatique suffisaient à répondre 429, et
+ * l'éditeur restait vide (« y en a qui s'ouvrent pas », Rafba, 2026-09-28).
+ *   · lecture : 300 / min — c'est de la navigation ;
+ *   · écriture : 120 / min — la sauvegarde automatique en fait une par pause ;
+ *   · génération par Lumi : 30 / min — elle coûte un appel au modèle.
+ */
+const regleLectureLimiter = rateLimit({ windowMs: 60_000, max: 300, keyFn: (req) => `autolect:${userKey(req)}` });
+const regleEcritureLimiter = rateLimit({ windowMs: 60_000, max: 120, keyFn: (req) => `autoecr:${userKey(req)}` });
+const regleGenerationLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `autogen:${userKey(req)}` });
+const reglesLimiter: express.RequestHandler = (req, res, next) => {
+  if (req.path.startsWith('/generer')) return regleGenerationLimiter(req, res, next);
+  if (req.method === 'GET' || req.method === 'HEAD') return regleLectureLimiter(req, res, next);
+  return regleEcritureLimiter(req, res, next);
+};
 // Per-user limiters for cost-bearing / compliance-sensitive endpoints. Keyed on
 // the JWT `sub` (userKey), so they're immune to X-Forwarded-For spoofing. These
 // also act as the in-memory fallback for dsr/incidents when Redis is absent.
@@ -667,9 +687,8 @@ if (!useRedis) {
   app.use('/api/quotes', quoteLimiterStrict);
   app.use('/api/agreements/public', agreementPublicLimiter);
   app.use('/api/automations/events', automationLimiter);
-  // Les écritures d'automatisations passent par le même plafond : une règle
-  // enregistrée met en file des textos et des courriels réels.
-  app.use('/api/automations/rules', automationLimiter);
+  // Plafonds par usage (lecture / écriture / génération) : voir reglesLimiter.
+  app.use('/api/automations/rules', reglesLimiter);
   app.use('/api/agent', agentLimiter);
   app.use('/api/lumi', agentLimiter);
   app.use('/api/dsr', dsrLimiterMem);
