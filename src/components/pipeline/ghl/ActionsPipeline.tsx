@@ -347,9 +347,14 @@ export function PermissionsModal({ fr, pipeline, onFermer }: {
   const roles = rolesQ.data ?? {};
   const acces = accesQ.data ?? [];
   const ouvertATous = acces.length === 0;
-  const estAdmin = (uid: string) => roles[uid] === 'owner' || roles[uid] === 'admin';
+  // Seul le PROPRIÉTAIRE voit tout, toujours (le filet : sans lui, un
+  // pipeline caché à tous les admins ne se rouvrirait plus). Un
+  // administrateur, lui, se coche ou se décoche comme les autres ; s'il voit
+  // le pipeline, il peut le modifier — c'est son rôle.
+  const estProprio = (uid: string) => roles[uid] === 'owner';
+  const estAdmin = (uid: string) => roles[uid] === 'admin';
   const membres = (membresQ.data ?? []).filter((m) => roles[m.id]);
-  const rolesPresents = [...new Set(membres.map((m) => roles[m.id]).filter((r) => r !== 'owner' && r !== 'admin'))];
+  const rolesPresents = [...new Set(membres.map((m) => roles[m.id]).filter((r) => r !== 'owner'))];
 
   async function agir(fn: () => Promise<void>) {
     setOccupe(true);
@@ -375,7 +380,7 @@ export function PermissionsModal({ fr, pipeline, onFermer }: {
    */
   async function figerEquipe(sauf?: string) {
     for (const m of membres) {
-      if (!estAdmin(m.id) && m.id !== sauf) await donnerAccesPipeline(pipeline!.id, m.id); // modal ouvert = pipeline présent
+      if (!estProprio(m.id) && m.id !== sauf) await donnerAccesPipeline(pipeline!.id, m.id); // modal ouvert = pipeline présent
     }
   }
 
@@ -420,7 +425,7 @@ export function PermissionsModal({ fr, pipeline, onFermer }: {
       title={fr ? `Permissions — ${pipeline?.name ?? ''}` : `Permissions — ${pipeline?.name ?? ''}`}
       description={ouvertATous
         ? (fr ? 'Ouvert à toute l’équipe en lecture. Cochez « Voir » pour le réserver à certains membres.' : 'Visible to the whole team. Tick “View” to restrict it to specific members.')
-        : (fr ? 'Réservé aux membres cochés. Propriétaires et administrateurs ont toujours accès à tout.' : 'Restricted to ticked members. Owners and admins always have full access.')}
+        : (fr ? 'Réservé aux membres cochés. Les propriétaires ont toujours accès à tout ; un administrateur coché peut aussi le modifier.' : 'Restricted to ticked members. Owners always have full access; a ticked admin can also edit it.')}
       footer={(
         <div className="flex items-center justify-between gap-2">
           {!ouvertATous ? (
@@ -454,10 +459,12 @@ export function PermissionsModal({ fr, pipeline, onFermer }: {
           </thead>
           <tbody className="divide-y divide-border-subtle">
             {membres.map((m) => {
+              const proprio = estProprio(m.id);
               const admin = estAdmin(m.id);
               const l = ligne(m.id);
-              const voit = admin || ouvertATous || !!l;
-              const modifie = admin || !!l?.peut_modifier;
+              const voit = proprio || ouvertATous || !!l;
+              // Administrateur : « Modifier » suit « Voir ».
+              const modifie = proprio || (admin && voit) || !!l?.peut_modifier;
               return (
                 <tr key={m.id}>
                   <td className="py-1.5 text-text-primary">{m.name}</td>
@@ -467,7 +474,8 @@ export function PermissionsModal({ fr, pipeline, onFermer }: {
                       type="checkbox"
                       aria-label={fr ? `${m.name} peut voir` : `${m.name} can view`}
                       checked={voit}
-                      disabled={admin || occupe}
+                      disabled={proprio || occupe}
+                      title={proprio ? (fr ? 'Un propriétaire voit toujours tout' : 'Owners always see everything') : undefined}
                       onChange={(e) => basculerVoir(m.id, e.target.checked)}
                       className="accent-primary"
                     />
@@ -477,7 +485,10 @@ export function PermissionsModal({ fr, pipeline, onFermer }: {
                       type="checkbox"
                       aria-label={fr ? `${m.name} peut modifier` : `${m.name} can edit`}
                       checked={modifie}
-                      disabled={admin || occupe}
+                      disabled={proprio || admin || occupe}
+                      title={proprio
+                        ? (fr ? 'Un propriétaire modifie toujours tout' : 'Owners can always edit')
+                        : admin ? (fr ? 'Un administrateur qui voit le pipeline peut le modifier' : 'An admin who can view it can edit it') : undefined}
                       onChange={(e) => basculerModifier(m.id, e.target.checked)}
                       className="accent-primary"
                     />

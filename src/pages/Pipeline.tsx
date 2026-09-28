@@ -126,7 +126,9 @@ export default function Pipeline() {
   // pas laisser le board vide : on retombe sur le défaut.
   const pipelineId = useMemo(() => {
     if (pipelineChoisi && pipelines.some((p) => p.id === pipelineChoisi)) return pipelineChoisi;
-    return pipelineQ.data?.id ?? null;
+    // Le défaut peut être CACHÉ à cet utilisateur (administrateur exclu d'un
+    // pipeline) : on retombe alors sur le premier qu'il voit, pas sur un board vide.
+    return pipelineQ.data?.id ?? pipelines[0]?.id ?? null;
   }, [pipelineChoisi, pipelines, pipelineQ.data]);
 
   const stagesQ = useQuery({

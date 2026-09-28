@@ -27,6 +27,10 @@ const m = {
   renommerEtape: vi.fn(async (..._a: any[]) => undefined),
   supprimerEtape: vi.fn(async (..._a: any[]) => 2),
   affichage: vi.fn(async (..._a: any[]) => undefined),
+  membres: vi.fn(async (..._a: any[]): Promise<any[]> => []),
+  roles: vi.fn(async (..._a: any[]): Promise<Record<string, string>> => ({})),
+  acces: vi.fn(async (..._a: any[]): Promise<any[]> => []),
+  donner: vi.fn(async (..._a: any[]) => undefined),
 };
 
 vi.mock('../src/lib/pipelineVentesApi', () => ({
@@ -49,10 +53,10 @@ vi.mock('../src/lib/pipelineVentesApi', () => ({
   archiverRaisonProposee: vi.fn(async () => undefined),
   fetchBureauxAdministres: vi.fn(async () => []),
   copierVersBureaux: vi.fn(async () => 1),
-  fetchMembres: vi.fn(async () => []),
-  fetchRolesMembres: vi.fn(async () => ({})),
-  fetchAccesPipeline: vi.fn(async () => []),
-  donnerAccesPipeline: vi.fn(async () => undefined),
+  fetchMembres: (...a: any[]) => m.membres(...a),
+  fetchRolesMembres: (...a: any[]) => m.roles(...a),
+  fetchAccesPipeline: (...a: any[]) => m.acces(...a),
+  donnerAccesPipeline: (...a: any[]) => m.donner(...a),
   retirerAccesPipeline: vi.fn(async () => undefined),
   majDroitModifier: vi.fn(async () => undefined),
   rouvrirPipeline: vi.fn(async () => undefined),
@@ -63,6 +67,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.f
 import PipelinesListe from '../src/components/pipeline/ghl/PipelinesListe';
 import PipelineModal from '../src/components/pipeline/ghl/PipelineModal';
 import PipelineDetail from '../src/components/pipeline/ghl/PipelineDetail';
+import { PermissionsModal } from '../src/components/pipeline/ghl/ActionsPipeline';
 
 const P1 = { id: 'p-1', name: 'Marketing Pipeline', is_default: true, position: 1, nb_etapes: 6, updated_at: '2026-09-23T16:54:00Z', color_mode: 'none' as const, use_deal_probability: false };
 const P2 = { id: 'p-2', name: 'Commercial', is_default: false, position: 2, nb_etapes: 4, updated_at: '2026-09-24T19:31:00Z', color_mode: 'dot' as const, use_deal_probability: false };
@@ -353,5 +358,60 @@ describe('page détail d’un pipeline', () => {
     await clic(bouton(/Actions pour l’étape Gagné/));
     const supprimer = boutons().find((b) => b.getAttribute('role') === 'menuitem' && b.textContent?.trim() === 'Supprimer') as HTMLButtonElement;
     expect(supprimer.disabled).toBe(true);
+  });
+});
+
+// ── Permissions : les administrateurs aussi se cochent (demande du 2026-09-28) ──
+
+describe('permissions d’un pipeline', () => {
+  const MEMBRES = [
+    { id: 'u-proprio', name: 'Olivier St-Pierre' },
+    { id: 'u-admin', name: 'Nathan Côté' },
+    { id: 'u-rep', name: 'Emma Roy' },
+  ];
+  const ROLES = { 'u-proprio': 'owner', 'u-admin': 'admin', 'u-rep': 'sales_rep' };
+  const caseDe = (nom: string, quoi: 'voir' | 'modifier') =>
+    conteneur.querySelector(`input[aria-label="${nom} peut ${quoi}"]`) as HTMLInputElement;
+
+  async function ouvrir(acces: any[]) {
+    m.membres.mockResolvedValue(MEMBRES);
+    m.roles.mockResolvedValue(ROLES);
+    m.acces.mockResolvedValue(acces);
+    await rendre(<PermissionsModal fr pipeline={P1} onFermer={vi.fn()} />);
+    await attendre(20);
+  }
+
+  it('seul le propriétaire est verrouillé ; l’admin a une case « Voir » cochable', async () => {
+    await ouvrir([]);
+    expect(caseDe('Olivier St-Pierre', 'voir').disabled).toBe(true);
+    expect(caseDe('Nathan Côté', 'voir').disabled).toBe(false);
+    expect(caseDe('Emma Roy', 'voir').disabled).toBe(false);
+  });
+
+  it('décocher l’admin garde l’accès de tous les autres, propriétaire exclu de la liste', async () => {
+    await ouvrir([]);
+    await clic(caseDe('Nathan Côté', 'voir'));
+    await attendre(10);
+    const donnes = m.donner.mock.calls.map((c) => c[1]);
+    expect(donnes).toEqual(['u-rep']);
+  });
+
+  it('admin NON coché : ni Voir ni Modifier', async () => {
+    await ouvrir([{ id: 'a1', user_id: 'u-rep', peut_modifier: false }]);
+    expect(caseDe('Nathan Côté', 'voir').checked).toBe(false);
+    expect(caseDe('Nathan Côté', 'modifier').checked).toBe(false);
+  });
+
+  it('admin coché : « Modifier » suit « Voir » ; un vendeur coché ne modifie pas', async () => {
+    await ouvrir([{ id: 'a1', user_id: 'u-rep', peut_modifier: false }, { id: 'a2', user_id: 'u-admin', peut_modifier: false }]);
+    expect(caseDe('Nathan Côté', 'voir').checked).toBe(true);
+    expect(caseDe('Nathan Côté', 'modifier').checked).toBe(true);
+    expect(caseDe('Emma Roy', 'modifier').checked).toBe(false);
+  });
+
+  it('propose « Tous les administrateurs » parmi les raccourcis', async () => {
+    await ouvrir([]);
+    expect(bouton(/Tous les administrateurs/)).toBeTruthy();
+    expect(bouton(/Tous les propriétaires/)).toBeFalsy();
   });
 });
