@@ -14,7 +14,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "create_notification",
      "action_config": {
-      "destinataire": "responsable",
+      "destinataire": "equipe_du_deal",
       "title": "👀 {{client.nom}} vient d'ouvrir la soumission #{{soumission.numero}} ({{soumission.total}}). Bon moment pour appeler.",
       "body": "Ouverte le {{soumission.ouverte_le}} · {{soumission.nb_vues}} vue(s)",
       "lien": "{{soumission.lien_interne}}"
@@ -57,7 +57,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "create_notification",
      "action_config": {
-      "destinataire": "responsable",
+      "destinataire": "equipe_du_deal",
       "title": "👀 {{client.nom}} vient d'ouvrir la soumission #{{soumission.numero}} ({{soumission.total}}). Bon moment pour appeler.",
       "body": "Ouverte le {{soumission.ouverte_le}} · {{soumission.nb_vues}} vue(s)",
       "lien": "{{soumission.lien_interne}}"
