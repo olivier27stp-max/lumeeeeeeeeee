@@ -32,8 +32,9 @@ export interface ChampStandard {
   /** Section du formulaire (clé du dossier système) ; absente = pas dans le formulaire. */
   section?: string;
   /**
-   * Indispensable : toujours affiché dans le formulaire (cadenas dans « Gérer les
-   * champs »). Les autres se décochent — cochés par défaut (décision de Rafba, 2026-09-28).
+   * Toujours affiché dans le formulaire (cadenas dans « Gérer les champs »). Tous les
+   * champs des formulaires de base le sont : seuls les champs personnalisés se
+   * décochent (décision de Rafba, 2026-09-28, qui remplace « décochables par défaut »).
    */
   verrouille?: boolean;
   /**
@@ -90,8 +91,9 @@ export const SECTIONS_SYSTEME: Record<ObjetChamp, SectionSysteme[]> = {
   ],
 };
 
+// Un champ rangé dans une section du formulaire est verrouillé d'office.
 const s = (key: string, fr: string, en: string, field_type: TypeChamp, section?: string, cherchable = false): ChampStandard =>
-  ({ key, label: { fr, en }, field_type, cherchable, ...(section ? { section } : {}) });
+  ({ key, label: { fr, en }, field_type, cherchable, ...(section ? { section, verrouille: true } : {}) });
 const verrou = (c: ChampStandard): ChampStandard => ({ ...c, verrouille: true });
 const suit = (parent: string, c: ChampStandard): ChampStandard => ({ ...c, suit: parent });
 
