@@ -42,6 +42,7 @@ import notificationsRouter from './routes/notifications';
 import emailsRouter from './routes/emails';
 import emailDeliveriesRouter from './routes/email-deliveries';
 import integrationsRouter from './routes/integrations';
+import quickbooksRouter from './routes/quickbooks';
 import emailAccountsRouter from './routes/email-accounts';
 import surveysRouter from './routes/surveys';
 import emailTemplatesRouter from './routes/email-templates';
@@ -811,6 +812,7 @@ app.use('/api', messagesRouter);
 app.use('/api', emailsRouter);
 app.use('/api', emailDeliveriesRouter);
 app.use('/api', integrationsRouter);
+app.use('/api', quickbooksRouter);
 app.use('/api', emailAccountsRouter);
 app.use('/api', emailTemplatesRouter);
 app.use('/api', communicationsRouter);
@@ -1498,6 +1500,18 @@ app.listen(port, '0.0.0.0', () => {
     logger.info('[oauth] Ménage des jetons planifié (toutes les 6 h, verrouillé)');
       },
     ).catch((e: any) => captureCronFailure('dunning-engine-import', e));
+
+    // Synchro QuickBooks — vide la file alimentée par les triggers factures /
+    // paiements / clients (migration 20261002100000). Chaque minute : une
+    // facture fermée dans Lume est payée dans QuickBooks dans la minute.
+    import('./lib/quickbooks/sync').then(({ runQuickBooksSync }) => {
+      const runQbo = () =>
+        withAdvisoryLock('quickbooks-sync', () => runQuickBooksSync())
+          .catch((e: any) => captureCronFailure('quickbooks-sync', e));
+      setInterval(runQbo, 60_000);
+      setTimeout(runQbo, 40_000);
+      logger.info('[quickbooks-sync] Worker started (every 1min, lock-guarded)');
+    }).catch((e: any) => captureCronFailure('quickbooks-sync-import', e));
 
     // Map pin repair — geocode request pins saved without coords, every 10 minutes
     Promise.all([import('./lib/fieldPinSync'), import('./lib/supabase')]).then(

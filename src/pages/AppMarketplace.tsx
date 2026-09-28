@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { INTEGRATIONS, type Integration } from '../lib/integrations';
+import QuickBooksSyncPanel from '../components/integrations/QuickBooksSyncPanel';
 import {
   getConnection,
   fetchAllConnections,
@@ -484,6 +485,13 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               </div>
             )}
           </div>
+
+          {app.id === 'quickbooks' && (
+            <>
+              <div className="border-t border-outline-subtle/40" />
+              <QuickBooksSyncPanel isFr={isFr} />
+            </>
+          )}
         </div>
       );
     }
