@@ -2539,60 +2539,25 @@ export async function executeEnvoyerSlack(
 
 // ── Action : webhook ────────────────────────────────────────
 
-/**
- * Une adresse est-elle sûre à appeler ?
- *
- * Même garde que la validation à l'enregistrement — mais refaite ICI, au
- * moment de l'appel. Une règle peut avoir été écrite avant que la garde
- * existe, ou modifiée en base hors du serveur : vérifier deux fois coûte une
- * expression régulière et ferme un SSRF.
- */
-function adresseSure(url: string): boolean {
-  if (!/^https:\/\//i.test(url)) return false;
-  try {
-    const hote = new URL(url).hostname.toLowerCase();
-    return !(
-      hote === 'localhost'
-      || hote === '169.254.169.254'
-      || /^127\./.test(hote)
-      || /^10\./.test(hote)
-      || /^192\.168\./.test(hote)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hote)
-      || hote.endsWith('.local')
-      || hote.endsWith('.internal')
-    );
-  } catch {
-    return false;
-  }
-}
-
 export async function executeWebhook(
   config: { url?: string },
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
   const url = (config.url || '').trim();
-  if (!adresseSure(url)) {
-    return { success: false, error: 'Adresse refusée : https:// et publique seulement.' };
-  }
-
-  // Un délai borné : sans lui, un serveur distant qui ne répond jamais
-  // immobiliserait le worker des tâches différées.
-  const abandon = AbortSignal.timeout(10_000);
+  // Garde anti-SSRF refaite AU MOMENT de l'appel (résolution DNS, IP
+  // revérifiée à la connexion, redirections revérifiées, délai) — voir
+  // server/lib/url-sortante.ts (launch 2026-09-28).
   try {
-    const reponse = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Lume-Automations/1' },
-      body: JSON.stringify({
-        org_id: ctx.orgId,
-        entity_type: ctx.entityType,
-        entity_id: ctx.entityId,
-        // Les variables déjà résolues : le destinataire reçoit le nom du
-        // client et les montants, pas des identifiants à recroiser.
-        data: vars,
-        sent_at: new Date().toISOString(),
-      }),
-      signal: abandon,
+    const { posterSansSsrf } = await import('../url-sortante');
+    const reponse = await posterSansSsrf(url, {
+      org_id: ctx.orgId,
+      entity_type: ctx.entityType,
+      entity_id: ctx.entityId,
+      // Les variables déjà résolues : le destinataire reçoit le nom du
+      // client et les montants, pas des identifiants à recroiser.
+      data: vars,
+      sent_at: new Date().toISOString(),
     });
     if (!reponse.ok) {
       return { success: false, error: `Le serveur distant a répondu ${reponse.status}.` };
@@ -2600,7 +2565,7 @@ export async function executeWebhook(
     return { success: true, data: { status: reponse.status } };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
-    return { success: false, error: `Appel impossible : ${message}` };
+    return { success: false, error: message.startsWith('Adresse refusée') ? message : `Appel impossible : ${message}` };
   }
 }
 
