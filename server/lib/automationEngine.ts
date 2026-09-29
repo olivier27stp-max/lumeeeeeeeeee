@@ -5,7 +5,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { eventBus, CRMEvent, CRMEventType } from './eventBus';
+import { eventBus, CRMEvent, CRMEventType, PREFIXE_A_REJOUER } from './eventBus';
 import {
   ActionContext,
   ActionType,
@@ -886,7 +886,9 @@ async function handleEvent(event: CRMEvent) {
       .order('id', { ascending: true });
 
     if (error) {
-      console.error('[automationEngine] failed to fetch rules:', error.message);
+      // Lecture ratée ≠ « aucune règle » : l'événement doit être REJOUÉ par
+      // l'outbox, pas coché comme traité (launch 2026-09-28).
+      throw Object.assign(new Error(`${PREFIXE_A_REJOUER}règles illisibles : ${error.message}`), { aRejouer: true });
     }
 
     if (rules && rules.length > 0) {
@@ -954,6 +956,7 @@ async function handleEvent(event: CRMEvent) {
 
   } catch (err: any) {
     console.error('[automationEngine] error handling event:', err.message);
+    if (err?.aRejouer) throw err;
   }
 }
 
@@ -1352,6 +1355,24 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         .eq('id', task.id)
         .eq('status', 'pending');
       if (annuleErr) console.error(`[automationEngine] annulation (brouillon) impossible pour la tâche ${task.id}:`, annuleErr.message);
+      continue;
+    }
+
+    /*
+     * Étape SUPPRIMÉE du parcours après sa planification (launch 2026-09-28).
+     * Avant : la tâche tombait sur executeAction('__sequence__') → « Unknown
+     * action type », 4 tentatives, puis une notification d'échec absurde.
+     * C'est une annulation propre, pas une panne.
+     */
+    const etapesPlanifiees = (task.automation_rules?.steps ?? null) as Etape[] | null;
+    // (Parcours vidé ou redevenu règle simple : même cas, l'étape n'existe plus.)
+    if (task.step_id && !(Array.isArray(etapesPlanifiees) && trouverEtape(etapesPlanifiees, task.step_id))) {
+      const { error: annuleErr } = await supabase
+        .from('automation_scheduled_tasks')
+        .update({ status: 'cancelled', completed_at: new Date().toISOString(), last_error: 'Étape supprimée du parcours : envoi annulé.' })
+        .eq('id', task.id)
+        .eq('status', 'pending');
+      if (annuleErr) console.error(`[automationEngine] annulation (étape supprimée) impossible pour la tâche ${task.id}:`, annuleErr.message);
       continue;
     }
 

@@ -380,7 +380,7 @@ export async function planifierEtape(
 
   const executeAt = new Date(executeAtMs).toISOString();
 
-  const { error } = await ctx.supabase.from('automation_scheduled_tasks').insert({
+  const ligneTache = {
     org_id: ctx.orgId,
     automation_rule_id: ctx.ruleId,
     entity_type: ctx.entityType,
@@ -407,7 +407,22 @@ export async function planifierEtape(
     execute_at: executeAt,
     status: 'pending',
     execution_key: cleEtape(ctx.ruleId, ctx.entityId, courante.id),
-  });
+  };
+
+  /*
+   * Launch 2026-09-28 : un échec d'insertion était seulement écrit dans les
+   * logs du serveur — le parcours mourait là, sans trace pour l'entreprise.
+   * On réessaie (hoquet réseau), puis on l'écrit dans le JOURNAL de
+   * l'automatisation. On ne relance PAS l'erreur : l'appelant rejouerait
+   * l'étape déjà envoyée (double envoi).
+   */
+  const ATTENTES_MS = [0, 500, 2000];
+  let error: { code?: string; message: string } | null = null;
+  for (const attente of ATTENTES_MS) {
+    if (attente) await new Promise((r) => setTimeout(r, attente));
+    ({ error } = await ctx.supabase.from('automation_scheduled_tasks').insert(ligneTache));
+    if (!error || error.code === '23505') break;
+  }
 
   if (error) {
     // 23505 = cette étape est DÉJÀ en file pour cette entité. Ce n'est pas une
@@ -418,9 +433,22 @@ export async function planifierEtape(
       logger.info(`[sequences] étape déjà planifiée, ignorée : ${cleEtape(ctx.ruleId, ctx.entityId, courante.id)}`);
       return null;
     }
-    logger.error('[sequences] planification échouée', {
+    logger.error('[sequences] planification échouée après 3 essais — parcours interrompu', {
       rule_id: ctx.ruleId, step_id: courante.id, message: error.message,
     });
+    const { error: errJournal } = await ctx.supabase.from('automation_execution_logs').insert({
+      org_id: ctx.orgId,
+      automation_rule_id: ctx.ruleId,
+      trigger_event: 'sequence',
+      entity_type: ctx.entityType,
+      entity_id: ctx.entityId,
+      action_type: courante.type === 'action' ? courante.action.type : '__sequence__',
+      action_config: { step_id: courante.id },
+      result_success: false,
+      result_error: `Étape suivante non planifiée (${error.message}) — parcours interrompu`,
+      duration_ms: 0,
+    });
+    if (errJournal) logger.error('[sequences] échec de planification non journalisé', { rule_id: ctx.ruleId, message: errJournal.message });
     return null;
   }
 
