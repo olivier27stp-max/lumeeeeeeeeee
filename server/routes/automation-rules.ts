@@ -141,9 +141,23 @@ router.get('/automations/rules', async (req, res) => {
 
 // ── Créer ───────────────────────────────────────────────────
 
+/**
+ * Le dossier choisi appartient-il à CE bureau ? (launch 2026-09-28)
+ * Un identifiant de dossier venu du navigateur n'était pas vérifié : une
+ * règle pouvait pointer vers le dossier d'une autre entreprise.
+ */
+async function dossierDuBureau(client: SupabaseClient, orgId: string, folderId: unknown): Promise<boolean> {
+  if (folderId === undefined || folderId === null) return true;
+  const { data, error } = await client.from('automation_folders').select('id').eq('id', String(folderId)).eq('org_id', orgId).maybeSingle();
+  return !error && !!data;
+}
+
 router.post('/automations/rules', validate(automationRuleCreateSchema), async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
+  if (!(await dossierDuBureau(auth.client, auth.orgId, req.body.folder_id))) {
+    return res.status(400).json({ error: 'Dossier introuvable dans ce bureau.' });
+  }
 
   const probleme = verifierCoherence(req.body);
   if (probleme) return res.status(400).json({ error: probleme });
@@ -388,6 +402,9 @@ async function refAutomatisationInventee(
 router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
+  if (!(await dossierDuBureau(auth.client, auth.orgId, req.body.folder_id))) {
+    return res.status(400).json({ error: 'Dossier introuvable dans ce bureau.' });
+  }
 
   const { data: existante, error: lectureErr } = await auth.client
     .from('automation_rules')
