@@ -279,3 +279,19 @@ describe('changer de langue en cours d’édition', () => {
       ?? container.textContent).toContain('Mon nom à moi');
   });
 });
+
+describe('« Aperçu » montre la version à jour', () => {
+  it('enregistre d’abord ce qui attend (délai de la sauvegarde auto), puis lit l’aperçu', async () => {
+    await ouvrir(`/automations/${ID}`);
+    cliquer(bouton('Relance devis'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v2');
+    api.modifier.mockClear();
+    const ordre: string[] = [];
+    api.modifier.mockImplementationOnce(async (id: string, patch: any) => { ordre.push('enregistrer'); return { ...regle({ id }), ...patch }; });
+    api.apercu.mockImplementationOnce(async () => { ordre.push('apercu'); return { client: null, message: 'x', apercu: [] }; });
+    cliquer(bouton('Aperçu'));
+    await attendre();
+    expect(ordre).toEqual(['enregistrer', 'apercu']);
+    expect(api.modifier.mock.calls[0][1]).toMatchObject({ name: 'Relance devis v2' });
+  });
+});

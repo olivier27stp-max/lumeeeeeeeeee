@@ -1537,6 +1537,20 @@ export default function AutomationBuilderPage() {
               }
               setApercuEnCours(true);
               try {
+                /*
+                 * L'aperçu lit la version ENREGISTRÉE : sans ceci, les 3
+                 * dernières secondes de modifications (délai de la sauvegarde
+                 * auto) n'apparaissaient pas (launch 2026-09-28). On enregistre
+                 * d'abord ce qui attend, comme avant de publier.
+                 */
+                if (etatSauvegarde === 'incomplet') {
+                  toast.info(fr ? 'Complétez les étapes en cours pour voir l’aperçu à jour.' : 'Complete the unfinished steps to see an up-to-date preview.');
+                  return;
+                }
+                if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours') {
+                  await ecrire({ name: nom.trim() || regle.name, steps });
+                  setEtatSauvegarde('a_jour');
+                }
                 setApercu(await apercuAutomatisation(idReel.current));
               } catch (e: unknown) {
                 toast.error(e instanceof Error ? e.message : String(e));
