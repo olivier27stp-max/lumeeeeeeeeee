@@ -318,8 +318,15 @@ router.post('/automations/rules/:id/apercu', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
 
+    /*
+     * Launch 2026-09-28 : la règle ET le client d'exemple se lisent avec la
+     * session de l'utilisateur — la RLS applique « Voir les automatisations »
+     * et « Voir les clients ». Avant, tout se lisait en service_role : un
+     * membre sans ces droits obtenait le nom, le courriel et le téléphone du
+     * dernier client.
+     */
     const admin = getServiceClient();
-    const { data: regle } = await admin
+    const { data: regle } = await auth.client
       .from('automation_rules')
       .select('id, name, trigger_event, actions, steps')
       .eq('id', req.params.id)
@@ -332,7 +339,7 @@ router.post('/automations/rules/:id/apercu', async (req, res) => {
      * joint. Un client sans courriel ni téléphone montrerait un aperçu
      * vide, ce qui n'aide personne à juger de son texte.
      */
-    const { data: client } = await admin
+    const { data: client } = await auth.client
       .from('clients')
       .select('id, first_name, last_name, email, phone')
       .eq('org_id', auth.orgId)
