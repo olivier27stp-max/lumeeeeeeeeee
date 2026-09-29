@@ -163,7 +163,8 @@ describe('détails de contenu', () => {
     // (Le jeu de variables s'appelle `messageVars` depuis la refonte des
     // avis ; le test suivait encore l'ancien nom `templateVars`.)
     expect(actions).toContain('subject = resolveTemplate(emailTemplate.subject, messageVars)');
-    expect(actions).toContain('body = resolveTemplate(emailTemplate.body, messageVars)');
+    // Corps HTML : valeurs échappées depuis le launch 2026-09-28.
+    expect(actions).toContain('body = resolveTemplate(emailTemplate.body, messageVars, { html: true })');
     expect(actions).toContain('...vars,');
   });
 

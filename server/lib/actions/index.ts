@@ -502,10 +502,25 @@ export type ActionType =
 
 // ── Template variable resolution ─────────────────────────────
 
+/** Échappe une valeur insérée dans du HTML. */
+export function echapperHtml(v: string): string {
+  return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * @param options.html — le gabarit est du HTML (corps d'un courriel) : chaque
+ *   valeur est ÉCHAPPÉE (launch 2026-09-28). Un nom venu d'un formulaire
+ *   public (« <a href=…>Cliquez</a> ») s'affichait tel quel dans le courriel
+ *   envoyé au client. Les variables qui PORTENT du HTML par conception (nom
+ *   en `_html`, ex. [contract_html]) ne sont pas échappées.
+ */
 export function resolveTemplate(
   template: string,
   vars: Record<string, string | null | undefined>,
+  options: { html?: boolean } = {},
 ): string {
+  const valeur = (cle: string, v: string | null | undefined): string =>
+    options.html && v && !cle.endsWith('_html') ? echapperHtml(v) : (v ?? '');
   // Support both {var} and [var] syntax for backward compatibility, normalize to {var}
   // Champs personnalisés : {{client.cle}} (format GoHighLevel) = {client_cf_cle}.
   // UNE seule passe : une valeur insérée n'est jamais relue. En trois passes, un
@@ -517,8 +532,8 @@ export function resolveTemplate(
       // Variables intégrées pointées ({{client.nom}}, {{soumission.total}}…)
       // AVANT les champs personnalisés : un champ perso nommé « nom » ne doit
       // pas masquer le nom du client.
-      if (objet) return vars[`${objet}.${cle}`] ?? vars[`${objet}_cf_${cle}`] ?? '';
-      return vars[(accolade ?? crochet) as string] ?? '';
+      if (objet) return valeur(`${objet}.${cle}`, vars[`${objet}.${cle}`] ?? vars[`${objet}_cf_${cle}`]);
+      return valeur((accolade ?? crochet) as string, vars[(accolade ?? crochet) as string]);
     },
   );
 }
@@ -1078,7 +1093,7 @@ export async function executeSendEmail(
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'subject', ctx.langue), champLocalise(config, 'body', ctx.langue));
   const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
-  const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
+  const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars, { html: true });
 
   try {
     const { sendEmail, isMailerConfigured, adresseInjoignable } = await import('../mailer');
@@ -1842,7 +1857,7 @@ export async function executeRequestReview(
       // presets du produit utilisent [var], et un second résolveur maison ne
       // comprenait que {var}.
       subject = resolveTemplate(emailTemplate.subject, messageVars);
-      body = resolveTemplate(emailTemplate.body, messageVars);
+      body = resolveTemplate(emailTemplate.body, messageVars, { html: true });
     }
   }
 
