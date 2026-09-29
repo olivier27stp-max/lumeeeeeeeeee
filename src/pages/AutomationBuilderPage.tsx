@@ -246,6 +246,27 @@ export default function AutomationBuilderPage() {
   // ── Le parcours ──
   const [steps, setSteps] = useState<Etape[]>([]);
   const [etapeChoisie, setEtapeChoisie] = useState<string | null>(null);
+  /** Le panneau ouvert a-t-il un brouillon non enregistré ? (PanneauEtape.onModifie) */
+  const brouillonEtapeModifie = useRef(false);
+  const signalerBrouillonEtape = useCallback((m: boolean) => { brouillonEtapeModifie.current = m; }, []);
+  /**
+   * Ouvrir une AUTRE carte : si l'étape ouverte a des modifications non
+   * enregistrées, on demande avant de les jeter (audit 2026-09-28).
+   */
+  const ouvrirEtape = useCallback(async (idEtape: string) => {
+    if (etapeChoisie && idEtape !== etapeChoisie && brouillonEtapeModifie.current) {
+      const ok = await confirmer({
+        title: language === 'fr' ? 'Changer d’étape sans enregistrer ?' : 'Switch step without saving?',
+        message: language === 'fr'
+          ? 'Les modifications de l’étape ouverte ne sont pas enregistrées : elles seront perdues.'
+          : 'The open step’s changes are not saved: they will be lost.',
+        confirmLabel: language === 'fr' ? 'Changer d’étape' : 'Switch step',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    setEtapeChoisie(idEtape);
+  }, [etapeChoisie, language]);
 
   // ── De quoi remplir les menus du panneau ──
   // Les membres (pour « assigner a ») et les etiquettes deja utilisees.
@@ -1634,7 +1655,7 @@ export default function AutomationBuilderPage() {
                             {p.etapeId ? (
                               <button
                                 type="button"
-                                onClick={() => setEtapeChoisie(p.etapeId!)}
+                                onClick={() => { if (p.etapeId) void ouvrirEtape(p.etapeId); }}
                                 className="text-left text-[12px] text-text-secondary underline decoration-dotted underline-offset-2 transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                               >
                                 {p.message}
@@ -1821,7 +1842,7 @@ export default function AutomationBuilderPage() {
                       fr={fr}
                       lectureSeule={formatOrigine}
                       selectionId={etapeChoisie}
-                      onSelection={setEtapeChoisie}
+                      onSelection={(idEtape) => void ouvrirEtape(idEtape)}
                       onAjouter={ouvrirAjout}
                       onMenu={setMenuEtape}
                       /*
@@ -1868,7 +1889,7 @@ export default function AutomationBuilderPage() {
                         const id = menuEtape;
                         if (!id) return;
                         if (cle === 'dupliquer') dupliquerEtape(id);
-                        else if (cle === 'modifier') { setMenuEtape(null); setEtapeChoisie(id); }
+                        else if (cle === 'modifier') { setMenuEtape(null); void ouvrirEtape(id); }
                         else if (cle === 'supprimer') { setMenuEtape(null); void supprimerEtape(id); }
                         else void supprimerDepuis(id);
                       }}
@@ -2138,6 +2159,7 @@ export default function AutomationBuilderPage() {
           onEnregistrer={enregistrerEtape}
           onSupprimer={supprimerEtape}
           onFermer={() => setEtapeChoisie(null)}
+          onModifie={signalerBrouillonEtape}
         />
       )}
       </div>

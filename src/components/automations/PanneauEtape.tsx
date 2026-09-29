@@ -43,6 +43,7 @@ import {
   BoutonsVariablesChamps, ConditionsChampsEtape, EditeurMajChamp, sansConditionsIncompletes,
 } from '../champs/automatisations';
 import type { ChampPerso, ObjetChamp } from '../../lib/champs/types';
+import { confirmer } from '../ui/ConfirmDialog';
 
 /** Les conditions d'une étape « si », en texte modifiable. */
 /** L'opérateur, tel qu'on l'ecrit : `montant > 5000`. */
@@ -157,6 +158,11 @@ interface Props {
   onEnregistrer: (etape: Etape) => void;
   onSupprimer: (id: string) => void;
   onFermer: () => void;
+  /**
+   * Le brouillon diffère-t-il de l'étape enregistrée ? Le parent s'en sert
+   * pour demander confirmation avant d'ouvrir une AUTRE carte.
+   */
+  onModifie?: (modifie: boolean) => void;
 }
 
 /** Les unités de délai proposées pour une attente. */
@@ -175,7 +181,7 @@ function decomposer(secondes: number): { valeur: number; unite: string } {
 
 export default function PanneauEtape({
   etape, fr, declencheur, membres, etiquettes, automatisations = [], champsPerso = [], objetChamps = null, stats,
-  onEnregistrer, onSupprimer, onFermer,
+  onEnregistrer, onSupprimer, onFermer, onModifie,
 }: Props) {
   const ids = useId();
   const [onglet, setOnglet] = useState<'edition' | 'stats'>('edition');
@@ -213,6 +219,36 @@ export default function PanneauEtape({
     setOnglet('edition');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- voir ci-dessus : suivre `etape` rendrait le panneau fragile à une optimisation du parent.
   }, [etape.id]);
+
+  /*
+   * UN BROUILLON NON ENREGISTRÉ NE SE JETTE PAS SANS PRÉVENIR (audit
+   * 2026-09-28). Fermer le panneau, « Annuler » ou cliquer une autre carte
+   * perdait la saisie en silence. Le panneau demande confirmation pour sa
+   * fermeture ; le parent, prévenu par `onModifie`, pour un changement de
+   * carte.
+   */
+  const modifie = useMemo(
+    () => brouillon.id === etape.id
+      && (JSON.stringify(brouillon) !== JSON.stringify(etape) || conditionsTexte !== texteDesConditions(etape)),
+    [brouillon, etape, conditionsTexte],
+  );
+  useEffect(() => { onModifie?.(modifie); }, [modifie, onModifie]);
+  useEffect(() => () => onModifie?.(false), [onModifie]);
+
+  const fermer = async () => {
+    if (modifie) {
+      const ok = await confirmer({
+        title: fr ? 'Fermer sans enregistrer ?' : 'Close without saving?',
+        message: fr
+          ? 'Les modifications de cette étape ne sont pas enregistrées : elles seront perdues.'
+          : 'This step’s changes are not saved: they will be lost.',
+        confirmLabel: fr ? 'Fermer sans enregistrer' : 'Close without saving',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    onFermer();
+  };
 
   const modele = brouillon.type === 'action' ? trouverAction(brouillon.action.type) : undefined;
 
@@ -322,7 +358,7 @@ export default function PanneauEtape({
         </div>
         <button
           type="button"
-          onClick={onFermer}
+          onClick={() => void fermer()}
           aria-label={fr ? 'Fermer le panneau' : 'Close panel'}
           className="shrink-0 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
@@ -738,7 +774,7 @@ export default function PanneauEtape({
         )}
         <button
           type="button"
-          onClick={onFermer}
+          onClick={() => void fermer()}
           className="rounded-lg px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {fr ? 'Annuler' : 'Cancel'}
