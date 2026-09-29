@@ -397,3 +397,33 @@ describe('pagination — jamais « Aucune automatisation » à tort', () => {
     expect(container.querySelectorAll('button[role="switch"]').length).toBe(10);
   });
 });
+
+// ─── Réponses périmées (bloc 5) ─────────────────────────────────
+
+describe('chargements qui se croisent', () => {
+  it('une réponse plus ANCIENNE arrivée en dernier n’écrase pas la liste', async () => {
+    const api = await import('../src/lib/automationRulesApi');
+    const builder = await import('../src/lib/automationBuilderApi');
+    const get = vi.mocked(api.getAutomationRules);
+    vi.mocked(builder.chargerDossiers).mockImplementationOnce(async () => [
+      { id: 'd1', name: 'Hiver', position: 0, created_at: '' }, { id: 'd2', name: 'Été', position: 1, created_at: '' },
+    ] as any);
+    reglesServies = [regle({ id: 'a', name: 'Alpha' })];
+    await rendre();
+    await attendre();
+    let lacherLent: (v: any) => void = () => {};
+    // 1er rechargement : LENT, il rendra une liste périmée (Alpha).
+    get.mockImplementationOnce(() => new Promise((r) => { lacherLent = r; }));
+    // 2e rechargement : RAPIDE, la vraie liste (Alpha partie).
+    get.mockImplementationOnce(async () => []);
+    // La barre des dossiers reste visible pendant un chargement : deux
+    // suppressions de dossier relancent deux chargements qui se croisent.
+    cliquer(container.querySelector('[aria-label="Supprimer le dossier Hiver"]'));
+    await attendre();
+    cliquer(container.querySelector('[aria-label="Supprimer le dossier Été"]'));
+    await attendre();
+    await act(async () => { lacherLent([regle({ id: 'a', name: 'Alpha' })]); });
+    await attendre();
+    expect(container.querySelectorAll('button[role="switch"]').length).toBe(0);
+  });
+});

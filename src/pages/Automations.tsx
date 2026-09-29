@@ -502,10 +502,19 @@ export default function Automations() {
     }
   };
 
+  /*
+   * Deux chargements qui se croisent (une action, puis une autre avant la
+   * réponse) : seul le DERNIER a le droit d'écrire l'écran — une réponse
+   * plus ancienne arrivée après ramenait une liste périmée (launch 2026-09-28).
+   */
+  const dernierChargement = useRef(0);
   const load = useCallback(async () => {
+    const numero = ++dernierChargement.current;
+    const perime = () => numero !== dernierChargement.current;
     setLoading(true);
     try {
       const data = await getAutomationRules();
+      if (perime()) return;
       /*
        * Dédoublonnage par `preset_key` : d'anciennes migrations ont semé le
        * même préréglage plusieurs fois.
@@ -529,6 +538,7 @@ export default function Automations() {
         // Une seule lecture : le compte ET la dernière cause par automatisation
         // (la liste est triée du plus récent au plus ancien).
         const recents = await getRecentAutomationFailures(200);
+        if (perime()) return;
         const compte: Record<string, number> = {};
         const causes: Record<string, string | null> = {};
         for (const f of recents) {
@@ -544,6 +554,7 @@ export default function Automations() {
       // « Total déclenché », « En cours » et le détail › : la route agrégée.
       try {
         const s = await chargerStatistiques();
+        if (perime()) return;
         setStats(s.par_regle);
         setTextoConfigure(s.texto_configure ?? null);
       } catch (e: unknown) {
@@ -551,10 +562,11 @@ export default function Automations() {
         setStats(null);
       }
     } catch (e: any) {
+      if (perime()) return;
       console.error('Failed to load rules:', e.message);
       toast.error(fr ? 'Impossible de charger les automatisations' : 'Failed to load automations');
     } finally {
-      setLoading(false);
+      if (!perime()) setLoading(false);
     }
   }, [fr]);
 
