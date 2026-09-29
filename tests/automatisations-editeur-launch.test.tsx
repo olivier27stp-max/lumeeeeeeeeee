@@ -311,3 +311,15 @@ describe('échec de chargement de l’éditeur', () => {
     expect(container.textContent).toContain('Relance devis');
   }, 15_000);
 });
+
+describe('textes de suppression d’étape', () => {
+  it('accents corrects, et les deux suppressions sont signalées comme dangereuses', () => {
+    const src = require('node:fs').readFileSync('src/pages/AutomationBuilderPage.tsx', 'utf8') as string;
+    expect(src).toContain('Supprimer cette étape ?');
+    expect(src).toContain('Ce qui venait après reste dans le parcours');
+    expect(src).not.toContain('Supprimer cette etape');
+    const bloc = (debut: string) => src.slice(src.indexOf(debut), src.indexOf(debut) + 1600);
+    expect(bloc('const supprimerEtape = useCallback')).toContain('danger: true');
+    expect(bloc('const supprimerDepuis = useCallback')).toContain('danger: true');
+  });
+});

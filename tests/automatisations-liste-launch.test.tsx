@@ -427,3 +427,15 @@ describe('chargements qui se croisent', () => {
     expect(container.querySelectorAll('button[role="switch"]').length).toBe(0);
   });
 });
+
+// ─── Textes (bloc 5) ────────────────────────────────────────────
+
+describe('textes visibles', () => {
+  it('l’interrupteur d’un préréglage porte son nom FRANÇAIS', async () => {
+    reglesServies = [regle({ id: 'p', name: 'Appointment Confirmation', is_preset: true, is_active: true })];
+    await rendre();
+    await attendre();
+    const libelles = Array.from(container.querySelectorAll('button[role="switch"]')).map((b) => b.getAttribute('aria-label'));
+    expect(libelles).toContain('Repasser Confirmation de rendez-vous en brouillon');
+  });
+});

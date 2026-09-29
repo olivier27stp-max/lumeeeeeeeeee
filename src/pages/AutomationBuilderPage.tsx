@@ -854,6 +854,7 @@ export default function AutomationBuilderPage() {
         ? 'Cette étape et tout ce qui la suit seront retirés du parcours.'
         : 'This step and everything after it will be removed.',
       confirmLabel: fr ? 'Supprimer' : 'Delete',
+      danger: true,
     });
     if (!ok) return;
     let restant = steps;
@@ -865,11 +866,12 @@ export default function AutomationBuilderPage() {
 
   const supprimerEtape = useCallback(async (idEtape: string) => {
     const ok = await confirmer({
-      title: fr ? 'Supprimer cette etape ?' : 'Delete this step?',
+      title: fr ? 'Supprimer cette étape ?' : 'Delete this step?',
       message: fr
-        ? 'Ce qui venait apres reste dans le parcours et se rebranche tout seul.'
+        ? 'Ce qui venait après reste dans le parcours et se rebranche tout seul.'
         : 'What came after stays in the journey and reconnects on its own.',
       confirmLabel: fr ? 'Supprimer' : 'Delete',
+      danger: true,
     });
     if (!ok) return;
     memoriser(retirerEtape(steps, idEtape));

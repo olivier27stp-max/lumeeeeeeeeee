@@ -1684,8 +1684,8 @@ export default function Automations() {
                                 enCours={fileBascule.enCours(rule.id)}
                                 desactive={!!rule.deleted_at}
                                 libelle={rule.is_active
-                                  ? (fr ? `Repasser ${rule.name} en brouillon` : `Unpublish ${rule.name}`)
-                                  : (fr ? `Publier ${rule.name}` : `Publish ${rule.name}`)}
+                                  ? (fr ? `Repasser ${localizeAutomationName(rule.name, language)} en brouillon` : `Unpublish ${localizeAutomationName(rule.name, language)}`)
+                                  : (fr ? `Publier ${localizeAutomationName(rule.name, language)}` : `Publish ${localizeAutomationName(rule.name, language)}`)}
                                 fr={fr}
                               />
 
