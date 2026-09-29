@@ -2137,7 +2137,7 @@ export default function AutomationBuilderPage() {
               ruleId={regle.id}
               reglages={(regle.settings ?? null) as ReglagesAutomatisation | null}
               fr={fr}
-              onChange={(r) => setRegle({ ...regle, settings: r as Record<string, unknown> | null })}
+              onChange={(r) => setRegle((x) => (x ? { ...x, settings: r as Record<string, unknown> | null } : x))}
             />
           </div>
         )}
