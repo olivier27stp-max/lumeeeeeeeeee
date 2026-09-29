@@ -860,6 +860,11 @@ export function startScheduler(
 
   logger.info('[scheduler] automation scheduler started (interval: 5 min)');
 
+  // Événements écrits par la base (bloc 2 du launch) : lus toutes les 15 s,
+  // pas au tick de 5 min — une confirmation de rendez-vous n'attend pas.
+  void import('./evenementsBase').then(({ demarrerEvenementsBase }) => demarrerEvenementsBase(supabase))
+    .catch((e: unknown) => logger.error('[scheduler] file des événements de la base non démarrée', { message: e instanceof Error ? e.message : String(e) }));
+
   // Run once immediately, then every 5 minutes
   void tickProtege(supabase, twilioConfig);
   intervalHandle = setInterval(() => void tickProtege(supabase, twilioConfig), INTERVAL_MS);

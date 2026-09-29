@@ -10,7 +10,6 @@ import { resolveClientIdForLead } from './leadsApi';
 import { clientDisplayName } from './clientsApi';
 import {
   emitJobCompleted,
-  emitAppointmentCreated,
   emitAppointmentRescheduled,
 } from './automationEventsApi';
 import { invalidateScheduleCache } from './scheduleApi';
@@ -293,7 +292,7 @@ async function syncJobSchedule(payload: {
       // Non bloquant : une automatisation muette ne doit jamais faire échouer
       // l'enregistrement du job.
       if (!(data as any)?.updated) {
-        emitAppointmentCreated(params);
+        // Visite créée : Launch 2026-09-28 (bloc 2) : l'événement naît d'un TRIGGER en base, plus du navigateur.
       } else if (visitesAvant.length === 1) {
         const avant = visitesAvant[0];
         const inchangee = memeInstant(avant.start_at, payload.scheduledAt)
