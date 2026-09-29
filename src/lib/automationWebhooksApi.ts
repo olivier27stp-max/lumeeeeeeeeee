@@ -17,7 +17,10 @@ import { getCurrentOrgId } from './orgApi';
 export interface AdresseDAppel {
   id: string;
   name: string;
-  api_key: string;
+  /** La clé COMPLÈTE — seulement juste après la création ou la régénération (launch 2026-09-28). */
+  api_key?: string | null;
+  /** « ••••a1b2 » : ce que la liste montre. */
+  cle_masquee: string;
   enabled: boolean;
   created_at: string;
 }
@@ -71,6 +74,16 @@ export async function basculerAdresseDAppel(id: string, enabled: boolean): Promi
     method: 'PATCH',
     headers: await entetes(),
     body: JSON.stringify({ enabled }),
+  });
+  if (!reponse.ok) throw await erreur(reponse);
+  return reponse.json();
+}
+
+/** Nouvelle clé : l'ancienne adresse cesse de fonctionner. Rend la clé complète, une seule fois. */
+export async function regenererAdresseDAppel(id: string): Promise<AdresseDAppel> {
+  const reponse = await fetch(`/api/automations/webhooks/${id}/regenerer`, {
+    method: 'POST',
+    headers: await entetes(),
   });
   if (!reponse.ok) throw await erreur(reponse);
   return reponse.json();

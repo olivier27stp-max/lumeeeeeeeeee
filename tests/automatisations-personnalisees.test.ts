@@ -329,8 +329,15 @@ describe('route — les gardes qui demandent de lire le catalogue', () => {
        * « permission denied », et supprimer une automatisation renvoyait 500
        * pour tout le monde.
        */
-      expect(a.table, 'une table automation_* écrite avec le service_role')
-        .toBe('automation_scheduled_tasks');
+      /*
+       * DEUXIÈME exception (launch 2026-09-28) : `automation_webhooks.api_key`
+       * n'est plus lisible par `authenticated` (la clé est un secret). Le
+       * suffixe masqué et la clé tout juste créée se lisent en service_role,
+       * TOUJOURS après que la RLS a autorisé l'adresse via `auth.client`, et
+       * filtrés sur l'org de la session.
+       */
+      expect(['automation_scheduled_tasks', 'automation_webhooks'], 'une table automation_* lue ou écrite avec le service_role')
+        .toContain(a.table);
     }
   });
 
@@ -347,8 +354,11 @@ describe('route — les gardes qui demandent de lire le catalogue', () => {
      * le service_role contourne la RLS, donc chaque appel est une porte
      * ouverte sur toutes les entreprises à la fois.
      */
+    //   · (launch 2026-09-28) `automation_webhooks.api_key` retirée à
+    //     `authenticated` : suffixe masqué et clé tout juste créée, lus après
+    //     la garde RLS — deux appels (suffixesDesCles, cleComplete).
     const appels = source.match(/getServiceClient\(\)/g) ?? [];
-    expect(appels.length, 'le service_role a un nouvel usage : le justifier ici').toBe(2);
+    expect(appels.length, 'le service_role a un nouvel usage : le justifier ici').toBe(4);
     const bloc = source.slice(source.indexOf('rules/generer'));
     // 3000, pas 2000 : le bloc qui prépare le contexte de Lumi (échanges
     // + parcours courant, ajouté le 2026-09-25 pour P1-6/P1-7) s'insère
