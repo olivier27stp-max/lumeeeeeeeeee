@@ -33,11 +33,13 @@ import { useColonnesTableau, type ColonneStandard } from '../champs/colonnes';
 import type { Condition } from '../../lib/champs/filtres';
 import type { ValeurEnregistree } from '../../lib/champs/types';
 import Modal from '../ui/Modal';
+import { CLASSE_SAISIE, CadreGhl, ChampGhl, ChampRaison, OPTIONS_SOURCE, OPTIONS_STATUT, SectionGhl, type StatutDeal } from './FormulaireDealGhl';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
   creerDealManuel, creerVue, estJobACreer, fetchVues, journaliserLot, nomClient, pastilles, priorite, supprimerVue,
-  rechercherClientsPourDeal, rechercherDevisPourDeal,
+  rechercherClientsPourDeal,
+  abandonnerDeal, deplacerDeal, fetchStages, majContactDuDeal, marquerPerdu,
   type ClientPourDeal, type DevisPourDeal,
   type Deal, type ModeCouleur, type PipelineStage, type VueSauvegardee,
 } from '../../lib/pipelineVentesApi';
@@ -546,13 +548,6 @@ function useDiffere<T>(valeur: T, ms: number): T {
  */
 type ModeDeal = 'client' | 'devis' | 'nouveau';
 
-const STATUT_DEVIS: Record<string, { fr: string; en: string }> = {
-  draft: { fr: 'Brouillon', en: 'Draft' },
-  awaiting_response: { fr: 'En attente', en: 'Awaiting response' },
-  changes_requested: { fr: 'Modifs demandées', en: 'Changes requested' },
-  approved: { fr: 'Approuvé', en: 'Approved' },
-};
-
 /**
  * Petit formulaire de création. En cas d'erreur de la base, il reste ouvert
  * avec les valeurs saisies : retaper une adresse parce qu'un courriel était
@@ -580,19 +575,25 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
   const [envoi, setEnvoi] = useState(false);
   // Étiquettes à poser sur le CLIENT une fois le deal créé (D1).
   const [etiquettesClient, setEtiquettesClient] = useState<string[]>([]);
+  // Formulaire GHL (« Add new opportunity ») : contact en un seul champ, étape, statut, entreprise.
+  const [listeContacts, setListeContacts] = useState(false);
+  const [entreprise, setEntreprise] = useState('');
+  const [etapeId, setEtapeId] = useState('');
+  const [statut, setStatut] = useState<StatutDeal>('ouvert');
+  const [raison, setRaison] = useState('');
+  const idRaison = useId();
+  const idStatut = useId();
+  const idEtapeDeal = useId();
+  const idEntreprise = useId();
   const qc = useQueryClient();
   const idEtiquettes = useId();
   // Un champ rangé dans une section (dossier système) s'affiche à la fin de celle-ci.
-  const champsPerso = useChampsCreation('deal', fr, { sections: ['depart', 'contact', 'previsions'] });
-  // Champs de base décochés dans « Gérer les champs » : retirés du formulaire pour toute l'entreprise.
-  const vis = champsPerso.systeme;
+  const champsPerso = useChampsCreation('deal', fr, { sections: ['depart', 'contact', 'previsions'], gererExterne: true });
+  const idFormulaire = useId();
   const idPipeline = useId();
   const idRecherche = useId();
-  const idPrenom = useId();
-  const idNom = useId();
   const idCourriel = useId();
   const idTelephone = useId();
-  const idAdresse = useId();
   const idMontant = useId();
   const idAssigne = useId();
   const idDateVisee = useId();
@@ -604,21 +605,21 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
     || '';
   const nomPipeline = pipelines.find((p) => p.id === pipelineCible)?.name ?? '';
 
+  const { data: etapesCible = [] } = useQuery({
+    queryKey: ['pipeline-etapes', pipelineCible],
+    queryFn: () => fetchStages(pipelineCible),
+    enabled: ouvert && !!pipelineCible,
+    staleTime: 60_000,
+  });
+  const etapesOuvertes = etapesCible.filter((e) => e.kind === 'open' && !e.archived_at).sort((a, b) => a.position - b.position);
+
   const termeDiffere = useDiffere(recherche.trim(), 250);
   const clientsQ = useQuery({
     queryKey: ['nouveau-deal', 'clients', termeDiffere],
     queryFn: () => rechercherClientsPourDeal(termeDiffere),
-    enabled: ouvert && mode === 'client' && !client && termeDiffere.length >= 2,
+    enabled: ouvert && !client && termeDiffere.length >= 2,
     staleTime: 30_000,
   });
-  // Sans saisie, les devis récents : le plus souvent, c'est celui qu'on vient d'envoyer.
-  const devisQ = useQuery({
-    queryKey: ['nouveau-deal', 'devis', termeDiffere],
-    queryFn: () => rechercherDevisPourDeal(termeDiffere),
-    enabled: ouvert && mode === 'devis' && !devis,
-    staleTime: 30_000,
-  });
-
   // L'avertissement de doublon : le nom tapé est comparé aux fiches existantes.
   const nomSaisi = useDiffere(`${champs.prenom} ${champs.nom}`.trim(), 400);
   const doublonsQ = useQuery({
@@ -629,13 +630,6 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
   });
   const doublons = mode === 'nouveau' ? (doublonsQ.data ?? []) : [];
 
-  function changerMode(m: ModeDeal) {
-    setMode(m);
-    setClient(null);
-    setDevis(null);
-    setRecherche('');
-  }
-
   function fermer() {
     setChamps(champsDealVides());
     setMode('client');
@@ -644,6 +638,11 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
     setRecherche('');
     setPipelineId('');
     setEtiquettesClient([]);
+    setListeContacts(false);
+    setEntreprise('');
+    setEtapeId('');
+    setStatut('ouvert');
+    setRaison('');
     onFermer();
   }
 
@@ -671,9 +670,13 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
     } else {
       prenom = champs.prenom.trim();
       if (prenom === '') {
-        toast.error(fr ? 'Le prénom est requis.' : 'First name is required.');
+        toast.error(fr ? 'Choisis un contact ou écris le nom d’un nouveau contact.' : 'Pick a contact or type a new contact’s name.');
         return;
       }
+    }
+    if (statut === 'perdu' && !raison.trim()) {
+      toast.error(fr ? 'Indique la raison de la perte.' : 'Enter the lost reason.');
+      return;
     }
 
     const erreurChamps = champsPerso.valider();
@@ -713,6 +716,31 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
       // la base a créé (ou retrouvé) pour un nouveau contact.
       const clientDuDeal = r.clientId
         ?? (mode === 'client' ? client?.id ?? null : mode === 'devis' ? devis?.clientId ?? null : null);
+      // Le reste du formulaire GHL : coordonnées modifiées d'un client existant,
+      // entreprise, étape choisie, statut. Seulement pour un deal NEUF — un deal
+      // déjà ouvert pour ce contact garde son étape et son statut.
+      if (!r.dealExistant) {
+        try {
+          const contact: Record<string, string | null> = {};
+          if (entreprise.trim()) contact.company = entreprise.trim();
+          if (mode === 'client' && client) {
+            if (champs.courriel.trim() !== (client.courriel ?? '')) contact.email = champs.courriel.trim() || null;
+            if (champs.telephone.trim() !== (client.telephone ?? '')) contact.phone = champs.telephone.trim() || null;
+          }
+          if (clientDuDeal && Object.keys(contact).length) await majContactDuDeal(clientDuDeal, contact);
+          const gagnee = etapesCible.find((x) => x.kind === 'won' && !x.archived_at);
+          const perdue = etapesCible.find((x) => x.kind === 'lost' && !x.archived_at);
+          if (statut === 'gagne' && gagnee) await deplacerDeal(r.dealId, gagnee.id);
+          else if (statut === 'perdu' && perdue) await marquerPerdu(r.dealId, perdue.id, raison.trim());
+          else if (statut === 'abandonne') await abandonnerDeal(r.dealId, raison);
+          else if (statut === 'ouvert' && etapeId && etapeId !== etapesOuvertes[0]?.id) await deplacerDeal(r.dealId, etapeId);
+        } catch (err) {
+          console.error('[pipeline] détails du deal non appliqués', err);
+          captureClientException(err, { contexte: 'ModalNouveauDeal.details' });
+          toast.error(fr ? 'Deal créé, mais une partie des détails (étape, statut ou coordonnées) n’a pas pu être enregistrée.'
+            : 'Deal created, but some details (stage, status or contact) could not be saved.');
+        }
+      }
       if (etiquettesClient.length > 0 && clientDuDeal) {
         let echecs = 0;
         for (const tag of etiquettesClient) {
@@ -757,235 +785,104 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
     }
   }
 
-  const tousChampsTexte: { id: string; cle: keyof ChampsDeal; label: string; type: string; requis: boolean }[] = [
-    { id: idPrenom, cle: 'prenom', label: fr ? 'Prénom' : 'First name', type: 'text', requis: true },
-    { id: idNom, cle: 'nom', label: fr ? 'Nom' : 'Last name', type: 'text', requis: false },
-    { id: idCourriel, cle: 'courriel', label: fr ? 'Courriel' : 'Email', type: 'email', requis: false },
-    { id: idTelephone, cle: 'telephone', label: fr ? 'Téléphone' : 'Phone', type: 'tel', requis: false },
-    { id: idAdresse, cle: 'adresse', label: fr ? 'Adresse' : 'Address', type: 'text', requis: false },
-  ];
-  const champsTexte = tousChampsTexte.filter((c) => vis(({ prenom: 'first_name', nom: 'last_name', courriel: 'email', telephone: 'phone', adresse: 'address' } as Record<string, string>)[c.cle] ?? ''));
-
-  const MODES: { cle: ModeDeal; fr: string; en: string }[] = [
-    { cle: 'client', fr: 'Client existant', en: 'Existing client' },
-    { cle: 'devis', fr: 'À partir d\'un devis', en: 'From a quote' },
-    { cle: 'nouveau', fr: 'Nouveau contact', en: 'New contact' },
-  ];
-
-  const resultats = mode === 'client' ? (clientsQ.data ?? []) : [];
-  const listeDevis = mode === 'devis' ? (devisQ.data ?? []) : [];
+  const resultats = !client ? (clientsQ.data ?? []) : [];
+  const saisieContact = recherche;
+  const choisirClient = (c: ClientPourDeal) => {
+    setMode('client');
+    setClient(c);
+    setRecherche('');
+    setListeContacts(false);
+    setChamps((v) => ({ ...v, courriel: c.courriel ?? '', telephone: c.telephone ?? '' }));
+  };
+  const saisirContact = (texte: string) => {
+    // Un nom tapé sans choisir de fiche = un NOUVEAU contact (prénom + nom).
+    setRecherche(texte);
+    setListeContacts(true);
+    setMode('nouveau');
+    const [p, ...n] = texte.trim().split(/\s+/);
+    setChamps((v) => ({ ...v, prenom: p ?? '', nom: n.join(' ') }));
+  };
+  const monnaie = fr ? 'C$' : 'C$';
 
   return (
     <Modal
       open={ouvert}
       onClose={fermer}
-      size="md"
-      title={fr ? 'Nouveau deal' : 'New deal'}
-      description={nomPipeline
-        ? (fr
-          ? `Le deal apparaîtra dans la première étape ouverte de « ${nomPipeline} ».`
-          : `The deal will appear in the first open stage of “${nomPipeline}”.`)
-        : (fr
-          ? 'Le deal apparaîtra dans la première étape ouverte du pipeline.'
-          : 'The deal will appear in the first open stage of the pipeline.')}
+      size="4xl"
+      title={fr ? 'Nouveau deal' : 'Add new opportunity'}
+      description={fr ? 'Crée un deal en remplissant les détails et en choisissant un contact.' : 'Create a new opportunity by filling in details and selecting a contact.'}
+      footer={(
+        <>
+          <button type="button" onClick={fermer} className={cn(CLASSE_BOUTON, 'px-5')}>
+            {fr ? 'Annuler' : 'Cancel'}
+          </button>
+          <button type="submit" form={idFormulaire} disabled={envoi}
+            className={cn(CLASSE_BOUTON, 'px-5 font-semibold text-white disabled:opacity-60')}
+            style={{ background: 'var(--color-accent)', borderColor: 'var(--color-accent)' }}>
+            {envoi ? (fr ? 'Création…' : 'Creating…') : (fr ? 'Créer' : 'Create')}
+          </button>
+        </>
+      )}
     >
-      <form onSubmit={soumettre} className="flex flex-col gap-3">
-        {pipelines.length > 1 && (
-          <div>
-            <label htmlFor={idPipeline} className="mb-1.5 block text-[11px] text-text-tertiary">
-              {fr ? 'Pipeline' : 'Pipeline'}
-            </label>
-            <select
-              id={idPipeline}
-              value={pipelineCible}
-              onChange={(e) => setPipelineId(e.target.value)}
-              className={CLASSE_CHAMP}
-            >
-              {pipelines.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div
-          role="group"
-          aria-label={fr ? 'Partir de' : 'Start from'}
-          className="grid grid-cols-3 gap-1 rounded-lg border border-outline p-1"
-        >
-          {MODES.map((m) => (
-            <button
-              key={m.cle}
-              type="button"
-              aria-pressed={mode === m.cle}
-              onClick={() => changerMode(m.cle)}
-              className={cn(
-                'rounded-md px-2 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1',
-                mode === m.cle
-                  ? 'bg-surface-secondary text-text-primary shadow-sm'
-                  : 'text-text-tertiary hover:text-text-primary',
+      <form id={idFormulaire} onSubmit={soumettre}>
+        <CadreGhl fr={fr} onGererChamps={champsPerso.ouvrirGerer}>
+          <SectionGhl titre={fr ? 'Coordonnées du contact' : 'Contact details'}>
+            <ChampGhl id={idRecherche} libelle={fr ? 'Contact principal' : 'Primary contact name'} requis>
+              {client ? (
+                <div className={cn(CLASSE_SAISIE, 'flex items-center justify-between gap-2')}>
+                  <span className="truncate font-medium">{client.nom}</span>
+                  <button type="button" onClick={() => { setClient(null); setMode('client'); setChamps((v) => ({ ...v, courriel: '', telephone: '' })); }}
+                    className="shrink-0 text-[12px] text-primary hover:underline">{fr ? 'Changer' : 'Change'}</button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input id={idRecherche} role="combobox" aria-expanded={listeContacts && (resultats.length > 0 || !!saisieContact.trim())}
+                    aria-controls={`${idRecherche}-liste`} aria-autocomplete="list" autoComplete="off" autoFocus
+                    value={saisieContact} onChange={(e) => saisirContact(e.target.value)}
+                    onFocus={() => setListeContacts(true)} onBlur={() => setTimeout(() => setListeContacts(false), 150)}
+                    placeholder={fr ? 'Choisir un contact' : 'Select contact'} className={CLASSE_SAISIE} />
+                  {listeContacts && (resultats.length > 0 || saisieContact.trim().length > 0) && (
+                    <ul id={`${idRecherche}-liste`} role="listbox"
+                      className="absolute left-0 right-0 top-full z-30 mt-1 max-h-60 overflow-y-auto rounded-lg border border-outline bg-surface py-1 shadow-lg">
+                      {resultats.map((c) => (
+                        <li key={c.id} role="option" aria-selected={false}>
+                          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => choisirClient(c)}
+                            className="w-full px-3 py-2 text-left hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                            <span className="block truncate text-[13px] font-medium text-text-primary">{c.nom}</span>
+                            <span className="block truncate text-[11.5px] text-text-tertiary">{[c.telephone, c.courriel].filter(Boolean).join(' · ') || c.adresse || '—'}</span>
+                          </button>
+                        </li>
+                      ))}
+                      {saisieContact.trim().length > 0 && (
+                        <li role="option" aria-selected={false}>
+                          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setListeContacts(false)}
+                            className="w-full border-t border-outline px-3 py-2 text-left text-[13px] font-medium text-primary hover:bg-surface-secondary">
+                            {fr ? `+ Nouveau contact « ${saisieContact.trim()} »` : `+ New contact “${saisieContact.trim()}”`}
+                          </button>
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </div>
               )}
-            >
-              {fr ? m.fr : m.en}
-            </button>
-          ))}
-        </div>
-        {champsPerso.section('depart')}
-
-        {/* ── Client existant ── */}
-        {mode === 'client' && (client ? (
-          <div className="flex items-start justify-between gap-3 rounded-lg border border-outline px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="truncate text-[13px] font-semibold text-text-primary">{client.nom}</p>
-              <p className="truncate text-[11.5px] text-text-tertiary">
-                {[client.telephone, client.courriel, client.adresse].filter(Boolean).join(' · ')
-                  || (fr ? 'Aucune coordonnée sur la fiche' : 'No contact details on file')}
-              </p>
-            </div>
-            <button type="button" onClick={() => setClient(null)} className={CLASSE_BOUTON}>
-              {fr ? 'Changer' : 'Change'}
-            </button>
-          </div>
-        ) : (
-          <div>
-            <label htmlFor={idRecherche} className="mb-1.5 block text-[11px] text-text-tertiary">
-              {fr ? 'Rechercher un client' : 'Search a client'}
-            </label>
-            <input
-              id={idRecherche}
-              type="search"
-              autoFocus
-              value={recherche}
-              onChange={(e) => setRecherche(e.target.value)}
-              placeholder={fr ? 'Nom, téléphone, courriel, adresse…' : 'Name, phone, email, address…'}
-              className={CLASSE_CHAMP}
-            />
-            <ul className="mt-1.5 flex max-h-56 flex-col gap-0.5 overflow-y-auto">
-              {resultats.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => { setClient(c); setRecherche(''); }}
-                    className="w-full rounded-md px-2.5 py-1.5 text-left hover:bg-surface-secondary focus-visible:outline focus-visible:outline-2"
-                  >
-                    <span className="block truncate text-[12.5px] font-medium text-text-primary">{c.nom}</span>
-                    <span className="block truncate text-[11px] text-text-tertiary">
-                      {[c.telephone, c.courriel].filter(Boolean).join(' · ') || c.adresse || '—'}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {termeDiffere.length >= 2 && clientsQ.isSuccess && resultats.length === 0 && (
-              <p className="mt-1.5 text-[11.5px] text-text-tertiary">
-                {fr ? 'Aucun client trouvé. ' : 'No client found. '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const [p, ...n] = recherche.trim().split(/\s+/);
-                    changerMode('nouveau');
-                    setChamps((v) => ({ ...v, prenom: p ?? '', nom: n.join(' ') }));
-                  }}
-                  className="font-medium text-text-primary underline underline-offset-2"
-                >
-                  {fr ? 'Créer un nouveau contact' : 'Create a new contact'}
-                </button>
-              </p>
-            )}
-          </div>
-        ))}
-
-        {/* ── À partir d'un devis ── */}
-        {mode === 'devis' && (devis ? (
-          <div className="flex items-start justify-between gap-3 rounded-lg border border-outline px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="truncate text-[13px] font-semibold text-text-primary">
-                {devis.numero} · {argent(devis.totalCents, fr)}
-              </p>
-              <p className="truncate text-[11.5px] text-text-tertiary">
-                {devis.clientNom}{devis.titre ? ` · ${devis.titre}` : ''}
-              </p>
-            </div>
-            <button type="button" onClick={() => setDevis(null)} className={CLASSE_BOUTON}>
-              {fr ? 'Changer' : 'Change'}
-            </button>
-          </div>
-        ) : (
-          <div>
-            <label htmlFor={idRecherche} className="mb-1.5 block text-[11px] text-text-tertiary">
-              {fr ? 'Rechercher un devis' : 'Search a quote'}
-            </label>
-            <input
-              id={idRecherche}
-              type="search"
-              autoFocus
-              value={recherche}
-              onChange={(e) => setRecherche(e.target.value)}
-              placeholder={fr ? 'Numéro, titre ou client…' : 'Number, title or client…'}
-              className={CLASSE_CHAMP}
-            />
-            <ul className="mt-1.5 flex max-h-56 flex-col gap-0.5 overflow-y-auto">
-              {listeDevis.map((d) => (
-                <li key={d.id}>
-                  <button
-                    type="button"
-                    onClick={() => { setDevis(d); setRecherche(''); }}
-                    className="w-full rounded-md px-2.5 py-1.5 text-left hover:bg-surface-secondary focus-visible:outline focus-visible:outline-2"
-                  >
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-[12.5px] font-medium text-text-primary">
-                        {d.numero} · {d.clientNom}
-                      </span>
-                      <span className="shrink-0 text-[12px] tabular-nums text-text-primary">
-                        {argent(d.totalCents, fr)}
-                      </span>
-                    </span>
-                    <span className="block truncate text-[11px] text-text-tertiary">
-                      {(fr ? STATUT_DEVIS[d.statut]?.fr : STATUT_DEVIS[d.statut]?.en) ?? d.statut}
-                      {d.titre ? ` · ${d.titre}` : ''}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {devisQ.isSuccess && listeDevis.length === 0 && (
-              <p className="mt-1.5 text-[11.5px] text-text-tertiary">
-                {fr
-                  ? 'Aucun devis ouvert trouvé (les devis convertis, refusés ou expirés sont exclus).'
-                  : 'No open quote found (converted, declined or expired quotes are excluded).'}
-              </p>
-            )}
-          </div>
-        ))}
-
-        {/* ── Nouveau contact ── */}
-        {mode === 'nouveau' && (
-          <>
-            {champsTexte.map((c) => (
-              <div key={c.id}>
-                <label htmlFor={c.id} className="mb-1.5 block text-[11px] text-text-tertiary">
-                  {c.label}
-                  {c.requis && <span aria-hidden="true"> *</span>}
-                </label>
-                <input
-                  id={c.id}
-                  type={c.type}
-                  required={c.requis}
-                  value={champs[c.cle]}
-                  onChange={(e) => setChamps((v) => ({ ...v, [c.cle]: e.target.value }))}
-                  className={CLASSE_CHAMP}
-                />
-              </div>
-            ))}
-
+            </ChampGhl>
+            <ChampGhl id={idCourriel} libelle={fr ? 'Courriel principal' : 'Primary email'}>
+              <input id={idCourriel} type="email" value={champs.courriel}
+                onChange={(e) => setChamps((v) => ({ ...v, courriel: e.target.value }))}
+                placeholder={fr ? 'Entrer un courriel' : 'Enter email'} className={CLASSE_SAISIE} />
+            </ChampGhl>
+            <ChampGhl id={idTelephone} libelle={fr ? 'Téléphone principal' : 'Primary phone'}>
+              <input id={idTelephone} type="tel" value={champs.telephone}
+                onChange={(e) => setChamps((v) => ({ ...v, telephone: e.target.value }))}
+                placeholder={fr ? 'Entrer un téléphone' : 'Enter phone'} className={CLASSE_SAISIE} />
+            </ChampGhl>
             {/*
-              Avertir, pas bloquer : deux personnes peuvent porter le même nom.
-              Mais le rapprochement automatique ne reconnaît quelqu'un QUE par
-              son téléphone ou son courriel — un nom seul crée une seconde
-              fiche en silence. On le dit, et on offre la fiche existante.
+              Avertir, pas bloquer : deux personnes peuvent porter le même nom. Mais
+              le rapprochement automatique ne reconnaît quelqu'un QUE par son
+              téléphone ou son courriel — un nom seul crée une seconde fiche.
             */}
             {doublons.length > 0 && (
-              <div role="status" className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              <div role="status" className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900 sm:col-span-2 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                 <p className="font-medium">
                   {fr
                     ? (doublons.length === 1 ? 'Un client porte déjà ce nom :' : 'Des clients portent déjà ce nom :')
@@ -994,138 +891,85 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
                 <ul className="mt-1.5 flex flex-col gap-1">
                   {doublons.map((d) => (
                     <li key={d.id} className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate">
-                        {d.nom}
-                        {(d.telephone || d.courriel) && (
-                          <span className="opacity-75"> · {d.telephone || d.courriel}</span>
-                        )}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => { setMode('client'); setClient(d); setRecherche(''); }}
-                        className="shrink-0 font-semibold underline underline-offset-2"
-                      >
+                      <span className="min-w-0 truncate">{d.nom}{(d.telephone || d.courriel) && <span className="opacity-75"> · {d.telephone || d.courriel}</span>}</span>
+                      <button type="button" onClick={() => choisirClient(d)} className="shrink-0 font-semibold underline underline-offset-2">
                         {fr ? 'Utiliser cette fiche' : 'Use this record'}
                       </button>
                     </li>
                   ))}
                 </ul>
                 <p className="mt-1.5 opacity-80">
-                  {fr
-                    ? 'Si c\'est une autre personne, continue : une nouvelle fiche sera créée.'
-                    : 'If it\'s someone else, carry on: a new record will be created.'}
+                  {fr ? 'Si c\'est une autre personne, continue : une nouvelle fiche sera créée.' : 'If it\'s someone else, carry on: a new record will be created.'}
                 </p>
               </div>
             )}
-          </>
-        )}
+          </SectionGhl>
+          {champsPerso.section('contact')}
 
-        {champsPerso.section('contact')}
-        {/* Étiquettes du client : posées sur sa fiche après la création. */}
-        <div role="group" aria-labelledby={idEtiquettes}>
-          <p id={idEtiquettes} className="mb-1.5 text-[11px] text-text-tertiary">
-            {fr ? 'Étiquettes du client (facultatif)' : 'Client tags (optional)'}
-          </p>
-          <SelecteurEtiquettes
-            valeurs={etiquettesClient}
-            fr={fr}
-            onAjouter={(tag) => setEtiquettesClient((v) => (v.some((x) => x.toLowerCase() === tag.toLowerCase()) ? v : [...v, tag]))}
-            onRetirer={(tag) => setEtiquettesClient((v) => v.filter((x) => x !== tag))}
-          />
-        </div>
-        {/*
-          Ce qui fait vivre les prévisions. Rien n'est obligatoire : rendre le
-          montant requis ferait saisir des chiffres inventés, et une prévision
-          fausse se croit alors qu'une prévision vide se voit. Un champ laissé
-          vide met simplement le deal dans « Corriger vos données ».
-        */}
-        <div className="mt-1 grid grid-cols-1 gap-3 border-t border-border-subtle pt-3 sm:grid-cols-2">
-          {mode !== 'devis' && vis('amount') && (
-            <div>
-              <label htmlFor={idMontant} className="mb-1.5 block text-[11px] text-text-tertiary">
-                {fr ? 'Montant estimé ($)' : 'Estimated amount ($)'}
-              </label>
-              <input
-                id={idMontant}
-                type="text"
-                inputMode="decimal"
-                value={champs.montant}
-                onChange={(e) => setChamps((v) => ({ ...v, montant: e.target.value }))}
-                placeholder={fr ? 'Ex. : 1250' : 'e.g. 1250'}
-                className={CLASSE_CHAMP}
-              />
-              <p className="mt-1 text-[10.5px] text-text-muted">
-                {fr
-                  ? 'Devient une estimation modifiable, remplacée par la vraie soumission.'
-                  : 'Becomes an editable estimate, replaced by the real quote.'}
-              </p>
-            </div>
-          )}
-
-          {vis('expected_close_date') && <div>
-            <label htmlFor={idDateVisee} className="mb-1.5 block text-[11px] text-text-tertiary">
-              {fr ? 'Fermeture visée' : 'Expected close'}
-            </label>
-            <input
-              id={idDateVisee}
-              type="date"
-              value={champs.dateVisee}
-              onChange={(e) => setChamps((v) => ({ ...v, dateVisee: e.target.value }))}
-              className={CLASSE_CHAMP}
-            />
-          </div>}
-
-          {vis('assigned_user') && <div>
-            <label htmlFor={idAssigne} className="mb-1.5 block text-[11px] text-text-tertiary">
-              {fr ? 'Responsable' : 'Assignee'}
-            </label>
-            <select
-              id={idAssigne}
-              value={champs.assigneA}
-              onChange={(e) => setChamps((v) => ({ ...v, assigneA: e.target.value }))}
-              className={CLASSE_CHAMP}
-            >
-              <option value="">{fr ? 'Non assigné' : 'Unassigned'}</option>
-              {membres.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>}
-
-          {vis('source') && <div>
-            <label htmlFor={idSource} className="mb-1.5 block text-[11px] text-text-tertiary">
-              {fr ? 'Source' : 'Source'}
-            </label>
-            <select
-              id={idSource}
-              value={champs.source}
-              onChange={(e) => setChamps((v) => ({ ...v, source: e.target.value }))}
-              className={CLASSE_CHAMP}
-            >
-              <option value="manual">{fr ? 'Saisie manuelle' : 'Manual entry'}</option>
-              <option value="form_web">{fr ? 'Formulaire web' : 'Web form'}</option>
-              <option value="meta">Meta</option>
-              <option value="d2d">{fr ? 'Porte-à-porte' : 'Door to door'}</option>
-            </select>
-          </div>}
-        </div>
-
-        {champsPerso.section('previsions')}
-        {champsPerso.bloc}
-
-        <div className="mt-1 flex items-center justify-end gap-2.5">
-          <button type="button" onClick={fermer} className={CLASSE_BOUTON}>
-            {fr ? 'Annuler' : 'Cancel'}
-          </button>
-          <button
-            type="submit"
-            disabled={envoi}
-            className={cn(CLASSE_BOUTON, 'font-semibold text-white disabled:opacity-60')}
-            style={{ background: 'var(--color-accent)', borderColor: 'var(--color-accent)' }}
-          >
-            {envoi ? (fr ? 'Création…' : 'Creating…') : (fr ? 'Créer le deal' : 'Create deal')}
-          </button>
-        </div>
+          <SectionGhl titre={fr ? 'Détails du deal' : 'Opportunity details'}>
+            <ChampGhl id={idPipeline} libelle="Pipeline">
+              <select id={idPipeline} value={pipelineCible} onChange={(e) => { setPipelineId(e.target.value); setEtapeId(''); }} className={CLASSE_SAISIE}>
+                {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </ChampGhl>
+            <ChampGhl id={idEtapeDeal} libelle={fr ? 'Étape' : 'Stage'}>
+              <select id={idEtapeDeal} value={statut === 'ouvert' ? (etapeId || etapesOuvertes[0]?.id || '') : ''} disabled={statut !== 'ouvert'}
+                onChange={(e) => setEtapeId(e.target.value)} className={CLASSE_SAISIE}>
+                {statut !== 'ouvert' && <option value="">{fr ? '— Deal fermé —' : '— Closed —'}</option>}
+                {etapesOuvertes.map((e) => <option key={e.id} value={e.id}>{fr ? e.name_fr : e.name_en}</option>)}
+              </select>
+            </ChampGhl>
+            <ChampGhl id={idStatut} libelle={fr ? 'Statut' : 'Status'}>
+              <select id={idStatut} value={statut} onChange={(e) => setStatut(e.target.value as StatutDeal)} className={CLASSE_SAISIE}>
+                {OPTIONS_STATUT.map((o) => <option key={o.cle} value={o.cle}>{fr ? o.fr : o.en}</option>)}
+              </select>
+            </ChampGhl>
+            <ChampGhl id={idMontant} libelle={fr ? 'Valeur' : 'Value'}>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-text-tertiary">{monnaie}</span>
+                <input id={idMontant} type="text" inputMode="decimal" value={champs.montant}
+                  onChange={(e) => setChamps((v) => ({ ...v, montant: e.target.value }))}
+                  placeholder={fr ? 'Montant estimé' : 'Please input'} className={cn(CLASSE_SAISIE, 'pl-10')} />
+              </div>
+            </ChampGhl>
+            {(statut === 'perdu' || statut === 'abandonne') && (
+              <ChampRaison id={idRaison} valeur={raison} onChange={setRaison} fr={fr} requise={statut === 'perdu'} />
+            )}
+            <ChampGhl id={idAssigne} libelle={fr ? 'Responsable' : 'Owner'}>
+              <select id={idAssigne} value={champs.assigneA} onChange={(e) => setChamps((v) => ({ ...v, assigneA: e.target.value }))} className={CLASSE_SAISIE}>
+                <option value="">{fr ? 'Non assigné' : 'Unassigned'}</option>
+                {membres.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </ChampGhl>
+            <ChampGhl id={idEntreprise} libelle={fr ? 'Entreprise' : 'Business name'}>
+              <input id={idEntreprise} value={entreprise} onChange={(e) => setEntreprise(e.target.value)}
+                placeholder={fr ? 'Nom de l’entreprise' : 'Enter business name'} className={CLASSE_SAISIE} />
+            </ChampGhl>
+            <ChampGhl id={idSource} libelle="Source">
+              <select id={idSource} value={champs.source} onChange={(e) => setChamps((v) => ({ ...v, source: e.target.value }))} className={CLASSE_SAISIE}>
+                {OPTIONS_SOURCE.map((o) => <option key={o.cle} value={o.cle}>{fr ? o.fr : o.en}</option>)}
+              </select>
+            </ChampGhl>
+            <ChampGhl id={idDateVisee} libelle={fr ? 'Date de fermeture prévue' : 'Expected close date'}>
+              <input id={idDateVisee} type="date" value={champs.dateVisee}
+                onChange={(e) => setChamps((v) => ({ ...v, dateVisee: e.target.value }))} className={CLASSE_SAISIE} />
+            </ChampGhl>
+            <ChampGhl libelle={fr ? 'Étiquettes' : 'Tags'}>
+              {/* Encadré comme un champ (« Add tags » de GHL). */}
+              <div className="flex min-h-10 items-center rounded-lg border border-outline bg-surface px-2 py-1.5">
+                <SelecteurEtiquettes
+                  valeurs={etiquettesClient}
+                  fr={fr}
+                  onAjouter={(tag) => setEtiquettesClient((v) => (v.some((x) => x.toLowerCase() === tag.toLowerCase()) ? v : [...v, tag]))}
+                  onRetirer={(tag) => setEtiquettesClient((v) => v.filter((x) => x !== tag))}
+                />
+              </div>
+            </ChampGhl>
+          </SectionGhl>
+          {champsPerso.section('depart')}
+          {champsPerso.section('previsions')}
+          {champsPerso.bloc}
+        </CadreGhl>
       </form>
     </Modal>
   );

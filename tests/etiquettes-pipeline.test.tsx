@@ -388,9 +388,8 @@ describe('actions en lot — étiquettes', () => {
 describe('Nouveau deal — étiquettes du client', () => {
   it('pose les étiquettes choisies sur le client du deal créé', async () => {
     await rendreBoard();
-    await clic(bouton(/nouveau deal/i));
-    await clic(bouton(/nouveau contact/i));
-    const lab = [...conteneur.querySelectorAll('label')].find((l) => /Prénom/.test(l.textContent ?? ''));
+    await clic(bouton(/nouveau deal/i));
+    const lab = [...conteneur.querySelectorAll('label')].find((l) => /Contact principal/.test(l.textContent ?? ''));
     await saisir([...conteneur.querySelectorAll('input')].find((e) => e.id === lab?.getAttribute('for')) as HTMLInputElement, 'Zoé');
     await clic(boutons().find((b) => b.textContent?.trim() === 'Étiquette'));
     const opt = [...conteneur.querySelectorAll('[role="option"]')].find((o) => o.textContent === 'VIP')!;
