@@ -112,6 +112,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   // lecture, tout le reste écrit des règles qui enverront de vrais textos et
   // courriels aux clients — donc le droit de modification.
   'GET /api/automations/rules': 'automations.read',
+  // Total déclenché, en cours, passages par étape (une route agrégée).
+  'GET /api/automations/rules/stats': 'automations.read',
   // « X clients correspondent aujourd'hui » (déclencheur Client inactif).
   'GET /api/automations/clients-inactifs/apercu': 'automations.read',
   // Aperçu d'une automatisation : montre un vrai client (launch 2026-09-28).
@@ -121,6 +123,9 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'DELETE /api/automations/rules/:id': 'automations.update',
   'POST /api/automations/rules/:id/duplicate': 'automations.update',
   'POST /api/automations/rules/:id/copier-bureaux': 'automations.update',
+  // Publier / repasser en brouillon, un par un ou en lot (audit M8).
+  'POST /api/automations/rules/:id/publication': 'automations.update',
+  'POST /api/automations/rules/publication': 'automations.update',
   'GET /api/automations/bureaux-cibles': 'automations.update',
   // Générer coûte un appel au modèle : même droit que créer à la main.
   'POST /api/automations/rules/generer': 'automations.update',

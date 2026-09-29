@@ -1,14 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════
    Vue d'ensemble des automatisations — l'écran « Overview » de GHL.
 
-   Trois tuiles, une courbe sur 7 semaines, le résumé des erreurs et
-   l'analyse des déclencheurs. Structure relevée sur leur app.
+   Trois tuiles, une courbe sur 7 semaines et le résumé des erreurs.
+   Structure relevée sur leur app.
 
-   CE QUI EST VRAI ET CE QUI NE L'EST PAS : les tuiles et le résumé des
-   erreurs lisent de vraies données (`automation_rules`,
-   `automation_execution_logs`). La courbe et l'analyse des déclencheurs
-   attendent le comptage des inscriptions — elles affichent la structure
-   et le disent, plutôt que d'inventer des chiffres.
+   TOUT CE QUI EST AFFICHÉ LIT DE VRAIES DONNÉES (`automation_rules`,
+   `automation_execution_logs`) : la courbe compte les déclenchements réels
+   semaine par semaine. L'« Analyse des déclencheurs » de GHL a été retirée
+   (audit du 2026-09-28) : aucune donnée ne la remplissait, elle n'affichait
+   que des « — ».
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -210,38 +210,11 @@ export default function AutomationsApercu() {
               )}
             </div>
 
-            {/* Analyse des déclencheurs */}
-            <div className="section-card p-4">
-              <h2 className="text-[14px] font-semibold text-text-primary">
-                {fr ? 'Analyse des déclencheurs' : 'Trigger analysis'}
-              </h2>
-              <p className="mt-0.5 text-[12px] text-text-tertiary">
-                {fr
-                  ? 'Filtrer la performance des déclencheurs pour voir le détail.'
-                  : 'Filter trigger performance by various criteria to get detailed insights.'}
-              </p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                {[
-                  { t: fr ? 'Tentatives' : 'Attempted enrollments',
-                    d: fr ? 'Contacts évalués par automatisation' : 'Contacts evaluated per workflow' },
-                  { t: fr ? 'Correspondances' : 'Matched enrollments',
-                    d: fr ? 'Contacts qui correspondent au déclencheur' : 'Contacts matching workflow triggers' },
-                  { t: fr ? 'Sans correspondance' : 'Unmatched enrollments',
-                    d: fr ? 'Contacts qui ne correspondent pas' : 'Contacts failing to match triggers' },
-                ].map((c) => (
-                  <div key={c.t} className="rounded-xl border border-border p-3">
-                    <p className="text-2xl font-bold text-text-primary">—</p>
-                    <p className="mt-0.5 text-[12px] font-medium text-text-primary">{c.t}</p>
-                    <p className="text-[11px] text-text-tertiary">{c.d}</p>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-3 text-[11px] text-text-tertiary">
-                {fr
-                  ? 'Ces chiffres arrivent avec le comptage des déclenchements, en même temps que l’onglet « Historique ».'
-                  : 'These numbers arrive with enrollment counting, alongside the “History” tab.'}
-              </p>
-            </div>
+            {/* « Analyse des déclencheurs » (tentatives, correspondances) RETIRÉE
+                le 2026-09-28 : aucune donnée ne la remplit — le moteur ne
+                journalise pas les événements qui ne correspondent à aucune
+                règle. Trois cases « — » au launch disaient « ça ne marche
+                pas ». Elle reviendra avec un vrai comptage. */}
           </>
         )}
       </div>

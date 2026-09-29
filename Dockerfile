@@ -60,6 +60,10 @@ COPY src/lib/variablesCourriel.ts ./src/lib/variablesCourriel.ts
 # routes d'écriture en dérivent les clés acceptées. Sans cette ligne, le
 # serveur ne démarre pas — `validation.ts` l'importe au chargement.
 COPY src/lib/automationCatalogue.ts ./src/lib/automationCatalogue.ts
+# La garde de publication (audit M8) : la route serveur et l'éditeur
+# partagent la même vérification. Elle lit aussi `sequenceTypes.ts`.
+COPY src/lib/publicationAutomatisation.ts ./src/lib/publicationAutomatisation.ts
+COPY src/lib/sequenceTypes.ts ./src/lib/sequenceTypes.ts
 # `src/lib/supabaseAdmin.ts` is now a stub that throws if imported from
 # client code (real impl lives at `server/lib/supabaseAdmin.ts` for security
 # — commit c12b767). The stub exists so Railway/BuildKit cache layers that

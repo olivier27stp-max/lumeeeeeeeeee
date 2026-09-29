@@ -41,6 +41,7 @@ import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie
 import { logger } from '../lib/logger';
 import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
+import { problemesBloquants, messageRefus } from '../lib/automations-publication';
 import {
   DECLENCHEURS,
   ACTIONS,
@@ -161,6 +162,12 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
 
   const probleme = verifierCoherence(req.body);
   if (probleme) return res.status(400).json({ error: probleme });
+
+  // Naître publiée = publier : mêmes vérifications que la route de publication (M8).
+  if (req.body.is_active === true) {
+    const problemes = problemesBloquants(req.body);
+    if (problemes.length) return res.status(422).json({ error: messageRefus(problemes), code: 'publication_refusee', problemes });
+  }
 
   const { data, error } = await auth.client
     .from('automation_rules')
@@ -408,7 +415,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
 
   const { data: existante, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('id, is_preset, trigger_event, delay_seconds, modele_id')
+    .select('id, is_preset, trigger_event, delay_seconds, modele_id, conditions, steps, actions')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .maybeSingle();
@@ -441,6 +448,13 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     actions: patch.actions,
   });
   if (probleme) return res.status(400).json({ error: probleme });
+
+  // Publier par ce chemin passe par les mêmes vérifications que la route de
+  // publication (M8), sur la règle telle qu'elle SERA après modification.
+  if (patch.is_active === true) {
+    const problemes = problemesBloquants({ ...existante, ...patch });
+    if (problemes.length) return res.status(422).json({ error: messageRefus(problemes), code: 'publication_refusee', problemes });
+  }
 
   const { data, error } = await auth.client
     .from('automation_rules')

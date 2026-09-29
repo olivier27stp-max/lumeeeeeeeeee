@@ -1422,3 +1422,13 @@ const nomDossier = z.string().trim().min(1, 'Donnez un nom au dossier.').max(60,
 
 export const dossierCreateSchema = z.object({ name: nomDossier });
 export const dossierUpdateSchema = z.object({ name: nomDossier });
+
+/**
+ * Publier / repasser en brouillon (route de publication, audit M8).
+ * `actif: true` = publier (vérifié contre le catalogue), `false` = brouillon.
+ */
+export const publicationSchema = z.object({ actif: z.boolean() }).strict();
+export const publicationLotSchema = z.object({
+  actif: z.boolean(),
+  ids: z.array(z.string().uuid()).min(1).max(200),
+}).strict();

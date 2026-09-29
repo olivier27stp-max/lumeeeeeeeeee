@@ -42,6 +42,10 @@ import {
   chargerMembres,
   chargerEtiquettes,
   apercuAutomatisation,
+  changerPublication,
+  chargerStatistiques,
+  type StatsEtape,
+  type BrouillonAutomatisation,
   type CatalogueAutomatisations,
   type ApercuAutomatisation,
 } from '../lib/automationBuilderApi';
@@ -55,6 +59,7 @@ import {
   estFormatOrigine,
   projeterFormatOrigine,
   apercuConversion,
+  TEXTES_ACTION_PROVISOIRE,
 } from '../lib/sequenceTypes';
 import SequenceCanvas from '../components/automations/SequenceCanvas';
 import PanneauEtape from '../components/automations/PanneauEtape';
@@ -78,15 +83,16 @@ import {
   champVisible,
   configParDefaut,
   declencheurOffert,
-  problemesAvantPublication,
   trouverAction,
 } from '../lib/automationCatalogue';
+import { problemesPublication } from '../lib/publicationAutomatisation';
 import { useModuleAccess } from '../hooks/useModuleAccess';
 import { apercuClientsInactifs } from '../lib/reservationApi';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
 import OngletReglages, { type ReglagesAutomatisation } from '../components/automations/OngletReglages';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { creerFileBascule } from '../lib/fileBascule';
+import { captureClientException } from '../lib/sentry';
 
 type Onglet = 'parcours' | 'reglages' | 'historique' | 'journaux';
 
@@ -112,6 +118,62 @@ export default function AutomationBuilderPage() {
 
   const [regle, setRegle] = useState<AutomationRule | null>(null);
   /*
+   * « Partir de zéro » et « Construire avec Lumi » ouvrent
+   * `/automations/nouvelle` : RIEN n'est créé en base tant que
+   * l'utilisateur n'a rien fait (audit 2026-09-28 — brouillons orphelins, et
+   * sans Autopilot la règle naissait AVANT l'écran de vente). Elle naît à la
+   * première vraie sauvegarde, dans `ecrire`, une seule fois même si deux
+   * sauvegardes partent en même temps.
+   */
+  const estNouvelle = id === 'nouvelle';
+  const idReel = useRef<string | null>(estNouvelle ? null : (id ?? null));
+  const creationEnVol = useRef<Promise<AutomationRule> | null>(null);
+  /** Vrai le temps de remplacer `/nouvelle` par l'id créé : pas de rechargement. */
+  const passageALaRegleCreee = useRef(false);
+  const regleCourante = useRef<AutomationRule | null>(null);
+  useEffect(() => { regleCourante.current = regle; }, [regle]);
+  const { isEnabled: sortieALaCreation } = useModuleAccess('auto_sortie_parcours');
+
+  /**
+   * Toute écriture de la règle passe par ici. Brouillon jamais enregistré :
+   * la PREMIÈRE écriture le crée (avec le contenu demandé), les suivantes
+   * attendent cette création puis modifient.
+   */
+  const ecrire = useCallback(async (patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => {
+    if (idReel.current) return modifierAutomatisation(idReel.current, patch);
+    if (creationEnVol.current) {
+      const creee = await creationEnVol.current;
+      return modifierAutomatisation(creee.id, patch);
+    }
+    const base = regleCourante.current;
+    const enCreation = creerAutomatisation({
+      name: base?.name || (fr ? 'Nouvelle automatisation' : 'New automation'),
+      trigger_event: base?.trigger_event ?? 'quote.sent',
+      conditions: (base?.conditions ?? {}) as Record<string, unknown>,
+      delay_seconds: 0,
+      // Action PROVISOIRE (le serveur en exige une) : l'éditeur la reconnaît
+      // comme un parcours vide — voir TEXTES_ACTION_PROVISOIRE.
+      actions: [{ type: 'send_sms', config: { body: TEXTES_ACTION_PROVISOIRE[fr ? 0 : 1] } }],
+      steps: [],
+      // Sortie automatique du parcours : une NOUVELLE automatisation naît
+      // avec la case cochée. Drapeau coupé = rien d'écrit, comme avant.
+      ...(sortieALaCreation ? { settings: { arreter_si_resolu: true } } : {}),
+      ...patch,
+      is_active: false,
+    }).then((creee) => {
+      idReel.current = creee.id;
+      passageALaRegleCreee.current = true;
+      setRegle((r) => (r ? { ...r, id: creee.id, org_id: creee.org_id, created_at: creee.created_at, updated_at: creee.updated_at } : creee));
+      navigate(`/automations/${creee.id}${parametres.get('lumi') === '1' ? '?lumi=1' : ''}`, { replace: true });
+      return creee;
+    }, (e: unknown) => {
+      creationEnVol.current = null;
+      throw e;
+    });
+    creationEnVol.current = enCreation;
+    return enCreation;
+  }, [fr, navigate, parametres, sortieALaCreation]);
+  /*
    * Interrupteur martelé (Rafba, 2026-09-28) : chaque clic envoyait sa
    * requête calculée sur un état périmé, et la dernière réponse ARRIVÉE
    * gagnait. La file envoie un changement à la fois et finit toujours sur
@@ -122,7 +184,8 @@ export default function AutomationBuilderPage() {
   const confirmationPublication = useRef(false);
   const [, setVersionBascule] = useState(0);
   const [fileBascule] = useState(() => creerFileBascule({
-    envoyer: async (id, actif) => { await modifierAutomatisation(id, { is_active: actif }); },
+    // La route serveur de publication (M8), la même que la liste.
+    envoyer: changerPublication,
     surFin: (id, actif) => {
       setRegle((r) => (r && r.id === id ? { ...r, is_active: actif } : r));
       setVersionBascule((v) => v + 1);
@@ -183,6 +246,27 @@ export default function AutomationBuilderPage() {
   // ── Le parcours ──
   const [steps, setSteps] = useState<Etape[]>([]);
   const [etapeChoisie, setEtapeChoisie] = useState<string | null>(null);
+  /** Le panneau ouvert a-t-il un brouillon non enregistré ? (PanneauEtape.onModifie) */
+  const brouillonEtapeModifie = useRef(false);
+  const signalerBrouillonEtape = useCallback((m: boolean) => { brouillonEtapeModifie.current = m; }, []);
+  /**
+   * Ouvrir une AUTRE carte : si l'étape ouverte a des modifications non
+   * enregistrées, on demande avant de les jeter (audit 2026-09-28).
+   */
+  const ouvrirEtape = useCallback(async (idEtape: string) => {
+    if (etapeChoisie && idEtape !== etapeChoisie && brouillonEtapeModifie.current) {
+      const ok = await confirmer({
+        title: language === 'fr' ? 'Changer d’étape sans enregistrer ?' : 'Switch step without saving?',
+        message: language === 'fr'
+          ? 'Les modifications de l’étape ouverte ne sont pas enregistrées : elles seront perdues.'
+          : 'The open step’s changes are not saved: they will be lost.',
+        confirmLabel: language === 'fr' ? 'Changer d’étape' : 'Switch step',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    setEtapeChoisie(idEtape);
+  }, [etapeChoisie, language]);
 
   // ── De quoi remplir les menus du panneau ──
   // Les membres (pour « assigner a ») et les etiquettes deja utilisees.
@@ -258,6 +342,20 @@ export default function AutomationBuilderPage() {
   /** L'aperçu (« Tester ») : ce qui partirait, sur un vrai client. */
   const [apercu, setApercu] = useState<ApercuAutomatisation | null>(null);
   const [apercuEnCours, setApercuEnCours] = useState(false);
+  /**
+   * Passages par étape (onglet « Statistiques » du panneau), lus par la
+   * route agrégée. Ils étaient toujours vides : `stats={null}` en dur.
+   */
+  const [statsEtapes, setStatsEtapes] = useState<Record<string, StatsEtape> | null>(null);
+  const idStats = regle?.id ?? '';
+  useEffect(() => {
+    if (!idStats) { setStatsEtapes(null); return; }
+    let vivant = true;
+    chargerStatistiques(idStats)
+      .then((s) => { if (vivant) setStatsEtapes(s.par_etape ?? {}); })
+      .catch((e: unknown) => console.error('[builder] statistiques par étape', e instanceof Error ? e.message : String(e)));
+    return () => { vivant = false; };
+  }, [idStats]);
 
   /**
    * Des départs tout faits — on ne part jamais d'une page blanche.
@@ -388,14 +486,14 @@ export default function AutomationBuilderPage() {
       // Réglages posés d'office par ce déclencheur (ex. « première ouverture
       // seulement ») — sans écraser ce que la règle portait déjà.
       const defaut = DECLENCHEURS.find((d) => d.cle === cle)?.conditions_defaut;
-      const maj = await modifierAutomatisation(regle.id, defaut
+      const maj = await ecrire(defaut
         ? { trigger_event: cle, conditions: { ...defaut, ...((regle.conditions ?? {}) as Record<string, unknown>) } }
         : { trigger_event: cle });
       setRegle(maj);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
     }
-  }, [regle]);
+  }, [regle, ecrire]);
 
   /**
    * Lumi construit le parcours à partir de la description.
@@ -422,6 +520,12 @@ export default function AutomationBuilderPage() {
     setGenere(true);
     try {
       /*
+       * Envoyer une demande à Lumi est une vraie action : un brouillon jamais
+       * enregistré naît ICI (et pas au clic sur « Construire avec Lumi »),
+       * pour que la conversation soit gardée avec l'automatisation.
+       */
+      if (!idReel.current) await ecrire({ name: nom.trim() || regle?.name || (fr ? 'Nouvelle automatisation' : 'New automation') });
+      /*
        * On donne à Lumi la CONVERSATION et le parcours à l'écran.
        *
        * Avant, il ne recevait que la dernière phrase : « change le
@@ -433,7 +537,7 @@ export default function AutomationBuilderPage() {
         // 6 derniers tours seulement : c'est ce que la route accepte, et
         // l'historique complet gonflerait le prompt sans rien apporter.
         echanges: echangesLumi.slice(-6),
-        ruleId: regle?.id ?? null,
+        ruleId: idReel.current,
         parcoursActuel: steps.length > 0
           ? { trigger_event: regle?.trigger_event, steps }
           : null,
@@ -444,8 +548,23 @@ export default function AutomationBuilderPage() {
       // l'utilisateur a décrit, il pourra les changer.
       if (propose.nom) setNom(propose.nom);
       if (propose.trigger_event && regle) {
-        setRegle({ ...regle, trigger_event: propose.trigger_event });
-        modifierAutomatisation(regle.id, { trigger_event: propose.trigger_event }).catch(() => {});
+        // Mise à jour FONCTIONNELLE : `regle` ici date d'avant la création
+        // du brouillon, et l'écraser remettrait un id vide.
+        const declencheurEnBase = regle.trigger_event;
+        setRegle((r) => (r ? { ...r, trigger_event: propose.trigger_event } : r));
+        /*
+         * L'échec était AVALÉ (`.catch(() => {})`, audit 2026-09-28) :
+         * l'écran montrait le déclencheur de Lumi, la base gardait l'ancien.
+         * On le dit, et l'écran revient à ce que la base contient.
+         */
+        ecrire({ trigger_event: propose.trigger_event }).catch((e: unknown) => {
+          console.error('[builder] déclencheur proposé par Lumi non enregistré', e);
+          captureClientException(e, { where: 'AutomationBuilderPage.construireAvecLumi' });
+          setRegle((r) => (r ? { ...r, trigger_event: declencheurEnBase } : r));
+          toast.error(fr
+            ? `Le déclencheur proposé par Lumi n’a pas pu être enregistré : ${e instanceof Error ? e.message : String(e)}`
+            : `Lumi’s trigger could not be saved: ${e instanceof Error ? e.message : String(e)}`);
+        });
       }
       // La conversation se poursuit : le tour suivant saura ce qui
       // vient d'être demandé et ce que Lumi a répondu.
@@ -523,7 +642,26 @@ export default function AutomationBuilderPage() {
   };
 
   // ── Chargement ──
+  /*
+   * Échec de chargement ≠ automatisation introuvable (launch 2026-09-28) :
+   * après les 3 essais, l'écran disait « introuvable » — on croyait
+   * l'automatisation supprimée. Un échec dit « Impossible de charger » et
+   * propose « Réessayer ».
+   */
+  const [echecChargement, setEchecChargement] = useState(false);
+  const [essaiChargement, setEssaiChargement] = useState(0);
   useEffect(() => {
+    // `/nouvelle` vient d'être remplacé par l'id du brouillon créé : l'écran
+    // EST déjà la règle — relire la base écraserait ce qu'on tape.
+    if (passageALaRegleCreee.current) { passageALaRegleCreee.current = false; return; }
+    // Une AUTRE règle ouverte dans le même éditeur (lien « Ouvrir » d'un
+    // toast) : les écritures doivent la viser, elle.
+    idReel.current = estNouvelle ? null : (id ?? null);
+    creationEnVol.current = null;
+    // La langue au moment du chargement, lue par ref : changer de langue en
+    // cours d'édition ne doit PAS relancer ce chargement — il remplaçait les
+    // étapes non enregistrées par la version du serveur (audit 2026-09-28).
+    const frChargement = frBascule.current;
     let vivant = true;
     /*
      * Un échec passager (serveur occupé, 429, réseau) ne doit pas laisser
@@ -543,7 +681,16 @@ export default function AutomationBuilderPage() {
       .then((d) => {
         if (!vivant) return;
         setCatalogue(d.catalogue);
-        const trouvee = d.rules.find((r) => r.id === id) ?? null;
+        // `/nouvelle` : un brouillon LOCAL, rien en base (voir `ecrire`).
+        const trouvee = estNouvelle
+          ? {
+            id: '', org_id: '', name: frChargement ? 'Nouvelle automatisation' : 'New automation', description: null,
+            trigger_event: 'quote.sent', conditions: {}, delay_seconds: 0,
+            actions: [{ type: 'send_sms', config: { body: TEXTES_ACTION_PROVISOIRE[frChargement ? 0 : 1] } }],
+            steps: [], settings: null, is_active: false, is_preset: false, preset_key: null,
+            created_at: '', updated_at: '', lumi_conversation: [],
+          } satisfies AutomationRule
+          : d.rules.find((r) => r.id === id) ?? null;
         setRegle(trouvee);
         /*
          * Le nom des préréglages est stocké en ANGLAIS en base
@@ -558,7 +705,7 @@ export default function AutomationBuilderPage() {
          * son nom à lui, puisque la table ne connaît que les libellés
          * d'origine.
          */
-        setNom(localizeAutomationName(trouvee?.name ?? '', language));
+        setNom(localizeAutomationName(trouvee?.name ?? '', frChargement ? 'fr' : 'en'));
         const etapes = (trouvee?.steps as Etape[] | undefined) ?? [];
         // Le fil avec Lumi est gardé avec l'automatisation : il survit à la
         // fermeture de l'éditeur, et Lumi s'en souvient.
@@ -574,7 +721,7 @@ export default function AutomationBuilderPage() {
       })
       .catch((e: unknown) => {
         console.error('[builder] chargement échoué', e instanceof Error ? e.message : String(e));
-        toast.error(fr ? 'Impossible de charger cette automatisation' : 'Could not load this automation');
+        if (vivant) setEchecChargement(true);
       })
       .finally(() => { if (vivant) setChargement(false); });
 
@@ -588,7 +735,7 @@ export default function AutomationBuilderPage() {
       .catch((e: unknown) => console.error('[builder] etiquettes', e instanceof Error ? e.message : String(e)));
 
     return () => { vivant = false; };
-  }, [id, fr]);
+  }, [id, essaiChargement]);
 
   /*
    * « Construire avec Lumi » ouvre l'éditeur avec `?lumi=1` : le curseur
@@ -707,6 +854,7 @@ export default function AutomationBuilderPage() {
         ? 'Cette étape et tout ce qui la suit seront retirés du parcours.'
         : 'This step and everything after it will be removed.',
       confirmLabel: fr ? 'Supprimer' : 'Delete',
+      danger: true,
     });
     if (!ok) return;
     let restant = steps;
@@ -718,11 +866,12 @@ export default function AutomationBuilderPage() {
 
   const supprimerEtape = useCallback(async (idEtape: string) => {
     const ok = await confirmer({
-      title: fr ? 'Supprimer cette etape ?' : 'Delete this step?',
+      title: fr ? 'Supprimer cette étape ?' : 'Delete this step?',
       message: fr
-        ? 'Ce qui venait apres reste dans le parcours et se rebranche tout seul.'
+        ? 'Ce qui venait après reste dans le parcours et se rebranche tout seul.'
         : 'What came after stays in the journey and reconnects on its own.',
       confirmLabel: fr ? 'Supprimer' : 'Delete',
+      danger: true,
     });
     if (!ok) return;
     memoriser(retirerEtape(steps, idEtape));
@@ -751,14 +900,17 @@ export default function AutomationBuilderPage() {
    * ne va pas avec son déclencheur, c'est le découvrir après avoir tout monté.
    */
   const problemesVivants = useMemo(
-    () => problemesAvantPublication({
+    // Le module PARTAGÉ avec la route serveur de publication (M8) : ce que
+    // l'éditeur annonce est exactement ce que le serveur refusera.
+    () => problemesPublication({
       trigger_event: regle?.trigger_event,
       steps,
       actions: regle?.actions,
       conditions: (regle?.conditions ?? null) as Record<string, unknown> | null,
+      is_preset: regle?.is_preset,
       fr,
     }),
-    [regle?.trigger_event, regle?.actions, regle?.conditions, steps, fr],
+    [regle?.trigger_event, regle?.actions, regle?.conditions, regle?.is_preset, steps, fr],
   );
   /** Les étapes fautives, pour les signaler SUR le canevas (§6.5). */
   const etapesEnErreur = useMemo(
@@ -834,7 +986,7 @@ export default function AutomationBuilderPage() {
       for (let essai = 0; essai <= attentes.length; essai++) {
         if (annule) return;
         try {
-          await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
+          await ecrire({ name: nom.trim() || regle.name, steps });
           /*
            * On confirme même si l'effet a été relancé : le serveur a bien
            * reçu `envoye`. Si l'écran a changé depuis, le nouvel état
@@ -868,7 +1020,7 @@ export default function AutomationBuilderPage() {
       }
     }, 3000);
     return () => { annule = true; clearTimeout(minuterie); };
-  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr]);
+  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire]);
 
   // Dès que la dernière étape vide est remplie, on repart en enregistrement.
   useEffect(() => {
@@ -894,7 +1046,7 @@ export default function AutomationBuilderPage() {
        * qu'on peut cliquer se corrige, une erreur qu'on doit chercher se
        * contourne.
        */
-      const problemes = problemesAvantPublication({
+      const problemes = problemesPublication({
         trigger_event: regle.trigger_event,
         steps,
         actions: regle.actions,
@@ -902,6 +1054,7 @@ export default function AutomationBuilderPage() {
         // du déclencheur manque — la règle se publierait pour ne jamais
         // partir.
         conditions: (regle.conditions ?? null) as Record<string, unknown> | null,
+        is_preset: regle.is_preset,
         fr,
       });
       const bloquants = problemes.filter((p) => p.gravite === 'bloquant');
@@ -942,8 +1095,26 @@ export default function AutomationBuilderPage() {
         confirmLabel: fr ? 'Publier' : 'Publish',
       }).finally(() => { confirmationPublication.current = false; });
       if (!ok) return;
+      /*
+       * Le serveur vérifie la version ENREGISTRÉE : les dernières
+       * secondes de modifications partent d'abord, sinon il jugerait
+       * (et publierait) l'avant-dernière version du parcours.
+       */
+      if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours') {
+        try {
+          await ecrire({ name: nom.trim() || regle.name, steps });
+          setEtatSauvegarde('a_jour');
+        } catch (e: unknown) {
+          toast.error(e instanceof Error ? e.message : String(e));
+          return;
+        }
+      }
     }
-    const voulu = fileBascule.basculer(regle.id, regle.is_active);
+    // Un brouillon jamais enregistré n'a rien à publier (le contrôle
+    // ci-dessus l'a déjà dit) ; sinon l'id RÉEL, créé au besoin juste avant.
+    const cible = idReel.current;
+    if (!cible) return;
+    const voulu = fileBascule.basculer(cible, regle.is_active);
     setRegle((r) => (r ? { ...r, is_active: voulu } : r));
   };
 
@@ -1071,7 +1242,7 @@ export default function AutomationBuilderPage() {
     let echecEnregistrement = false;
     if (regle && etapesIncompletes === 0 && (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours')) {
       try {
-        await modifierAutomatisation(regle.id, { name: nom.trim() || regle.name, steps });
+        await ecrire({ name: nom.trim() || regle.name, steps });
         setEtatSauvegarde('a_jour');
       } catch (e: unknown) {
         console.error('[automatisations] enregistrement à la sortie impossible', e);
@@ -1095,7 +1266,7 @@ export default function AutomationBuilderPage() {
       if (!ok) return;
     }
     navigate('/automations');
-  }, [regle, etapesIncompletes, etatSauvegarde, nom, steps, fr, navigate]);
+  }, [regle, etapesIncompletes, etatSauvegarde, nom, steps, fr, navigate, ecrire]);
 
   const declencheurLabel = useMemo(() => {
     if (!catalogue || !regle) return fr ? '— à choisir —' : '— to pick —';
@@ -1224,7 +1395,7 @@ export default function AutomationBuilderPage() {
     try {
       // La case « Arrêter si… » vit dans `settings` : on la fusionne avec les
       // réglages existants (fenêtre, réentrée…) au lieu de les écraser.
-      const maj = await modifierAutomatisation(regle.id, arreterSiResolu === undefined
+      const maj = await ecrire(arreterSiResolu === undefined
         ? { conditions }
         : { conditions, settings: { ...((regle.settings ?? {}) as Record<string, unknown>), arreter_si_resolu: arreterSiResolu } });
       setRegle(maj);
@@ -1233,12 +1404,38 @@ export default function AutomationBuilderPage() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
     }
-  }, [regle, fr]);
+  }, [regle, fr, ecrire]);
 
   if (chargement) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface">
         <Loader2 className="h-6 w-6 animate-spin text-text-tertiary" aria-hidden="true" />
+      </div>
+    );
+  }
+
+  if (!regle && echecChargement) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-surface">
+        <p className="text-sm text-text-secondary">
+          {fr ? 'Impossible de charger cette automatisation pour le moment.' : 'Could not load this automation right now.'}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => { setEchecChargement(false); setChargement(true); setEssaiChargement((n) => n + 1); }}
+            className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Réessayer' : 'Try again'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void quitterEditeur()}
+            className="rounded-lg border border-outline px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Mes automatisations' : 'My automations'}
+          </button>
+        </div>
       </div>
     );
   }
@@ -1370,9 +1567,27 @@ export default function AutomationBuilderPage() {
             type="button"
             onClick={async () => {
               if (!regle) return;
+              if (!idReel.current) {
+                toast.info(fr ? 'Ajoutez une première étape : il n’y a encore rien à prévisualiser.' : 'Add a first step: there is nothing to preview yet.');
+                return;
+              }
               setApercuEnCours(true);
               try {
-                setApercu(await apercuAutomatisation(regle.id));
+                /*
+                 * L'aperçu lit la version ENREGISTRÉE : sans ceci, les 3
+                 * dernières secondes de modifications (délai de la sauvegarde
+                 * auto) n'apparaissaient pas (launch 2026-09-28). On enregistre
+                 * d'abord ce qui attend, comme avant de publier.
+                 */
+                if (etatSauvegarde === 'incomplet') {
+                  toast.info(fr ? 'Complétez les étapes en cours pour voir l’aperçu à jour.' : 'Complete the unfinished steps to see an up-to-date preview.');
+                  return;
+                }
+                if (etatSauvegarde === 'modifie' || etatSauvegarde === 'en_cours') {
+                  await ecrire({ name: nom.trim() || regle.name, steps });
+                  setEtatSauvegarde('a_jour');
+                }
+                setApercu(await apercuAutomatisation(idReel.current));
               } catch (e: unknown) {
                 toast.error(e instanceof Error ? e.message : String(e));
               } finally {
@@ -1490,7 +1705,7 @@ export default function AutomationBuilderPage() {
                             {p.etapeId ? (
                               <button
                                 type="button"
-                                onClick={() => setEtapeChoisie(p.etapeId!)}
+                                onClick={() => { if (p.etapeId) void ouvrirEtape(p.etapeId); }}
                                 className="text-left text-[12px] text-text-secondary underline decoration-dotted underline-offset-2 transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                               >
                                 {p.message}
@@ -1677,7 +1892,7 @@ export default function AutomationBuilderPage() {
                       fr={fr}
                       lectureSeule={formatOrigine}
                       selectionId={etapeChoisie}
-                      onSelection={setEtapeChoisie}
+                      onSelection={(idEtape) => void ouvrirEtape(idEtape)}
                       onAjouter={ouvrirAjout}
                       onMenu={setMenuEtape}
                       /*
@@ -1724,7 +1939,7 @@ export default function AutomationBuilderPage() {
                         const id = menuEtape;
                         if (!id) return;
                         if (cle === 'dupliquer') dupliquerEtape(id);
-                        else if (cle === 'modifier') { setMenuEtape(null); setEtapeChoisie(id); }
+                        else if (cle === 'modifier') { setMenuEtape(null); void ouvrirEtape(id); }
                         else if (cle === 'supprimer') { setMenuEtape(null); void supprimerEtape(id); }
                         else void supprimerDepuis(id);
                       }}
@@ -1903,16 +2118,28 @@ export default function AutomationBuilderPage() {
 
         {/* Historique et journaux : les données existent depuis des mois,
             c'est l'écran qui manquait. */}
-        {onglet === 'historique' && <div className="absolute inset-0 overflow-y-auto"><OngletHistorique ruleId={regle.id} fr={fr} /></div>}
-        {onglet === 'journaux' && <div className="absolute inset-0 overflow-y-auto"><OngletJournaux ruleId={regle.id} fr={fr} /></div>}
+        {/* Un brouillon jamais enregistré n'a ni historique, ni journaux, ni
+            réglages à écrire : on le dit au lieu d'interroger la base avec
+            un identifiant vide. */}
+        {onglet !== 'parcours' && !regle.id && (
+          <div className="absolute inset-0 flex items-center justify-center p-6">
+            <p className="text-sm text-text-secondary">
+              {fr
+                ? 'Cette automatisation n’est pas encore enregistrée : ajoutez une première étape.'
+                : 'This automation is not saved yet: add a first step.'}
+            </p>
+          </div>
+        )}
+        {onglet === 'historique' && regle.id && <div className="absolute inset-0 overflow-y-auto"><OngletHistorique ruleId={regle.id} fr={fr} /></div>}
+        {onglet === 'journaux' && regle.id && <div className="absolute inset-0 overflow-y-auto"><OngletJournaux ruleId={regle.id} fr={fr} /></div>}
 
-        {onglet === 'reglages' && (
+        {onglet === 'reglages' && regle.id && (
           <div className="absolute inset-0 overflow-y-auto">
             <OngletReglages
               ruleId={regle.id}
               reglages={(regle.settings ?? null) as ReglagesAutomatisation | null}
               fr={fr}
-              onChange={(r) => setRegle({ ...regle, settings: r as Record<string, unknown> | null })}
+              onChange={(r) => setRegle((x) => (x ? { ...x, settings: r as Record<string, unknown> | null } : x))}
             />
           </div>
         )}
@@ -1978,10 +2205,11 @@ export default function AutomationBuilderPage() {
           automatisations={autresAutomatisations}
           champsPerso={champsPerso}
           objetChamps={objetRegle}
-          stats={null}
+          stats={statsEtapes?.[etapeOuverte.id] ?? null}
           onEnregistrer={enregistrerEtape}
           onSupprimer={supprimerEtape}
           onFermer={() => setEtapeChoisie(null)}
+          onModifie={signalerBrouillonEtape}
         />
       )}
       </div>
