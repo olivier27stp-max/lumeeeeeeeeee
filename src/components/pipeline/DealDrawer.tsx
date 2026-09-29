@@ -27,6 +27,7 @@ import { deleteTask, updateTask } from '../../lib/tasksApi';
 import SpecificNotes from '../SpecificNotes';
 import CustomFieldsPanel from '../champs/CustomFieldsPanel';
 import EtiquettesDuClient from '../etiquettes/EtiquettesDuClient';
+import { DetailsDealEdition } from './FormulaireDealGhl';
 import { lireValeurs } from '../../lib/champsPersoApi';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -50,7 +51,7 @@ interface Membre { id: string; name: string }
 /** Provenance du montant affiché — calculée par `pipeline_montants` en base. */
 export type MontantProvenance = 'job' | 'devis' | 'devis_client' | 'aucun';
 
-type Onglet = 'lie' | 'apercu' | 'rdv' | 'taches' | 'notes' | 'paiements' | 'activite';
+type Onglet = 'details' | 'lie' | 'apercu' | 'rdv' | 'taches' | 'notes' | 'paiements' | 'activite';
 
 /**
  * Canaux proposés dans le sélecteur de source.
@@ -1139,9 +1140,11 @@ function OngletLie({ deal, fr, lectureSeule }: { deal: Deal; fr: boolean; lectur
 
 export default function DealDrawer({
   deal, etapes, membres, montantCents, montantProvenance, onClose, onAssigner, onCreerJob,
-  onChangement,
+  onChangement, nomPipeline,
 }: {
   deal: Deal | null;
+  /** Nom du pipeline du deal (formulaire « Détails du deal »). */
+  nomPipeline?: string;
   etapes: PipelineStage[];
   membres?: Membre[];
   /** Montant DÉRIVÉ du deal (jamais stocké). `null` = aucune source. */
@@ -1168,7 +1171,8 @@ export default function DealDrawer({
   const idRaisonAbandon = useId();
   const idDateFermeture = useId();
   const idOnglets = useId();
-  const [onglet, setOnglet] = useState<Onglet>('lie');
+  // 1re page = le formulaire du deal, comme « Add opportunity » de GHL (Rafba, 2026-09-29).
+  const [onglet, setOnglet] = useState<Onglet>('details');
   // La RLS des valeurs d'un deal exige « leads.update » : sans ce droit, les
   // champs s'affichent en lecture seule plutôt que de refuser à l'enregistrement.
   const perms = usePermissions();
@@ -1229,10 +1233,10 @@ export default function DealDrawer({
   useEffect(() => {
     setEtapePerdueVisee(null);
     setRaisonSaisie('');
-    // Chaque deal s'ouvre sur son CLIENT : la première question est « c'est
-    // qui, et où on en est avec lui ? ». Revenir sur le deal précédent avec
-    // la section qu'on regardait la fois d'avant serait déroutant.
-    setOnglet('lie');
+    // Chaque deal s'ouvre sur SES DÉTAILS (le formulaire, comme GHL) — décision
+    // de Rafba du 2026-09-29, qui remplace « s'ouvre sur le client ». Revenir sur
+    // le deal précédent avec la section d'avant serait déroutant.
+    setOnglet('details');
   }, [dealId]);
 
   if (!deal) return null;
@@ -1265,6 +1269,7 @@ export default function DealDrawer({
    * de savoir qu'il doit encore 1 200 $.
    */
   const ONGLETS: { cle: Onglet; libelle: string }[] = [
+    { cle: 'details', libelle: fr ? 'Détails du deal' : 'Deal details' },
     { cle: 'lie', libelle: fr ? 'Client' : 'Client' },
     { cle: 'apercu', libelle: fr ? 'Deal' : 'Deal' },
     { cle: 'rdv', libelle: fr ? 'Rendez-vous' : 'Appointments' },
@@ -1986,6 +1991,13 @@ export default function DealDrawer({
                 <ActivityTimeline entityType="deal" entityId={deal.id} />
               </Section>
             </>
+          )}
+
+          {onglet === 'details' && (
+            <DetailsDealEdition deal={deal} etapes={etapes} membres={listeMembres} montantCents={montantCents}
+              nomPipeline={nomPipeline}
+              fr={fr} lectureSeule={champsEnLecture} onAssigner={onAssigner} onCreerJob={onCreerJob} onChangement={onChangement}
+              champsPerso={<SectionInformations dealId={deal.id} fr={fr} lectureSeule={champsEnLecture} />} />
           )}
 
           {onglet === 'lie' && <OngletLie deal={deal} fr={fr} lectureSeule={champsEnLecture} />}

@@ -9,7 +9,7 @@ interface ModalProps {
   title?: string;
   description?: string;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl';
   footer?: React.ReactNode;
 }
 
@@ -20,6 +20,8 @@ const sizeMap = {
   xl: 'max-w-xl',
   // Formulaire + aperçu côte à côte (création de champ personnalisé).
   '2xl': 'max-w-3xl',
+  // Formulaire du deal sur deux colonnes + navigation à gauche (« Add opportunity » de GHL).
+  '4xl': 'max-w-5xl',
 };
 
 export default function Modal({ open, onClose, title, description, children, size = 'md', footer }: ModalProps) {
@@ -92,7 +94,8 @@ export default function Modal({ open, onClose, title, description, children, siz
         )}
         <div className="px-6 py-5">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2.5 px-6 pb-6 pt-0 border-t border-border-light mt-0 pt-4">
+          // Collé en bas : sur un long formulaire, « Créer » reste visible (comme GHL).
+          <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2.5 px-6 pb-6 pt-0 border-t border-border-light mt-0 pt-4" style={{ background: 'inherit' }}>
             {footer}
           </div>
         )}

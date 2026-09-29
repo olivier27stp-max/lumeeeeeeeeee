@@ -685,6 +685,8 @@ export interface ContactClient {
   email: string | null;
   phone: string | null;
   address: string | null;
+  /** « Entreprise » du formulaire du deal (GHL : Business name). */
+  company: string | null;
 }
 
 /**
