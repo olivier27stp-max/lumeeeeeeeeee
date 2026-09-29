@@ -27,11 +27,8 @@ import { Banc, DISPONIBLE, attendre, type OrgTest } from './_fixtures';
 
 const courriels: Array<{ to: string; subject: string }> = [];
 const sms: Array<{ to: string; body: string; args: any }> = [];
-vi.mock('../../../server/lib/mailer', () => ({
-  isMailerConfigured: () => true,
-  sendEmail: vi.fn(async (p: { to: string; subject: string }) => { courriels.push({ to: p.to, subject: p.subject }); return { sent: true, messageId: 'test' }; }),
-}));
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'qa@lume.test' }), langueEntreprise: () => 'fr' }));
+vi.mock('../../../server/lib/mailer', async () => (await import('../_simulations')).mailerSimule(vi.fn(async (p: { to: string; subject: string }) => { courriels.push({ to: p.to, subject: p.subject }); return { sent: true, messageId: 'test' }; })));
+vi.mock('../../../server/routes/emails', async () => (await import('../_simulations')).emailsSimules('qa@lume.test'));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 const twilio = { messages: { create: vi.fn(async (p: { to: string; body: string }) => { sms.push({ to: p.to, body: p.body, args: p }); return { sid: `SM_${sms.length}` }; }) } };
 

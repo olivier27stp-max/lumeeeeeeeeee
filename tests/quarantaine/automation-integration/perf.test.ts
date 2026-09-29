@@ -15,8 +15,8 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { Banc, DISPONIBLE, type OrgTest } from './_fixtures';
 
-vi.mock('../../../server/lib/mailer', () => ({ isMailerConfigured: () => true, sendEmail: vi.fn(async () => ({ sent: true, messageId: 'test' })) }));
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'qa@lume.test' }), langueEntreprise: () => 'fr' }));
+vi.mock('../../../server/lib/mailer', async () => (await import('../_simulations')).mailerSimule(vi.fn(async () => ({ sent: true, messageId: 'test' }))));
+vi.mock('../../../server/routes/emails', async () => (await import('../_simulations')).emailsSimules('qa@lume.test'));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 const twilio = { messages: { create: vi.fn(async () => ({ sid: 'SM_perf' })) } };
 
