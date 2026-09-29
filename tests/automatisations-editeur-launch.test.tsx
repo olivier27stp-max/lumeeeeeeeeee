@@ -295,3 +295,19 @@ describe('« Aperçu » montre la version à jour', () => {
     expect(api.modifier.mock.calls[0][1]).toMatchObject({ name: 'Relance devis v2' });
   });
 });
+
+describe('échec de chargement de l’éditeur', () => {
+  it('dit « Impossible de charger » (pas « introuvable ») et « Réessayer » recharge', async () => {
+    api.charger.mockImplementation(async () => { throw new Error('503'); });
+    await ouvrir(`/automations/${ID}`);
+    // Les 3 essais (1,5 s puis 3 s) passent avant le verdict.
+    await act(async () => { await new Promise((r) => setTimeout(r, 4800)); });
+    await attendre();
+    expect(container.textContent).toContain('Impossible de charger cette automatisation');
+    expect(container.textContent).not.toContain('introuvable');
+    api.charger.mockImplementation(async () => ({ rules: etat.regles, catalogue: { declencheurs: [], actions: [] } }));
+    cliquer(bouton('Réessayer'));
+    await attendre();
+    expect(container.textContent).toContain('Relance devis');
+  }, 15_000);
+});

@@ -642,6 +642,14 @@ export default function AutomationBuilderPage() {
   };
 
   // ── Chargement ──
+  /*
+   * Échec de chargement ≠ automatisation introuvable (launch 2026-09-28) :
+   * après les 3 essais, l'écran disait « introuvable » — on croyait
+   * l'automatisation supprimée. Un échec dit « Impossible de charger » et
+   * propose « Réessayer ».
+   */
+  const [echecChargement, setEchecChargement] = useState(false);
+  const [essaiChargement, setEssaiChargement] = useState(0);
   useEffect(() => {
     // `/nouvelle` vient d'être remplacé par l'id du brouillon créé : l'écran
     // EST déjà la règle — relire la base écraserait ce qu'on tape.
@@ -713,7 +721,7 @@ export default function AutomationBuilderPage() {
       })
       .catch((e: unknown) => {
         console.error('[builder] chargement échoué', e instanceof Error ? e.message : String(e));
-        toast.error(frChargement ? 'Impossible de charger cette automatisation' : 'Could not load this automation');
+        if (vivant) setEchecChargement(true);
       })
       .finally(() => { if (vivant) setChargement(false); });
 
@@ -727,7 +735,7 @@ export default function AutomationBuilderPage() {
       .catch((e: unknown) => console.error('[builder] etiquettes', e instanceof Error ? e.message : String(e)));
 
     return () => { vivant = false; };
-  }, [id]);
+  }, [id, essaiChargement]);
 
   /*
    * « Construire avec Lumi » ouvre l'éditeur avec `?lumi=1` : le curseur
@@ -1400,6 +1408,32 @@ export default function AutomationBuilderPage() {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface">
         <Loader2 className="h-6 w-6 animate-spin text-text-tertiary" aria-hidden="true" />
+      </div>
+    );
+  }
+
+  if (!regle && echecChargement) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-surface">
+        <p className="text-sm text-text-secondary">
+          {fr ? 'Impossible de charger cette automatisation pour le moment.' : 'Could not load this automation right now.'}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => { setEchecChargement(false); setChargement(true); setEssaiChargement((n) => n + 1); }}
+            className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Réessayer' : 'Try again'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void quitterEditeur()}
+            className="rounded-lg border border-outline px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {fr ? 'Mes automatisations' : 'My automations'}
+          </button>
+        </div>
       </div>
     );
   }
