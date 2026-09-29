@@ -373,3 +373,27 @@ describe('bandeau quand le bureau n’a pas de numéro texto', () => {
     expect(container.textContent).not.toContain(PHRASE);
   });
 });
+
+// ─── Pagination (bloc 5) ────────────────────────────────────────
+
+describe('pagination — jamais « Aucune automatisation » à tort', () => {
+  it('supprimer la seule ligne de la dernière page ramène à la page précédente', async () => {
+    reglesServies = Array.from({ length: 11 }, (_, i) => regle({ id: `r${i + 1}`, name: `Règle ${String(i + 1).padStart(2, '0')}`, created_at: `2026-09-${String(10 + i).padStart(2, '0')}T12:00:00Z` }));
+    await rendre();
+    await attendre();
+    cliquer(bouton('Suivant'));
+    await attendre();
+    const derniere = Array.from(container.querySelectorAll('button')).find((b) => /^Actions pour/.test(b.getAttribute('aria-label') ?? ''));
+    expect(derniere).toBeTruthy();
+    const nom = derniere!.getAttribute('aria-label')!.replace('Actions pour ', '');
+    // La base ne rend plus que 10 règles après la suppression.
+    reglesServies = reglesServies.filter((r) => r.name !== nom);
+    cliquer(derniere);
+    await attendre();
+    cliquer(Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Supprimer'));
+    await attendre();
+    await attendre();
+    expect(container.textContent).not.toContain('Aucune automatisation');
+    expect(container.querySelectorAll('button[role="switch"]').length).toBe(10);
+  });
+});

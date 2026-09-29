@@ -658,7 +658,8 @@ export default function Automations() {
 
   // Changer d'onglet ou de filtre remet à la première page : rester en page 3
   // d'une liste qui n'en a plus qu'une donne un écran vide inexplicable.
-  useEffect(() => { setPage(1); setRestentAffichees(new Set()); }, [onglet, search, filterCategory, filterStatut]);
+  // Le dossier aussi (launch 2026-09-28) : rester en page 3 d'un dossier qui n'en a qu'une donnait « Aucune automatisation ».
+  useEffect(() => { setPage(1); setRestentAffichees(new Set()); }, [onglet, search, filterCategory, filterStatut, dossierActif]);
 
   // Une sélection ne survit à AUCUN changement de vue (M9) : onglet, dossier,
   // page, recherche, filtres, taille de page.
@@ -876,6 +877,10 @@ export default function Automations() {
   });
 
   const pages = Math.max(1, Math.ceil(filtrees.length / parPage));
+  // Après une suppression (ou un déplacement) sur la dernière page, la page
+  // courante peut ne plus exister : on la ramène dans les bornes au lieu
+  // d'afficher « Aucune automatisation » (launch 2026-09-28).
+  useEffect(() => { setPage((p) => Math.min(p, pages)); }, [pages]);
 
   /** Combien d'automatisations dans chaque dossier — un dossier vide se voit. */
   const compteParDossier = (id: string) => vivantes.filter((r) => r.folder_id === id).length;
