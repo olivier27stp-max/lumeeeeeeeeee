@@ -24,6 +24,15 @@ export interface ActionContext {
   twilio: { client: any; phoneNumber: string } | null;
   baseUrl: string;
   /**
+   * Une tentative PRÉCÉDENTE a peut-être déjà envoyé ce message (délai
+   * dépassé, tâche récupérée après un arrêt, événement rejoué par l'outbox).
+   * Avant de renvoyer, on cherche le même message au même destinataire
+   * depuis cette date ; s'il est là, on ne renvoie pas (launch M5).
+   */
+  dejaEnvoyeDepuis?: string;
+  /** Clé d'idempotence du fournisseur de courriel (Resend) : `tâche:étape`. */
+  cleIdempotence?: string;
+  /**
    * true = message COMMERCIAL (relance, suivi, cross-sell — toute action
    * différée). Soumis au plafond de fréquence par destinataire. false/absent
    * = transactionnel (confirmation, reçu, rappel de RDV attendu) : toujours
@@ -89,9 +98,61 @@ async function avecLienReservation(
   }
 }
 
+/**
+ * Pourquoi un envoi n'a pas pu partir sur CE canal — jamais une panne.
+ *
+ * Launch 2026-09-28 (M1) : ces cas faisaient ÉCHOUER l'étape, et une étape
+ * échouée arrête tout le parcours. Sans numéro texto (aucun bureau n'en a
+ * encore), le rappel de rendez-vous mourait au premier texto : ni le
+ * courriel, ni les rappels 7 j / veille / 2 h ne partaient. Ce ne sont pas
+ * des pannes à reprendre, ce sont des impossibilités : l'étape est SAUTÉE,
+ * le parcours continue, le motif est dans le journal (`result_data.saute`).
+ */
+export type CodeSaut =
+  | 'sms_non_configure'
+  | 'sans_telephone'
+  | 'sans_courriel'
+  | 'sans_consentement'
+  | 'adresse_injoignable'
+  | 'date_absente'
+  | 'desabonne'
+  | 'deja_envoye'
+  | 'boucle';
+
 /** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
-function saute(motif: string): ActionResult {
-  return { success: true, data: { saute: motif } };
+function saute(motif: string, code: CodeSaut = 'desabonne'): ActionResult {
+  return { success: true, data: { saute: motif, saute_code: code } };
+}
+
+const DEJA_ENVOYE = 'Déjà envoyé lors d’une tentative précédente';
+
+/**
+ * Le même message est-il déjà parti vers ce destinataire depuis `depuis` ?
+ *
+ * Launch M5 : une action coupée à 5 s, une tâche récupérée après un arrêt
+ * brutal ou un événement rejoué par l'outbox repassaient par l'envoi — et le
+ * client recevait deux fois le même texto. `null` = impossible de le savoir
+ * (lecture ratée) : l'appelant échoue en reprise plutôt que de risquer un
+ * doublon.
+ */
+async function dejaEnvoye(
+  ctx: ActionContext,
+  canal: 'sms' | 'email',
+  cle: { destinataire: string; texte: string },
+): Promise<boolean | null> {
+  if (!ctx.dejaEnvoyeDepuis) return false;
+  const requete = canal === 'sms'
+    ? ctx.supabase.from('messages').select('id')
+      .eq('org_id', ctx.orgId).eq('direction', 'outbound')
+      .eq('phone_number', normalizeE164(cle.destinataire)).eq('message_text', cle.texte)
+    : ctx.supabase.from('email_deliveries').select('id')
+      .eq('org_id', ctx.orgId).eq('to_email', cle.destinataire).eq('subject', cle.texte.slice(0, 500));
+  const { data, error } = await requete.gte('created_at', ctx.dejaEnvoyeDepuis).limit(1);
+  if (error) {
+    console.error(`[actions] vérification « déjà envoyé » impossible (${canal}, org ${ctx.orgId}):`, error.message);
+    return null;
+  }
+  return (data?.length ?? 0) > 0;
 }
 
 /** Le résultat est-il un vrai envoi (pas un saut) ? */
@@ -250,7 +311,7 @@ async function depassePlafondFrequence(
  */
 export type VerdictConsentement =
   | { autorise: true; base?: BaseLegale; clientId?: string }
-  | { autorise: false; motif: string; desabonne?: boolean };
+  | { autorise: false; motif: string; desabonne?: boolean; technique?: boolean };
 
 /**
  * Les dates qui peuvent fonder un tacite, pour un client donné.
@@ -371,7 +432,7 @@ async function consentementCommercial(
     console.error(`[actions] consentement indéterminable (${canal}, org ${ctx.orgId}):`, e?.message || e);
     // Doute = on ne part pas. Voir l'en-tête : l'inverse du plafond de fréquence.
     return ctx.commercial
-      ? { autorise: false, motif: 'consentement invérifiable (erreur technique) — envoi commercial suspendu' }
+      ? { autorise: false, motif: 'consentement invérifiable (erreur technique) — envoi commercial suspendu', technique: true }
       : { autorise: true };
   }
 }
@@ -785,8 +846,8 @@ export async function resolveEntityVariables(
       // Variables du déclencheur « Facture consultée par le client », même
       // forme que celles de la soumission. `facture.lien` part du jeton que la
       // page publique lit VRAIMENT (`view_token`) ; `[invoice_link]`, lui,
-      // lit `public_token` (toujours vide) — laissé tel quel pour ne rien
-      // changer aux règles existantes, voir le rapport de phase 0 (bug 3).
+      // lisait `public_token` (toujours vide) : corrigé au launch (bug 3 de
+      // la phase 0), il porte maintenant `view_token` lui aussi.
       // « Paiement échoué » : le dernier échec de cette facture (hors litige),
       // la raison en mots de client, et le lien pour payer. Drapeau seulement,
       // pour la même raison que plus bas (charge du webhook).
@@ -830,11 +891,13 @@ export async function resolveEntityVariables(
       vars.invoice_number = inv.invoice_number || '';
       vars.invoice_due_date = inv.due_date || '';
       vars.invoice_total = argent(inv.total_cents);
-      // `invoices` utilise `public_token` la ou `quotes` utilise
-      // `view_token` — deux noms pour la meme idee, verifie dans le schema
-      // de production. La page servie est `/invoice/:token`.
-      if (inv.public_token) {
-        vars.invoice_link = `${resolvePublicBaseUrl()}/invoice/${inv.public_token}`;
+      // La page servie est `/invoice/:token`, et GET /api/invoices/public/:token
+      // cherche la facture par `view_token`. `[invoice_link]` lisait
+      // `public_token`, toujours vide : les relances de facture du pack
+      // partaient SANS lien (launch 2026-09-28, bug 3 de la phase 0).
+      const jetonFacture = inv.view_token || inv.public_token;
+      if (jetonFacture) {
+        vars.invoice_link = `${resolvePublicBaseUrl()}/invoice/${jetonFacture}`;
       }
       if (inv.client_id) {
         const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
@@ -1011,15 +1074,23 @@ export async function executeSendEmail(
   // Voir `DESTINATAIRE_IMPOSE` plus haut : `config.to` permettait d'envoyer les
   // données d'un client (nom, montants, adresse) vers une adresse arbitraire.
   const to = vars.client_email;
-  if (!to) return { success: false, error: 'No recipient email' };
+  if (!to) return saute('Aucune adresse courriel pour ce client', 'sans_courriel');
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'subject', ctx.langue), champLocalise(config, 'body', ctx.langue));
   const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
   const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
 
   try {
-    const { sendEmail, isMailerConfigured } = await import('../mailer');
+    const { sendEmail, isMailerConfigured, adresseInjoignable } = await import('../mailer');
     if (!isMailerConfigured()) return { success: false, error: 'SMTP not configured' };
+
+    // Launch M7 : une adresse qui a rebondi (ou porté plainte) ne reçoit plus
+    // rien — comme les relances de factures (reminders-cron). Écrire à une
+    // adresse morte abîme la réputation d'envoi de TOUTES les entreprises, et
+    // le journal affichait « succès ». Étape sautée, le parcours continue.
+    if (await adresseInjoignable(ctx.orgId, to)) {
+      return saute('Adresse courriel injoignable (rebond ou plainte)', 'adresse_injoignable');
+    }
 
     // Identité de l'ORG, pas de Lume.
     //
@@ -1045,7 +1116,7 @@ export async function executeSendEmail(
       if (ctx.parCanal) {
         if (ctx.commercial) return saute(motifSaut('courriel'));
       } else {
-        return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails` };
+        return saute(motifSaut('courriel'));
       }
     }
 
@@ -1055,7 +1126,9 @@ export async function executeSendEmail(
     const consentement = await consentementCommercial(ctx, 'email', to);
     if (!consentement.autorise) {
       if (ctx.parCanal && consentement.desabonne) return saute(motifSaut('courriel'));
-      return { success: false, error: `Consentement manquant pour ${to} : ${consentement.motif}` };
+      // Une LECTURE ratée n'est pas une absence de consentement : vrai échec, repris plus tard.
+      if (consentement.technique) return { success: false, error: 'Lecture du carnet de clients impossible (erreur technique) — envoi suspendu' };
+      return saute(`Consentement manquant (courriel) : ${consentement.motif}`, consentement.desabonne ? 'desabonne' : 'sans_consentement');
     }
     // La preuve, pas seulement l'autorisation : le CRTC demande à l'expéditeur
     // de démontrer POURQUOI il avait le droit. N'échoue jamais l'envoi.
@@ -1138,11 +1211,16 @@ export async function executeSendEmail(
       ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${apercuTexte.replace(/[<>]/g, '')}</div>`
       : '';
 
+    const dejaParti = await dejaEnvoye(ctx, 'email', { destinataire: to, texte: subject });
+    if (dejaParti === null) return { success: false, error: 'Vérification « déjà envoyé » impossible — envoi reporté' };
+    if (dejaParti) return saute(DEJA_ENVOYE, 'deja_envoye');
+
     const result = await sendEmail({
       ...expediteur,
       to,
       subject,
       html: buildEmailLayout(company, apercu + body + pied, bouton),
+      ...(ctx.cleIdempotence ? { cleIdempotence: ctx.cleIdempotence } : {}),
       /* Sans `suivi`, la ligne `email_deliveries` part sans entity_type, et la
          fonction de suivi en base REFUSE alors d'enregistrer l'ouverture
          (`and d.entity_type is not null`, exclusion Loi 25 des courriels de
@@ -1192,12 +1270,12 @@ export async function executeSendSms(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  if (!ctx.twilio) return { success: false, error: 'Twilio not configured' };
+  if (!ctx.twilio) return saute('Aucun numéro texto configuré pour le bureau', 'sms_non_configure');
 
   // Même règle que pour le courriel : le numéro vient de l'entité, pas de la
   // règle. Voir `DESTINATAIRE_IMPOSE`.
   const to = vars.client_phone;
-  if (!to) return { success: false, error: 'No recipient phone' };
+  if (!to) return saute('Aucun numéro de téléphone pour ce client', 'sans_telephone');
 
   // CASL compliance — manual sends already blocked opted-out recipients, but
   // automations bypassed the list entirely and kept texting after a STOP.
@@ -1212,7 +1290,7 @@ export async function executeSendSms(
     // Désabonnement par canal : seul le marketing est sauté. Un texto
     // transactionnel est tenté — si l'opérateur le bloque (STOP géré par
     // Twilio, erreur 21610), il est sauté plus bas avec le même motif.
-    if (!ctx.parCanal) return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)` };
+    if (!ctx.parCanal) return saute(motifSaut('texto'));
     if (ctx.commercial) return saute(motifSaut('texto'));
   }
 
@@ -1220,7 +1298,9 @@ export async function executeSendSms(
   // qu'une base légale existe — exprès, ou la relation d'affaires (LCAP).
   const consentementSms = await consentementCommercial(ctx, 'sms', to);
   if (!consentementSms.autorise) {
-    return { success: false, error: `Consentement manquant pour ${optOutPhone} : ${consentementSms.motif}` };
+    // Une LECTURE ratée n'est pas une absence de consentement : vrai échec, repris plus tard.
+    if (consentementSms.technique) return { success: false, error: 'Lecture du carnet de clients impossible (erreur technique) — envoi suspendu' };
+    return saute(`Consentement manquant (texto) : ${consentementSms.motif}`, 'sans_consentement');
   }
   // Même raison que pour le courriel : la base retenue doit être démontrable.
   if (ctx.commercial) void journaliserBaseLegale(ctx, 'sms', consentementSms.clientId ?? null, consentementSms.base);
@@ -1242,13 +1322,12 @@ export async function executeSendSms(
     const { getOrgSmsFromNumber } = await import('../twilioProvisioning');
     fromNumber = await getOrgSmsFromNumber(ctx.orgId);
   } catch (err: any) {
-    return {
-      success: false,
-      error:
-        err?.code === 'plan_excludes_sms'
-          ? 'Plan does not include SMS'
-          : `Organization has no SMS number provisioned (${err?.code || err?.message || 'unknown'})`,
-    };
+    return saute(
+      err?.code === 'plan_excludes_sms'
+        ? 'Le forfait n’inclut pas les textos'
+        : 'Aucun numéro texto configuré pour le bureau',
+      'sms_non_configure',
+    );
   }
 
   {
@@ -1257,6 +1336,10 @@ export async function executeSendSms(
     const orgGelee = await destinataireGele(getServiceClient(), { phone: to }, ctx.orgId);
     if (orgGelee) { journaliserBlocage('sms', orgGelee, to, 'automatisation'); return { success: false, error: MESSAGE_GEL }; }
   }
+  const dejaParti = await dejaEnvoye(ctx, 'sms', { destinataire: to, texte: body });
+  if (dejaParti === null) return { success: false, error: 'Vérification « déjà envoyé » impossible — envoi reporté' };
+  if (dejaParti) return saute(DEJA_ENVOYE, 'deja_envoye');
+
   try {
     const { getTwilioStatusCallbackUrl } = await import('../config');
     const statusCallback = getTwilioStatusCallbackUrl();
@@ -1764,18 +1847,30 @@ export async function executeRequestReview(
   }
 
   // 9. Envoi : courriel si on a l'adresse, SMS si on a le numéro.
-  const emailResult = vars.client_email
-    ? await executeSendEmail({ subject, body }, vars, ctx)
-    : { success: false, error: 'Client has no email address.' };
+  //
+  // F7 (launch 2026-09-28) : une demande d'avis est une SOLLICITATION. Même
+  // partie tout de suite (donc « non commerciale » pour le moteur), elle
+  // compte dans le plafond de messages commerciaux par destinataire — sinon
+  // un client déjà à 3 messages en 24 h recevait en plus courriel + texto.
+  const ctxPlafond: ActionContext = { ...ctx, commercial: true };
+  const auPlafond = (canal: 'sms' | 'email', dest: string) => ({
+    success: false as const,
+    error: `Frequency cap reached for ${dest} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — ${canal === 'sms' ? 'SMS' : 'email'} review request skipped`,
+  });
+  const emailResult: ActionResult = !vars.client_email
+    ? { success: false, error: 'Client has no email address.' }
+    : await depassePlafondFrequence(ctxPlafond, 'email', vars.client_email)
+      ? auPlafond('email', vars.client_email)
+      : await executeSendEmail({ subject, body }, vars, ctx);
 
-  const smsResult = vars.client_phone
-    ? await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx)
-    : { success: false, error: 'Client has no phone number.' };
+  const smsResult: ActionResult = !vars.client_phone
+    ? { success: false, error: 'Client has no phone number.' }
+    : await depassePlafondFrequence(ctxPlafond, 'sms', vars.client_phone)
+      ? auPlafond('sms', vars.client_phone)
+      : await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx);
 
-  // Avec le désabonnement par canal, un canal SAUTÉ n'est pas un envoi.
-  const sent = ctx.parCanal
-    ? estEnvoye(emailResult) || estEnvoye(smsResult)
-    : emailResult.success || smsResult.success;
+  // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
+  const sent = estEnvoye(emailResult) || estEnvoye(smsResult);
   const sautes = [emailResult, smsResult]
     .map((r) => (r.success && r.data && typeof r.data === 'object' ? (r.data as { saute?: string }).saute : undefined))
     .filter((m): m is string => !!m);
@@ -2560,6 +2655,9 @@ export async function executeArreterAutomatisation(
  * qui démarrent le même troisième sur le même client ne produisent qu'une
  * seule inscription.
  */
+/** Au-delà, une chaîne « A démarre B démarre C… » est arrêtée (launch 2026-09-28). */
+export const PROFONDEUR_MAX_DEMARRAGE = 3;
+
 export async function executeDemarrerAutomatisation(
   config: { rule_id?: string },
   _vars: Record<string, string>,
@@ -2572,9 +2670,23 @@ export async function executeDemarrerAutomatisation(
     return { success: false, error: 'Une automatisation ne peut pas se démarrer elle-même.' };
   }
 
+  /*
+   * Anti-boucle ENTRE parcours (launch 2026-09-28). La chaîne = les règles
+   * qui ont mené ici. A → B → A tournait sans fin : la garde ne refusait
+   * que « se démarrer soi-même ». Règle déjà dans la chaîne, ou plus de
+   * PROFONDEUR_MAX_DEMARRAGE automatisations enchaînées : arrêt, journalisé.
+   */
+  const chaine = [...(ctx.chaine ?? []), ...(ctx.ruleId ? [ctx.ruleId] : [])];
+  if (chaine.includes(cible)) {
+    return saute('Boucle évitée : cette automatisation a déjà été démarrée plus haut dans la chaîne', 'boucle');
+  }
+  if (chaine.length >= PROFONDEUR_MAX_DEMARRAGE) {
+    return saute(`Chaîne arrêtée : plus de ${PROFONDEUR_MAX_DEMARRAGE} automatisations démarrées à la suite`, 'boucle');
+  }
+
   const { data: regle, error: errLecture } = await ctx.supabase
     .from('automation_rules')
-    .select('id, name, actions, is_active, deleted_at')
+    .select('id, name, is_active, deleted_at, actions, steps')
     .eq('id', cible)
     .eq('org_id', ctx.orgId)
     .maybeSingle();
@@ -2588,32 +2700,23 @@ export async function executeDemarrerAutomatisation(
     // tâches pour une règle que personne n'a publiée.
     return { success: false, error: `« ${regle.name} » est en brouillon : rien à démarrer.` };
   }
-
-  const actions = Array.isArray(regle.actions) ? regle.actions : [];
-  if (actions.length === 0) {
+  const aDesActions = Array.isArray(regle.actions) && regle.actions.length > 0;
+  const aDesEtapes = Array.isArray(regle.steps) && regle.steps.length > 0;
+  if (!aDesActions && !aDesEtapes) {
     return { success: false, error: `« ${regle.name} » n'a aucune action.` };
   }
 
-  const maintenant = new Date().toISOString();
-  let inscrites = 0;
-  for (let i = 0; i < actions.length; i++) {
-    const { error } = await ctx.supabase.from('automation_scheduled_tasks').insert({
-      org_id: ctx.orgId,
-      automation_rule_id: regle.id,
-      entity_type: ctx.entityType,
-      entity_id: ctx.entityId,
-      action_config: { ...actions[i], trigger_event: 'automation.started' },
-      execute_at: maintenant,
-      status: 'pending',
-      execution_key: `${regle.id}:${ctx.entityId}:${i}`,
-    });
-    if (!error) { inscrites += 1; continue; }
-    // 23505 = déjà inscrit. Ce n'est pas un échec : c'est l'anti-doublon
-    // qui fait son travail.
-    if (error.code !== '23505') return { success: false, error: error.message };
-  }
-
-  return { success: true, data: { automatisation: regle.name, inscrites } };
+  /*
+   * MÊME point d'entrée qu'un déclencheur : un parcours démarre à sa 1re
+   * étape (avec ses attentes), une règle à délai est planifiée, une règle
+   * immédiate part — avec les mêmes anti-doublons. Avant, seules les
+   * `actions` étaient inscrites, toutes « maintenant » : un parcours
+   * n'envoyait que sa 1re action, sans ses attentes.
+   */
+  const { demarrerRegle } = await import('../automationEngine');
+  const r = await demarrerRegle(regle.id, { orgId: ctx.orgId, entityType: ctx.entityType, entityId: ctx.entityId, chaine });
+  if (!r.ok) return { success: false, error: r.erreur };
+  return { success: true, data: { demarree: regle.name } };
 }
 
 // ── Actions : envoyer la facture / la soumission ────────────

@@ -125,6 +125,12 @@ export interface CRMEvent {
    * orphelin, complété par le moteur au fil des règles (voir outbox.ts).
    */
   reglesTraitees?: string[];
+  /**
+   * Rejeu d'un orphelin de l'outbox : l'heure où l'événement a été consigné.
+   * Le traitement coupé a pu envoyer avant de mourir ; les envois vérifient
+   * « déjà parti depuis cette heure-là ? » avant de repartir (launch M5).
+   */
+  rejoueDepuis?: string;
 }
 
 // Map event types to activity_log event_type values

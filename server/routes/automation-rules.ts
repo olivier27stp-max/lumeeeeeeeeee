@@ -779,7 +779,7 @@ router.post('/automations/pause', async (req, res) => {
 
   const enPause = req.body?.paused === true;
 
-  const { error } = await auth.client
+  const { data: modifiees, error } = await auth.client
     .from('company_settings')
     .update({
       automations_paused: enPause,
@@ -789,7 +789,12 @@ router.post('/automations/pause', async (req, res) => {
       automations_paused_at: enPause ? new Date().toISOString() : null,
       automations_paused_by: enPause ? auth.user.id : null,
     })
-    .eq('org_id', auth.orgId);
+    .eq('org_id', auth.orgId)
+    // Launch 2026-09-28 : la RLS de company_settings ne laisse modifier
+    // qu'un administrateur. Pour un autre rôle, la mise à jour touche ZÉRO
+    // ligne, sans erreur — et la route répondait « en pause » alors que rien
+    // n'était arrêté. On relit ce qui a vraiment été écrit.
+    .select('automations_paused');
 
   if (error) {
     if (error.code === '42501') {
@@ -798,13 +803,21 @@ router.post('/automations/pause', async (req, res) => {
     logger.error('[automation-rules] bascule de pause échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de changer l’état des automatisations.' });
   }
+  if (!modifiees || modifiees.length === 0) {
+    return res.status(403).json({
+      error: enPause
+        ? 'Seul un administrateur peut arrêter les automatisations. Rien n’a été arrêté.'
+        : 'Seul un administrateur peut reprendre les automatisations. Elles sont toujours en pause.',
+    });
+  }
 
   // Le moteur garde l'état en cache 15 s : on l'oublie tout de suite, sinon
   // un arrêt d'urgence mettrait un quart de minute à mordre.
   oublierPause(auth.orgId);
 
   logger.warn('[automations] pause basculée', { orgId: auth.orgId, enPause, par: auth.user.id });
-  return res.json({ paused: enPause });
+  // L'état RÉEL, relu de la base — pas celui qu'on a demandé.
+  return res.json({ paused: (modifiees[0] as { automations_paused: boolean | null }).automations_paused === true });
 });
 
 // ── Webhooks entrants ───────────────────────────

@@ -126,6 +126,43 @@ export function premiereEtape(steps: Etape[]): Etape | null {
   return steps[0] ?? null;
 }
 
+/**
+ * La première étape qui n'est PAS une action immédiate du début du parcours.
+ *
+ * Launch M6 : une visite créée EN LOT (plan de service, job multi-visites)
+ * porte `suppress_immediate` — seule la première visite confirme. Le garde
+ * ne valait que pour les règles simples ; le pack « rendez-vous » est un
+ * parcours, et un plan de 4 visites envoyait 4 confirmations. On saute les
+ * actions qui ouvrent le parcours (la confirmation) et on démarre à la
+ * première attente ou condition : les rappels restent calés sur CHAQUE visite.
+ * `null` = le parcours n'est fait que d'actions immédiates : rien à planifier.
+ */
+/**
+ * Les actions qui OUVRENT le parcours, avant toute attente ou condition :
+ * la confirmation (« votre rendez-vous est confirmé »). Elles répondent à
+ * une demande du client — transactionnelles, même si elles passent par la
+ * file (launch M10).
+ */
+export function etapesDeConfirmation(steps: Etape[]): Set<string> {
+  const ids = new Set<string>();
+  let etape = premiereEtape(steps);
+  while (etape && etape.type === 'action' && !ids.has(etape.id)) {
+    ids.add(etape.id);
+    etape = trouverEtape(steps, etapeSuivante(etape));
+  }
+  return ids;
+}
+
+export function premiereEtapeSansConfirmation(steps: Etape[]): Etape | null {
+  let etape = premiereEtape(steps);
+  const vues = new Set<string>();
+  while (etape && etape.type === 'action' && !vues.has(etape.id)) {
+    vues.add(etape.id);
+    etape = trouverEtape(steps, etapeSuivante(etape));
+  }
+  return etape && etape.type !== 'action' ? etape : null;
+}
+
 export function trouverEtape(steps: Etape[], id: string | null | undefined): Etape | null {
   if (!id) return null;
   return steps.find((e) => e.id === id) ?? null;

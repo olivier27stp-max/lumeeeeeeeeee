@@ -220,6 +220,12 @@ export interface SendEmailParams {
    * lui-même, une file créerait des doublons.
    */
   reessayer?: boolean;
+  /**
+   * Clé d'idempotence (Resend) : deux envois avec la même clé dans les 24 h
+   * n'en font qu'un chez le fournisseur. Les automatisations passent
+   * `tâche:étape` (launch M5).
+   */
+  cleIdempotence?: string;
 }
 
 export interface SendEmailResult {
@@ -232,10 +238,14 @@ export interface SendEmailResult {
 
 const RESEND_API = 'https://api.resend.com/emails';
 
-async function envoyerViaResend(p: { from: string; to: string[]; replyTo?: string; subject: string; html: string; text: string; headers?: Record<string, string> }): Promise<{ id: string }> {
+async function envoyerViaResend(p: { from: string; to: string[]; replyTo?: string; subject: string; html: string; text: string; headers?: Record<string, string>; cleIdempotence?: string }): Promise<{ id: string }> {
   const res = await fetch(RESEND_API, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+      ...(p.cleIdempotence ? { 'Idempotency-Key': p.cleIdempotence.slice(0, 256) } : {}),
+    },
     body: JSON.stringify({
       from: p.from,
       to: p.to,
@@ -348,6 +358,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         html: params.html,
         text,
         headers: params.headers,
+        cleIdempotence: params.cleIdempotence,
       });
       messageId = id;
     } else {
