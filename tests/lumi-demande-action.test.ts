@@ -48,3 +48,18 @@ describe('questions sur le contenu du compte : jamais une FAQ', () => {
     expect(reponseFaqPour('How do I set up taxes for Quebec?', 'en')).not.toBeNull();
   });
 });
+
+describe('verbes ajoutés après l’éval finale', () => {
+  it('sors-la, tick, take … off, draft sont des ordres', () => {
+    for (const q of [
+      'La job 46 c’est un brouillon mort : sors-la de mes listes.',
+      'On job 24’s checklist, tick "photos before".',
+      'Take job 37 off the calendar entirely.',
+      'Draft a contract for job 30.',
+    ]) expect(estDemandeDAction(q), q).toBe(true);
+  });
+  it('la fiche du job par le routeur : seulement pour le job lui-même', () => {
+    const r = readFileSync(resolve(__dirname, '..', 'server', 'routes', 'lumi.ts'), 'utf8');
+    expect(r).toContain("routeur.verdict?.action === 'job-numero' && detecterRaccourci(message)?.id !== 'job-numero'");
+  });
+});

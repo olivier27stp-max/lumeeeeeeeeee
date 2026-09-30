@@ -25,6 +25,7 @@ const VERBES_FR = [
   'arrete', 'génère', 'genere', 'convertis', 'transforme', 'traite', 'note', 'prends', 'prélève', 'preleve', 'charge', 'paie', 'paye',
   'publie', 'renomme', 'fais', 'prépare', 'prepare', 'bloque', 'débloque', 'ouvre', 'ferme', 'termine', 'démarre', 'demarre', 'pointe',
   'oublie', 'retiens', 'garde', 'souviens-toi', 'rappelle-toi', 'enregistre', 'inscris', 'ajuste', 'corrige', 'remplace', 'vide', 'range',
+  'sors', 'coche', 'décoche', 'decoche', 'rédige', 'redige', 'déplanifie', 'deplanifie', 'réactive', 'rembourse',
 ];
 const VERBES_EN = [
   'delete', 'remove', 'send', 'resend', 'text', 'email', 'create', 'add', 'set', 'mark', 'refund', 'cancel', 'change', 'update', 'move',
@@ -32,6 +33,7 @@ const VERBES_EN = [
   'bill', 'merge', 'invite', 'reactivate', 'revoke', 'approve', 'raise', 'lower', 'run', 'generate', 'convert', 'stop', 'charge', 'pay',
   'publish', 'rename', 'make', 'prepare', 'void', 'record', 'log', 'clock', 'start', 'end', 'close', 'open', 'book', 'put',
   'forget', 'remember', 'keep', 'save', 'fix', 'replace', 'adjust', 'note down', 'write down',
+  'tick', 'untick', 'check off', 'uncheck', 'draft', 'take', 'unschedule', 'pause', 'resume', 'apply', 'reorder', 'reorganize', 'optimize', 'optimise',
 ];
 const DEBUT_POLI = /^(s['’]il te pla[iî]t|stp|svp|please|pls|peux-tu|tu peux|pourrais-tu|est-ce que tu peux|can you|could you|would you|go ahead and|j['’]aimerais que tu|je veux que tu|i want you to|i need you to)\s+/i;
 
