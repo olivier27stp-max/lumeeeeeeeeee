@@ -526,7 +526,10 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       }
     }
 
-    const raccourci = enAttente.length || repli ? null : detecterRaccourci(message);
+    // Un raccourci est une LECTURE toute faite (fiche du job 24, mes jobs demain) :
+    // jamais pour un ordre (« supprime la liste de la job 24 » affichait la fiche
+    // et s'arrêtait — éval des outils, 2026-09-30).
+    const raccourci = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
     if (raccourci) {
       const debut = Date.now();
       const reponse = await repondreRaccourci(raccourci, ctxRaccourci);

@@ -152,6 +152,38 @@ export async function membreVoitLesMontants(userId: string | null | undefined, o
   }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NUMEROS: Record<string, { table: 'jobs' | 'invoices' | 'quotes'; colonne: string; quoi: string }> = {
+  job_id: { table: 'jobs', colonne: 'job_number', quoi: 'job' },
+  invoice_id: { table: 'invoices', colonne: 'invoice_number', quoi: 'facture' },
+  quote_id: { table: 'quotes', colonne: 'quote_number', quoi: 'devis' },
+};
+
+/**
+ * Remplace un numéro affiché par l'identifiant, DANS l'org. Numéro exact
+ * d'abord ; sinon, pour un nombre seul, une fin de numéro unique (« 17 » →
+ * « INV-000017 », préfixe de bureau). Aucun ou plusieurs → erreur lisible.
+ */
+export async function resoudreNumeros(args: Record<string, any>, orgId: string): Promise<{ args: Record<string, any> } | { erreur: string }> {
+  const sortie = { ...args };
+  for (const [cle, def] of Object.entries(NUMEROS)) {
+    const v = sortie[cle];
+    if (typeof v !== 'string' || !v.trim() || UUID_RE.test(v.trim()) || /^ref\d+$/i.test(v.trim())) continue;
+    const brut = v.trim().replace(/^#/, '');
+    const db = getServiceClient();
+    let { data } = await db.from(def.table).select('id').eq('org_id', orgId).eq(def.colonne, brut).is('deleted_at', null).limit(2);
+    if ((!data || !data.length) && /^\d+$/.test(brut)) {
+      const { data: proches } = await db.from(def.table).select(`id, ${def.colonne}`).eq('org_id', orgId).ilike(def.colonne, `%${brut}`).is('deleted_at', null).limit(5);
+      data = (proches ?? []).filter((r: any) => String(r[def.colonne]).replace(/\D/g, '').replace(/^0+/, '') === brut.replace(/^0+/, '')) as any;
+    }
+    if (!data || data.length !== 1) {
+      return { erreur: data && data.length > 1 ? `Plusieurs ${def.quoi}s portent le numéro ${brut} : demande lequel.` : `Aucun(e) ${def.quoi} n° ${brut} dans cette entreprise : vérifie le numéro avec l'utilisateur.` };
+    }
+    sortie[cle] = (data[0] as any).id;
+  }
+  return { args: sortie };
+}
+
 /** Des arguments d'écriture portent-ils un montant (prix, *_cents…) ? */
 export function argsContiennentMontant(v: unknown): boolean {
   if (Array.isArray(v)) return v.some(argsContiennentMontant);
@@ -226,7 +258,13 @@ export async function executerOutilGarde(opts: {
 
   const ctx: ToolContext = { client: opts.client, orgId: opts.orgId, userId: opts.userId, accessToken: opts.accessToken, ...(opts.dryRun ? { dryRun: true } : {}) };
   // Une date-heure sans décalage (« 2026-10-01T09:00 ») est une heure de L'ENTREPRISE, pas d'UTC (audit 2026-09-30).
-  const args = normaliserDatesHeures(validation.args, await fuseauDeLOrg(opts.orgId));
+  const avecDates = normaliserDatesHeures(validation.args, await fuseauDeLOrg(opts.orgId));
+  // Un NUMÉRO affiché (« job 33 », « INV-000017 », « devis 8 ») passé comme identifiant
+  // est résolu dans l'org (audit 2026-09-30) : avant, la requête échouait (uuid
+  // invalide) et Lumi répondait « souci de connexion à Lume ».
+  const resolution = await resoudreNumeros(avecDates, opts.orgId);
+  if ('erreur' in resolution) return { result: { error: resolution.erreur } };
+  const args = resolution.args;
   const result = await tool.handler(args, ctx);
   return {
     result: voitLesMontants
