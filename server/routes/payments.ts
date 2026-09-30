@@ -248,18 +248,25 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             }
           }
 
-          // Update invoice paid_cents and status — la part facture seulement,
-          // le pourboire ne réduit pas le solde dû.
+          // La facture est DÉJÀ à jour : l'insertion du paiement déclenche
+          // `trg_payments_recalculate_invoice`, qui recalcule paid_cents, le
+          // solde et le statut depuis la somme des paiements réussis. On la
+          // relit. L'ancien appel à `apply_invoice_payment` AJOUTAIT le montant
+          // une seconde fois : 40 $ payés sur 100 $ donnaient paid_cents = 80 $,
+          // 60 $ marquaient la facture payée — et le même PaymentIntent reçu
+          // sous un 2e événement (plateforme puis Connect) l'ajoutait encore
+          // (audit automatisations V2, 2026-09-29, C16/C17).
+          // Le pourboire n'entre pas dans la facture (amount_cents = factureCents).
           const admin = getServiceClient();
           const amountPaid = factureCents;
 
-          const { data: applied, error: applyErr } = await admin.rpc('apply_invoice_payment', {
-            p_invoice_id: metadata.invoiceId,
-            p_org_id: metadata.orgId,
-            p_amount_cents: amountPaid,
-          });
-          if (applyErr) throw new Error('apply_invoice_payment failed: ' + applyErr.message);
-          const invoiceRow = Array.isArray(applied) ? applied[0] : applied;
+          const { data: invoiceRow, error: lectureErr } = await admin
+            .from('invoices')
+            .select('id, paid_cents, balance_cents, status, total_cents')
+            .eq('id', metadata.invoiceId)
+            .eq('org_id', metadata.orgId)
+            .maybeSingle();
+          if (lectureErr) throw new Error('invoice re-read failed: ' + lectureErr.message);
 
           if (invoiceRow) {
             const newPaidCents = Number(invoiceRow.paid_cents || 0);
