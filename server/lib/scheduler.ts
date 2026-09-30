@@ -585,28 +585,58 @@ async function handleRecurringInvoices(supabase: SupabaseClient) {
 // Overdue invoice detection — emits invoice.overdue events
 // ---------------------------------------------------------------------------
 
-async function detectOverdueInvoices(supabase: SupabaseClient) {
-  const today = todayDateString();
+/** Le jour (AAAA-MM-JJ) dans un fuseau donné. */
+function jourDans(fuseau: string, d: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: fuseau, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
 
-  // Find invoices that are past due and not paid/cancelled
-  const { data: invoices, error } = await supabase
-    .from('invoices')
-    .select('id, org_id, invoice_number, due_date, client_id')
-    .not('status', 'in', '("paid","cancelled","void")')
-    .not('due_date', 'is', null)
-    .lt('due_date', today)
-    .is('deleted_at', null);
-
-  if (error || !invoices) return;
+export async function detectOverdueInvoices(supabase: SupabaseClient) {
+  /*
+   * Launch 2026-09-28.
+   *   · PAGINÉ : PostgREST plafonne une réponse (souvent 1 000 lignes) SANS
+   *     erreur — au-delà, des factures en retard n'étaient jamais vues.
+   *   · « Aujourd'hui » dans le FUSEAU DE L'ENTREPRISE : en UTC, une facture
+   *     due hier à Montréal passait « en retard » à 20 h la veille, et les
+   *     jalons J+x tombaient le mauvais jour.
+   * Borne large (lendemain UTC) pour la requête ; le vrai tri se fait par
+   * entreprise, dans son fuseau.
+   */
+  const borne = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const invoices: any[] = [];
+  const PAGE = 1000;
+  for (let de = 0; ; de += PAGE) {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('id, org_id, invoice_number, due_date, client_id')
+      .not('status', 'in', '("paid","cancelled","void")')
+      .not('due_date', 'is', null)
+      .lt('due_date', borne)
+      .is('deleted_at', null)
+      .order('id')
+      .range(de, de + PAGE - 1);
+    if (error) {
+      console.error('[scheduler] factures en retard illisibles:', error.message);
+      return;
+    }
+    invoices.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+  if (invoices.length === 0) return;
 
   const { eventBus } = await import('./eventBus');
-  const todayDate = new Date(today + 'T00:00:00');
-  const joursDeRetard = (inv: any) =>
-    Math.floor((todayDate.getTime() - new Date(inv.due_date + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24));
+  const { fuseauOrg } = await import('./automations-fuseau-org');
+  const aujourdhuiParOrg = new Map<string, string>();
+  for (const orgId of new Set(invoices.map((inv) => inv.org_id as string))) {
+    aujourdhuiParOrg.set(orgId, jourDans(await fuseauOrg(supabase, orgId)));
+  }
+  const joursDeRetard = (inv: any) => {
+    const aujourdhui = aujourdhuiParOrg.get(inv.org_id) ?? new Date().toISOString().slice(0, 10);
+    return Math.round((Date.parse(aujourdhui + 'T00:00:00Z') - Date.parse(inv.due_date + 'T00:00:00Z')) / 86_400_000);
+  };
 
   // Only emit on specific days to match preset conditions
-  const candidates = (invoices as any[]).filter(
-    (inv) => inv.due_date && (OVERDUE_DAYS as readonly number[]).includes(joursDeRetard(inv)),
+  const candidates = invoices.filter(
+    (inv) => inv.due_date && joursDeRetard(inv) > 0 && (OVERDUE_DAYS as readonly number[]).includes(joursDeRetard(inv)),
   );
   if (candidates.length === 0) return;
 
@@ -859,6 +889,11 @@ export function startScheduler(
     twilio && twilio.client && twilio.phoneNumber ? twilio : null;
 
   logger.info('[scheduler] automation scheduler started (interval: 5 min)');
+
+  // Événements écrits par la base (bloc 2 du launch) : lus toutes les 15 s,
+  // pas au tick de 5 min — une confirmation de rendez-vous n'attend pas.
+  void import('./evenementsBase').then(({ demarrerEvenementsBase }) => demarrerEvenementsBase(supabase))
+    .catch((e: unknown) => logger.error('[scheduler] file des événements de la base non démarrée', { message: e instanceof Error ? e.message : String(e) }));
 
   // Run once immediately, then every 5 minutes
   void tickProtege(supabase, twilioConfig);

@@ -500,22 +500,28 @@ ${viewUrl ? `
     // avec le bus (qui écrit lui aussi 'invoice_sent' dans activity_log), d'où
     // deux lignes « Invoice sent » par envoi. On garde uniquement l'emit,
     // enrichi des métadonnées qui étaient dans l'insert manuel.
-    eventBus.emit('invoice.sent', {
-      orgId,
-      entityType: 'invoice',
-      entityId: invoiceId,
-      actorId: auth.user.id,
-      relatedEntityType: invoice.client_id ? 'client' : undefined,
-      relatedEntityId: invoice.client_id || undefined,
-      metadata: {
-        invoice_number: invoice.invoice_number,
-        client_name: clientName,
-        client_id: invoice.client_id || null,
-        subject_sent: emailSubject,
-        email_template_id: emailTemplateId,
-        to_email: clientData.email,
-      },
-    });
+    // Premier envoi (brouillon → envoyée) : `invoice.sent` naît du TRIGGER en
+    // base (launch 2026-09-28, bloc 2) — l'émettre ici le doublerait. Un
+    // RENVOI ne change pas le statut : c'est ici qu'il est émis, comme avant
+    // (historique « Facture envoyée » + automatisations).
+    if (invoice.status !== 'draft') {
+      eventBus.emit('invoice.sent', {
+        orgId,
+        entityType: 'invoice',
+        entityId: invoiceId,
+        actorId: auth.user.id,
+        relatedEntityType: invoice.client_id ? 'client' : undefined,
+        relatedEntityId: invoice.client_id || undefined,
+        metadata: {
+          invoice_number: invoice.invoice_number,
+          client_name: clientName,
+          client_id: invoice.client_id || null,
+          subject_sent: emailSubject,
+          email_template_id: emailTemplateId,
+          to_email: clientData.email,
+        },
+      });
+    }
 
     return res.json({ ok: true, emailId: emailResult?.messageId || null });
   } catch (error: any) {

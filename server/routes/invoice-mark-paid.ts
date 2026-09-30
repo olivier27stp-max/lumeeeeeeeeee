@@ -12,6 +12,7 @@ import { Router } from 'express';
 import { requireFinancialAccess } from '../lib/rbac';
 import { getServiceClient } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
+import { eventBus } from '../lib/eventBus';
 
 const router = Router();
 router.use(maxBodySize());
@@ -99,6 +100,18 @@ router.post('/invoices/:id/mark-paid', requireFinancialAccess('payments.create')
       .eq('id', invoiceId)
       .eq('org_id', ctx.orgId);
     if (upErr) throw upErr;
+
+    // Automatisations « Facture payée » : émis ICI, après l'écriture, par le
+    // serveur (consigné dans l'outbox). Avant, le navigateur l'émettait après
+    // coup — onglet fermé, et le remerciement ne partait jamais (launch M2).
+    await eventBus.emit('invoice.paid', {
+      orgId: ctx.orgId,
+      entityType: 'invoice',
+      entityId: invoiceId,
+      actorId: ctx.userId,
+      ...(inv.client_id ? { relatedEntityType: 'client', relatedEntityId: inv.client_id } : {}),
+      metadata: { amount_cents: amountCents, provider: 'manual', client_id: inv.client_id ?? null, job_id: inv.job_id ?? null, payment_type: 'full' },
+    });
 
     res.json({ ok: true, amount_cents: amountCents });
   } catch (err: any) {

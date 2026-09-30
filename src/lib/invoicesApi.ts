@@ -4,7 +4,6 @@ import { supabase } from './supabase';
 import { getDocumentTaxLines } from './taxApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { pageTrieeParChamp } from './colonnesTableauApi';
-import { emitInvoicePaidManually } from './automationEventsApi';
 
 export type InvoiceStatusFilter = 'all' | 'draft' | 'sent_not_due' | 'past_due' | 'paid';
 export type InvoiceRangeFilter = 'all' | '30d' | 'this_month' | 'custom';
@@ -961,8 +960,8 @@ export async function markInvoicePaidManually(invoiceId: string, input: MarkInvo
     throw new Error(data?.error || `Impossible de marquer la facture payée (HTTP ${res.status}).`);
   }
 
-  // Emit automation event to stop invoice reminders and trigger payment workflows
-  emitInvoicePaidManually({ invoiceId });
+  // « Facture payée » : émis par le SERVEUR dans la route mark-paid, après
+  // l'écriture du paiement (launch 2026-09-28) — plus depuis le navigateur.
 
   // Generate/confirm sales commissions for this now-paid invoice (Stripe does
   // this via webhook; manual payments need this explicit trigger). Ne bloque
