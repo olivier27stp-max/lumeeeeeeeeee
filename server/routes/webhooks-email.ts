@@ -174,6 +174,21 @@ export async function emailWebhookHandler(req: express.Request, res: express.Res
     || null;
 
   const admin = getServiceClient();
+  // Audit V2, C2 : un rebond REJOUÉ (même svix-id) recréait la notification
+  // « Courriel non livré ». Même garde que pour les ouvertures.
+  const svixId = req.header('svix-id');
+  if (svixId) {
+    const { data: deja, error: e0 } = await admin
+      .from('webhook_receipts')
+      .select('id')
+      .eq('provider', 'resend')
+      .eq('reference', svixId)
+      .eq('outcome', 'counted')
+      .limit(1);
+    if (e0) logger.error('[webhooks/email] lecture webhook_receipts échouée', { error: e0.message });
+    else if (deja?.length) return res.json({ received: true, duplicate: true });
+  }
+
   const { data, error } = await admin
     .from('email_deliveries')
     .update({ status: statut, ...(detail ? { error: String(detail).slice(0, 500) } : {}) })
@@ -197,5 +212,12 @@ export async function emailWebhookHandler(req: express.Request, res: express.Res
     }
   }
 
+  if (svixId) {
+    const { error: e1 } = await admin.from('webhook_receipts').insert({
+      provider: 'resend', signature_ok: true, event_type: String(evenement.type), reference: svixId,
+      outcome: 'counted', summary: { email_id: emailId, statut, updated: data?.length ?? 0 },
+    });
+    if (e1) logger.error('[webhooks/email] webhook_receipts non journalisé', { error: e1.message });
+  }
   return res.json({ received: true, updated: data?.length ?? 0 });
 }
