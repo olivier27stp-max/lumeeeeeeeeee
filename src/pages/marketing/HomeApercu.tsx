@@ -224,11 +224,11 @@ const HOME_APERCU_CSS = `
 .home-apercu { --forest:#1F5F4F; --mint:#3FAF97; --mint-soft:#dff3ec; --amber:#b45309; --amber-soft:#fef3c7; --line:#e5e5e0; color:#171717; background:transparent; }
 .home-apercu .ha-kicker { font-size:11px; letter-spacing:.2em; text-transform:uppercase; font-weight:600; color:var(--forest); margin:0; }
 
-.ha-hero { position:relative; overflow:hidden; background:transparent; padding-top:88px; }
+.ha-hero { position:relative; overflow:hidden; background:transparent; padding-top:88px; container:ha-hero / inline-size; }
 .ha-cloud { position:absolute; border-radius:50%; background:#fff; filter:blur(2px); opacity:.9; pointer-events:none; }
 .ha-c1 { width:520px; height:170px; left:-120px; top:140px; } .ha-c2 { width:380px; height:130px; right:-60px; top:100px; }
-.ha-head { position:relative; z-index:2; max-width:820px; margin:0 auto; padding:26px 24px 8px; text-align:center; }
-.ha-h1 { font-size:clamp(34px,3.6vw,50px); font-weight:800; letter-spacing:-.035em; line-height:1.05; margin:12px auto 0; max-width:20ch; color:#111; text-wrap:balance; }
+.ha-head { position:relative; z-index:2; max-width:1180px; margin:0 auto; padding:26px 24px 8px; text-align:center; container-type:inline-size; }
+.ha-h1 { font-size:clamp(30px,5.3cqi,64px); font-weight:800; letter-spacing:-.035em; line-height:1.05; margin:12px auto 0; max-width:none; color:#111; text-wrap:balance; }
 .ha-sub { font-size:clamp(18px,1.7vw,23px); line-height:1.45; color:#3a3a3a; max-width:46ch; margin:20px auto 0; }
 .ha-ctas { display:flex; justify-content:center; gap:10px; margin-top:26px; flex-wrap:wrap; }
 .ha-btn { display:inline-flex; align-items:center; gap:8px; padding:13px 20px; border-radius:12px; border:0; font-size:14.5px; font-weight:700; cursor:pointer; text-decoration:none; }
@@ -254,16 +254,16 @@ const HOME_APERCU_CSS = `
 /* Personas : une carte de chaque côté du titre, dans la même famille que les
    cartes flottantes de l'aperçu. Entrée en douceur, avatar qui flotte, et la
    carte se déplace un peu vers la souris (--px/--py posés par le hero). */
-.ha-person { position:absolute; z-index:3; top:246px; display:flex; gap:12px; align-items:center; background:#fff; border:1px solid rgba(11,40,80,.12); border-radius:16px; padding:12px 16px 12px 12px; box-shadow:0 24px 50px -28px rgba(0,0,0,.35); font-size:14px; color:#171717; white-space:nowrap; animation:ha-pop .7s cubic-bezier(.2,.8,.2,1) both; transform:translate(calc(var(--px, 0) * 16px), calc(var(--py, 0) * 10px)); transition:transform .35s ease-out; }
+.ha-person { position:absolute; z-index:3; top:300px; display:flex; gap:12px; align-items:center; background:#fff; border:1px solid rgba(11,40,80,.12); border-radius:16px; padding:12px 16px 12px 12px; box-shadow:0 24px 50px -28px rgba(0,0,0,.35); font-size:14px; color:#171717; white-space:nowrap; animation:ha-pop .7s cubic-bezier(.2,.8,.2,1) both; transform:translate(calc(var(--px, 0) * 16px), calc(var(--py, 0) * 10px)); transition:transform .35s ease-out; }
 .ha-p-l { left:max(24px, calc(50% - 640px)); animation-delay:.25s; }
-.ha-p-r { right:max(24px, calc(50% - 640px)); top:300px; animation-delay:.4s; }
+.ha-p-r { right:max(24px, calc(50% - 640px)); top:360px; animation-delay:.4s; }
 .ha-person img { width:52px; height:52px; border-radius:50%; background:#f5f5f5; flex:none; animation:ha-float 6s ease-in-out infinite; }
 .ha-p-r img { animation-delay:-3s; }
 .ha-person em { display:block; font-style:normal; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:var(--forest); }
 .ha-person b { display:block; font-size:14px; color:#0a0a0a; }
 .ha-person span { display:block; font-size:12.5px; color:#4a4f57; margin-top:2px; }
 @keyframes ha-pop { from { opacity:0; translate:0 14px; scale:.96; } to { opacity:1; translate:0 0; scale:1; } }
-@media (max-width: 1180px) { .ha-person { display:none; } }
+@container ha-hero (max-width: 1400px) { .ha-person { display:none; } }
 
 .ha-case-note { margin:28px 0 0; padding-top:12px; border-top:1px solid #d9d9d4; font-size:12.5px; color:#555; }
 
