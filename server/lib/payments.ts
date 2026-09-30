@@ -937,6 +937,18 @@ export async function resoudreCreateurPaiementSysteme(
   throw new Error(`Aucun membre actif pour l'org ${orgId} : impossible d'attribuer le paiement.`);
 }
 
+/** La facture est-elle soldée (statut relu après le recalcul par le trigger) ? */
+async function factureSoldee(admin: ReturnType<typeof getServiceClient>, invoiceId: string): Promise<boolean> {
+  const { data, error } = await admin.from('invoices').select('status').eq('id', invoiceId).maybeSingle();
+  if (error) {
+    // Lecture ratée : on ne ment pas « payée », mais on le dit — l'événement
+    // manquant se rattrape à la main (« Marquer payée »), un faux ne se reprend pas.
+    console.error('[payments] statut de la facture illisible — invoice.paid non émis', invoiceId, error.message);
+    return false;
+  }
+  return (data as { status?: string } | null)?.status === 'paid';
+}
+
 export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput) {
   const admin = getServiceClient();
   const existing = await findExistingPaymentByIdentifiers(admin, input);
@@ -997,7 +1009,15 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
     throw error;
   }
 
-  if (input.status === 'succeeded' && input.invoice_id) {
+  // « Facture payée » seulement quand elle L'EST : le trigger
+  // `trg_payments_recalculate_invoice` vient de recalculer son statut. Émis à
+  // chaque paiement réussi, un acompte de 40 $ sur 100 $ envoyait « paiement
+  // reçu, merci » et déclenchait tout ce qui suit une facture payée (audit
+  // automatisations V2, 2026-09-29, C18).
+  const facturePayee = input.status === 'succeeded' && input.invoice_id
+    ? await factureSoldee(admin, input.invoice_id)
+    : false;
+  if (facturePayee && input.invoice_id) {
     // Emit invoice.paid event. Carry the client as related entity so the
     // payment surfaces in the client's activity/events panel too (not just
     // the invoice). Job id passed in metadata for the job panel.

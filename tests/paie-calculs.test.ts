@@ -107,6 +107,37 @@ describe('les heures d un pointage', () => {
     })).toBe(0);
   });
 
+  it('une pause au format des routes de pointage (HH:MM:SS) est deduite', () => {
+    // C'est le format reellement ecrit par /timesheets/break-start et break-end
+    // (toTimeString). Avant le correctif, Date.parse('12:00:00') = NaN : la
+    // pause etait ignoree et donc PAYEE.
+    expect(computeEntryHours({
+      punch_in_at: h('1', '08:00'), punch_out_at: h('1', '16:00'),
+      breaks: [{ start: '12:00:00', end: '12:30:00' }],
+    })).toBe(7.5);
+  });
+
+  it('une pause HH:MM et une pause ISO se cumulent dans la meme journee', () => {
+    expect(computeEntryHours({
+      punch_in_at: h('1', '08:00'), punch_out_at: h('1', '16:00'),
+      breaks: [{ start: '10:00', end: '10:15' }, { start: h('1', '12:00'), end: h('1', '13:00') }],
+    })).toBe(6.75);
+  });
+
+  it('une pause HH:MM:SS qui traverse minuit compte sa vraie duree', () => {
+    expect(computeEntryHours({
+      punch_in_at: h('1', '18:00'), punch_out_at: h('2', '06:00'),
+      breaks: [{ start: '23:45:00', end: '00:15:00' }],
+    })).toBe(11.5);
+  });
+
+  it('une heure de pause illisible est ignoree, pas devinee', () => {
+    expect(computeEntryHours({
+      punch_in_at: h('1', '08:00'), punch_out_at: h('1', '16:00'),
+      breaks: [{ start: 'midi', end: '13:00:00' }],
+    })).toBe(8);
+  });
+
   it('une demi-heure est comptee comme 0,5 h', () => {
     expect(computeEntryHours({
       punch_in_at: h('1', '08:00'), punch_out_at: h('1', '08:30'), breaks: null,

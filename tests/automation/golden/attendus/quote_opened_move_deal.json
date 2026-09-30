@@ -1,0 +1,15 @@
+{
+  "preset_key": "quote_opened_move_deal",
+  "trigger_event": "quote.viewed",
+  "delay_seconds": 0,
+  "planifie": [],
+  "messages": [
+    {
+      "canal": "deal",
+      "body": "étape → Soumission ouverte",
+      "moment": "immediat"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

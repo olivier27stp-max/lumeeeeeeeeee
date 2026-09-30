@@ -27,6 +27,7 @@ import { deleteTask, updateTask } from '../../lib/tasksApi';
 import SpecificNotes from '../SpecificNotes';
 import CustomFieldsPanel from '../champs/CustomFieldsPanel';
 import EtiquettesDuClient from '../etiquettes/EtiquettesDuClient';
+import { DetailsDealEdition } from './FormulaireDealGhl';
 import { lireValeurs } from '../../lib/champsPersoApi';
 import { useChampsPersoActifs } from '../../hooks/useChampsPersoActifs';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -50,7 +51,50 @@ interface Membre { id: string; name: string }
 /** Provenance du montant affiché — calculée par `pipeline_montants` en base. */
 export type MontantProvenance = 'job' | 'devis' | 'devis_client' | 'aucun';
 
-type Onglet = 'lie' | 'apercu' | 'rdv' | 'taches' | 'notes' | 'paiements' | 'activite';
+type Onglet = 'details' | 'lie' | 'apercu' | 'rdv' | 'taches' | 'notes' | 'paiements' | 'activite';
+
+/**
+ * Statut d'un devis, d'une job, d'une facture ou d'un paiement, dans la langue
+ * de l'écran. La base les garde en anglais ; la fiche les affichait tels quels
+ * (« approved » dans l'historique d'un deal — Rafba, 2026-09-30).
+ */
+const STATUTS_DOCUMENTS: Record<string, [string, string]> = {
+  draft: ['Brouillon', 'Draft'],
+  sent: ['Envoyé', 'Sent'],
+  viewed: ['Ouvert', 'Viewed'],
+  approved: ['Accepté', 'Approved'],
+  accepted: ['Accepté', 'Accepted'],
+  signed: ['Signé', 'Signed'],
+  declined: ['Refusé', 'Declined'],
+  rejected: ['Refusé', 'Rejected'],
+  expired: ['Expiré', 'Expired'],
+  converted: ['Converti', 'Converted'],
+  changes_requested: ['Modifications demandées', 'Changes requested'],
+  action_required: ['Action requise', 'Action required'],
+  archived: ['Archivé', 'Archived'],
+  scheduled: ['Planifiée', 'Scheduled'],
+  unscheduled: ['À planifier', 'Unscheduled'],
+  in_progress: ['En cours', 'In progress'],
+  completed: ['Terminée', 'Completed'],
+  cancelled: ['Annulée', 'Cancelled'],
+  late: ['En retard', 'Late'],
+  requires_invoicing: ['À facturer', 'Requires invoicing'],
+  paid: ['Payée', 'Paid'],
+  partial: ['Payée en partie', 'Partially paid'],
+  partially_paid: ['Payée en partie', 'Partially paid'],
+  overdue: ['En retard', 'Overdue'],
+  void: ['Annulée', 'Void'],
+  succeeded: ['Réussi', 'Succeeded'],
+  pending: ['En attente', 'Pending'],
+  failed: ['Échoué', 'Failed'],
+  refunded: ['Remboursé', 'Refunded'],
+};
+
+export function libelleStatutDocument(statut: string | null | undefined, fr: boolean): string {
+  if (!statut) return '—';
+  const l = STATUTS_DOCUMENTS[statut];
+  return l ? (fr ? l[0] : l[1]) : statut;
+}
 
 /**
  * Canaux proposés dans le sélecteur de source.
@@ -478,7 +522,7 @@ function LigneDossier({ vers, numero, titre, statut, cents, alerte, fr }: {
           {alerte}
         </span>
       )}
-      <span className="shrink-0 text-[11px] text-text-tertiary">{statut}</span>
+      <span className="shrink-0 text-[11px] text-text-tertiary">{libelleStatutDocument(statut, fr)}</span>
       <span className="shrink-0 text-[12px] tabular-nums text-text-primary">{argent(cents, fr)}</span>
     </Link>
   );
@@ -927,7 +971,7 @@ function OngletPaiements({ deal, fr }: { deal: Deal; fr: boolean }) {
                     </Link>
                   </td>
                   <td className="py-2 px-2 text-text-tertiary">
-                    {l.statut || '\u2014'}
+                    {libelleStatutDocument(l.statut, fr)}
                     {/* Le solde restant, l\u00e0 o\u00f9 il existe : une facture « envoy\u00e9e »
                         à moitié payée n'est pas la même chose qu'une intacte.
 
@@ -1072,7 +1116,7 @@ function OngletLie({ deal, fr, lectureSeule }: { deal: Deal; fr: boolean; lectur
             </span>
             <span className="block text-[11.5px] text-text-secondary mt-0.5">{job.title}</span>
             <span className="block text-[11px] text-text-muted mt-0.5">
-              {montant(job.total_cents, fr)} · {job.status}
+              {montant(job.total_cents, fr)} · {libelleStatutDocument(job.status, fr)}
             </span>
           </Link>
         )}
@@ -1094,7 +1138,7 @@ function OngletLie({ deal, fr, lectureSeule }: { deal: Deal; fr: boolean; lectur
               <span className="block text-[11.5px] text-text-secondary mt-0.5">{devis.title}</span>
             )}
             <span className="block text-[11px] text-text-muted mt-0.5">
-              {montant(devis.total_cents, fr)} · {devis.status}
+              {montant(devis.total_cents, fr)} · {libelleStatutDocument(devis.status, fr)}
             </span>
           </Link>
         )}
@@ -1139,9 +1183,11 @@ function OngletLie({ deal, fr, lectureSeule }: { deal: Deal; fr: boolean; lectur
 
 export default function DealDrawer({
   deal, etapes, membres, montantCents, montantProvenance, onClose, onAssigner, onCreerJob,
-  onChangement,
+  onChangement, nomPipeline,
 }: {
   deal: Deal | null;
+  /** Nom du pipeline du deal (formulaire « Détails du deal »). */
+  nomPipeline?: string;
   etapes: PipelineStage[];
   membres?: Membre[];
   /** Montant DÉRIVÉ du deal (jamais stocké). `null` = aucune source. */
@@ -1168,7 +1214,8 @@ export default function DealDrawer({
   const idRaisonAbandon = useId();
   const idDateFermeture = useId();
   const idOnglets = useId();
-  const [onglet, setOnglet] = useState<Onglet>('lie');
+  // 1re page = le formulaire du deal, comme « Add opportunity » de GHL (Rafba, 2026-09-29).
+  const [onglet, setOnglet] = useState<Onglet>('details');
   // La RLS des valeurs d'un deal exige « leads.update » : sans ce droit, les
   // champs s'affichent en lecture seule plutôt que de refuser à l'enregistrement.
   const perms = usePermissions();
@@ -1229,10 +1276,10 @@ export default function DealDrawer({
   useEffect(() => {
     setEtapePerdueVisee(null);
     setRaisonSaisie('');
-    // Chaque deal s'ouvre sur son CLIENT : la première question est « c'est
-    // qui, et où on en est avec lui ? ». Revenir sur le deal précédent avec
-    // la section qu'on regardait la fois d'avant serait déroutant.
-    setOnglet('lie');
+    // Chaque deal s'ouvre sur SES DÉTAILS (le formulaire, comme GHL) — décision
+    // de Rafba du 2026-09-29, qui remplace « s'ouvre sur le client ». Revenir sur
+    // le deal précédent avec la section d'avant serait déroutant.
+    setOnglet('details');
   }, [dealId]);
 
   if (!deal) return null;
@@ -1265,6 +1312,7 @@ export default function DealDrawer({
    * de savoir qu'il doit encore 1 200 $.
    */
   const ONGLETS: { cle: Onglet; libelle: string }[] = [
+    { cle: 'details', libelle: fr ? 'Détails du deal' : 'Deal details' },
     { cle: 'lie', libelle: fr ? 'Client' : 'Client' },
     { cle: 'apercu', libelle: fr ? 'Deal' : 'Deal' },
     { cle: 'rdv', libelle: fr ? 'Rendez-vous' : 'Appointments' },
@@ -1381,6 +1429,10 @@ export default function DealDrawer({
         {/* En-tête : qui, où il en est, combien. */}
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
+            {/* Titre du deal au-dessus du client (GHL « Opportunity name »). */}
+            {deal.title?.trim() && (
+              <p className="text-[13px] font-semibold text-text-secondary">{deal.title}</p>
+            )}
             {deal.client_id ? (
               <Link
                 to={`/clients/${deal.client_id}`}
@@ -1986,6 +2038,13 @@ export default function DealDrawer({
                 <ActivityTimeline entityType="deal" entityId={deal.id} />
               </Section>
             </>
+          )}
+
+          {onglet === 'details' && (
+            <DetailsDealEdition deal={deal} etapes={etapes} membres={listeMembres} montantCents={montantCents}
+              nomPipeline={nomPipeline}
+              fr={fr} lectureSeule={champsEnLecture} onAssigner={onAssigner} onCreerJob={onCreerJob} onChangement={onChangement}
+              champsPerso={<SectionInformations dealId={deal.id} fr={fr} lectureSeule={champsEnLecture} />} />
           )}
 
           {onglet === 'lie' && <OngletLie deal={deal} fr={fr} lectureSeule={champsEnLecture} />}

@@ -45,6 +45,8 @@ vi.mock('../../../src/lib/automationRulesApi', () => ({
   updateRuleMessage: vi.fn(async () => {}),
   getCompanyBranding: vi.fn(async () => ({ nom: 'A inc.', logo: null, couleur: null })),
   getRecentAutomationFailures: vi.fn(async () => []),
+  // Ajoutée avec le réglage « demandes d'avis » : sans elle, la page entière tombait.
+  avisActives: vi.fn(async () => true),
 }));
 // Réponse PostgREST configurable, pour éprouver l'API RÉELLE (T13.4).
 const etatSupabase: { reponse: { data: unknown; error: unknown } } = { reponse: { data: [], error: null } };

@@ -55,6 +55,11 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
   sections?: string[];
   /** Le formulaire pose `apres(clé)` sous ses rangées : une custom key peut s'y glisser (RANGEES_FORMULAIRE). */
   rangees?: boolean;
+  /**
+   * Le formulaire a SON bouton « Gérer les champs » (ex. en bas à gauche, comme GHL) :
+   * le bloc n'en montre pas un second, ni la ligne « Aucun champ personnalisé ».
+   */
+  gererExterne?: boolean;
 } = {}) {
   const { isEnabled } = useChampsPersoActifs();
   const idBase = useId();
@@ -182,7 +187,7 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
   const enregistrer = async (entityId: string | null | undefined): Promise<void> => { await ecrire(entityId, false); };
   const completerVides = (entityId: string | null | undefined): Promise<number> => ecrire(entityId, true);
 
-  const boutonGerer = peutGerer ? (
+  const boutonGerer = peutGerer && !opts.gererExterne ? (
     <button type="button" onClick={() => setGerer(true)}
       className="inline-flex items-center gap-1 rounded text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
       <Settings2 size={12} aria-hidden />{fr ? 'Gérer les champs' : 'Manage fields'}
@@ -254,7 +259,7 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
   const nbHorsSections = enApercu ? groupes.length : groupes.reduce((n, g) => n + g.champs.length, 0);
 
   // Aucun champ affiché (liste chargée) : on le dit, avec de quoi en ajouter, plutôt qu'un silence.
-  const bloc = !isEnabled ? null : nbHorsSections === 0 ? (data ? (
+  const bloc = !isEnabled ? null : nbHorsSections === 0 ? (opts.gererExterne ? panneau : data ? (
     <div className="flex flex-wrap items-center justify-between gap-2">
       {tousActifs.length === 0 ? <LienAjouterChamps fr={fr} /> : champs.length === 0 ? (
         <p className="text-[12px] text-text-tertiary">{fr ? 'Aucun champ personnalisé dans cette fenêtre.' : 'No custom fields in this window.'}</p>
@@ -278,5 +283,7 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean, opts: {
     </div>
   );
 
-  return { bloc, section, apres, systeme, valider, enregistrer, completerVides, actif: champs.length > 0 };
+  /** Ouvre « Gérer les champs » depuis un bouton du formulaire (ex. en bas à gauche, comme GHL). */
+  const ouvrirGerer = peutGerer ? () => setGerer(true) : undefined;
+  return { bloc, section, apres, systeme, valider, enregistrer, completerVides, ouvrirGerer, actif: champs.length > 0 };
 }

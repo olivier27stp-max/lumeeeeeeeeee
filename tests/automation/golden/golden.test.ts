@@ -1,16 +1,17 @@
 /**
- * T14 — GOLDEN SET des 35 presets d'automatisation, et T3.11 — vocabulaire.
+ * T14 — GOLDEN SET des presets d'automatisation, et T3.11 — vocabulaire.
  *
- * Pour chaque preset, le banc (`golden/_banc-golden.ts`) rejoue l'événement sur
- * un jeu de données fixe, dépile les tâches différées à leur échéance, et
- * capture TOUT ce qui sort : SMS, courriels, notifications, tâches, activité,
- * planifications. Le résultat est comparé, à l'octet près, au fichier
- * `golden/<preset_key>.json`.
+ * Pour chaque preset, le banc (`_banc-golden.ts`) rejoue l'événement sur un jeu
+ * de données fixe, dépile les tâches différées à leur échéance, et capture TOUT
+ * ce qui sort : SMS, courriels, notifications, tâches, activité, déplacement de
+ * deal, planifications. Le résultat est comparé, à l'octet près, au fichier
+ * `attendus/<preset_key>.json`.
  *
- *   - Fichier absent → rouge, avec la marche à suivre.
+ *   - Fichier absent → rouge, avec la marche à suivre (un preset ajouté doit
+ *     venir avec son golden).
  *   - Différence → rouge : un texte, un délai ou un canal a changé. Si c'est
  *     voulu, régénérer SCIEMMENT ce seul fichier avec
- *         GOLDEN_UPDATE=<preset_key> npx vitest run tests/automation/golden.test.ts
+ *         GOLDEN_UPDATE=<preset_key> npx vitest run tests/automation/golden/golden.test.ts
  *     (ou GOLDEN_UPDATE=1 pour tout) et relire le diff dans le commit.
  *
  * T3.11 relit les mêmes sorties et vérifie qu'elles sont présentables pour un
@@ -18,12 +19,11 @@
  * anglais, montants en dollars canadiens, SMS d'une longueur raisonnable,
  * aucune action en échec, aucune tâche annulée par sa propre condition d'arrêt.
  *
- * ROUGE ATTENDU aujourd'hui (6) :
- *   - invoice_sent_reminder_1d/3d/7d/14d/30d : `[invoice_total]` sort en
- *     « $1626.90 » (actions/index.ts:380) au lieu de « 1 626,90 $ » ;
- *   - lost_lead_reengagement : la tâche est ANNULÉE au dépilage par
- *     checkStopConditions (lead_status = 'lost' ⇒ arrêt), alors que le preset
- *     ne se déclenche QUE sur un lead perdu — il ne peut jamais partir (F25).
+ * Sorti de quarantaine le 2026-09-29 : en CI, tout vert. Il était rouge à 76/77
+ * alors que les goldens étaient JUSTES — le harnais avait vieilli (mocks sans
+ * `senderForOrg`/`adresseInjoignable`, carnet de clients rendu en objet, ligne
+ * de réservation « en cours » lue comme un échec, `quote.viewed` inconnu). Les
+ * six rouges attendus d'origine (montant « $1626.90 », F25) sont corrigés.
  *
  * Fuseau forcé sur America/Toronto et horloge figée : le résultat ne dépend
  * ni de la machine ni du jour (voir T9 pour la dépendance réelle au fuseau).
@@ -34,14 +34,17 @@ import { join } from 'node:path';
 
 const courriels: any[] = [];
 const sms: any[] = [];
-vi.mock('../../../server/lib/mailer', () => ({
-  isMailerConfigured: () => true,
-  sendEmail: vi.fn(async (p: any) => { courriels.push({ to: p.to, subject: p.subject, html: p.html }); return { sent: true, messageId: 'golden' }; }),
-}));
+vi.mock('../../../server/lib/mailer', async () => (await import('../../quarantaine/_simulations')).mailerSimule(vi.fn(async (p: any) => { courriels.push({ to: p.to, subject: p.subject, html: p.html }); return { sent: true, messageId: 'golden' }; })));
 // `langueEntreprise` a été ajoutée au module après l'écriture de ce mock : son
 // absence faisait échouer 69 des 71 cas sur « No export is defined », ce qui
 // ressemblait à 69 défauts produit alors qu'il manquait UNE ligne au harnais.
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'qa@lume.test' }), langueEntreprise: () => 'fr' }));
+vi.mock('../../../server/routes/emails', async () => (await import('../../quarantaine/_simulations')).emailsSimules('qa@lume.test'));
+// « Aussi par courriel » d'une notification : même enregistreur que les courriels.
+vi.mock('../../../server/lib/notificationCourriel', () => ({
+  envoyerNotificationParCourriel: async (_c: unknown, _o: string, dest: Map<string, string>, m: { title: string; body: string }) => {
+    courriels.push({ to: [...dest.keys()].join(','), subject: m.title, html: m.body }); return dest.size;
+  },
+}));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 // Le gel des communications lit la base par `getServiceClient()` — le VRAI
 // client, pas le faux du test : la lecture échouait et aucun envoi ne partait.
@@ -52,9 +55,9 @@ vi.mock('../../../server/lib/migration/gel-communications', () => ({
 }));
 
 import { AUTOMATION_PRESETS } from '../../../server/lib/automationPresets.data';
-import { jouer, type Sortie } from './golden/_banc-golden';
+import { jouer, type Sortie } from './_banc-golden';
 
-const DOSSIER = join(__dirname, 'golden');
+const DOSSIER = join(__dirname, 'attendus');
 const MAJ = process.env.GOLDEN_UPDATE || '';
 const TZ_ORIGINE = process.env.TZ;
 const sorties = new Map<string, Sortie>();
@@ -95,7 +98,7 @@ describe('T3.11 — vocabulaire et qualité des messages produits', () => {
       const fautes: string[] = [];
       if (s.erreurs.length) fautes.push(`actions en échec : ${s.erreurs.join(' | ')}`);
       if (s.annulees.length) fautes.push(`tâche annulée par la condition d'arrêt AVANT toute exécution — ce preset ne peut jamais partir : ${s.annulees.join(', ')}`);
-      const envoyes = s.messages.filter((m) => m.canal === 'sms' || m.canal === 'courriel' || m.canal === 'notification' || m.canal === 'tache' || m.canal === 'avis');
+      const envoyes = s.messages.filter((m) => m.canal === 'sms' || m.canal === 'courriel' || m.canal === 'notification' || m.canal === 'tache' || m.canal === 'avis' || m.canal === 'deal');
       if (envoyes.length === 0) fautes.push('aucun message produit : preset mort ou événement/condition non satisfaits');
       for (const m of envoyes) {
         const texte = `${m.subject ?? ''}\n${m.body}`;

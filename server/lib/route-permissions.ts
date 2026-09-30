@@ -73,7 +73,9 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/payments/stripe/balance': 'financial.view_payments',
   'POST /api/payments/paypal/create-order': 'financial.view_payments',
   'POST /api/payments/paypal/capture-order': 'financial.view_payments',
-  'POST /api/payments/refund': 'financial.view_payments',
+  // Rembourser = la case « Rembourser des paiements » de la page Rôles (une
+  // répartitrice admin qui ne l'a pas ne rembourse pas). Avant : view_payments.
+  'POST /api/payments/refund': 'payments.refund',
   'POST /api/payment-requests/create': 'financial.view_payments',
   'POST /api/payment-requests/resend': 'financial.view_payments',
 
@@ -363,8 +365,6 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/referrals/me': 'settings.read',
   'GET /api/referrals/history': 'settings.read',
 
-  // ── Workflows ──
-  'POST /api/workflows/execute-action': 'automations.update',
 };
 
 /**

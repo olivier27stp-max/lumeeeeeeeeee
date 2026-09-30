@@ -13,8 +13,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../../../server/lib/mailer', () => ({ sendEmail: vi.fn(async () => ({ sent: true })), isMailerConfigured: () => true }));
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }), langueEntreprise: () => 'fr' }));
+vi.mock('../../../server/lib/mailer', async () => (await import('../_simulations')).mailerSimule(vi.fn(async () => ({ sent: true }))));
+vi.mock('../../../server/routes/emails', async () => (await import('../_simulations')).emailsSimules());
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 // Le gel des communications lit la base par `getServiceClient()` — le VRAI
 // client, pas le faux du test : la lecture échouait et aucun SMS ne partait.
@@ -24,7 +24,7 @@ vi.mock('../../../server/lib/migration/gel-communications', () => ({
   MESSAGE_GEL: 'gel',
 }));
 
-import { clientEnregistreur, requetes } from './_enregistreur';
+import { clientEnregistreur, requetes, executionsJournalisees } from './_enregistreur';
 import { AUTOMATION_PRESETS } from '../../../server/lib/automationPresets.data';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
@@ -69,7 +69,7 @@ async function aMatche(regle: any, metadata: Record<string, unknown>, trigger = 
   const { eventBus, journal } = await moteur({ ...base(), automation_rules: { data: [regle] } });
   await eventBus.emit(trigger as any, { orgId: ORG, entityType, entityId, metadata });
   await laisserTravailler();
-  return requetes(journal, 'automation_execution_logs', 'insert').length + requetes(journal, 'automation_scheduled_tasks', 'insert').length;
+  return executionsJournalisees(journal).length + requetes(journal, 'automation_scheduled_tasks', 'insert').length;
 }
 
 /* ═══════════════════ T2 — Conditions ═══════════════════ */
@@ -86,7 +86,9 @@ describe('T2.1 — opérateurs, types et valeurs vides', () => {
     ['in, absent de la liste', { a: { in: [1, '2'] } }, { a: 3 }, 0],
     ['not_in, valeur hors liste : vrai', { a: { not_in: ['x'] } }, { a: 'y' }, 1],
     ['not_in, valeur dans la liste : faux', { a: { not_in: ['x'] } }, { a: 'x' }, 0],
-    ['chaîne vide vs zéro : faux', { a: '' }, { a: 0 }, 0],
+    // Réglage laissé VIDE dans un déclencheur (« montant minimum » vide) = pas de
+    // filtre, voulu (evaluateConditions) : il ne compare pas '' à 0.
+    ['réglage vide : pas de filtre', { a: '' }, { a: 0 }, 1],
     ['valeur objet : jamais égale', { a: { eq: 'x' } }, { a: { x: 1 } }, 0],
     ['clé absente avec eq : faux', { a: { eq: 'x' } }, {}, 0],
     ['sans condition : toujours vrai', {}, { n: 'importe' }, 1],
@@ -99,10 +101,12 @@ describe('T2.1 — opérateurs, types et valeurs vides', () => {
 });
 
 describe('T2.2 — opérateur inconnu : la règle est refusée, jamais exécutée par défaut', () => {
-  it('{ gt: 5 } → 0 exécution et un avertissement explicite', async () => {
+  // `gt`/`gte`/`lt`/`lte` sont devenus des opérateurs CONNUS avec les filtres de
+  // date et de montant (#658) ; l'inconnu éprouvé ici est `between`.
+  it('{ between } → 0 exécution et un avertissement explicite', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(await aMatche(temoin({ amount_cents: { gt: 5 } }), { amount_cents: 100 })).toBe(0);
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/opérateur\(s\) non supporté\(s\).*amount_cents.*gt/));
+    expect(await aMatche(temoin({ amount_cents: { between: [1, 500] } }), { amount_cents: 100 })).toBe(0);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/opérateur\(s\) non supporté\(s\).*amount_cents.*between/));
     warn.mockRestore();
   });
 
@@ -127,12 +131,11 @@ describe('T2.4 — ancienne / nouvelle valeur, telles que l’émetteur les four
   });
 });
 
-describe('T2.5 — dates : égalité de chaîne seulement', () => {
-  it('même chaîne YYYY-MM-DD → matche ; aucune comparaison temporelle n’existe (limite S3)', async () => {
+describe('T2.5 — dates : égalité et comparaisons (limite S3 levée par #658)', () => {
+  it('même chaîne YYYY-MM-DD → matche ; « avant le 2 » matche le 1er, pas le 3', async () => {
     expect(await aMatche(temoin({ due_date: '2026-09-01' }), { due_date: '2026-09-01' })).toBe(1);
-    // « avant le 2 » n'est pas exprimable : { lt } est inconnu → refusé (T2.2).
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(await aMatche(temoin({ due_date: { lt: '2026-09-02' } }), { due_date: '2026-09-01' })).toBe(0);
+    expect(await aMatche(temoin({ due_date: { lt: '2026-09-02' } }), { due_date: '2026-09-01' })).toBe(1);
+    expect(await aMatche(temoin({ due_date: { lt: '2026-09-02' } }), { due_date: '2026-09-03' })).toBe(0);
   });
 });
 
@@ -198,7 +201,8 @@ describe('T1.7 — un événement que personne n’écoute ne coûte qu’une li
     await eventBus.emit('invoice.overdue', { orgId: ORG, entityType: 'invoice', entityId: 'inv-1', metadata: { days_overdue: 3 } });
     await laisserTravailler();
     const tables = journal.map((r) => `${r.op}:${r.table}`);
-    expect(tables).toEqual(['insert:activity_log', 'select:automation_rules']);
+    // `domain_events` : l'outbox (#695) consigne chaque événement pour le rejouer après une panne.
+    expect(tables).toEqual(['insert:activity_log', 'insert:domain_events', 'select:automation_rules']);
   });
 });
 

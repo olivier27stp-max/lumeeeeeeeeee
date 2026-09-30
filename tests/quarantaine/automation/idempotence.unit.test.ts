@@ -14,8 +14,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../../../server/lib/mailer', () => ({ sendEmail: vi.fn(async () => ({ sent: true })), isMailerConfigured: () => true }));
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }), langueEntreprise: () => 'fr' }));
+vi.mock('../../../server/lib/mailer', async () => (await import('../_simulations')).mailerSimule(vi.fn(async () => ({ sent: true }))));
+vi.mock('../../../server/routes/emails', async () => (await import('../_simulations')).emailsSimules());
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 // Le gel des communications lit la base par `getServiceClient()` — le VRAI
 // client, pas le faux du test : la lecture échouait en « fetch failed » et
@@ -26,7 +26,7 @@ vi.mock('../../../server/lib/migration/gel-communications', () => ({
   MESSAGE_GEL: 'gel',
 }));
 
-import { clientEnregistreur, requetes } from './_enregistreur';
+import { clientEnregistreur, requetes, executionsJournalisees, journalExecutionsUnique } from './_enregistreur';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const VISITE = '55555555-5555-4555-8555-555555555555';
@@ -83,16 +83,19 @@ const laisserTravailler = async () => { for (let i = 0; i < 20; i++) await new P
 
 describe('T4.1 — même événement livré deux fois → un seul effet immédiat', () => {
   it('ROUGE ATTENDU (F3) : deux émissions identiques d’appointment.created → un seul SMS', async () => {
-    const { eventBus, journal } = await moteur({ ...donneesA(), automation_rules: { data: [regleImmediate] } });
+    // L'anti-doublon repose sur l'index UNIQUE de execution_key : le banc le simule.
+    const { eventBus, journal } = await moteur({ ...donneesA(), automation_rules: { data: [regleImmediate] }, automation_execution_logs: journalExecutionsUnique() });
     const evenement = { orgId: ORG, entityType: 'schedule_event', entityId: VISITE, metadata: { job_id: 'job-a', start_time: '2026-09-20T13:00:00Z' } };
     await eventBus.emit('appointment.created', evenement);
     await laisserTravailler();
     await eventBus.emit('appointment.created', evenement);
     await laisserTravailler();
     const envois = twilio.messages.create.mock.calls.length;
-    const logs = requetes(journal, 'automation_execution_logs', 'insert').length;
-    expect(envois, `SMS envoyés pour un seul rendez-vous : ${envois} (logs : ${logs})`).toBe(1);
-    expect(logs).toBe(1);
+    // Une seule ligne de journal : la réservation de la 1re émission, complétée par son
+    // résultat ; celle de la 2e a reçu 23505 et n'a rien écrit.
+    const cles = new Set(requetes(journal, 'automation_execution_logs', 'insert').map((r) => (r.valeur as any).execution_key));
+    expect(envois, `SMS envoyés pour un seul rendez-vous : ${envois} (clés journalisées : ${cles.size})`).toBe(1);
+    expect(cles.size).toBe(1);
   });
 
   it('témoin : deux événements pour deux rendez-vous différents → deux SMS', async () => {
@@ -183,13 +186,16 @@ describe('T4.5 — reprise après échec du fournisseur', () => {
     expect(cles[1]).toBe(cles[0]);
   });
 
-  it('une erreur définitive (« No recipient phone ») → failed sans reprise', async () => {
+  // M1 (launch) : un client sans numéro n'est plus un échec qui tue le parcours,
+  // c'est une étape SAUTÉE avec son motif — terminée, jamais reprise.
+  it('sans numéro (« No recipient phone ») → sautée, terminée sans reprise', async () => {
     const donnees = donneesA();
     (donnees.schedule_events.data.job.clients as any).phone = null;
     const { processScheduledTasks, client, journal } = await moteur({ ...donnees, automation_scheduled_tasks: { data: [tache(0)] } });
     await processScheduledTasks(client);
     const cloture = requetes(journal, 'automation_scheduled_tasks', 'update').map((r) => r.valeur as any).at(-1);
-    expect(cloture.status).toBe('failed');
+    expect(cloture.status).toBe('completed');
+    expect(executionsJournalisees(journal).map((r) => (r.valeur as any).result_data?.saute_code)).toEqual(['sans_telephone']);
     expect(twilio.messages.create).not.toHaveBeenCalled();
   });
 
@@ -213,7 +219,8 @@ describe('T4.10 — un log d’exécution qui échoue ne rejoue pas l’action',
     await eventBus.emit('appointment.created', { orgId: ORG, entityType: 'schedule_event', entityId: VISITE, metadata: {} });
     await laisserTravailler();
     expect(twilio.messages.create).toHaveBeenCalledTimes(1);
-    expect(requetes(journal, 'automation_execution_logs', 'insert')).toHaveLength(1);
+    // La réservation échoue aussi (même panne) : l'action part sans elle, puis le résultat tente de s'écrire.
+    expect(executionsJournalisees(journal)).toHaveLength(1);
     expect(erreurs).toHaveBeenCalledWith(expect.stringContaining('failed to write execution log'), 'connexion perdue');
     erreurs.mockRestore();
   });

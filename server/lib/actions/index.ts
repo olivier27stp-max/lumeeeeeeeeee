@@ -2013,6 +2013,12 @@ export async function executeLogActivity(
  * Le deal LIÉ à une soumission : celui qui la porte (`deals.quote_id`),
  * sinon le deal ouvert le plus récent de son client. `null` = aucun — pas
  * une erreur : une soumission faite hors pipeline n'a rien à déplacer.
+ *
+ * Un deal ne compte que ce qui arrive APRÈS son entrée dans la pipeline
+ * (Rafba, 2026-09-30) : un devis fait avant le deal appartient à une autre
+ * vente et ne le fait jamais avancer — même accepté, même renvoyé. La base
+ * l'impose déjà au lien direct (`deals_lien_posterieur`) ; le repli par
+ * client doit l'imposer lui-même.
  */
 async function dealDeLaSoumission(ctx: ActionContext): Promise<{ id: string; pipeline_id: string; stage_id: string } | null> {
   const { data: direct } = await ctx.supabase
@@ -2021,14 +2027,15 @@ async function dealDeLaSoumission(ctx: ActionContext): Promise<{ id: string; pip
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (direct) return direct as { id: string; pipeline_id: string; stage_id: string };
 
-  const { data: q } = await ctx.supabase.from('quotes').select('client_id, lead_id')
+  const { data: q } = await ctx.supabase.from('quotes').select('client_id, lead_id, created_at')
     .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
   const client = (q?.client_id as string | null) ?? (q?.lead_id as string | null) ?? null;
-  if (!client) return null;
+  if (!client || !q?.created_at) return null;
   const { data: ouverts } = await ctx.supabase
     .from('deals').select('id, pipeline_id, stage_id, pipeline_stages!deals_stage_same_org!inner(kind)')
     .eq('org_id', ctx.orgId).eq('client_id', client).is('deleted_at', null)
     .eq('pipeline_stages.kind', 'open')
+    .lte('created_at', q.created_at as string)
     .order('created_at', { ascending: false }).limit(1);
   const d = (ouverts ?? [])[0] as { id: string; pipeline_id: string; stage_id: string } | undefined;
   return d ?? null;
@@ -2537,19 +2544,19 @@ export async function executeEnvoyerSlack(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  const texte = resolveTemplate(config.body || '', vars).trim();
-  if (!texte) return { success: false, error: 'Le message est vide.' };
-
-  try {
-    const { isSlackConfigured, canalSupport, envoyerMessageSlack } = await import('../slack');
-    if (!isSlackConfigured()) {
-      return { success: false, error: 'Slack n’est pas configuré sur ce serveur.' };
-    }
-    await envoyerMessageSlack({ channel: canalSupport(), text: texte });
-    return { success: true, data: { longueur: texte.length } };
-  } catch (e: unknown) {
-    return { success: false, error: e instanceof Error ? e.message : String(e) };
-  }
+  /*
+   * Aucune connexion Slack PAR ENTREPRISE n'existe encore. Le Slack configuré
+   * sur ce serveur est celui du SUPPORT DE LUME : y publier enverrait les
+   * messages d'un client (noms, suivis) dans notre canal interne, alors que
+   * l'écran promet « le canal Slack de votre entreprise » (audit V2,
+   * 2026-09-29). On ne publie donc nulle part, et on le dit. L'éditeur grise
+   * l'action et la publication la refuse (catalogue : `indisponible`).
+   */
+  void config; void vars; void ctx;
+  return {
+    success: false,
+    error: 'Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié.',
+  };
 }
 
 // ── Action : webhook ────────────────────────────────────────

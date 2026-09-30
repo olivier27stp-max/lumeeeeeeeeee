@@ -26,7 +26,17 @@ interface RawEntry {
   notes: string | null;
   job_id: string | null;
   status: string | null;
+  approved_at: string | null;
 }
+
+/**
+ * Approbation d'un pointage. Avant, « Approuver » préfixait les notes par
+ * « [APPROVED] » (colonne approved_at jamais remplie) : on lit encore ce
+ * préfixe pour les pointages approuvés à l'ancienne, et on ne l'affiche pas.
+ */
+const PREFIXE_ANCIEN = /^(\[APPROVED\]\s*)+/;
+export const estApprouve = (e: { approved_at: string | null; notes: string | null }) => !!e.approved_at || PREFIXE_ANCIEN.test(e.notes || '');
+export const notesAffichees = (notes: string | null) => (notes || '').replace(PREFIXE_ANCIEN, '').trim() || null;
 
 interface Props {
   /** Reference date controlling the day / week window. */
@@ -133,7 +143,7 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
       const orgId = await getCurrentOrgIdOrThrow();
       let q = supabase
         .from('time_entries')
-        .select('id, employee_id, employee_name, date, punch_in, punch_out, punch_in_at, punch_out_at, breaks, notes, job_id, status')
+        .select('id, employee_id, employee_name, date, punch_in, punch_out, punch_in_at, punch_out_at, breaks, notes, job_id, status, approved_at')
         .eq('org_id', orgId)
         .gte('date', rangeStart)
         .lte('date', rangeEnd);
@@ -156,6 +166,7 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
         notes: e.notes || null,
         job_id: e.job_id || null,
         status: e.status || null,
+        approved_at: e.approved_at || null,
       }));
       setEntries(rows);
 
@@ -227,6 +238,29 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
     }
   }, [fr, load]);
 
+  /** Approuve les pointages TERMINÉS d'un technicien sur la période affichée (gestionnaires). */
+  const approuver = useCallback(async (techId: string) => {
+    try {
+      const orgId = await getCurrentOrgIdOrThrow();
+      const { data, error: upErr } = await supabase
+        .from('time_entries')
+        .update({ approved_by: userId, approved_at: new Date().toISOString() })
+        .eq('org_id', orgId)
+        .eq('employee_id', techId)
+        .eq('status', 'completed')
+        .is('approved_at', null)
+        .gte('date', rangeStart)
+        .lte('date', rangeEnd)
+        .select('id');
+      if (upErr) throw upErr;
+      toast.success(fr ? `${data?.length ?? 0} pointage(s) approuvé(s)` : `${data?.length ?? 0} entr(ies) approved`);
+      void load();
+    } catch (err: any) {
+      console.error('[TechnicianTimesheetTable] approbation échouée :', err?.message || err);
+      toast.error(fr ? "Échec de l'approbation" : 'Failed to approve');
+    }
+  }, [userId, rangeStart, rangeEnd, fr, load]);
+
   // Load the technician roster once (managers: all techs; others: just self).
   useEffect(() => {
     let cancelled = false;
@@ -294,56 +328,6 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
     entries: RawEntry[];
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // TEMPORARY DEMO DATA — 4 imaginary technicians with fake punches.
-  // Display-only (never written to the DB). Delete this whole block + the
-  // `...DEMO_ENTRIES` spread below to remove them.
-  // ───────────────────────────────────────────────────────────────────────────
-  const DEMO_ENTRIES = useMemo<RawEntry[]>(() => {
-    if (!isManager) return []; // only managers see the imaginary techs
-    const demoTechs = [
-      { id: 'demo-tech-1', name: 'Marc Tremblay' },
-      { id: 'demo-tech-2', name: 'Sophie Gagnon' },
-      { id: 'demo-tech-3', name: 'David Roy' },
-      { id: 'demo-tech-4', name: 'Émilie Bouchard' },
-    ];
-    const rows: RawEntry[] = [];
-    // Deterministic pseudo-random so totals stay stable across renders.
-    const rand = (seed: number) => {
-      const x = Math.sin(seed * 99.13) * 10000;
-      return x - Math.floor(x);
-    };
-    days.forEach((d, di) => {
-      const dow = d.getDay();
-      if (dow === 0 || dow === 6) return; // weekdays only
-      demoTechs.forEach((tech, ti) => {
-        const seed = di * 10 + ti;
-        if (rand(seed) < 0.15) return; // occasional day off
-        const startH = 7 + Math.floor(rand(seed + 1) * 2);          // 7–8h
-        const lenH = 6 + Math.floor(rand(seed + 2) * 4);            // 6–9h
-        const dateStr = ymd(d);
-        const pin = `${String(startH).padStart(2, '0')}:00:00`;
-        const poutH = startH + lenH;
-        const pout = `${String(poutH).padStart(2, '0')}:00:00`;
-        rows.push({
-          id: `demo-${tech.id}-${dateStr}`,
-          employee_id: tech.id,
-          employee_name: tech.name,
-          date: dateStr,
-          punch_in: pin,
-          punch_out: pout,
-          punch_in_at: `${dateStr}T${pin}`,
-          punch_out_at: `${dateStr}T${pout}`,
-          breaks: [{ start: `${dateStr}T12:00:00`, end: `${dateStr}T12:30:00` }],
-          notes: rand(seed + 3) < 0.4 ? (fr ? 'Contrat terminé à temps' : 'Job completed on time') : null,
-          job_id: null,
-          status: 'completed',
-        });
-      });
-    });
-    return rows;
-  }, [days, fr, isManager]);
-  // ─── END TEMPORARY DEMO DATA ───────────────────────────────────────────────
 
   const techRows: TechAgg[] = useMemo(() => {
     const byTech = new Map<string, RawEntry[]>();
@@ -351,7 +335,7 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
     for (const tech of technicians) {
       if (!byTech.has(tech.id)) byTech.set(tech.id, []);
     }
-    for (const e of [...entries, ...DEMO_ENTRIES]) {
+    for (const e of entries) {
       const arr = byTech.get(e.employee_id) || [];
       arr.push(e);
       byTech.set(e.employee_id, arr);
@@ -372,7 +356,7 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
       aggs.push({ techId, name: nameFor(techId, list[0]?.employee_name), perDayMinutes: perDay, totalMinutes: total, running, entries: list });
     }
     return aggs.sort((a, b) => a.name.localeCompare(b.name));
-  }, [entries, DEMO_ENTRIES, days, nameFor]);
+  }, [entries, days, nameFor]);
 
   const dayColumnTotals = useMemo(() => {
     const totals = days.map(() => 0);
@@ -452,6 +436,7 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
                   <UnifiedAvatar id={row.techId} name={row.name} size={28} />
                   <span className="text-[14px] font-medium text-text-primary truncate">{row.name}</span>
                   {row.running && <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 shrink-0">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span>}
+                  <EtatApprobation entries={row.entries} isManager={isManager} fr={fr} onApprouver={() => approuver(row.techId)} />
                 </div>
                 {row.perDayMinutes.map((m, i) => (
                   <span key={i} className="text-center text-[13px] tabular-nums text-text-secondary">
@@ -497,6 +482,7 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
                 <UnifiedAvatar id={row.techId} name={row.name} size={28} />
                 <span className="text-[14px] font-medium text-text-primary truncate">{row.name}</span>
                 {row.running && <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 shrink-0">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span>}
+                <EtatApprobation entries={row.entries} isManager={isManager} fr={fr} onApprouver={() => approuver(row.techId)} />
               </div>
               <span className="text-right text-[14px] font-semibold tabular-nums text-text-primary shrink-0">{fmtDuration(row.totalMinutes, timeFormat)}</span>
             </div>
@@ -505,6 +491,34 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
         );
       })}
     </div>
+  );
+}
+
+// ── Approbation : état ou bouton, dans l'en-tête de la ligne d'un technicien ──
+function EtatApprobation({ entries, isManager, fr, onApprouver }: {
+  entries: RawEntry[];
+  isManager: boolean;
+  fr: boolean;
+  onApprouver: () => void;
+}) {
+  const terminees = entries.filter((e) => e.status === 'completed');
+  if (terminees.length === 0) return null;
+  const aApprouver = terminees.filter((e) => !estApprouve(e)).length;
+  if (aApprouver === 0) {
+    return <span className="text-[11px] font-medium text-emerald-700 shrink-0">✓ {fr ? 'Approuvé' : 'Approved'}</span>;
+  }
+  if (!isManager) {
+    return <span className="text-[11px] font-medium text-amber-700 shrink-0">{fr ? 'À approuver' : 'Pending approval'}</span>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={(ev) => { ev.stopPropagation(); onApprouver(); }}
+      onKeyDown={(ev) => ev.stopPropagation()}
+      className="h-6 px-2 rounded-md border border-emerald-300 bg-emerald-50 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
+    >
+      {fr ? `Approuver (${aApprouver})` : `Approve (${aApprouver})`}
+    </button>
   );
 }
 
@@ -614,7 +628,7 @@ function DayExpanded({
             return (
               <tr key={e.id} className="border-b border-outline/30">
                 <td className="px-3 py-2 text-[13px] text-text-primary">
-                  {isManager && !e.id.startsWith('demo-') ? (
+                  {isManager ? (
                     <select
                       value={e.job_id || ''}
                       onChange={(ev) => onAssignJob(e.id, ev.target.value || null)}
@@ -628,7 +642,7 @@ function DayExpanded({
                     </select>
                   ) : jobLabel(e.job_id)}
                 </td>
-                <td className="px-3 py-2 text-[13px] text-text-secondary max-w-[280px] truncate">{e.notes ? e.notes : <span className="text-text-tertiary">—</span>}</td>
+                <td className="px-3 py-2 text-[13px] text-text-secondary max-w-[280px] truncate">{notesAffichees(e.notes) ?? <span className="text-text-tertiary">—</span>}{estApprouve(e) && <span className="ml-2 text-[11px] font-medium text-emerald-700">✓ {fr ? 'Approuvé' : 'Approved'}</span>}</td>
                 <td className="px-3 py-2 text-[13px] tabular-nums text-text-secondary">{fmtClock(e, 'in')}</td>
                 <td className="px-3 py-2 text-[13px] tabular-nums text-text-secondary">
                   {running ? <span className="text-emerald-600 font-medium">{tt.inProgress || (fr ? 'En cours' : 'In progress')}</span> : fmtClock(e, 'out')}

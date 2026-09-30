@@ -72,7 +72,11 @@ export interface ParcoursPropose {
  * Actions que Lumi ne propose JAMAIS : elles désignent une autre automatisation
  * par son identifiant, qu'il ne connaît pas — il en inventait un.
  */
-const ACTIONS_HORS_LUMI = new Set(['demarrer_automatisation', 'arreter_automatisation']);
+const ACTIONS_HORS_LUMI = new Set([
+  'demarrer_automatisation', 'arreter_automatisation',
+  // Les actions pas encore disponibles (voir `indisponible` au catalogue).
+  ...ACTIONS.filter((a) => a.indisponible).map((a) => a.cle),
+]);
 
 /**
  * Un TROU que le modèle a laissé à la place d'une donnée qu'il n'a pas :
