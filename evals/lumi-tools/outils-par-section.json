@@ -4,13 +4,13 @@
    "nom": "search_help",
    "genre": "lecture",
    "sensible": false,
-   "permission": null
+   "permission": "settings.read"
   },
   {
    "nom": "recall_notes",
    "genre": "lecture",
    "sensible": false,
-   "permission": null
+   "permission": "settings.update"
   },
   {
    "nom": "forget_note",
@@ -272,7 +272,7 @@
    "nom": "get_weather",
    "genre": "lecture",
    "sensible": false,
-   "permission": null
+   "permission": "settings.read"
   },
   {
    "nom": "create_job",
@@ -293,10 +293,16 @@
    "permission": "calendar.read"
   },
   {
-   "nom": "optimize_route",
+   "nom": "propose_day_optimization",
    "genre": "lecture",
    "sensible": false,
-   "permission": "jobs.read"
+   "permission": "calendar.read"
+  },
+  {
+   "nom": "apply_day_optimization",
+   "genre": "action",
+   "sensible": true,
+   "permission": "calendar.update"
   },
   {
    "nom": "update_job_status",
@@ -920,7 +926,7 @@
    "nom": "get_company_info",
    "genre": "lecture",
    "sensible": false,
-   "permission": null
+   "permission": "settings.read"
   },
   {
    "nom": "list_automations",
@@ -1340,7 +1346,7 @@
    "nom": "list_courses",
    "genre": "lecture",
    "sensible": false,
-   "permission": null
+   "permission": "team.read"
   },
   {
    "nom": "list_houses",

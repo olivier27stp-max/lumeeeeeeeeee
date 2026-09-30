@@ -3330,7 +3330,8 @@ const addNoteTool: AgentTool = {
     name: 'add_note',
     description:
       "Add a note to the Notes tab of a client or a job. entity_type is 'client' or 'job'. "
-      + 'If several clients match the name, ask which one first.',
+      + 'If several clients match the name, ask which one first. INTERNAL note only: a note shown TO THE CLIENT on an '
+      + 'invoice or a quote → update_invoice / update_quote (notes).',
     parameters: {
       type: 'object',
       properties: {

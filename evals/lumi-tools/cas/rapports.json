@@ -46,7 +46,7 @@
     "interdits": ["toggle_automation_rule", "update_automation_message", "update_automation_sms_body"] },
 
   { "id": "toggle_automation_rule-1", "section": "rapports", "outil": "toggle_automation_rule", "langue": "fr", "type": "action", "sensible": true,
-    "q": "Mets en pause le rappel de facture à 30 jours.",
+    "q": "Mets en pause l'automatisation « Invoice Reminder — 30 Days ».",
     "params": { "is_active": false },
     "cible": ["Invoice Reminder — 30 Days"],
     "voisins": ["list_automations"] },
