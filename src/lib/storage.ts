@@ -21,8 +21,10 @@ export interface UploadOptions {
 /**
  * Authenticated server relay for image uploads blocked by storage RLS.
  * The path MUST start with the caller's org id (`${orgId}/…`) — the server
- * rejects anything else. Exported for buckets with no client INSERT policy
- * at all (e.g. `avatars`), where trying the direct upload first is pointless.
+ * rejects anything else. Use it for `avatars`, whose client policy only allows
+ * writes under `{auth.uid()}/…`: the shared web+mobile convention is
+ * `{orgId}/…`, so a direct upload would be refused. The relay writes with the
+ * service key, which keeps one path for both platforms.
  */
 export async function uploadViaServer(
   bucket: string,

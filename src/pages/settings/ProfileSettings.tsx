@@ -101,8 +101,10 @@ export default function ProfileSettings() {
 
   // Banner — stored by convention at avatars/{orgId}/banners/{userId} (no DB
   // column); the banner image falls back to the gradient when no banner was ever
-  // uploaded. Uploads go through the server relay: the avatars bucket has no
-  // client INSERT policy, so direct uploads die on RLS.
+  // uploaded. Uploads go through the server relay because the client policy on
+  // `avatars` only allows writes under `{auth.uid()}/…`, while the path shared
+  // with mobile is `{orgId}/…`. The relay writes with the service key, so both
+  // platforms land on the same path.
   const [bannerBroken, setBannerBroken] = useState(false);
   const [bannerVersion, setBannerVersion] = useState(0);
   const [uploadingBanner, setUploadingBanner] = useState(false);
