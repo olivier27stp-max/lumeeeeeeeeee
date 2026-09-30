@@ -211,14 +211,20 @@ async function main() {
   // temps de la batterie, puis remis. Sans ça, la batterie épuise le mois ou déclenche le
   // plafond journalier (palier « restreint ») en cours de route, et la comparaison est faussée.
   const BUDGET = Number(arg('--budget', '0')) || 0;
-  let budgetAvant: { planId: string; cents: number } | null = null;
+  let budgetAvant: { planId: string; valeurs: Record<string, number> } | null = null;
   if (BUDGET > 0) {
     const { data: abo } = await admin.from('subscriptions').select('plan_id').eq('org_id', orgId).eq('status', 'active').limit(1).maybeSingle();
-    const { data: plan } = await admin.from('plans').select('id, ai_monthly_budget_cents').eq('id', (abo as any)?.plan_id).maybeSingle();
+    const { data: plan } = await admin.from('plans').select('*').eq('id', (abo as any)?.plan_id).maybeSingle();
     if (!plan) throw new Error('budget temporaire impossible (forfait introuvable)');
-    budgetAvant = { planId: (plan as any).id, cents: Number((plan as any).ai_monthly_budget_cents) || 0 };
-    await admin.from('plans').update({ ai_monthly_budget_cents: BUDGET }).eq('id', budgetAvant.planId);
-    console.log(`budget temporaire : ${BUDGET} ¢ (sera remis à ${budgetAvant.cents} ¢)`);
+    // Deux modèles de plafond selon la migration « crédits Lumi » (2026-10-05) :
+    // cents (ai_monthly_budget_cents) ou crédits (lumi_credits_mensuels, 1 crédit = 3 ¢).
+    const valeurs: Record<string, number> = {};
+    const nouvelles: Record<string, number> = {};
+    if ('ai_monthly_budget_cents' in (plan as any)) { valeurs.ai_monthly_budget_cents = Number((plan as any).ai_monthly_budget_cents) || 0; nouvelles.ai_monthly_budget_cents = BUDGET; }
+    if ('lumi_credits_mensuels' in (plan as any)) { valeurs.lumi_credits_mensuels = Number((plan as any).lumi_credits_mensuels) || 0; nouvelles.lumi_credits_mensuels = Math.ceil(BUDGET / 3); }
+    budgetAvant = { planId: (plan as any).id, valeurs };
+    await admin.from('plans').update(nouvelles).eq('id', budgetAvant.planId);
+    console.log(`budget temporaire : ${JSON.stringify(nouvelles)} (sera remis à ${JSON.stringify(valeurs)})`);
   }
   // Mode « demander » le temps de la batterie : aucune écriture ne s'exécute.
   await admin.from('memberships').update({ lumi_mode: 'demander' }).eq('user_id', userId).eq('org_id', orgId);
@@ -237,7 +243,7 @@ async function main() {
   } finally {
     await admin.from('memberships').update({ lumi_mode: (m as any).lumi_mode }).eq('user_id', userId).eq('org_id', orgId);
     if (budgetAvant) {
-      await admin.from('plans').update({ ai_monthly_budget_cents: budgetAvant.cents }).eq('id', budgetAvant.planId);
+      await admin.from('plans').update(budgetAvant.valeurs).eq('id', budgetAvant.planId);
       console.log('budget d’origine remis');
     }
     if (forfaitAvant) {
