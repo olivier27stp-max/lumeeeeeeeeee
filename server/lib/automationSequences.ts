@@ -176,8 +176,14 @@ export function trouverEtape(steps: Etape[], id: string | null | undefined): Eta
  * clé différente, les tâches déjà en attente restaient, et le client recevait
  * tout en double (constaté en prod, 10 tâches pour un seul devis).
  */
-export function cleEtape(ruleId: string, entityId: string, stepId: string): string {
-  return `${ruleId}:${entityId}:step:${stepId}`;
+/**
+ * `passage` : posé au démarrage d'un parcours quand la règle permet au client
+ * de REPASSER (`settings.reentree`). Sans lui, un 2e passage était refusé par
+ * l'index unique tant que le 1er attendait encore (audit V2, D-12).
+ */
+export function cleEtape(ruleId: string, entityId: string, stepId: string, passage?: unknown): string {
+  const base = `${ruleId}:${entityId}:step:${stepId}`;
+  return typeof passage === 'string' && passage ? `${base}:${passage}` : base;
 }
 
 // ── Validation structurelle ─────────────────────────────────
@@ -378,6 +384,17 @@ export async function planifierEtape(
     executeAtMs = Math.max(executeAtMs, cible);
   }
 
+  /*
+   * Attente « jusqu'à réponse, au plus N » : la tâche est l'ÉCHÉANCE. Son
+   * délai n'était jamais ajouté : elle était datée maintenant, tranchée au
+   * tick suivant (« pas de réponse ») et la relance partait une à cinq
+   * minutes après au lieu de N jours (audit V2, D-07). Une réponse du client
+   * avant l'échéance la réveille (`reveillerAttentesReponse`).
+   */
+  if (courante.type === 'attendre' && courante.mode === 'reponse') {
+    executeAtMs += Math.max(0, courante.delai_secondes || 0) * 1000;
+  }
+
   const executeAt = new Date(executeAtMs).toISOString();
 
   const ligneTache = {
@@ -406,7 +423,7 @@ export async function planifierEtape(
     sequence_context: { ...ctx.contexte, franchies: ctx.franchies + 1 },
     execute_at: executeAt,
     status: 'pending',
-    execution_key: cleEtape(ctx.ruleId, ctx.entityId, courante.id),
+    execution_key: cleEtape(ctx.ruleId, ctx.entityId, courante.id, ctx.contexte.passage),
   };
 
   /*
@@ -430,7 +447,7 @@ export async function planifierEtape(
     // deux ticks concurrents). supabase-js ne lève jamais — l'erreur se lit
     // dans la réponse, un catch ici n'attraperait rien.
     if (error.code === '23505') {
-      logger.info(`[sequences] étape déjà planifiée, ignorée : ${cleEtape(ctx.ruleId, ctx.entityId, courante.id)}`);
+      logger.info(`[sequences] étape déjà planifiée, ignorée : ${cleEtape(ctx.ruleId, ctx.entityId, courante.id, ctx.contexte.passage)}`);
       return null;
     }
     logger.error('[sequences] planification échouée après 3 essais — parcours interrompu', {

@@ -608,7 +608,10 @@ export async function detectOverdueInvoices(supabase: SupabaseClient) {
     const { data, error } = await supabase
       .from('invoices')
       .select('id, org_id, invoice_number, due_date, client_id')
-      .not('status', 'in', '("paid","cancelled","void")')
+      // Liste POSITIVE, comme le cron des relances : un brouillon n'a jamais
+      // été reçu par le client — « votre facture est en retard » serait faux
+      // (audit V2, D-05 ; 4 brouillons échus en prod au 2026-09-30).
+      .in('status', ['sent', 'partial'])
       .not('due_date', 'is', null)
       .lt('due_date', borne)
       .is('deleted_at', null)

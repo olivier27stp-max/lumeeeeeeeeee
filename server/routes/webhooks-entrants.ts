@@ -29,6 +29,7 @@
    large, et le mandat interdit d'ouvrir plus que nécessaire.
    ═══════════════════════════════════════════════════════════════ */
 
+import { randomUUID } from 'node:crypto';
 import { Router, raw } from 'express';
 import { getServiceClient } from '../lib/supabase';
 import { eventBus } from '../lib/eventBus';
@@ -210,14 +211,30 @@ router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, 
   // ── L'événement ───────────────────────────────────────────
 
   /*
-   * `entityId` = l'id du webhook. Il n'y a pas d'entité CRM derrière un
-   * appel extérieur, et le moteur a besoin d'un id stable pour sa clé
-   * d'anti-doublon.
+   * La trace d'abord : son id devient l'ENTITÉ de l'événement.
+   *
+   * L'entité était l'id du WEBHOOK, le même pour tous les appels : deux
+   * prospects arrivés à moins de 2 minutes d'écart (Zapier, Facebook)
+   * partageaient la clé anti-doublon « règle + entité », et le 2e était
+   * reçu, consigné… et jamais traité (audit V2, D-02). Chaque appel reçu
+   * est une occurrence distincte ; un vrai rejeu du MÊME appel reste
+   * arrêté par l'outbox.
    */
+  const { data: trace, error: erreurTrace } = await admin.from('automation_webhook_receipts').insert({
+    webhook_id: hook.id, org_id: hook.org_id, statut: 'accepte', corps: corps as object | null,
+  }).select('id').single();
+  if (erreurTrace) {
+    // La trace a échoué : l'événement part quand même, avec un id propre à
+    // cet appel. On ne fait pas échouer l'appelant, qui réessaierait — ce
+    // qui déclencherait l'automatisation deux fois.
+    logger.error('[webhooks-entrants] trace non écrite', { message: erreurTrace.message });
+  }
+  const occurrence = (trace as { id?: string } | null)?.id ?? randomUUID();
+
   await eventBus.emit('webhook.received', {
     orgId: hook.org_id,
-    entityType: 'automation_webhook',
-    entityId: hook.id,
+    entityType: 'automation_webhook_receipt',
+    entityId: occurrence,
     /*
      * Les champs du JSON reçu sont étalés au premier niveau, EN PLUS de
      * `corps`.
@@ -228,28 +245,19 @@ router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, 
      * que le service extérieur envoie — constaté le 2026-09-25 en
      * éprouvant les filtres de date.
      *
-     * `corps` reste disponible entier, et nos deux champs sont posés
-     * APRÈS : un JSON qui porterait « recu_le » ne peut pas écraser
-     * l'heure que nous avons constatée.
+     * `corps` reste disponible entier, et nos champs sont posés APRÈS : un
+     * JSON qui porterait « recu_le » ne peut pas écraser l'heure que nous
+     * avons constatée.
      */
     metadata: {
       ...champsFiltrables(corps),
       corps,
       // Le corps reçu, rangé à part (launch 2026-09-28).
       webhook: corps,
+      webhook_id: hook.id,
       recu_le: new Date().toISOString(),
     },
   });
-
-  const { error: erreurTrace } = await admin.from('automation_webhook_receipts').insert({
-    webhook_id: hook.id, org_id: hook.org_id, statut: 'accepte', corps: corps as object | null,
-  });
-  if (erreurTrace) {
-    // La trace a échoué mais l'événement est parti : on le dit dans les
-    // logs sans faire échouer l'appelant, qui n'y peut rien et
-    // réessaierait — ce qui déclencherait l'automatisation deux fois.
-    logger.error('[webhooks-entrants] trace non écrite', { message: erreurTrace.message });
-  }
 
   return res.json({ ok: true });
 });
@@ -263,7 +271,7 @@ router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, 
  */
 export const CHAMPS_RESERVES_MOTEUR = new Set([
   'chaine', 'suppress_immediate', 'evenement_base_id', 'origine', 'outboxId', 'reglesTraitees',
-  'rejoueDepuis', 'dejaEnvoyeDepuis', 'corps', 'webhook', 'recu_le',
+  'rejoueDepuis', 'dejaEnvoyeDepuis', 'corps', 'webhook', 'recu_le', 'webhook_id', 'passage',
 ]);
 export function champsFiltrables(corps: unknown): Record<string, unknown> {
   if (corps === null || typeof corps !== 'object' || Array.isArray(corps)) return {};

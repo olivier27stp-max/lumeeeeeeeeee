@@ -19,7 +19,7 @@ vi.mock('../server/lib/supabase', () => ({
         select: () => q, is: () => q,
         eq: (c: string, v: string) => { if (c === 'api_key') cle = v; return q; },
         maybeSingle: async () => { base.lectures++; return { data: cle === base.cleValide ? { id: 'h1', org_id: 'org-a', enabled: true, deleted_at: null } : null, error: null }; },
-        insert: async () => ({ data: null, error: null }),
+        insert: () => Object.assign(Promise.resolve({ data: null, error: null }), { select: () => ({ single: async () => ({ data: { id: 'recu-1' }, error: null }) }) }),
         update: () => q,
       };
       return q;

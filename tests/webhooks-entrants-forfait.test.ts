@@ -23,7 +23,8 @@ vi.mock('../server/lib/supabase', () => ({
           : table === 'subscriptions' ? (base.plan ? { plans: base.plan } : null) : null,
         error: null,
       });
-      q.insert = async () => ({ data: null, error: null });
+      // Reçu : attendu directement, ou .select('id').single() pour son id (occurrence).
+      q.insert = () => Object.assign(Promise.resolve({ data: null, error: null }), { select: () => ({ single: async () => ({ data: { id: 'recu-1' }, error: null }) }) });
       return q;
     },
   }),

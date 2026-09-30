@@ -76,22 +76,10 @@ async function rafale(n: number, regles: any[]) {
   return journal;
 }
 
-describe('T12.1 / T12.2 — plafond quotidien de SMS d’automatisation par org', () => {
-  it('ROUGE ATTENDU (F11/F13) : au-delà du plafond, les SMS sont retenus (reportés), jamais envoyés', async () => {
-    const journal = await rafale(PLAFOND_SMS_JOUR + 1, [bienvenue]);
-    const envoyes = twilio.messages.create.mock.calls.length;
-    const retenus = requetes(journal, 'automation_scheduled_tasks', 'insert').length;
-    expect(envoyes, `${envoyes} SMS partis pour un plafond de ${PLAFOND_SMS_JOUR} ; retenus : ${retenus}`).toBeLessThanOrEqual(PLAFOND_SMS_JOUR);
-    expect(retenus).toBeGreaterThanOrEqual(1);
-  });
-
-  it('ROUGE ATTENDU : à 80 % du plafond, une notification prévient l’administrateur', async () => {
-    const journal = await rafale(Math.ceil(PLAFOND_SMS_JOUR * 0.8), [bienvenue]);
-    const notifs = requetes(journal, 'notifications', 'insert').map((r) => (r.valeur as any).title as string);
-    // Les notifications « Nouveau lead » de la règle ne comptent pas : on cherche une alerte de plafond.
-    expect(notifs.filter((t) => /plafond|limite|quota/i.test(t)), `notifications vues : ${JSON.stringify(notifs)}`).not.toHaveLength(0);
-  });
-});
+// T12.1 / T12.2 (plafond quotidien de SMS) et T6.1 (« plafonné et mis en
+// file ») : spécification ÉCARTÉE le 2026-09-23 (voir tests/quarantaine/
+// README.md). Remplacés par l'ÉTALEMENT — tout part, lentement — prouvé en
+// CI par tests/automation/vague2-etalement-textos.test.ts (audit V2, F11).
 
 describe('T12.3 — kill switch global', () => {
   it('ROUGE ATTENDU (F6) : AUTOMATIONS_ENABLED=false → aucun événement traité', async () => {
@@ -115,16 +103,6 @@ describe('T12.3 — kill switch global', () => {
   });
 });
 
-describe('T6.1 — 200 leads importés d’un coup', () => {
-  it('ROUGE ATTENDU (F11) : le comportement défini est « plafonné et mis en file », pas 200 SMS et 200 courriels dans la requête', async () => {
-    const journal = await rafale(200, [bienvenue]);
-    const smsPartis = twilio.messages.create.mock.calls.length;
-    const courrielsPartis = (sendEmail as any).mock.calls.length;
-    const enFile = requetes(journal, 'automation_scheduled_tasks', 'insert').length;
-    expect(smsPartis + courrielsPartis, `partis immédiatement : ${smsPartis} SMS + ${courrielsPartis} courriels ; en file : ${enFile}`).toBeLessThanOrEqual(2 * PLAFOND_SMS_JOUR);
-  }, 60_000);
-});
-
 describe('T6.2 — cliquet : requêtes Supabase par événement', () => {
   it('un lead.created qui déclenche SMS + courriel + notification + journal coûte au plus 20 requêtes', async () => {
     const journal = await rafale(1, [bienvenue]);
@@ -133,13 +111,8 @@ describe('T6.2 — cliquet : requêtes Supabase par événement', () => {
     expect(n, `requêtes : ${journal.map((r) => `${r.op}:${r.table}`).join(', ')}`).toBeLessThanOrEqual(20);
   });
 
-  it('les réglages de l’org sont relus pour CHAQUE règle du même événement (N+1 documenté, F24)', async () => {
-    const r2 = { ...bienvenue, id: 'r-2', actions: [{ type: 'log_activity', config: { event_type: 'x' } }] };
-    const journal = await rafale(1, [bienvenue, r2]);
-    const lectures = requetes(journal, 'company_settings', 'select').length;
-    // Comportement ACTUEL figé : resolveEntityVariables + langueOrg par règle → 2 lectures × 2 règles.
-    expect(lectures).toBe(4);
-  });
+  // N+1 des réglages (F24) : CORRIGÉ le 2026-09-30 (variables résolues une fois
+  // par événement, langue en cache) — cliquet en CI : tests/automation/vague2-n-plus-1.test.ts.
 });
 
 describe('T6.4 — 10 visites créées en lot', () => {

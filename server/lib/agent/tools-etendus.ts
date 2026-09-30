@@ -2856,7 +2856,7 @@ const markInvoicePaidTool: AgentTool = {
       // On lit la facture À L'IDENTITÉ (RLS garantit l'appartenance à l'org).
       const { data: inv, error: eInv } = await ctx.client
         .from('invoices')
-        .select('id, invoice_number, total_cents, balance_cents, status, client_id')
+        .select('id, invoice_number, total_cents, balance_cents, status, client_id, job_id, currency')
         .eq('org_id', ctx.orgId).eq('id', invoiceId)
         .is('deleted_at', null).maybeSingle();
       if (eInv) throw eInv;
@@ -2880,13 +2880,10 @@ const markInvoicePaidTool: AgentTool = {
       // est bloqué (pas de GRANT à authenticated ; et le service client
       // déclenche une cascade webhook qui exige un contexte auth). Testé en
       // staging : balance → 0, statut → payée.
+      // Un VRAI paiement manuel, comme le bouton « Marquer payée » : le trigger
+      // met la facture à jour (solde 0, payée). Voir enregistrerPaiementManuel.
       const admin = getServiceClient();
-      const { error: eApply } = await admin.rpc('apply_invoice_payment', {
-        p_invoice_id: invoiceId,
-        p_org_id: ctx.orgId,
-        p_amount_cents: reste,
-      });
-      if (eApply) throw eApply;
+      await enregistrerPaiementManuel(ctx, { id: invoiceId, client_id: inv.client_id, job_id: inv.job_id, currency: inv.currency }, reste, methode);
 
       const { data: apres } = await admin
         .from('invoices').select('invoice_number, balance_cents, status')
@@ -3513,3 +3510,39 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   setJobExpensesTool,
   sendEmailTool,
 ];
+
+/**
+ * Un paiement enregistré par Lumi est un VRAI paiement manuel, comme le
+ * bouton « Marquer payée » (invoice-mark-paid.ts) : une ligne `payments`, et
+ * le trigger `trg_payments_recalculate_invoice` met la facture à jour.
+ *
+ * Lumi appelait `apply_invoice_payment`, qui modifie la facture SANS ligne de
+ * paiement : absent des Paiements, des rapports et de QuickBooks — et le
+ * premier paiement Stripe suivant, recalculé depuis `payments`, EFFAÇAIT ce
+ * montant (audit V2, 2026-09-30).
+ */
+export async function enregistrerPaiementManuel(
+  ctx: ToolContext,
+  facture: { id: string; client_id?: string | null; job_id?: string | null; currency?: string | null },
+  montantCents: number,
+  methode: string | null,
+): Promise<void> {
+  const { error } = await getServiceClient().from('payments').insert({
+    org_id: ctx.orgId,
+    created_by: ctx.userId,
+    invoice_id: facture.id,
+    client_id: facture.client_id ?? null,
+    job_id: facture.job_id ?? null,
+    provider: 'manual',
+    status: 'succeeded',
+    method: methode,
+    amount_cents: montantCents,
+    currency: facture.currency || 'CAD',
+    payment_date: new Date().toISOString(),
+    paid_at: new Date().toISOString(),
+    // Pas de `notes` : la colonne n'existe ni en prod ni sur staging
+    // (20260928120000 jamais appliquée) — une seule clé inconnue fait
+    // échouer toute l'insertion.
+  });
+  if (error) throw error;
+}

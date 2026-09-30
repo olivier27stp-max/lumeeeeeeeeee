@@ -82,6 +82,8 @@ injustifiable : ce n'est ni notre coût, ni notre business.
 Ce qui protège réellement de l'emballement existe déjà : le **kill switch F6**
 (`AUTOMATIONS_ENABLED=false`) arrête tout en une variable, sans perdre la file.
 
+**Mise à jour 2026-09-30 (audit V2)** : le webhook entrant (#644) a créé le chemin de rafale prévu ici. L'ÉTALEMENT est en place (`DEBIT_SMS_PAR_MINUTE`, `server/lib/automationEngine.ts`) et prouvé en CI par `tests/automation/vague2-etalement-textos.test.ts` ; les trois tests « plafond » ont été retirés de ce dossier.
+
 **Si ce test redevient pertinent un jour**, ce sera parce qu'un chemin réel
 produit des rafales (un webhook entrant, une synchronisation externe). À ce
 moment-là, la bonne réponse sera d'**étaler dans le temps** — tout part, mais

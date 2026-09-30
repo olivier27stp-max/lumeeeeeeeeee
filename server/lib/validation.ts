@@ -881,6 +881,15 @@ const CLES_LUES_PAR_LE_MOTEUR_PAR_ACTION: Record<string, string[]> = {
   create_task: ['description'],
 };
 const CLES_LUES_PAR_LE_MOTEUR = Object.values(CLES_LUES_PAR_LE_MOTEUR_PAR_ACTION).flat();
+/**
+ * Actions exécutées par le moteur mais jamais proposées dans l'éditeur
+ * (audit V2, D-14) : `log_activity` vient des préréglages. Seules les clés
+ * listées ici sont admises pour elles ; toute autre clé reste refusée.
+ */
+const CLES_ACTIONS_INTERNES: Readonly<Record<string, readonly string[]>> = {
+  log_activity: ['event_type', 'metadata'],
+};
+export const ACTIONS_INTERNES: readonly string[] = Object.keys(CLES_ACTIONS_INTERNES);
 
 const configAction = z.object(
   Object.fromEntries(
@@ -894,18 +903,31 @@ const configAction = z.object(
       [`${cle}_en`, z.string().trim().max(10000).optional()],
     ]),
   ) as Record<string, z.ZodOptional<z.ZodString>>,
-);
+).extend({
+  event_type: z.string().trim().max(100).optional(),
+  // Seule valeur non textuelle : les métadonnées d'un journal d'activité.
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
 
 const actionAutomatisation = z
   .object({
-    type: z.enum(CLES_ACTIONS as [string, ...string[]], { message: 'Unknown action.' }),
+    type: z.enum([...CLES_ACTIONS, ...ACTIONS_INTERNES] as [string, ...string[]], { message: 'Unknown action.' }),
     // `strict` : une cle inconnue est refusee, pas ignoree.
     config: configAction.strict(),
   })
   .superRefine((action, ctx) => {
     const modele = trouverAction(action.type);
-    if (!modele) return;
+    const internes = new Set(CLES_ACTIONS_INTERNES[action.type] ?? []);
     const config = action.config as Record<string, unknown>;
+    if (!modele) {
+      // Action interne : seules ses clés internes sont admises.
+      for (const cle of Object.keys(config)) {
+        if (!internes.has(cle)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['config', cle], message: `« ${action.type} » n'utilise pas le champ « ${cle} ».` });
+        }
+      }
+      return;
+    }
 
     for (const champ of modele.champs) {
       const valeur = config[champ.cle];
