@@ -23,6 +23,9 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { tourLumi, promptSystemeLumi, isLumiConfigured } from '../lumi/orchestrateur';
 import { etatBudget, reserverBudget, reglerBudget, reglagesPourPalier, messagePause } from '../lumi/budget';
 import { modeleLumi } from '../lumi/tarifs';
+import type { Apercu } from '../lumi/fiches';
+import { argentFr, argentEn } from '../lumi/apercu-action';
+import { EXPIRATION_CONFIRMATION_MIN } from './confirmation';
 import { logger } from '../logger';
 
 /** Un SMS est facturé par tranche de 160 caractères : au-delà, on coupe. */
@@ -31,11 +34,56 @@ export const LONGUEUR_MAX_SMS = 900;
 /** Tours gardés en mémoire pour le fil : assez pour un suivi, pas plus. */
 export const TOURS_HISTORIQUE = 6;
 
+/** Une écriture en attente de « oui ». `groupe` : toutes les écritures de la même carte, dans l'ordre. */
+export interface PropositionSms {
+  tool: string;
+  args: Record<string, unknown>;
+  tool_use_id: string;
+  groupe?: Array<{ tool: string; args: Record<string, unknown>; tool_use_id: string }>;
+  /** Le membre qui l'a reçue : un « oui » venu d'un autre compte ne la confirme pas. */
+  user_id?: string;
+  org_id?: string;
+}
+
 export interface ReponseSms {
   texte: string;
   /** Écriture proposée, en attente d'un « oui » au prochain message. */
-  proposition: { tool: string; args: Record<string, unknown>; tool_use_id: string } | null;
+  proposition: PropositionSms | null;
   cout_cents: number;
+}
+
+/**
+ * Ce que le « oui » confirmera, écrit par le SERVEUR à partir de l'aperçu de
+ * la carte (audit des outils, 2026-09-30). Avant, le texto ne montrait que la
+ * phrase du modèle : on pouvait dire « oui » à « je relance Sophie ? » alors
+ * que l'action visait une autre Sophie, ou un autre montant.
+ */
+export function apercuEnTexte(apercu: Apercu | null | undefined, langue: 'fr' | 'en'): { texte: string; bloque: boolean } {
+  const fr = langue !== 'en';
+  if (!apercu) return { texte: '', bloque: false };
+  const lignes: string[] = [];
+  let bloque = false;
+  const argent = (c: number) => (fr ? argentFr(c) : argentEn(c));
+  if (apercu.genre === 'action') {
+    for (const l of [...apercu.cibles, ...apercu.details]) {
+      if (l.alerte) bloque = true;
+      lignes.push(`${fr ? l.libelle.fr : l.libelle.en} : ${fr ? l.valeur : (l.valeur_en ?? l.valeur)}`);
+    }
+  } else if (apercu.genre === 'quote' || apercu.genre === 'invoice') {
+    const quoi = apercu.genre === 'quote' ? (fr ? 'Devis' : 'Quote') : (fr ? 'Facture' : 'Invoice');
+    lignes.push(`${quoi} : ${[apercu.client?.name, apercu.title].filter(Boolean).join(' · ')}`);
+    lignes.push(`${fr ? 'Total taxes incluses' : 'Total incl. taxes'} : ${argent(apercu.total_cents)}`);
+  } else if (apercu.genre === 'sms' || apercu.genre === 'email') {
+    if (!apercu.to) bloque = true;
+    lignes.push(`${fr ? 'À' : 'To'} : ${apercu.to || (fr ? 'aucun destinataire' : 'no recipient')}`);
+    lignes.push(`« ${apercu.body.slice(0, 280)}${apercu.body.length > 280 ? '…' : ''} »`);
+  } else if (apercu.genre === 'fusion') {
+    if (!apercu.garder || !apercu.absorber) bloque = true;
+    lignes.push(`${fr ? 'Garder' : 'Keep'} : ${apercu.garder?.name ?? '?'} · ${fr ? 'absorber' : 'absorb'} : ${apercu.absorber?.name ?? '?'}`);
+  }
+  if (apercu.drapeaux?.irreversible) lignes.push(fr ? 'Irréversible.' : 'Cannot be undone.');
+  if (apercu.drapeaux?.vers_client) lignes.push(fr ? 'Part chez le client.' : 'Goes to the client.');
+  return { texte: lignes.map((l) => `- ${l}`).join('\n').slice(0, 600), bloque };
 }
 
 /**
@@ -146,6 +194,8 @@ export async function repondreParSms(
   const { client, accessToken } = await clientDesOutils(ctx);
 
   let texte = '';
+  // Les aperçus de la carte (non exécutés d'office) : ce que le « oui » confirmera.
+  let apercus: Array<Apercu | null> = [];
   const resultat = await tourLumi({
     client,
     accessToken,
@@ -156,6 +206,7 @@ export async function repondreParSms(
     reglages,
     emettre: (e) => {
       if (e.type === 'text') texte += e.delta;
+      if (e.type === 'proposal' && !e.auto) apercus = e.groupe ? e.groupe.map((g) => g.apercu) : [e.apercu];
     },
     journaliser: async () => { /* l'usage est journalisé par la réservation ci-dessous */ },
     budget: {
@@ -166,10 +217,32 @@ export async function repondreParSms(
 
   if (resultat.plafond) return vide(messagePause(ctx.langue));
 
-  const final = pourSms(texte || resultat.texte || '');
+  const final = pourSms(texte || resultat.texte || '', resultat.proposition ? 400 : LONGUEUR_MAX_SMS);
+  const reponse = final || (fr ? "Je n'ai pas trouvé de réponse. Reformule ?" : "I couldn't find an answer. Try rephrasing?");
+  if (!resultat.proposition) return { texte: reponse, proposition: null, cout_cents: resultat.cost_cents ?? 0 };
+
+  const p = resultat.proposition;
+  const resumes = apercus.map((a) => apercuEnTexte(a, ctx.langue));
+  if (resumes.some((r) => r.bloque)) {
+    // Un élément visé est introuvable (ou un message sans destinataire) : rien
+    // n'attend de « oui », on ne propose pas une action qu'on sait fausse.
+    return {
+      texte: `${fr ? "Je ne peux pas faire ça : un élément visé est introuvable ou incomplet." : "I can't do that: something it targets is missing or incomplete."}\n${resumes.map((r) => r.texte).filter(Boolean).join('\n')}`.slice(0, LONGUEUR_MAX_SMS),
+      proposition: null,
+      cout_cents: resultat.cost_cents ?? 0,
+    };
+  }
+  const detail = resumes.map((r) => r.texte).filter(Boolean).join('\n');
+  const consigne = fr
+    ? `Réponds OUI pour confirmer (valable ${EXPIRATION_CONFIRMATION_MIN} min), NON pour annuler.`
+    : `Reply YES to confirm (valid ${EXPIRATION_CONFIRMATION_MIN} min), NO to cancel.`;
   return {
-    texte: final || (fr ? "Je n'ai pas trouvé de réponse. Reformule ?" : "I couldn't find an answer. Try rephrasing?"),
-    proposition: resultat.proposition ?? null,
+    texte: [reponse, detail ? `${fr ? 'Ce que je ferai' : 'What I will do'} :\n${detail}` : '', consigne].filter(Boolean).join('\n\n'),
+    proposition: {
+      tool: p.tool, args: p.args, tool_use_id: p.tool_use_id,
+      ...(p.groupe && p.groupe.length > 1 ? { groupe: p.groupe.map((g) => ({ tool: g.tool, args: g.args, tool_use_id: g.tool_use_id })) } : {}),
+      user_id: ctx.userId, org_id: ctx.orgId,
+    },
     cout_cents: resultat.cost_cents ?? 0,
   };
 }

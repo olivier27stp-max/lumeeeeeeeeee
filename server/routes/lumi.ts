@@ -39,7 +39,7 @@ import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { reponseAideMulti } from '../lib/support/aide-multi';
 import { peutRepondreHorsScope, reponseHorsScope } from '../lib/lumi/hors-scope';
 import { detecterActionDirecte, repondreActionDirecte, actionDepuisExtraction } from '../lib/lumi/actions-directes';
-import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
+import { texteRecus, lireContenuEcriture, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
 import { classifier, modeRouteur, MODELE_ROUTEUR, SEUIL_CONFIANCE, type ResultatRouteur, type ContexteRouteur } from '../lib/lumi/routeur';
@@ -892,9 +892,8 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     const debut = Date.now();
     const lignes: LigneRecu[] = enAttente.map((a, i) => {
       const bloc = blocs[i];
-      let erreur: string | null = null;
-      try { const j = JSON.parse(bloc.content); if (typeof j?.error === 'string') erreur = j.error; } catch { /* contenu non JSON : pas d'erreur métier lisible */ }
-      return { recu: execute[i] ?? { tool_use_id: a.tool_use_id, ok: false, fiche: null }, erreur, outil: a.tool };
+      const { erreur, resultat } = lireContenuEcriture(bloc.content);
+      return { recu: execute[i] ?? { tool_use_id: a.tool_use_id, ok: false, fiche: null }, erreur, outil: a.tool, resultat };
     });
     const texte = texteRecus(lignes, decision, ctx.language === 'fr');
     const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;

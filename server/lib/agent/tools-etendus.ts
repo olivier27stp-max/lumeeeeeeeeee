@@ -35,6 +35,8 @@ import {
 } from '../payroll';
 import { analyserRentabilite, pourAgent } from '../rentabilite';
 import { ecrireValeurs } from '../champs/service';
+import { etatDesabonnement } from '../desabonnement';
+import { adresseInjoignable } from '../mailer';
 import type { AgentTool, ToolContext } from './tools';
 
 interface TaxLine { code: string; label: string; rate: number; enabled: boolean }
@@ -353,7 +355,7 @@ export async function executerIdempotent(
     // jargon SQL) passe par la traduction.
     const dejaHumaine = e instanceof Error && !(e as any)?.code
       && !/constraint|violates|postgres|sql|null value|rls|row-level|permission denied/i.test(String(e.message || ''));
-    return { error: dejaHumaine ? String(e.message).slice(0, 200) : messageHumainErreur(e) };
+    return { error: dejaHumaine ? String(e.message).slice(0, 400) : messageHumainErreur(e) };
   }
 }
 
@@ -2366,7 +2368,8 @@ const sendEmailTool: AgentTool = {
   declaration: {
     name: 'send_email',
     description:
-      'Send a free-form email to a client (a thank-you, a follow-up, an answer) — IT ACTUALLY SENDS. '
+      'Send a free-form email to a client or lead of the CRM (a thank-you, a follow-up, an answer) — IT ACTUALLY SENDS. '
+      + 'The address must be on a client or lead record; unsubscribed or bouncing addresses are refused. '
       + 'For a quote or invoice, use the quote or invoice sending action instead. ALWAYS show the user the recipient, '
       + 'subject and full text and get their explicit OK first. Only owners/admins can send.',
     parameters: {
@@ -2385,6 +2388,21 @@ const sendEmailTool: AgentTool = {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) throw new Error('L’adresse courriel du destinataire n’est pas valide.');
       const subject = champRequis(args.subject, 'L’objet').slice(0, 300);
       const texte = champRequis(args.message, 'Le message').slice(0, 20000);
+      // Audit 2026-09-30 : un courriel libre part seulement à un client ou un
+      // prospect de l'entreprise (une consigne glissée dans une note ou un
+      // formulaire ne peut pas faire écrire à une adresse externe), jamais à
+      // une adresse désabonnée ni à une adresse qui rebondit.
+      const destinataire = await contactParCourriel(ctx, to);
+      if (!destinataire) {
+        throw new Error('Je n’envoie un courriel libre qu’à un client ou un prospect de ton CRM, et cette adresse n’y est pas. Ajoute-la d’abord à sa fiche.');
+      }
+      const etat = await etatDesabonnement(ctx.client, ctx.orgId, destinataire);
+      if (etat.courriel.desabonne) {
+        throw new Error(`${destinataire.nom} s’est désabonné(e) des courriels : je ne lui écris pas. Réponds-lui depuis ta boîte ou par téléphone si c’est lui qui t’a écrit.`);
+      }
+      if (await adresseInjoignable(ctx.orgId, to)) {
+        throw new Error(`L’adresse de ${destinataire.nom} a rebondi ou signalé un pourriel : un courriel n’arrivera pas. Vérifie l’adresse sur sa fiche.`);
+      }
       const html = texte.split(/\n{2,}/).map((par) =>
         `<p>${par.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`,
       ).join('');
@@ -2403,6 +2421,24 @@ const sendEmailTool: AgentTool = {
       return { sent: true, channel: 'email', destinataire: to, note: 'Courriel envoyé.' };
     }),
 };
+
+/**
+ * Le client ou prospect de l'org qui porte exactement cette adresse. Comparaison
+ * insensible à la casse faite ICI : un `ilike` lirait « _ » comme un joker.
+ */
+async function contactParCourriel(ctx: ToolContext, email: string): Promise<{ id: string; nom: string; email: string; phone: string | null; email_opt_out_at: string | null } | null> {
+  const cible = email.trim().toLowerCase();
+  const { data, error } = await ctx.client
+    .from('clients')
+    .select('id, first_name, last_name, company, display_as_company, email, phone, email_opt_out_at')
+    .eq('org_id', ctx.orgId)
+    .ilike('email', cible)
+    .is('deleted_at', null)
+    .limit(20);
+  if (error) throw error;
+  const c = (data ?? []).find((x: any) => String(x.email ?? '').trim().toLowerCase() === cible) as any;
+  return c ? { id: c.id, nom: nomClient(c), email: cible, phone: c.phone ?? null, email_opt_out_at: c.email_opt_out_at ?? null } : null;
+}
 
 /** Ligne renvoyée par le RPC `get_available_slots` (TABLE slot_start, slot_end, team_id). */
 type CreneauLibre = { slot_start: string; slot_end: string; team_id: string | null };
@@ -3483,6 +3519,17 @@ const sendPaymentReminders: AgentTool = {
 
       // Téléphones et noms, en une requête (jamais un client d'une autre org).
       const ids = [...new Set(liste.map((r) => String(r.client_id)).filter(Boolean))];
+      // Qui doit VRAIMENT de l'argent (audit 2026-09-30) : une relance de
+      // paiement à un client à jour, c'est un texto gênant et faux.
+      const { data: dues, error: errDues } = await ctx.client
+        .from('invoices')
+        .select('client_id')
+        .eq('org_id', ctx.orgId).in('client_id', ids).is('deleted_at', null)
+        .gt('balance_cents', 0)
+        .not('status', 'in', '(draft,void,cancelled,paid)');
+      if (errDues) throw errDues;
+      const doitDeLArgent = new Set((dues || []).map((f: any) => String(f.client_id)));
+      const dejaVus = new Set<string>();
       const { data: clients } = await ctx.client
         .from('clients')
         .select('id, first_name, last_name, company, display_as_company, phone')
@@ -3495,6 +3542,10 @@ const sendPaymentReminders: AgentTool = {
         const c = parId.get(String(r.client_id));
         const nom = c ? nomClient(c) : 'client inconnu';
         if (!c) { ignores.push({ client: nom, raison: 'client introuvable dans votre CRM' }); continue; }
+        // Un seul texto par client, même s'il apparaît deux fois dans la liste.
+        if (dejaVus.has(c.id)) { ignores.push({ client: nom, raison: 'déjà dans la liste (un seul rappel par client)' }); continue; }
+        dejaVus.add(c.id);
+        if (!doitDeLArgent.has(c.id)) { ignores.push({ client: nom, raison: 'aucune facture impayée' }); continue; }
         if (!c.phone) { ignores.push({ client: nom, raison: 'aucun numéro de téléphone' }); continue; }
         try {
           await envoyerUnSms(ctx, c.phone, String(r.message), c.id, nom);
@@ -3506,11 +3557,17 @@ const sendPaymentReminders: AgentTool = {
         }
       }
 
+      // Rien n'est parti : c'est un échec, pas « c'est fait ». Rien n'a été
+      // envoyé, donc l'empreinte est libérée et on peut réessayer après correction.
+      if (!envoyes.length) {
+        throw new Error(`Aucun rappel n’est parti. ${ignores.slice(0, 5).map((i) => `${i.client} : ${i.raison}`).join(' ; ')}${ignores.length > 5 ? '…' : ''}`);
+      }
       return {
         sent_count: envoyes.length,
         skipped_count: ignores.length,
         sent: envoyes,
         skipped: ignores,
+        ...(ignores.length ? { warning: `${ignores.length} rappel(s) non envoyé(s) : ${ignores.slice(0, 5).map((i) => `${i.client} (${i.raison})`).join(', ')}${ignores.length > 5 ? '…' : ''}` } : {}),
         note: `Rappels envoyés à ${envoyes.length} client(s)`
           + (ignores.length ? `, ${ignores.length} ignoré(s) — explique-les à l\u2019utilisateur.` : '.'),
       };

@@ -16,7 +16,9 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Anthropic from '@anthropic-ai/sdk';
-import { repondreParSms, type ReponseSms } from './lumi-sms';
+import { repondreParSms, type ReponseSms, type PropositionSms } from './lumi-sms';
+import { verifierProposition, ecrituresDe, EXPIRATION_CONFIRMATION_MIN } from './confirmation';
+import { texteRecus, lireContenuEcriture, type LigneRecu } from '../lumi/recus';
 import { estConfirmation, estAnnulation, type MembreIdentifie } from './identifier-membre';
 import { twilioClient } from '../config';
 import { getOrgSmsFromNumber } from '../twilioProvisioning';
@@ -32,11 +34,11 @@ export const MESSAGES_RELUS = 12;
  */
 const MARQUE = '​​';
 
-export function marquerProposition(texte: string, p: { tool: string; args: Record<string, unknown>; tool_use_id: string }): string {
+export function marquerProposition(texte: string, p: PropositionSms): string {
   return `${texte}${MARQUE}${JSON.stringify(p)}`;
 }
 
-export function lireProposition(texte: string): { visible: string; proposition: { tool: string; args: Record<string, unknown>; tool_use_id: string } | null } {
+export function lireProposition(texte: string): { visible: string; proposition: PropositionSms | null } {
   const i = (texte || '').indexOf(MARQUE);
   if (i < 0) return { visible: texte || '', proposition: null };
   try {
@@ -108,23 +110,42 @@ async function historique(admin: SupabaseClient, conversationId: string): Promis
     .filter((m) => m.content.trim().length > 0);
 }
 
-/** La dernière écriture proposée par Lumi et encore sans réponse. */
+/** La dernière écriture proposée par Lumi et encore sans réponse, avec son message. */
 async function propositionEnAttente(admin: SupabaseClient, conversationId: string) {
   const { data } = await admin
     .from('messages')
-    .select('message_text, direction')
+    .select('id, message_text, direction, created_at')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(3);
   // On ne remonte pas plus loin que l'échange précédent : un « oui » qui
   // arrive trois messages après une proposition ne confirme plus rien.
-  for (const m of data ?? []) {
-    if ((m as any).direction !== 'outbound') continue;
-    const p = lireProposition(String((m as any).message_text ?? '')).proposition;
-    if (p) return p;
+  for (const m of (data ?? []) as Array<{ id: string; message_text: string | null; direction: string; created_at: string }>) {
+    if (m.direction !== 'outbound') continue;
+    const texte = String(m.message_text ?? '');
+    const { visible, proposition } = lireProposition(texte);
+    if (proposition) return { id: m.id, texte, visible, creeLe: m.created_at, proposition };
     break;
   }
   return null;
+}
+
+/**
+ * Consomme la proposition : retire le marqueur du message, SEULEMENT s'il y
+ * est encore. Deux « oui » simultanés : un seul trouve le marqueur (la
+ * seconde mise à jour ne correspond plus au texte), donc une seule exécution.
+ */
+async function consommer(admin: SupabaseClient, m: { id: string; texte: string; visible: string }): Promise<boolean> {
+  const { data, error } = await admin.from('messages')
+    .update({ message_text: m.visible })
+    .eq('id', m.id)
+    .eq('message_text', m.texte)
+    .select('id');
+  if (error) {
+    logger.error('[sms/fil] proposition non consommée', { error: error.message });
+    return false;
+  }
+  return (data ?? []).length === 1;
 }
 
 /**
@@ -143,10 +164,24 @@ export async function repondreAuMembre(opts: OptionsFil): Promise<void> {
   // Sans cette garde, un « oui » isolé partirait au modèle comme une demande,
   // et pire : le webhook le lit déjà comme un consentement LCAP.
   if (enAttente && estAnnulation(texte)) {
+    await consommer(admin, enAttente);
     await dire(fr ? "C'est correct, je ne fais rien." : "All good, I won't do anything.");
     return;
   }
   if (enAttente && estConfirmation(texte)) {
+    const verdict = verifierProposition(enAttente.proposition, enAttente.creeLe, membre);
+    if (!verdict.ok) {
+      await consommer(admin, enAttente);
+      await dire(verdict.raison === 'expiree'
+        ? (fr ? `Cette demande a plus de ${EXPIRATION_CONFIRMATION_MIN} minutes, je ne l'exécute plus. Redemande-moi si c'est encore d'actualité.` : `That request is over ${EXPIRATION_CONFIRMATION_MIN} minutes old, so I won't run it. Ask me again if it still applies.`)
+        : (fr ? "Je ne peux pas confirmer cette demande. Redemande-moi." : "I can't confirm that request. Ask me again."));
+      return;
+    }
+    // Usage unique : si un autre « oui » l'a déjà prise, on ne refait rien.
+    if (!(await consommer(admin, enAttente))) {
+      await dire(fr ? "C'est déjà en cours, je te confirme dès que c'est fait." : "Already on it.");
+      return;
+    }
     try {
       const [{ executerEcriture }, { clientPourMembre }] = await Promise.all([
         import('../lumi/execution'),
@@ -156,18 +191,21 @@ export async function repondreAuMembre(opts: OptionsFil): Promise<void> {
       // sans session du membre, la base refuse (`auth.uid()` nul) et la
       // confirmation échouerait alors qu'elle vient d'être donnée.
       const { client, accessToken } = await clientPourMembre(membre.userId, membre.orgId);
-      const { recu } = await executerEcriture({
-        tool: enAttente.tool,
-        toolUseId: enAttente.tool_use_id,
-        args: enAttente.args,
-        userId: membre.userId,
-        orgId: membre.orgId,
-        client,
-        accessToken,
-      });
-      await dire(recu.ok
-        ? (fr ? "C'est fait." : 'Done.')
-        : (fr ? "Je n'ai pas réussi. Regarde dans l'app ?" : "That didn't work. Check the app?"));
+      // TOUTES les écritures de la carte, dans l'ordre (avant : seule la
+      // première partait, et le texto disait « C'est fait »). Un échec arrête
+      // la suite : on ne texte pas le client pour une job qui n'a pas été créée.
+      const lignes: LigneRecu[] = [];
+      for (const e of ecrituresDe(enAttente.proposition)) {
+        const r = await executerEcriture({
+          tool: e.tool, toolUseId: e.tool_use_id, args: e.args as Record<string, any>,
+          userId: membre.userId, orgId: membre.orgId, client, accessToken,
+        });
+        lignes.push({ recu: r.recu, outil: e.tool, ...lireContenuEcriture(r.contenu) });
+        if (!r.recu.ok) break;
+      }
+      const restantes = ecrituresDe(enAttente.proposition).length - lignes.length;
+      const suite = restantes > 0 ? (fr ? `\nJe me suis arrêté là : ${restantes} autre(s) action(s) non faite(s).` : `\nI stopped there: ${restantes} other action(s) not done.`) : '';
+      await dire(`${texteRecus(lignes, 'confirm', fr)}${suite}`.slice(0, 900));
     } catch (e: any) {
       logger.error('[sms/fil] exécution refusée ou en échec', { error: e?.message || String(e) });
       await dire(fr ? "Je n'ai pas réussi. Regarde dans l'app ?" : "That didn't work. Check the app?");
