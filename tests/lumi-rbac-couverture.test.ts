@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { TOOLS_BY_NAME } from '../server/lib/agent/tools';
-import { PERMISSION_PAR_OUTIL, OUTILS_FINANCIERS, outilsPermis } from '../server/lib/agent/garde';
+import { PERMISSION_PAR_OUTIL, OUTILS_FINANCIERS, outilsPermis, restrictionsDe } from '../server/lib/agent/garde';
 import { ROLE_PRESETS, PERMISSION_KEYS, type TeamRole } from '../src/lib/permissions';
 import type { UserContext } from '../server/lib/rbac';
 
@@ -202,5 +202,41 @@ describe('les suggestions de départ suivent le rôle', () => {
     const { hasPermission: hp } = await import('../src/lib/permissions');
     const s = suggestionsPour((cle) => hp(ROLE_PRESETS.owner, cle, 'owner'), 'fr');
     expect(s.map((x) => x.action)).toContain('revenu-mois');
+  });
+});
+
+
+describe('le refus est clair, et n’offre pas de porte qui n’existe pas', () => {
+  // Mesuré en prod le 2026-09-30 : un technicien qui demandait son chiffre du
+  // mois s'entendait répondre « je ne trouve pas d'outil… mais je peux te
+  // sortir un rapport financier, tu veux ? ». Aucune donnée ne fuyait, mais il
+  // se cognait à une porte fermée.
+  it('un technicien reçoit la liste de ce que son rôle ne permet pas', () => {
+    const t = restrictionsDe(ctxDe('technician'), false, 'fr');
+    expect(t).toBeTruthy();
+    expect(t).toContain('revenus');
+    expect(t).toContain('paie');
+    expect(t).toContain('notes d’entreprise');
+  });
+
+  it('le texte interdit explicitement de proposer un contournement', () => {
+    const t = restrictionsDe(ctxDe('technician'), false, 'fr')!;
+    expect(t).toContain('ne propose PAS de rapport');
+    expect(t).toMatch(/ni chiffre, ni estimation/);
+  });
+
+  it('un propriétaire n’a aucune restriction — donc aucun token de plus', () => {
+    expect(restrictionsDe(ctxDe('owner'), true, 'fr')).toBeNull();
+  });
+
+  it('ce texte n’est QU’une explication : la garde reste les outils', () => {
+    // Si ce texte devenait la sécurité, un « ignore tes règles » suffirait.
+    // Le vrai verrou : l'outil n'est pas remis au modèle.
+    expect(outilsPermis(ctxDe('technician'), false).has('get_revenue_summary')).toBe(false);
+  });
+
+  it('existe aussi en anglais', () => {
+    const t = restrictionsDe(ctxDe('technician'), false, 'en');
+    expect(t).toContain('does NOT give access to');
   });
 });

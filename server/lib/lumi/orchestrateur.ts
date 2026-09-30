@@ -187,7 +187,7 @@ export interface Souvenir { key: string; value: string }
  */
 export { ECRITURES_ANODINES } from '../agent/registre';
 
-export function promptSystemeLumi(ctx: { companyName: string | null; userName: string | null; language: 'fr' | 'en'; todayIso: string; souvenirs?: Souvenir[]; focus?: string | null }): Anthropic.Messages.TextBlockParam[] {
+export function promptSystemeLumi(ctx: { companyName: string | null; userName: string | null; language: 'fr' | 'en'; todayIso: string; souvenirs?: Souvenir[]; focus?: string | null; restrictions?: string | null }): Anthropic.Messages.TextBlockParam[] {
   // Partie STABLE (sans date, nom ni entreprise) → cache. La partie variable suit.
   // Le nom de l'entreprise est dans la partie VARIABLE : mesuré en prod le
   // 2026-09-16, un préfixe qui le contenait était mis en cache PAR org, et
@@ -250,6 +250,9 @@ ${CONSIGNES_COLLEGUE}`;
   const variable = langue + ' ' + (ctx.language === 'fr'
     ? `Entreprise : ${company}. Aujourd'hui : ${ctx.todayIso}.${ctx.userName ? ` Tu parles à ${ctx.userName}.` : ''}`
     : `Company: ${company}. Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`) + memoire
+    // Ce que le rôle ne permet pas : dans la partie VARIABLE, jamais dans le
+    // bloc en cache — il dépend de la personne. Null pour qui a tout accès.
+    + (ctx.restrictions ? `\n\n${ctx.restrictions}` : '')
     + (ctx.focus ? `\n\n${ctx.focus}` : '');
   return [
     { type: 'text', text: stable, cache_control: CACHE_1H },
