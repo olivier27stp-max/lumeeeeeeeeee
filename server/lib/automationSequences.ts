@@ -378,6 +378,17 @@ export async function planifierEtape(
     executeAtMs = Math.max(executeAtMs, cible);
   }
 
+  /*
+   * Attente « jusqu'à réponse, au plus N » : la tâche est l'ÉCHÉANCE. Son
+   * délai n'était jamais ajouté : elle était datée maintenant, tranchée au
+   * tick suivant (« pas de réponse ») et la relance partait une à cinq
+   * minutes après au lieu de N jours (audit V2, D-07). Une réponse du client
+   * avant l'échéance la réveille (`reveillerAttentesReponse`).
+   */
+  if (courante.type === 'attendre' && courante.mode === 'reponse') {
+    executeAtMs += Math.max(0, courante.delai_secondes || 0) * 1000;
+  }
+
   const executeAt = new Date(executeAtMs).toISOString();
 
   const ligneTache = {

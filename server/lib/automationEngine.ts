@@ -864,6 +864,12 @@ async function handleEvent(event: CRMEvent) {
    */
   if (await orgEnPause(engineConfig.supabase, event.orgId)) return;
 
+  // Le client a répondu : ses attentes « jusqu'à réponse » n'attendent plus
+  // l'échéance (audit V2, D-07). Indépendant des règles sur client.replied.
+  if (event.type === 'client.replied' && event.entityType === 'client' && event.entityId) {
+    await reveillerAttentesReponse(engineConfig.supabase, event.orgId, event.entityId);
+  }
+
   try {
     // ── 1. Match automation_rules (legacy system) ──
     // L'ordre est EXPLICITE : sans `order by`, PostgreSQL n'en garantit aucun.
@@ -1955,6 +1961,47 @@ async function clientDeLaTache(
  * Même prudence que `checkStopConditions` : ne jamais supprimer un envoi sur
  * une information qu'on n'a pas pu vérifier.
  */
+/**
+ * Réveille les attentes « jusqu'à réponse » d'un client qui vient de répondre :
+ * leur échéance passe à maintenant, et le worker suit la branche « réponse »
+ * au tick suivant (il revérifie la réponse lui-même — rien n'est décidé ici).
+ *
+ * Sans ça, « attendre la réponse, au plus 3 jours » ne réagissait qu'au bout
+ * des 3 jours. Ne lève jamais : un réveil raté laisse l'attente aller à son
+ * échéance, qui tranchera correctement.
+ */
+export async function reveillerAttentesReponse(supabase: SupabaseClient, orgId: string, clientId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from('automation_scheduled_tasks')
+      .select('id, entity_type, entity_id, execute_at')
+      .eq('org_id', orgId)
+      .eq('status', 'pending')
+      .eq('action_config->>mode', 'reponse')
+      .gt('execute_at', new Date().toISOString())
+      .limit(200);
+    if (error) throw new Error(error.message);
+    const aReveiller: string[] = [];
+    for (const t of (data ?? []) as Array<{ id: string; entity_type: string; entity_id: string }>) {
+      if (await clientDeLaTache(supabase, orgId, t.entity_type, t.entity_id) === clientId) aReveiller.push(t.id);
+    }
+    if (!aReveiller.length) return 0;
+    const { error: eMaj } = await supabase
+      .from('automation_scheduled_tasks')
+      .update({ execute_at: new Date().toISOString() })
+      .eq('org_id', orgId)
+      .eq('status', 'pending')
+      .in('id', aReveiller);
+    if (eMaj) throw new Error(eMaj.message);
+    return aReveiller.length;
+  } catch (e) {
+    logger.error('[automationEngine] réveil des attentes de réponse impossible — elles iront à leur échéance', {
+      org_id: orgId, message: e instanceof Error ? e.message : String(e),
+    });
+    return 0;
+  }
+}
+
 async function clientARepondu(
   supabase: SupabaseClient,
   orgId: string,
