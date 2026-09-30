@@ -5,6 +5,8 @@
  *       « Répondez STOP pour ne plus recevoir » (FR/EN), ajoutés
  *       automatiquement ; un transactionnel n'est pas touché ; la mention
  *       ne fait pas basculer l'encodage (segments).
+ *  L8 : un courriel COMMERCIAL sans nom ou sans adresse postale de
+ *       l'entreprise est sauté avec un motif lisible ; le transactionnel part.
  *
  * Aucun envoi réel : Twilio et le courriel sont des doublures.
  */
@@ -33,7 +35,7 @@ vi.mock('../../server/lib/courriels/bouton-automatisation', () => ({ boutonPourE
 vi.mock('../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 vi.mock('../../server/lib/migration/gel-communications', () => ({ destinataireGele: async () => null, journaliserBlocage: () => {}, MESSAGE_GEL: 'gel' }));
 
-import { executeSendSms } from '../../server/lib/actions';
+import { executeSendEmail, executeSendSms, identiteManquante } from '../../server/lib/actions';
 import { avecMentionCommerciale, phraseStop, segmentsSms } from '../../server/lib/desabonnement/mention-sms';
 import { clientEnregistreur } from './filet-regression/_enregistreur';
 
@@ -147,5 +149,55 @@ describe('L7 — la mention elle-même', () => {
     expect(segmentsSms('ê'.repeat(70))).toEqual({ encodage: 'UCS-2', unites: 70, segments: 1 });
     expect(segmentsSms('ê'.repeat(71)).segments).toBe(2);
     expect(segmentsSms('€').unites).toBe(2);
+  });
+});
+
+describe('L8 — courriel commercial sans identification de l’entreprise', () => {
+  const COMPLETE = { company_name: 'Lavage Coquin', company_address: '120 rue Principale, Granby, QC, J2G 2V1' };
+  const envoyer = (commercial: boolean) => {
+    const { ctx } = ctxDe({ commercial });
+    return executeSendEmail({ subject: 'Promo de printemps', body: '<p>10 % sur les vitres</p>' }, { client_email: 'alice@a.test' }, ctx);
+  };
+
+  it('sans nom ni adresse : sauté, motif lisible, rien n’est envoyé', async () => {
+    societe.courante = {};
+    const r = await envoyer(true);
+    expect(r).toEqual({ success: true, data: { saute: expect.stringContaining('le nom et l’adresse postale de l’entreprise manquent'), saute_code: 'identite_manquante' } });
+    expect(mailer.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('avec le nom mais sans adresse : sauté aussi (la loi exige les deux)', async () => {
+    societe.courante = { company_name: 'Lavage Coquin' };
+    const r = await envoyer(true);
+    expect((r.data as { saute: string }).saute).toContain('l’adresse postale de l’entreprise manque');
+    expect(mailer.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('identité complète : le courriel commercial part', async () => {
+    societe.courante = COMPLETE;
+    const r = await envoyer(true);
+    expect(r.success).toBe(true);
+    expect((r.data as { saute?: string }).saute).toBeUndefined();
+    expect(mailer.sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('transactionnel sans identité : part comme avant', async () => {
+    societe.courante = {};
+    const r = await envoyer(false);
+    expect((r.data as { saute?: string }).saute).toBeUndefined();
+    expect(mailer.sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('le type marketing calculé par le moteur prime sur « différé »', async () => {
+    societe.courante = {};
+    const { ctx } = ctxDe({ commercial: false });
+    ctx.marketing = true;
+    const r = await executeSendEmail({ subject: 'Promo', body: 'x' }, { client_email: 'alice@a.test' }, ctx);
+    expect((r.data as { saute_code?: string }).saute_code).toBe('identite_manquante');
+  });
+
+  it('identiteManquante : motif selon ce qui manque', () => {
+    expect(identiteManquante(COMPLETE)).toBeNull();
+    expect(identiteManquante({ company_name: '  ', company_address: 'x' })).toContain('le nom de l’entreprise manque');
   });
 });

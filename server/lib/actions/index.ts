@@ -131,7 +131,8 @@ export type CodeSaut =
   | 'date_absente'
   | 'desabonne'
   | 'deja_envoye'
-  | 'boucle';
+  | 'boucle'
+  | 'identite_manquante';
 
 /** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
 function saute(motif: string, code: CodeSaut = 'desabonne'): ActionResult {
@@ -1097,6 +1098,18 @@ export async function dealLie(
 
 // ── Action: Send Email ──────────────────────────────────────
 
+/**
+ * Ce qui manque à l'entreprise pour envoyer un courriel commercial (LCAP :
+ * nom et adresse postale), sous forme de motif de journal — ou `null`.
+ */
+export function identiteManquante(company: { company_name?: string | null; company_address?: string | null }): string | null {
+  const manque: string[] = [];
+  if (!String(company.company_name ?? '').trim()) manque.push('le nom');
+  if (!String(company.company_address ?? '').trim()) manque.push('l’adresse postale');
+  if (manque.length === 0) return null;
+  return `Courriel commercial non envoyé : ${manque.join(' et ')} de l’entreprise ${manque.length > 1 ? 'manquent' : 'manque'} (Paramètres → Entreprise). La loi exige que le client sache qui lui écrit.`;
+}
+
 export async function executeSendEmail(
   config: {
     to?: string; subject: string; body: string;
@@ -1155,6 +1168,19 @@ export async function executeSendEmail(
       }
     }
 
+    const { getCompanySettings, buildEmailLayout, senderForOrg, langueEntreprise } = await import('../../routes/emails');
+    const { boutonPourEntite } = await import('../courriels/bouton-automatisation');
+    const company = await getCompanySettings(ctx.orgId);
+    /* LCAP (audit V2, L8) : un courriel COMMERCIAL identifie l'expéditeur —
+       nom ET adresse postale. Le pied de page les affiche quand l'entreprise
+       les a saisis ; sans eux, le courriel partait de « noreply » sans nom,
+       sans adresse, sans contact. Sauté avec un motif lisible (le parcours
+       continue) ; le transactionnel part comme avant. */
+    if (estCommercialLcap(ctx)) {
+      const manque = identiteManquante(company);
+      if (manque) return saute(manque, 'identite_manquante');
+    }
+
     // Consentement (F7) : le retrait ci-dessus traite ceux qui se sont
     // désabonnés ; ici on vérifie qu'une base légale existe — un consentement
     // exprès, ou la relation d'affaires elle-même (LCAP).
@@ -1174,9 +1200,6 @@ export async function executeSendEmail(
       return { success: false, error: `Frequency cap reached for ${to} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
     }
 
-    const { getCompanySettings, buildEmailLayout, senderForOrg, langueEntreprise } = await import('../../routes/emails');
-    const { boutonPourEntite } = await import('../courriels/bouton-automatisation');
-    const company = await getCompanySettings(ctx.orgId);
     /* Le lien de désabonnement n'a de sens que sur un message COMMERCIAL.
        Il était posé sur tout, y compris l'accusé de réception d'un formulaire :
        quelqu'un qui vient de demander une soumission n'est sur aucune liste de

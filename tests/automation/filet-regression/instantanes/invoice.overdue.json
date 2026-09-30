@@ -69,8 +69,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Un message de Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "b1d361c6248c6c9b"
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "06ce926685f80227"
    }
   ],
   "annulees": []
@@ -239,8 +239,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Un message de Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "b1d361c6248c6c9b"
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "06ce926685f80227"
    }
   ],
   "annulees": []
@@ -800,8 +800,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "a82f9f47af5ea5d4"
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "f6357cfef6f44676"
    }
   ],
   "annulees": []
@@ -1048,8 +1048,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "a82f9f47af5ea5d4"
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "f6357cfef6f44676"
    }
   ],
   "annulees": []
@@ -2492,8 +2492,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Facture INV-000042",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Voici votre facture INV-000042. https://app.lume.test/invoice/bbbbbbbb-0000-4000-8000-000000000002 Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "6f7517bd70e6e779"
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Voici votre facture INV-000042. https://app.lume.test/invoice/bbbbbbbb-0000-4000-8000-000000000002 Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "e07a7d348b32f23f"
    }
   ],
   "annulees": []
@@ -2659,8 +2659,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Facture INV-000042",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Voici votre facture INV-000042. https://app.lume.test/invoice/bbbbbbbb-0000-4000-8000-000000000002 Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "6f7517bd70e6e779"
+    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Voici votre facture INV-000042. https://app.lume.test/invoice/bbbbbbbb-0000-4000-8000-000000000002 Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "e07a7d348b32f23f"
    }
   ],
   "annulees": []

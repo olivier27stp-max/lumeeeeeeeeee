@@ -13,10 +13,14 @@
  */
 type Envoi = (p: any) => Promise<{ sent: boolean; messageId?: string }>;
 
-/** `server/routes/emails` : réglages vides, gabarit transparent, expéditeur fixe. */
-export function emailsSimules(from = 'test@lume.test') {
+/**
+ * `server/routes/emails` : gabarit transparent, expéditeur fixe. L'entreprise
+ * a un nom et une adresse postale : sans eux, un courriel commercial est
+ * sauté (LCAP, audit V2 L8) — un test qui veut ce cas passe `societe`.
+ */
+export function emailsSimules(from = 'test@lume.test', societe: Record<string, unknown> = { company_name: 'Entreprise test', company_address: '120 rue Principale, Granby, QC, J2G 2V1' }) {
   return {
-    getCompanySettings: async () => ({}),
+    getCompanySettings: async () => societe,
     buildEmailLayout: (_c: unknown, b: string) => b,
     senderFor: () => ({ from }),
     senderForOrg: async () => ({ from }),
