@@ -1147,12 +1147,13 @@ const deleteDeal: AgentTool = {
         if (errFiche) echecEcriture('vérifier la fiche liée', errFiche);
         if (fiche) {
           if (fiche.status !== 'lead') throw new Error('La fiche liée à cette carte est un client actif : je retire seulement la carte, sans supprimer le client. Redemande sans supprimer la fiche.');
-          const compte = async (table: 'jobs' | 'invoices' | 'quotes') => {
-            const { count, error } = await ctx.client.from(table).select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', fiche.id).is('deleted_at', null);
-            if (error) echecEcriture('vérifier la fiche liée', error);
-            return count ?? 0;
-          };
-          const historique = (await compte('jobs')) + (await compte('invoices')) + (await compte('quotes'));
+          // Trois requêtes explicites (pas de nom de table dynamique : le vérificateur
+          // de schéma voit chaque colonne citée).
+          const nb = (r: { count: number | null; error: any }) => { if (r.error) echecEcriture('vérifier la fiche liée', r.error); return r.count ?? 0; };
+          const historique =
+            nb(await ctx.client.from('jobs').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', fiche.id).is('deleted_at', null))
+            + nb(await ctx.client.from('invoices').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', fiche.id).is('deleted_at', null))
+            + nb(await ctx.client.from('quotes').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', fiche.id).is('deleted_at', null));
           if (historique > 0) throw new Error('Ce prospect a déjà des jobs, devis ou factures : je ne supprime pas sa fiche avec la carte. Redemande sans supprimer la fiche.');
         }
       }

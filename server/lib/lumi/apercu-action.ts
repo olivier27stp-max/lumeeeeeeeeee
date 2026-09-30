@@ -148,11 +148,20 @@ const invitation: Resolveur = async (id, { client: db, orgId }) => {
   const { data: i } = await db.from('invitations').select('email, role, status').eq('org_id', orgId).eq('id', id).maybeSingle();
   return i ? { libelle: L('Invitation', 'Invitation'), valeur: [txt(i.email), txt(i.role), txt(i.status)].filter(Boolean).join(' · ') } : introuvable(L('Invitation', 'Invitation'));
 };
+// Les outils du pipeline écrivent dans pipeline_deals (la table `deals` n'a pas de
+// colonne statut : la requête échouait et toute carte de deal disait « introuvable »).
 const deal: Resolveur = async (id, ctx, fuseau) => {
-  const { data: d } = await ctx.client.from('deals').select('client_id, statut').eq('org_id', ctx.orgId).eq('id', id).maybeSingle();
-  if (!d) return introuvable(L('Deal', 'Deal'));
-  const c = estUuid(d.client_id) ? await client(d.client_id, ctx, fuseau) : null;
-  return { libelle: L('Deal', 'Deal'), valeur: [c?.valeur, txt(d.statut)].filter(Boolean).join(' · ') };
+  const { data: d } = await ctx.client.from('pipeline_deals').select('title, stage, client_id, lead_id').eq('org_id', ctx.orgId).eq('id', id).is('deleted_at', null).maybeSingle();
+  if (!d) return introuvable(L('Carte du pipeline', 'Pipeline card'));
+  const pid = estUuid(d.client_id) ? d.client_id : estUuid(d.lead_id) ? d.lead_id : null;
+  const c = pid ? await client(pid, ctx, fuseau) : null;
+  return { libelle: L('Carte du pipeline', 'Pipeline card'), valeur: [txt(d.title), c?.valeur, txt(d.stage)].filter(Boolean).join(' · ') };
+};
+// Taxe : nom et taux ACTUELS, pour voir l'avant → après sur la carte (audit 2026-09-30).
+const taxe: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: t } = await db.from('tax_configs').select('name, rate, is_active').eq('org_id', orgId).eq('id', id).maybeSingle();
+  if (!t) return introuvable(L('Taxe', 'Tax'));
+  return { libelle: L('Taxe (actuellement)', 'Tax (currently)'), valeur: `${txt(t.name)} · ${String(t.rate).replace('.', ',')} %${t.is_active ? '' : ' · inactive'}`, valeur_en: `${txt(t.name)} · ${t.rate}%${t.is_active ? '' : ' · inactive'}` };
 };
 
 /** Nom d'argument → résolveur. Les identifiants non listés restent signalés comme « élément visé ». */
@@ -171,6 +180,7 @@ const RESOLVEURS: Array<[RegExp, Resolveur]> = [
   [/^service_id$/, service],
   [/^invitation_id$/, invitation],
   [/^deal_id$/, deal],
+  [/^(tax_id|tax_config_id)$/, taxe],
 ];
 const resolveurDe = (cle: string) => RESOLVEURS.find(([re]) => re.test(cle))?.[1] ?? null;
 
