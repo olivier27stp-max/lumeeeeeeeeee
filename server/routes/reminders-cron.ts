@@ -128,6 +128,11 @@ export function fenetreRelance(
    croise avec votre paiement » évite l'échange vexé qui suit un rappel sec.
    L'objet ne répète pas le nom de l'entreprise : l'expéditeur l'affiche déjà,
    et la place gagnée sert à faire tenir le montant avant la coupure. */
+/** « Bonjour , » quand le nom manque → « Bonjour, ». */
+function sansNomVide(texte: string): string {
+  return texte.replace(/\b(Bonjour|Hello|Hi)\s+,/g, '$1,');
+}
+
 const DEFAUTS = {
   fr: {
     sujet: 'Facture {invoice_number} — il reste {amount_due}',
@@ -382,7 +387,9 @@ router.post('/cron/payment-reminders', async (req, res) => {
               .select('id, first_name, last_name, email, phone')
               .eq('id', inv.client_id)
               .maybeSingle();
-            const clientName = [client?.first_name, client?.last_name].filter(Boolean).join(' ') || 'Customer';
+            // Pas de nom : pas de « Customer » anglais dans un courriel français —
+            // la salutation devient « Bonjour, » (voir `sansNomVide`).
+            const clientName = [client?.first_name, client?.last_name].filter(Boolean).join(' ');
             const toEmail = (client?.email || '').trim();
             const toPhone = (client?.phone || '').trim();
 
@@ -412,7 +419,8 @@ router.post('/cron/payment-reminders', async (req, res) => {
             const vars = {
               client_name: clientName,
               company_name: companyName,
-              invoice_number: inv.invoice_number || inv.id.slice(0, 8),
+              // Jamais un morceau d'identifiant interne à la place du numéro (objet).
+              invoice_number: inv.invoice_number || '',
               amount_due: formatMoney(Number(inv.balance_cents || 0), String(inv.currency || 'CAD'), langueRappel),
               /* Passait la date ISO BRUTE : le client lisait « était due le
                  2026-04-24 » dans le texte ET dans le SMS, alors que la carte
@@ -453,7 +461,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
               const modeleOrg = await texteDuCourriel(orgId, 'invoice_reminder', vars, undefined,
                 { invoice: inv.id, client: inv.client_id ?? null });
               const subject = modeleOrg?.sujet || applyTemplate(settings.custom_email_subject || defauts.sujet, vars);
-              const body = nettoyerLiensMorts(applyTemplate(settings.custom_email_body || defauts.corps, vars));
+              const body = nettoyerLiensMorts(sansNomVide(applyTemplate(settings.custom_email_body || defauts.corps, vars)));
               // Le texte du rappel (celui de l'entreprise ou le défaut) dans le gabarit commun, avec le montant en carte et le bouton payer.
               const html = rendreCourrielClient({
                 langue: langueRappel,

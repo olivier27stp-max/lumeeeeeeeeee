@@ -69,8 +69,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Un message de Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "a1e754445d4c6e4d"
+    "texte": "Plomberie Tremblay inc. Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc.&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "bfa20c4d0bffa433"
    }
   ],
   "annulees": []
@@ -239,8 +239,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Un message de Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "a1e754445d4c6e4d"
+    "texte": "Plomberie Tremblay inc. Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc.&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "bfa20c4d0bffa433"
    }
   ],
   "annulees": []
@@ -711,7 +711,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+      "subject": "Comment s'est passé notre service ?",
       "source": "automation"
      }
     }
@@ -740,7 +740,7 @@
      "client_id": null,
      "job_id": null,
      "survey_id": "sondage-1",
-     "subject_sent": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+     "subject_sent": "Comment s'est passé notre service ?",
      "status": "sent",
      "sent_at": "2026-09-13T15:00:00.000Z"
     }
@@ -799,9 +799,9 @@
     "moment": "immediat",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer votre projet et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "ba8cfa1d7450a92c"
+    "subject": "Comment s'est passé notre service ?",
+    "texte": "Plomberie Tremblay inc. Nous venons de terminer votre projet et votre opinion compte pour nous. Notez votre expérience en 10…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer votre projet et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Le bouton ne fonctionne pas ? Ouvrir le lien Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "5811555344e3e714"
    }
   ],
   "annulees": []
@@ -927,7 +927,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+      "subject": "Comment s'est passé notre service ?",
       "source": "automation"
      }
     }
@@ -970,7 +970,7 @@
      "client_id": null,
      "job_id": null,
      "survey_id": "sondage-1",
-     "subject_sent": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+     "subject_sent": "Comment s'est passé notre service ?",
      "status": "sent",
      "sent_at": "2026-09-14T15:00:00.000Z"
     }
@@ -1047,9 +1047,9 @@
     "moment": "differe:request_review",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer votre projet et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "ba8cfa1d7450a92c"
+    "subject": "Comment s'est passé notre service ?",
+    "texte": "Plomberie Tremblay inc. Nous venons de terminer votre projet et votre opinion compte pour nous. Notez votre expérience en 10…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer votre projet et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Le bouton ne fonctionne pas ? Ouvrir le lien Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "5811555344e3e714"
    }
   ],
   "annulees": []

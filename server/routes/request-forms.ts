@@ -832,8 +832,8 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
            visiteurs d'une org francophone. */
         const lang = langueEntreprise(company);
         const subject = lang === 'fr'
-          ? `Nous avons bien reçu votre demande — ${companyName}`
-          : `We received your request — ${companyName}`;
+          ? 'Nous avons bien reçu votre demande'
+          : 'We received your request';
 
         const bodyHtml = lang === 'fr'
           ? `<p style="margin:0 0 16px;font-size:15px;">Bonjour ${escapeHtml(body.first_name)},</p>

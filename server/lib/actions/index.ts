@@ -518,6 +518,15 @@ export type ActionType =
 // ── Template variable resolution ─────────────────────────────
 
 /** Échappe une valeur insérée dans du HTML. */
+/**
+ * Une variable de nom vide laissait « Bonjour , » ou « Paiement reçu — merci ! »
+ * (espace orpheline avant la ponctuation). On recolle la ponctuation.
+ */
+export function sansPrenomVide(texte: string): string {
+  return texte
+    .replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s+([,!.?])/g, '$1$2');
+}
+
 export function echapperHtml(v: string): string {
   return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
@@ -1143,8 +1152,9 @@ export async function executeSendEmail(
   if (!to) return saute('Aucune adresse courriel pour ce client', 'sans_courriel');
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'subject', ctx.langue), champLocalise(config, 'body', ctx.langue));
-  const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
-  const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars, { html: true });
+  // Prénom manquant : « Bonjour , » / « merci ! » deviennent « Bonjour, » / « merci! ».
+  const subject = sansPrenomVide(resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars));
+  const body = sansPrenomVide(resolveTemplate(champLocalise(config, 'body', ctx.langue), vars, { html: true }));
 
   try {
     const { sendEmail, isMailerConfigured, adresseInjoignable } = await import('../mailer');
@@ -1841,7 +1851,7 @@ export async function executeRequestReview(
   // 1. Réglages « Avis clients » : au moins une plateforme + interrupteur actif
   const { data: cs } = await ctx.supabase
     .from('company_settings')
-    .select('review_enabled, google_review_url, facebook_review_url, review_sms_body, review_email_subject, review_email_body')
+    .select('review_enabled, google_review_url, facebook_review_url, review_sms_body, review_email_subject, review_email_body, brand_color')
     .eq('org_id', ctx.orgId)
     .limit(1)
     .maybeSingle();
@@ -1937,7 +1947,7 @@ export async function executeRequestReview(
     review_link: surveyUrl,
   };
 
-  let { subject, html: body } = reviewEmail(cs, messageVars);
+  let { subject, html: body } = reviewEmail(cs, messageVars, { langue: ctx.langue, couleur: (cs as { brand_color?: string | null } | null)?.brand_color ?? null });
 
   if (!String(cs?.review_email_body || '').trim()) {
     const { data: emailTemplate } = await ctx.supabase
@@ -2855,17 +2865,28 @@ async function envoyerDocument(
     return { success: false, error: 'Aucun lien public pour ce document.' };
   }
 
-  const numero = type === 'invoice' ? vars.invoice_number : vars.quote_number;
-  const objet = type === 'invoice'
-    ? `Facture ${numero || ''}`.trim()
-    : `Soumission ${numero || ''}`.trim();
+  /* Dans la langue de l'ENTREPRISE, en HTML, sans lien en clair.
+
+     Le texte partait en français codé en dur (même pour une entreprise
+     anglophone), en texte brut dont les sauts de ligne disparaissaient dans
+     le gabarit (tout sur une ligne), et avec l'URL écrite en clair EN PLUS du
+     bouton que `boutonPourEntite` pose déjà pour une facture ou une
+     soumission. */
+  const en = ctx.langue === 'en';
+  const numero = (type === 'invoice' ? vars.invoice_number : vars.quote_number) || '';
+  const nom = type === 'invoice' ? (en ? 'Invoice' : 'Facture') : (en ? 'Quote' : 'Soumission');
+  const objet = `${nom} ${numero}`.trim();
 
   const mot = (config.body || '').trim();
+  const paragraphe = (t: string) => `<p>${echapperHtml(t).replace(/\n/g, '<br/>')}</p>`;
   const corps = mot
-    ? `${mot}\n\n${lien}`
-    : (type === 'invoice'
-      ? `Bonjour [client_first_name],\n\nVoici votre facture ${numero || ''}.\n\n${lien}`
-      : `Bonjour [client_first_name],\n\nVoici votre soumission ${numero || ''}.\n\n${lien}`);
+    ? mot.split(/\n{2,}/).map(paragraphe).join('')
+    : [
+      paragraphe(en ? 'Hi [client_first_name],' : 'Bonjour [client_first_name],'),
+      paragraphe(type === 'invoice'
+        ? (en ? `Here is your invoice ${numero}. You can view and pay it online with the button below.` : `Voici votre facture ${numero}. Vous pouvez la consulter et la payer en ligne avec le bouton ci-dessous.`)
+        : (en ? `Here is your quote ${numero}. You can review and approve it online with the button below.` : `Voici votre soumission ${numero}. Vous pouvez la consulter et l’approuver en ligne avec le bouton ci-dessous.`)),
+    ].join('');
 
   return executeSendEmail({ subject: objet, body: corps }, vars, ctx);
 }

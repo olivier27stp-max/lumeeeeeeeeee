@@ -66,6 +66,29 @@ export async function ensureAutomationPresets(
   orgId: string,
   opts: { activateAll?: boolean } = {},
 ): Promise<{ inserted: number; repaired: number }> {
+  /*
+   * 0. L'entreprise a-t-elle DÉJÀ reçu son socle ?
+   *
+   * `activateAll` (publier le pack, mettre tout le reste en brouillon) ne
+   * doit s'appliquer qu'UNE fois, à la création. Or le webhook de paiement
+   * et l'onboarding le rappelaient aussi sur une entreprise EXISTANTE (le
+   * client qui paie par un lien a déjà un compte) : ses automatisations
+   * étaient remises à zéro, sans un mot — celles qu'elle avait éteintes se
+   * rallumaient, celles qu'elle avait publiées retombaient en brouillon
+   * (constaté le 2026-09-30). `orgs.automations_initialisees_le` le retient.
+   */
+  let dejaInitialisee = false;
+  if (opts.activateAll) {
+    const { data: org, error: orgErr } = await admin
+      .from('orgs')
+      .select('automations_initialisees_le')
+      .eq('id', orgId)
+      .maybeSingle();
+    if (orgErr) throw orgErr;
+    dejaInitialisee = !!(org as { automations_initialisees_le?: string | null } | null)?.automations_initialisees_le;
+  }
+  const activer = !!opts.activateAll && !dejaInitialisee;
+
   // 1. Réparer le trigger jamais émis hérité du vieux seed DB
   const { data: repairedRows, error: repErr } = await admin
     .from('automation_rules')
@@ -127,7 +150,9 @@ export async function ensureAutomationPresets(
          * déjà actives (5 relances de devis + le parcours = messages en
          * double). Ils y arrivent en brouillon, donc dans Modèles.
          */
-        is_active: !PRESETS_SOLLICITATION.has(p.preset_key) && !packCles.has(p.preset_key),
+        // Entreprise déjà installée : ce qui manque arrive en BROUILLON —
+        // on ne publie jamais rien de neuf chez elle sans qu'elle le décide.
+        is_active: !dejaInitialisee && !PRESETS_SOLLICITATION.has(p.preset_key) && !packCles.has(p.preset_key),
         is_preset: true,
         preset_key: p.preset_key,
       })),
@@ -139,7 +164,7 @@ export async function ensureAutomationPresets(
   // les presets de sollicitation commerciale (F7, 2026-09-19). Voir
   // PRESETS_SOLLICITATION : on n'active pas d'office une relance publicitaire
   // au nom d'une entreprise qui vient de s'inscrire et n'a rien demandé.
-  if (opts.activateAll) {
+  if (activer) {
     /*
      * LE PACK DE BASE (décidé le 2026-09-28) : seuls ses parcours et
      * préréglages sont publiés ; tout le reste — y compris les anciennes
@@ -183,6 +208,15 @@ export async function ensureAutomationPresets(
         .in('preset_key', [...PRESETS_ATTENDENT_AVIS]);
       if (avisErr) throw avisErr;
     }
+
+    // Retenu : les prochains appels (paiement, onboarding) ne toucheront plus
+    // jamais à l'activation de ses automatisations.
+    const { error: marqueErr } = await admin
+      .from('orgs')
+      .update({ automations_initialisees_le: new Date().toISOString() })
+      .eq('id', orgId)
+      .is('automations_initialisees_le', null);
+    if (marqueErr) throw marqueErr;
   }
 
   return { inserted: missing.length, repaired: (repairedRows?.length || 0) + (reviewRows?.length || 0) };

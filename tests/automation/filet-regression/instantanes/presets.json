@@ -365,8 +365,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Contrat signé",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Merci Marie, Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps ici : À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "7cc5996c9de4b4ba"
+    "texte": "Plomberie Tremblay inc. Merci Marie, Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie, Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps ici : À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "77b8a1ca205b9b53"
    }
   ],
   "annulees": []
@@ -561,8 +561,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Rendez-vous confirmé",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est confirmé : Date : 2026-09-25 Heure : 09 h 00 Adresse : 412 rue des Érables, Longueuil À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "1db3258e2ef26776"
+    "texte": "Plomberie Tremblay inc. Votre rendez-vous est confirmé : Date : 2026-09-25 Heure : 09 h 00 Adresse : 412 rue des Érables,…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est confirmé : Date : 2026-09-25 Heure : 09 h 00 Adresse : 412 rue des Érables, Longueuil À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "bb02c3292b5e9db8"
    }
   ],
   "annulees": []
@@ -998,8 +998,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Déjà un an!",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Ça fait déjà un an qu'on a fait des travaux chez vous — merci encore pour votre confiance! Si c'est le temps d'une retouche ou d'un entretien, répondez à ce courriel et on vous prépare une soumission. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "c8ef427d05d1128e"
+    "texte": "Plomberie Tremblay inc. Ça fait déjà un an qu&#39;on a fait des travaux chez vous — merci encore pour votre confiance! Si c&#39;est le…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait déjà un an qu'on a fait des travaux chez vous — merci encore pour votre confiance! Si c'est le temps d'une retouche ou d'un entretien, répondez à ce courriel et on vous prépare une soumission. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "9fee40a0c1916057"
    },
    {
     "moment": "differe:send_sms",
@@ -1300,8 +1300,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Des nouvelles de nous",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable! Saviez-vous qu'on offre aussi d'autres services d'entretien? Répondez à ce courriel pour en savoir plus. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "4b0b95151dc77616"
+    "texte": "Plomberie Tremblay inc. Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable! Saviez-vous qu&#39;on…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable! Saviez-vous qu'on offre aussi d'autres services d'entretien? Répondez à ce courriel pour en savoir plus. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "e8967fafcce14e77"
    }
   ],
   "annulees": []
@@ -1835,8 +1835,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Dépôt reçu, merci!",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Merci Marie! Votre dépôt a bien été reçu et votre place est réservée à l'horaire. On vous recontacte avec les détails du rendez-vous. À bientôt, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "2c340f177623b05d"
+    "texte": "Plomberie Tremblay inc. Merci Marie! Votre dépôt a bien été reçu et votre place est réservée à l&#39;horaire. On vous recontacte avec…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie! Votre dépôt a bien été reçu et votre place est réservée à l'horaire. On vous recontacte avec les détails du rendez-vous. À bientôt, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "a222bbb2c73848a1"
    }
   ],
   "annulees": []
@@ -2262,7 +2262,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+      "subject": "Comment s'est passé notre service ?",
       "source": "automation"
      }
     }
@@ -2305,7 +2305,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
      "survey_id": "sondage-1",
-     "subject_sent": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+     "subject_sent": "Comment s'est passé notre service ?",
      "status": "sent",
      "sent_at": "2026-09-13T17:00:00.000Z"
     }
@@ -2475,9 +2475,9 @@
     "moment": "differe:request_review",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "8b4b5653d1aa0032"
+    "subject": "Comment s'est passé notre service ?",
+    "texte": "Plomberie Tremblay inc. Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Le bouton ne fonctionne pas ? Ouvrir le lien Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "41e5d277e4674fda"
    }
   ],
   "annulees": []
@@ -3167,8 +3167,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Facture INV-000042 impayée depuis 2 semaines",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est impayée depuis deux semaines. Merci de la régler rapidement. En cas de problème, répondez à ce courriel et on trouvera une solution. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "cd310898edda556c"
+    "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est impayée depuis deux semaines. Merci de la régler rapidement. En…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est impayée depuis deux semaines. Merci de la régler rapidement. En cas de problème, répondez à ce courriel et on trouvera une solution. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "23a664cba0cb4e11"
    },
    {
     "moment": "differe:send_sms",
@@ -3469,8 +3469,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Petit rappel amical : la facture INV-000042 de 1 626,90 $ est en attente de paiement. Si vous avez déjà payé, ignorez ce message. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "d40f3352826f8617"
+    "texte": "Plomberie Tremblay inc. Petit rappel amical : la facture INV-000042 de 1 626,90 $ est en attente de paiement. Si vous avez déjà…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel amical : la facture INV-000042 de 1 626,90 $ est en attente de paiement. Si vous avez déjà payé, ignorez ce message. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "1f9d61fd4e25ff1e"
    }
   ],
   "annulees": []
@@ -4162,8 +4162,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Facture INV-000042 en souffrance (30 jours)",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est en souffrance depuis 30 jours. Merci de la régler sans tarder, ou contactez-nous pour convenir d'une entente de paiement. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "b6fcddbe94daf9ec"
+    "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est en souffrance depuis 30 jours. Merci de la régler sans tarder, ou…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est en souffrance depuis 30 jours. Merci de la régler sans tarder, ou contactez-nous pour convenir d'une entente de paiement. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "d73ee690df0fda6f"
    },
    {
     "moment": "differe:send_sms",
@@ -4605,8 +4605,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est toujours en attente de paiement. Si vous avez déjà payé, ignorez ce message. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "d302aa7a924d9375"
+    "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est toujours en attente de paiement. Si vous avez déjà payé, ignorez…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est toujours en attente de paiement. Si vous avez déjà payé, ignorez ce message. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "41411ca010f4bc02"
    },
    {
     "moment": "differe:send_sms",
@@ -5174,8 +5174,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Facture INV-000042 en attente depuis 7 jours",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est en attente depuis une semaine. Merci de la régler dès que possible, ou répondez à ce courriel si quelque chose ne va pas. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "ad6f785035b6656a"
+    "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est en attente depuis une semaine. Merci de la régler dès que…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est en attente depuis une semaine. Merci de la régler dès que possible, ou répondez à ce courriel si quelque chose ne va pas. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "fa19930f59b9b506"
    },
    {
     "moment": "differe:send_sms",
@@ -5626,8 +5626,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Votre rendez-vous est demain",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est demain , le 2026-09-25 à 09 h 00. Un empêchement? Répondez à ce courriel et on trouvera un autre moment. À demain! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "4472937267b14220"
+    "texte": "Plomberie Tremblay inc. Votre rendez-vous est demain , le 2026-09-25 à 09 h 00. Un empêchement? Répondez à ce courriel et on…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est demain , le 2026-09-25 à 09 h 00. Un empêchement? Répondez à ce courriel et on trouvera un autre moment. À demain! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "d75a3e6965d2e10b"
    }
   ],
   "annulees": []
@@ -6355,8 +6355,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Rappel : rendez-vous dans une semaine",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Petit rappel : votre rendez-vous est prévu le 2026-09-25 à 09 h 00 . Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous. À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "f8e165f1b2c0fe31"
+    "texte": "Plomberie Tremblay inc. Petit rappel : votre rendez-vous est prévu le 2026-09-25 à 09 h 00 . Répondez à ce courriel si vous avez…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel : votre rendez-vous est prévu le 2026-09-25 à 09 h 00 . Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous. À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "2bd157b08d831c74"
    }
   ],
   "annulees": []
@@ -6913,8 +6913,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Toujours intéressé?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services? Un simple mot et on vous prépare une soumission. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "a799efa616b00dce"
+    "texte": "Plomberie Tremblay inc. Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services? Un simple…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services? Un simple mot et on vous prépare une soumission. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "365e62598b169917"
    }
   ],
   "annulees": []
@@ -7498,8 +7498,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — On pense à vous",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Vous nous avez contactés récemment et on veut s'assurer de ne pas vous laisser sans réponse. Répondez à ce courriel et on s'occupe de vous rapidement. Merci, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "231f1c2316e7feae"
+    "texte": "Plomberie Tremblay inc. Vous nous avez contactés récemment et on veut s&#39;assurer de ne pas vous laisser sans réponse. Répondez à ce…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Vous nous avez contactés récemment et on veut s'assurer de ne pas vous laisser sans réponse. Répondez à ce courriel et on s'occupe de vous rapidement. Merci, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "835d821e5f850911"
    }
   ],
   "annulees": []
@@ -8031,8 +8031,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Paiement reçu — merci Marie!",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Merci Marie! Nous confirmons la réception de votre paiement pour la facture INV-000042. Merci de votre confiance. Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "aa68aa8eab8e0f29"
+    "texte": "Plomberie Tremblay inc. Merci Marie! Nous confirmons la réception de votre paiement pour la facture INV-000042. Merci de votre…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie! Nous confirmons la réception de votre paiement pour la facture INV-000042. Merci de votre confiance. Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "3240a6bb01323064"
    }
   ],
   "annulees": []
@@ -9014,8 +9014,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Dernière relance pour votre soumission",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, On voulait faire un dernier suivi au sujet de votre soumission. Si le moment n'est pas bon, aucun souci — répondez-nous et on se reprendra quand ça vous conviendra. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "af161c514139f849"
+    "texte": "Plomberie Tremblay inc. On voulait faire un dernier suivi au sujet de votre soumission. Si le moment n&#39;est pas bon, aucun souci —…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, On voulait faire un dernier suivi au sujet de votre soumission. Si le moment n'est pas bon, aucun souci — répondez-nous et on se reprendra quand ça vous conviendra. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "3df0de4d3698cb1e"
    }
   ],
   "annulees": []
@@ -9460,8 +9460,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Suivi de votre soumission",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, On vous a envoyé une soumission hier et on voulait s'assurer que vous l'avez bien reçue. Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "6044005b95b8f4ae"
+    "texte": "Plomberie Tremblay inc. On vous a envoyé une soumission hier et on voulait s&#39;assurer que vous l&#39;avez bien reçue. Des questions?…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, On vous a envoyé une soumission hier et on voulait s'assurer que vous l'avez bien reçue. Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "79a3c449736714d5"
    }
   ],
   "annulees": []
@@ -9885,8 +9885,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — On garde votre dossier ouvert",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre soumission. Répondez à ce courriel à tout moment. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "9d56a1714a4ced1b"
+    "texte": "Plomberie Tremblay inc. On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre soumission. Répondez à ce courriel à tout moment. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "4ca67d32d32cbeeb"
    }
   ],
   "annulees": []
@@ -10331,8 +10331,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Votre soumission vous attend",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Petit rappel au sujet de la soumission qu'on vous a envoyée. Si un détail ne convient pas, on peut l'ajuster — dites-le-nous simplement. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "b5e977fe40514be2"
+    "texte": "Plomberie Tremblay inc. Petit rappel au sujet de la soumission qu&#39;on vous a envoyée. Si un détail ne convient pas, on peut…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel au sujet de la soumission qu'on vous a envoyée. Si un détail ne convient pas, on peut l'ajuster — dites-le-nous simplement. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "b504d34f16127abf"
    }
   ],
   "annulees": []
@@ -10904,8 +10904,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Votre soumission est toujours valide",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Votre soumission est toujours valide et on garde votre place. Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel. Au plaisir, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "a4a2714e9d10afd1"
+    "texte": "Plomberie Tremblay inc. Votre soumission est toujours valide et on garde votre place. Si vous avez des questions ou souhaitez…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre soumission est toujours valide et on garde votre place. Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel. Au plaisir, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "fd8020ba2fe18a85"
    }
   ],
   "annulees": []
@@ -11341,8 +11341,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Déjà 3 mois!",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû. Répondez à ce courriel et on vous trouve une place à l'horaire. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "33e5d8f2a9a01312"
+    "texte": "Plomberie Tremblay inc. Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû. Répondez à ce courriel…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû. Répondez à ce courriel et on vous trouve une place à l'horaire. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "56b662e70869cf34"
    },
    {
     "moment": "differe:send_sms",
@@ -12060,8 +12060,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — La saison s'en vient",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, La saison avance — c'est le bon moment pour préparer votre propriété. Répondez à ce courriel pour une soumission rapide et sans engagement. À bientôt, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "cb035e7ef64a9cbc"
+    "texte": "Plomberie Tremblay inc. La saison avance — c&#39;est le bon moment pour préparer votre propriété. Répondez à ce courriel pour une…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La saison avance — c'est le bon moment pour préparer votre propriété. Répondez à ce courriel pour une soumission rapide et sans engagement. À bientôt, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "dda588c45ddcd52c"
    },
    {
     "moment": "differe:send_sms",
@@ -13009,8 +13009,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Merci d'avoir contacté Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Merci d'avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très rapidement. Si votre demande est urgente, répondez à ce courriel — nous la traiterons en priorité. Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "90efbb5cf399f5f1"
+    "texte": "Plomberie Tremblay inc. Merci d&#39;avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Merci d'avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très rapidement. Si votre demande est urgente, répondez à ce courriel — nous la traiterons en priorité. Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "546ddaced4ca1dc1"
    }
   ],
   "annulees": []

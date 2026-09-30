@@ -69,8 +69,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Un message de Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "2acc220a82a4d370"
+    "texte": "Plomberie Tremblay inc. Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Approuver la…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "49fb5b9ccee6be95"
    }
   ],
   "annulees": []
@@ -545,7 +545,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+      "subject": "Comment s'est passé notre service ?",
       "source": "automation"
      }
     }
@@ -574,7 +574,7 @@
      "client_id": null,
      "job_id": null,
      "survey_id": "sondage-1",
-     "subject_sent": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+     "subject_sent": "Comment s'est passé notre service ?",
      "status": "sent",
      "sent_at": "2026-09-13T15:00:00.000Z"
     }
@@ -633,9 +633,9 @@
     "moment": "immediat",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "b5e1fec80d73c673"
+    "subject": "Comment s'est passé notre service ?",
+    "texte": "Plomberie Tremblay inc. Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Le bouton ne fonctionne pas ? Ouvrir le lien Merci d'avoir choisi Plomberie Tremblay inc. ! Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "5314c63dd14eb57e"
    }
   ],
   "annulees": []
@@ -2087,8 +2087,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Soumission Q-2026-042",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Voici votre soumission Q-2026-042. https://app.lume.test/quote/bbbbbbbb-0000-4000-8000-000000000001 Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "9426c434d8aadaa5"
+    "texte": "Plomberie Tremblay inc. Voici votre soumission Q-2026-042. Vous pouvez la consulter et l’approuver en ligne avec le bouton…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Voici votre soumission Q-2026-042. Vous pouvez la consulter et l’approuver en ligne avec le bouton ci-dessous. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "3096233aa6d369ef"
    }
   ],
   "annulees": []

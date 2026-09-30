@@ -150,8 +150,8 @@ export default function AutomationsReglages() {
                 : 'Saves changes while you edit a draft, with no need to click.'}
             >
               <DejaEnPlace texte={fr
-                ? 'Déjà actif : l’éditeur enregistre une seconde après votre dernière frappe, et l’indique en haut à droite (« Enregistré »).'
-                : 'Already on: the editor saves one second after your last keystroke, and says so at the top right (“Saved”).'}
+                ? 'Déjà actif : l’éditeur enregistre trois secondes après votre dernière frappe, et l’indique en haut à droite (« Enregistré »).'
+                : 'Already on: the editor saves three seconds after your last keystroke, and says so at the top right (“Saved”).'}
               />
             </Carte>
 
@@ -176,8 +176,8 @@ export default function AutomationsReglages() {
                 : 'The hours during which an automated message may reach a client.'}
             >
               <DejaEnPlace texte={fr
-                ? 'Aucun texto n’est envoyé entre 20 h et 8 h, heure du Québec : un message prêt en dehors de cette plage attend le matin. Ce n’est pas encore réglable.'
-                : 'No text is sent between 8 p.m. and 8 a.m. Québec time: a message ready outside that window waits for morning. Not adjustable yet.'}
+                ? 'Par défaut, aucun texto n’est envoyé entre 20 h et 8 h, heure du Québec : un message prêt en dehors de cette plage attend le matin. Chaque automatisation peut régler sa propre fenêtre dans son onglet Réglages.'
+                : 'By default, no text is sent between 8 p.m. and 8 a.m. Québec time: a message ready outside that window waits for morning. Each automation can set its own window in its Settings tab.'}
               />
             </Carte>
 

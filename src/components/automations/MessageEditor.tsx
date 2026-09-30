@@ -47,6 +47,8 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
   const [enregistrement, setEnregistrement] = useState(false);
   const [enregistre, setEnregistre] = useState(false);
   const modifie = texte !== body;
+  /** Un texto vide partirait vide : jamais enregistrable (A-06). */
+  const vide = texte.trim().length === 0;
 
   /** Variables citées que le serveur ne sait pas remplir — elles partiraient vides. */
   const inconnues = useMemo(() => variablesInconnues(texte), [texte]);
@@ -58,7 +60,7 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
   );
 
   const enregistrerSms = async () => {
-    if (!modifie || enregistrement) return;
+    if (!modifie || vide || enregistrement) return;
     setEnregistrement(true);
     try {
       await updateRuleMessage(ruleId, 'send_sms', texte);
@@ -192,14 +194,21 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
         ))}
       </div>
 
+      {/* Un bouton grisé dit POURQUOI (P2-12). */}
+      {vide && (
+        <p className="mt-2 text-[10px] text-danger">
+          {fr ? 'Le message ne peut pas être vide.' : 'The message cannot be empty.'}
+        </p>
+      )}
+
       <div className="mt-2.5 flex items-center gap-2">
         <button
           type="button"
           onClick={enregistrerSms}
-          disabled={!modifie || enregistrement}
+          disabled={!modifie || vide || enregistrement}
           className={cn(
             'px-3 py-1.5 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1.5',
-            modifie && !enregistrement
+            modifie && !vide && !enregistrement
               ? 'bg-primary text-white hover:bg-primary/90'
               : 'bg-surface-tertiary text-text-tertiary cursor-not-allowed',
           )}
