@@ -1395,11 +1395,21 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
       && !/\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b/i.test(adresse)
       && !/\b(québec|montréal|laval|drummond|sherbrooke|gatineau|longueuil)\b/i.test(adresse);
 
+    // Équipe (audit 2026-09-30) : « crée le job pour l'équipe Nord » perdait
+    // l'équipe (p_team_id toujours null) — le job n'apparaissait dans aucune colonne.
+    let teamId: string | null = null;
+    if (args.team_id) {
+      const { data: equipe, error: errEq } = await ctx.client.from('teams').select('id').eq('org_id', ctx.orgId).eq('id', String(args.team_id)).maybeSingle();
+      if (errEq) throw errEq;
+      if (!equipe) throw new Error('Équipe introuvable dans cette entreprise — vérifie avec la liste des équipes.');
+      teamId = equipe.id;
+    }
+
     // 1. Création par LA RPC de l'app — job + visite éventuelle d'un coup.
     const { data: rpcData, error: rpcError } = await ctx.client.rpc('rpc_create_job_with_optional_schedule', {
       p_lead_id: args.lead_id || null,
       p_client_id: args.client_id || null,
-      p_team_id: null,
+      p_team_id: teamId,
       p_title: champRequis(args.title, 'Le titre').slice(0, 200),
       p_job_number: null,
       p_job_type: args.job_type ? String(args.job_type).slice(0, 80) : null,
@@ -1845,10 +1855,26 @@ async function envoyerUnSms(
   }
   const conversation = await findOrCreateConversation(admin, ctx.orgId, telephone, clientId || undefined, clientNom || undefined);
   const statusCallback = getTwilioStatusCallbackUrl();
-  const twilioMessage = await twilioClient.messages.create({
-    body: message, from: fromNumber, to: telephone,
-    ...(statusCallback ? { statusCallback } : {}),
-  });
+  let twilioMessage: { sid: string };
+  try {
+    twilioMessage = await twilioClient.messages.create({
+      body: message, from: fromNumber, to: telephone,
+      ...(statusCallback ? { statusCallback } : {}),
+    });
+  } catch (e: any) {
+    // Codes Twilio traduits (audit 2026-09-30) : avant, « la consultation a
+    // échoué côté Lume » pour un numéro invalide ou un client désabonné.
+    const code = Number(e?.code);
+    const phrase: Record<number, string> = {
+      21211: 'Ce numéro de téléphone n’est pas valide : corrige-le sur la fiche du client.',
+      21610: 'Ce client a répondu STOP : il ne reçoit plus de textos.',
+      21614: 'Ce numéro ne peut pas recevoir de textos (ligne fixe ?).',
+      21408: 'Les textos vers cette région ne sont pas permis depuis le numéro de l’entreprise.',
+      21612: 'Ce numéro ne peut pas être joint depuis le numéro de l’entreprise.',
+    };
+    if (phrase[code]) throw new Error(phrase[code]);
+    throw e;
+  }
   const { data: msg } = await admin.from('messages').insert({
     conversation_id: conversation.id, org_id: ctx.orgId,
     client_id: conversation.client_id || clientId || null,

@@ -569,6 +569,15 @@ const updateD2dPipelineItem: AgentTool = {
       const id = identifiant(args.deal_id, "L'identifiant du deal");
       const now = new Date().toISOString();
       const updates: Record<string, any> = champsFournis(args, ['d2d_status', 'lost_reason', 'rep_id']);
+      // Réattribuer un deal = geste d'admin (audit 2026-09-30) : un vendeur ne
+      // s'attribue pas le deal d'un collègue. La RLS borne déjà « ses deals »
+      // quand l'org le restreint ; ceci couvre les orgs non restreintes.
+      if (updates.rep_id !== undefined) {
+        const { data: moi } = await ctx.client.from('memberships').select('role').eq('org_id', ctx.orgId).eq('user_id', ctx.userId ?? '').maybeSingle();
+        if (!moi || !['owner', 'admin'].includes(String((moi as any).role))) {
+          throw new Error('Seul un propriétaire ou un admin peut changer le représentant d’un deal.');
+        }
+      }
       if (args.stage !== undefined) {
         updates.stage = String(args.stage);
         if (updates.stage === 'closed_lost') updates.lost_at = now;

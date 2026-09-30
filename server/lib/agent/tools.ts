@@ -932,6 +932,7 @@ const createJob: AgentTool = {
     parameters: {
       type: 'object',
       properties: {
+        team_id: { type: 'string', description: 'Optional team id (from list_teams): the job and its visit go to that team\'s calendar column.' },
         title: { type: 'string', description: 'Job title.' },
         client_id: { type: 'string', description: 'Existing client id (optional).' },
         property_address: { type: 'string', description: 'Job site address (optional).' },
@@ -964,7 +965,10 @@ const sendSms: AgentTool = {
   declaration: {
     name: 'send_sms',
     description:
-      'Send an SMS to a client — IT ACTUALLY SENDS, and a sent SMS cannot be recalled. ALWAYS show the user the exact message and recipient and get their explicit OK in the conversation before calling this. Opt-outs (STOP) are enforced server-side.',
+      'Send a free-text SMS to a client — IT ACTUALLY SENDS, and a sent SMS cannot be recalled. '
+      + 'A quote link → send_quote_sms ; a contract link → send_agreement_sms ; a payment link → create_payment_request ; '
+      + 'reminders to several overdue clients → send_payment_reminders.'
+      + '  ALWAYS show the user the exact message and recipient and get their explicit OK in the conversation before calling this. Opt-outs (STOP) are enforced server-side.',
     parameters: {
       type: 'object',
       properties: {
