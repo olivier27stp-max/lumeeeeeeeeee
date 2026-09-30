@@ -467,6 +467,31 @@ const createAutomationFromText: AgentTool = {
       if (error) throw error;
       const row = ligneTouchee(data, 'L\'automatisation');
 
+      // La DEUXIÈME automatisation (autre déclencheur, ex. « quand le client
+      // répond ») était jetée en silence (audit 2026-09-30) : on la crée aussi,
+      // en pause, ou on dit ce qui manque pour l'écrire.
+      let seconde: Record<string, unknown> | null = null;
+      const autre = resultat.parcours.autre;
+      if (autre) {
+        const v2 = sequenceEtapes.safeParse(autre.steps);
+        if (autre.manque) {
+          seconde = { creee: false, name: autre.nom, manque: autre.manque };
+        } else if (!v2.success) {
+          seconde = { creee: false, name: autre.nom, manque: 'un parcours valide (à construire dans Automatisations)' };
+        } else {
+          const { data: d2, error: e2 } = await ctx.client
+            .from('automation_rules')
+            .insert({
+              org_id: ctx.orgId, name: autre.nom, description: autre.resume, trigger_event: autre.trigger_event,
+              conditions: {}, delay_seconds: 0, actions: [], steps: v2.data, is_active: false,
+            })
+            .select('id, name, trigger_event');
+          seconde = e2 || !d2?.length
+            ? { creee: false, name: autre.nom, manque: 'l’enregistrement a échoué — à créer dans Automatisations' }
+            : { creee: true, rule_id: d2[0].id, name: d2[0].name, trigger_event: d2[0].trigger_event };
+        }
+      }
+
       return {
         created: true,
         rule_id: row.id,
@@ -475,7 +500,9 @@ const createAutomationFromText: AgentTool = {
         etapes: verdict.data.length,
         resume: resultat.parcours.resume,
         is_active: false,
-        note: 'Créée EN PAUSE : rien ne partira tant qu\'elle n\'est pas activée. Elle est visible dans Automatisations, où le parcours peut être ajusté.',
+        ...(seconde ? { deuxieme_automatisation: seconde } : {}),
+        ...(seconde && !seconde.creee ? { warning: `La deuxième automatisation (« ${String(seconde.name)} ») n’a PAS été créée : il manque ${String(seconde.manque)}.` } : {}),
+        note: 'Créée EN PAUSE : rien ne partira tant qu\'elle n\'est pas activée. Elle est visible dans Automatisations, où le parcours peut être ajusté. Un filtre sur le déclencheur (montant, type de job…) ne se crée pas d\'ici : il s\'ajoute dans l\'éditeur.',
       };
     }),
 };
