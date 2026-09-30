@@ -8,7 +8,11 @@ import {
   approveCommission,
   reverseCommission,
   markCommissionPaid,
+  unmarkCommissionPaid,
+  telechargerExportCommissions,
 } from '../../lib/commissionsApi';
+import { toast } from 'sonner';
+import { Button } from '../d2d/button';
 import type { FsCommissionEntry, CommissionPayrollPreview } from '../../types';
 import { fetchTeamList } from '../../lib/invitationsApi';
 import CommissionFilters, { type CommissionFiltersValue } from './CommissionFilters';
@@ -101,7 +105,8 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
       setEntries((prev) => prev?.map((e) => (e.id === id ? { ...e, ...updated } : e)) ?? null);
       setPayroll(await getPayrollPreview(filters.from, filters.to, filters.repId));
     } catch (err: any) {
-      setError(err?.message || (isFr ? "Échec de l'approbation" : 'Approve failed'));
+      // Toast, pas setError : une action refusée ne doit pas masquer tout le tableau de bord.
+      toast.error(err?.message || (isFr ? "Échec de l'approbation" : 'Approve failed'));
     } finally {
       setActionLoading(null);
     }
@@ -126,7 +131,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
       setEntries((prev) => prev?.map((e) => (e.id === id ? { ...e, ...updated } : e)) ?? null);
       setPayroll(await getPayrollPreview(filters.from, filters.to, filters.repId));
     } catch (err: any) {
-      setError(err?.message || (isFr ? 'Échec du reversement' : 'Reverse failed'));
+      toast.error(err?.message || (isFr ? 'Échec du reversement' : 'Reverse failed'));
     } finally {
       setActionLoading(null);
     }
@@ -141,9 +146,45 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
       const p = await getPayrollPreview(filters.from, filters.to, filters.repId);
       setPayroll(p);
     } catch (err: any) {
-      setError(err?.message || (isFr ? 'Échec du versement' : 'Mark paid failed'));
+      toast.error(err?.message || (isFr ? 'Échec du versement' : 'Mark paid failed'));
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleUnmarkPaid = async (id: string) => {
+    const ok = await confirmer({
+      title: isFr ? 'Annuler ce versement ?' : 'Undo this payout?',
+      message: isFr
+        ? 'La commission redevient « approuvée » (à verser). À utiliser seulement si elle a été marquée versée par erreur.'
+        : 'The commission goes back to “approved” (to pay). Only use this if it was marked paid by mistake.',
+      confirmLabel: isFr ? 'Annuler le versement' : 'Undo payout',
+    });
+    if (!ok) return;
+    setActionLoading(id);
+    try {
+      const updated = await unmarkCommissionPaid(id);
+      setEntries((prev) => prev?.map((e) => (e.id === id ? { ...e, ...updated } : e)) ?? null);
+      setPayroll(await getPayrollPreview(filters.from, filters.to, filters.repId));
+    } catch (err: any) {
+      toast.error(err?.message || (isFr ? "Échec de l'annulation" : 'Undo failed'));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const [exportEnCours, setExportEnCours] = useState(false);
+  const exporter = async () => {
+    setExportEnCours(true);
+    try {
+      await telechargerExportCommissions({
+        from: filters.from, to: filters.to, userId: filters.repId,
+        status: filters.status === 'all' ? undefined : filters.status, lang: isFr ? 'fr' : 'en',
+      });
+    } catch (err: any) {
+      toast.error(err?.message || (isFr ? "Échec de l'export" : 'Export failed'));
+    } finally {
+      setExportEnCours(false);
     }
   };
 
@@ -206,6 +247,11 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
   return (
     <div className="space-y-6">
       <CommissionFilters value={filters} onChange={setFilters} reps={repOptions} />
+      <div className="-mt-3 flex justify-end">
+        <Button variant="outline" size="sm" onClick={() => void exporter()} disabled={exportEnCours}>
+          {exportEnCours ? (isFr ? 'Export…' : 'Exporting…') : filters.repId ? (isFr ? 'Relevé du représentant (CSV)' : 'Rep statement (CSV)') : (isFr ? 'Exporter (CSV)' : 'Export (CSV)')}
+        </Button>
+      </div>
 
       {loading && (
         <div className="flex items-center justify-center py-12">
@@ -294,6 +340,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
                 onApprove={handleApprove}
                 onReverse={handleReverse}
                 onMarkPaid={handleMarkPaid}
+                onUnmarkPaid={handleUnmarkPaid}
                 timeZone={payroll?.timezone}
               />
             </CardContent>

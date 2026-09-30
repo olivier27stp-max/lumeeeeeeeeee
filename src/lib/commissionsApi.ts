@@ -102,6 +102,33 @@ export function markCommissionPaid(entryId: string): Promise<FsCommissionEntry> 
   return apiFetch(`/commissions/${entryId}/mark-paid`, { method: 'POST' });
 }
 
+/** « Annuler le versement » d'une commission versée par erreur. */
+export function unmarkCommissionPaid(entryId: string): Promise<FsCommissionEntry> {
+  return apiFetch(`/commissions/${entryId}/unmark-paid`, { method: 'POST' });
+}
+
+/**
+ * Télécharge l'export CSV (page) ou le relevé d'un rep (userId). Le serveur
+ * limite un non-admin à ses propres commissions.
+ */
+export async function telechargerExportCommissions(options: { from: string; to: string; userId?: string; status?: string; lang: 'fr' | 'en' }): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE}/commissions/export.csv${qs({ from: options.from, to: options.to, userId: options.userId, status: options.status, lang: options.lang })}`, { headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error ?? `HTTP ${res.status}`);
+  }
+  const nom = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'commissions.csv';
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nom;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function reverseCommission(entryId: string, reason?: string): Promise<FsCommissionEntry> {
   return apiFetch(`/commissions/${entryId}/reverse`, {
     method: 'POST',

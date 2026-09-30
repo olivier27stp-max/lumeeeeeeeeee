@@ -16,10 +16,29 @@ import {
   createCommissionRule,
   getPayrollPreview,
   markCommissionPaid,
+  unmarkCommissionPaid,
   generateCommissionsForInvoice,
   projectCommissionForJob,
   voidProjectedCommissionForJob,
+  toutesLesEntrees,
+  enrichirEntrees,
 } from '../lib/field-sales/commission-engine';
+import { exigerPeriodeOuverte, PeriodeVerrouillee } from '../lib/field-sales/commission-verrou';
+import { totauxCommissions, enCents } from '../lib/field-sales/commission-periode';
+import { fuseauOrg } from '../lib/automations-fuseau-org';
+import { toLocalDate } from '../lib/reports/dates';
+import { csvCell, CSV_BOM } from '../lib/reports/csv';
+
+/** Réponse d'erreur : 409 lisible pour une période versée, sinon erreur sûre. */
+function erreurCommission(res: any, err: unknown) {
+  if (err instanceof PeriodeVerrouillee) {
+    return res.status(409).json({
+      error: `Période de paie déjà versée (du ${err.periode.debut} au ${err.periode.fin}) : cette commission est verrouillée. Toute correction passe par la période suivante.`,
+      code: 'periode_verrouillee', periode: err.periode,
+    });
+  }
+  return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+}
 
 const router = Router();
 router.use(maxBodySize());
@@ -199,12 +218,32 @@ router.post('/commissions/:id/mark-paid', async (req, res) => {
   if (!auth) return;
   try {
     const sc = getServiceClient();
+    await exigerPeriodeOuverte(sc, auth.orgId, req.params.id);
     const entry = await markCommissionPaid(sc, auth.orgId, req.params.id);
     await tracer(sc, auth, req, 'commission.paid', { type: 'fs_commission_entry', id: req.params.id },
       { status: 'approved' }, { status: 'paid', amount: entry?.amount, user_id: entry?.user_id, paid_at: entry?.paid_at });
     res.json(entry);
   } catch (err: any) {
-    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+    return erreurCommission(res, err);
+  }
+});
+
+// POST /api/commissions/:id/unmark-paid (admin) — « Annuler le versement » d'une
+// commission versée par erreur. Refusé si sa période de paie est versée.
+router.post('/commissions/:id/unmark-paid', async (req, res) => {
+  const auth = await requireAdmin(req, res);
+  if (!auth) return;
+  try {
+    const sc = getServiceClient();
+    await exigerPeriodeOuverte(sc, auth.orgId, req.params.id);
+    const { data: avant } = await sc.from('fs_commission_entries').select('status, paid_at, amount, user_id')
+      .eq('id', req.params.id).eq('org_id', auth.orgId).maybeSingle();
+    const entry = await unmarkCommissionPaid(sc, auth.orgId, req.params.id);
+    await tracer(sc, auth, req, 'commission.unpaid', { type: 'fs_commission_entry', id: req.params.id },
+      avant, { status: 'approved', paid_at: null });
+    res.json(entry);
+  } catch (err: any) {
+    return erreurCommission(res, err);
   }
 });
 
@@ -215,12 +254,13 @@ router.post('/commissions/:id/approve', async (req, res) => {
 
   try {
     const sc = getServiceClient();
+    await exigerPeriodeOuverte(sc, auth.orgId, req.params.id);
     const entry = await approveCommission(sc, auth.orgId, req.params.id, auth.user.id);
     await tracer(sc, auth, req, 'commission.approved', { type: 'fs_commission_entry', id: req.params.id },
       { status: 'pending' }, { status: 'approved', amount: entry?.amount, user_id: entry?.user_id });
     res.json(entry);
   } catch (err: any) {
-    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+    return erreurCommission(res, err);
   }
 });
 
@@ -233,6 +273,7 @@ router.post('/commissions/:id/reverse', validate(commissionReverseSchema), async
 
   try {
     const sc = getServiceClient();
+    await exigerPeriodeOuverte(sc, auth.orgId, req.params.id);
     const { data: avant } = await sc.from('fs_commission_entries').select('status, amount, user_id')
       .eq('id', req.params.id).eq('org_id', auth.orgId).maybeSingle();
     const entry = await reverseCommission(sc, auth.orgId, req.params.id, reason);
@@ -240,7 +281,7 @@ router.post('/commissions/:id/reverse', validate(commissionReverseSchema), async
       avant, { status: 'reversed', reason });
     res.json(entry);
   } catch (err: any) {
-    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+    return erreurCommission(res, err);
   }
 });
 
@@ -459,11 +500,76 @@ router.put('/commissions/settings', validate(commissionSettingsSchema), async (r
     if (reversal_policy) payload.reversal_policy = reversal_policy;
     if (default_rule_id !== undefined) payload.default_rule_id = default_rule_id;
     const { data, error } = await sc.from('commission_settings').upsert(payload, { onConflict: 'org_id' }).select().single();
+    // « Reprendre » exige la migration 20261005100400 : tant qu'elle n'est pas
+    // appliquée, la contrainte de la base refuse la valeur — on le dit clairement
+    // au lieu d'un « Data validation failed » incompréhensible.
+    if (error && error.code === '23514' && reversal_policy === 'clawback') {
+      return res.status(409).json({
+        error: 'L’option « Reprendre » sera disponible après la prochaine mise à jour de la base. Les autres options fonctionnent déjà.',
+        code: 'clawback_indisponible',
+      });
+    }
     if (error) throw error;
     await tracer(sc, auth, req, 'commission_settings.updated', { type: 'commission_settings', id: null }, avant, data);
     res.json(data);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+  }
+});
+
+// GET /api/commissions/export.csv?from=&to=&userId=&status=&lang=fr|en
+// Export de la page, et « relevé » d'un rep quand userId est donné. Un non-admin
+// n'exporte QUE ses commissions (même portée que la page). Toutes les lignes de
+// la période (pas de plafond de 1 000), plus les totaux en pied de fichier.
+router.get('/commissions/export.csv', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const from = req.query.from as string | undefined;
+  const to = req.query.to as string | undefined;
+  if ((from && !DATE_SEULE.test(from)) || (to && !DATE_SEULE.test(to)) || (!!from !== !!to)) {
+    return res.status(400).json({ error: 'from and to must both be YYYY-MM-DD dates.' });
+  }
+  const fr = req.query.lang !== 'en';
+  try {
+    const sc = getServiceClient();
+    const isAdmin = await isOrgAdminOrOwner(sc, auth.user.id, auth.orgId);
+    const userId = isAdmin ? (req.query.userId as string | undefined) || undefined : auth.user.id;
+    const status = typeof req.query.status === 'string' && ['pending', 'approved', 'paid', 'reversed'].includes(req.query.status) ? req.query.status : undefined;
+    const tz = await fuseauOrg(sc, auth.orgId);
+    const brutes = await toutesLesEntrees(sc, auth.orgId, '*', { userId, status, dateRange: from && to ? { from, to } : undefined });
+    brutes.sort((a, b) => String(a.triggered_at).localeCompare(String(b.triggered_at)));
+    const lignes = await enrichirEntrees(sc, auth.orgId, brutes);
+
+    const statut = (e: any) => (!e.invoice_id && e.status === 'pending')
+      ? (fr ? 'Estimation' : 'Estimate')
+      : ({ pending: fr ? 'En attente' : 'Pending', approved: fr ? 'Approuvé' : 'Approved', paid: fr ? 'Versé' : 'Paid', reversed: fr ? 'Reversé' : 'Reversed' } as Record<string, string>)[e.status] ?? e.status;
+    const dollars = (cents: number) => (cents / 100).toFixed(2); // nombre brut : jamais neutralisé (les reprises sont négatives)
+    const texte = (v: unknown) => csvCell(v);
+    const entete = fr
+      ? ['Gagnée le', 'Représentant', 'Facture', 'Job', 'Client', 'Base avant taxes ($)', 'Commission ($)', 'Statut', 'Versée le', 'Remarque']
+      : ['Earned', 'Rep', 'Invoice', 'Job', 'Client', 'Pre-tax base ($)', 'Commission ($)', 'Status', 'Paid on', 'Note'];
+    let csv = CSV_BOM + entete.map(texte).join(',') + '\r\n';
+    for (const e of lignes as any[]) {
+      csv += [
+        texte(toLocalDate(e.triggered_at, tz)), texte(e.rep_name), texte(e.invoice_number ?? ''), texte(e.job_number ?? ''),
+        texte(e.client_name ?? ''), dollars(enCents(e.base_amount)), dollars(enCents(e.amount)), texte(statut(e)),
+        texte(e.paid_at ? toLocalDate(e.paid_at, tz) : ''), texte(e.reverse_reason || (e.calc_breakdown?.reprise_de ? e.description : '') || ''),
+      ].join(',') + '\r\n';
+    }
+    const t = totauxCommissions(lignes);
+    const pied: Array<[string, number]> = fr
+      ? [['Total dû (en attente + approuvé + versé)', t.du_cents], ['dont versé', t.verse_cents], ['dont à verser', t.en_attente_cents + t.approuve_cents], ['Reprises (non dues)', t.repris_cents], ['Estimations (jobs non payés, non dues)', t.estime_cents]]
+      : [['Total owed (pending + approved + paid)', t.du_cents], ['of which paid', t.verse_cents], ['of which to pay', t.en_attente_cents + t.approuve_cents], ['Reversed (not owed)', t.repris_cents], ['Estimates (unpaid jobs, not owed)', t.estime_cents]];
+    csv += '\r\n';
+    for (const [libelle, cents] of pied) csv += [texte(libelle), '', '', '', '', '', dollars(cents), '', '', ''].join(',') + '\r\n';
+
+    const nom = `commissions${userId ? `-${(lignes[0] as any)?.rep_name ?? 'rep'}`.replace(/[^\w-]+/g, '-') : ''}${from ? `-${from}_${to}` : ''}.csv`;
+    await tracer(sc, auth, req, 'commissions.exported', { type: 'fs_commission_entries', id: null }, null, { from, to, userId: userId ?? null, lignes: lignes.length });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${nom}"`);
+    res.send(csv);
+  } catch (err: any) {
+    return erreurCommission(res, err);
   }
 });
 
