@@ -697,17 +697,32 @@ async function journaliserAction(
   }
 }
 
+/**
+ * Les variables d'un ÉVÉNEMENT ne dépendent pas de la règle : elles étaient
+ * pourtant relues pour chaque règle (réglages de l'entreprise, fiche client,
+ * champs personnalisés — le N+1 T6.2). Résolues une fois par événement ;
+ * chaque règle en reçoit une COPIE, pour qu'une action qui ajoute une
+ * variable (lien de sondage…) ne déborde pas sur la règle suivante.
+ */
+const variablesParEvenement = new WeakMap<CRMEvent, Promise<Record<string, string>>>();
+
+async function variablesDeLEvenement(event: CRMEvent, config: EngineConfig): Promise<Record<string, string>> {
+  let promesse = variablesParEvenement.get(event);
+  if (!promesse) {
+    promesse = resolveEntityVariables(config.supabase, event.orgId, event.entityType, event.entityId);
+    variablesParEvenement.set(event, promesse);
+    // Une lecture ratée ne doit pas être resservie aux règles suivantes.
+    promesse.catch(() => variablesParEvenement.delete(event));
+  }
+  return { ...(await promesse) };
+}
+
 async function executeRuleActions(
   rule: AutomationRule,
   event: CRMEvent,
   config: EngineConfig,
 ) {
-  const vars = await resolveEntityVariables(
-    config.supabase,
-    event.orgId,
-    event.entityType,
-    event.entityId,
-  );
+  const vars = await variablesDeLEvenement(event, config);
 
   const ctx: ActionContext = {
     supabase: config.supabase,
