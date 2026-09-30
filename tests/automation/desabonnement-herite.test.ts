@@ -73,3 +73,33 @@ describe('L3 — « oui » n\'est pas un réabonnement', () => {
     expect(route).toContain('motCleHerite(bodyTrim)');
   });
 });
+
+describe('L2 — un STOP ne coupe que l\'entreprise du numéro qui l\'a reçu', () => {
+  it('numéro connu : seule son entreprise est désabonnée', async () => {
+    const { client, journal } = monde();
+    const r = await appliquerMotCleHerite(client, { telephone: TEL, to: NUMERO_A, genre: 'stop' });
+    expect(r.orgIds).toEqual([ORG_A]);
+    expect(orgsTouchees(journal, 'insert')).toEqual([ORG_A]);
+    // Et les conversations ne sont même pas consultées.
+    expect(requetes(journal, 'conversations')).toHaveLength(0);
+  });
+
+  it('numéro inconnu : prudence, toutes les entreprises en conversation', async () => {
+    const { client, journal } = monde(null);
+    const r = await appliquerMotCleHerite(client, { telephone: TEL, to: '+19995550000', genre: 'stop' });
+    expect(r.orgIds.sort()).toEqual([ORG_A, ORG_B]);
+    expect(orgsTouchees(journal, 'insert').sort()).toEqual([ORG_A, ORG_B]);
+  });
+
+  it('sans numéro destinataire : prudence aussi', async () => {
+    const { client } = monde();
+    const r = await appliquerMotCleHerite(client, { telephone: TEL, to: null, genre: 'stop' });
+    expect(r.orgIds.sort()).toEqual([ORG_A, ORG_B]);
+  });
+
+  it('le STOP est enregistré avec le motif client_stop', async () => {
+    const { client, journal } = monde();
+    await appliquerMotCleHerite(client, { telephone: TEL, to: NUMERO_A, genre: 'stop' });
+    expect(requetes(journal, 'sms_opt_outs', 'insert')[0].valeur).toEqual({ org_id: ORG_A, phone: TEL, reason: 'client_stop' });
+  });
+});

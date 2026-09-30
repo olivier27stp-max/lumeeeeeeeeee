@@ -130,7 +130,11 @@ export function motCleHerite(corps: string | null | undefined): 'stop' | 'start'
  * relèvent du drapeau par canal). Ne lève pas.
  *
  * Portée :
- *   - STOP : toutes les entreprises qui ont une conversation avec ce numéro.
+ *   - STOP : l'entreprise du numéro qui a REÇU le mot (`To`) quand on la
+ *     connaît (audit V2, L2) : répondre STOP à une entreprise ne coupe plus
+ *     les autres. Sinon — numéro inconnu, lecture ratée — toutes celles qui
+ *     ont une conversation avec ce numéro : trop bloquer est un désagrément,
+ *     pas assez est illégal.
  *   - START : SEULEMENT l'entreprise du numéro `To` (L3). Sans elle, rien
  *     n'est levé : réabonner des entreprises auxquelles la personne n'a
  *     jamais écrit START serait un consentement qu'elle n'a pas donné.
@@ -140,9 +144,9 @@ export async function appliquerMotCleHerite(
   p: { telephone: string; to: string | null | undefined; genre: 'stop' | 'start' },
 ): Promise<{ orgIds: string[]; appliques: number }> {
   try {
-    const orgDuTo = p.genre === 'start' ? await orgDuNumeroSms(admin, p.to) : null;
+    const orgDuTo = await orgDuNumeroSms(admin, p.to);
     let orgIds: string[] = orgDuTo ? [orgDuTo] : [];
-    if (p.genre === 'stop') {
+    if (!orgDuTo && p.genre === 'stop') {
       const { data: convos, error } = await admin
         .from('conversations')
         .select('org_id')
