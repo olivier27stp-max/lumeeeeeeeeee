@@ -568,6 +568,28 @@ export async function basculerTacheDeal(tacheId: string, fait: boolean): Promise
 // on n'écrit QUE l'étape. Écrire `won_at` ici produirait une valeur concurrente
 // de celle de la base.
 
+/**
+ * Déplacer des deals vers un AUTRE pipeline, à une étape ouverte de celui-ci.
+ *
+ * Rafba (2026-09-30) : dupliquer un pipeline n'emporte pas les deals — c'est
+ * voulu (un deal = une vente ; le copier doublerait les chiffres et les
+ * envois) — mais rien ne permettait de les DÉPLACER. Le deal garde tout :
+ * client, historique, étiquettes, titre, devis et job liés. La base refuse
+ * une étape d'un autre pipeline (trigger deals_verifier_etape) ; l'historique
+ * et les automatisations de l'étape d'arrivée suivent comme pour un glisser.
+ * Retourne le nombre de deals réellement déplacés (la RLS peut en refuser).
+ */
+export async function deplacerVersPipeline(dealIds: string[], pipelineId: string, etapeId: string): Promise<number> {
+  if (dealIds.length === 0) return 0;
+  const { data, error } = await supabase
+    .from('deals')
+    .update({ pipeline_id: pipelineId, stage_id: etapeId })
+    .in('id', dealIds)
+    .select('id');
+  if (error) throw error;
+  return (data ?? []).length;
+}
+
 export async function deplacerDeal(dealId: string, versEtapeId: string): Promise<void> {
   const { error } = await supabase
     .from('deals')

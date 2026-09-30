@@ -18,7 +18,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  ArrowUpDown, Filter, GripVertical, LayoutGrid, List, Plus, Search, Tag, X,
+  ArrowRightLeft, ArrowUpDown, Filter, GripVertical, LayoutGrid, List, Plus, Search, Tag, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -34,6 +34,7 @@ import type { Condition } from '../../lib/champs/filtres';
 import type { ValeurEnregistree } from '../../lib/champs/types';
 import Modal from '../ui/Modal';
 import { CLASSE_SAISIE, CadreGhl, ChampGhl, ChampRaison, OPTIONS_SOURCE, OPTIONS_STATUT, SectionGhl, type StatutDeal } from './FormulaireDealGhl';
+import ModalChangerPipeline from './ModalChangerPipeline';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
@@ -1675,8 +1676,10 @@ function ListeDeals({ fr, deals, etapes, montants, membres, maintenant, valeurs,
 
 export default function PipelineBoard({
   deals, etapes, montants, membres, chargement, onOuvrir, onDeplacer, onAssigner, onChangement,
-  pipelines, pipelineActif, onChangerPipeline, modeCouleur = 'dot', onCreerPipeline,
+  pipelines, pipelineActif, onChangerPipeline, modeCouleur = 'dot', onCreerPipeline, pipelinesCibles = [],
 }: {
+  /** Pipelines où l'utilisateur peut déplacer des deals (« Autre pipeline… »). */
+  pipelinesCibles?: { id: string; name: string }[];
   /** Ouvre les réglages pour créer un pipeline. Absent = pas le droit. */
   onCreerPipeline?: () => void;
   /** Réglage du pipeline affiché. Par défaut la pastille, comme avant. */
@@ -1747,6 +1750,9 @@ export default function PipelineBoard({
    * objets figés afficherait des cartes périmées dans la barre d'actions.
    */
   const [selection, setSelection] = useState<Set<string>>(new Set());
+  /** La fenêtre « Déplacer vers une autre pipeline » pour la sélection. */
+  const [changerPipeline, setChangerPipeline] = useState(false);
+  const autresPipelines = pipelinesCibles.filter((p) => p.id !== pipelineActif);
   const idLotAssigne = useId();
   const idLotEtape = useId();
 
@@ -2336,6 +2342,21 @@ export default function PipelineBoard({
               </option>
             ))}
           </select>
+
+          {autresPipelines.length > 0 && (
+            <button type="button" onClick={() => setChangerPipeline(true)} className={CLASSE_BOUTON}>
+              <ArrowRightLeft size={13} aria-hidden="true" />
+              {fr ? 'Autre pipeline…' : 'Other pipeline…'}
+            </button>
+          )}
+          <ModalChangerPipeline
+            ouvert={changerPipeline}
+            fr={fr}
+            dealIds={[...selection]}
+            pipelines={autresPipelines}
+            onFermer={() => setChangerPipeline(false)}
+            onDeplace={() => { setChangerPipeline(false); setSelection(new Set()); onChangement?.(); }}
+          />
 
           <button type="button" onClick={() => setLotEtiquette('ajouter')} className={CLASSE_BOUTON}>
             <Tag size={13} aria-hidden="true" />
