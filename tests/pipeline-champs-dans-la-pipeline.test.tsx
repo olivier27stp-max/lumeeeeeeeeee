@@ -265,9 +265,8 @@ describe('vue Liste — colonnes de champs', () => {
 describe('Nouveau deal sur un contact qui a déjà un deal ouvert', () => {
   async function creerAvecValeursParDefaut() {
     await act(async () => { bouton(/nouveau deal/i)!.click(); });
-    await act(async () => { bouton(/nouveau contact/i)!.click(); });
     await laisserRepondre();
-    const lab = [...conteneur.querySelectorAll('label')].find((l) => /Prénom/.test(l.textContent ?? ''));
+    const lab = [...conteneur.querySelectorAll('label')].find((l) => /Contact principal/.test(l.textContent ?? ''));
     const prenom = [...conteneur.querySelectorAll('input')].find((e) => e.id === lab?.getAttribute('for')) as HTMLInputElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(prenom, 'Alice');

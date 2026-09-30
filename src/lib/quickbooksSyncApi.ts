@@ -83,3 +83,33 @@ export const sendQboHistory = (from: string) =>
 export const retryQboSync = (id?: string) =>
   call<{ retried: number }>('/retry', { method: 'POST', body: JSON.stringify(id ? { id } : {}) });
 export const runQboSyncNow = () => call<{ processed: number }>('/run', { method: 'POST' });
+
+// ── Traçabilité d'une facture (fiche facture) ──────────────────
+export interface QboEntityTrace {
+  qbo_id: string | null;
+  qbo_doc_number: string | null;
+  qbo_state: 'active' | 'voided' | 'deleted' | null;
+  last_synced_at: string | null;
+  queue_status: 'pending' | 'processing' | 'done' | 'error' | 'skipped' | null;
+  message: string | null;
+  queued_at: string | null;
+}
+
+export interface QboInvoiceTrace {
+  connected: boolean;
+  company: string | null;
+  invoice: QboEntityTrace;
+  payments: Array<QboEntityTrace & {
+    id: string;
+    amount_cents: number;
+    status: string;
+    provider: string | null;
+    method: string | null;
+    payment_date: string | null;
+  }>;
+}
+
+export const getQboInvoiceTrace = (invoiceId: string) =>
+  call<QboInvoiceTrace>(`/invoice/${encodeURIComponent(invoiceId)}`);
+export const resendQboInvoice = (invoiceId: string) =>
+  call<QboInvoiceTrace>(`/invoice/${encodeURIComponent(invoiceId)}/resend`, { method: 'POST' });

@@ -58,6 +58,8 @@ export interface Deal {
   lost_from_stage_id: string | null;
   /** Date de fermeture visée — le mois de la chronologie. `null` = sans date. */
   expected_close_date: string | null;
+  /** Titre du deal (GHL « Opportunity name ») ; vide = on montre le nom du client. */
+  title?: string | null;
   /** Porte-à-porte : la porte d'où vient ce deal, et le rep qui l'a ouverte. */
   pin_id: string | null;
   field_rep_id: string | null;
@@ -278,7 +280,7 @@ export async function fetchDeals(pipelineId: string): Promise<Deal[]> {
       'id,pipeline_id,stage_id,client_id,assigned_user_id,source,' +
       'utm_source,utm_medium,utm_campaign,utm_content,fbclid,job_id,quote_id,' +
       'first_contacted_at,last_activity_at,stage_entered_at,won_at,lost_at,' +
-      'lost_reason,lost_from_stage_id,expected_close_date,pin_id,field_rep_id,created_at,' +
+      'lost_reason,lost_from_stage_id,expected_close_date,pin_id,field_rep_id,created_at,title,' +
       'client:clients!deals_client_same_org(first_name,last_name,company,email,phone,address)',
     )
     .eq('pipeline_id', pipelineId)
@@ -669,6 +671,13 @@ export async function lierDevis(dealId: string, quoteId: string, clientId: strin
 }
 
 /** Canal d'acquisition du deal. `deals.source` est du texte libre : on écrit ce qu'on reçoit. */
+/** Titre du deal ; vide = aucun titre (la carte montre le nom du client). */
+export async function majTitreDeal(dealId: string, titre: string | null): Promise<void> {
+  const t = (titre ?? '').trim();
+  const { error } = await supabase.from('deals').update({ title: t || null }).eq('id', dealId);
+  if (error) throw error;
+}
+
 export async function majSourceDuDeal(dealId: string, source: string): Promise<void> {
   const { error } = await supabase.from('deals').update({ source }).eq('id', dealId);
   if (error) throw error;
@@ -685,6 +694,8 @@ export interface ContactClient {
   email: string | null;
   phone: string | null;
   address: string | null;
+  /** « Entreprise » du formulaire du deal (GHL : Business name). */
+  company: string | null;
 }
 
 /**

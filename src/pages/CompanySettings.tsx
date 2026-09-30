@@ -796,7 +796,7 @@ export default function CompanySettings() {
 
           <div>
             <label htmlFor={`${id}-revenue-goal`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
-              {language === 'fr' ? 'Objectif de revenus ($)' : 'Revenue Goal ($)'}
+              {language === 'fr' ? 'Objectif de revenu annuel ($)' : 'Annual revenue goal ($)'}
             </label>
             <input id={`${id}-revenue-goal`}
               type="number"
@@ -812,8 +812,8 @@ export default function CompanySettings() {
             />
             <p className="text-[12px] text-text-tertiary mt-1">
               {language === 'fr'
-                ? 'Le diagramme d\'objectif dans Insights affichera la progression par rapport à ce montant.'
-                : 'The goal chart in Insights will display progress against this amount.'}
+                ? 'Pour l\'année complète. Lumi le ramène au mois ou aux 30 derniers jours quand tu lui demandes où tu en es.'
+                : 'For the full year. Lumi prorates it to the month or the last 30 days when you ask how you are tracking.'}
             </p>
           </div>
         </div>
