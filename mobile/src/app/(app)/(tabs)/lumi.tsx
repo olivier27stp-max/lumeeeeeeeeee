@@ -40,6 +40,8 @@ import { CarteAutorisation, FichesLiees } from '@/components/lumi/CarteAutorisat
 import { CarteRapport } from '@/components/lumi/CarteRapport';
 import { FournisseurFiches, TexteLumi } from '@/components/lumi/TexteLumi';
 import { HistoriqueDrawer } from '@/components/lumi/HistoriqueDrawer';
+import { HaloLumi, useAnimationsReduites } from '@/components/lumi/AnimationsLumi';
+import { RobotLumi } from '@/components/lumi/RobotLumi';
 import {
   ErreurLumi,
   chargerConversationLumi,
@@ -68,7 +70,7 @@ import { useAuth } from '@/lib/auth';
 import { useTranslation } from '@/lib/i18n';
 import { SOURCES_OUTILS } from '@/lib/lumi/deepLinks';
 import { fmtDollars } from '@/lib/lumi/libelles';
-import { ThemeLumiProvider, useThemeLumi } from '@/lib/lumi/theme';
+import { useThemeLumi } from '@/lib/lumi/theme';
 import { MAX_SECONDES, useDictee } from '@/lib/lumi/useDictee';
 import { useLectureVocale } from '@/lib/lumi/useLectureVocale';
 import { useMembership } from '@/lib/membership-context';
@@ -106,6 +108,7 @@ function EcranLumi() {
   const fr = language === 'fr';
   const lang: 'fr' | 'en' = fr ? 'fr' : 'en';
   const { c, choix, setChoix } = useThemeLumi();
+  const animReduites = useAnimationsReduites();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { session } = useAuth();
@@ -692,7 +695,7 @@ function EcranLumi() {
 
         <View style={{ flex: 1, alignItems: 'center' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <IconeLumi nom="lumi" couleur={c.lumi} taille={16} />
+            <RobotLumi couleur={c.texte} taille={18} />
             <Text style={{ fontSize: 17, fontWeight: '700', color: c.texte }}>Lumi</Text>
           </View>
           {!!budget && budget.includes_ai && (
@@ -749,6 +752,7 @@ function EcranLumi() {
           >
             {items.length === 0 && (
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingVertical: 24 }}>
+                <RobotLumi couleur={c.texte} taille={56} />
                 <Pressable
                   onPress={basculerMicro}
                   disabled={bloque || horsLigne}
@@ -776,7 +780,6 @@ function EcranLumi() {
                     {ecoute ? `${fr ? 'Je t’écoute' : 'Listening'} · ${chrono}` : fr ? 'Je transcris…' : 'Transcribing…'}
                   </Text>
                 )}
-                <Text style={{ fontSize: 18, fontWeight: '600', color: c.texte }}>Lumi</Text>
                 <Text style={{ fontSize: 13, lineHeight: 19, color: c.texteTenu, textAlign: 'center', maxWidth: 320 }}>
                   {fr
                     ? 'Je connais tout ton espace de travail. Pose une question, ou demande-moi de préparer un devis, une facture, une job ou un message : tu confirmes avant chaque action.'
@@ -841,18 +844,22 @@ function EcranLumi() {
               return (
                 <Pressable key={m.id} onLongPress={() => !m.enCours && m.text && menuMessage(m)} accessibilityRole="text">
                   <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <View
-                      style={{
-                        width: 26,
-                        height: 26,
-                        borderRadius: 13,
-                        backgroundColor: `${c.lumi}1F`,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginTop: 2,
-                      }}
-                    >
-                      <IconeLumi nom="lumi" couleur={c.lumi} taille={13} />
+                    <View style={{ marginTop: 2 }}>
+                      {/* Le halo bat autour du robot pendant qu'il réfléchit — `.lumi-halo` du web. */}
+                      <HaloLumi actif={reflechit} couleur={c.lumi} taille={26} reduit={animReduites}>
+                        <View
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: 13,
+                            backgroundColor: `${c.lumi}1F`,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <RobotLumi couleur={c.texte} taille={17} />
+                        </View>
+                      </HaloLumi>
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       {(reflechit || etapes.length > 0) && (
@@ -1139,7 +1146,6 @@ function EcranLumi() {
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {(
                 [
-                  { id: 'auto' as const, fr: 'Comme le téléphone', en: 'Match phone' },
                   { id: 'clair' as const, fr: 'Clair', en: 'Light' },
                   { id: 'sombre' as const, fr: 'Sombre', en: 'Dark' },
                 ]
@@ -1173,9 +1179,7 @@ function EcranLumi() {
 }
 
 export default function LumiScreen() {
-  return (
-    <ThemeLumiProvider>
-      <EcranLumi />
-    </ThemeLumiProvider>
-  );
+  // Le thème est fourni à la racine (src/app/_layout.tsx) depuis qu'il vaut pour
+  // toute l'app : plus rien à envelopper ici.
+  return <EcranLumi />;
 }

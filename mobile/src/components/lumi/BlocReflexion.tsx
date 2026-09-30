@@ -8,6 +8,8 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
+import { DisqueLumi, TexteAnime, useAnimationsReduites } from './AnimationsLumi';
+
 import type { UsageLumi } from '@/lib/api/lumi';
 import { fmtDollars, fmtTokens, libelleOutil, nomModele } from '@/lib/lumi/libelles';
 import { useThemeLumi } from '@/lib/lumi/theme';
@@ -33,6 +35,7 @@ export function BlocReflexion({
   fr: boolean;
 }) {
   const { c } = useThemeLumi();
+  const reduit = useAnimationsReduites();
   // Ouvert pendant la réflexion, replié ensuite — comme au web.
   const [ouvertManuel, setOuvertManuel] = useState<boolean | null>(null);
   const ouvert = ouvertManuel ?? reflechit;
@@ -47,14 +50,10 @@ export function BlocReflexion({
         accessibilityLabel={reflechit ? (fr ? 'Lumi réfléchit' : 'Lumi is thinking') : fr ? 'Détail de la réflexion' : 'Thinking details'}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28 }}
       >
-        {reflechit ? (
-          <ActivityIndicator size="small" color={c.lumi} />
-        ) : (
-          <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: c.lumi, backgroundColor: c.lumi }} />
-        )}
-        <Text style={{ fontSize: 12.5, fontWeight: '500', color: reflechit ? c.lumi : c.texteDoux }}>
+        <DisqueLumi actif={reflechit} couleur={c.lumi} reduit={reduit} />
+        <TexteAnime actif={reflechit} reduit={reduit} style={{ fontSize: 12.5, fontWeight: '500', color: reflechit ? c.lumi : c.texteDoux }}>
           {reflechit ? (fr ? 'Lumi réfléchit…' : 'Lumi is thinking…') : `${fr ? 'Réflexion' : 'Thinking'}${secondes ? ` · ${secondes} s` : ''}`}
-        </Text>
+        </TexteAnime>
         {!reflechit && !!usage && (
           <Text style={{ fontSize: 11, color: c.texteTenu }}>
             {interne

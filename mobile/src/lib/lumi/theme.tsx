@@ -1,14 +1,21 @@
 /**
- * Thème clair / sombre — pour l'instant utilisé par l'écran Lumi seulement.
+ * Thème clair / sombre de TOUTE l'app (2026-09-30).
  *
- * Le reste de l'app est écrit en classes nativewind claires codées en dur
- * (`bg-white`, `text-ink`…) : lui donner un mode sombre voudrait dire reprendre
- * 208 fichiers, ce qui dépasse le mandat. Lumi, lui, est un écran neuf : il
- * lit sa palette ici et fonctionne dans les deux thèmes.
+ * Avant, ce fichier ne servait qu'à l'écran Lumi, faute de quoi on aurait eu
+ * « un Lumi noir au milieu d'une app blanche ». Le reste de l'app est maintenant
+ * peint avec des jetons sémantiques dont les valeurs vivent dans
+ * src/global.css (:root / .dark:root) — les MÊMES couleurs que les palettes
+ * CLAIR/SOMBRE ci-dessous, pour qu'il n'existe qu'une vérité.
  *
- * Le réglage suit l'apparence du TÉLÉPHONE par défaut (`useColorScheme`, qui
- * demande `userInterfaceStyle: "automatic"` dans app.json), et l'utilisateur
- * peut le forcer depuis l'en-tête de Lumi ; son choix est gardé localement.
+ * Ce fournisseur est monté à la RACINE (src/app/_layout.tsx) et fait deux
+ * choses :
+ *   1. il sert la palette aux endroits qui ont besoin d'une couleur en valeur
+ *      (props `tintColor`, `style={{…}}`, cartes, graphiques) via useThemeLumi() ;
+ *   2. il pousse le choix dans nativewind (`colorScheme`), ce qui permute les
+ *      variables CSS et donc toutes les classes `bg-surface`, `text-ink`…
+ *
+ * Par défaut CLAIR, volontairement : on ne suit pas l'apparence du téléphone
+ * tant que l'utilisateur n'a pas choisi. Le choix est gardé localement.
  *
  * ⚠️ Le web garde SA préférence dans `localStorage['lume-theme']` — donc dans
  * le navigateur, pas sur le compte. Il n'y a rien à lire depuis le téléphone.
@@ -17,10 +24,10 @@
  * changement CÔTÉ WEB, hors mandat, en attente d'un OK.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { colorScheme } from 'nativewind';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { useColorScheme } from 'react-native';
 
-export type ChoixTheme = 'auto' | 'clair' | 'sombre';
+export type ChoixTheme = 'clair' | 'sombre';
 const CLE = 'lume-theme-lumi';
 
 export interface PaletteLumi {
@@ -39,7 +46,8 @@ export interface PaletteLumi {
   /** Couleur d'action (noir en clair, blanc en sombre) + son texte. */
   action: string;
   texteSurAction: string;
-  /** Vert de Lumi, identique au web (#3FAF97). */
+  /** Accent de Lumi = l'encre de l'app (#171717). Le web a un vert à lui ;
+   *  l'app mobile est monochrome, et Lumi doit suivre l'app, pas le web. */
   lumi: string;
   danger: string;
   dangerFond: string;
@@ -61,12 +69,12 @@ const CLAIR: PaletteLumi = {
   bordureForte: '#D4D4D4',
   action: '#171717',
   texteSurAction: '#FFFFFF',
-  lumi: '#3FAF97',
+  lumi: '#171717',
   danger: '#DC2626',
   dangerFond: '#FEF2F2',
   succes: '#059669',
   succesFond: '#ECFDF5',
-  attente: '#B45309',
+  attente: '#D97706',
   attenteFond: '#FFFBEB',
 };
 
@@ -82,7 +90,7 @@ const SOMBRE: PaletteLumi = {
   bordureForte: '#3A3A3F',
   action: '#F5F5F5',
   texteSurAction: '#0B0B0C',
-  lumi: '#4FC4AA',
+  lumi: '#F5F5F5',
   danger: '#F87171',
   dangerFond: '#2A1416',
   succes: '#34D399',
@@ -97,19 +105,18 @@ interface ValeurTheme {
   setChoix: (v: ChoixTheme) => void;
 }
 
-const Ctx = createContext<ValeurTheme>({ c: CLAIR, choix: 'auto', setChoix: () => {} });
+const Ctx = createContext<ValeurTheme>({ c: CLAIR, choix: 'clair', setChoix: () => {} });
 
 export function ThemeLumiProvider({ children }: { children: React.ReactNode }) {
-  const systeme = useColorScheme();
-  const [choix, setChoixState] = useState<ChoixTheme>('auto');
+  const [choix, setChoixState] = useState<ChoixTheme>('clair');
 
   useEffect(() => {
     AsyncStorage.getItem(CLE)
       .then((v) => {
-        if (v === 'auto' || v === 'clair' || v === 'sombre') setChoixState(v);
+        if (v === 'clair' || v === 'sombre') setChoixState(v);
       })
       .catch(() => {
-        /* stockage indisponible : on reste sur « auto » */
+        /* stockage indisponible : on reste en clair */
       });
   }, []);
 
@@ -118,10 +125,13 @@ export function ThemeLumiProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(CLE, v).catch((e) => console.error('[lumi] thème non enregistré', e));
   };
 
-  const valeur = useMemo<ValeurTheme>(() => {
-    const sombre = choix === 'sombre' || (choix === 'auto' && systeme === 'dark');
-    return { c: sombre ? SOMBRE : CLAIR, choix, setChoix };
-  }, [choix, systeme]);
+  // Les classes Tailwind suivent le même choix : nativewind pose (ou retire) la
+  // classe `dark`, ce qui permute les variables de global.css.
+  useEffect(() => {
+    colorScheme.set(choix === 'sombre' ? 'dark' : 'light');
+  }, [choix]);
+
+  const valeur = useMemo<ValeurTheme>(() => ({ c: choix === 'sombre' ? SOMBRE : CLAIR, choix, setChoix }), [choix]);
 
   return <Ctx.Provider value={valeur}>{children}</Ctx.Provider>;
 }
