@@ -84,7 +84,8 @@ describe('P2-9 — la pause se voit sur chaque ligne', () => {
 
 describe('P2-10 (révisé le 2026-09-28) — construire avec Lumi est déduit des crédits Lumi, et on le dit', () => {
   it('le serveur mesure le coût, sous une source distincte', () => {
-    expect(lire('server/routes/automation-rules.ts')).toMatch(/cout_cents: resultat\.coutCents \?\? null/);
+    // Crédits Lumi (2026-09-30) : le coût est mesuré et débité, mais aucun montant en $ ne repart vers l'écran.
+    expect(lire('server/routes/automation-rules.ts')).not.toMatch(/cout_cents/);
     expect(lire('server/lib/lumi/generer-parcours.ts')).toContain("source: 'automatisations'");
   });
 
