@@ -1375,8 +1375,17 @@ app.listen(port, '0.0.0.0', () => {
     console.warn('');
   }
 
+  /* LUME_TACHES_DE_FOND=off : API sans AUCUNE tâche de fond (file planifiée,
+     crons, relevés). Pour une API locale branchée sur staging (tests
+     d'interface de npm run test:automations) : sans ça, elle dépile les
+     tâches de TOUTES les entreprises de staging — c'est ainsi qu'une API de
+     test avait envoyé ~80 courriels le 2026-09-29. Le moteur d'événements,
+     lui, reste branché : il ne réagit qu'aux requêtes reçues. */
+  const tachesDeFond = String(process.env.LUME_TACHES_DE_FOND || '').trim().toLowerCase() !== 'off';
+  if (!tachesDeFond) logger.warn('[demarrage] LUME_TACHES_DE_FOND=off — aucune tâche de fond ne tourne sur cette instance.');
+
   // Start automation scheduler
-  startScheduler(supabaseUrl, supabaseServiceRoleKey, {
+  if (tachesDeFond) startScheduler(supabaseUrl, supabaseServiceRoleKey, {
     client: twilioClient,
     phoneNumber: twilioPhoneNumber,
   });
@@ -1387,7 +1396,7 @@ app.listen(port, '0.0.0.0', () => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
     // Start recurring jobs scheduler
-    startRecurringJobScheduler(serviceClient);
+    if (tachesDeFond) startRecurringJobScheduler(serviceClient);
 
     initAutomationEngine({
       supabase: serviceClient,
@@ -1402,7 +1411,7 @@ app.listen(port, '0.0.0.0', () => {
   }
 
   // ── Cron jobs — wrapped in advisory locks so only one replica runs each tick ──
-  import('./lib/advisory-lock').then(({ withAdvisoryLock }) => {
+  if (tachesDeFond) import('./lib/advisory-lock').then(({ withAdvisoryLock }) => {
     // Automated alerts — scan every 30 minutes
     import('./lib/alerts-engine').then(({ runAlertScan }) => {
       setInterval(async () => {

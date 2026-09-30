@@ -75,7 +75,7 @@ describe('tâches interrompues — plus de blocage définitif', () => {
 
   it('la récupération tourne avant chaque traitement', () => {
     const proc = engine.slice(engine.indexOf('export async function processScheduledTasks'));
-    const recup = proc.indexOf('await recupererTachesFigees(supabase)');
+    const recup = proc.indexOf('await recupererTachesFigees(supabase');
     const fetch = proc.indexOf("eq('status', 'pending')");
     expect(recup).toBeGreaterThan(-1);
     expect(fetch).toBeGreaterThan(recup);

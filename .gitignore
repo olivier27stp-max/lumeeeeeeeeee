@@ -54,3 +54,5 @@ scripts/qa/rapports/
 tests/stats/.resultats/
 test-results/
 playwright-report/
+# Sortie de npm run test:automations
+/rapports/

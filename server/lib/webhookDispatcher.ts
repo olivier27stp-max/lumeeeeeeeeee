@@ -200,6 +200,7 @@ export async function attemptDelivery(deliveryId: string): Promise<{
         'X-Lume-Delivery': deliveryId,
         'X-Lume-Signature': signature,
       },
+      orgId: (delivery as DeliveryRow).org_id ?? endpoint.org_id,
     });
     httpStatus = resp.status;
     try {

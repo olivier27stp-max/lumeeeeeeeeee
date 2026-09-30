@@ -4,6 +4,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { contexteEnvoi } from '../bac-a-sable';
 import { insertTargetedNotifications } from '../notificationHelpers';
 import { annoncerEtiquette } from '../etiquettes';
 import { executerMajChamp } from '../champs/automatisations';
@@ -2736,8 +2737,8 @@ export async function executeWebhook(
     }, ctx.cleIdempotence
       // La même clé à chaque reprise : le destinataire peut reconnaître un
       // renvoi (audit V2, C24).
-      ? { entetes: { 'Idempotency-Key': ctx.cleIdempotence } }
-      : {});
+      ? { entetes: { 'Idempotency-Key': ctx.cleIdempotence }, orgId: ctx.orgId }
+      : { orgId: ctx.orgId });
     if (!reponse.ok) {
       return { success: false, error: `Le serveur distant a répondu ${reponse.status}.` };
     }
@@ -2996,6 +2997,17 @@ export async function executeEnvoyerSoumission(
 }
 
 export async function executeAction(
+  actionType: ActionType,
+  config: Record<string, any>,
+  vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  // Tout envoi fait sous cette action connaît son entreprise : le bac à sable
+  // (server/lib/bac-a-sable.ts) s'en sert pour un texto qui ne la porte pas.
+  return contexteEnvoi.run({ orgId: ctx.orgId ?? null }, () => aiguillerAction(actionType, config, vars, ctx));
+}
+
+async function aiguillerAction(
   actionType: ActionType,
   config: Record<string, any>,
   vars: Record<string, string>,
