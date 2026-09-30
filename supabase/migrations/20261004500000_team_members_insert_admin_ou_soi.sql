@@ -1,4 +1,4 @@
--- PROPOSÉE — NON APPLIQUÉE (audit des outils de Lumi, 2026-09-30). Attend l'accord de Rafba.
+-- Audit des outils de Lumi (2026-09-30) — approuvée par Rafba le 2026-09-30.
 --
 -- Constat : team_members_insert_org laisse TOUT membre (technicien, vendeur)
 -- insérer une fiche d'équipe pour n'importe quel user_id de l'org (WITH CHECK

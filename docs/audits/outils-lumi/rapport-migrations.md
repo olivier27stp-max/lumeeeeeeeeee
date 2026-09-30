@@ -4,7 +4,7 @@ Aucune migration de l'audit n'a été appliquée, aucun préréglage de rôle mo
 
 | Fichier | Effet | Risque | Vérification prévue |
 |---|---|---|---|
-| `supabase/migrations/proposed/20261004500000_team_members_insert_admin_ou_soi.sql` | INSERT sur `team_members` réservé aux admins, ou à soi-même (fiche de profil) | Faible : les deux chemins d'insertion du client sont conservés ; les routes serveur écrivent en service_role | Staging : un technicien ne peut plus créer la fiche d'un autre (42501) ; puis `check:broken-objects` + `check:db-coherence` |
+| `supabase/migrations/20261004500000_team_members_insert_admin_ou_soi.sql` — **APPLIQUÉE staging + prod le 2026-09-30 (accord de Rafba)** | INSERT sur `team_members` réservé aux admins, ou à soi-même | Vérifié sur staging : un vendeur ne crée plus la fiche d’un autre (refus RLS), sa propre fiche passe ; politique identique en prod ; checks sans nouvel écart | — |
 
 À décider avant d'écrire (pas de fichier tant que la décision n'est pas prise) :
 
