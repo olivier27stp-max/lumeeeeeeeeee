@@ -3540,7 +3540,9 @@ export async function enregistrerPaiementManuel(
     currency: facture.currency || 'CAD',
     payment_date: new Date().toISOString(),
     paid_at: new Date().toISOString(),
-    notes: 'Enregistré par Lumi',
+    // Pas de `notes` : la colonne n'existe ni en prod ni sur staging
+    // (20260928120000 jamais appliquée) — une seule clé inconnue fait
+    // échouer toute l'insertion.
   });
   if (error) throw error;
 }
