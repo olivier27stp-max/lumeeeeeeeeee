@@ -83,10 +83,6 @@ export default function HomeApercu() {
     frameRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
   }, [reduceMotion]);
 
-  const facts = fr
-    ? ['Support FR / EN']
-    : ['Support in FR / EN'];
-
   const before = fr
     ? [
         ['7 h', 'Appels et textos de confirmation faits un par un, depuis le camion, avant la première job.'],
@@ -142,7 +138,6 @@ export default function HomeApercu() {
             </button>
             <Link to="/features" className="ha-btn ha-ghost">{fr ? 'Voir les fonctionnalités' : 'See the features'}</Link>
           </div>
-          <ul className="ha-facts">{facts.map((f) => <li key={f}>{f}</li>)}</ul>
         </div>
 
         {/* ── 2. Aperçu interactif ── */}
@@ -239,9 +234,6 @@ const HOME_APERCU_CSS = `
 .ha-btn { display:inline-flex; align-items:center; gap:8px; padding:13px 20px; border-radius:12px; border:0; font-size:14.5px; font-weight:700; cursor:pointer; text-decoration:none; }
 .ha-dark { background:#111; color:#fff; } .ha-dark:hover { background:#000; }
 .ha-ghost { background:rgba(255,255,255,.7); color:#171717; border:1.5px solid rgba(0,0,0,.22); font-weight:600; } .ha-ghost:hover { background:#fff; }
-.ha-facts { list-style:none; margin:14px 0 0; padding:0; display:flex; justify-content:center; gap:16px; flex-wrap:wrap; }
-.ha-facts li { display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:500; color:#3a3a3a; }
-.ha-facts li::before { content:""; width:16px; height:16px; border-radius:50%; border:2px solid var(--mint); background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3 8.5l3.5 3.5L13 5' stroke='%233FAF97' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/9px no-repeat; flex:none; }
 
 .ha-stage { position:relative; z-index:2; max-width:1180px; margin:22px auto 0; padding:0 24px 40px; scroll-margin-top:84px; }
 .ha-frame { background:#fff; border-radius:18px; box-shadow:0 40px 90px -36px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.06); overflow:hidden; }
