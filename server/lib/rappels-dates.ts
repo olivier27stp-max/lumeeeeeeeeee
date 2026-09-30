@@ -41,7 +41,12 @@ export function jourLocal(d: Date = new Date()): string {
 
 /** Le jour visé, décalé de `jours` (négatif = avant). */
 export function jourDecale(jours: number, base: Date = new Date()): string {
-  return jourLocal(new Date(base.getTime() + jours * 86_400_000));
+  // En jours CIVILS : près de minuit, le jour du changement d'heure, « + 24 h »
+  // retombait sur la veille (25 h) ou sautait un jour (23 h).
+  const [a, m, j] = jourLocal(base).split('-').map(Number);
+  const d = new Date(Date.UTC(a, m - 1, j + jours));
+  const deux = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${deux(d.getUTCMonth() + 1)}-${deux(d.getUTCDate())}`;
 }
 
 export interface ResumeRappels {
