@@ -80,7 +80,8 @@ describe('éditeur — ce que l’utilisateur voit et fait', () => {
     // Twilio facture par tranche de 160 caractères : sans compteur, un texte
     // rallongé double la facture sans que personne ne le voie.
     expect(editeur).toContain('texte.length');
-    expect(editeur).toContain('Math.ceil(texte.length / 160)');
+    // Le VRAI nombre de segments (160/153 en GSM-7, 70/67 dès un ê ou un ’).
+    expect(editeur).toContain('segmentsSms(texte)');
   });
 
   it('les variables viennent d’une source unique', () => {

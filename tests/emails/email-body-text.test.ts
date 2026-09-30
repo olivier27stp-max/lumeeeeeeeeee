@@ -220,7 +220,7 @@ describe('éditeur — plus de HTML à l’écran', () => {
   });
 
   it('le SMS garde son compteur de caractères', () => {
-    expect(message).toContain('Math.ceil(texte.length / 160)');
+    expect(message).toContain('segmentsSms(texte)');
   });
 });
 
