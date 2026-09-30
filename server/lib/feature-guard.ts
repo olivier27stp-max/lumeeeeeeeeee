@@ -138,6 +138,36 @@ async function verdictEnCache(orgId: string, drapeau: string, maintenant: number
 }
 
 /**
+ * La même garde pour une route SANS utilisateur, dont le bureau est connu
+ * autrement — l'adresse d'appel `/api/hooks/:cle` (audit V2, C33) : la clé
+ * désigne le bureau, qui doit avoir les automatisations dans son forfait.
+ *
+ * `true` = refuser (mode enforce ET hors forfait). En mode `log`, journalise
+ * ce qui AURAIT été bloqué et laisse passer ; forfait illisible = fail-open,
+ * comme le middleware.
+ */
+export async function horsForfaitPourOrg(
+  orgId: string,
+  drapeau: string,
+  options: { mode?: ModeGardeFonction; env?: NodeJS.ProcessEnv; contexte?: string } = {},
+): Promise<boolean> {
+  const mode = options.mode ?? modeGardeFonction(options.env ?? process.env);
+  if (mode === 'off') return false;
+  try {
+    const verdict = await verdictEnCache(orgId, drapeau, Date.now());
+    if (verdict.autorise) return false;
+    if (mode === 'log') {
+      console.warn(`[feature-guard] AURAIT BLOQUÉ ${options.contexte ?? ''} org=${orgId} forfait=${verdict.forfait} drapeau=${drapeau}`);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.error('[feature-guard] vérification impossible, fail-open:', err?.message || err);
+    return false;
+  }
+}
+
+/**
  * `resoudreOrg` est injecté : la résolution d'utilisateur (jeton → org) vit
  * dans subscription-guard, qui tourne AVANT. On la lui passe plutôt que de
  * refaire un `auth.getUser()` par requête.

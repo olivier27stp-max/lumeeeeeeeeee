@@ -35,6 +35,7 @@ import { eventBus } from '../lib/eventBus';
 import { logger } from '../lib/logger';
 import { messageTropDeDemandes } from '../lib/message-429';
 import { extractIP } from '../lib/security';
+import { horsForfaitPourOrg } from '../lib/feature-guard';
 
 const router = Router();
 
@@ -156,6 +157,17 @@ router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, 
   if (!hook || !hook.enabled) {
     noterEchec(ip);
     return res.status(404).json({ error: 'Webhook introuvable.' });
+  }
+
+  // Garde de forfait (audit V2, C33) : le middleware ne voit pas cette route
+  // (pas d'utilisateur) ; la clé désigne le bureau, dont le forfait doit
+  // inclure les automatisations. Même mode que partout (FEATURE_GUARD).
+  if (await horsForfaitPourOrg(hook.org_id, 'includes_automations', { contexte: 'POST /api/hooks' })) {
+    return res.status(403).json({
+      error: 'feature_not_in_plan',
+      feature: 'includes_automations',
+      message: 'Le forfait de cette entreprise n’inclut pas les automatisations. / This business’s plan does not include automations.',
+    });
   }
 
   // ── Le corps ──────────────────────────────────────────────
