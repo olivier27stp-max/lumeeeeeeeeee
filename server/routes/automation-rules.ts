@@ -69,7 +69,7 @@ const CHAMPS_CONTENU = ['name', 'description', 'trigger_event', 'conditions', 'd
  * Les gardes qui ont besoin du catalogue, donc impossibles à exprimer en Zod
  * seul. Retourne un message en clair, ou null si tout va bien.
  */
-function verifierCoherence(corps: {
+export function verifierCoherence(corps: {
   trigger_event?: string;
   delay_seconds?: number;
   actions?: Array<{ type: string }>;
