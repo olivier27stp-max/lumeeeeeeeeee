@@ -386,8 +386,21 @@ export function horsFenetre(
   d: Date = new Date(),
   tz: string = QUIET_TZ,
 ): boolean {
-  const debut = reglages?.fenetre?.debut ?? SEND_START_HOUR;
-  const fin = reglages?.fenetre?.fin ?? SEND_END_HOUR;
+  /*
+   * Une fenêtre IMPOSSIBLE (inversée, vide, hors 0-24, illisible) n'arrive
+   * pas par l'éditeur (Zod), mais par un préréglage, Lumi ou une vieille
+   * règle. Elle valait « toujours hors fenêtre » : nextSendTime ne trouvait
+   * rien et rendait l'heure de départ, la file repoussait la tâche « à
+   * maintenant » à chaque passage — le message ne partait jamais, sans trace.
+   * Réglage invalide = fenêtre par défaut, comme un réglage absent.
+   */
+  const f = reglages?.fenetre;
+  const lisible = !!f && Number.isInteger(f.debut ?? SEND_START_HOUR) && Number.isInteger(f.fin ?? SEND_END_HOUR);
+  const d0 = lisible ? (f?.debut ?? SEND_START_HOUR) : SEND_START_HOUR;
+  const f0 = lisible ? (f?.fin ?? SEND_END_HOUR) : SEND_END_HOUR;
+  const valide = d0 >= 0 && f0 <= 24 && d0 < f0;
+  const debut = valide ? d0 : SEND_START_HOUR;
+  const fin = valide ? f0 : SEND_END_HOUR;
   const h = localHour(d, tz);
   if (h < debut || h >= fin) return true;
 
