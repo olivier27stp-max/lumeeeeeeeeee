@@ -14,7 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { useJobModalController } from '../../../contexts/JobModalController';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlignLeft, ChevronUp, Copy, GripVertical, Info, Loader2, Plus, TextCursorInput, Trash2, X } from 'lucide-react';
+import { AlignLeft, ChevronUp, Copy, GripVertical, Info, Loader2, Maximize2, Plus, TextCursorInput, Trash2, X } from 'lucide-react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core';
@@ -175,6 +175,8 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
   // Vrai formulaire (client, devis, job) : la place se choisit en déposant le champ dedans.
   const vraiFormulaire = !!objetChoisi && OBJETS_VRAI_FORMULAIRE.includes(objetChoisi);
   const [apresChoisi, setApresChoisi] = useState<string | null>(champ?.config?.apres ?? null);
+  // « Voir en grand » : le vrai formulaire à sa taille réelle, pour déposer le champ.
+  const [enGrand, setEnGrand] = useState(false);
   const surPlaceFormulaire = (p: PlaceFormulaire) => { setDossier(p.folder_id ?? ''); setApresChoisi(p.apres); };
   const dossiersCle = dossiers.map((d) => d.id).join();
   useEffect(() => {
@@ -636,8 +638,34 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                   {fr ? `Le vrai formulaire « ${TITRE_FORMULAIRE[objetChoisi].fr} » — attrape le champ par sa poignée et dépose-le dans une zone « Déposer ici ».`
                     : `The real “${TITRE_FORMULAIRE[objetChoisi].en}” form — grab the field by its handle and drop it on a “Drop here” zone.`}
                 </p>
-                <ApercuVraiFormulaire objet={objetChoisi} dossiers={dossiers} fr={fr} onPlace={surPlaceFormulaire}
-                  cible={pseudo(objetChoisi, dossier, apresChoisi)} rendreCible={() => cibleApercu} />
+                <button type="button" onClick={() => setEnGrand(true)}
+                  className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-outline px-2.5 py-1 text-[12px] font-medium text-text-primary hover:bg-surface-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                  <Maximize2 size={12} aria-hidden />{fr ? 'Voir en grand' : 'View full size'}
+                </button>
+                {!enGrand && (
+                  <ApercuVraiFormulaire objet={objetChoisi} dossiers={dossiers} fr={fr} onPlace={surPlaceFormulaire}
+                    cible={pseudo(objetChoisi, dossier, apresChoisi)} rendreCible={() => cibleApercu} />
+                )}
+                {enGrand && createPortal(
+                  // Clic et touches arrêtés ici : ils ne doivent pas fermer « Créer un champ » derrière.
+                  <div className="fixed inset-0 z-[96] flex items-center justify-center bg-black/40 p-4" role="presentation" tabIndex={-1}
+                    onClick={(e) => { e.stopPropagation(); setEnGrand(false); }}>
+                    <div role="dialog" aria-modal="true" aria-label={fr ? 'Placer le champ dans le formulaire' : 'Place the field in the form'} tabIndex={-1}
+                      onClick={(e) => e.stopPropagation()} className="flex h-[94vh] w-full max-w-6xl flex-col rounded-xl bg-surface shadow-2xl">
+                      <div className="flex items-center justify-between border-b border-outline px-5 py-3">
+                        <p className="text-[14px] font-semibold text-text-primary">
+                          {fr ? `« ${TITRE_FORMULAIRE[objetChoisi].fr} » — dépose le champ dans une zone « Déposer ici »` : `“${TITRE_FORMULAIRE[objetChoisi].en}” — drop the field on a “Drop here” zone`}
+                        </p>
+                        <button type="button" onClick={() => setEnGrand(false)} className="glass-button-primary px-4 py-1.5 text-[13px]">{fr ? 'Terminé' : 'Done'}</button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto bg-surface-secondary/40 p-4">
+                        <ApercuVraiFormulaire objet={objetChoisi} dossiers={dossiers} fr={fr} onPlace={surPlaceFormulaire}
+                          cible={pseudo(objetChoisi, dossier, apresChoisi)} rendreCible={() => cibleApercu} />
+                      </div>
+                    </div>
+                  </div>,
+                  document.body,
+                )}
               </>
             ) : objetChoisi && plan.length ? (
               <ApercuFormulaire plan={plan} onPlan={surPlan} cibleId={idCible} cible={cibleApercu}

@@ -176,31 +176,9 @@ async function processRecurringJobs(supabase: SupabaseClient) {
           //
           // Non bloquant : une automatisation muette ne doit pas interrompre
           // la génération des occurrences suivantes.
-          if (newEvent?.id) {
-            try {
-              const { eventBus } = await import('./eventBus');
-              await eventBus.emit('appointment.created', {
-                orgId: job.org_id,
-                entityType: 'schedule_event',
-                entityId: newEvent.id,
-                // Créé par le planificateur, pas par un utilisateur.
-                actorId: job.created_by || undefined,
-                metadata: {
-                  job_id: newJob.id,
-                  client_id: job.client_id || null,
-                  start_time: scheduledAt,
-                  title: job.title || '',
-                  address: job.property_address || '',
-                  job_name: job.title || '',
-                  source: 'recurring',
-                },
-                relatedEntityType: 'job',
-                relatedEntityId: newJob.id,
-              });
-            } catch (emitErr: any) {
-              console.error(`[recurring-jobs] appointment.created emit failed for event ${newEvent.id}:`, emitErr?.message);
-            }
-          }
+          // `appointment.created` naît du TRIGGER sur l'insertion de la visite
+          // (launch 2026-09-28, bloc 2) : les tournées récurrentes le reçoivent
+          // comme les visites planifiées à la main, sans émission ici.
         }
 
         // Calculate next occurrence.

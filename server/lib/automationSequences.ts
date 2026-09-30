@@ -126,6 +126,43 @@ export function premiereEtape(steps: Etape[]): Etape | null {
   return steps[0] ?? null;
 }
 
+/**
+ * La première étape qui n'est PAS une action immédiate du début du parcours.
+ *
+ * Launch M6 : une visite créée EN LOT (plan de service, job multi-visites)
+ * porte `suppress_immediate` — seule la première visite confirme. Le garde
+ * ne valait que pour les règles simples ; le pack « rendez-vous » est un
+ * parcours, et un plan de 4 visites envoyait 4 confirmations. On saute les
+ * actions qui ouvrent le parcours (la confirmation) et on démarre à la
+ * première attente ou condition : les rappels restent calés sur CHAQUE visite.
+ * `null` = le parcours n'est fait que d'actions immédiates : rien à planifier.
+ */
+/**
+ * Les actions qui OUVRENT le parcours, avant toute attente ou condition :
+ * la confirmation (« votre rendez-vous est confirmé »). Elles répondent à
+ * une demande du client — transactionnelles, même si elles passent par la
+ * file (launch M10).
+ */
+export function etapesDeConfirmation(steps: Etape[]): Set<string> {
+  const ids = new Set<string>();
+  let etape = premiereEtape(steps);
+  while (etape && etape.type === 'action' && !ids.has(etape.id)) {
+    ids.add(etape.id);
+    etape = trouverEtape(steps, etapeSuivante(etape));
+  }
+  return ids;
+}
+
+export function premiereEtapeSansConfirmation(steps: Etape[]): Etape | null {
+  let etape = premiereEtape(steps);
+  const vues = new Set<string>();
+  while (etape && etape.type === 'action' && !vues.has(etape.id)) {
+    vues.add(etape.id);
+    etape = trouverEtape(steps, etapeSuivante(etape));
+  }
+  return etape && etape.type !== 'action' ? etape : null;
+}
+
 export function trouverEtape(steps: Etape[], id: string | null | undefined): Etape | null {
   if (!id) return null;
   return steps.find((e) => e.id === id) ?? null;
@@ -343,7 +380,7 @@ export async function planifierEtape(
 
   const executeAt = new Date(executeAtMs).toISOString();
 
-  const { error } = await ctx.supabase.from('automation_scheduled_tasks').insert({
+  const ligneTache = {
     org_id: ctx.orgId,
     automation_rule_id: ctx.ruleId,
     entity_type: ctx.entityType,
@@ -370,7 +407,22 @@ export async function planifierEtape(
     execute_at: executeAt,
     status: 'pending',
     execution_key: cleEtape(ctx.ruleId, ctx.entityId, courante.id),
-  });
+  };
+
+  /*
+   * Launch 2026-09-28 : un échec d'insertion était seulement écrit dans les
+   * logs du serveur — le parcours mourait là, sans trace pour l'entreprise.
+   * On réessaie (hoquet réseau), puis on l'écrit dans le JOURNAL de
+   * l'automatisation. On ne relance PAS l'erreur : l'appelant rejouerait
+   * l'étape déjà envoyée (double envoi).
+   */
+  const ATTENTES_MS = [0, 500, 2000];
+  let error: { code?: string; message: string } | null = null;
+  for (const attente of ATTENTES_MS) {
+    if (attente) await new Promise((r) => setTimeout(r, attente));
+    ({ error } = await ctx.supabase.from('automation_scheduled_tasks').insert(ligneTache));
+    if (!error || error.code === '23505') break;
+  }
 
   if (error) {
     // 23505 = cette étape est DÉJÀ en file pour cette entité. Ce n'est pas une
@@ -381,9 +433,22 @@ export async function planifierEtape(
       logger.info(`[sequences] étape déjà planifiée, ignorée : ${cleEtape(ctx.ruleId, ctx.entityId, courante.id)}`);
       return null;
     }
-    logger.error('[sequences] planification échouée', {
+    logger.error('[sequences] planification échouée après 3 essais — parcours interrompu', {
       rule_id: ctx.ruleId, step_id: courante.id, message: error.message,
     });
+    const { error: errJournal } = await ctx.supabase.from('automation_execution_logs').insert({
+      org_id: ctx.orgId,
+      automation_rule_id: ctx.ruleId,
+      trigger_event: 'sequence',
+      entity_type: ctx.entityType,
+      entity_id: ctx.entityId,
+      action_type: courante.type === 'action' ? courante.action.type : '__sequence__',
+      action_config: { step_id: courante.id },
+      result_success: false,
+      result_error: `Étape suivante non planifiée (${error.message}) — parcours interrompu`,
+      duration_ms: 0,
+    });
+    if (errJournal) logger.error('[sequences] échec de planification non journalisé', { rule_id: ctx.ruleId, message: errJournal.message });
     return null;
   }
 

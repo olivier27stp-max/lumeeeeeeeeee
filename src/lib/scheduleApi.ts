@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
-import { emitAppointmentCreated, emitAppointmentCancelled, emitAppointmentRescheduled } from './automationEventsApi';
+import { emitAppointmentRescheduled } from './automationEventsApi';
 
 export const DEFAULT_TIMEZONE = 'America/Toronto';
 const CACHE_TTL_MS = 30_000;
@@ -291,13 +291,6 @@ export async function scheduleUnscheduledJob(payload: {
   const eventRow = (data as any)?.event || data;
   const mapped = mapScheduleRow(eventRow);
 
-  // Fire automation hook (non-blocking)
-  emitAppointmentCreated({
-    eventId: mapped.id,
-    jobId: payload.jobId,
-    startTime: payload.startAt,
-  });
-
   return mapped;
 }
 
@@ -398,14 +391,6 @@ export async function addVisit(payload: {
 
   const event = mapScheduleRow((data as any)?.event);
 
-  // Fire automation hook (non-blocking)
-  emitAppointmentCreated({
-    eventId: event.id,
-    jobId: payload.jobId,
-    startTime: payload.startAt,
-    suppressImmediate: payload.suppressConfirmation === true,
-  });
-
   return {
     event,
     overlaps: Number((data as any)?.overlaps || 0),
@@ -505,11 +490,5 @@ export async function unscheduleJob(payload: { jobId: string; eventId?: string |
   if (error) throw error;
   invalidateScheduleCache();
 
-  // Fire automation hook (non-blocking)
-  if (payload.eventId) {
-    emitAppointmentCancelled({
-      eventId: payload.eventId,
-      jobId: payload.jobId,
-    });
-  }
+  // « Rendez-vous annulé » : Launch 2026-09-28 (bloc 2) : l'événement naît d'un TRIGGER en base, plus du navigateur.
 }

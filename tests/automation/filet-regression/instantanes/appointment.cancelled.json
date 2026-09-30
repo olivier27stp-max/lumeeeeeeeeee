@@ -2176,12 +2176,7 @@
   ]
  },
  "demarrer_automatisation@0": {
-  "planifie": [
-   {
-    "action": "demarrer_automatisation",
-    "execute_at": "2026-09-13T15:00:00.000Z"
-   }
-  ],
+  "planifie": [],
   "ecritures": [
    {
     "moment": "immediat",
@@ -2204,21 +2199,62 @@
    },
    {
     "moment": "immediat",
-    "table": "automation_scheduled_tasks",
+    "table": "automation_execution_logs",
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "automation_rule_id": "regle-appointment.cancelled-demarrer_automatisation-0",
+     "automation_rule_id": "aaaaaaaa-0000-4000-8000-00000000000e",
+     "trigger_event": "task.completed",
      "entity_type": "schedule_event",
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
+     "action_type": "create_task",
      "action_config": {
-      "type": "demarrer_automatisation",
-      "config": "#7973af01168d",
-      "trigger_event": "automation.started"
+      "title": "Rappeler le client",
+      "body": "Suivi"
      },
-     "execute_at": "2026-09-13T15:00:00.000Z",
-     "status": "pending",
-     "execution_key": "regle-appointment.cancelled-demarrer_automatisation-0:aaaaaaaa-0000-4000-8000-000000000003:0"
+     "result_success": false,
+     "result_error": "en cours",
+     "execution_key": "aaaaaaaa-0000-4000-8000-00000000000e:aaaaaaaa-0000-4000-8000-000000000003:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "tasks",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "title": "Rappeler le client",
+     "description": "Suivi",
+     "status": "open",
+     "priority": "medium",
+     "assignee_user_id": null,
+     "linked_entity_type": "job",
+     "linked_entity_id": "aaaaaaaa-0000-4000-8000-000000000002",
+     "created_by": "aaaaaaaa-0000-4000-8000-000000000006",
+     "due_date": null
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "automation_execution_logs",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "automation_rule_id": "aaaaaaaa-0000-4000-8000-00000000000e",
+     "trigger_event": "task.completed",
+     "entity_type": "schedule_event",
+     "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
+     "action_type": "create_task",
+     "action_config": {
+      "title": "Rappeler le client",
+      "body": "Suivi"
+     },
+     "result_success": true,
+     "result_data": {
+      "title": "Rappeler le client"
+     },
+     "result_error": null,
+     "duration_ms": "<ms>"
     }
    },
    {
@@ -2237,78 +2273,15 @@
      },
      "result_success": true,
      "result_data": {
-      "automatisation": "regle-appointment.cancelled-demarrer_automatisation-0",
-      "inscrites": 1
+      "demarree": "Suivi équipe"
      },
      "result_error": null,
      "duration_ms": "<ms>"
     }
-   },
-   {
-    "moment": "differe:demarrer_automatisation",
-    "table": "automation_scheduled_tasks",
-    "op": "update",
-    "filtres": [
-     [
-      "eq",
-      "status",
-      "running"
-     ],
-     [
-      "lt",
-      "execute_at",
-      "2026-09-13T14:45:00.000Z"
-     ]
-    ],
-    "valeur": {
-     "status": "pending",
-     "execute_at": "2026-09-13T15:00:00.000Z"
-    }
-   },
-   {
-    "moment": "differe:demarrer_automatisation",
-    "table": "automation_scheduled_tasks",
-    "op": "update",
-    "filtres": [
-     [
-      "eq",
-      "id",
-      "tache-1"
-     ],
-     [
-      "eq",
-      "status",
-      "pending"
-     ]
-    ],
-    "valeur": {
-     "status": "running",
-     "attempts": 1,
-     "execute_at": "2026-09-13T15:00:00.000Z"
-    }
-   },
-   {
-    "moment": "differe:demarrer_automatisation",
-    "table": "automation_scheduled_tasks",
-    "op": "update",
-    "filtres": [
-     [
-      "eq",
-      "id",
-      "tache-1"
-     ]
-    ],
-    "valeur": {
-     "status": "cancelled",
-     "completed_at": "2026-09-13T15:00:00.000Z",
-     "last_error": "Annulée : la condition d’arrêt de la règle est remplie."
-    }
    }
   ],
   "envois": [],
-  "annulees": [
-   "demarrer_automatisation@2026-09-13T15:00:00.000Z: Annulée : la condition d’arrêt de la règle est remplie."
-  ]
+  "annulees": []
  },
  "demarrer_automatisation@86400": {
   "planifie": [

@@ -32,25 +32,6 @@ async function fireEvent(path: string, body: Record<string, any>): Promise<void>
   }
 }
 
-/** Notify engine that an appointment/schedule_event was created */
-export function emitAppointmentCreated(params: {
-  eventId: string;
-  jobId?: string;
-  clientId?: string;
-  startTime?: string;
-  title?: string;
-  address?: string;
-  /**
-   * Visite créée en lot (plan de service, job multi-visites) : le moteur
-   * saute la confirmation immédiate mais planifie normalement les rappels
-   * datés (J-7 / J-1 / 2 h) de la visite. Sans ce flag, un plan de 10
-   * visites envoyait 10 confirmations d'un coup au client.
-   */
-  suppressImmediate?: boolean;
-}) {
-  fireEvent('appointment-created', params);
-}
-
 /**
  * Notify engine that an existing appointment was MOVED to a new date.
  *
@@ -65,15 +46,6 @@ export function emitAppointmentRescheduled(params: {
   startTime?: string;
 }) {
   fireEvent('appointment-rescheduled', params);
-}
-
-/** Notify engine that an appointment was cancelled/unscheduled */
-export function emitAppointmentCancelled(params: {
-  eventId: string;
-  jobId?: string;
-  clientId?: string;
-}) {
-  fireEvent('appointment-cancelled', params);
 }
 
 /** Notify engine that a job was marked completed */
@@ -101,30 +73,6 @@ export function emitQuoteSent(params: {
   channel: 'email' | 'sms';
 }) {
   fireEvent('quote-sent', params);
-}
-
-/** Notify engine that a quote was approved */
-export function emitQuoteApproved(params: {
-  quoteId: string;
-  leadId?: string;
-}) {
-  fireEvent('quote-approved', params);
-}
-
-/** Notify engine that a quote was declined */
-export function emitQuoteDeclined(params: {
-  quoteId: string;
-  leadId?: string;
-}) {
-  fireEvent('quote-declined', params);
-}
-
-/** Notify engine that an invoice was paid manually */
-export function emitInvoicePaidManually(params: {
-  invoiceId: string;
-  clientId?: string;
-}) {
-  fireEvent('invoice-paid', params);
 }
 
 /** Notify engine that a lead was created */
@@ -172,3 +120,11 @@ export function emitClientUntagged(params: { clientId: string; tag: string }) {
 export function emitTaskCompleted(params: { taskId: string }) {
   fireEvent('task-completed', params);
 }
+
+/*
+ * Retirés au launch 2026-09-28 (bloc 2) : rendez-vous créé / annulé, devis
+ * accepté / refusé et facture payée ne partent PLUS du navigateur. Les quatre
+ * premiers naissent d'un trigger en base (migration 20261003100000), la
+ * facture payée est émise par le serveur (route mark-paid). Un événement
+ * émis d'ici se perdait dès que l'onglet se fermait.
+ */

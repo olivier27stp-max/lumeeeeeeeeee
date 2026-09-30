@@ -1,8 +1,7 @@
 /**
  * T8 (unitaire) — PERMISSIONS : destinataire arbitraire et contexte d'exécution.
  *
- *   T8.3  une règle portant `config.to` fait partir le message vers ce numéro,
- *         pas vers le client                                     ROUGE (F18)
+ *   T8.3  (F18) sorti de quarantaine — tests/automation/launch-f18-f7.test.ts
  *   T8.5  contexte d'exécution documenté : les écritures ne portent jamais
  *         l'acteur de l'événement — la tâche est attribuée au propriétaire de
  *         l'org, le SMS n'a pas d'expéditeur utilisateur                   vert
@@ -55,22 +54,7 @@ async function jouer(actions: Array<{ type: string; config: Record<string, unkno
   return journal;
 }
 
-describe('T8.3 — destinataire arbitraire dans une règle', () => {
-  it('ROUGE ATTENDU (F18) : `config.to` est ignoré, le SMS part au client de l’entité', async () => {
-    await jouer([{ type: 'send_sms', config: { body: 'Merci [client_first_name]', to: '+15145559999' } }]);
-    expect(twilio.messages.create).toHaveBeenCalledTimes(1);
-    const to = twilio.messages.create.mock.calls[0][0].to;
-    expect(to, `SMS parti vers ${to} (le numéro écrit dans la règle) au lieu du client`).toBe('+15145550101');
-  });
-
-  it('ROUGE ATTENDU (F18) : `config.to` templatable — « [client_phone] » ou une adresse externe — n’est pas honoré non plus pour le courriel', async () => {
-    const { sendEmail } = await import('../../../server/lib/mailer');
-    await jouer([{ type: 'send_email', config: { subject: 'S', body: 'B', to: 'concurrent@exemple.test' } }]);
-    expect(sendEmail).toHaveBeenCalledTimes(1);
-    const to = (sendEmail as any).mock.calls[0][0].to;
-    expect(to, `courriel parti vers ${to}`).toBe('alice@a.test');
-  });
-});
+// T8.3 (F18) sorti de quarantaine au launch 2026-09-28 : tests/automation/launch-f18-f7.test.ts.
 
 describe('T8.5 — contexte d’exécution : « système », jamais l’acteur', () => {
   it('la tâche créée est attribuée au propriétaire de l’org, pas au technicien qui a déclenché', async () => {

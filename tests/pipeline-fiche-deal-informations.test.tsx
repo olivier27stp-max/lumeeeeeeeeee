@@ -98,7 +98,8 @@ describe('fiche du deal — section « Informations » dans l’onglet qui s’o
   it('montre les champs du deal sans changer d’onglet', async () => {
     await rendre();
     const actif = conteneur.querySelector('[role="tab"][aria-selected="true"]');
-    expect(actif?.textContent?.trim()).toBe('Client');
+    // L'onglet qui s'ouvre est « Détails du deal » (Rafba, 2026-09-29) ; les champs y sont.
+    expect(actif?.textContent?.trim()).toBe('Détails du deal');
     expect(conteneur.querySelector('[data-section-informations]'), 'section « Informations » absente').toBeTruthy();
     expect(champSuperficie()?.value).toBe('2400');
     expect(champSuperficie()?.disabled).toBe(false);

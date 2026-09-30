@@ -389,22 +389,27 @@ describe('fiche du deal — dossier du client', () => {
 });
 
 describe('fiche du deal — navigation', () => {
-  it('ouvre sur le CLIENT, pas sur le deal', async () => {
+  it('ouvre sur « Détails du deal » (le formulaire, comme GHL), le client à un clic', async () => {
     dossierMock.mockResolvedValue({
       jobs: [{ id: 'j1', numero: 'JOB-77', titre: 'Lavage', statut: 'completed', cents: 40000, date: '2026-05-01T00:00:00Z' }],
       devis: [], factures: [], messages: [], paye_cents: 40000, du_cents: 0,
     });
     await rendre();
-    // La première question en ouvrant un deal est « c'est qui ? », pas
-    // « quelle étape ? ». Sans clic, l'historique doit déjà être là.
+    // Décision de Rafba (2026-09-29) : la 1re page de la fiche est le formulaire
+    // du deal (« Add opportunity » de GHL), plus le dossier du client.
+    const actif = conteneur.querySelector('[role="tab"][aria-selected="true"]');
+    expect(actif?.textContent?.trim()).toBe('Détails du deal');
+    expect(conteneur.textContent).toContain('Coordonnées du contact');
+    await ouvrirSection('Client');
     expect(conteneur.textContent).toContain('JOB-77');
   });
 
-  it('range les sections en colonne, le client en premier', async () => {
+  it('range les sections en colonne, les détails du deal puis le client', async () => {
     await rendre();
     const sections = [...conteneur.querySelectorAll('[role="tab"]')]
       .map((b) => b.textContent?.trim() ?? '');
-    expect(sections[0]).toBe('Client');
+    expect(sections[0]).toBe('Détails du deal');
+    expect(sections[1]).toBe('Client');
     expect(sections).toContain('Rendez-vous');
     expect(sections).toContain('Tâches');
     expect(sections).toContain('Notes');

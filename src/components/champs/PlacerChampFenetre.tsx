@@ -17,7 +17,9 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { enregistrerPlan, type ChampPerso, type DossierChamp, type ObjetChamp } from '../../lib/champsPersoApi';
+import { enregistrerPlan, modifierChamp, type ChampPerso, type DossierChamp, type ObjetChamp } from '../../lib/champsPersoApi';
+import ApercuVraiFormulaire, { OBJETS_VRAI_FORMULAIRE, type PlaceFormulaire } from './ApercuVraiFormulaire';
+import ChampSaisie from './ChampSaisie';
 import { TITRE_FORMULAIRE, planFormulaire, type ElementPlan } from '../../lib/champs/placement';
 import { cn } from '../../lib/utils';
 
@@ -76,11 +78,34 @@ export default function PlacerChampFenetre({ objet, champ, champs, dossiers, fr,
   const [plan, setPlan] = useState<ElementPlan[]>(initial);
   const [envoi, setEnvoi] = useState(false);
   const liste = useRef<HTMLUListElement>(null);
+  const corps = useRef<HTMLDivElement>(null);
+  // Client, devis, job : le VRAI formulaire, et on y dépose le champ (Rafba, 2026-09-28).
+  const vrai = OBJETS_VRAI_FORMULAIRE.includes(objet);
+  const placeInitiale: PlaceFormulaire = { folder_id: champ.folder_id ?? null, apres: champ.config?.apres ?? null };
+  const [place, setPlace] = useState<PlaceFormulaire>(placeInitiale);
+  const deplace = place.folder_id !== placeInitiale.folder_id || place.apres !== placeInitiale.apres;
+  const cibleVraie = {
+    ...champ, folder_id: place.folder_id, config: { ...champ.config, apres: place.apres },
+    // Déplacé : à la fin de sa nouvelle place.
+    position: deplace ? 1_000_000 : champ.position,
+  } as ChampPerso;
+  const idCible = useId();
+  const rendreCible = () => (
+    <>
+      <label htmlFor={idCible} className="mb-1 block text-[12px] font-medium text-text-secondary">
+        {champ.label}{champ.is_required && <span className="text-red-500" aria-hidden> *</span>}
+      </label>
+      <ChampSaisie id={idCible} champ={champ} valeur={null} fr={fr} onValider={() => {}} disabled />
+    </>
+  );
 
-  // La place proposée : visible dès l'ouverture.
+  // La place proposée : visible dès l'ouverture (le vrai formulaire se charge un peu après).
   useEffect(() => {
     liste.current?.querySelector('[data-cible]')?.scrollIntoView({ block: 'center' });
-  }, []);
+    if (!vrai) return;
+    const t = setTimeout(() => corps.current?.querySelector('[data-cible-apercu]')?.scrollIntoView({ block: 'center' }), 1500);
+    return () => clearTimeout(t);
+  }, [vrai]);
   useEffect(() => {
     const echap = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', echap);
@@ -101,7 +126,16 @@ export default function PlacerChampFenetre({ objet, champ, champs, dossiers, fr,
   const sauvegarder = async () => {
     setEnvoi(true);
     try {
-      await enregistrerPlan(objet, plan, tous);
+      if (vrai) {
+        if (deplace) {
+          await modifierChamp(champ.id, {
+            folder_id: place.folder_id, config: { apres: place.apres },
+            position: Math.max(0, ...tous.map((c) => c.position ?? 0)) + 1,
+          });
+        }
+      } else {
+        await enregistrerPlan(objet, plan, tous);
+      }
       await qc.invalidateQueries({ queryKey: ['champs-perso'] });
       toast.success(fr ? `« ${champ.label} » est placé dans le formulaire.` : `“${champ.label}” is placed in the form.`);
       onSauvegarde?.();
@@ -118,7 +152,7 @@ export default function PlacerChampFenetre({ objet, champ, champs, dossiers, fr,
   return createPortal(
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/40 p-4" role="presentation" tabIndex={-1} onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-labelledby={idTitre} tabIndex={-1} onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-surface shadow-2xl">
+        className={cn('flex w-full flex-col rounded-xl bg-surface shadow-2xl', vrai ? 'h-[94vh] max-w-6xl' : 'max-h-[90vh] max-w-lg')}>
         <div className="flex items-start justify-between border-b border-outline px-5 py-4">
           <div className="min-w-0">
             <h2 id={idTitre} className="text-[16px] font-semibold text-text-primary">
@@ -126,13 +160,22 @@ export default function PlacerChampFenetre({ objet, champ, champs, dossiers, fr,
             </h2>
             <p className="mt-0.5 text-[12px] text-text-tertiary">
               {fr
-                ? `Formulaire « ${titre} » — glisse le champ à la place voulue, puis Sauvegarder. Les champs de base (cadenas) ne bougent pas.`
-                : `“${titre}” form — drag the field where you want it, then Save. Base fields (lock) stay put.`}
+                ? (vrai
+                  ? `Le vrai formulaire « ${titre} » — attrape le champ par sa poignée ⋮⋮ et dépose-le dans une zone « Déposer ici », puis Sauvegarder.`
+                  : `Formulaire « ${titre} » — glisse le champ à la place voulue, puis Sauvegarder. Les champs de base (cadenas) ne bougent pas.`)
+                : (vrai
+                  ? `The real “${titre}” form — grab the field by its ⋮⋮ handle and drop it on a “Drop here” zone, then Save.`
+                  : `“${titre}” form — drag the field where you want it, then Save. Base fields (lock) stay put.`)}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'}
             className="rounded p-1 text-text-tertiary hover:bg-surface-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><X size={16} /></button>
         </div>
+        {vrai ? (
+          <div ref={corps} className="flex-1 overflow-y-auto bg-surface-secondary/40 p-4">
+            <ApercuVraiFormulaire objet={objet} cible={cibleVraie} rendreCible={rendreCible} dossiers={dossiers} fr={fr} onPlace={setPlace} />
+          </div>
+        ) : (
         <div className="flex-1 overflow-y-auto px-5 py-3">
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={surDrag}
           // Défilement automatique seulement tout près du bord : sinon, déposer sur une
@@ -148,9 +191,10 @@ export default function PlacerChampFenetre({ objet, champ, champs, dossiers, fr,
             </SortableContext>
           </DndContext>
         </div>
+        )}
         <div className="flex justify-end gap-2 border-t border-outline px-5 py-3">
           <button type="button" onClick={onClose} className="glass-button px-4 py-2 text-[13px]">{fr ? 'Annuler' : 'Cancel'}</button>
-          <button type="button" onClick={() => { void sauvegarder(); }} disabled={envoi}
+          <button type="button" onClick={() => { void sauvegarder(); }} disabled={envoi || (vrai && !deplace)}
             className="glass-button-primary inline-flex items-center gap-1.5 px-4 py-2 text-[13px] disabled:opacity-50">
             {envoi && <Loader2 size={13} className="animate-spin" aria-hidden />}{fr ? 'Sauvegarder' : 'Save'}
           </button>

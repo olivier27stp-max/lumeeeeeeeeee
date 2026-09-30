@@ -271,11 +271,7 @@ describe('création de deal — ce qui nourrit les prévisions', () => {
       .find((x) => /nouveau deal/i.test(x.textContent ?? ''));
     expect(b).toBeTruthy();
     await act(async () => { b!.click(); });
-    // S'ouvre sur « Client existant » : ces tests portent sur un nouveau contact.
-    const nouveau = [...conteneur.querySelectorAll('button')]
-      .find((x) => /nouveau contact/i.test(x.textContent ?? ''));
-    expect(nouveau).toBeTruthy();
-    await act(async () => { nouveau!.click(); });
+    // Formulaire GHL : un nom tapé dans « Contact principal » = un nouveau contact.
   }
   function parEtiquette(re: RegExp): HTMLElement | undefined {
     const lab = [...conteneur.querySelectorAll('label')]
@@ -293,8 +289,8 @@ describe('création de deal — ce qui nourrit les prévisions', () => {
     // vide : c'est la cause mesurée des 22 deals sans date en production.
     await rendre();
     await ouvrirFormulaire();
-    expect(parEtiquette(/Montant/)).toBeTruthy();
-    expect(parEtiquette(/Fermeture visée/)).toBeTruthy();
+    expect(parEtiquette(/^Valeur/)).toBeTruthy();
+    expect(parEtiquette(/Date de fermeture prévue/)).toBeTruthy();
     expect(parEtiquette(/Responsable/)).toBeTruthy();
     expect(parEtiquette(/Source/)).toBeTruthy();
   });
@@ -304,7 +300,7 @@ describe('création de deal — ce qui nourrit les prévisions', () => {
     // corrige. Le deal entre dans la Chronologie tout de suite.
     await rendre();
     await ouvrirFormulaire();
-    const d = parEtiquette(/Fermeture visée/) as HTMLInputElement;
+    const d = parEtiquette(/Date de fermeture prévue/) as HTMLInputElement;
     expect(d.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(new Date(d.value).getTime()).toBeGreaterThan(Date.now());
   });
@@ -323,8 +319,8 @@ describe('création de deal — ce qui nourrit les prévisions', () => {
     // au lieu de 125000 ferait afficher 12,50 $ sur la carte.
     await rendre();
     await ouvrirFormulaire();
-    await saisir(parEtiquette(/Prénom/) as HTMLInputElement, 'Alice');
-    await saisir(parEtiquette(/Montant/) as HTMLInputElement, '1250');
+    await saisir(parEtiquette(/Contact principal/) as HTMLInputElement, 'Alice');
+    await saisir(parEtiquette(/^Valeur/) as HTMLInputElement, '1250');
 
     const envoyer = [...conteneur.querySelectorAll('button')]
       .find((b) => b.getAttribute('type') === 'submit');
@@ -338,7 +334,7 @@ describe('création de deal — ce qui nourrit les prévisions', () => {
     // « 0 $ » affirme que le deal ne vaut rien ; vide dit qu'on ne sait pas.
     await rendre();
     await ouvrirFormulaire();
-    await saisir(parEtiquette(/Prénom/) as HTMLInputElement, 'Bob');
+    await saisir(parEtiquette(/Contact principal/) as HTMLInputElement, 'Bob');
     const envoyer = [...conteneur.querySelectorAll('button')]
       .find((b) => b.getAttribute('type') === 'submit');
     await act(async () => { envoyer?.click(); });

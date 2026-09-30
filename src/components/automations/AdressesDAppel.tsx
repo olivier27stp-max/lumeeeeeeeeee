@@ -18,16 +18,18 @@
    LA CLÉ EST UN SECRET. Elle est masquée par défaut : une capture
    d'écran de cette page, un partage rapide, et n'importe qui peut
    déclencher les automatisations de l'entreprise. Qui détient l'adresse
-   peut appeler.
+   peut appeler. Depuis le launch (2026-09-28), elle n'est MONTRÉE qu'une
+   fois — juste après la création ou la régénération. Perdue ? On la
+   régénère (l'ancienne adresse cesse de fonctionner).
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useEffect, useState } from 'react';
-import { Loader2, Copy, Check, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Copy, Check, Eye, EyeOff, Plus, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
 import {
   listerAdressesDAppel, creerAdresseDAppel, basculerAdresseDAppel,
-  supprimerAdresseDAppel, type AdresseDAppel,
+  supprimerAdresseDAppel, regenererAdresseDAppel, type AdresseDAppel,
 } from '../../lib/automationWebhooksApi';
 
 /** L'URL complète que l'utilisateur colle chez son fournisseur. */
@@ -73,7 +75,29 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
     }
   }
 
+  async function regenerer(a: AdresseDAppel) {
+    const ok = await confirmer({
+      title: fr ? 'Régénérer cette adresse ?' : 'Regenerate this address?',
+      message: fr
+        ? 'Une nouvelle adresse sera créée et affichée une seule fois. L’ancienne cessera immédiatement de déclencher vos automatisations : il faudra coller la nouvelle chez votre fournisseur.'
+        : 'A new address will be created and shown once. The old one will stop triggering your automations immediately: paste the new one at your provider.',
+      confirmLabel: fr ? 'Régénérer' : 'Regenerate',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const nouvelle = await regenererAdresseDAppel(a.id);
+      setAdresses((l) => l.map((x) => (x.id === a.id ? nouvelle : x)));
+      setDevoilees((d) => new Set(d).add(a.id));
+      toast.success(fr ? 'Nouvelle adresse : copiez-la maintenant, elle ne sera plus affichée.' : 'New address: copy it now, it will not be shown again.');
+    } catch (e) {
+      console.error('[AdressesDAppel] régénération', e);
+      toast.error(e instanceof Error && e.message ? e.message : (fr ? 'Régénération impossible.' : 'Could not regenerate.'));
+    }
+  }
+
   async function copier(a: AdresseDAppel) {
+    if (!a.api_key) return;
     try {
       await navigator.clipboard.writeText(urlComplete(a.api_key));
       setCopiee(a.id);
@@ -142,8 +166,10 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
       )}
 
       {adresses.map((a) => {
-        const devoilee = devoilees.has(a.id);
-        const url = urlComplete(a.api_key);
+        // La clé complète n'est connue que juste après création / régénération.
+        const cleConnue = !!a.api_key;
+        const devoilee = cleConnue && devoilees.has(a.id);
+        const url = a.api_key ? urlComplete(a.api_key) : '';
         return (
           <div key={a.id} className="rounded-lg border border-outline/40 p-3">
             <div className="flex items-center justify-between gap-3">
@@ -173,8 +199,9 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
 
             <div className="mt-2 flex items-center gap-1.5">
               <code className="min-w-0 flex-1 truncate rounded bg-surface-secondary px-2 py-1.5 font-mono text-[11px] text-text-secondary">
-                {devoilee ? url : `${window.location.origin}/api/hooks/${'•'.repeat(24)}`}
+                {devoilee ? url : `${window.location.origin}/api/hooks/${a.cle_masquee}`}
               </code>
+              {cleConnue ? (<>
               <button
                 type="button"
                 onClick={() => setDevoilees((d) => {
@@ -199,7 +226,22 @@ export default function AdressesDAppel({ fr }: { fr: boolean }) {
                   ? <Check size={13} className="text-success" aria-hidden="true" />
                   : <Copy size={13} aria-hidden="true" />}
               </button>
+              </>) : (
+                <button
+                  type="button"
+                  onClick={() => regenerer(a)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-text-secondary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <RefreshCw size={12} aria-hidden="true" />
+                  {fr ? 'Régénérer' : 'Regenerate'}
+                </button>
+              )}
             </div>
+            {cleConnue && (
+              <p className="mt-1.5 text-[11px] text-text-tertiary">
+                {fr ? 'Copiez-la maintenant : elle ne sera plus affichée.' : 'Copy it now: it will not be shown again.'}
+              </p>
+            )}
           </div>
         );
       })}

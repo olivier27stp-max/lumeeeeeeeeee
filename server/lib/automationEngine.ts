@@ -5,7 +5,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { eventBus, CRMEvent, CRMEventType } from './eventBus';
+import { eventBus, CRMEvent, CRMEventType, PREFIXE_A_REJOUER } from './eventBus';
 import {
   ActionContext,
   ActionType,
@@ -23,6 +23,8 @@ import {
   trouverEtape,
   etapeSuivante,
   premiereEtape,
+  premiereEtapeSansConfirmation,
+  etapesDeConfirmation,
   echeanceAvantDate,
 } from './automationSequences';
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
@@ -587,6 +589,8 @@ async function executeRuleActions(
     langue: await langueOrg(config.supabase, event.orgId),
     ruleId: rule.id,
     chaine: Array.isArray(event.metadata?.chaine) ? (event.metadata!.chaine as string[]) : undefined,
+    // Rejeu par l'outbox : le traitement coupé a pu envoyer avant de mourir.
+    ...(event.rejoueDepuis ? { dejaEnvoyeDepuis: event.rejoueDepuis } : {}),
   };
 
   // La fenêtre d'envoi se calcule dans le fuseau de l'ENTREPRISE, pas dans
@@ -620,8 +624,12 @@ async function executeRuleActions(
         automation_rule_id: rule.id,
         entity_type: event.entityType,
         entity_id: event.entityId,
-        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
-        execute_at: nextSendTime(new Date(), rule.settings).toISOString(),
+        // Confirmation REPORTÉE : elle reste transactionnelle (launch M10).
+        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata, report_heures_calmes: true },
+        // Dans le fuseau de l'ENTREPRISE, comme le test « hors fenêtre » juste
+        // au-dessus : sans lui, une entreprise hors Montréal voyait son envoi
+        // reporté à 8 h heure de Montréal (launch M10).
+        execute_at: nextSendTime(new Date(), rule.settings, fuseau).toISOString(),
         status: 'pending',
         execution_key: executionKey,
       });
@@ -641,7 +649,14 @@ async function executeRuleActions(
     const startTime = Date.now();
 
     try {
-      const result = await executeAction(action.type, action.config, vars, contextePour(action));
+      // Délai max, comme la file : l'outbox tient pour orphelin un événement
+      // non coché après 3 min et le rejoue. Une action immédiate sans borne
+      // pouvait encore tourner à ce moment-là → double envoi (launch M5).
+      const result = await avecDelaiMax(
+        executeAction(action.type, action.config, vars, contextePour(action)),
+        DELAI_MAX_ACTION_MS,
+        `${action.type} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
+      );
       const durationMs = Date.now() - startTime;
 
       await journaliserAction(config.supabase, reservation, rule, event, i, {
@@ -746,8 +761,40 @@ async function resolveExecuteAt(
     }
   }
 
+  /*
+   * Un délai NÉGATIF veut dire « X avant la date du rendez-vous ». Sans date
+   * (pas un rendez-vous, rendez-vous sans heure ou introuvable), on
+   * retombait sur Math.abs(délai) : le rappel « 7 jours avant » partait 7
+   * jours APRÈS. On ne planifie rien et on le dit (launch M10).
+   */
+  if (rule.delay_seconds < 0) {
+    logger.info(`[automationEngine] rappel « avant la date » sans date de rendez-vous — non planifié, règle "${rule.name}"`);
+    await journaliserSautSansDate(config.supabase, rule, event);
+    return null;
+  }
+
   // Normal positive delay from now
-  return new Date(Date.now() + Math.abs(rule.delay_seconds) * 1000);
+  return new Date(Date.now() + rule.delay_seconds * 1000);
+}
+
+/** Trace d'un rappel « avant » qui n'a pas de date : visible dans les Journaux. */
+async function journaliserSautSansDate(supabase: SupabaseClient, rule: AutomationRule, event: CRMEvent): Promise<void> {
+  const { error } = await supabase.from('automation_execution_logs').insert(
+    rule.actions.map((action) => ({
+      org_id: event.orgId,
+      automation_rule_id: rule.id,
+      trigger_event: event.type,
+      entity_type: event.entityType,
+      entity_id: event.entityId,
+      action_type: action.type,
+      action_config: action.config,
+      result_success: true,
+      result_data: { saute: 'Aucune date de rendez-vous : rappel « avant la date » non planifié', saute_code: 'date_absente' },
+      result_error: null,
+      duration_ms: 0,
+    })),
+  );
+  if (error) console.error(`[automationEngine] saut « sans date » non journalisé (rule ${rule.id}):`, error.message);
 }
 
 // ── Schedule delayed actions ────────────────────────────────
@@ -839,7 +886,9 @@ async function handleEvent(event: CRMEvent) {
       .order('id', { ascending: true });
 
     if (error) {
-      console.error('[automationEngine] failed to fetch rules:', error.message);
+      // Lecture ratée ≠ « aucune règle » : l'événement doit être REJOUÉ par
+      // l'outbox, pas coché comme traité (launch 2026-09-28).
+      throw Object.assign(new Error(`${PREFIXE_A_REJOUER}règles illisibles : ${error.message}`), { aRejouer: true });
     }
 
     if (rules && rules.length > 0) {
@@ -879,43 +928,7 @@ async function handleEvent(event: CRMEvent) {
           continue;
         }
         aAgi = true;
-        // Une SÉQUENCE se parcourt étape par étape : on ne planifie que la
-        // première, chacune ouvrant la suivante une fois faite. Rien n'est
-        // planifié d'avance, pour qu'une branche « si » soit évaluée sur
-        // l'état du devis AU MOMENT où on y arrive, pas sur celui d'il y a
-        // trois jours.
-        if (Array.isArray(rule.steps) && rule.steps.length > 0) {
-          const debut = premiereEtape(rule.steps);
-          if (debut) {
-            await planifierEtape(
-              {
-                supabase: engineConfig.supabase,
-                orgId: event.orgId,
-                ruleId: rule.id,
-                entityType: event.entityType,
-                entityId: event.entityId,
-                contexte: event.metadata ?? {},
-                franchies: 0,
-              },
-              rule.steps,
-              debut.id,
-            );
-          }
-          continue;
-        }
-        if (rule.delay_seconds !== 0) {
-          await scheduleDelayedActions(rule, event, engineConfig);
-        } else if (event.metadata?.suppress_immediate) {
-          // Visite créée en lot (plan de service, job multi-visites) : seule la
-          // PREMIÈRE visite déclenche la confirmation immédiate — sans ce
-          // garde, un plan de 10 visites envoyait 10 confirmations d'un coup
-          // au client. Les rappels datés (délai négatif) ne sont pas touchés :
-          // ils passent par scheduleDelayedActions ci-dessus et restent calés
-          // sur la date de CHAQUE visite.
-          logger.info(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
-        } else {
-          await executeRuleActions(rule, event, engineConfig);
-        }
+        await lancerRegle(rule, event, engineConfig);
         } catch (err: any) {
           // On nomme la règle fautive : « une automatisation a planté » sans
           // dire laquelle n'aide personne à la réparer.
@@ -943,7 +956,90 @@ async function handleEvent(event: CRMEvent) {
 
   } catch (err: any) {
     console.error('[automationEngine] error handling event:', err.message);
+    if (err?.aRejouer) throw err;
   }
+}
+
+/**
+ * Lance UNE règle pour un événement déjà accepté (conditions passées) :
+ * parcours → 1re étape ; délai → tâches planifiées ; sinon → actions
+ * immédiates. Le même point d'entrée sert aux déclencheurs ET à l'action
+ * « Démarrer une automatisation » (launch 2026-09-28) : avant, celle-ci
+ * n'exécutait que `actions` — sur un parcours, la 1re action seulement,
+ * tout de suite, sans les attentes.
+ */
+async function lancerRegle(rule: AutomationRule, event: CRMEvent, config: EngineConfig): Promise<void> {
+  // Une SÉQUENCE se parcourt étape par étape : on ne planifie que la
+  // première, chacune ouvrant la suivante une fois faite. Rien n'est
+  // planifié d'avance, pour qu'une branche « si » soit évaluée sur
+  // l'état du devis AU MOMENT où on y arrive, pas sur celui d'il y a
+  // trois jours.
+  if (Array.isArray(rule.steps) && rule.steps.length > 0) {
+    // Visite créée en lot : la confirmation ne part qu'à la première (M6).
+    const enLot = event.metadata?.suppress_immediate === true;
+    const debut = enLot ? premiereEtapeSansConfirmation(rule.steps) : premiereEtape(rule.steps);
+    if (enLot) logger.info(`[automationEngine] confirmation du parcours supprimée (visite en lot) — règle "${rule.name}"`);
+    if (debut) {
+      await planifierEtape(
+        {
+          supabase: config.supabase,
+          orgId: event.orgId,
+          ruleId: rule.id,
+          entityType: event.entityType,
+          entityId: event.entityId,
+          contexte: event.metadata ?? {},
+          franchies: 0,
+        },
+        rule.steps,
+        debut.id,
+      );
+    }
+    return;
+  }
+  if (rule.delay_seconds !== 0) {
+    await scheduleDelayedActions(rule, event, config);
+  } else if (event.metadata?.suppress_immediate) {
+    // Visite créée en lot (plan de service, job multi-visites) : seule la
+    // PREMIÈRE visite déclenche la confirmation immédiate — sans ce
+    // garde, un plan de 10 visites envoyait 10 confirmations d'un coup
+    // au client. Les rappels datés (délai négatif) ne sont pas touchés :
+    // ils passent par scheduleDelayedActions ci-dessus et restent calés
+    // sur la date de CHAQUE visite.
+    logger.info(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
+  } else {
+    await executeRuleActions(rule, event, config);
+  }
+}
+
+/**
+ * « Démarrer une automatisation » (action) : inscrit l'entité dans la règle
+ * `ruleId`, par le même chemin qu'un déclencheur. `chaine` = les règles qui
+ * ont mené ici (anti-boucle, voir executeDemarrerAutomatisation).
+ */
+export async function demarrerRegle(
+  ruleId: string,
+  cible: { orgId: string; entityType: string; entityId: string; chaine: string[] },
+): Promise<{ ok: true; nom: string } | { ok: false; erreur: string }> {
+  if (!engineConfig) return { ok: false, erreur: 'Moteur d’automatisations non démarré.' };
+  const { data: rule, error } = await engineConfig.supabase
+    .from('automation_rules')
+    .select('*')
+    .eq('id', ruleId)
+    .eq('org_id', cible.orgId)
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error) return { ok: false, erreur: error.message };
+  if (!rule) return { ok: false, erreur: 'Automatisation introuvable ou en brouillon.' };
+  const event: CRMEvent = {
+    type: (rule as AutomationRule).trigger_event as CRMEvent['type'],
+    orgId: cible.orgId,
+    entityType: cible.entityType,
+    entityId: cible.entityId,
+    metadata: { chaine: cible.chaine },
+  };
+  await lancerRegle(rule as AutomationRule, event, engineConfig);
+  return { ok: true, nom: String((rule as AutomationRule).name ?? '') };
 }
 
 /**
@@ -1262,6 +1358,24 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
       continue;
     }
 
+    /*
+     * Étape SUPPRIMÉE du parcours après sa planification (launch 2026-09-28).
+     * Avant : la tâche tombait sur executeAction('__sequence__') → « Unknown
+     * action type », 4 tentatives, puis une notification d'échec absurde.
+     * C'est une annulation propre, pas une panne.
+     */
+    const etapesPlanifiees = (task.automation_rules?.steps ?? null) as Etape[] | null;
+    // (Parcours vidé ou redevenu règle simple : même cas, l'étape n'existe plus.)
+    if (task.step_id && !(Array.isArray(etapesPlanifiees) && trouverEtape(etapesPlanifiees, task.step_id))) {
+      const { error: annuleErr } = await supabase
+        .from('automation_scheduled_tasks')
+        .update({ status: 'cancelled', completed_at: new Date().toISOString(), last_error: 'Étape supprimée du parcours : envoi annulé.' })
+        .eq('id', task.id)
+        .eq('status', 'pending');
+      if (annuleErr) console.error(`[automationEngine] annulation (étape supprimée) impossible pour la tâche ${task.id}:`, annuleErr.message);
+      continue;
+    }
+
     // Heures calmes : on repousse à la prochaine fenêtre sans consommer de
     // tentative. Toute tâche présente ici est par construction DIFFÉRÉE (une
     // action immédiate s'exécute en direct, sans passer par cette file) : elle
@@ -1550,15 +1664,27 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         entityId: task.entity_id,
         twilio: engineConfig.twilio,
         baseUrl: engineConfig.baseUrl,
-        // Toute tâche de cette file est DIFFÉRÉE, donc commerciale : soumise au
-        // plafond de fréquence. Les actions immédiates (confirmations) ne
-        // passent pas ici et restent exemptes.
-        commercial: true,
+        // Une tâche de cette file est DIFFÉRÉE, donc commerciale (plafond de
+        // fréquence, consentement)… SAUF une confirmation : celle reportée
+        // pour heures calmes, et celles qui ouvrent un parcours avant toute
+        // attente. Elles répondent à une demande du client (launch M10).
+        commercial: !(
+          actionConfig.report_heures_calmes === true
+          || (task.step_id && Array.isArray(etapesRegle) && etapesDeConfirmation(etapesRegle).has(task.step_id))
+        ),
         langue: await langueOrg(supabase, task.org_id),
         ruleId: task.automation_rule_id,
+        // Une tentative a déjà eu lieu (`attempts` est incrémenté à la prise) :
+        // délai dépassé, ou tâche récupérée après un arrêt entre l'envoi et la
+        // clôture. Le message est peut-être parti — on vérifie avant de
+        // renvoyer (launch M5).
+        ...(Number(task.attempts || 0) > 0 ? { dejaEnvoyeDepuis: String(task.created_at) } : {}),
+        cleIdempotence: `${task.id}:${task.step_id ?? 'action'}`,
         // Étape de séquence : la chaîne voyage dans son contexte (anti-boucle des étiquettes).
         chaine: Array.isArray((task.sequence_context as Record<string, unknown> | null)?.chaine)
-          ? ((task.sequence_context as Record<string, unknown>).chaine as string[]) : undefined,
+          ? ((task.sequence_context as Record<string, unknown>).chaine as string[])
+          // Règle simple différée : la chaîne est dans les métadonnées de l'événement.
+          : Array.isArray(actionConfig.event_metadata?.chaine) ? (actionConfig.event_metadata.chaine as string[]) : undefined,
       };
       // Désabonnement par canal : « différé » ne veut plus dire « commercial ».
       // Un rappel de rendez-vous ou de facture est transactionnel même s'il

@@ -28,6 +28,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { Router } from 'express';
+import { randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { genererParcours } from '../lib/lumi/generer-parcours';
@@ -141,9 +142,23 @@ router.get('/automations/rules', async (req, res) => {
 
 // ── Créer ───────────────────────────────────────────────────
 
+/**
+ * Le dossier choisi appartient-il à CE bureau ? (launch 2026-09-28)
+ * Un identifiant de dossier venu du navigateur n'était pas vérifié : une
+ * règle pouvait pointer vers le dossier d'une autre entreprise.
+ */
+async function dossierDuBureau(client: SupabaseClient, orgId: string, folderId: unknown): Promise<boolean> {
+  if (folderId === undefined || folderId === null) return true;
+  const { data, error } = await client.from('automation_folders').select('id').eq('id', String(folderId)).eq('org_id', orgId).maybeSingle();
+  return !error && !!data;
+}
+
 router.post('/automations/rules', validate(automationRuleCreateSchema), async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
+  if (!(await dossierDuBureau(auth.client, auth.orgId, req.body.folder_id))) {
+    return res.status(400).json({ error: 'Dossier introuvable dans ce bureau.' });
+  }
 
   const probleme = verifierCoherence(req.body);
   if (probleme) return res.status(400).json({ error: probleme });
@@ -394,6 +409,9 @@ async function refAutomatisationInventee(
 router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
+  if (!(await dossierDuBureau(auth.client, auth.orgId, req.body.folder_id))) {
+    return res.status(400).json({ error: 'Dossier introuvable dans ce bureau.' });
+  }
 
   const { data: existante, error: lectureErr } = await auth.client
     .from('automation_rules')
@@ -793,7 +811,7 @@ router.post('/automations/pause', async (req, res) => {
 
   const enPause = req.body?.paused === true;
 
-  const { error } = await auth.client
+  const { data: modifiees, error } = await auth.client
     .from('company_settings')
     .update({
       automations_paused: enPause,
@@ -803,7 +821,12 @@ router.post('/automations/pause', async (req, res) => {
       automations_paused_at: enPause ? new Date().toISOString() : null,
       automations_paused_by: enPause ? auth.user.id : null,
     })
-    .eq('org_id', auth.orgId);
+    .eq('org_id', auth.orgId)
+    // Launch 2026-09-28 : la RLS de company_settings ne laisse modifier
+    // qu'un administrateur. Pour un autre rôle, la mise à jour touche ZÉRO
+    // ligne, sans erreur — et la route répondait « en pause » alors que rien
+    // n'était arrêté. On relit ce qui a vraiment été écrit.
+    .select('automations_paused');
 
   if (error) {
     if (error.code === '42501') {
@@ -812,13 +835,21 @@ router.post('/automations/pause', async (req, res) => {
     logger.error('[automation-rules] bascule de pause échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de changer l’état des automatisations.' });
   }
+  if (!modifiees || modifiees.length === 0) {
+    return res.status(403).json({
+      error: enPause
+        ? 'Seul un administrateur peut arrêter les automatisations. Rien n’a été arrêté.'
+        : 'Seul un administrateur peut reprendre les automatisations. Elles sont toujours en pause.',
+    });
+  }
 
   // Le moteur garde l'état en cache 15 s : on l'oublie tout de suite, sinon
   // un arrêt d'urgence mettrait un quart de minute à mordre.
   oublierPause(auth.orgId);
 
   logger.warn('[automations] pause basculée', { orgId: auth.orgId, enPause, par: auth.user.id });
-  return res.json({ paused: enPause });
+  // L'état RÉEL, relu de la base — pas celui qu'on a demandé.
+  return res.json({ paused: (modifiees[0] as { automations_paused: boolean | null }).automations_paused === true });
 });
 
 // ── Webhooks entrants ───────────────────────────
@@ -833,13 +864,40 @@ router.post('/automations/pause', async (req, res) => {
  * reste la garde de fond, comme pour les règles.
  */
 
+/*
+ * LA CLÉ EST UN SECRET (launch 2026-09-28). Qui la détient déclenche les
+ * automatisations de l'entreprise depuis l'extérieur. Elle n'est plus jamais
+ * RELUE : la liste montre ses 4 derniers caractères, et la clé complète ne
+ * sort qu'une fois — à la création ou à la régénération. La colonne n'est
+ * plus lisible par `authenticated` (migration du bloc 4) : la lecture du
+ * suffixe passe par service_role APRÈS la garde de la RLS.
+ */
+const COLONNES_WEBHOOK = 'id, name, enabled, created_at';
+const masquer = (cle: string | null | undefined) => (cle ? `••••${cle.slice(-4)}` : '••••');
+
+async function suffixesDesCles(orgId: string, ids: string[]): Promise<Map<string, string>> {
+  if (!ids.length) return new Map();
+  const { data, error } = await getServiceClient().from('automation_webhooks').select('id, api_key').eq('org_id', orgId).in('id', ids);
+  if (error) {
+    logger.error('[automation-rules] suffixes des clés illisibles', { message: error.message });
+    return new Map();
+  }
+  return new Map(((data ?? []) as Array<{ id: string; api_key: string }>).map((w) => [w.id, masquer(w.api_key)]));
+}
+
+async function cleComplete(orgId: string, id: string): Promise<string | null> {
+  const { data } = await getServiceClient().from('automation_webhooks').select('api_key').eq('org_id', orgId).eq('id', id).maybeSingle();
+  return (data as { api_key?: string } | null)?.api_key ?? null;
+}
+
 router.get('/automations/webhooks', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
 
+  // La RLS (« Voir les automatisations ») décide QUELLES adresses on voit.
   const { data, error } = await auth.client
     .from('automation_webhooks')
-    .select('id, name, api_key, enabled, created_at')
+    .select(COLONNES_WEBHOOK)
     .eq('org_id', auth.orgId)
     .is('deleted_at', null)
     .order('created_at');
@@ -848,7 +906,9 @@ router.get('/automations/webhooks', async (req, res) => {
     logger.error('[automation-rules] webhooks illisibles', { message: error.message });
     return res.status(500).json({ error: 'Impossible de lire vos adresses d’appel.' });
   }
-  return res.json({ webhooks: data ?? [] });
+  const lignes = (data ?? []) as Array<{ id: string }>;
+  const suffixes = await suffixesDesCles(auth.orgId, lignes.map((w) => w.id));
+  return res.json({ webhooks: lignes.map((w) => ({ ...w, cle_masquee: suffixes.get(w.id) ?? '••••' })) });
 });
 
 router.post('/automations/webhooks', async (req, res) => {
@@ -864,7 +924,7 @@ router.post('/automations/webhooks', async (req, res) => {
   const { data, error } = await auth.client
     .from('automation_webhooks')
     .insert({ org_id: auth.orgId, created_by: auth.user.id, name: nom })
-    .select('id, name, api_key, enabled, created_at')
+    .select(COLONNES_WEBHOOK)
     .single();
 
   if (error) {
@@ -874,7 +934,37 @@ router.post('/automations/webhooks', async (req, res) => {
     logger.error('[automation-rules] création webhook échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de créer l’adresse d’appel.' });
   }
-  return res.status(201).json(data);
+  // La SEULE fois où la clé complète sort (avec la régénération).
+  const cle = await cleComplete(auth.orgId, (data as { id: string }).id);
+  return res.status(201).json({ ...data, api_key: cle, cle_masquee: masquer(cle) });
+});
+
+router.post('/automations/webhooks/:id/regenerer', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  // Nouvelle clé, même format que la base (32 octets en hexadécimal).
+  // L'ancienne adresse cesse de fonctionner immédiatement.
+  const nouvelle = randomBytes(32).toString('hex');
+  const { data, error } = await auth.client
+    .from('automation_webhooks')
+    .update({ api_key: nouvelle, updated_at: new Date().toISOString() })
+    .eq('id', req.params.id)
+    .eq('org_id', auth.orgId)
+    .is('deleted_at', null)
+    .select(COLONNES_WEBHOOK)
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === '42501') {
+      return res.status(403).json({ error: 'Votre rôle ne permet pas de régénérer cette adresse.' });
+    }
+    logger.error('[automation-rules] régénération webhook échouée', { message: error.message });
+    return res.status(500).json({ error: 'Impossible de régénérer l’adresse d’appel.' });
+  }
+  // 0 ligne = introuvable, ou la RLS a refusé (pas « Modifier les automatisations »).
+  if (!data) return res.status(404).json({ error: 'Adresse d’appel introuvable, ou votre rôle ne permet pas de la régénérer.' });
+  return res.json({ ...data, api_key: nouvelle, cle_masquee: masquer(nouvelle) });
 });
 
 router.patch('/automations/webhooks/:id', async (req, res) => {
@@ -892,7 +982,7 @@ router.patch('/automations/webhooks/:id', async (req, res) => {
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .is('deleted_at', null)
-    .select('id, name, api_key, enabled, created_at')
+    .select(COLONNES_WEBHOOK)
     .maybeSingle();
 
   if (error) {
@@ -900,7 +990,8 @@ router.patch('/automations/webhooks/:id', async (req, res) => {
     return res.status(500).json({ error: 'Impossible de modifier l’adresse d’appel.' });
   }
   if (!data) return res.status(404).json({ error: 'Adresse d’appel introuvable.' });
-  return res.json(data);
+  const suffixes = await suffixesDesCles(auth.orgId, [(data as { id: string }).id]);
+  return res.json({ ...data, cle_masquee: suffixes.get((data as { id: string }).id) ?? '••••' });
 });
 
 router.delete('/automations/webhooks/:id', async (req, res) => {

@@ -20,103 +20,22 @@ const router = Router();
 
 // ── POST /automations/events/appointment-created ──
 // Called after a schedule_event is created
-router.post('/automations/events/appointment-created', validate(automationEventSchema), async (req, res) => {
-  try {
-    const auth = await requireAuthedClient(req, res);
-    if (!auth) return;
-
-    const { eventId, jobId, clientId, startTime, title, address, suppressImmediate } = req.body;
-    if (!eventId) return res.status(400).json({ error: 'eventId is required' });
-
-    // Fetch details for variable resolution
-    const admin = getServiceClient();
-    let clientName = '';
-    let clientEmail = '';
-    let clientPhone = '';
-    let jobName = '';
-
-    if (jobId && auth.orgId) {
-      const { data: job } = await admin
-        .from('jobs')
-        .select('title, client_id')
-        .eq('id', jobId)
-        .eq('org_id', auth.orgId)
-        .maybeSingle();
-      if (job) {
-        jobName = job.title || '';
-        const cid = clientId || job.client_id;
-        if (cid) {
-          const { data: client } = await admin
-            .from('clients')
-            .select('first_name, last_name, email, phone')
-            .eq('id', cid)
-            .eq('org_id', auth.orgId)
-            .maybeSingle();
-          if (client) {
-            clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
-            clientEmail = client.email || '';
-            clientPhone = client.phone || '';
-          }
-        }
-      }
-    }
-
-    await eventBus.emit('appointment.created', {
-      orgId: auth.orgId,
-      entityType: 'schedule_event',
-      entityId: eventId,
-      actorId: auth.user.id,
-      metadata: {
-        job_id: jobId || null,
-        client_id: clientId || null,
-        start_time: startTime || null,
-        title: title || jobName || '',
-        address: address || '',
-        client_name: clientName,
-        client_email: clientEmail,
-        client_phone: clientPhone,
-        job_name: jobName,
-        // Visite créée en lot : le moteur saute les règles immédiates
-        // (confirmation) mais planifie normalement les rappels datés.
-        ...(suppressImmediate ? { suppress_immediate: true } : {}),
-      },
-      relatedEntityType: jobId ? 'job' : undefined,
-      relatedEntityId: jobId || undefined,
-    });
-
-    return res.json({ ok: true });
-  } catch (err: any) {
-    console.error('[automation-events] appointment.created error:', err.message);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
+router.post('/automations/events/appointment-created', validate(automationEventSchema), (_req, res) => {
+  // Launch 2026-09-28 (bloc 2) : cet événement naît d'un TRIGGER en base
+  // (migration 20261003100000, lu par server/lib/evenementsBase.ts). Émis ici,
+  // il partirait en double. La route reste pour les onglets ouverts sur une
+  // ancienne version de l'app, qui l'appellent encore.
+  return res.json({ ok: true, via: 'base' });
 });
 
 // ── POST /automations/events/appointment-cancelled ──
 // Called after a schedule_event is deleted/cancelled
-router.post('/automations/events/appointment-cancelled', validate(automationEventSchema), async (req, res) => {
-  try {
-    const auth = await requireAuthedClient(req, res);
-    if (!auth) return;
-
-    const { eventId, jobId, clientId } = req.body;
-    if (!eventId) return res.status(400).json({ error: 'eventId is required' });
-
-    await eventBus.emit('appointment.cancelled', {
-      orgId: auth.orgId,
-      entityType: 'schedule_event',
-      entityId: eventId,
-      actorId: auth.user.id,
-      metadata: {
-        job_id: jobId || null,
-        client_id: clientId || null,
-      },
-    });
-
-    return res.json({ ok: true });
-  } catch (err: any) {
-    console.error('[automation-events] appointment.cancelled error:', err.message);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
+router.post('/automations/events/appointment-cancelled', validate(automationEventSchema), (_req, res) => {
+  // Launch 2026-09-28 (bloc 2) : cet événement naît d'un TRIGGER en base
+  // (migration 20261003100000, lu par server/lib/evenementsBase.ts). Émis ici,
+  // il partirait en double. La route reste pour les onglets ouverts sur une
+  // ancienne version de l'app, qui l'appellent encore.
+  return res.json({ ok: true, via: 'base' });
 });
 
 // ── POST /automations/events/appointment-rescheduled ──
@@ -244,20 +163,10 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
     const userCtx = req.userContext;
     const isTechnician = userCtx?.role === 'technician';
 
-    await eventBus.emit('job.completed', {
-      orgId: auth.orgId,
-      entityType: 'job',
-      entityId: jobId,
-      actorId: auth.user.id,
-      metadata: {
-        job_name: job.title || '',
-        client_id: job.client_id || null,
-        client_name: clientName,
-        client_email: clientEmail,
-        client_phone: clientPhone,
-        completed_by_technician: isTechnician,
-      },
-    });
+  // Launch 2026-09-28 (bloc 2) : `job.completed` naît d'un TRIGGER en base
+  // (migration 20261003100000, lu par server/lib/evenementsBase.ts). Émis ici,
+  // il partirait en double. La route reste pour les onglets ouverts sur une
+  // ancienne version de l'app, qui l'appellent encore.
 
     // When a technician completes a job, emit a separate event for invoicing
     // and create a notification for owner/admin to handle the invoice
@@ -401,79 +310,22 @@ router.post('/automations/events/quote-sent', validate(automationEventSchema), a
 });
 
 // ── POST /automations/events/quote-approved ──
-router.post('/automations/events/quote-approved', validate(automationEventSchema), async (req, res) => {
-  try {
-    const auth = await requireAuthedClient(req, res);
-    if (!auth) return;
-    const { quoteId, leadId } = req.body;
-
-    await eventBus.emit('quote.approved', {
-      orgId: auth.orgId,
-      entityType: 'quote',
-      entityId: quoteId || '',
-      actorId: auth.user.id,
-      metadata: { lead_id: leadId || null },
-    });
-    return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'Internal server error' });
-  }
+router.post('/automations/events/quote-approved', validate(automationEventSchema), (_req, res) => {
+  // Launch 2026-09-28 (bloc 2) : cet événement naît d'un TRIGGER en base
+  // (migration 20261003100000, lu par server/lib/evenementsBase.ts). Émis ici,
+  // il partirait en double. La route reste pour les onglets ouverts sur une
+  // ancienne version de l'app, qui l'appellent encore.
+  return res.json({ ok: true, via: 'base' });
 });
 
 // ── POST /automations/events/invoice-paid ──
 // Called when an invoice is manually marked as paid
-router.post('/automations/events/invoice-paid', validate(automationEventSchema), async (req, res) => {
-  try {
-    const auth = await requireAuthedClient(req, res);
-    if (!auth) return;
-    const { invoiceId, clientId } = req.body;
-    if (!invoiceId) return res.status(400).json({ error: 'invoiceId is required' });
-
-    const admin = getServiceClient();
-    const { data: inv } = await admin
-      .from('invoices')
-      .select('invoice_number, client_id, job_id, total_cents')
-      .eq('id', invoiceId)
-      .eq('org_id', auth.orgId)
-      .maybeSingle();
-
-    let clientName = '';
-    let clientEmail = '';
-    let clientPhone = '';
-    const cid = clientId || inv?.client_id;
-    if (cid) {
-      const { data: client } = await admin
-        .from('clients')
-        .select('first_name, last_name, email, phone')
-        .eq('id', cid)
-        .eq('org_id', auth.orgId)
-        .maybeSingle();
-      if (client) {
-        clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
-        clientEmail = client.email || '';
-        clientPhone = client.phone || '';
-      }
-    }
-
-    await eventBus.emit('invoice.paid', {
-      orgId: auth.orgId,
-      entityType: 'invoice',
-      entityId: invoiceId,
-      actorId: auth.user.id,
-      metadata: {
-        invoice_number: inv?.invoice_number || '',
-        client_id: cid || null,
-        client_name: clientName,
-        client_email: clientEmail,
-        client_phone: clientPhone,
-        total_cents: inv?.total_cents || 0,
-      },
-    });
-    return res.json({ ok: true });
-  } catch (err: any) {
-    console.error('[automation-events] invoice.paid error:', err.message);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
+router.post('/automations/events/invoice-paid', validate(automationEventSchema), (_req, res) => {
+  // Launch 2026-09-28 (bloc 2) : cet événement naît d'un TRIGGER en base
+  // (migration 20261003100000, lu par server/lib/evenementsBase.ts). Émis ici,
+  // il partirait en double. La route reste pour les onglets ouverts sur une
+  // ancienne version de l'app, qui l'appellent encore.
+  return res.json({ ok: true, via: 'base' });
 });
 
 // ── POST /automations/events/lead-created ──

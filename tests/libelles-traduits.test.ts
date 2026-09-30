@@ -98,6 +98,9 @@ describe('les remboursements passent par Stripe, pas par Lume', () => {
     // remboursement fait dans Stripe resterait invisible pour toujours.
     const routes = lire('server/routes/payments.ts');
     expect(routes).toContain("event.type === 'charge.refunded'");
-    expect(routes).toContain('partially_refunded');
+    // Le montant rendu est inscrit (refunded_cents) ; l'ancien statut
+    // 'partially_refunded' était refusé par payments_status_check, en silence.
+    expect(routes).toContain('refunded_cents: rembourse');
+    expect(routes).not.toMatch(/status:[^\n]*'partially_refunded'/);
   });
 });
