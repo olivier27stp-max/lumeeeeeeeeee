@@ -135,29 +135,47 @@ function memeValeur(a: unknown, b: unknown): boolean {
  * de nombres suffit ensuite. On essaie le nombre D'ABORD, sinon
  * `Date.parse('5')` interpréterait « 5 » comme une année.
  */
-function versNombreComparable(v: unknown): number | null {
+/*
+ * Une DATE, c'est une date ISO (« 2026-09-30 », « 2026-09-30T10:00:00Z »,
+ * « 2026-09-30 10:00:00+00 » de Postgres) — rien d'autre. `Date.parse` seul
+ * lit n'importe quoi : « 1500$ » devient l'an 1500, « Montant 5 » mai 2001,
+ * « 2026-02-30 » le 2 mars. Une borne « montant ≥ 1500$ » laissait alors
+ * passer TOUS les montants (comparés à une date de l'an 1500).
+ */
+const DATE_ISO = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?$/i;
+
+function versNombreComparable(v: unknown): { valeur: number; nature: 'nombre' | 'date' } | null {
   if (v === null || v === undefined || v === '') return null;
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.getTime();
+  if (typeof v === 'number') return Number.isFinite(v) ? { valeur: v, nature: 'nombre' } : null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : { valeur: v.getTime(), nature: 'date' };
   if (typeof v !== 'string') return null;
 
   const texte = v.trim();
   if (texte === '') return null;
 
   // Un nombre pur reste un nombre (montants en cents, quantités…).
-  if (/^-?\d+(\.\d+)?$/.test(texte)) return Number(texte);
+  if (/^-?\d+(\.\d+)?$/.test(texte)) return { valeur: Number(texte), nature: 'nombre' };
 
+  const iso = DATE_ISO.exec(texte);
+  if (!iso) return null;
+  // Le jour doit exister : « 2026-02-30 » n'est pas « roulé » au 2 mars.
+  const [a, m, j] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  const jour = new Date(Date.UTC(a, m - 1, j));
+  if (jour.getUTCFullYear() !== a || jour.getUTCMonth() !== m - 1 || jour.getUTCDate() !== j) return null;
   const t = Date.parse(texte);
-  return Number.isNaN(t) ? null : t;
+  return Number.isNaN(t) ? null : { valeur: t, nature: 'date' };
 }
 
 /**
- * `a OP b` sur des dates ou des nombres. `null` = incomparable.
+ * `a OP b` sur des dates ou des nombres. `null` = incomparable — y compris
+ * un nombre comparé à une date (« montant ≤ 2026-01-01 » n'a pas de sens).
  */
 function comparer(a: unknown, b: unknown, op: 'gt' | 'gte' | 'lt' | 'lte'): boolean | null {
-  const x = versNombreComparable(a);
-  const y = versNombreComparable(b);
-  if (x === null || y === null) return null;
+  const ga = versNombreComparable(a);
+  const gb = versNombreComparable(b);
+  if (ga === null || gb === null || ga.nature !== gb.nature) return null;
+  const x = ga.valeur;
+  const y = gb.valeur;
   switch (op) {
     case 'gt': return x > y;
     case 'gte': return x >= y;
