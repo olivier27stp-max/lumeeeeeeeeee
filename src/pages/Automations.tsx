@@ -19,7 +19,7 @@ import {
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
   Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
   Plus, Pencil, Copy, Trash2, RotateCcw, X, EllipsisVertical,
-  Settings, FolderPlus, Filter, Building2, Link2, Eye, } from 'lucide-react';
+  Settings, FolderPlus, Filter, Building2, Link2, Eye, Trophy, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { localizeAutomationName } from '../lib/automationNames';
 import { useTranslation } from '../i18n';
@@ -195,6 +195,7 @@ const PRESET_META: Record<string, {
   quote_opened_notify:      { icon: Eye,            category: 'Quotes' },
   quote_opened_move_deal:   { icon: Eye,            category: 'Quotes' },
   quote_sent_move_deal:     { icon: Send,           category: 'Quotes' },
+  quote_approved_move_deal: { icon: Trophy,         category: 'Quotes' },
   quote_followup_1d:        { icon: Mail,           category: 'Quotes' },
   quote_followup_3d:        { icon: Mail,           category: 'Quotes' },
   quote_followup_7d:        { icon: Mail,           category: 'Quotes' },

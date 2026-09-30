@@ -39,6 +39,8 @@ const ETAPES = [
   { id: 'bbbbbbbb-0000-4000-8000-000000000011', pipeline_id: PIPELINE, role_systeme: 'nouveau', position: 1, kind: 'open', archived_at: null, name_fr: 'Nouveau' },
   { id: 'bbbbbbbb-0000-4000-8000-000000000012', pipeline_id: PIPELINE, role_systeme: 'soumission_envoyee', position: 2, kind: 'open', archived_at: null, name_fr: 'Soumission envoyée' },
   { id: 'bbbbbbbb-0000-4000-8000-000000000013', pipeline_id: PIPELINE, role_systeme: 'soumission_ouverte', position: 3, kind: 'open', archived_at: null, name_fr: 'Soumission ouverte' },
+  // Étape de type `won`, sans rôle : la cible `gagne` (devis accepté) la trouve par son type.
+  { id: 'bbbbbbbb-0000-4000-8000-000000000016', pipeline_id: PIPELINE, role_systeme: null, position: 6, kind: 'won', archived_at: null, name_fr: 'Gagné' },
 ];
 export const nomEtape = (id: string) => ETAPES.find((e) => e.id === id)?.name_fr ?? id;
 

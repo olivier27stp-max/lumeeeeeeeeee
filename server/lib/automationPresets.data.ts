@@ -59,6 +59,22 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
     ]
   },
   {
+    "preset_key": "quote_approved_move_deal",
+    "name": "Passer le deal à « Gagné » quand la soumission est acceptée",
+    "description": "Quand le client accepte une soumission faite depuis l'entrée du deal dans la pipeline, le deal passe à « Gagné » (bande « job à créer » tant que la job n'existe pas). Jamais depuis un deal déjà gagné ou perdu, jamais pour un devis d'avant le deal.",
+    "trigger_event": "quote.approved",
+    "conditions": {},
+    "delay_seconds": 0,
+    "actions": [
+      {
+        "type": "move_deal_stage",
+        "config": {
+          "cible": "gagne"
+        }
+      }
+    ]
+  },
+  {
     "preset_key": "quote_opened_move_deal",
     "name": "Avancer le deal quand le client ouvre sa soumission",
     "description": "À la première ouverture, le deal lié passe de « Soumission envoyée » à « Soumission ouverte ». Jamais de retour en arrière.",

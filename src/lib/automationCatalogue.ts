@@ -972,9 +972,10 @@ export const ACTIONS: ActionCatalogue[] = [
           { cle: 'etape', fr: 'Une étape précise', en: 'A specific stage' },
           { cle: 'role_envoyee', fr: 'L’étape « Soumission envoyée »', en: 'The “Quote sent” stage' },
           { cle: 'role', fr: 'L’étape « Soumission ouverte » (depuis « Soumission envoyée »)', en: 'The “Quote opened” stage (from “Quote sent”)' },
+          { cle: 'gagne', fr: 'L’étape « Gagné »', en: 'The “Won” stage' },
         ],
-        aide_fr: 'Les étapes « Soumission envoyée » et « Soumission ouverte » suivent l’étape même si vous la renommez, et ne font jamais reculer une opportunité déjà plus loin.',
-        aide_en: 'The “Quote sent” and “Quote opened” options follow the stage even if renamed, and never move a deal backwards.',
+        aide_fr: 'Les étapes « Soumission envoyée », « Soumission ouverte » et « Gagné » suivent l’étape même si vous la renommez, et ne font jamais reculer une opportunité déjà plus loin (une opportunité gagnée ou perdue ne bouge pas).',
+        aide_en: 'The “Quote sent”, “Quote opened” and “Won” options follow the stage even if renamed, and never move a deal backwards (a won or lost deal does not move).',
       },
       {
         cle: 'stage_id', fr: 'L’étape visée', en: 'Target stage', obligatoire: true, type: 'texte', max: 40,
