@@ -448,18 +448,34 @@ export function nextSendTime(
  * Langue des communications automatiques de l'org (company_settings.
  * default_language). Défaut 'fr' si absent/erreur — jamais bloquant.
  */
+/**
+ * Langue de l'entreprise, gardée 5 minutes comme le fuseau (T6.2 : elle
+ * était relue à CHAQUE événement et à chaque tâche). Une lecture ratée n'est
+ * pas mise en cache : on retombe sur le français pour cette fois seulement.
+ */
+const cacheLangue = new Map<string, { langue: 'fr' | 'en'; expire: number }>();
+const DUREE_CACHE_LANGUE_MS = 5 * 60_000;
+
 async function langueOrg(supabase: SupabaseClient, orgId: string): Promise<'fr' | 'en'> {
+  const connue = cacheLangue.get(orgId);
+  if (connue && connue.expire > Date.now()) return connue.langue;
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('company_settings')
       .select('default_language')
       .eq('org_id', orgId)
       .maybeSingle();
-    return data?.default_language === 'en' ? 'en' : 'fr';
+    if (error) return 'fr';
+    const langue: 'fr' | 'en' = data?.default_language === 'en' ? 'en' : 'fr';
+    cacheLangue.set(orgId, { langue, expire: Date.now() + DUREE_CACHE_LANGUE_MS });
+    return langue;
   } catch {
     return 'fr';
   }
 }
+
+/** Pour les tests : oublier la langue gardée en mémoire. */
+export function oublierLanguesOrg(): void { cacheLangue.clear(); }
 
 /**
  * Fenêtre anti-doublon des actions IMMÉDIATES (F3).
