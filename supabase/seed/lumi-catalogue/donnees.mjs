@@ -254,6 +254,23 @@ export function construireJeu(cal = construireCalendrier()) {
     JOB('jean_boreal', 120, { bureau: 'boreal', client: 'jean_boreal', titre: 'Rénovation salle de bain', statut: 'completed', lignes: [{ service: null, nom: 'Rénovation salle de bain — forfait', qte: 1, prix: 100000 }], visites: [V(J(-40), '08:00', '16:00', 'autre')], termine: J(-40) }),
   ];
 
+  // La base refuse deux visites du même technicien qui se chevauchent
+  // (schedule_events_no_tech_overlap). Les visites de la semaine du changement
+  // d'heure ont des dates FIXES, les autres suivent l'ancre : selon le jour du
+  // seed, deux visites peuvent tomber l'une sur l'autre. Les fixes sont placées
+  // d'abord, puis les autres dans l'ordre de la liste, décalées au lendemain
+  // tant qu'elles heurtent une visite déjà placée.
+  const minutes = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+  const placees = [];
+  const heurte = (v) => placees.some((f) => f.assigne === v.assigne && iso(f.jour) === iso(v.jour)
+    && minutes(v.debut) < minutes(f.fin) && minutes(f.debut) < minutes(v.fin));
+  for (const j of [...jobs.filter((x) => x.cle.endsWith('_dst')), ...jobs.filter((x) => !x.cle.endsWith('_dst'))]) {
+    for (const v of j.visites) {
+      if (!j.cle.endsWith('_dst')) while (heurte(v)) v.jour = plusJours(v.jour, 1);
+      placees.push(v);
+    }
+  }
+
   // ── Factures et paiements ──
   const F = (cle, numero, champs) => {
     const st = champs.sousTotal ?? somme(champs.lignes);
