@@ -39,6 +39,9 @@ export const MESSAGES_EN: Record<string, string> = {
   'Dossier introuvable dans ce bureau.': 'Folder not found in this office.',
   'Votre rôle ne permet pas de créer une automatisation.': 'Your role does not allow creating an automation.',
   'Impossible de créer l\'automatisation.': 'Could not create the automation.',
+  'Impossible de créer l’automatisation.': 'Could not create the automation.',
+  // Bibliothèque de modèles (#778).
+  'Modèle introuvable.': 'Template not found.',
   'Décris ton automatisation en une phrase.': 'Describe your automation in one sentence.',
   'Impossible de lire l\'automatisation.': 'Could not read the automation.',
   'Impossible de lire l’automatisation.': 'Could not read the automation.',
