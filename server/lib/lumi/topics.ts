@@ -51,7 +51,7 @@ export const TOPICS: readonly Topic[] = [
   {
     id: 'facturation',
     description: 'Factures, paiements, retards, relances, factures récurrentes, modèles de facture, taxes, catalogue de services, revenus, rentabilité, comparaisons de périodes.',
-    outils: ['list_invoices', 'get_overdue_payments', 'get_revenue_summary', 'get_financial_overview', 'compare_revenue', 'get_job_profitability', 'get_top_services',
+    outils: ['list_invoices', 'get_overdue_payments', 'get_revenue_summary', 'get_financial_overview', 'compare_revenue', 'analyze_profitability', 'get_top_services',
       'create_invoice', 'create_invoice_from_job', 'send_invoice', 'mark_invoice_paid', 'send_payment_reminders'],
     refuse: 'Un devis (soumission) → devis ; planifier une visite → planification ; fiche d’un client → clients.',
   },

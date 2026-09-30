@@ -1,15 +1,21 @@
 /**
- * Job profitability — real P&L per job, computed IN THE DATABASE by
- * `rentabilite_jobs` (migration 20261002700000) so the Statistics card, the
- * job page and Lumi share ONE definition:
- *   revenue  = jobs.subtotal_cents (before taxes — TPS/TVQ are not revenue)
- *   labour   = hours clocked ON the job (time_entries.job_id, breaks deducted)
- *              × the member's hourly rate (team_members, like payroll)
- *   expenses = jobs.expenses_cents
- * Access: financial.view_margins (Roles page) — enforced by the function.
+ * Job profitability — ONE definition for the job page, the Statistics card,
+ * Lumi and the MCP: the server action `analyze_profitability`
+ * (server/lib/rentabilite, route GET /api/profitability).
+ *   revenue     = invoices before taxes, minus refunds (job/quote price as an
+ *                 estimate when nothing is invoiced)
+ *   labour      = hours clocked on the job × the member's hourly rate
+ *                 (scheduled visits × assigned tech as an estimate)
+ *   commissions = the job's commission entries
+ *   expenses    = the "Expenses" custom-field folder (+ priced materials);
+ *                 the old per-job total only when no such field is filled
+ * With a missing cost the margin is a MAXIMUM (`marge_est_un_maximum`).
+ * Access: financial.view_margins (Roles page), checked by the server.
  */
 import { supabase } from './supabase';
-import { getCurrentOrgIdOrThrow } from './orgApi';
+import { getCurrentOrgId, getCurrentOrgIdOrThrow } from './orgApi';
+
+export type Completude = 'complete' | 'partielle' | 'insuffisante';
 
 export interface JobPnLRow {
   job_id: string;
@@ -18,78 +24,123 @@ export interface JobPnLRow {
   revenue_cents: number;
   hours: number;
   labour_cents: number;
+  commissions_cents: number;
   expenses_cents: number;
   profit_cents: number;
-  margin_pct: number;
+  /** null: no revenue, or not enough data to compute a margin. */
+  margin_pct: number | null;
+  completude: Completude;
+  margin_is_maximum: boolean;
+  estimated: boolean;
+  /** The old per-job expense total can still be edited (no "Expenses" field filled). */
+  expenses_editable: boolean;
 }
 
 export interface JobPnL {
   rows: JobPnLRow[];
   total_revenue_cents: number;
   total_labour_cents: number;
+  total_commissions_cents: number;
   total_expenses_cents: number;
   total_profit_cents: number;
-  margin_pct: number;
+  margin_pct: number | null;
+  completude: Completude;
+  margin_is_maximum: boolean;
+  /** Ready-made sentence: figure, what is included, what is missing, one action. */
+  summary_fr: string;
+  summary_en: string;
 }
 
 const EMPTY: JobPnL = {
   rows: [],
   total_revenue_cents: 0,
   total_labour_cents: 0,
+  total_commissions_cents: 0,
   total_expenses_cents: 0,
   total_profit_cents: 0,
-  margin_pct: 0,
+  margin_pct: null,
+  completude: 'insuffisante',
+  margin_is_maximum: false,
+  summary_fr: '',
+  summary_en: '',
 };
 
-function versLigne(r: any): JobPnLRow {
+/** Accès refusé (permission des marges) : l'écran masque le volet au lieu d'afficher une erreur. */
+export class RentabiliteRefusee extends Error {}
+
+async function lireRentabilite(params: Record<string, string | number | undefined>): Promise<any> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Session expirée.');
+  const orgId = await getCurrentOrgId();
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v != null && v !== '') qs.set(k, String(v));
+  const reponse = await fetch(`/api/profitability?${qs.toString()}`, {
+    headers: { Authorization: `Bearer ${token}`, ...(orgId ? { 'x-org-id': orgId } : {}) },
+  });
+  let corps: any = null;
+  try { corps = await reponse.json(); } catch { /* corps illisible : le statut suffit */ }
+  if (reponse.status === 403) throw new RentabiliteRefusee(corps?.error || 'Accès refusé.');
+  if (!reponse.ok) throw new Error(corps?.error || 'Rentabilité indisponible.');
+  return corps;
+}
+
+function versLigne(g: any): JobPnLRow {
   return {
-    job_id: String(r.job_id),
-    job_number: r.job_number || String(r.job_id).slice(0, 8),
-    client_name: r.client_nom || '—',
-    revenue_cents: Number(r.revenu_cents) || 0,
-    hours: Number(r.heures) || 0,
-    labour_cents: Number(r.main_oeuvre_cents) || 0,
-    expenses_cents: Number(r.depenses_cents) || 0,
-    profit_cents: Number(r.profit_cents) || 0,
-    margin_pct: Math.round(Number(r.marge_pct) || 0),
+    job_id: String(g.cle),
+    job_number: g.numero || String(g.cle).slice(0, 8),
+    client_name: g.client || '—',
+    revenue_cents: Number(g.revenus_cents) || 0,
+    hours: Number(g.heures) || 0,
+    labour_cents: Number(g.main_oeuvre_cents) || 0,
+    commissions_cents: Number(g.commissions_cents) || 0,
+    expenses_cents: Number(g.depenses_cents) || 0,
+    profit_cents: Number(g.profit_cents) || 0,
+    margin_pct: g.completude === 'insuffisante' || g.marge_pct == null ? null : Math.round(Number(g.marge_pct)),
+    completude: g.completude,
+    margin_is_maximum: Boolean(g.marge_est_un_maximum),
+    estimated: Boolean(g.contient_estimations),
+    expenses_editable: g.depenses_saisie_libre !== false,
   };
 }
 
 export async function fetchJobPnL(params: { from: string; to: string }): Promise<JobPnL> {
   try {
-    const orgId = await getCurrentOrgIdOrThrow();
-    const { data, error } = await supabase.rpc('rentabilite_jobs', { p_org: orgId, p_from: params.from, p_to: params.to });
-    if (error) throw error;
-    const rows = ((data || []) as any[]).map(versLigne).sort((a, b) => b.revenue_cents - a.revenue_cents);
-    if (rows.length === 0) return EMPTY;
-    const tRev = rows.reduce((s, r) => s + r.revenue_cents, 0);
-    const tLab = rows.reduce((s, r) => s + r.labour_cents, 0);
-    const tExp = rows.reduce((s, r) => s + r.expenses_cents, 0);
-    const tPro = tRev - tLab - tExp;
+    const r = await lireRentabilite({ date_from: params.from, date_to: params.to, group_by: 'job', sort: 'revenus_desc', limit: 500 });
+    const rows = ((r?.groupes || []) as any[]).map(versLigne);
+    if (rows.length === 0) return { ...EMPTY, summary_fr: r?.resume_fr ?? '', summary_en: r?.resume_en ?? '' };
+    const t = r.totaux;
     return {
       rows,
-      total_revenue_cents: tRev,
-      total_labour_cents: tLab,
-      total_expenses_cents: tExp,
-      total_profit_cents: tPro,
-      margin_pct: tRev > 0 ? Math.round((tPro / tRev) * 100) : 0,
+      total_revenue_cents: t.revenus_cents,
+      total_labour_cents: t.main_oeuvre_cents,
+      total_commissions_cents: t.commissions_cents,
+      total_expenses_cents: t.depenses_cents,
+      total_profit_cents: t.profit_cents,
+      margin_pct: r.completude === 'insuffisante' || t.marge_pct == null ? null : Math.round(t.marge_pct),
+      completude: r.completude,
+      margin_is_maximum: Boolean(r.marge_est_un_maximum),
+      summary_fr: r.resume_fr,
+      summary_en: r.resume_en,
     };
   } catch (err) {
+    if (err instanceof RentabiliteRefusee) return EMPTY;
     console.error('[profitabilityApi] fetchJobPnL :', err);
     return EMPTY;
   }
 }
 
 /** Rentabilité d'UN job (fiche de job). null si l'utilisateur n'a pas accès aux marges. */
-export async function fetchJobPnLForJob(jobId: string): Promise<JobPnLRow | null> {
-  const orgId = await getCurrentOrgIdOrThrow();
-  const { data, error } = await supabase.rpc('rentabilite_jobs', { p_org: orgId, p_job: jobId });
-  if (error) {
-    if (error.code === '42501') return null;
-    throw error;
+export async function fetchJobPnLForJob(jobId: string): Promise<(JobPnLRow & { summary_fr: string; summary_en: string }) | null> {
+  try {
+    const r = await lireRentabilite({ job_id: jobId, group_by: 'job', limit: 1 });
+    const g = (r?.groupes || [])[0];
+    if (!g) return null;
+    return { ...versLigne(g), summary_fr: r.resume_fr, summary_en: r.resume_en };
+  } catch (err) {
+    if (err instanceof RentabiliteRefusee) return null;
+    throw err;
   }
-  const r = ((data || []) as any[])[0];
-  return r ? versLigne(r) : null;
 }
 
 /** Set the materials/subcontracting expense on a job (in cents). Org-scoped. */

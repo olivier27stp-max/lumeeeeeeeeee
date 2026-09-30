@@ -51,7 +51,7 @@ import {
 } from '../lib/jobBillingApi';
 import { fetchReminderSettings, fetchReminderLog, type ReminderSettings, type ReminderLogEntry } from '../lib/remindersApi';
 import { formatCents, type TaxLine } from '../lib/jobCalc';
-import { fetchJobPnLForJob, type JobPnLRow } from '../lib/profitabilityApi';
+import { fetchJobPnLForJob } from '../lib/profitabilityApi';
 import { Job } from '../types';
 import StatusBadge from '../components/ui/StatusBadge';
 import { useJobModalController } from '../contexts/JobModalController';
@@ -211,7 +211,7 @@ export default function JobDetails() {
   const [isClosing, setIsClosing] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [showProfitability, setShowProfitability] = useState(false);
-  const [rentabilite, setRentabilite] = useState<JobPnLRow | null>(null);
+  const [rentabilite, setRentabilite] = useState<Awaited<ReturnType<typeof fetchJobPnLForJob>>>(null);
   // Chargée à l'ouverture du volet seulement (permission des marges vérifiée en base aussi).
   useEffect(() => {
     if (!showProfitability || !canSeeMargins || !id) return;
@@ -909,15 +909,16 @@ export default function JobDetails() {
   const displayTaxCents = subtotalCents > 0 ? taxCents : enabledTaxes.reduce((sum, tx) => sum + Math.round(computedSubtotalCents * (tx.rate / 100)), 0);
   const displayTotalCents = subtotalCents > 0 ? totalCents : displaySubtotalCents + displayTaxCents;
 
-  // Rentabilité : calculée en base (rentabilite_jobs), même définition que les
-  // Statistiques et Lumi — revenu AVANT taxes − main-d'œuvre pointée sur le job
-  // − dépenses. Avant, main-d'œuvre et dépenses étaient « 0,00 $ » écrits en
-  // dur et le revenu comptait les taxes : marge toujours 100 %.
+  // Rentabilité : l'action serveur analyze_profitability (même calcul que les
+  // Statistiques et Lumi) — revenu AVANT taxes − main-d'œuvre − commissions −
+  // dépenses. Un coût manquant fait de la marge un MAXIMUM (« ≤ ») ; sans
+  // aucun coût connu, pas de marge du tout plutôt qu'un faux 100 %.
   const revenuHtCents = rentabilite?.revenue_cents ?? displaySubtotalCents;
   const mainOeuvreCents = rentabilite?.labour_cents ?? 0;
+  const commissionsCents = rentabilite?.commissions_cents ?? 0;
   const depensesCents = rentabilite?.expenses_cents ?? 0;
   const profitCents = rentabilite?.profit_cents ?? revenuHtCents;
-  const profitMargin = revenuHtCents > 0 ? Math.round((profitCents / revenuHtCents) * 100) : 0;
+  const margeTexte = rentabilite?.margin_pct == null ? '—' : `${rentabilite.margin_is_maximum ? '≤ ' : ''}${rentabilite.margin_pct}%`;
 
   // Status helpers
   const isToday = job?.scheduled_at && new Date(job.scheduled_at).toDateString() === new Date().toDateString();
@@ -1405,7 +1406,7 @@ export default function JobDetails() {
                   <div className="pt-4 flex flex-col lg:flex-row lg:items-center gap-5">
                     {/* Margin */}
                     <div>
-                      <p className="text-[28px] font-bold text-text-primary leading-none">{profitMargin}%</p>
+                      <p className="text-[28px] font-bold text-text-primary leading-none">{margeTexte}</p>
                       <p className="text-[11px] text-text-tertiary mt-1">{language === 'fr' ? 'Marge de profit' : 'Profit margin'}</p>
                     </div>
 
@@ -1414,6 +1415,10 @@ export default function JobDetails() {
                       <ProfitBlock label={language === 'fr' ? 'Prix avant taxes' : 'Price before tax'} value={formatCents(revenuHtCents)} />
                       <span className="text-text-tertiary font-medium">−</span>
                       <ProfitBlock label={language === 'fr' ? `Main-d'œuvre (${(rentabilite?.hours ?? 0).toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA')} h)` : `Labour (${rentabilite?.hours ?? 0} h)`} value={formatCents(mainOeuvreCents)} color="text-text-secondary" />
+                      {commissionsCents > 0 && (<>
+                        <span className="text-text-tertiary font-medium">−</span>
+                        <ProfitBlock label={language === 'fr' ? 'Commissions' : 'Commissions'} value={formatCents(commissionsCents)} color="text-text-secondary" />
+                      </>)}
                       <span className="text-text-tertiary font-medium">−</span>
                       <ProfitBlock label={language === 'fr' ? 'Dépenses' : 'Expenses'} value={formatCents(depensesCents)} color="text-text-secondary" />
                       <span className="text-text-tertiary font-medium">=</span>
@@ -1427,6 +1432,9 @@ export default function JobDetails() {
                       </div>
                     </div>
                   </div>
+                  {rentabilite && (
+                    <p className="pt-3 text-[12px] text-text-tertiary leading-relaxed">{language === 'fr' ? rentabilite.summary_fr : rentabilite.summary_en}</p>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

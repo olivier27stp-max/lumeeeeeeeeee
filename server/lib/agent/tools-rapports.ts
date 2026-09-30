@@ -96,7 +96,7 @@ async function rapportFinancier(args: Record<string, any>, ctx: ToolContext, lan
   const [comp, serie, renta, services, retards, top] = await Promise.all([
     lire('compare_revenue', { from: du, to: au }, ctx),
     ctx.client.rpc('rpc_insights_revenue_series', { p_org: ctx.orgId, p_from: du, p_to: au, p_granularity: 'month' }),
-    lire('get_job_profitability', { from: du, to: au }, ctx),
+    lire('analyze_profitability', { date_from: du, date_to: au, group_by: 'job', limit: 500, detail: true }, ctx),
     lire('get_top_services', { from: du, to: au }, ctx),
     lire('get_overdue_payments', { limit: 100 }, ctx),
     lire('get_top_clients', { limit: 10 }, ctx),
@@ -133,18 +133,22 @@ async function rapportFinancier(args: Record<string, any>, ctx: ToolContext, lan
   }
 
   // Rentabilité.
-  if (renta && !renta.error && renta.nombre_de_jobs != null) {
+  if (renta && !renta.error && !renta.acces_refuse && renta.nb_jobs != null) {
+    const max = renta.marge_est_un_maximum ? t('au plus ', 'at most ') : '';
+    const jugés = (renta.groupes || []).filter((g: any) => g.completude !== 'insuffisante');
     sections.push({
       titre: t('Rentabilité des jobs', 'Job profitability'),
       kpis: [
-        { label: t('Jobs', 'Jobs'), valeur: String(renta.nombre_de_jobs) },
-        { label: t('Revenus', 'Revenue'), valeur: fmtArgent(renta.revenus_cents, langue) },
-        { label: t('Coûts enregistrés', 'Recorded costs'), valeur: fmtArgent(renta.couts_cents, langue) },
-        { label: t('Marge brute', 'Gross margin'), valeur: fmtArgent(renta.marge_cents, langue), detail: renta.marge_pct == null ? undefined : `${renta.marge_pct} %` },
-        { label: t('Jobs rentables', 'Profitable jobs'), valeur: String(renta.jobs_rentables) },
-        { label: t('Jobs à perte', 'Jobs at a loss'), valeur: String(renta.jobs_a_perte) },
+        { label: t('Jobs', 'Jobs'), valeur: String(renta.nb_jobs) },
+        { label: t('Revenus (avant taxes)', 'Revenue (before taxes)'), valeur: fmtArgent(renta.totaux.revenus_cents, langue) },
+        { label: t('Coûts connus', 'Known costs'), valeur: fmtArgent(renta.totaux.couts_cents, langue) },
+        ...(renta.completude === 'insuffisante' ? [] : [
+          { label: t('Profit', 'Profit'), valeur: `${max}${fmtArgent(renta.totaux.profit_cents, langue)}`, detail: renta.totaux.marge_pct == null ? undefined : `${max}${renta.totaux.marge_pct} %` },
+          { label: t('Jobs rentables', 'Profitable jobs'), valeur: String(jugés.filter((g: any) => g.profit_cents > 0).length) },
+          { label: t('Jobs à perte', 'Jobs at a loss'), valeur: String(jugés.filter((g: any) => g.profit_cents < 0).length) },
+        ]),
       ],
-      note: t('Les coûts sont ceux saisis sur les jobs ; un job sans dépense saisie compte comme 100 % de marge.', 'Costs are those recorded on jobs; a job with no recorded expense counts as 100% margin.'),
+      note: langue === 'en' ? renta.resume_en : renta.resume_fr,
     });
   }
 

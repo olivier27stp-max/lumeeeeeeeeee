@@ -314,7 +314,24 @@ export function nomSection(objet: ObjetChamp, cle: string, fr: boolean): string 
   return s ? (fr ? s.nom.fr : s.nom.en) : null;
 }
 
+/**
+ * Dossier système « Dépenses » des jobs (migration 20261003470000) : chaque champ
+ * MONTANT qu'il contient est compté comme dépense par la rentabilité
+ * (server/lib/rentabilite). Ce n'est pas une section du formulaire : il se
+ * renomme, mais ne se supprime pas.
+ */
+export const CLE_DOSSIER_DEPENSES = 'depenses';
+const NOM_DEPENSES = { fr: 'Dépenses', en: 'Expenses' };
+
+/** Le dossier peut-il être renommé ? (Les sections du formulaire, non.) */
+export const dossierRenommable = (d: { cle_systeme?: string | null }) => !d.cle_systeme || d.cle_systeme === CLE_DOSSIER_DEPENSES;
+
 /** Nom affiché d'un dossier : traduit s'il est système, tel quel sinon. */
 export function nomDossier(d: { object_type: ObjetChamp; name: string; cle_systeme?: string | null }, fr: boolean): string {
+  if (d.cle_systeme === CLE_DOSSIER_DEPENSES) {
+    // Traduit tant qu'il porte son nom d'origine ; renommé, c'est le nom choisi par l'entreprise.
+    const n = d.name.trim().toLowerCase();
+    return n === NOM_DEPENSES.fr.toLowerCase() || n === NOM_DEPENSES.en.toLowerCase() ? (fr ? NOM_DEPENSES.fr : NOM_DEPENSES.en) : d.name;
+  }
   return (d.cle_systeme && nomSection(d.object_type, d.cle_systeme, fr)) || d.name;
 }
