@@ -59,7 +59,12 @@ function adminFactice(plan: any, depenses: Record<string, number>) {
       c.then = (r: any) => r({ data: [], error: null });
       return c;
     }),
-    rpc: vi.fn(async (fn: string, args: any) => ({ data: fn === 'lumi_depense_du_mois' ? (depenses[args.p_org] ?? 0) : null, error: null })),
+    rpc: vi.fn(async (fn: string, args: any) => ({
+      data: fn === 'lumi_depense_du_mois' ? (depenses[args.p_org] ?? 0)
+        : fn === 'lumi_prochain_renouvellement' ? '2026-10-12T04:00:00Z'
+        : fn === 'lumi_periode_courante' ? '2026-09-12' : null,
+      error: null,
+    })),
   };
 }
 vi.mock('../server/lib/supabase', () => ({
@@ -88,9 +93,10 @@ describe('paliers de budget (le client n est jamais à sec)', () => {
 
   it('etatBudget expose le palier ; à plafond atteint, epuise reste vrai (garde-fou interne)', async () => {
     const { etatBudget } = await import('../server/lib/lumi/budget');
-    const eco = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 4000 }, { 'org-1': 2900 }) as any, 'org-1');
+    // 1 000 crédits = 3 000 ¢ de plafond interne.
+    const eco = await etatBudget(adminFactice({ slug: 'autopilot', includes_ai: true, lumi_credits_mensuels: 1000 }, { 'org-1': 2200 }) as any, 'org-1');
     expect(eco.palier).toBe('econome');
-    const plein = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 4000 }, { 'org-1': 4000 }) as any, 'org-1');
+    const plein = await etatBudget(adminFactice({ slug: 'autopilot', includes_ai: true, lumi_credits_mensuels: 1000 }, { 'org-1': 3000 }) as any, 'org-1');
     expect(plein).toMatchObject({ palier: 'epuise', epuise: true });
   });
 
@@ -130,20 +136,21 @@ describe('paliers de budget (le client n est jamais à sec)', () => {
 });
 
 describe('budget mensuel', () => {
-  it('Autopilot : 150 $, dépense lue en base, reste calculé', async () => {
+  it('Autopilot : 1 000 crédits (plafond interne 3 000 ¢), dépense lue en base, reste calculé, renouvellement', async () => {
     const { etatBudget } = await import('../server/lib/lumi/budget');
-    const b = await etatBudget(adminFactice({ slug: 'autopilot', includes_ai: true, ai_monthly_budget_cents: 15000 }, { 'org-1': 1234.5 }) as any, 'org-1');
-    expect(b).toMatchObject({ plan_slug: 'autopilot', includes_ai: true, budget_cents: 15000, depense_cents: 1234.5, reste_cents: 13765.5, epuise: false });
+    const b = await etatBudget(adminFactice({ slug: 'autopilot', includes_ai: true, lumi_credits_mensuels: 1000 }, { 'org-1': 1234.5 }) as any, 'org-1');
+    expect(b).toMatchObject({ plan_slug: 'autopilot', includes_ai: true, credits_mensuels: 1000, budget_cents: 3000, depense_cents: 1234.5, reste_cents: 1765.5, epuise: false });
+    expect(b.renouvellement_le).toMatch(/^2026-10-1[12]$/);
   });
-  it('Scale : 80 $ — épuisé quand la dépense atteint le budget', async () => {
+  it('épuisé quand la dépense atteint le plafond des crédits', async () => {
     const { etatBudget } = await import('../server/lib/lumi/budget');
-    const b = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 8000 }, { 'org-1': 8000 }) as any, 'org-1');
+    const b = await etatBudget(adminFactice({ slug: 'autopilot', includes_ai: true, lumi_credits_mensuels: 1000 }, { 'org-1': 3000 }) as any, 'org-1');
     expect(b.epuise).toBe(true);
     expect(b.reste_cents).toBe(0);
   });
   it('plan sans IA (ou sans abonnement) → pas de Lumi, sans lire la dépense', async () => {
     const { etatBudget } = await import('../server/lib/lumi/budget');
-    const admin = adminFactice({ slug: 'starter', includes_ai: false, ai_monthly_budget_cents: 0 }, { 'org-1': 0 });
+    const admin = adminFactice({ slug: 'starter', includes_ai: false, lumi_credits_mensuels: 0 }, { 'org-1': 0 });
     const b = await etatBudget(admin as any, 'org-1');
     expect(b.includes_ai).toBe(false);
     expect(admin.rpc).not.toHaveBeenCalled();

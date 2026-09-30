@@ -6,6 +6,7 @@ import { useTranslation } from '../i18n';
 import { useCurrentPlan, type PlanFeatureFlag } from '../hooks/usePlanFeature';
 import type { Plan } from '../lib/billingApi';
 import { FEATURE_MOCKUPS } from './featureMockups';
+import { creditsParMois } from '../lib/lumiCreditsFormat';
 
 interface ExploreFeaturesModalProps {
   open: boolean;
@@ -65,14 +66,14 @@ const FEATURES: FeatureCard[] = [
       'Drafts quotes, emails & SMS in your tone',
       'Smart scheduling & routing suggestions',
       'Customer insights & churn predictions',
-      'Unlimited interactions on Autopilot',
+      `${creditsParMois('en')} on Autopilot`,
     ],
     benefitsFr: [
       'Commandes CRM activées par la voix',
       'Rédige devis, emails et SMS dans votre ton',
       'Suggestions de planification et de routes',
       'Insights clients et prédictions de churn',
-      'Interactions illimitées sur Autopilot',
+      `${creditsParMois('fr')} sur Autopilot`,
     ],
     visualEn: '🎙️ “Send John a follow-up about quote #2024-08” → done',
     visualFr: '🎙️ «Envoie un suivi à Jean pour le devis #2024-08» → fait',
