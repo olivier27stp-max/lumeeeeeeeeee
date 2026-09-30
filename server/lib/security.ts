@@ -392,6 +392,11 @@ export function sanitizeRequestBody() {
   };
 }
 
+/** Champs de texte libre (conversation, notes, messages) : jamais inspectés comme du SQL. */
+export const CHAMPS_TEXTE_LIBRE: ReadonlySet<string> = new Set([
+  'message', 'messages', 'text', 'texte', 'note', 'notes', 'description', 'body', 'question', 'prompt', 'comment', 'commentaire',
+]);
+
 function sanitizeObject(obj: Record<string, any>, req?: Request, depth = 0): { blocked: boolean } {
   if (depth > 10) return { blocked: false }; // Prevent infinite recursion
 
@@ -409,8 +414,14 @@ function sanitizeObject(obj: Record<string, any>, req?: Request, depth = 0): { b
       // une requête SQL en clair (hachées/comparées), on ne les inspecte pas.
       if (key === 'code_challenge' || key === 'code_verifier') continue;
 
-      // Detect SQL injection — log and BLOCK the request
-      if (containsSQLInjection(value)) {
+      // Detect SQL injection — log and BLOCK the request.
+      // PAS sur le texte en langage naturel (audit des outils de Lumi, 2026-09-30) :
+      // « Delete Sophie from my clients », « Update the address, set it to… »,
+      // « Select all my tasks » sont des phrases normales en anglais — elles
+      // étaient bloquées ET l'IP bannie 60 min (tout le bureau). Ces champs ne
+      // sont jamais interpolés dans du SQL (requêtes paramétrées) ; le nettoyage
+      // XSS ci-dessous s'applique toujours.
+      if (!CHAMPS_TEXTE_LIBRE.has(key) && containsSQLInjection(value)) {
         logSecurityEvent({
           event_type: 'sql_injection_attempt',
           severity: 'critical',
