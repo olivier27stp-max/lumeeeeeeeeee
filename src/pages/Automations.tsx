@@ -26,6 +26,7 @@ import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
 import BandeauPause from '../components/automations/BandeauPause';
+import BibliothequeModeles from '../components/automations/BibliothequeModeles';
 import MessageEditor from '../components/automations/MessageEditor';
 import InterrupteurPublication from '../components/automations/InterrupteurPublication';
 import CopierVersBureauxModal from '../components/automations/CopierVersBureauxModal';
@@ -428,6 +429,9 @@ export default function Automations() {
   const [onglet, setOnglet] = useState<'toutes' | 'verifier' | 'corbeille' | 'modeles'>('toutes');
   /** Menu « Créer » : les cinq départs de GHL. */
   const [menuCreer, setMenuCreer] = useState(false);
+  const [bibliotheque, setBibliotheque] = useState(false);
+  /** Le focus revient ici à la fermeture de la bibliothèque (l'entrée du menu n'existe plus). */
+  const boutonCreer = useRef<HTMLButtonElement>(null);
   /** Menu « … » ouvert sur quelle ligne ? */
   const [menuLigne, setMenuLigne] = useState<string | null>(null);
 
@@ -1053,7 +1057,7 @@ export default function Automations() {
     { cle: 'lumi', fr: 'Construire avec Lumi', en: 'Build with Lumi', icone: Sparkles,
       aideFr: 'Décris ce que tu veux, Lumi le monte. Inclus dans Autopilot.', aideEn: 'Describe it, Lumi builds it. Included in Autopilot.' },
     { cle: 'modele', fr: 'Partir d’un modèle', en: 'Start from a template', icone: FileText,
-      aideFr: `${modeles.length} modèles prêts à l’emploi.`, aideEn: `${modeles.length} ready-made templates.` },
+      aideFr: 'Une bibliothèque de modèles prêts à l’emploi.', aideEn: 'A library of ready-made templates.' },
     /*
      * GoHighLevel en offre deux de plus : « Importer d'une campagne » et
      * « Automatisation d'entreprise ». Ni l'un ni l'autre n'a d'équivalent
@@ -1069,7 +1073,10 @@ export default function Automations() {
     setMenuCreer(false);
     if (cle === 'zero') { partirDeZero(false); return; }
     if (cle === 'lumi') { partirDeZero(true); return; }
-    if (cle === 'modele') { setOnglet('modeles'); return; }
+    // Ouvre la bibliothèque. Avant (jusqu'au 2026-09-30), ce départ basculait
+    // sur l'onglet « Modèles » — les vraies automatisations en brouillon de
+    // l'entreprise — et rien n'était créé.
+    if (cle === 'modele') { setBibliotheque(true); return; }
     // Inatteignable : les trois départs ci-dessus couvrent tout `DEPARTS`.
     // Le garder évite qu'un ajout futur retombe dans le vide sans un mot.
     console.error('[automations] départ inconnu :', cle);
@@ -1131,6 +1138,18 @@ export default function Automations() {
           dorment coûte des relances pendant des jours.
         */}
         <BandeauPause fr={fr} onChange={setToutEnPause} />
+
+        <BibliothequeModeles
+          open={bibliotheque}
+          fr={fr}
+          onClose={() => { setBibliotheque(false); requestAnimationFrame(() => boutonCreer.current?.focus()); }}
+          onCree={(regle) => {
+            setBibliotheque(false);
+            toast.success(fr ? 'Automatisation créée en brouillon' : 'Automation created as a draft');
+            navigate(`/automations/${regle.id}`);
+          }}
+          onErreur={(message) => toast.error(message)}
+        />
 
         {/*
           Aucun numéro texto (bloqué tant que Trust Hub n'est pas approuvé) :
@@ -1229,6 +1248,7 @@ export default function Automations() {
             <div className="relative">
               <button
                 type="button"
+                ref={boutonCreer}
                 onClick={(e) => { e.stopPropagation(); setMenuCreer((m) => !m); }}
                 aria-haspopup="menu"
                 aria-expanded={menuCreer}

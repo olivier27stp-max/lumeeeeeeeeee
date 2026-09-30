@@ -66,6 +66,9 @@ COPY src/lib/automationCatalogue.ts ./src/lib/automationCatalogue.ts
 # partagent la même vérification. Elle lit aussi `sequenceTypes.ts`.
 COPY src/lib/publicationAutomatisation.ts ./src/lib/publicationAutomatisation.ts
 COPY src/lib/sequenceTypes.ts ./src/lib/sequenceTypes.ts
+# La bibliothèque de modèles (« Partir d'un modèle ») : types et fonctions
+# partagés entre le catalogue serveur et la fenêtre.
+COPY src/lib/automationTemplates.ts ./src/lib/automationTemplates.ts
 # `src/lib/supabaseAdmin.ts` is now a stub that throws if imported from
 # client code (real impl lives at `server/lib/supabaseAdmin.ts` for security
 # — commit c12b767). The stub exists so Railway/BuildKit cache layers that

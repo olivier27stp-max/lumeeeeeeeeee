@@ -36,7 +36,10 @@ import { sequenceEtapes } from '../lib/validation';
 import {
   validate, automationRuleCreateSchema, automationRuleUpdateSchema,
   dossierCreateSchema, dossierUpdateSchema, automationCopieBureauxSchema,
+  automationModeleUtiliserSchema,
 } from '../lib/validation';
+import { MODELES_AUTOMATISATION, trouverModele } from '../lib/automationTemplates';
+import { copierEtapes, nomDisponible } from '../../src/lib/automationTemplates';
 import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie } from '../lib/automatisations-bureaux';
 import { logger } from '../lib/logger';
 import { oublierPause } from '../lib/automations-pause-org';
@@ -525,6 +528,102 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   }
 
   return res.json(copies.length ? { ...data, copies } : data);
+});
+
+// ── Bibliothèque de modèles ─────────────────────────────────
+//
+// GET : le catalogue, global et en lecture seule — ouvrir la bibliothèque
+// n'écrit RIEN. POST : « Utiliser ce modèle » crée UNE automatisation, copie
+// profonde du modèle, en brouillon, dans l'entreprise de la SESSION. Aucune
+// autre règle n'est touchée (un seul INSERT, aucun UPDATE).
+
+router.get('/automations/templates', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  return res.json({ modeles: MODELES_AUTOMATISATION });
+});
+
+/**
+ * Double clic = une seule copie. La clé d'idempotence (en-tête
+ * `Idempotency-Key`, générée à l'ouverture de l'aperçu) est retenue 10 min
+ * par entreprise : le 2e appel reçoit la MÊME réponse que le 1er, même s'il
+ * arrive pendant que le 1er s'exécute encore.
+ */
+const utilisationsEnCours = new Map<string, { expire: number; resultat: Promise<{ status: number; body: unknown }> }>();
+const IDEMPOTENCE_MS = 10 * 60_000;
+
+router.post('/automations/templates/utiliser', validate(automationModeleUtiliserSchema), async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const { templateId } = req.body as { templateId: string };
+  const modele = trouverModele(templateId);
+  if (!modele) return res.status(404).json({ error: 'Modèle introuvable.' });
+
+  const cleBrute = String(req.header('idempotency-key') ?? '').slice(0, 100);
+  const cle = cleBrute ? `${auth.orgId}:${cleBrute}` : '';
+  const maintenant = Date.now();
+  for (const [k, v] of utilisationsEnCours) if (v.expire < maintenant) utilisationsEnCours.delete(k);
+  const deja = cle ? utilisationsEnCours.get(cle) : undefined;
+  if (deja) {
+    const r = await deja.resultat;
+    return res.status(r.status).json(r.body);
+  }
+
+  const travail = (async (): Promise<{ status: number; body: unknown }> => {
+    const [{ data: reglages }, { data: noms, error: nomsErr }] = await Promise.all([
+      auth.client.from('company_settings').select('default_language').eq('org_id', auth.orgId).maybeSingle(),
+      auth.client.from('automation_rules').select('name').eq('org_id', auth.orgId).is('deleted_at', null),
+    ]);
+    if (nomsErr) {
+      logger.error('[automation-templates] lecture des noms échouée', { message: nomsErr.message });
+      return { status: 500, body: { error: 'Impossible de créer l’automatisation.' } };
+    }
+    const en = reglages?.default_language === 'en';
+    const nom = nomDisponible(en ? modele.nom.en : modele.nom.fr, (noms ?? []).map((n) => String(n.name ?? '')));
+    let compteur = 0;
+    const steps = modele.steps ? copierEtapes(modele.steps, () => `e${++compteur}`) : null;
+
+    const { data, error } = await auth.client
+      .from('automation_rules')
+      .insert({
+        org_id: auth.orgId,
+        name: nom.slice(0, 120),
+        description: en ? modele.description.en : modele.description.fr,
+        trigger_event: modele.declencheur,
+        conditions: JSON.parse(JSON.stringify(modele.conditions)),
+        delay_seconds: modele.delai_secondes,
+        actions: JSON.parse(JSON.stringify(modele.actions)),
+        steps,
+        settings: modele.settings ? JSON.parse(JSON.stringify(modele.settings)) : null,
+        // Brouillon, jamais activée d'office. Une automatisation À SOI : ni
+        // `is_preset` ni `preset_key` — le seeder ne la réécrira jamais.
+        is_active: false,
+        is_preset: false,
+        preset_key: null,
+      })
+      .select(COLONNES)
+      .single();
+
+    if (error) {
+      if (error.code === '42501') return { status: 403, body: { error: 'Votre rôle ne permet pas de créer une automatisation.' } };
+      logger.error('[automation-templates] création échouée', { message: error.message, code: error.code, templateId });
+      return { status: 500, body: { error: 'Impossible de créer l’automatisation.' } };
+    }
+    return { status: 201, body: data };
+  })();
+
+  if (cle) utilisationsEnCours.set(cle, { expire: maintenant + IDEMPOTENCE_MS, resultat: travail });
+  try {
+    const r = await travail;
+    // Un échec n'est pas retenu : réessayer doit pouvoir réussir.
+    if (cle && r.status >= 400) utilisationsEnCours.delete(cle);
+    return res.status(r.status).json(r.body);
+  } catch (e: unknown) {
+    if (cle) utilisationsEnCours.delete(cle);
+    logger.error('[automation-templates] création échouée', { message: e instanceof Error ? e.message : String(e), templateId });
+    return res.status(500).json({ error: 'Impossible de créer l’automatisation.' });
+  }
 });
 
 // ── Dupliquer ───────────────────────────────────────────────

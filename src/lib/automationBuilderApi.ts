@@ -16,6 +16,7 @@ import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
 import type { AutomationRule } from './automationRulesApi';
 import type { DeclencheurCatalogue, ActionCatalogue } from './automationCatalogue';
+import type { ModeleAutomatisation } from './automationTemplates';
 
 export interface ActionAutomatisation {
   type: string;
@@ -194,6 +195,30 @@ export async function dupliquerAutomatisation(id: string): Promise<AutomationRul
     headers: await entetes(),
   });
   if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de dupliquer l\'automatisation.');
+  return reponse.json();
+}
+
+// ─── Bibliothèque de modèles ─────────────────────────────────────────
+/** Le catalogue global (lecture seule) : ouvrir la bibliothèque n'écrit rien. */
+export async function fetchModelesAutomatisation(): Promise<ModeleAutomatisation[]> {
+  const reponse = await fetch('/api/automations/templates', { headers: await entetes() });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de charger les modèles.');
+  const corps = (await reponse.json()) as { modeles: ModeleAutomatisation[] };
+  return corps.modeles;
+}
+
+/**
+ * « Utiliser ce modèle » : crée UNE automatisation en brouillon. Seul
+ * l'identifiant du modèle part ; l'entreprise est celle de la session. La clé
+ * d'idempotence fait qu'un double clic ne crée qu'une copie.
+ */
+export async function utiliserModele(templateId: string, cleIdempotence: string): Promise<AutomationRule> {
+  const reponse = await fetch('/api/automations/templates/utiliser', {
+    method: 'POST',
+    headers: { ...(await entetes()), 'Idempotency-Key': cleIdempotence },
+    body: JSON.stringify({ templateId }),
+  });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de créer l’automatisation.');
   return reponse.json();
 }
 
