@@ -32,6 +32,11 @@ export default function TabsLayout() {
   // courses are Scale+. Without the plan flag the tab is hidden, same as web.
   const hasD2D = usePlanFeature('includes_d2d').hasFeature;
   const hasCourses = usePlanFeature('includes_courses').hasFeature;
+  // Lumi : les DEUX mêmes gardes que la route /lumi du web (App.tsx) —
+  // la permission de la page Rôles ET le drapeau de forfait. Le serveur
+  // revérifie les deux à chaque appel ; ceci ne fait que cacher l'onglet.
+  const hasAI = usePlanFeature('includes_ai').hasFeature;
+  const showLumi = can('external_agent.use') && hasAI;
 
   const showD2D = can('door_to_door.access') && d2dEnabled === true && hasD2D;
   // The Map tab: tech mode needs the D2D module + permission + plan; sales mode
@@ -66,6 +71,19 @@ export default function TabsLayout() {
           title: 'Home',
           href: sales ? null : showJobs ? undefined : null,
           tabBarIcon: ({ color }) => <TabIcon name="house" color={color} />,
+        }}
+      />
+      {/* ── Lumi — juste à droite de l'Accueil ──
+          L'ordre des onglets suit l'ordre de déclaration, et un onglet masqué
+          porte `href: null`. Déclaré ici, Lumi tombe donc après « Accueil » en
+          mode technicien ET après « Classement » en mode vendeur, sans code
+          conditionnel sur la position. */}
+      <Tabs.Screen
+        name="lumi"
+        options={{
+          title: 'Lumi',
+          href: showLumi ? undefined : null,
+          tabBarIcon: ({ color }) => <TabIcon name="sparkles" color={color} />,
         }}
       />
       <Tabs.Screen
