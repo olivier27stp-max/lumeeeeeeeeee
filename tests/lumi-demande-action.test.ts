@@ -38,3 +38,13 @@ describe('ordres et caches', () => {
     expect(enonceCachable('Combien de jobs j’ai demain ?')).toBe(true);
   });
 });
+
+describe('questions sur le contenu du compte : jamais une FAQ', () => {
+  it('« c’est quoi mes… », « what … do I have », « show me my… » vont au modèle ; « comment… » garde l’aide', async () => {
+    const { reponseFaqPour } = await import('../server/lib/support/faq');
+    expect(reponseFaqPour('C’est quoi mes préréglages de soumission ?', 'fr')).toBeNull();
+    expect(reponseFaqPour('What checklist templates do I have set up?', 'en')).toBeNull();
+    expect(reponseFaqPour('What taxes do I have set up, and which tax group is the default?', 'en')).toBeNull();
+    expect(reponseFaqPour('How do I set up taxes for Quebec?', 'en')).not.toBeNull();
+  });
+});

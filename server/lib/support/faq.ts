@@ -90,6 +90,14 @@ const MARQUES_DONNEES = [
   /\b(annule|supprim\w*|efface\w*|envoie|envoy\w*|cree|creer|creé\w*|marque|ajoute|ajout\w*|planifie|deplace|relance)\b/i,
   // Renvois au contenu réel du compte.
   /\b(chez|pour le client|de mon client)\b/i,
+  // « C'est quoi MES préréglages », « montre-moi mes modèles », « what checklist
+  // templates DO I HAVE », « show me my taxes » : on demande ce que CONTIENT le
+  // compte (audit des outils de Lumi, 2026-09-30 — ces questions recevaient une
+  // FAQ, parfois hors sujet : les gabarits de listes → la page Taxes).
+  // « Comment configurer mes taxes » reste une question produit (pas de marque ici).
+  /\b(c[’' ]?est quoi|c[’' ]?est qui|quels? sont|quelles? sont|montre[ -]?moi|liste[ -]?moi|donne[ -]?moi|affiche[ -]?moi)\s+(mes|mon|ma|nos|notre)\b/i,
+  /\b(what|which)\b[^.?]{0,50}\b(do|did|have) i\s+(have|got|set up|setup|configured)\b/i,
+  /\b(show|list|give|tell)\s+me\s+(all\s+)?my\b/i,
   // Conversation en cours : une correction, une confirmation, un renvoi à ce
   // qui précède ne sont jamais des questions produit autonomes.
   /\b(non|pas ca|pas le|plutot|au lieu|celui la|celle la|c est lui|c lui|att|attend|oups)\b/i,
