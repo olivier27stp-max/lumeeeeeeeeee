@@ -91,6 +91,13 @@ supabase/
 - **Lumi (assistant IA)** : les consignes de présentation vivent dans `server/lib/agent/consignesCollegue.ts` (partagées avec le MCP) ; `npm run qa:lumi` (API locale sur staging, ≈ 2,30 $ d'inférence par passe) envoie 80 demandes en français (factuel, présentation, actions, sécurité + injection par les données, chaque outil de lecture, conversations suivies, exécution réelle confirmer/annuler avec nettoyage, quota épuisé, rôle technicien) et mesure le taux d'erreur contre la base — à relancer après tout changement de prompt ou d'outil. Référence au 2026-09-10 : 98 % (les échecs restants étaient le correcteur).
 - Sur téléphone (< md), le tiroir de navigation est fermé au chargement et à chaque navigation ; la carte Setup ne s'affiche pas sur `/new`, `/edit`, `/settings`, `/finances` (`routeAvecBarreDAction`). `npm run qa:boutons-atteignables` vérifie qu'aucun bouton d'action n'est recouvert (1440×900 et 390×844, vrai clic).
 
+## Ressources du poste (plusieurs sessions Claude en parallèle)
+Plusieurs sessions tournent en même temps sur le même PC (16 cœurs, disque C: limité). Mesuré le 2026-09-30 : 80 processus node, 2 suites Vitest simultanées = 35 processus, 5 piles Docker, disque plein → Docker et les E2E sont tombés. Règles :
+- **Tests** : pendant le travail, lancer les fichiers concernés (`npx vitest run tests/x.test.ts`) ; la suite complète UNE fois avant la PR (la CI la rejoue). Vitest local est plafonné à 25 % des cœurs (`maxWorkers` dans `vitest.config.ts`) — ne pas le relever. Jamais de mode watch (`vitest`, `tsc -w`) laissé ouvert.
+- **Serveurs** : tout ce qu'une session lance (vite, `tsx server/index.ts`, proxy, Playwright) est arrêté à la fin de sa tâche — par son PID ou son port, jamais `taskkill /IM node.exe` (ça tue les autres sessions).
+- **Docker** : une seule pile locale par session, arrêtée à la fin (`docker stop` ; jamais `docker rm` ni suppression de volume — on la relance avec `docker start`). Studio / pg_meta seulement si on s'en sert.
+- **Disque** : sorties lourdes (traces Playwright, dumps) hors du dépôt et effacées après usage ; `npm cache clean --force` si C: passe sous 5 Go.
+
 ## AI Behavior
 - Always read `CLAUDE.md` first
 - Read the specific file(s) before modifying
