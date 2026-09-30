@@ -41,7 +41,7 @@ const api = {
   })),
   creer: vi.fn(async (_b: any) => regle({ id: 'neuve-1' }) as any),
   modifier: vi.fn(async (id: string, patch: any) => ({ ...regle({ id }), ...patch }) as any),
-  apercu: vi.fn(async (_id: string) => ({ client: null, message: 'Aucun client', apercu: [] })),
+  apercu: vi.fn(async (_id: string): Promise<any> => ({ client: null, message: 'Aucun client', apercu: [] })),
   publier: vi.fn(async (_id: string, _a: boolean) => undefined),
   generer: vi.fn(),
   stats: vi.fn(async (_id?: string): Promise<any> => ({ par_regle: {}, par_etape: {} })),
