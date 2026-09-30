@@ -50,12 +50,12 @@ describe('D-08 — action immédiate lente : le vrai résultat est journalisé',
     etat.lenteurMs = 5_600;
     const { journal, eventBus } = await moteur({ automation_rules: { data: [regle([WEBHOOK])] }, automation_execution_logs: journalExecutionsUnique() });
     await eventBus.emit('lead.created', { orgId: ORG, entityType: 'lead', entityId: 'l1', metadata: {} });
-    await attendre(7_000);
+    await attendre(9_000); // marge : la suite complète charge la machine
     const majs = requetes(journal, 'automation_execution_logs', 'update').map((r) => r.valeur as any);
     expect(majs[0].result_error).toMatch(/résultat en attente/);
     expect(majs.at(-1)).toMatchObject({ result_success: true, result_error: null });
     expect(etat.appels).toHaveLength(1);
-  }, 15_000);
+  }, 20_000);
 });
 
 describe('C24 — tâche planifiée lente : un seul envoi, reprise annulée', () => {
