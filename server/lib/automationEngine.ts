@@ -1402,9 +1402,54 @@ export function isTransientFailure(error?: string | null): boolean {
     // Webhook vers une adresse interne ou non publique (garde SSRF) : la
     // même adresse sera refusée à chaque essai (audit V2, C25).
     'adresse refusée',
+    /*
+     * Configuration ou données de l'entité : rien ne changera d'ici 2 h.
+     * Ces motifs étaient repris 4 fois — la notification qui dit à
+     * l'entrepreneur d'agir arrivait 2 h 35 plus tard, et chaque reprise
+     * d'une demande d'avis créait un nouveau sondage (tests E-040).
+     */
+    'no google or facebook review link',
+    'client has no email address',
+    'client has no phone number',
+    'already sent to this client',
+    'table not allowed',
+    'unknown action type',
+    'no org owner found',
+    'aucune étiquette à',
+    'aucun client rattaché',
+    'la note est vide',
+    'aucune automatisation choisie',
+    'ne peut pas se démarrer elle-même',
+    'automatisation introuvable',
+    'rien à démarrer',
+    'n\'a aucune action',
+    "s'applique à un deal ou à une soumission",
+    'stage_id (ou vers_role) manquant',
+    'introuvable dans cette organisation',
+    'appartient à un autre pipeline',
+    'est archivée',
+    'statut inconnu',
+    'valeur invalide',
+    'rien à modifier',
+    'aucun statut choisi',
+    'client introuvable',
+    'rendez-vous introuvable',
+    'opportunité introuvable',
+    'aucun lien public',
   ];
   const lower = error.toLowerCase();
-  return !definitifs.some((d) => lower.includes(d));
+  if (definitifs.some((d) => lower.includes(d))) return false;
+  /*
+   * Webhook refusé par son destinataire (4xx) : la même requête sera refusée
+   * à chaque essai. Sauf 408 (délai), 425 (trop tôt) et 429 (trop de
+   * requêtes), qui demandent justement de revenir plus tard.
+   */
+  const http = /le serveur distant a répondu (\d{3})/.exec(lower);
+  if (http) {
+    const code = Number(http[1]);
+    if (code >= 400 && code < 500 && ![408, 425, 429].includes(code)) return false;
+  }
+  return true;
 }
 
 /**
