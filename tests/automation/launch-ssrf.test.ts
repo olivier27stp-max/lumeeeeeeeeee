@@ -88,3 +88,12 @@ describe('l’action « webhook » elle-même', () => {
     }
   });
 });
+
+describe('Vague 3 (audit V2, C23) — les deux IPv6 qui passaient encore', () => {
+  it.each(['::7f00:1', '[::7f00:1]', '::127.0.0.1', '::a00:1', '2002:7f00:1::', '[2002:7f00:1::]', '2002:c0a8:101::1'])('%s est refusée', (ip) => expect(ipNonPublique(ip)).toBe(true));
+  it.each(['http://[::7f00:1]/hook', 'http://[2002:7f00:1::]/hook'])('%s est refusée au texte', (url) => expect(adresseAcceptable(url).ok).toBe(false));
+  it('une IPv6 publique ordinaire passe toujours', () => {
+    expect(ipNonPublique('2606:4700:4700::1111')).toBe(false);
+    expect(ipNonPublique('2a00:1450:4009:81f::200e')).toBe(false);
+  });
+});
