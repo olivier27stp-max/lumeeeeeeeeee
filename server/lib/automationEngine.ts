@@ -1504,7 +1504,8 @@ async function prevenirEchecDefinitif(
       org_id: task.org_id,
       type: 'automation_failed',
       title: `Échec d'envoi — ${nom}`,
-      body: `Le ${canal} n'est pas parti et ne partira pas : ${cause}.`,
+      // Sans le point final du motif : « …phone number.. » (vu dans le filet de régression).
+      body: `Le ${canal} n'est pas parti et ne partira pas : ${cause.replace(/[.\s]+$/, '')}.`,
       reference_id: task.id,
     });
     if (error) throw new Error(error.message);
