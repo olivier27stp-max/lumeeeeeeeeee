@@ -104,3 +104,73 @@ export async function appliquerMotCleSms(
     return false;
   }
 }
+
+// ── Chemin SANS le drapeau par canal (traitement d'origine) ──
+
+const STOP_HERITE = /^(stop|arret|arrêt|unsubscribe|cancel|end|quit|désabonner|desabonner)$/i;
+const START_HERITE = /^(start|unstop|reprendre|resume)$/i;
+
+/**
+ * Le mot-clé du traitement d'origine (drapeau `auto_desabonnement_canal` OFF).
+ *
+ * « oui » / « yes » n'en sont PAS (audit V2, L3) : c'est une RÉPONSE — à
+ * « Confirmez-vous jeudi ? » par exemple —, pas un ordre de réabonnement.
+ * Le traiter comme un START levait les désabonnements du client chez toutes
+ * les entreprises où il avait une conversation.
+ */
+export function motCleHerite(corps: string | null | undefined): 'stop' | 'start' | null {
+  const t = String(corps ?? '').trim();
+  if (STOP_HERITE.test(t)) return 'stop';
+  if (START_HERITE.test(t)) return 'start';
+  return null;
+}
+
+/**
+ * STOP / START du traitement d'origine, sans journal ni confirmation (ceux-là
+ * relèvent du drapeau par canal). Ne lève pas.
+ *
+ * Portée :
+ *   - STOP : toutes les entreprises qui ont une conversation avec ce numéro.
+ *   - START : SEULEMENT l'entreprise du numéro `To` (L3). Sans elle, rien
+ *     n'est levé : réabonner des entreprises auxquelles la personne n'a
+ *     jamais écrit START serait un consentement qu'elle n'a pas donné.
+ */
+export async function appliquerMotCleHerite(
+  admin: SupabaseClient,
+  p: { telephone: string; to: string | null | undefined; genre: 'stop' | 'start' },
+): Promise<{ orgIds: string[]; appliques: number }> {
+  try {
+    const orgDuTo = p.genre === 'start' ? await orgDuNumeroSms(admin, p.to) : null;
+    let orgIds: string[] = orgDuTo ? [orgDuTo] : [];
+    if (p.genre === 'stop') {
+      const { data: convos, error } = await admin
+        .from('conversations')
+        .select('org_id')
+        .eq('phone_number', p.telephone);
+      if (error) logger.error('[desabonnement/sms] conversations illisibles pour le STOP', { error: error.message });
+      orgIds = Array.from(new Set(((convos || []) as Array<{ org_id?: string | null }>).map((c) => c.org_id).filter((o): o is string => !!o)));
+    }
+    if (orgIds.length === 0 && p.genre === 'start') {
+      logger.info('[desabonnement/sms] START sans entreprise identifiable (numéro destinataire inconnu) — rien n\'est levé');
+    }
+
+    let appliques = 0;
+    for (const oid of orgIds) {
+      // LCAP : une opposition non enregistrée = on continue de texter
+      // quelqu'un qui a répondu STOP. L'échec doit être bruyant.
+      const { error } = p.genre === 'stop'
+        ? await admin.from('sms_opt_outs').upsert({ org_id: oid, phone: p.telephone, reason: 'client_stop' }, { onConflict: 'org_id,phone' })
+        : await admin.from('sms_opt_outs').delete().eq('org_id', oid).eq('phone', p.telephone);
+      if (error) {
+        logger.error(`[desabonnement/sms] ${p.genre.toUpperCase()} non appliqué`, { orgId: oid, error: error.message });
+      } else {
+        appliques++;
+      }
+    }
+    logger.info(`[desabonnement/sms] ${p.genre.toUpperCase()} appliqué dans ${appliques}/${orgIds.length} entreprise(s)`);
+    return { orgIds, appliques };
+  } catch (e: any) {
+    logger.error('[desabonnement/sms] mot-clé non traité', { genre: p.genre, error: e?.message || String(e) });
+    return { orgIds: [], appliques: 0 };
+  }
+}
