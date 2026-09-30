@@ -1277,7 +1277,11 @@ export async function executeSendEmail(
        diffusion, et s'il clique il cesse aussi de recevoir ses factures.
        `ctx.commercial` fait déjà cette distinction pour le plafond de
        fréquence et la base légale — le pied de page la suit. */
-    const unsubUrl = ctx.commercial ? await getUnsubscribeUrl(ctx.supabase, ctx.orgId, to) : null;
+    // Un courriel MARKETING immédiat (drapeau par canal éteint) n'a pas
+    // `ctx.commercial` : il partait sans lien ni List-Unsubscribe, alors que
+    // la LCAP exige un mécanisme de retrait dans tout message commercial —
+    // même critère que l'identification exigée plus haut (`estCommercialLcap`).
+    const unsubUrl = ctx.commercial || estCommercialLcap(ctx) ? await getUnsubscribeUrl(ctx.supabase, ctx.orgId, to) : null;
 
     /* Le bouton vers la page publique de l'entité concernée.
        Les 26 relances automatiques partaient sans aucun bouton : toutes

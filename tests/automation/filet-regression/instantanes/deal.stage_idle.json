@@ -24,6 +24,16 @@
    },
    {
     "moment": "immediat",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "activity_log",
     "op": "insert",
     "valeur": {
@@ -701,6 +711,16 @@
      "client_id": null,
      "job_id": null,
      "token": "<jeton>"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
     }
    },
    {
