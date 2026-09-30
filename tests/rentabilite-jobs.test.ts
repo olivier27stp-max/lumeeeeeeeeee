@@ -81,6 +81,13 @@ describe('client : fetchJobPnL et la fiche de job lisent l’action serveur', ()
     vi.unstubAllGlobals();
   });
 
+  it('carte des Statistiques : un refus REMONTE (plus de « aucun job » trompeur)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(reponse(403, { error: 'refus', code: 'permission' })));
+    const { fetchJobPnL, RentabiliteRefusee } = await import('../src/lib/profitabilityApi');
+    await expect(fetchJobPnL({ from: '2026-09-01', to: '2026-09-30' })).rejects.toBeInstanceOf(RentabiliteRefusee);
+    vi.unstubAllGlobals();
+  });
+
   it('fiche de job sans la permission des marges → null (pas d’erreur affichée)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(reponse(403, { error: 'refus', code: 'permission' })));
     const { fetchJobPnLForJob } = await import('../src/lib/profitabilityApi');

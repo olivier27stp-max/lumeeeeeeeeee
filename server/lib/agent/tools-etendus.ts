@@ -945,8 +945,8 @@ const getFinancialOverview: AgentTool = {
   declaration: {
     name: 'get_financial_overview',
     description:
-      'Financial overview: invoice KPIs (30 days), revenue collected this month, and job margins '
-      + '(revenue vs recorded expenses) for completed jobs this month. Requires financial access in Lume.',
+      'Financial overview: invoice KPIs (30 days), revenue collected this month, and the profit of this '
+      + 'month’s jobs (same calculation as analyze_profitability). Requires financial access in Lume.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -956,37 +956,36 @@ const getFinancialOverview: AgentTool = {
     const to = dateOrgAujourdhui();
     const from = `${to.slice(0, 7)}-01`;
 
-    const [kpisR, serieR, jobsR] = await Promise.all([
+    // La marge du mois vient de LA définition de la rentabilité (server/lib/rentabilite) :
+    // avant taxes, main-d'œuvre et commissions comprises, mois local. Avant, elle
+    // valait « total TAXES INCLUSES − dépenses », sans main-d'œuvre, mois borné en UTC.
+    const [kpisR, serieR, renta] = await Promise.all([
       ctx.client.rpc('rpc_invoices_kpis_30d', { p_org: ctx.orgId }),
       ctx.client.rpc('rpc_insights_revenue_series', { p_org: ctx.orgId, p_from: from, p_to: to, p_granularity: 'month' }),
-      ctx.client
-        .from('jobs_active')
-        .select('total_cents, expenses_cents')
-        .eq('org_id', ctx.orgId)
-        .eq('status', 'completed')
-        .gte('completed_at', `${from}T00:00:00Z`),
+      analyserRentabilite({ client: ctx.client, orgId: ctx.orgId, userId: ctx.userId, demande: { date_from: from, date_to: to, limit: 1 } }),
     ]);
     if (kpisR.error) return erreurOutil('finances', kpisR.error);
     if (serieR.error) return erreurOutil('finances', serieR.error);
-    if (jobsR.error) return erreurOutil('finances', jobsR.error);
 
     const kpis = Array.isArray(kpisR.data) ? kpisR.data[0] : kpisR.data;
     const revenus = (Array.isArray(serieR.data) ? serieR.data : [])
       .reduce((s: number, r: any) => s + (Number(r.revenue_cents) || 0), 0);
-    const jobs = jobsR.data || [];
-    const ca = jobs.reduce((s, j: any) => s + (Number(j.total_cents) || 0), 0);
-    const depenses = jobs.reduce((s, j: any) => s + (Number(j.expenses_cents) || 0), 0);
 
     return {
       invoices_30d: kpis || {},
       revenue_this_month_cents: revenus,
-      completed_jobs_this_month: {
-        count: jobs.length,
-        revenue_cents: ca,
-        expenses_cents: depenses,
-        margin_cents: ca - depenses,
-        margin_pct: ca > 0 ? Math.round(((ca - depenses) / ca) * 1000) / 10 : null,
-      },
+      jobs_this_month: renta.ok
+        ? {
+          count: renta.resultat.nb_jobs,
+          revenue_cents: renta.resultat.totaux.revenus_cents,
+          costs_cents: renta.resultat.totaux.couts_cents,
+          profit_cents: renta.resultat.totaux.profit_cents,
+          margin_pct: renta.resultat.completude === 'insuffisante' ? null : renta.resultat.totaux.marge_pct,
+          margin_is_maximum: renta.resultat.marge_est_un_maximum,
+          summary_fr: renta.resultat.resume_fr,
+          summary_en: renta.resultat.resume_en,
+        }
+        : { note: 'refus' in renta ? renta.refus.fr : renta.erreur },
     };
   },
 };

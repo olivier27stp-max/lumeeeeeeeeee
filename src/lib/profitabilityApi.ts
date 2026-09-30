@@ -124,9 +124,10 @@ export async function fetchJobPnL(params: { from: string; to: string }): Promise
       summary_en: r.resume_en,
     };
   } catch (err) {
-    if (err instanceof RentabiliteRefusee) return EMPTY;
-    console.error('[profitabilityApi] fetchJobPnL :', err);
-    return EMPTY;
+    // Refus et erreurs REMONTENT : la carte doit dire « accès réservé » ou
+    // « indisponible », jamais « aucun job » (audit Statistiques 2026-09-30).
+    if (!(err instanceof RentabiliteRefusee)) console.error('[profitabilityApi] fetchJobPnL :', err);
+    throw err;
   }
 }
 

@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchJobPnL, updateJobExpenses } from '../../lib/profitabilityApi';
+import { fetchJobPnL, updateJobExpenses, RentabiliteRefusee } from '../../lib/profitabilityApi';
 import { useTranslation } from '../../i18n';
 import PeriodSelector from './PeriodSelector';
 import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
@@ -59,7 +59,8 @@ export default function ProfitabilityCard({
   const qc = useQueryClient();
 
   const key = ['job-pnl', range.from, range.to];
-  const q = useQuery({ queryKey: key, queryFn: () => fetchJobPnL({ from: range.from, to: range.to }), staleTime: 30_000 });
+  const q = useQuery({ queryKey: key, queryFn: () => fetchJobPnL({ from: range.from, to: range.to }), staleTime: 30_000,
+    retry: (n, err) => !(err instanceof RentabiliteRefusee) && n < 2 });
 
   const k = (cents: number) => new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
   const data = q.data;
@@ -75,6 +76,12 @@ export default function ProfitabilityCard({
 
       {q.isLoading ? (
         <div className="h-[140px] mx-6 mt-4 rounded-lg bg-surface-secondary/40 animate-pulse" />
+      ) : q.isError ? (
+        <div role="status" className="h-[120px] flex items-center justify-center px-6 text-center text-[12.5px] text-text-tertiary">
+          {q.error instanceof RentabiliteRefusee
+            ? (fr ? 'Rentabilité réservée aux rôles qui voient les marges et profits (page Rôles).' : 'Profitability is limited to roles that can view margins & profits (Roles page).')
+            : (fr ? 'Rentabilité indisponible pour le moment. Réessaie dans un instant.' : 'Profitability is unavailable right now. Try again in a moment.')}
+        </div>
       ) : rows.length === 0 ? (
         <div className="h-[120px] flex items-center justify-center text-[12.5px] text-text-tertiary">{fr ? 'Aucun job sur la période' : 'No jobs for this period'}</div>
       ) : (
