@@ -405,19 +405,26 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
        EXPÉDITEUR, juste au-dessus de l'objet. Le répéter le dit deux fois sur
        la même ligne, et vole la place du montant. */
     if (!customSubject) emailSubject = modeleOrg?.sujet || `${m.facture} ${numero} — ${montantTexte}`;
-    // Sans modèle ni texte personnalisé : le courriel structuré (montant en carte, échéance, un bouton).
-    const htmlStructure = !bodyHtml ? rendreCourrielClient({
+    /* TOUJOURS le courriel structuré (montant en carte, échéance, bouton).
+
+       Un texte personnalisé (`body`) ou un modèle choisi (`emailTemplateId`)
+       remplaçait tout le courriel par une enveloppe nue : plus de montant,
+       plus de bouton « Payer la facture » — le client ne pouvait plus payer
+       depuis le courriel. Le texte de l'entreprise prend maintenant la place
+       de la salutation et de l'introduction, comme le modèle par défaut. */
+    const texteEntreprise = bodyHtml || modeleOrg?.corpsHtml || null;
+    const htmlStructure = rendreCourrielClient({
       langue,
       marque: marqueDepuis(company),
       preheader: dejaPayee ? `${m.facture} ${numero} — ${m.payee}` : `${m.facture} ${numero} — ${montantTexte}${echeance ? ` — ${m.echeance} ${echeance}` : ''}`,
       titre: langue === 'fr' ? `Votre facture ${numero}` : `Your invoice ${numero}`,
       // Le modèle de l'entreprise porte sa propre salutation et son propre
       // texte : on n'ajoute pas les nôtres par-dessus, on les remplace.
-      salutation: modeleOrg ? null : m.bonjour(clientName),
-      intro: modeleOrg ? null : (dejaPayee
+      salutation: texteEntreprise ? null : m.bonjour(clientName),
+      intro: texteEntreprise ? null : (dejaPayee
         ? (langue === 'fr' ? 'Voici votre facture, réglée. Merci !' : 'Here is your invoice, paid in full. Thank you!')
         : (langue === 'fr' ? 'Les travaux sont terminés — merci de votre confiance. Voici votre facture, détail ci-dessous.' : 'The work is done — thank you for your trust. Here is your invoice, details below.')),
-      corpsHtml: modeleOrg?.corpsHtml ?? null,
+      corpsHtml: texteEntreprise,
       montant: { libelle: dejaPayee ? m.montantTotal : m.montantDu, valeur: montantTexte, sous: !dejaPayee && echeance ? `${m.echeance} : ${echeance}` : null },
       /* Ce qu'on facture d'abord, les métadonnées ensuite.
 
@@ -443,53 +450,14 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
       ],
       bouton: viewUrl ? { texte: dejaPayee ? (langue === 'fr' ? 'Voir la facture' : 'View invoice') : m.voirFacture, url: viewUrl } : null,
       note: m.question,
-    }) : null;
-    if (!bodyHtml && !htmlStructure) {
-      bodyHtml = `
-<h2 style="margin:0 0 8px;font-size:20px;color:#1a1a2e;">Invoice ${invoice.invoice_number || ''}</h2>
-<p style="margin:0 0 24px;color:#6b7280;">Hello ${clientName},</p>
-<p style="margin:0 0 16px;color:#374151;">
-  Please find below the details for your invoice.
-</p>
-
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
-<tr style="background-color:#f9fafb;">
-  <td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;">Invoice #</td>
-  <td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;">${invoice.invoice_number || invoiceId.slice(0, 8)}</td>
-</tr>
-<tr>
-  <td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Amount</td>
-  <td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;font-weight:700;">${amountStr}</td>
-</tr>
-<tr>
-  <td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Due Date</td>
-  <td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;">${formatDate(invoice.due_date)}</td>
-</tr>
-<tr>
-  <td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Status</td>
-  <td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;">${(invoice.status || 'pending').charAt(0).toUpperCase() + (invoice.status || 'pending').slice(1)}</td>
-</tr>
-</table>
-
-${viewUrl ? `
-<div style="text-align:center;margin-bottom:16px;">
-  <a href="${viewUrl}" style="display:inline-block;padding:12px 32px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
-    View Invoice
-  </a>
-</div>
-` : ''}
-
-<p style="margin:0;font-size:13px;color:#9ca3af;">
-  If you have any questions, please reply to this email or contact us directly.
-</p>`;
-    }
+    });
 
     ensureMailer();
     const emailResult = await sendEmail({
       ...(await senderForOrg(orgId, company)),
       to: clientData.email,
       subject: emailSubject,
-      html: htmlStructure ?? buildEmailLayout(company, bodyHtml),
+      html: htmlStructure,
       suivi: { orgId, entityType: 'invoice', entityId: invoiceId },
     });
 
@@ -652,7 +620,7 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
     const emailResult = await sendEmail({
       ...(await senderForOrg(orgId, company)),
       to: clientData.email,
-      subject: modeleOrg?.sujet || `${m.soumission} ${numero} — ${montantTexte}${company.company_name ? ` — ${company.company_name}` : ''}`,
+      subject: modeleOrg?.sujet || `${m.soumission}${numero ? ` ${numero}` : ''} — ${montantTexte}`,
       html,
       suivi: { orgId, entityType: 'invoice', entityId: quote.id },
     });
@@ -759,7 +727,7 @@ router.post('/emails/send-mobile-quote', async (req, res) => {
     const emailResult = await sendEmail({
       ...(await senderForOrg(orgId, company)),
       to: clientData.email,
-      subject: modeleOrg?.sujet || `${m.soumission} ${numero} — ${montantTexte}${company.company_name ? ` — ${company.company_name}` : ''}`,
+      subject: modeleOrg?.sujet || `${m.soumission}${numero ? ` ${numero}` : ''} — ${montantTexte}`,
       html,
       suivi: { orgId, entityType: 'quote', entityId: quoteId },
     });
