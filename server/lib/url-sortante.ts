@@ -49,6 +49,12 @@ export function ipNonPublique(ip: string): boolean {
     }
     return (
       v6 === '::' || v6 === '::1'
+      // ::/96 « IPv4-compatible » (obsolète) : [::7f00:1] = 127.0.0.1 passait
+      // le filtre de texte (audit V2, C23). Aucun usage légitime : refusé.
+      || /^::([0-9a-f]{1,4}:)?[0-9a-f]{1,4}$/.test(v6) || /^::\d+\.\d+\.\d+\.\d+$/.test(v6)
+      // 2002::/16 (6to4) embarque une IPv4 quelconque, privée comprise
+      // ([2002:7f00:1::] = 127.0.0.1) : refusé en bloc.
+      || /^2002:/.test(v6)
       || /^f[cd]/.test(v6) // fc00::/7 (adresses locales uniques)
       || /^fe[89ab]/.test(v6) // fe80::/10 (link-local)
       || /^ff/.test(v6) // multicast
@@ -115,7 +121,14 @@ export const DELAI_TOTAL_MS = 10_000;
 export async function posterSansSsrf(
   url: string,
   corps: unknown,
-  options: { resoudre?: Resolveur; fetcher?: typeof fetch } = {},
+  options: {
+    resoudre?: Resolveur;
+    fetcher?: typeof fetch;
+    /** En-têtes en plus (signature d'un webhook d'intégration…). */
+    entetes?: Record<string, string>;
+    /** Corps déjà sérialisé — une signature porte sur ces octets exacts. */
+    corpsBrut?: string;
+  } = {},
 ): Promise<Response> {
   const fetcher = options.fetcher ?? fetch;
   const abandon = AbortSignal.timeout(DELAI_TOTAL_MS);
@@ -128,8 +141,8 @@ export async function posterSansSsrf(
     }
     const reponse = await fetcher(cible, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Lume-Automations/1' },
-      body: JSON.stringify(corps),
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Lume-Automations/1', ...(options.entetes ?? {}) },
+      body: options.corpsBrut ?? JSON.stringify(corps),
       redirect: 'manual',
       signal: abandon,
       // @ts-expect-error — option undici (fetch natif de Node) : IP revérifiée à la connexion.

@@ -337,19 +337,14 @@ export interface RelanceDeal {
   created_at: string;
 }
 
-export async function fetchRelances(
-  dealId: string,
-  clientId?: string | null,
-): Promise<RelanceDeal[]> {
-  // `entity_id` est un uuid nu : on cible le deal ET son client, sans
-  // supposer lequel des deux l'automatisation a nommé.
-  const cibles = [dealId, clientId].filter(Boolean) as string[];
-  const { data, error } = await supabase
-    .from('automation_execution_logs')
-    .select('id,action_type,result_success,result_error,trigger_event,created_at,entity_id')
-    .in('entity_id', cibles)
-    .order('created_at', { ascending: false })
-    .limit(50);
+export async function fetchRelances(dealId: string): Promise<RelanceDeal[]> {
+  if (!dealId) return [];
+  // Le deal ET son contact, côté base (`relances_du_deal`). Un vendeur n'a
+  // pas « Voir les automatisations » : il ne lit plus la table des journaux
+  // (qui porte courriels et téléphones des clients de tout le bureau), mais
+  // cette fonction, qui ne rend que les relances de CE deal, sans donnée de
+  // contact (audit V2, vague 3).
+  const { data, error } = await supabase.rpc('relances_du_deal', { p_deal_id: dealId });
   if (error) throw error;
   return (data ?? []).map((x: Record<string, unknown>) => ({
     id: x.id as string,

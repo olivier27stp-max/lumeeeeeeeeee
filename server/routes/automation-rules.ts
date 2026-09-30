@@ -957,17 +957,21 @@ router.delete('/automations/folders/:id', async (req, res) => {
   // La clé étrangère est en `on delete set null` : les automatisations du
   // dossier reviennent à la racine et CONTINUENT de tourner. Un rangement
   // ne doit jamais faire disparaître un envoi.
-  const { error } = await auth.client
+  const { data, error } = await auth.client
     .from('automation_folders')
     .delete()
     .eq('id', req.params.id)
-    .eq('org_id', auth.orgId);
+    .eq('org_id', auth.orgId)
+    .select('id');
 
   if (error) {
     if (error.code === '42501') return res.status(403).json({ error: 'Votre rôle ne permet pas de supprimer un dossier.' });
     logger.error('[automation-folders] suppression échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de supprimer le dossier.' });
   }
+  // Audit V2, S9 : 0 ligne (dossier d'un autre bureau, inexistant, ou refusé
+  // par la RLS) répondait 204 « supprimé » sans rien supprimer.
+  if (!data?.length) return res.status(404).json({ error: 'Dossier introuvable.' });
   return res.status(204).end();
 });
 
@@ -1169,9 +1173,11 @@ router.post('/automations/webhooks/:id/regenerer', async (req, res) => {
   // Nouvelle clé, même format que la base (32 octets en hexadécimal).
   // L'ancienne adresse cesse de fonctionner immédiatement.
   const nouvelle = randomBytes(32).toString('hex');
+  // 1. Le DROIT, avec le client de l'utilisateur : la RLS (automations.update)
+  //    décide. Seul `updated_at` est écrit à cette étape.
   const { data, error } = await auth.client
     .from('automation_webhooks')
-    .update({ api_key: nouvelle, updated_at: new Date().toISOString() })
+    .update({ updated_at: new Date().toISOString() })
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .is('deleted_at', null)
@@ -1187,6 +1193,19 @@ router.post('/automations/webhooks/:id/regenerer', async (req, res) => {
   }
   // 0 ligne = introuvable, ou la RLS a refusé (pas « Modifier les automatisations »).
   if (!data) return res.status(404).json({ error: 'Adresse d’appel introuvable, ou votre rôle ne permet pas de la régénérer.' });
+
+  // 2. La CLÉ, avec le client service_role : `authenticated` n'a plus le
+  //    droit d'écrire `api_key` (audit V2, S8 — une clé choisie par un
+  //    client pouvait être devinable). Bornée au bureau et à l'id vérifiés.
+  const { error: erreurCle } = await getServiceClient()
+    .from('automation_webhooks')
+    .update({ api_key: nouvelle })
+    .eq('id', (data as { id: string }).id)
+    .eq('org_id', auth.orgId);
+  if (erreurCle) {
+    logger.error('[automation-rules] nouvelle clé non écrite', { message: erreurCle.message });
+    return res.status(500).json({ error: 'Impossible de régénérer l’adresse d’appel.' });
+  }
   return res.json({ ...data, api_key: nouvelle, cle_masquee: masquer(nouvelle) });
 });
 
@@ -1223,16 +1242,21 @@ router.delete('/automations/webhooks/:id', async (req, res) => {
 
   // Effacement DOUX, comme partout : le journal des appels reçus garde son
   // sens, et une suppression par erreur reste réparable.
-  const { error } = await auth.client
+  const { data, error } = await auth.client
     .from('automation_webhooks')
     .update({ deleted_at: new Date().toISOString(), enabled: false })
     .eq('id', req.params.id)
-    .eq('org_id', auth.orgId);
+    .eq('org_id', auth.orgId)
+    .is('deleted_at', null)
+    .select('id');
 
   if (error) {
+    if (error.code === '42501') return res.status(403).json({ error: 'Votre rôle ne permet pas de supprimer cette adresse.' });
     logger.error('[automation-rules] suppression webhook échouée', { message: error.message });
     return res.status(500).json({ error: 'Impossible de supprimer l’adresse d’appel.' });
   }
+  // Audit V2, S9 : 0 ligne répondait { ok: true } sans rien supprimer.
+  if (!data?.length) return res.status(404).json({ error: 'Adresse d’appel introuvable.' });
   return res.json({ ok: true });
 });
 

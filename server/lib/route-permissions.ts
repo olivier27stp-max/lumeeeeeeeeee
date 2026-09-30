@@ -116,6 +116,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/automations/rules': 'automations.read',
   // Total déclenché, en cours, passages par étape (une route agrégée).
   'GET /api/automations/rules/stats': 'automations.read',
+  // L'éditeur d'une automatisation : sa règle + le catalogue (lecture).
+  'GET /api/automations/editeur': 'automations.read',
   // « X clients correspondent aujourd'hui » (déclencheur Client inactif).
   'GET /api/automations/clients-inactifs/apercu': 'automations.read',
   // Aperçu d'une automatisation : montre un vrai client (launch 2026-09-28).
@@ -142,6 +144,32 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/automations/events/invoice-paid': 'financial.view_invoices',
   'POST /api/automations/events/lead-created': 'automations.update',
   'POST /api/automations/events/lead-status-changed': 'automations.update',
+  // Audit V2, S10 : ces routes n'avaient AUCUNE entrée. La RLS rattrapait
+  // (liste vide, 404), mais un membre sans droit recevait 200 / 404 au lieu
+  // d'un 403 explicite, et tout membre pouvait signaler un événement.
+  'POST /api/automations/rules/:id/restaurer': 'automations.update',
+  'GET /api/automations/folders': 'automations.read',
+  'POST /api/automations/folders': 'automations.update',
+  'PATCH /api/automations/folders/:id': 'automations.update',
+  'DELETE /api/automations/folders/:id': 'automations.update',
+  'GET /api/automations/webhooks': 'automations.read',
+  'POST /api/automations/webhooks': 'automations.update',
+  'POST /api/automations/webhooks/:id/regenerer': 'automations.update',
+  'PATCH /api/automations/webhooks/:id': 'automations.update',
+  'DELETE /api/automations/webhooks/:id': 'automations.update',
+  // « Tout arrêter » : la route exige en plus un administrateur.
+  'GET /api/automations/pause': 'automations.read',
+  'POST /api/automations/pause': 'automations.update',
+  // Événements signalés par le navigateur : le droit de faire l'action
+  // elle-même (déplacer une visite, étiqueter un client, travailler une
+  // tâche), pas celui de modifier les automatisations — un technicien qui
+  // déplace SA visite doit replanifier ses rappels.
+  'POST /api/automations/events/appointment-rescheduled': ['jobs.update', 'calendar.update'],
+  'POST /api/automations/events/client-tagged': ['clients.update', 'leads.update'],
+  'POST /api/automations/events/client-untagged': ['clients.update', 'leads.update'],
+  // Pas de clé « tâches » : ceux qui travaillent des tâches dans chaque rôle
+  // prédéfini (la route vérifie en plus que la tâche est VRAIMENT terminée).
+  'POST /api/automations/events/task-completed': ['jobs.update', 'clients.update', 'leads.update'],
 
   // ── AI / Agent ── (backend removed — only external agent auth remains)
   // External agent endpoints live under /api/agent/connect and /api/agent/webhook

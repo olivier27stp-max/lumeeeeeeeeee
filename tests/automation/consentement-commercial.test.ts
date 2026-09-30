@@ -25,7 +25,9 @@ vi.mock('../../server/lib/mailer', () => ({
   sendEmail: vi.fn(async (p: any) => { envois.push({ to: p?.to }); return { sent: true, messageId: 'x' }; }),
 }));
 vi.mock('../../server/routes/emails', () => ({
-  getCompanySettings: async () => ({}),
+  // Nom et adresse : sans eux, un courriel commercial est sauté avant même
+  // le consentement (LCAP, audit V2 L8) — ce n'est pas ce qu'on teste ici.
+  getCompanySettings: async () => ({ company_name: 'Entreprise test', company_address: '120 rue Principale, Granby, QC' }),
   // `bouton` est le 3e argument depuis que les automatisations en portent un.
   buildEmailLayout: (_c: unknown, b: string) => b,
   senderFor: () => ({ from: 'test@lume.test' }),
