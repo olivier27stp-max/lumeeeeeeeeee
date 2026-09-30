@@ -59,6 +59,7 @@ export const MESSAGES_EN: Record<string, string> = {
   'Votre rôle ne permet pas de restaurer une automatisation.': 'Your role does not allow restoring an automation.',
   'Impossible de restaurer l’automatisation.': 'Could not restore the automation.',
   'Automatisation introuvable dans la corbeille.': 'Automation not found in the bin.',
+  'Impossible de supprimer définitivement l’automatisation.': 'Could not permanently delete the automation.',
   'Impossible de lire les dossiers.': 'Could not read the folders.',
   'Un dossier porte déjà ce nom.': 'A folder already has this name.',
   'Votre rôle ne permet pas de créer un dossier.': 'Your role does not allow creating a folder.',

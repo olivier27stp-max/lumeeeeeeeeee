@@ -35,6 +35,7 @@ import {
   dupliquerAutomatisation,
   supprimerAutomatisation,
   restaurerAutomatisation,
+  supprimerDefinitivementAutomatisation,
   chargerDossiers,
   creerDossier,
   supprimerDossier,
@@ -881,6 +882,35 @@ export default function Automations() {
     }
   };
 
+  /**
+   * Vider une ligne de la corbeille (demande du 2026-09-30).
+   *
+   * Irréversible pour l'utilisateur : confirmation obligatoire. L'historique
+   * d'envois est conservé côté serveur — c'est la preuve de ce qui est parti
+   * chez les clients.
+   */
+  const supprimerDefinitivement = async (regle: AutomationRule) => {
+    const ok = await confirmer({
+      title: fr ? 'Supprimer définitivement ?' : 'Delete permanently?',
+      message: fr
+        ? `« ${regle.name} » disparaît de la corbeille et ne pourra plus être restaurée. L’historique des messages déjà envoyés est conservé.`
+        : `“${regle.name}” leaves the bin and can no longer be restored. The history of messages already sent is kept.`,
+      confirmLabel: fr ? 'Supprimer définitivement' : 'Delete permanently',
+      danger: true,
+    });
+    if (!ok) return;
+    setOccupeId(regle.id);
+    try {
+      await supprimerDefinitivementAutomatisation(regle.id);
+      toast.success(fr ? 'Automatisation supprimée définitivement' : 'Automation permanently deleted');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOccupeId(null);
+    }
+  };
+
   const getCategory = (r: AutomationRule): CategoryKey =>
     (PRESET_META[r.preset_key || '']?.category as CategoryKey) || 'Follow-up';
 
@@ -1110,6 +1140,27 @@ export default function Automations() {
     { fr: (n) => `${n} automatisation(s) restaurée(s) en brouillon`, en: (n) => `${n} automation(s) restored as drafts` },
     reglesCochees.filter((r) => !!r.deleted_at),
   );
+
+  const supprimerDefinitivementLot = async () => {
+    const cibles = reglesCochees.filter((r) => !!r.deleted_at);
+    if (cibles.length === 0) return;
+    const ok = await confirmer({
+      title: fr
+        ? `Supprimer définitivement ${cibles.length} automatisation(s) ?`
+        : `Permanently delete ${cibles.length} automation(s)?`,
+      message: fr
+        ? 'Elles disparaissent de la corbeille et ne pourront plus être restaurées. L’historique des messages déjà envoyés est conservé.'
+        : 'They leave the bin and can no longer be restored. The history of messages already sent is kept.',
+      confirmLabel: fr ? 'Supprimer définitivement' : 'Delete permanently',
+      danger: true,
+    });
+    if (!ok) return;
+    await agirEnLot(
+      (r) => supprimerDefinitivementAutomatisation(r.id),
+      { fr: (n) => `${n} automatisation(s) supprimée(s) définitivement`, en: (n) => `${n} automation(s) permanently deleted` },
+      cibles,
+    );
+  };
 
   const DEPARTS: Array<{ cle: string; fr: string; en: string; aideFr: string; aideEn: string; icone: typeof Zap }> = [
     { cle: 'zero', fr: 'Partir de zéro', en: 'Start from scratch', icone: Plus,
@@ -1531,8 +1582,8 @@ export default function Automations() {
 
         {/*
           La barre d'actions groupées — elle n'apparaît QUE s'il y a une
-          sélection, comme chez GoHighLevel. Dans la corbeille, la seule
-          action offerte est « Restaurer ».
+          sélection, comme chez GoHighLevel. Dans la corbeille : « Restaurer »
+          et « Supprimer définitivement ».
         */}
         {reglesCochees.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2">
@@ -1543,6 +1594,7 @@ export default function Automations() {
             </span>
             <div className="flex flex-wrap items-center gap-1.5">
               {onglet === 'corbeille' ? (
+                <>
                 <button
                   type="button"
                   onClick={() => void restaurerLot()}
@@ -1552,6 +1604,16 @@ export default function Automations() {
                   <RotateCcw size={13} aria-hidden="true" />
                   {fr ? `Restaurer (${reglesCochees.length})` : `Restore (${reglesCochees.length})`}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => void supprimerDefinitivementLot()}
+                  disabled={lotEnCours}
+                  className="glass-button inline-flex items-center gap-1.5 text-[12px] text-danger disabled:opacity-50"
+                >
+                  <Trash2 size={13} aria-hidden="true" />
+                  {fr ? `Supprimer définitivement (${reglesCochees.length})` : `Delete permanently (${reglesCochees.length})`}
+                </button>
+                </>
               ) : (
                 <>
                   <button
@@ -1843,12 +1905,13 @@ export default function Automations() {
                                     className="absolute right-0 z-30 mt-1 w-[210px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
                                   >
                                     {/*
-                                      À la corbeille, une seule action a du sens.
-                                      Modifier, dupliquer ou ranger une règle
-                                      supprimée n'aurait aucun effet visible :
-                                      mieux vaut ne pas l'offrir.
+                                      À la corbeille : restaurer, ou supprimer
+                                      définitivement. Modifier, dupliquer ou
+                                      ranger une règle supprimée n'aurait aucun
+                                      effet visible : mieux vaut ne pas l'offrir.
                                     */}
                                     {rule.deleted_at ? (
+                                      <>
                                       <button
                                         type="button"
                                         role="menuitem"
@@ -1858,6 +1921,16 @@ export default function Automations() {
                                         <RotateCcw size={13} aria-hidden="true" />
                                         {fr ? 'Restaurer' : 'Restore'}
                                       </button>
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => { setMenuLigne(null); void supprimerDefinitivement(rule); }}
+                                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-danger transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        <Trash2 size={13} aria-hidden="true" />
+                                        {fr ? 'Supprimer définitivement' : 'Delete permanently'}
+                                      </button>
+                                      </>
                                     ) : (
                                     <>
                                     <button

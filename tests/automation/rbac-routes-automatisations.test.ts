@@ -46,6 +46,7 @@ describe('S10 — toute route d’automatisation déclare son droit', () => {
       "'POST /api/automations/webhooks/:id/regenerer': 'automations.update'",
       "'POST /api/automations/pause': 'automations.update'",
       "'POST /api/automations/rules/:id/restaurer': 'automations.update'",
+      "'DELETE /api/automations/rules/:id/definitivement': 'automations.update'",
       "'POST /api/automations/events/appointment-rescheduled': ['jobs.update', 'calendar.update']",
       "'POST /api/automations/events/client-tagged': ['clients.update', 'leads.update']",
     ]) expect(PERMS).toContain(ligne);

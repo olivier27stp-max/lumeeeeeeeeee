@@ -53,6 +53,7 @@ function regle(over: Record<string, unknown> = {}) {
 let reglesServies: any[] = [];
 const restaurerMock = vi.fn(async (_id: string) => regle());
 const supprimerMock = vi.fn(async (_id: string) => undefined);
+const definitifMock = vi.fn(async (_id: string) => undefined);
 const toggleMock = vi.fn(async (_id: string, _actif: boolean) => undefined);
 
 vi.mock('../src/lib/automationRulesApi', () => ({
@@ -71,6 +72,7 @@ vi.mock('../src/lib/automationBuilderApi', () => ({
   dupliquerAutomatisation: vi.fn(async () => regle()),
   supprimerAutomatisation: (...a: any[]) => supprimerMock(a[0]),
   restaurerAutomatisation: (...a: any[]) => restaurerMock(a[0]),
+  supprimerDefinitivementAutomatisation: (...a: any[]) => definitifMock(a[0]),
   chargerDossiers: vi.fn(async () => []),
   creerDossier: vi.fn(async () => ({ id: 'd1', name: 'X', position: 0, created_at: '' })),
   supprimerDossier: vi.fn(async () => undefined),
@@ -102,6 +104,7 @@ let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   restaurerMock.mockClear();
   supprimerMock.mockClear();
+  definitifMock.mockClear();
   toggleMock.mockClear();
   // La langue par défaut de Lume est le FRANÇAIS (#500) : les libellés
   // attendus ci-dessous sont ceux que l'utilisateur voit vraiment.
@@ -244,7 +247,7 @@ describe('restaurer', () => {
     expect(restaurerMock).toHaveBeenCalledWith('jetee');
   });
 
-  it('le menu d’une ligne supprimée n’offre NI « Modifier » NI « Supprimer »', async () => {
+  it('le menu d’une ligne supprimée n’offre NI « Modifier » NI « Supprimer » (sans effet) — seulement « Supprimer définitivement »', async () => {
     /*
      * Modifier ou re-supprimer une règle déjà à la corbeille n'a aucun effet
      * visible : offrir le bouton, c'est promettre une action qui ne se passe
@@ -265,7 +268,58 @@ describe('restaurer', () => {
       .map((e) => e.textContent || '');
     expect(dansMenu.join(' | ')).toContain('Restaurer');
     expect(dansMenu.some((t) => t.includes('Modifier')), 'pas de « Modifier »').toBe(false);
-    expect(dansMenu.some((t) => t.includes('Supprimer')), 'pas de « Supprimer »').toBe(false);
+    expect(dansMenu.some((t) => t.includes('Supprimer') && !t.includes('définitivement')), 'pas de « Supprimer » (re-mise à la corbeille)').toBe(false);
+  });
+});
+
+describe('supprimer définitivement (demande du 2026-09-30)', () => {
+  it('le menu d’une ligne à la corbeille propose « Supprimer définitivement », demande confirmation et appelle le serveur', async () => {
+    reglesServies = [regle({ id: 'jetee', name: 'Règle jetée', deleted_at: '2026-09-24T10:00:00Z' })];
+    await rendre();
+    ouvrirOnglet('Corbeille');
+    await act(async () => {});
+    const menu = Array.from(container.querySelectorAll('button')).find((b) =>
+      (b.getAttribute('aria-label') || '').includes('Actions pour Règle jetée'),
+    );
+    cliquer(menu, 'menu « … »');
+    await act(async () => {});
+    const btn = boutons('Supprimer définitivement')[0];
+    expect(btn, 'le menu doit offrir « Supprimer définitivement »').toBeDefined();
+    const { confirmer } = await import('../src/components/ui/ConfirmDialog');
+    vi.mocked(confirmer).mockClear();
+    await act(async () => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => {});
+    expect(vi.mocked(confirmer)).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(vi.mocked(confirmer).mock.calls[0][0])).toMatch(/ne pourra plus être restaurée.*historique/);
+    expect(definitifMock).toHaveBeenCalledWith('jetee');
+  });
+
+  it('refusé à la confirmation : rien n’est appelé', async () => {
+    reglesServies = [regle({ id: 'jetee', name: 'Règle jetée', deleted_at: '2026-09-24T10:00:00Z' })];
+    await rendre();
+    ouvrirOnglet('Corbeille');
+    await act(async () => {});
+    const menu = Array.from(container.querySelectorAll('button')).find((b) =>
+      (b.getAttribute('aria-label') || '').includes('Actions pour Règle jetée'),
+    );
+    cliquer(menu, 'menu « … »');
+    await act(async () => {});
+    const { confirmer } = await import('../src/components/ui/ConfirmDialog');
+    vi.mocked(confirmer).mockResolvedValueOnce(false);
+    await act(async () => { boutons('Supprimer définitivement')[0].dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => {});
+    expect(definitifMock).not.toHaveBeenCalled();
+  });
+
+  it('une ligne VIVANTE n’offre jamais « Supprimer définitivement »', async () => {
+    reglesServies = [regle({ id: 'v', name: 'Règle vivante' })];
+    await rendre();
+    const menu = Array.from(container.querySelectorAll('button')).find((b) =>
+      (b.getAttribute('aria-label') || '').includes('Actions pour Règle vivante'),
+    );
+    cliquer(menu, 'menu « … »');
+    await act(async () => {});
+    expect(boutons('Supprimer définitivement')).toHaveLength(0);
   });
 });
 
@@ -328,6 +382,20 @@ describe('les actions groupées — les cases à cocher commandent enfin quelque
     expect(boutons('Restaurer').length, '« Restaurer » offert').toBeGreaterThan(0);
     expect(boutons('Repasser en brouillon').length, 'publier n’a pas de sens ici').toBe(0);
   });
+
+  it('dans la corbeille, le lot propose « Supprimer définitivement » et l’applique à chaque ligne', async () => {
+    reglesServies = [regle({ id: 'jetee', name: 'Règle jetée', deleted_at: '2026-09-24T10:00:00Z' })];
+    await rendre();
+    ouvrirOnglet('Corbeille');
+    await act(async () => {});
+    cocherPremiere();
+    await act(async () => {});
+    const btn = boutons('Supprimer définitivement (1)')[0];
+    expect(btn, '« Supprimer définitivement » offert en lot').toBeDefined();
+    await act(async () => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => {});
+    expect(definitifMock).toHaveBeenCalledWith('jetee');
+  });
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -375,6 +443,24 @@ describe('la route de suppression, côté serveur', () => {
     expect(corps).toMatch(/deleted_at:/);
     expect(corps, 'une suppression dure rendrait la corbeille inutile')
       .not.toMatch(/from\('automation_rules'\)\s*\n?\s*\.delete\(\)/);
+  });
+
+  it('supprimer définitivement : jamais un `.delete()` (les journaux gardent la preuve des envois), seulement depuis la corbeille', () => {
+    const bloc = routes.slice(routes.indexOf("router.delete('/automations/rules/:id/definitivement'"));
+    const corps = bloc.slice(0, bloc.indexOf('\n});'));
+    expect(corps).toMatch(/purged_at:/);
+    expect(corps).not.toMatch(/\.delete\(\)/);
+    expect(corps, 'une règle vivante ne se supprime pas définitivement en un clic').toMatch(/\.not\('deleted_at', 'is', null\)/);
+  });
+
+  it('une règle supprimée définitivement ne se liste plus et ne se restaure plus', () => {
+    const liste = routes.slice(routes.indexOf("router.get('/automations/rules'"));
+    expect(liste.slice(0, liste.indexOf('\n});'))).toMatch(/\.is\('purged_at', null\)/);
+    const rest = routes.slice(routes.indexOf("router.post('/automations/rules/:id/restaurer'"));
+    expect(rest.slice(0, rest.indexOf('\n});'))).toMatch(/\.is\('purged_at', null\)/);
+    const api = readFileSync(resolve(__dirname, '../src/lib/automationRulesApi.ts'), 'utf8');
+    const lire = api.slice(api.indexOf('export async function getAutomationRules'));
+    expect(lire.slice(0, lire.indexOf('\n}'))).toMatch(/\.is\('purged_at', null\)/);
   });
 
   it('restaurer ramène en BROUILLON, jamais publiée', () => {
