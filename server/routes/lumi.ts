@@ -16,11 +16,12 @@
 import { Router, type Request, type Response } from 'express';
 import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient, companyOrgIds } from '../lib/supabase';
+import { dateLocale, fuseauDuBureau } from '../lib/lumi/credits';
 import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { etatBudget, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause } from '../lib/lumi/budget';
+import { etatBudget, etatCredits, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause } from '../lib/lumi/budget';
 import { verifierPlafond, ajouterDepense, compterRefus, etatPlafonds } from '../lib/lumi/plafond-journalier';
 import { modeleLumi, coutEnCents } from '../lib/lumi/tarifs';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
@@ -248,7 +249,7 @@ async function servirOptimisation(
   emettreSse('tool', { type: 'tool', name: 'propose_day_optimization', statut: 'fin' });
   emettreSse('text', { type: 'text', delta: rep.texte });
   if (rep.carte) emettreSse('proposal', { type: 'proposal', ...rep.carte });
-  emettreSse('done', { conversation_id: o.conversationId, cost_cents: 0, budget: ctx.budget, proposal: rep.carte ? { tool_use_id: rep.carte.tool_use_id, tool: rep.carte.tool, args: rep.carte.args } : null, raccourci: o.action, etage: o.etage });
+  emettreSse('done', { conversation_id: o.conversationId, credits: ctx.credits, proposal: rep.carte ? { tool_use_id: rep.carte.tool_use_id, tool: rep.carte.tool, args: rep.carte.args } : null, raccourci: o.action, etage: o.etage });
   void journaliserTrace(ctx.admin, {
     orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: o.conversationId, canal: 'lumi', origine: o.origine,
     enonce: o.enonce, etage: o.etage, action: o.action, params: o.params, outils: ['propose_day_optimization'], resultat: rep.carte ? 'proposition' : 'ok',
@@ -267,7 +268,7 @@ async function contexteTour(req: Request, res: Response) {
   const admin = getServiceClient();
   const budget = await etatBudget(admin, auth.orgId);
   if (!budget.includes_ai) {
-    res.status(403).json({ error: 'Lumi is not included in this plan.', code: 'plan_sans_lumi', budget });
+    res.status(403).json({ error: 'Lumi is not included in this plan.', code: 'plan_sans_lumi', credits: await etatCredits(admin, auth.orgId, budget) });
     return null;
   }
   // Plafond atteint (palier « epuise ») : rien n'est refusé ici. Les étages
@@ -319,7 +320,9 @@ async function contexteTour(req: Request, res: Response) {
   const promptCtx = { companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs, restrictions };
   const systeme = promptSystemeLumi(promptCtx);
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
-  return { auth, admin, budget, systeme, promptCtx, language, accessToken, fuseau, userName };
+  // Ce que le client voit : des crédits (jamais de $) — calculé une fois par requête.
+  const credits = await etatCredits(admin, auth.orgId, budget);
+  return { auth, admin, budget, credits, systeme, promptCtx, language, accessToken, fuseau, userName };
 }
 
 async function executerTourSse(opts: {
@@ -441,7 +444,7 @@ async function executerTourSse(opts: {
       ecrituresRestantes: Math.max(0, PLAFOND_ECRITURES_PAR_CONVERSATION - compterEcritures([...opts.historique, ...opts.nouveauxAvant])),
       historique: [...opts.historique, ...opts.nouveauxAvant],
       emettre: (e) => { if (!ferme) emettre(e); },
-      journaliser: (usage, model, cost_cents) => {
+      journaliser: (usage, model, cost_cents, requestId) => {
         // Le compteur du jour se nourrit du coût RÉEL, au même endroit que le journal.
         ajouterDepense('lumi', cost_cents);
         return journaliserUsage(ctx.admin, {
@@ -449,20 +452,21 @@ async function executerTourSse(opts: {
           input_tokens: usage.input_tokens, output_tokens: usage.output_tokens,
           cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
           cache_read_input_tokens: usage.cache_read_input_tokens ?? 0, cost_cents,
+          requestId: requestId ?? null,
         });
       },
     });
     if (resultat.plafond) {
       // Plafond dur atteint : rien n'est parti au modèle pour cette étape ;
       // message gabarit (0 token), les actions rapides restent servies.
-      const texte = messagePause(ctx.language);
+      const texte = messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());
       if (!ferme) emettreSse('text', { type: 'text', delta: texte });
       resultat.nouveauxMessages.push({ role: 'assistant', content: [{ type: 'text', text: texte }] });
       resultat.texte = resultat.texte ? `${resultat.texte}\n\n${texte}` : texte;
     }
     await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages, cleRefs);
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
-    if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition, etage: ETAGE.agent });
+    if (!ferme) emettreSse('done', { conversation_id: conversationId, credits: await etatCredits(ctx.admin, ctx.auth.orgId, budget), proposal: resultat.proposition, etage: ETAGE.agent });
     // Montants cités sans source dans les résultats d'outils : on le dit
     // FORT. Le prompt exige que chaque chiffre vienne d'un outil ; sans
     // cette ligne, une hallucination de montant passerait inaperçue jusqu'à
@@ -577,7 +581,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texteAide }] }], cleRefs);
         const emettreSse = ouvrirSse(res);
         emettreSse('text', { type: 'text', delta: texteAide });
-        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, etage: aide ? ETAGE.enonceExact : ETAGE.raccourci });
+        emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage: aide ? ETAGE.enonceExact : ETAGE.raccourci });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
           enonce: normaliserEnonce(message), etage: aide ? ETAGE.enonceExact : ETAGE.raccourci,
@@ -606,7 +610,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'fin' });
         emettreSse('text', { type: 'text', delta: reponse.texte });
         if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
-        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id, etage: raccourci.etage ?? ETAGE.raccourci });
+        emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, raccourci: raccourci.id, etage: raccourci.etage ?? ETAGE.raccourci });
         // Étage 2 : répondu sans modèle. C'est cette ligne qui mesure la part de trafic absorbée.
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
@@ -642,10 +646,10 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
           if (rep.recu) emettreSse('executed', { type: 'executed', ...rep.recu });
           emettreSse('text', { type: 'text', delta: rep.texte });
           if (rep.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: rep.fiches });
-          emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: directe.id, etage: ETAGE.raccourci });
+          emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, raccourci: directe.id, etage: ETAGE.raccourci });
         } else {
           emettreSse('proposal', { type: 'proposal', tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args, capacite: rep.capacite, apercu: rep.apercu });
-          emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: { tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args }, raccourci: directe.id, etage: ETAGE.raccourci });
+          emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: { tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args }, raccourci: directe.id, etage: ETAGE.raccourci });
         }
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
@@ -688,7 +692,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         for (const o of hit.outils) { emettreSse('tool', { type: 'tool', name: o, statut: 'debut' }); emettreSse('tool', { type: 'tool', name: o, statut: 'fin' }); }
         emettreSse('text', { type: 'text', delta: hit.texte });
         if (hit.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: hit.fiches });
-        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, etage });
+        emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
           enonce: message, etage, action: etage === ETAGE.cacheReponse ? 'cache-exact' : 'cache-semantique', outils: hit.outils, resultat: 'ok',
@@ -710,7 +714,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texte }] }], `${ctx.auth.orgId}:${ctx.auth.user.id}`);
         const emettreSse = ouvrirSse(res);
         emettreSse('text', { type: 'text', delta: texte });
-        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, etage: ETAGE.interface });
+        emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage: ETAGE.interface });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
           enonce: normaliserEnonce(message), etage: ETAGE.interface, action: 'plafond_conversation', params: { depense_cents: Math.round(depense * 100) / 100 },
@@ -755,7 +759,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texte }] }], cleRefs);
         const emettreSse = ouvrirSse(res);
         emettreSse('text', { type: 'text', delta: texte });
-        emettreSse('done', { conversation_id: conversationId, cost_cents: coutRouteur, budget: ctx.budget, proposal: null, etage: ETAGE.routeur });
+        emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage: ETAGE.routeur });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
           enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: 'hors-scope', topic: 'hors_scope',
@@ -776,7 +780,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('tool', { type: 'tool', name: r.tool, statut: 'fin' });
         emettreSse('text', { type: 'text', delta: reponse.texte });
         if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
-        emettreSse('done', { conversation_id: conversationId, cost_cents: coutRouteur, budget: ctx.budget, proposal: null, raccourci: r.id, etage: ETAGE.routeur });
+        emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, raccourci: r.id, etage: ETAGE.routeur });
         // La même question, redemandée : servie par les caches (étages 3-4), sans même le routeur. Premier message seulement.
         if (premierMessage) {
           const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: message };
@@ -810,7 +814,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         const emettreSse = ouvrirSse(res);
         emettreSse('proposal', { type: 'proposal', tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args, capacite: rep.capacite, apercu: rep.apercu });
         const coutRouteur = routeur.usage ? coutEnCents(MODELE_ROUTEUR, routeur.usage) : 0;
-        emettreSse('done', { conversation_id: conversationId, cost_cents: coutRouteur, budget: ctx.budget, proposal: { tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args }, raccourci: `extraction:${a.id}`, etage: ETAGE.routeur });
+        emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: { tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args }, raccourci: `extraction:${a.id}`, etage: ETAGE.routeur });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
           enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: `extraction:${a.id}`, params: { extraction: routeur.verdict.extraction, routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms } },
@@ -884,7 +888,7 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
     emettreSse('tool', { type: 'tool', name: raccourci!.tool, statut: 'fin' });
     emettreSse('text', { type: 'text', delta: reponse.texte });
     if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
-    emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci!.id, etage: ETAGE.interface });
+    emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, raccourci: raccourci!.id, etage: ETAGE.interface });
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
       enonce: label, etage: ETAGE.interface, action, params, outils: [raccourci!.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
@@ -990,7 +994,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     for (const recu of execute) emettreSse('executed', recu);
     emettreSse('text', { type: 'text', delta: texte });
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
-    emettreSse('done', { conversation_id, cost_cents: 0, budget, proposal: null, recu: true, etage: ETAGE.interface });
+    emettreSse('done', { conversation_id, credits: await etatCredits(ctx.admin, ctx.auth.orgId, budget), proposal: null, recu: true, etage: ETAGE.interface });
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: conversation_id, canal: 'lumi', origine: 'carte',
       enonce: null, etage: ETAGE.interface, action: decision, outils: enAttente.map((a) => a.tool),
@@ -1069,17 +1073,89 @@ router.get('/lumi/quota', async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
-    const budget = await etatBudget(getServiceClient(), auth.orgId);
-    // Posture de coût du SERVEUR (incident 2026-09-18) : une batterie qui tape
-    // sur cette API ne choisit pas le modèle — c'est l'environnement du serveur
-    // qui décide. Elle doit pouvoir le vérifier avant de lancer 2 000 appels.
+    const admin = getServiceClient();
+    const credits = await etatCredits(admin, auth.orgId);
+    // Crédits seulement : aucun montant en $ ne part vers un client (2026-09-30).
+    // Posture de coût du SERVEUR (incident 2026-09-18) : les batteries internes
+    // (@lume-test.ca) vérifient le modèle et les plafonds avant de lancer 2 000
+    // appels — elles seules reçoivent ce détail.
+    const interne = /@lume-test\.ca$/i.test(String(auth.user.email || ''));
     return res.json({
-      ...budget,
       configured: isLumiConfigured(),
-      cout: { modele: modeleLumi(), plafonds_jour: etatPlafonds() },
+      credits,
+      ...(interne ? { cout: { modele: modeleLumi(), plafonds_jour: etatPlafonds() } } : {}),
     });
   } catch (error: any) {
     return sendSafeError(res, error, 'Unable to load Lumi quota.', '[lumi/quota]');
+  }
+});
+
+// ── GET /lumi/credits — ce que le client voit (crédits, jamais de $) ─────
+router.get('/lumi/credits', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    return res.json(await etatCredits(getServiceClient(), auth.orgId));
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Unable to load Lumi credits.', '[lumi/credits]');
+  }
+});
+
+/*
+ * GET /lumi/credits/historique?jours=30 — consommation par jour (le groupe
+ * d'entreprises, pool partagé) et, pour qui a « external_agent.admin »
+ * (page Rôles), par utilisateur. Le bureau vient TOUJOURS de la session ;
+ * le support n'est pas compté ; aucun $ ne sort.
+ */
+router.get('/lumi/credits/historique', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const jours = Math.min(90, Math.max(1, Number(req.query.jours) || 30));
+    const fuseau = await fuseauDuBureau(admin, auth.orgId);
+    const { data: debut } = await admin.rpc('lumi_periode_debut', { p_org: auth.orgId });
+    const credits = await etatCredits(admin, auth.orgId);
+    const depuis = new Date(Date.now() - jours * 86_400_000).toISOString();
+    const orgIds = await companyOrgIds(admin, auth.orgId);
+    const { data: lignes, error } = await admin.from('ai_usage')
+      .select('org_id, user_id, credits_micro, created_at')
+      .in('org_id', orgIds).neq('source', 'support').gte('created_at', depuis)
+      .order('created_at', { ascending: true }).limit(20_000);
+    if (error) throw error;
+    const parJour = new Map<string, number>();
+    const parUser = new Map<string, number>();
+    for (const l of (lignes ?? []) as Array<{ org_id: string; user_id: string | null; credits_micro: number | null; created_at: string }>) {
+      const micro = Number(l.credits_micro ?? 0);
+      const jour = dateLocale(l.created_at, fuseau);
+      // Par jour : le pool du GROUPE (un total, aucune identité).
+      parJour.set(jour, (parJour.get(jour) ?? 0) + micro);
+      // Par utilisateur : le bureau de la SESSION seulement — jamais les
+      // employés d'un autre bureau du groupe (isolation multi-bureaux).
+      if (l.user_id && l.org_id === auth.orgId) parUser.set(l.user_id, (parUser.get(l.user_id) ?? 0) + micro);
+    }
+    const enCredits = (micro: number) => Math.round(micro / 100_000) / 10; // 1 décimale
+    const uctx = await getUserContext(admin, auth.user.id, auth.orgId, true).catch(() => null);
+    const detail = !!uctx && hasPermission(uctx, 'external_agent.admin');
+    let parUtilisateur: Array<{ user_id: string; nom: string; credits: number }> | null = null;
+    if (detail) {
+      const ids = [...parUser.keys()];
+      const { data: membres } = ids.length
+        ? await admin.from('memberships').select('user_id, full_name').eq('org_id', auth.orgId).in('user_id', ids)
+        : { data: [] as Array<{ user_id: string; full_name: string | null }> };
+      const noms = new Map(((membres ?? []) as Array<{ user_id: string; full_name: string | null }>).map((m) => [m.user_id, String(m.full_name || '').trim()]));
+      parUtilisateur = ids
+        .map((id) => ({ user_id: id, nom: noms.get(id) || 'Membre', credits: enCredits(parUser.get(id) ?? 0) }))
+        .sort((a, b) => b.credits - a.credits);
+    }
+    return res.json({
+      periode_debut: debut ? dateLocale(String(debut), fuseau) : null,
+      renouvellement_le: credits.renouvellement_le,
+      par_jour: [...parJour.entries()].map(([jour, micro]) => ({ jour, credits: enCredits(micro) })),
+      par_utilisateur: parUtilisateur,
+    });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Unable to load Lumi credit history.', '[lumi/credits/historique]');
   }
 });
 
@@ -1171,11 +1247,12 @@ router.get('/lumi/conversations/:id', async (req, res) => {
     const msgs = await chargerHistorique(id);
     // Tokens et coût réels de la conversation (table ai_usage, écrite à chaque
     // appel au modèle) : le chiffre vérifiable, pas une estimation.
-    let usage: { model: string | null; input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cost_cents: number; appels: number } | undefined;
-    const { data: lignes } = await getServiceClient().from('ai_usage').select('model, input_tokens, output_tokens, cache_read_input_tokens, cost_cents').eq('conversation_id', id).eq('org_id', auth.orgId);
+    // (Plus de coût en $ : le client ne voit que des crédits — 2026-09-30.)
+    let usage: { model: string | null; input_tokens: number; output_tokens: number; cache_read_input_tokens: number; appels: number } | undefined;
+    const { data: lignes } = await getServiceClient().from('ai_usage').select('model, input_tokens, output_tokens, cache_read_input_tokens').eq('conversation_id', id).eq('org_id', auth.orgId);
     if (lignes && lignes.length) {
-      usage = { model: (lignes[lignes.length - 1] as any).model ?? null, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cost_cents: 0, appels: lignes.length };
-      for (const l of lignes as any[]) { usage.input_tokens += l.input_tokens || 0; usage.output_tokens += l.output_tokens || 0; usage.cache_read_input_tokens += l.cache_read_input_tokens || 0; usage.cost_cents += l.cost_cents || 0; }
+      usage = { model: (lignes[lignes.length - 1] as any).model ?? null, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, appels: lignes.length };
+      for (const l of lignes as any[]) { usage.input_tokens += l.input_tokens || 0; usage.output_tokens += l.output_tokens || 0; usage.cache_read_input_tokens += l.cache_read_input_tokens || 0; }
     }
     return res.json({ conversation: conv, messages: rendreMessages(msgs), usage });
   } catch (error: any) {

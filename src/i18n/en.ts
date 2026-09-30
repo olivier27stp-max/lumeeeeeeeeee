@@ -3942,6 +3942,32 @@ const en = {
       },
     },
   },
+  // Crédits Lumi (2026-09-30) : l'usage IA se compte en crédits, jamais en dollars.
+  // `unit` est LA clé du libellé : la renommer ici renomme partout.
+  lumiCredits: {
+    unit: 'Lumi credits',
+    counter: '{restants} / {total} {unit}',
+    renews: 'renews {date}',
+    renewsOn: 'Renews on {date}',
+    untilRenewal: 'renewal',
+    barLabel: '{unit} left this period',
+    barValue: '{restants} of {total} {unit} left',
+    warn80: 'You have {n} {unit} left until {date}.',
+    exhausted: 'Your {unit} are used up until {date}. Quick actions and everything else in Lume still work.',
+    exhaustedInput: '{Unit} used up until {date}.',
+    slowed: 'Lumi is saving your {unit}: one reply per minute until {date}. Try again in a moment.',
+    perMonth: '{n} {unit} / month',
+    deducted: 'Uses your {unit}',
+    left: 'left',
+    ofTotal: 'of {total}',
+    noRollover: 'Unused {unit} do not roll over. The count restarts at each renewal.',
+    historyTitle: 'Last 30 days',
+    historyEmpty: 'No usage yet this period.',
+    historyError: 'Usage history is unavailable for now.',
+    byUser: 'By user',
+    dayUsage: '{jour}: {n} {unit}',
+    downgradeLost: 'Lumi, the AI assistant ({n} {unit} / month)',
+  },
 } as const;
 
 // Deep structure type that preserves shape but allows any string values
