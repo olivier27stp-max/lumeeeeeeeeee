@@ -68,6 +68,7 @@
     "qa:evenements-base": "node --env-file=.env.local --import tsx scripts/qa/eprouver-evenements-base.mts",
     "qa:lumi": "node --env-file=.env.local scripts/qa/evaluer-lumi.mjs",
     "qa:construire-lumi": "tsx --env-file=.env.local scripts/qa/evaluer-construire-lumi.mts",
+    "qa:surveiller-construire-lumi": "tsx --env-file=.env.local scripts/qa/surveiller-construire-lumi.mts",
     "qa:paywall": "node --env-file=.env.local scripts/qa/verifier-paywall.mjs",
     "qa:workflow-bout-en-bout": "tsx --env-file=.env.local scripts/qa/verifier-workflow-bout-en-bout.mjs",
     "qa:panneau-automatisation": "node --env-file=.env.local scripts/qa/verifier-panneau-automatisation.mjs",
