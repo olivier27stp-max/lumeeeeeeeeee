@@ -21,7 +21,7 @@ import { maintenantPourLumi } from '../lumi/temps';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Anthropic from '@anthropic-ai/sdk';
 import { tourLumi, promptSystemeLumi, isLumiConfigured } from '../lumi/orchestrateur';
-import { etatBudget, reserverBudget, reglerBudget, reglagesPourPalier, messagePause } from '../lumi/budget';
+import { etatBudget, reserverBudget, reglerBudget, reglagesPourPalier, messagePause, journaliserUsage } from '../lumi/budget';
 import { modeleLumi } from '../lumi/tarifs';
 import type { Apercu } from '../lumi/fiches';
 import { argentFr, argentEn } from '../lumi/apercu-action';
@@ -165,7 +165,7 @@ export async function repondreParSms(
       : "I'm not included in your plan. Reach out if you'd like to add me.");
   }
   if (budget.palier === 'epuise') {
-    return vide(messagePause(ctx.langue));
+    return vide(messagePause(ctx.langue, budget.renouvellement_le || new Date()));
   }
 
   const reglages = reglagesPourPalier(budget.palier, modeleLumi());
@@ -208,14 +208,22 @@ export async function repondreParSms(
       if (e.type === 'text') texte += e.delta;
       if (e.type === 'proposal' && !e.auto) apercus = e.groupe ? e.groupe.map((g) => g.apercu) : [e.apercu];
     },
-    journaliser: async () => { /* l'usage est journalisé par la réservation ci-dessous */ },
+    // Journalisé comme le chat : la consommation se lit dans ai_usage. Avant le
+    // 2026-09-30, ce crochet était vide — Lumi par texto ne comptait jamais.
+    journaliser: (usage, model, cost_cents, requestId) => journaliserUsage(ctx.admin, {
+      orgId: ctx.orgId, userId: ctx.userId, conversationId: null, model,
+      input_tokens: usage.input_tokens, output_tokens: usage.output_tokens,
+      cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+      cache_read_input_tokens: usage.cache_read_input_tokens ?? 0, cost_cents,
+      requestId: requestId ?? null,
+    }),
     budget: {
       reserver: (cents) => reserverBudget(ctx.admin, ctx.orgId, cents),
       regler: (id, cents) => reglerBudget(ctx.admin, id, cents),
     },
   });
 
-  if (resultat.plafond) return vide(messagePause(ctx.langue));
+  if (resultat.plafond) return vide(messagePause(ctx.langue, budget.renouvellement_le || new Date()));
 
   const final = pourSms(texte || resultat.texte || '', resultat.proposition ? 400 : LONGUEUR_MAX_SMS);
   const reponse = final || (fr ? "Je n'ai pas trouvé de réponse. Reformule ?" : "I couldn't find an answer. Try rephrasing?");

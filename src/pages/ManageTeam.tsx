@@ -52,6 +52,8 @@ import { useCompany } from '../contexts/CompanyContext';
 import { fetchSeatUsage, fetchCurrentBilling, setExtraSeats, type SeatUsage } from '../lib/billingApi';
 import { getTeamStats, type TeamMemberStats } from '../lib/repStatsApi';
 import { fetchHourlyRates, setHourlyRate } from '../lib/teamMembersApi';
+import { usePermissions } from '../hooks/usePermissions';
+import { hasPermission } from '../lib/permissions';
 import { listTeams, type TeamRecord } from '../lib/teamsApi';
 import { setRepExperience, setRepLeaderboardVisibility } from '../lib/leaderboardApi';
 import SeatChargeConfirmModal from '../components/SeatChargeConfirmModal';
@@ -110,6 +112,9 @@ export default function ManageTeam() {
   const [roleChangeMember, setRoleChangeMember] = useState<OrgMember | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [rates, setRates] = useState<Record<string, number>>({});
+  // Taux horaires : illisibles pour un collègue (grants par colonne) — la cellule n'existe que pour qui gère l'équipe.
+  const permsCtx = usePermissions();
+  const peutGererTaux = hasPermission(permsCtx.permissions, 'team.update', permsCtx.role ?? undefined);
   const [seatUsage, setSeatUsage] = useState<SeatUsage | null>(null);
   const [teamStats, setTeamStats] = useState<Record<string, TeamMemberStats>>({});
   const [orgTeams, setOrgTeams] = useState<TeamRecord[]>([]);
@@ -594,7 +599,7 @@ export default function ManageTeam() {
                 setOpenMenuId={setOpenMenuId}
                 onChangeRole={() => setRoleChangeMember(member)}
                 onRemove={() => setRemoveTarget(member)}
-                rate={rates[member.user_id] || 0}
+                rate={peutGererTaux ? (rates[member.user_id] || 0) : null}
                 onSaveRate={(c) => handleSaveRate(member, c)}
                 onSaveExperience={(lvl) => handleSaveExperience(member, lvl)}
                 onSaveLeaderboardVisibility={(visible) => handleSaveLeaderboardVisibility(member, visible)}
@@ -701,7 +706,7 @@ export default function ManageTeam() {
                 onRemove={() => {}}
                 onReactivate={() => handleReactivate(member)}
                 onDeleteForever={() => setDeleteTarget(member)}
-                rate={rates[member.user_id] || 0}
+                rate={peutGererTaux ? (rates[member.user_id] || 0) : null}
                 onSaveRate={(c) => handleSaveRate(member, c)}
                 isSuspended
               />
@@ -940,7 +945,8 @@ interface MemberRowProps {
   onRemove: () => void;
   onReactivate?: () => void;
   onDeleteForever?: () => void;
-  rate: number;
+  /** null = l'utilisateur ne gère pas l'équipe : pas de cellule de taux. */
+  rate: number | null;
   onSaveRate: (cents: number) => void;
   onSaveExperience?: (level: 'rookie' | 'experienced' | null) => void;
   onSaveLeaderboardVisibility?: (visible: boolean) => void;
@@ -973,8 +979,8 @@ const MemberRow: React.FC<MemberRowProps> = ({
   const { t } = useTranslation();
   const id = useId();
   const isFr = language === 'fr';
-  const [rateVal, setRateVal] = useState(rate > 0 ? String(rate / 100) : '');
-  useEffect(() => { setRateVal(rate > 0 ? String(rate / 100) : ''); }, [rate]);
+  const [rateVal, setRateVal] = useState(rate ? String(rate / 100) : '');
+  useEffect(() => { setRateVal(rate ? String(rate / 100) : ''); }, [rate]);
   const commitRate = () => {
     const dollars = parseFloat(rateVal.replace(/\s/g, '').replace(',', '.')) || 0;
     onSaveRate(Math.round(dollars * 100));
@@ -1134,6 +1140,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
       )}
 
       {/* Hourly rate (labour cost input for profitability) */}
+      {rate !== null && (
       <div className="shrink-0 flex items-center gap-1.5" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <label htmlFor={`${id}-rate`} className="text-[11px] font-semibold text-text-tertiary hidden sm:block">{isFr ? 'Taux/h' : 'Rate/h'}</label>
         <div className="flex items-center gap-0.5 rounded-lg border border-outline-subtle bg-surface-secondary/40 px-2 py-1.5 focus-within:border-primary transition-colors">
@@ -1151,6 +1158,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
           />
         </div>
       </div>
+      )}
 
       {/* Action menu (not for owner) */}
       {!isOwner && (

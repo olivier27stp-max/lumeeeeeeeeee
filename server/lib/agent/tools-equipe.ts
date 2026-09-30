@@ -751,17 +751,24 @@ const setHourlyRateTool: AgentTool = {
       }
       const membre = await membreDeLOrg(ctx, userId);
 
-      const { data: existant, error: eSel } = await ctx.client
-        .from('team_members')
-        .select('id, hourly_rate_cents')
-        .eq('org_id', ctx.orgId)
-        .eq('user_id', userId)
-        .limit(1);
+      // Le taux n'est pas lisible en direct (grants par colonne) : l'ancien vient de
+      // membres_remuneration, avec les droits de l'utilisateur.
+      const [{ data: existant, error: eSel }, { data: remunerations, error: eRem }] = await Promise.all([
+        ctx.client
+          .from('team_members')
+          .select('id')
+          .eq('org_id', ctx.orgId)
+          .eq('user_id', userId)
+          .limit(1),
+        ctx.client.rpc('membres_remuneration', { p_org: ctx.orgId }),
+      ]);
       if (eSel) throw eSel;
+      if (eRem) throw eRem;
 
       let ancien: number | null = null;
       if (existant && existant.length) {
-        ancien = Number(existant[0].hourly_rate_cents) || 0;
+        const avant = ((remunerations || []) as Array<{ team_member_id: string; hourly_rate_cents: number | null }>).find((r) => r.team_member_id === existant[0].id);
+        ancien = avant ? Number(avant.hourly_rate_cents) || 0 : null;
         const { error } = await ctx.client
           .from('team_members')
           .update({ hourly_rate_cents: cents, updated_at: new Date().toISOString() })

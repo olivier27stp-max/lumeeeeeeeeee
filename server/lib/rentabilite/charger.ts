@@ -150,7 +150,9 @@ export async function chargerDonnees(opts: {
     parLots<any>(jobIds, (lot) => (de, a) => client.from('job_line_items')
       .select('job_id, name, total_cents, included')
       .eq('org_id', orgId).is('deleted_at', null).in('job_id', lot).order('id').range(de, a)),
-    toutLire<any>((de, a) => client.from('team_members')
+    // Client service : les taux ne sont pas lisibles par le jeton de l'utilisateur (grants par
+    // colonne) ; financial.view_margins a été vérifiée avant d'arriver ici, et org_id vient de la session.
+    toutLire<any>((de, a) => sc.from('team_members')
       .select('user_id, first_name, last_name, email, hourly_rate_cents, labour_cost_hourly, compensation_mode, team_id')
       .eq('org_id', orgId).not('user_id', 'is', null).order('id').range(de, a)),
     toutLire<any>((de, a) => client.from('custom_field_folders')
