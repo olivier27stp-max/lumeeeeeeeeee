@@ -140,10 +140,22 @@ describe('Avis clients — messages personnalisables', () => {
 
   it('courriel par défaut : objet résolu + bouton vers le sondage', () => {
     const mail = reviewEmail({}, vars);
-    expect(mail.subject).toBe("Vision Lavage — Comment s'est passé notre service ?");
+    // L'objet ne répète plus le nom : l'expéditeur l'affiche déjà.
+    expect(mail.subject).toBe("Comment s'est passé notre service ?");
     expect(mail.html).toContain(`href="${vars.survey_url}"`);
     expect(mail.html).toContain('Noter mon expérience');
     expect(mail.html).toContain('Lavage de vitres');
+    expect(mail.html).toContain('Le bouton ne fonctionne pas ?');
+  });
+
+  it('courriel par défaut en anglais, bouton à la couleur de l’entreprise', () => {
+    const mail = reviewEmail({}, vars, { langue: 'en', couleur: '#0a7d4f' });
+    expect(mail.subject).toBe('How did we do?');
+    expect(mail.html).toContain('Rate my experience');
+    expect(mail.html).toContain('background:#0a7d4f');
+    expect(mail.html).not.toMatch(/Bonjour|Noter mon/);
+    // Une couleur illisible retombe sur le noir, jamais une injection de style.
+    expect(reviewEmail({}, vars, { couleur: 'red;x:1' }).html).toContain('background:#171717');
   });
 
   it('courriel personnalisé : paragraphes, HTML échappé, bouton ajouté à la fin si [survey_url] absent', () => {

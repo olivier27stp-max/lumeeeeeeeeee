@@ -165,15 +165,16 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
       {
         type: 'deposit_request',
         origine: 'parcours',
-        titre: { fr: 'Demande de dépôt', en: 'Deposit request' },
-        quand: { fr: 'Pour réserver une date à l’horaire', en: 'To hold a date on the schedule' },
+        titre: { fr: 'Demande de paiement', en: 'Payment request' },
+        quand: { fr: 'Quand vous envoyez un lien de paiement (dépôt ou facture)', en: 'When you send a payment link (deposit or invoice)' },
+        // Le même objet que le serveur envoie (payment-requests.ts) — ils divergeaient.
         objetOrigine: {
-          fr: 'Dépôt de [amount_due] — facture [invoice_number]',
-          en: '[amount_due] due — invoice [invoice_number]',
+          fr: 'Paiement demandé — [amount_due] — facture [invoice_number]',
+          en: 'Payment requested — [amount_due] — invoice [invoice_number]',
         },
         texteOrigine: {
-          fr: 'Ce dépôt réserve votre date à l’horaire. Dès qu’il est reçu, la date est à vous.',
-          en: 'This deposit holds your spot in the schedule. As soon as it is received, the date is yours.',
+          fr: 'Voici le lien pour régler votre facture en ligne. Le paiement se fait par carte, en toute sécurité.',
+          en: 'Here is the link to pay your invoice online. Payment is made by card, securely.',
         },
       },
       {

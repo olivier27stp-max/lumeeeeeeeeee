@@ -953,7 +953,7 @@ router.post('/emails/send-agreement', async (req, res) => {
     const emailResult = await sendEmail({
       ...(await senderForOrg(orgId, company)),
       to: clientData.email,
-      subject: modeleOrg?.sujet || `${m.contrat} ${number}${company.company_name ? ` — ${company.company_name}` : ''}`,
+      subject: modeleOrg?.sujet || `${m.contrat}${refNumber ? ` ${number}` : ''}${requireSig ? (langue === 'fr' ? ' à signer' : ' to sign') : ''}`,
       html,
       suivi: { orgId, entityType: 'agreement', entityId: agreement.id },
     });

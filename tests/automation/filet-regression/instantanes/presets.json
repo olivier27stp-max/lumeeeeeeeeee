@@ -365,8 +365,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Contrat signé",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Merci Marie, Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps ici : À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "45bf2dfb2a85b255"
+    "texte": "Plomberie Tremblay inc. Merci Marie, Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie, Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps ici : À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "81661a70262c8a52"
    }
   ],
   "annulees": []
@@ -561,8 +561,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Rendez-vous confirmé",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est confirmé : Date : 2026-09-25 Heure : 09 h 00 Adresse : 412 rue des Érables, Longueuil À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "274ce245c97b673f"
+    "texte": "Plomberie Tremblay inc. Votre rendez-vous est confirmé : Date : 2026-09-25 Heure : 09 h 00 Adresse : 412 rue des Érables,…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est confirmé : Date : 2026-09-25 Heure : 09 h 00 Adresse : 412 rue des Érables, Longueuil À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "ddbfeeb309418a16"
    }
   ],
   "annulees": []
@@ -998,8 +998,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Déjà un an!",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Ça fait déjà un an qu'on a fait des travaux chez vous — merci encore pour votre confiance! Si c'est le temps d'une retouche ou d'un entretien, répondez à ce courriel et on vous prépare une soumission. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "0f05910a5d71dc27"
+    "texte": "Plomberie Tremblay inc. Ça fait déjà un an qu&#39;on a fait des travaux chez vous — merci encore pour votre confiance! Si c&#39;est le…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait déjà un an qu'on a fait des travaux chez vous — merci encore pour votre confiance! Si c'est le temps d'une retouche ou d'un entretien, répondez à ce courriel et on vous prépare une soumission. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "7281e9280ba64e2b"
    },
    {
     "moment": "differe:send_sms",
@@ -1300,8 +1300,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Des nouvelles de nous",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable! Saviez-vous qu'on offre aussi d'autres services d'entretien? Répondez à ce courriel pour en savoir plus. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "947d5e69bc85775b"
+    "texte": "Plomberie Tremblay inc. Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable! Saviez-vous qu&#39;on…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable! Saviez-vous qu'on offre aussi d'autres services d'entretien? Répondez à ce courriel pour en savoir plus. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "8b2b58f666d9719c"
    }
   ],
   "annulees": []
@@ -1835,8 +1835,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Dépôt reçu, merci!",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Merci Marie! Votre dépôt a bien été reçu et votre place est réservée à l'horaire. On vous recontacte avec les détails du rendez-vous. À bientôt, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "4d26ad97a2909e71"
+    "texte": "Plomberie Tremblay inc. Merci Marie! Votre dépôt a bien été reçu et votre place est réservée à l&#39;horaire. On vous recontacte avec…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie! Votre dépôt a bien été reçu et votre place est réservée à l'horaire. On vous recontacte avec les détails du rendez-vous. À bientôt, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "a33fcab388eac8b8"
    }
   ],
   "annulees": []
@@ -2262,7 +2262,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+      "subject": "Comment s'est passé notre service ?",
       "source": "automation"
      }
     }
@@ -2305,7 +2305,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
      "survey_id": "sondage-1",
-     "subject_sent": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+     "subject_sent": "Comment s'est passé notre service ?",
      "status": "sent",
      "sent_at": "2026-09-13T17:00:00.000Z"
     }
@@ -2475,9 +2475,9 @@
     "moment": "differe:request_review",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "e4ae9bf3b87a8c4f"
+    "subject": "Comment s'est passé notre service ?",
+    "texte": "Plomberie Tremblay inc. Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Le bouton ne fonctionne pas ? Ouvrir le lien Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "aa299ac281ecedf2"
    }
   ],
   "annulees": []
@@ -3167,8 +3167,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Facture INV-000042 impayée depuis 2 semaines",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est impayée depuis deux semaines. Merci de la régler rapidement. En cas de problème, répondez à ce courriel et on trouvera une solution. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "aa8cfabf60f848a9"
+    "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est impayée depuis deux semaines. Merci de la régler rapidement. En…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est impayée depuis deux semaines. Merci de la régler rapidement. En cas de problème, répondez à ce courriel et on trouvera une solution. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "ed6d51b046be481e"
    },
    {
     "moment": "differe:send_sms",
@@ -3469,8 +3469,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Petit rappel amical : la facture INV-000042 de 1 626,90 $ est en attente de paiement. Si vous avez déjà payé, ignorez ce message. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "9cd81a7c5829f49c"
+    "texte": "Plomberie Tremblay inc. Petit rappel amical : la facture INV-000042 de 1 626,90 $ est en attente de paiement. Si vous avez déjà…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel amical : la facture INV-000042 de 1 626,90 $ est en attente de paiement. Si vous avez déjà payé, ignorez ce message. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "892045f71fa52586"
    }
   ],
   "annulees": []
@@ -4162,8 +4162,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Facture INV-000042 en souffrance (30 jours)",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est en souffrance depuis 30 jours. Merci de la régler sans tarder, ou contactez-nous pour convenir d'une entente de paiement. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "1a55a320fd984671"
+    "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est en souffrance depuis 30 jours. Merci de la régler sans tarder, ou…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est en souffrance depuis 30 jours. Merci de la régler sans tarder, ou contactez-nous pour convenir d'une entente de paiement. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "dadddeac98e34f85"
    },
    {
     "moment": "differe:send_sms",
@@ -4605,8 +4605,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est toujours en attente de paiement. Si vous avez déjà payé, ignorez ce message. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "0194f45ea0be01fa"
+    "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est toujours en attente de paiement. Si vous avez déjà payé, ignorez…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est toujours en attente de paiement. Si vous avez déjà payé, ignorez ce message. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "91fdd68744a6dbec"
    },
    {
     "moment": "differe:send_sms",
@@ -5174,8 +5174,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Facture INV-000042 en attente depuis 7 jours",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est en attente depuis une semaine. Merci de la régler dès que possible, ou répondez à ce courriel si quelque chose ne va pas. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "09f4273a914b2b07"
+    "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est en attente depuis une semaine. Merci de la régler dès que…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est en attente depuis une semaine. Merci de la régler dès que possible, ou répondez à ce courriel si quelque chose ne va pas. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "45bd578f2c56db02"
    },
    {
     "moment": "differe:send_sms",
@@ -5626,8 +5626,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Votre rendez-vous est demain",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est demain , le 2026-09-25 à 09 h 00. Un empêchement? Répondez à ce courriel et on trouvera un autre moment. À demain! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "dc71cadf5bc19b97"
+    "texte": "Plomberie Tremblay inc. Votre rendez-vous est demain , le 2026-09-25 à 09 h 00. Un empêchement? Répondez à ce courriel et on…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est demain , le 2026-09-25 à 09 h 00. Un empêchement? Répondez à ce courriel et on trouvera un autre moment. À demain! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "1de56f39be57f21b"
    }
   ],
   "annulees": []
@@ -6355,8 +6355,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Rappel : rendez-vous dans une semaine",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Petit rappel : votre rendez-vous est prévu le 2026-09-25 à 09 h 00 . Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous. À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "23d99c0af31d3dff"
+    "texte": "Plomberie Tremblay inc. Petit rappel : votre rendez-vous est prévu le 2026-09-25 à 09 h 00 . Répondez à ce courriel si vous avez…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel : votre rendez-vous est prévu le 2026-09-25 à 09 h 00 . Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous. À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "070917d6273f4c8e"
    }
   ],
   "annulees": []
@@ -6913,8 +6913,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Toujours intéressé?",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services? Un simple mot et on vous prépare une soumission. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "4d5823df7060c33f"
+    "texte": "Plomberie Tremblay inc. Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services? Un simple…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services? Un simple mot et on vous prépare une soumission. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "1b9c1963e5492fc6"
    }
   ],
   "annulees": []
@@ -7498,8 +7498,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — On pense à vous",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Vous nous avez contactés récemment et on veut s'assurer de ne pas vous laisser sans réponse. Répondez à ce courriel et on s'occupe de vous rapidement. Merci, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "cbba643689cbe7b5"
+    "texte": "Plomberie Tremblay inc. Vous nous avez contactés récemment et on veut s&#39;assurer de ne pas vous laisser sans réponse. Répondez à ce…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Vous nous avez contactés récemment et on veut s'assurer de ne pas vous laisser sans réponse. Répondez à ce courriel et on s'occupe de vous rapidement. Merci, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "65279fcf461eadc0"
    }
   ],
   "annulees": []
@@ -8031,8 +8031,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Paiement reçu — merci Marie!",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Merci Marie! Nous confirmons la réception de votre paiement pour la facture INV-000042. Merci de votre confiance. Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "4633b702035503bd"
+    "texte": "Plomberie Tremblay inc. Merci Marie! Nous confirmons la réception de votre paiement pour la facture INV-000042. Merci de votre…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie! Nous confirmons la réception de votre paiement pour la facture INV-000042. Merci de votre confiance. Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "135b3cd43bf5052d"
    }
   ],
   "annulees": []
@@ -9014,8 +9014,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Dernière relance pour votre soumission",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, On voulait faire un dernier suivi au sujet de votre soumission. Si le moment n'est pas bon, aucun souci — répondez-nous et on se reprendra quand ça vous conviendra. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "e0925a45502281ff"
+    "texte": "Plomberie Tremblay inc. On voulait faire un dernier suivi au sujet de votre soumission. Si le moment n&#39;est pas bon, aucun souci —…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, On voulait faire un dernier suivi au sujet de votre soumission. Si le moment n'est pas bon, aucun souci — répondez-nous et on se reprendra quand ça vous conviendra. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "e76b2a5eccec1aa5"
    }
   ],
   "annulees": []
@@ -9460,8 +9460,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Suivi de votre soumission",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, On vous a envoyé une soumission hier et on voulait s'assurer que vous l'avez bien reçue. Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "31fa18868baf1bdc"
+    "texte": "Plomberie Tremblay inc. On vous a envoyé une soumission hier et on voulait s&#39;assurer que vous l&#39;avez bien reçue. Des questions?…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, On vous a envoyé une soumission hier et on voulait s'assurer que vous l'avez bien reçue. Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "9dbdb82cf61aad6e"
    }
   ],
   "annulees": []
@@ -9885,8 +9885,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — On garde votre dossier ouvert",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre soumission. Répondez à ce courriel à tout moment. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "50d527b23dd2edb2"
+    "texte": "Plomberie Tremblay inc. On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre soumission. Répondez à ce courriel à tout moment. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "318d634fb6d23c5c"
    }
   ],
   "annulees": []
@@ -10331,8 +10331,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Votre soumission vous attend",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Petit rappel au sujet de la soumission qu'on vous a envoyée. Si un détail ne convient pas, on peut l'ajuster — dites-le-nous simplement. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "8f464250ab19d764"
+    "texte": "Plomberie Tremblay inc. Petit rappel au sujet de la soumission qu&#39;on vous a envoyée. Si un détail ne convient pas, on peut…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel au sujet de la soumission qu'on vous a envoyée. Si un détail ne convient pas, on peut l'ajuster — dites-le-nous simplement. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "e95e27a44e623483"
    }
   ],
   "annulees": []
@@ -10904,8 +10904,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Votre soumission est toujours valide",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Votre soumission est toujours valide et on garde votre place. Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel. Au plaisir, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "b89de25e64ba230f"
+    "texte": "Plomberie Tremblay inc. Votre soumission est toujours valide et on garde votre place. Si vous avez des questions ou souhaitez…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre soumission est toujours valide et on garde votre place. Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel. Au plaisir, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "4168d1f57b9ba3d4"
    }
   ],
   "annulees": []
@@ -11341,8 +11341,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — Déjà 3 mois!",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû. Répondez à ce courriel et on vous trouve une place à l'horaire. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "d7b0bc38bca6b7ab"
+    "texte": "Plomberie Tremblay inc. Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû. Répondez à ce courriel…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû. Répondez à ce courriel et on vous trouve une place à l'horaire. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "763017f90b93db19"
    },
    {
     "moment": "differe:send_sms",
@@ -12060,8 +12060,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Plomberie Tremblay inc. — La saison s'en vient",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, La saison avance — c'est le bon moment pour préparer votre propriété. Répondez à ce courriel pour une soumission rapide et sans engagement. À bientôt, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "8e3f38e1d9277d56"
+    "texte": "Plomberie Tremblay inc. La saison avance — c&#39;est le bon moment pour préparer votre propriété. Répondez à ce courriel pour une…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La saison avance — c'est le bon moment pour préparer votre propriété. Répondez à ce courriel pour une soumission rapide et sans engagement. À bientôt, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "313ea8c4a325fe8a"
    },
    {
     "moment": "differe:send_sms",
@@ -13009,8 +13009,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Merci d'avoir contacté Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Plomberie Tremblay inc. Bonjour Marie, Merci d'avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très rapidement. Si votre demande est urgente, répondez à ce courriel — nous la traiterons en priorité. Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "a8c5c3360f78799e"
+    "texte": "Plomberie Tremblay inc. Merci d&#39;avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Merci d'avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très rapidement. Si votre demande est urgente, répondez à ce courriel — nous la traiterons en priorité. Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "983d7a1cbf633144"
    }
   ],
   "annulees": []

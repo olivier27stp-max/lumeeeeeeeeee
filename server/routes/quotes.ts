@@ -315,7 +315,7 @@ router.post('/quotes/send-email', async (req, res) => {
           .replace(/\{\{total\}\}/g, totalFormatted)
           .replace(/\{\{company\}\}/g, companyName)
       : (modeleOrg?.sujet
-        || `${m.soumission} ${quote.quote_number} — ${totalFormatted}${companyName ? ` — ${companyName}` : ''}`);
+        || `${m.soumission}${quote.quote_number ? ` ${quote.quote_number}` : ''} — ${totalFormatted}`);
 
     const depot = quote.deposit_required && quote.deposit_value > 0
       ? (langue === 'fr' ? 'Dépôt demandé' : 'Deposit required')
