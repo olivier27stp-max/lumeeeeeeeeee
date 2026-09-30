@@ -97,13 +97,10 @@ async function creerUnDeal() {
   const b = [...conteneur.querySelectorAll('button')]
     .find((x) => /nouveau deal/i.test(x.textContent ?? ''));
   await act(async () => { b?.click(); });
-  // Le formulaire s'ouvre sur « Client existant » : ce test porte sur la saisie d'un nouveau contact.
-  const nouveauContact = [...conteneur.querySelectorAll('button')]
-    .find((x) => /nouveau contact/i.test(x.textContent ?? ''));
-  await act(async () => { nouveauContact?.click(); });
+  // Formulaire GHL : taper un nom dans « Contact principal » = un nouveau contact.
 
   const prenom = [...conteneur.querySelectorAll('input')]
-    .find((i) => /Prénom/i.test(
+    .find((i) => /Contact principal/i.test(
       conteneur.querySelector(`label[for="${i.id}"]`)?.textContent ?? ''));
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
   await act(async () => {
@@ -207,10 +204,10 @@ describe("Nouveau deal — partir de l'existant, dans le pipeline choisi", () =>
     rechercheClientsMock.mockResolvedValue([MARC]);
     await rendre(PIPELINE_DEFAUT);
     await act(async () => { bouton(/nouveau deal/i)?.click(); });
-    await taper(champ(/Rechercher un client/)!, 'tremblay');
+    await taper(champ(/Contact principal/)!, 'tremblay');
     await patienter(300);
     await act(async () => { bouton(/Marc Tremblay/)?.click(); });
-    await act(async () => { bouton(/Créer le deal/)?.click(); });
+    await act(async () => { bouton(/^Créer$/)?.click(); });
     await act(async () => { await Promise.resolve(); });
 
     const envoye = creerMock.mock.calls[0][0];
@@ -224,14 +221,12 @@ describe("Nouveau deal — partir de l'existant, dans le pipeline choisi", () =>
     rechercheClientsMock.mockResolvedValue([MARC]);
     await rendre(PIPELINE_DEFAUT);
     await act(async () => { bouton(/nouveau deal/i)?.click(); });
-    await act(async () => { bouton(/nouveau contact/i)?.click(); });
-    await taper(champ(/Prénom/)!, 'Marc');
-    await taper(champ(/^Nom/)!, 'Tremblay');
+    await taper(champ(/Contact principal/)!, 'Marc Tremblay');
     await patienter(450);
 
     expect(conteneur.textContent).toMatch(/porte déjà ce nom/);
     await act(async () => { bouton(/Utiliser cette fiche/)?.click(); });
-    await act(async () => { bouton(/Créer le deal/)?.click(); });
+    await act(async () => { bouton(/^Créer$/)?.click(); });
     await act(async () => { await Promise.resolve(); });
     expect(creerMock.mock.calls[0][0].clientId).toBe('c-marc');
   });
@@ -241,11 +236,9 @@ describe("Nouveau deal — partir de l'existant, dans le pipeline choisi", () =>
     rechercheClientsMock.mockResolvedValue([MARC]);
     await rendre(PIPELINE_DEFAUT);
     await act(async () => { bouton(/nouveau deal/i)?.click(); });
-    await act(async () => { bouton(/nouveau contact/i)?.click(); });
-    await taper(champ(/Prénom/)!, 'Marc');
-    await taper(champ(/^Nom/)!, 'Tremblay');
+    await taper(champ(/Contact principal/)!, 'Marc Tremblay');
     await patienter(450);
-    await act(async () => { bouton(/Créer le deal/)?.click(); });
+    await act(async () => { bouton(/^Créer$/)?.click(); });
     await act(async () => { await Promise.resolve(); });
 
     const envoye = creerMock.mock.calls[0][0];

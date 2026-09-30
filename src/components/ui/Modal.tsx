@@ -9,7 +9,7 @@ interface ModalProps {
   title?: string;
   description?: string;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl';
   footer?: React.ReactNode;
 }
 
@@ -20,22 +20,34 @@ const sizeMap = {
   xl: 'max-w-xl',
   // Formulaire + aperçu côte à côte (création de champ personnalisé).
   '2xl': 'max-w-3xl',
+  // Formulaire du deal sur deux colonnes + navigation à gauche (« Add opportunity » de GHL).
+  '4xl': 'max-w-5xl',
 };
 
 export default function Modal({ open, onClose, title, description, children, size = 'md', footer }: ModalProps) {
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<Element | null>(null);
+  // `onClose` change à chaque rendu chez la plupart des appelants : s'il était une
+  // dépendance de l'effet, CHAQUE rendu du parent remettait le focus sur la fenêtre
+  // (requestAnimationFrame plus bas) — un menu ouvert par un clic (ex. « + Étiquette »
+  // du Nouveau deal) perdait le focus et se refermait aussitôt : « il ne se passe rien ».
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
     // Save and restore focus
     previousFocusRef.current = document.activeElement;
-    // Focus the dialog after render
-    requestAnimationFrame(() => dialogRef.current?.focus());
+    // Focus sur la fenêtre après le rendu — sauf si un champ à l'intérieur l'a déjà
+    // (autoFocus) : le lui reprendre le faisait « blur » et refermait sa liste.
+    requestAnimationFrame(() => {
+      const d = dialogRef.current;
+      if (d && !d.contains(document.activeElement)) d.focus();
+    });
 
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'Escape') { onCloseRef.current(); return; }
       // Focus trap — Tab cycles within modal
       if (e.key === 'Tab' && dialogRef.current) {
         const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
@@ -57,7 +69,7 @@ export default function Modal({ open, onClose, title, description, children, siz
       // Restore previous focus
       if (previousFocusRef.current instanceof HTMLElement) previousFocusRef.current.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -92,7 +104,8 @@ export default function Modal({ open, onClose, title, description, children, siz
         )}
         <div className="px-6 py-5">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2.5 px-6 pb-6 pt-0 border-t border-border-light mt-0 pt-4">
+          // Collé en bas : sur un long formulaire, « Créer » reste visible (comme GHL).
+          <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2.5 px-6 pb-6 pt-0 border-t border-border-light mt-0 pt-4" style={{ background: 'inherit' }}>
             {footer}
           </div>
         )}

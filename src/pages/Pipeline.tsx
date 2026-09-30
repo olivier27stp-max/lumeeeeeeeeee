@@ -522,6 +522,7 @@ export default function Pipeline() {
       <DealDrawer
         deal={dealAffiche}
         etapes={etapes}
+        nomPipeline={dealAffiche ? pipelines.find((p) => p.id === dealAffiche.pipeline_id)?.name : undefined}
         membres={membresQ.data ?? []}
         // La provenance vient de la BASE, elle n'est plus devinée depuis
         // `job_id`/`quote_id` : `pipeline_montants` connaît le cas « dernier

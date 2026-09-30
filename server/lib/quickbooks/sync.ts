@@ -612,11 +612,25 @@ async function ensurePaymentMethod(
 async function removePayment(db: SupabaseClient, ctx: QboContext, paymentId: string, mapped: MapRow | null): Promise<Outcome> {
   if (!mapped || mapped.qbo_state !== 'active') return { status: 'skipped', note: 'Paiement jamais envoyé.' };
   const current = await qboRead<any>(ctx.orgId, 'Payment', mapped.qbo_id);
-  if (current) {
-    await qboRequest(ctx.orgId, 'POST', 'payment?operation=delete', { Id: current.Id, SyncToken: current.SyncToken });
+  if (!current) {
+    await setMapState(db, ctx, 'payment', paymentId, 'deleted');
+    return { status: 'done', note: 'Déjà absent de QuickBooks.' };
   }
-  await setMapState(db, ctx, 'payment', paymentId, 'deleted');
-  return { status: 'done', note: 'Retiré de QuickBooks.' };
+  // Annulé (void) plutôt que supprimé : le paiement reste visible à 0 $ dans
+  // QuickBooks avec sa date et sa référence — le comptable voit qu'il a existé
+  // puis a été remboursé / retiré, et la facture se rouvre comme dans Lume.
+  try {
+    await qboRequest(ctx.orgId, 'POST', 'payment?operation=void', { Id: current.Id, SyncToken: current.SyncToken, sparse: true });
+    await setMapState(db, ctx, 'payment', paymentId, 'voided');
+    return { status: 'done', note: 'Paiement annulé (void) dans QuickBooks.' };
+  } catch (err) {
+    // Période comptable fermée, paiement déjà déposé… : on retombe sur la
+    // suppression, seule autre façon de refléter Lume.
+    if (!(err instanceof QboError) || err.auth || err.retryable) throw err;
+    await qboRequest(ctx.orgId, 'POST', 'payment?operation=delete', { Id: current.Id, SyncToken: current.SyncToken });
+    await setMapState(db, ctx, 'payment', paymentId, 'deleted');
+    return { status: 'done', note: `Void refusé par QuickBooks (${err.message}) — paiement supprimé.` };
+  }
 }
 
 async function syncPayment(db: SupabaseClient, ctx: QboContext, settings: QuickBooksSettings, paymentId: string): Promise<Outcome> {

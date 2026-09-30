@@ -177,7 +177,7 @@ async function valeursFacture(db: SupabaseClient, orgId: string, id: string, f: 
 }
 
 async function valeursDeal(db: SupabaseClient, orgId: string, id: string, f: Format): Promise<Valeurs> {
-  const d = await une(db, 'deals', 'pipeline_id, client_id, quote_id, expected_close_date, assigned_user_id, source', id, orgId);
+  const d = await une(db, 'deals', 'pipeline_id, client_id, quote_id, expected_close_date, assigned_user_id, source, title', id, orgId);
   if (!d) return {};
   const [pipeline, cli, responsable, montant] = await Promise.all([
     d.pipeline_id ? db.from('pipelines_ventes').select('name').eq('id', String(d.pipeline_id)).maybeSingle().then((r) => txt(r.data?.name)) : Promise.resolve(''),
@@ -190,7 +190,7 @@ async function valeursDeal(db: SupabaseClient, orgId: string, id: string, f: For
   };
   const s = SOURCES[txt(d.source)];
   return {
-    pipeline, client: nomClient(cli), first_name: txt(cli?.first_name), last_name: txt(cli?.last_name), email: txt(cli?.email),
+    pipeline, title: txt(d.title), client: nomClient(cli), first_name: txt(cli?.first_name), last_name: txt(cli?.last_name), email: txt(cli?.email),
     phone: txt(cli?.phone), address: txt(cli?.address), amount: montant, expected_close_date: date(d.expected_close_date, f),
     assigned_user: responsable, source: s ? (f.langue === 'fr' ? s[0] : s[1]) : txt(d.source),
   };
