@@ -152,6 +152,15 @@ export async function membreVoitLesMontants(userId: string | null | undefined, o
   }
 }
 
+/** Des arguments d'écriture portent-ils un montant (prix, *_cents…) ? */
+export function argsContiennentMontant(v: unknown): boolean {
+  if (Array.isArray(v)) return v.some(argsContiennentMontant);
+  if (v && typeof v === 'object') {
+    return Object.entries(v as Record<string, unknown>).some(([k, val]) => (CLES_MONTANTS.test(k) && val !== null && val !== undefined) || argsContiennentMontant(val));
+  }
+  return false;
+}
+
 /** Blanchit récursivement les champs de montants d'un résultat d'outil. */
 export function masquerMontants(v: any): any {
   if (Array.isArray(v)) return v.map(masquerMontants);
@@ -201,6 +210,11 @@ export async function executerOutilGarde(opts: {
   const voitLesMontants = await membreVoitLesMontants(opts.userId, opts.orgId);
   if (!voitLesMontants && OUTILS_FINANCIERS.has(opts.name)) {
     return { refus: 'Cette personne ne voit pas les montants dans Lume (réglage de son rôle) : cet outil financier ne lui est pas accessible. Dis-le-lui simplement.' };
+  }
+  // Audit 2026-09-30 : qui ne VOIT pas les montants ne les ÉCRIT pas non plus
+  // (un technicien réécrivait les prix d'un job par update_job).
+  if (!voitLesMontants && tool.kind === 'write' && argsContiennentMontant(opts.args)) {
+    return { refus: 'Cette personne ne voit pas les montants dans Lume (réglage de son rôle) : elle ne peut pas non plus les modifier. Fais la demande sans prix, ou vois avec l’administrateur.' };
   }
 
   // R2/R7 : les arguments sont validés contre la déclaration de l'outil AVANT

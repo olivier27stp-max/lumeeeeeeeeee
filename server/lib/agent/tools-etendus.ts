@@ -3192,8 +3192,8 @@ const addNoteTool: AgentTool = {
   declaration: {
     name: 'add_note',
     description:
-      "Add a note to a client's or a job's activity feed — visible in the Lume timeline. "
-      + "entity_type is 'client' or 'job'.",
+      "Add a note to the Notes tab of a client or a job. entity_type is 'client' or 'job'. "
+      + 'If several clients match the name, ask which one first.',
     parameters: {
       type: 'object',
       properties: {
@@ -3208,6 +3208,14 @@ const addNoteTool: AgentTool = {
     executerIdempotent(ctx, 'add_note', args, async () => {
       const type = String(args.entity_type);
       if (!['client', 'job'].includes(type)) throw new Error("entity_type : 'client' ou 'job'.");
+      // La fiche doit exister DANS cette entreprise (audit 2026-09-30) : avant,
+      // un identifiant faux ou d'ailleurs donnait une note orpheline et « c'est fait ».
+      const entityId = champRequis(args.entity_id, "L'élément à annoter");
+      const { data: fiche, error: errFiche } = type === 'client'
+        ? await ctx.client.from('clients').select('id').eq('org_id', ctx.orgId).eq('id', entityId).is('deleted_at', null).maybeSingle()
+        : await ctx.client.from('jobs').select('id').eq('org_id', ctx.orgId).eq('id', entityId).is('deleted_at', null).maybeSingle();
+      if (errFiche) throw errFiche;
+      if (!fiche) throw new Error(type === 'client' ? 'Client introuvable dans cette entreprise.' : 'Job introuvable dans cette entreprise.');
       // L'onglet Notes de la fiche (specific_notes), là où list_notes, update_note
       // et delete_note lisent — la note écrite dans activity_notes (fil d'activité)
       // était invisible dans l'onglet (batterie d'exécution du 2026-09-17).
@@ -3217,7 +3225,7 @@ const addNoteTool: AgentTool = {
         .insert({
           org_id: ctx.orgId,
           entity_type: type,
-          entity_id: champRequis(args.entity_id, "L'élément à annoter"),
+          entity_id: entityId,
           text: champRequis(args.note, 'La note').slice(0, 4000),
           files: [],
           created_by: ctx.userId,
@@ -3235,8 +3243,9 @@ const archiveJobTool: AgentTool = {
   declaration: {
     name: 'archive_job',
     description:
-      'Archive a job (reversible — restore: true brings it back). Archived jobs leave the late/upcoming '
-      + 'counts. The right tool for cleaning up demo or stale jobs the user confirms are dead.',
+      'Flag a job as archived (reversible — restore: true). It does NOT remove it from the late/upcoming lists '
+      + 'nor its visits from the calendar: to take a dead job out of the late list, change its status '
+      + '(cancelled or completed) with update_job_status instead.',
     parameters: {
       type: 'object',
       properties: {
@@ -3259,7 +3268,11 @@ const archiveJobTool: AgentTool = {
         .select('id, job_number, title, archived_at')
         .single();
       if (error) throw error;
-      return { [restaurer ? 'restored' : 'archived']: true, job: { job_number: data.job_number, title: data.title } };
+      return {
+        [restaurer ? 'restored' : 'archived']: true, job: { job_number: data.job_number, title: data.title },
+        // Audit 2026-09-30 : l'écran ne lit pas archived_at — le dire, plutôt que laisser croire le job rangé.
+        ...(restaurer ? {} : { note: 'Job marqué archivé, mais il reste dans les listes et ses visites restent au calendrier : pour le sortir des retards, passe-le à « annulé » ou « terminé ».' }),
+      };
     }),
 };
 
