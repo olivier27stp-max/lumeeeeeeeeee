@@ -357,8 +357,12 @@ describe('route — les gardes qui demandent de lire le catalogue', () => {
     //   · (launch 2026-09-28) `automation_webhooks.api_key` retirée à
     //     `authenticated` : suffixe masqué et clé tout juste créée, lus après
     //     la garde RLS — deux appels (suffixesDesCles, cleComplete).
+    //   · (vague 3, audit V2 S8) `api_key` n'est plus ÉCRIVABLE par
+    //     `authenticated` : la régénération écrit la nouvelle clé avec le
+    //     service_role, APRÈS que la RLS a accepté la mise à jour de
+    //     `updated_at` par l'utilisateur — un appel.
     const appels = source.match(/getServiceClient\(\)/g) ?? [];
-    expect(appels.length, 'le service_role a un nouvel usage : le justifier ici').toBe(4);
+    expect(appels.length, 'le service_role a un nouvel usage : le justifier ici').toBe(5);
     const bloc = source.slice(source.indexOf('rules/generer'));
     // 3000, pas 2000 : le bloc qui prépare le contexte de Lumi (échanges
     // + parcours courant, ajouté le 2026-09-25 pour P1-6/P1-7) s'insère

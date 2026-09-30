@@ -1095,9 +1095,11 @@ router.post('/automations/webhooks/:id/regenerer', async (req, res) => {
   // Nouvelle clé, même format que la base (32 octets en hexadécimal).
   // L'ancienne adresse cesse de fonctionner immédiatement.
   const nouvelle = randomBytes(32).toString('hex');
+  // 1. Le DROIT, avec le client de l'utilisateur : la RLS (automations.update)
+  //    décide. Seul `updated_at` est écrit à cette étape.
   const { data, error } = await auth.client
     .from('automation_webhooks')
-    .update({ api_key: nouvelle, updated_at: new Date().toISOString() })
+    .update({ updated_at: new Date().toISOString() })
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .is('deleted_at', null)
@@ -1113,6 +1115,19 @@ router.post('/automations/webhooks/:id/regenerer', async (req, res) => {
   }
   // 0 ligne = introuvable, ou la RLS a refusé (pas « Modifier les automatisations »).
   if (!data) return res.status(404).json({ error: 'Adresse d’appel introuvable, ou votre rôle ne permet pas de la régénérer.' });
+
+  // 2. La CLÉ, avec le client service_role : `authenticated` n'a plus le
+  //    droit d'écrire `api_key` (audit V2, S8 — une clé choisie par un
+  //    client pouvait être devinable). Bornée au bureau et à l'id vérifiés.
+  const { error: erreurCle } = await getServiceClient()
+    .from('automation_webhooks')
+    .update({ api_key: nouvelle })
+    .eq('id', (data as { id: string }).id)
+    .eq('org_id', auth.orgId);
+  if (erreurCle) {
+    logger.error('[automation-rules] nouvelle clé non écrite', { message: erreurCle.message });
+    return res.status(500).json({ error: 'Impossible de régénérer l’adresse d’appel.' });
+  }
   return res.json({ ...data, api_key: nouvelle, cle_masquee: masquer(nouvelle) });
 });
 
