@@ -1,38 +1,73 @@
 /**
- * Le p'tit robot de Lumi.
+ * Le p'tit robot de Lumi — le MÊME que sur le web, image ET vidéo.
  *
- * Dessiné en SVG plutôt que chargé depuis un fichier : le web référence
- * `/agent/lumi-poster.png`, qui **n'existe ni dans le dépôt ni en ligne**
- * (404) — l'avatar de Lumi y est une image cassée que personne n'a vue parce
- * qu'elle porte `alt=""`. Rien à copier, donc.
+ * Les deux fichiers viennent de `public/agent/` du dépôt web, récupérés dans
+ * l'historique git (commit 3dd3f0ca, « agent vendeur Lumi sur la page
+ * d'accueil publique »). ⚠️ Ils ont été **supprimés par accident** du web
+ * dans le commit a21a6533 (un portage SES sans rapport) : c'est pour ça que
+ * `/agent/lumi-poster.png` renvoie 404 en prod et que l'avatar de Lumi est
+ * une image cassée sur le web — masquée par son `alt=""`, donc invisible.
+ * À remettre côté web aussi.
  *
- * Il suit le reste de l'app : trait monochrome à l'encre `#171717`, bouts
- * arrondis, comme les icônes d'onglets et la mascotte Lume. Il prend la
- * couleur qu'on lui donne, donc il marche aussi en thème sombre.
+ * Deux rendus, choisis selon l'endroit :
+ *  • `anime` → la VRAIE vidéo (lumi-robot.mp4, 5 s en boucle, muette), donc
+ *    le robot bouge exactement comme sur le web. Réservé au grand robot de
+ *    l'écran d'accueil : un lecteur vidéo par message coûterait cher pour un
+ *    avatar de 26 px, et la page Lumi du web y met elle aussi l'image fixe.
+ *  • sinon → l'image fixe (lumi-robot.png), le « poster » de cette vidéo.
  *
- * `react-native-svg` est déjà une dépendance : aucun module natif de plus.
+ * Si la personne a demandé de réduire les animations, la vidéo ne joue pas :
+ * on montre l'image fixe à la place.
  */
+import { Image } from 'expo-image';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import React from 'react';
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { View } from 'react-native';
 
-export function RobotLumi({ couleur, taille = 24 }: { couleur: string; taille?: number }) {
-  // Le trait s'affine quand le robot grossit, pour qu'il garde le même poids
-  // visuel à 18 px (en-tête) comme à 56 px (état vide).
-  const trait = taille >= 44 ? 1.4 : taille >= 28 ? 1.6 : 1.8;
+import { useAnimationsReduites } from './AnimationsLumi';
+
+const POSTER = require('@/assets/images/lumi-robot.png');
+const FILM = require('@/assets/images/lumi-robot.mp4');
+
+function RobotFixe({ taille, rond }: { taille: number; rond: boolean }) {
   return (
-    <Svg width={taille} height={taille} viewBox="0 0 24 24" fill="none">
-      {/* antenne */}
-      <Circle cx="12" cy="2.6" r="1.25" fill={couleur} />
-      <Path d="M12 3.85V6" stroke={couleur} strokeWidth={trait} strokeLinecap="round" />
-      {/* oreilles */}
-      <Path d="M3 11.5v2.4M21 11.5v2.4" stroke={couleur} strokeWidth={trait} strokeLinecap="round" />
-      {/* tête */}
-      <Rect x="5" y="6" width="14" height="12.5" rx="4.2" stroke={couleur} strokeWidth={trait} />
-      {/* yeux */}
-      <Circle cx="9.4" cy="11.2" r="1.15" fill={couleur} />
-      <Circle cx="14.6" cy="11.2" r="1.15" fill={couleur} />
-      {/* sourire */}
-      <Path d="M9.7 14.6c.7.7 3.9.7 4.6 0" stroke={couleur} strokeWidth={trait} strokeLinecap="round" />
-    </Svg>
+    <Image
+      source={POSTER}
+      style={{ width: taille, height: taille, borderRadius: rond ? taille / 2 : 0 }}
+      contentFit="cover"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    />
   );
+}
+
+function RobotFilm({ taille, rond }: { taille: number; rond: boolean }) {
+  const lecteur = useVideoPlayer(FILM, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
+  return (
+    <View
+      style={{ width: taille, height: taille, borderRadius: rond ? taille / 2 : 0, overflow: 'hidden' }}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <VideoView
+        player={lecteur}
+        style={{ width: taille, height: taille }}
+        contentFit="cover"
+        nativeControls={false}
+        // Le robot n'est pas un film qu'on regarde : pas de plein écran, pas d'image dans l'image.
+        fullscreenOptions={{ enable: false }}
+        allowsPictureInPicture={false}
+      />
+    </View>
+  );
+}
+
+export function RobotLumi({ taille = 24, rond = true, anime = false }: { taille?: number; rond?: boolean; anime?: boolean }) {
+  const reduit = useAnimationsReduites();
+  if (anime && !reduit) return <RobotFilm taille={taille} rond={rond} />;
+  return <RobotFixe taille={taille} rond={rond} />;
 }

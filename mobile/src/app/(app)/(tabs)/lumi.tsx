@@ -466,6 +466,7 @@ function EcranLumi() {
       if (!t || enCoursRef.current || horsLigne) return;
       if (dictee.etat !== 'repos') dictee.annuler();
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Keyboard.dismiss();
       setInput('');
       AsyncStorage.removeItem(CLE_BROUILLON).catch(() => {});
       dicteRef.current = !!opts.dicte || dicteEnAttenteRef.current;
@@ -605,6 +606,7 @@ function EcranLumi() {
     if (enCoursRef.current || horsLigne) return;
     if (dictee.etat !== 'repos') dictee.annuler();
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
     setInput('');
     dicteRef.current = false;
     dicteEnAttenteRef.current = false;
@@ -695,7 +697,7 @@ function EcranLumi() {
 
         <View style={{ flex: 1, alignItems: 'center' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <RobotLumi couleur={c.texte} taille={18} />
+            <RobotLumi taille={22} />
             <Text style={{ fontSize: 17, fontWeight: '700', color: c.texte }}>Lumi</Text>
           </View>
           {!!budget && budget.includes_ai && (
@@ -748,11 +750,12 @@ function EcranLumi() {
             onScroll={surDefilement}
             scrollEventThrottle={64}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16, gap: 16, flexGrow: 1 }}
           >
             {items.length === 0 && (
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, paddingVertical: 24 }}>
-                <RobotLumi couleur={c.texte} taille={56} />
+                <RobotLumi taille={96} anime />
                 <Pressable
                   onPress={basculerMicro}
                   disabled={bloque || horsLigne}
@@ -847,18 +850,7 @@ function EcranLumi() {
                     <View style={{ marginTop: 2 }}>
                       {/* Le halo bat autour du robot pendant qu'il réfléchit — `.lumi-halo` du web. */}
                       <HaloLumi actif={reflechit} couleur={c.lumi} taille={26} reduit={animReduites}>
-                        <View
-                          style={{
-                            width: 26,
-                            height: 26,
-                            borderRadius: 13,
-                            backgroundColor: `${c.lumi}1F`,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <RobotLumi couleur={c.texte} taille={17} />
-                        </View>
+                        <RobotLumi taille={26} />
                       </HaloLumi>
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
