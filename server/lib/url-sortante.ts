@@ -121,7 +121,14 @@ export const DELAI_TOTAL_MS = 10_000;
 export async function posterSansSsrf(
   url: string,
   corps: unknown,
-  options: { resoudre?: Resolveur; fetcher?: typeof fetch } = {},
+  options: {
+    resoudre?: Resolveur;
+    fetcher?: typeof fetch;
+    /** En-têtes en plus (signature d'un webhook d'intégration…). */
+    entetes?: Record<string, string>;
+    /** Corps déjà sérialisé — une signature porte sur ces octets exacts. */
+    corpsBrut?: string;
+  } = {},
 ): Promise<Response> {
   const fetcher = options.fetcher ?? fetch;
   const abandon = AbortSignal.timeout(DELAI_TOTAL_MS);
@@ -134,8 +141,8 @@ export async function posterSansSsrf(
     }
     const reponse = await fetcher(cible, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Lume-Automations/1' },
-      body: JSON.stringify(corps),
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Lume-Automations/1', ...(options.entetes ?? {}) },
+      body: options.corpsBrut ?? JSON.stringify(corps),
       redirect: 'manual',
       signal: abandon,
       // @ts-expect-error — option undici (fetch natif de Node) : IP revérifiée à la connexion.

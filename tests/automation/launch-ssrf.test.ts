@@ -97,3 +97,20 @@ describe('Vague 3 (audit V2, C23) — les deux IPv6 qui passaient encore', () =>
     expect(ipNonPublique('2a00:1450:4009:81f::200e')).toBe(false);
   });
 });
+
+describe('Vague 3 (C26) — en-têtes et corps brut pour les webhooks d’intégration', () => {
+  it('la signature porte sur les octets envoyés : corpsBrut part tel quel, en-têtes ajoutés', async () => {
+    const fetcher = vi.fn(async () => new Response('ok', { status: 200 }));
+    await posterSansSsrf('https://ok.exemple.com/hook', null, {
+      resoudre: async () => [{ address: '93.184.216.34' }],
+      fetcher: fetcher as unknown as typeof fetch,
+      corpsBrut: '{"b":2,"a":1}',
+      entetes: { 'X-Lume-Signature': 't=1,v1=abc' },
+    });
+    const init = (fetcher.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(init.body).toBe('{"b":2,"a":1}');
+    expect((init.headers as Record<string, string>)['X-Lume-Signature']).toBe('t=1,v1=abc');
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(init.redirect).toBe('manual');
+  });
+});
