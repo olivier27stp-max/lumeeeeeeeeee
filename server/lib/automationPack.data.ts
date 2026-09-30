@@ -341,4 +341,5 @@ export const PACK_ACTIF: ReadonlySet<string> = new Set([
   'quote_opened_notify',
   'quote_opened_move_deal',
   'quote_sent_move_deal',
+  'quote_approved_move_deal',
 ]);

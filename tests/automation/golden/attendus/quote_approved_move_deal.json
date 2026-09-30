@@ -1,0 +1,15 @@
+{
+  "preset_key": "quote_approved_move_deal",
+  "trigger_event": "quote.approved",
+  "delay_seconds": 0,
+  "planifie": [],
+  "messages": [
+    {
+      "canal": "deal",
+      "body": "étape → Gagné",
+      "moment": "immediat"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

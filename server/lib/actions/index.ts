@@ -2058,7 +2058,10 @@ export async function executeMoveDealStage(
   if (ctx.entityType !== 'deal' && ctx.entityType !== 'quote') {
     return { success: false, error: `move_deal_stage s'applique à un deal ou à une soumission (reçu : ${ctx.entityType}).` };
   }
-  if (!config?.stage_id && !config?.vers_role) {
+  // « Vers : l'étape Gagné » (devis accepté). Pas de rôle système : c'est
+  // l'étape de type `won` du pipeline du deal, résolue plus bas.
+  const versGagne = config?.cible === 'gagne';
+  if (!config?.stage_id && !config?.vers_role && !versGagne) {
     return { success: false, error: 'move_deal_stage : stage_id (ou vers_role) manquant.' };
   }
 
@@ -2079,6 +2082,22 @@ export async function executeMoveDealStage(
     deal = data as typeof deal;
   }
   if (!deal) return { success: false, error: 'Deal introuvable dans cette organisation.' };
+
+  if (versGagne) {
+    // Seulement depuis une étape OUVERTE : un deal déjà gagné ne bouge pas,
+    // un deal perdu ne se rouvre pas tout seul parce qu'un vieux devis
+    // change de statut.
+    const { data: etapes } = await ctx.supabase
+      .from('pipeline_stages').select('id, kind, position')
+      .eq('pipeline_id', deal.pipeline_id).eq('org_id', ctx.orgId).is('archived_at', null);
+    const etapeActuelle = deal.stage_id;
+    const actuelle = (etapes ?? []).find((e) => e.id === etapeActuelle);
+    const gagnee = (etapes ?? []).filter((e) => e.kind === 'won')
+      .sort((a, b) => Number(a.position) - Number(b.position))[0];
+    if (!gagnee) return { success: true, data: { pas_d_etape_cible: true } };
+    if (!actuelle || actuelle.kind !== 'open') return { success: true, data: { deja_ailleurs: true } };
+    config = { ...config, stage_id: gagnee.id as string };
+  }
 
   // Étapes repérées par RÔLE, dans le pipeline DU DEAL : l'entreprise peut
   // les renommer ou les réordonner, la règle suit.
@@ -2148,7 +2167,9 @@ export async function executeMoveDealStage(
   // d'écrire la ligne ; on la complète.
   const motif = config.cible === 'role'
     ? 'Déplacée automatiquement — le client a ouvert la soumission'
-    : 'Déplacée automatiquement par une automatisation';
+    : versGagne
+      ? 'Déplacée automatiquement — le client a accepté la soumission'
+      : 'Déplacée automatiquement par une automatisation';
   const { data: derniere } = await ctx.supabase
     .from('deal_stage_history').select('id')
     .eq('deal_id', deal.id).eq('to_stage_id', cible)
