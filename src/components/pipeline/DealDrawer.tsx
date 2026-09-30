@@ -1265,7 +1265,7 @@ export default function DealDrawer({
   // qu'elle a récupéré une vente.
   const { data: relances = [] } = useQuery({
     queryKey: ['deal-relances', deal?.id],
-    queryFn: () => fetchRelances(deal?.id ?? '', deal?.client_id ?? null),
+    queryFn: () => fetchRelances(deal?.id ?? ''),
     enabled: !!deal,
     staleTime: 60_000,
   });
