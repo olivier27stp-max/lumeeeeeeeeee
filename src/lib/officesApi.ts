@@ -46,8 +46,13 @@ export interface OfficeSummary {
   created_at: string;
   phone: string;
   street1: string;
+  street2?: string;
   city: string;
   province: string;
+  postal_code?: string;
+  country?: string;
+  weather_lat?: number | null;
+  weather_lng?: number | null;
   member_count: number;
   /** Porte l'abonnement de la compagnie. */
   is_primary: boolean;
@@ -74,6 +79,16 @@ export async function listOffices(): Promise<OfficesListing> {
   const res = await fetch(`${API_BASE}/orgs/offices`, { headers: await authHeaders() });
   if (!res.ok) await throwApiError(res, 'Failed to load offices.');
   return res.json();
+}
+
+/** Modifie l'adresse d'un bureau (propriétaire ou admin de ce bureau). */
+export async function updateOfficeAddress(orgId: string, address: OfficeAddressInput & { city: string }): Promise<void> {
+  const res = await fetch(`${API_BASE}/orgs/offices/${encodeURIComponent(orgId)}/address`, {
+    method: 'PATCH',
+    headers: await authHeaders(),
+    body: JSON.stringify(address),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to save the address.');
 }
 
 // ── Création ────────────────────────────────────────────────────────
