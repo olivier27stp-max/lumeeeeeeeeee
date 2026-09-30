@@ -1728,9 +1728,15 @@ export default function AutomationBuilderPage() {
                     <div className="rounded-xl border border-danger/40 bg-danger/5 p-3">
                       <p className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-danger">
                         <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                        {fr
-                          ? `${bloquantsVivants.length} chose(s) à corriger avant de publier`
-                          : `${bloquantsVivants.length} thing(s) to fix before publishing`}
+                        {/* Publiée ET cassée (règle d'avant la garde serveur,
+                            A-03) : « avant de publier » mentait — elle l'est. */}
+                        {regle.is_active
+                          ? (fr
+                            ? `Publiée mais cassée : ${bloquantsVivants.length} chose(s) à corriger — rien ne part correctement`
+                            : `Published but broken: ${bloquantsVivants.length} thing(s) to fix — nothing goes out correctly`)
+                          : (fr
+                            ? `${bloquantsVivants.length} chose(s) à corriger avant de publier`
+                            : `${bloquantsVivants.length} thing(s) to fix before publishing`)}
                       </p>
                       <ul className="space-y-1">
                         {bloquantsVivants.slice(0, 4).map((p, i) => (

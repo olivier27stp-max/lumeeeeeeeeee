@@ -45,7 +45,7 @@ import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie
 import { logger } from '../lib/logger';
 import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
-import { problemesBloquants, messageRefus } from '../lib/automations-publication';
+import { problemesBloquants, messageRefus, messagePublieeCassee } from '../lib/automations-publication';
 import {
   DECLENCHEURS,
   ACTIONS,
@@ -461,7 +461,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
 
   const { data: existante, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('id, is_preset, trigger_event, delay_seconds, modele_id, conditions, steps, actions')
+    .select('id, is_preset, is_active, trigger_event, delay_seconds, modele_id, conditions, steps, actions')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .maybeSingle();
@@ -500,6 +500,25 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   if (patch.is_active === true) {
     const problemes = problemesBloquants({ ...existante, ...patch });
     if (problemes.length) return res.status(422).json({ error: messageRefus(problemes), code: 'publication_refusee', problemes });
+  }
+
+  /*
+   * UNE AUTOMATISATION PUBLIÉE NE SE CASSE PAS EN SILENCE (audit V2, A-03).
+   *
+   * Changer le déclencheur d'une règle publiée (« Facture envoyée » →
+   * « Nouveau prospect ») laissait « Envoyer la facture » sans facture : la
+   * règle restait publiée et ne faisait plus rien. On rejoue les contrôles
+   * de publication sur l'état FINAL dès que le parcours bouge, et on refuse
+   * ce qui AJOUTE un problème. Une règle publiée déjà cassée (d'avant la
+   * garde) reste corrigeable pas à pas ; la dépublier n'est jamais refusé.
+   */
+  const parcoursModifie = (['trigger_event', 'steps', 'actions', 'conditions'] as const).some((k) => k in patch);
+  if (existante.is_active && patch.is_active === undefined && parcoursModifie) {
+    const avant = new Set(problemesBloquants(existante));
+    const nouveaux = problemesBloquants({ ...existante, ...patch }).filter((p) => !avant.has(p));
+    if (nouveaux.length) {
+      return res.status(422).json({ error: messagePublieeCassee(nouveaux), code: 'publiee_cassee', problemes: nouveaux });
+    }
   }
 
   const { data, error } = await auth.client

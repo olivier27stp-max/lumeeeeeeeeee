@@ -196,3 +196,37 @@ describe('A-02 — « Ajouter » ne touche pas une règle au format d’origine'
     expect(boutonExact('Ajouter')).toBeDefined();
   });
 });
+
+// ─── A-03 (écran) ───────────────────────────────────────────────
+
+describe('A-03 — une automatisation publiée et cassée est dite comme telle', () => {
+  it('le bandeau ne dit pas « avant de publier » : elle l’est déjà, et rien ne part correctement', async () => {
+    etat.regles = [regle({
+      trigger_event: 'invoice.sent', is_active: true,
+      steps: [{ id: 'e1', type: 'action', nom: null, action: { type: 'envoyer_soumission', config: {} }, suivant: null }],
+    })];
+    await ouvrir(`/automations/${ID}`);
+    const texte = container.textContent ?? '';
+    expect(texte).not.toContain('à corriger avant de publier');
+    expect(texte).toContain('Publiée mais cassée');
+  });
+
+  it('le refus du serveur au changement de déclencheur est affiché, et l’écran garde l’ancien', async () => {
+    api.modifier.mockImplementation(async () => {
+      throw new Error('Cette automatisation est publiée : cette modification l’empêcherait de fonctionner (…).');
+    });
+    etat.regles = [regle({ is_active: true })];
+    await ouvrir(`/automations/${ID}`);
+    cliquer(bouton('Quand'));
+    await attendre();
+    // Le tiroir ou le panneau du déclencheur : on passe par « Changer » au besoin.
+    const changer = bouton('Changer');
+    if (changer) cliquer(changer);
+    await attendre();
+    const choix = bouton('Nouveau prospect');
+    expect(choix).toBeDefined();
+    cliquer(choix);
+    await attendre();
+    expect(toasts.erreur.join('\n')).toContain('est publiée');
+  });
+});

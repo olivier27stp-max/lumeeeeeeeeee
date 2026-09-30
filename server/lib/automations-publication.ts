@@ -30,6 +30,11 @@ export function messageRefus(problemes: string[]): string {
   return `Publication refusée : ${problemes.join(' · ')}`;
 }
 
+/** Refus d'une modification qui casserait une automatisation PUBLIÉE (A-03). */
+export function messagePublieeCassee(problemes: string[]): string {
+  return `Cette automatisation est publiée : cette modification l’empêcherait de fonctionner (${problemes.join(' · ')}). Corrigez-la, ou repassez-la en brouillon d’abord.`;
+}
+
 /** Les problèmes bloquants d'une règle, en texte (vide = publiable). */
 export function problemesBloquants(regle: RegleAPublier): string[] {
   return bloquantsPublication({ ...regle, fr: true }).map((p) => p.message);
