@@ -449,6 +449,21 @@ export function rendreRaccourci(r: Raccourci, resultat: any, opts: { fr: boolean
 }
 
 /**
+ * « à » + un libellé qui commence par un article : « à le résumé » ne se dit
+ * pas, c'est « au résumé ». Les libellés de PERMISSION_PAR_OUTIL commencent
+ * presque tous par « le », « la », « les » ou « l' » — les coller après « à »
+ * donnait une faute visible par toute personne refusée.
+ */
+export function aAvecArticle(capacite: string): string {
+  const c = capacite.trim();
+  if (/^les\s/i.test(c)) return `aux ${c.slice(4)}`;
+  if (/^le\s/i.test(c)) return `au ${c.slice(3)}`;
+  if (/^la\s/i.test(c)) return `à la ${c.slice(3)}`;
+  if (/^l['’]/i.test(c)) return `à l${c.slice(1)}`;
+  return `à ${c}`;
+}
+
+/**
  * Exécute l'outil du raccourci (avec les gardes) et rend la réponse.
  * null = le modèle prend le relais (refus de rôle, erreur d'outil, résultat inattendu).
  */
@@ -479,7 +494,7 @@ export async function repondreRaccourci(r: Raccourci, ctx: ContexteRaccourci): P
       if (!regle) return null;
       return {
         texte: fr
-          ? `Ton rôle dans Lume ne te donne pas accès à ${regle.capacite}. Si ça devrait changer, parles-en à un administrateur.`
+          ? `Ton rôle dans Lume ne te donne pas accès ${aAvecArticle(regle.capacite)}. Si ça devrait changer, parles-en à un administrateur.`
           : 'Your role in Lume does not give you access to that. Talk to an administrator if that should change.',
         fiches: [],
         refus: true,
