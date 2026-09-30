@@ -1,18 +1,21 @@
 /**
- * Extra Statistiques aggregates that had no RPC yet — computed client-side,
- * defensively (any failure returns an empty/zero shape so a card shows an empty
- * state, never a crash). Covers: payment-method mix, average-job-value series,
- * monthly-recurring-revenue (from recurring schedules), and loyalty metrics.
+ * Extra Statistiques aggregates that had no RPC yet — computed client-side over
+ * ALL rows (lignesPaginees) with local-day bounds. Errors propagate: the card shows
+ * an error state instead of a misleading zero. Covers: payment-method mix,
+ * average-job-value series and loyalty metrics.
  */
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
-import { listPayments, paymentMethodLabel } from './paymentsApi';
-import { fetchClientLifetimeValue, fetchCohortRetention } from './insightsApi';
-
-const MONTHS_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
-const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+import { fetchCohortRetention, fonctionAbsente, toIsoRange } from './insightsApi';
+import { TAILLE_PAGE, toutesLesLignesParId } from './lignesPaginees';
 
 export interface Series { labels: string[]; vals: number[] }
+
+/** Clé « YYYY-MM » du mois LOCAL d'un instant (le navigateur est à l'heure de l'entreprise). */
+function moisLocal(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 /** Ordered YYYY-MM keys spanning [from, to]. */
 function monthKeys(from: string, to: string): string[] {
@@ -27,98 +30,130 @@ function monthKeys(from: string, to: string): string[] {
   }
   return out;
 }
+/** Nom court du mois, formaté comme le graphique Revenu (« sept. », « Sep »). */
 function monthLabel(key: string, fr: boolean): string {
-  const m = Number(key.slice(5, 7)) - 1;
-  return (fr ? MONTHS_FR : MONTHS_EN)[m] || key;
+  const d = new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 15);
+  return new Intl.DateTimeFormat(fr ? 'fr-CA' : 'en-CA', { month: 'short' }).format(d);
 }
 
-/** Revenue by payment method over the period (top 4). */
+/**
+ * Encaissé par mode de paiement sur la période (4 premiers, le reste dans « other »).
+ * Même définition que la carte Revenu : paiements réussis NETS des remboursements
+ * (un remboursement partiel laisse le statut 'succeeded'), bornes au minuit local.
+ * Lu dans la table (refunded_cents) et non via rpc_list_payments, qui ne le renvoie pas
+ * et plafonnait à 5 000 paiements.
+ */
 export async function fetchPaymentMix(params: { from: string; to: string }): Promise<Array<{ name: string; value: number }>> {
-  try {
-    // Paiements aboutis seulement — pending/failed/refunded ne sont pas du
-    // revenu. Paginé: la version précédente tronquait silencieusement à 1000.
-    const map = new Map<string, number>();
-    for (let page = 1; page <= 5; page++) {
-      const res = await listPayments({ status: 'succeeded', method: 'all', date: 'custom', q: '', page, pageSize: 1000, fromDate: params.from, toDate: params.to });
-      for (const r of res.rows) {
-        const label = paymentMethodLabel(r.method) || (r.method || 'Autre');
-        map.set(label, (map.get(label) || 0) + (r.amount_cents || 0));
-      }
-      if (res.rows.length < 1000) break;
-    }
-    const sorted = Array.from(map.entries()).map(([name, value]) => ({ name, value })).filter((s) => s.value > 0).sort((a, b) => b.value - a.value);
-    if (sorted.length <= 4) return sorted;
-    const top = sorted.slice(0, 3);
-    const other = sorted.slice(3).reduce((s, x) => s + x.value, 0);
-    if (other > 0) top.push({ name: 'Autre', value: other });
-    return top;
-  } catch {
-    return [];
-  }
-}
-
-/** Average completed-job value per month over the period (cents). */
-export async function fetchAvgJobValueSeries(params: { from: string; to: string; fr: boolean }): Promise<Series> {
-  try {
-    const orgId = await getCurrentOrgIdOrThrow();
-    const { data, error } = await supabase
-      .from('jobs')
-      .select('created_at, total_cents, status')
+  const orgId = await getCurrentOrgIdOrThrow();
+  const agregat = await supabase.rpc('rpc_insights_payment_mix', { p_org: orgId, p_from: params.from, p_to: params.to });
+  if (!agregat.error) return top4((agregat.data || []).map((r: any) => ({ name: String(r.method), value: Number(r.cents) || 0 })));
+  if (!fonctionAbsente(agregat.error)) throw agregat.error;
+  const { fromIso, toIsoExclusive } = toIsoRange(params.from, params.to);
+  const lignes = await toutesLesLignesParId<{ id: string; method: string | null; amount_cents: number; refunded_cents: number | null }>((apres) => {
+    let q = supabase
+      .from('payments')
+      .select('id, method, amount_cents, refunded_cents')
       .eq('org_id', orgId)
       .is('deleted_at', null)
-      .in('status', ['completed', 'invoiced'])
-      .gte('created_at', params.from)
-      .lte('created_at', `${params.to}T23:59:59.999Z`)
-      .limit(5000);
-    if (error) throw error;
-    const buckets = new Map<string, { sum: number; n: number }>();
-    for (const j of (data || []) as Array<{ created_at: string; total_cents: number }>) {
-      const key = String(j.created_at).slice(0, 7);
-      const b = buckets.get(key) || { sum: 0, n: 0 };
-      b.sum += j.total_cents || 0; b.n += 1;
-      buckets.set(key, b);
-    }
-    const keys = monthKeys(params.from, params.to);
-    return {
-      labels: keys.map((k) => monthLabel(k, params.fr)),
-      vals: keys.map((k) => { const b = buckets.get(k); return b && b.n ? Math.round(b.sum / b.n) : 0; }),
-    };
-  } catch {
-    return { labels: [], vals: [] };
+      .in('status', ['succeeded', 'refunded'])
+      .gte('payment_date', fromIso)
+      .lt('payment_date', toIsoExclusive);
+    if (apres) q = q.gt('id', apres);
+    return q.order('id').limit(TAILLE_PAGE);
+  });
+  const map = new Map<string, number>();
+  for (const r of lignes) {
+    const cle = r.method || 'other';
+    map.set(cle, (map.get(cle) || 0) + (r.amount_cents || 0) - (r.refunded_cents || 0));
   }
+  return top4(Array.from(map.entries()).map(([name, value]) => ({ name, value })));
 }
 
-/** Loyalty metrics: recurring-revenue share, average lifetime value, retention. */
-export async function fetchLoyalty(params: { from: string; to: string }): Promise<{ recurringPct: number; ltvAvgCents: number; retentionPct: number }> {
-  try {
-    const orgId = await getCurrentOrgIdOrThrow();
-    const { data: jobs } = await supabase
+/** 4 modes au plus : les 3 premiers et « other » pour le reste (ex æquo : ordre alphabétique). */
+function top4(lignes: Array<{ name: string; value: number }>): Array<{ name: string; value: number }> {
+  const sorted = lignes.filter((s) => s.value > 0).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+  if (sorted.length <= 4) return sorted;
+  const top = sorted.slice(0, 3);
+  const other = sorted.slice(3).reduce((s, x) => s + x.value, 0);
+  if (other > 0) top.push({ name: 'other', value: other });
+  return top;
+}
+
+interface MoisCompletes { nombre: number; total: number; recurrent: number }
+
+/**
+ * Jobs COMPLÉTÉS dans la période, regroupés par mois LOCAL de complétion : agrégat en base
+ * (rpc_insights_completed_jobs_monthly) ou, sans lui, lecture de toutes les lignes.
+ */
+async function moisCompletes(params: { from: string; to: string }): Promise<Map<string, MoisCompletes>> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const parMois = new Map<string, MoisCompletes>();
+  const agregat = await supabase.rpc('rpc_insights_completed_jobs_monthly', { p_org: orgId, p_from: params.from, p_to: params.to });
+  if (!agregat.error) {
+    for (const r of (agregat.data || []) as any[]) parMois.set(String(r.mois), { nombre: Number(r.nombre) || 0, total: Number(r.total_cents) || 0, recurrent: Number(r.recurrent_cents) || 0 });
+    return parMois;
+  }
+  if (!fonctionAbsente(agregat.error)) throw agregat.error;
+  for (const j of await jobsCompletes(params)) {
+    const m = parMois.get(moisLocal(j.completed_at)) || { nombre: 0, total: 0, recurrent: 0 };
+    m.nombre += 1; m.total += j.total_cents || 0;
+    if (String(j.job_type) === 'recurring') m.recurrent += j.total_cents || 0;
+    parMois.set(moisLocal(j.completed_at), m);
+  }
+  return parMois;
+}
+
+/** Jobs COMPLÉTÉS dans la période (date de complétion, bornes locales), toutes pages. */
+async function jobsCompletes(params: { from: string; to: string }) {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { fromIso, toIsoExclusive } = toIsoRange(params.from, params.to);
+  return toutesLesLignesParId<{ id: string; completed_at: string; total_cents: number; job_type: string | null }>((apres) => {
+    let q = supabase
       .from('jobs')
-      .select('total_cents, job_type, status')
+      .select('id, completed_at, total_cents, job_type')
       .eq('org_id', orgId)
       .is('deleted_at', null)
-      .in('status', ['completed', 'invoiced'])
-      .gte('created_at', params.from)
-      .lte('created_at', `${params.to}T23:59:59.999Z`)
-      .limit(5000);
-    let rec = 0, tot = 0;
-    for (const j of (jobs || []) as Array<{ total_cents: number; job_type: string | null }>) {
-      const v = j.total_cents || 0; tot += v;
-      if (String(j.job_type) === 'recurring') rec += v;
-    }
-    const recurringPct = tot > 0 ? Math.round((rec / tot) * 100) : 0;
+      .eq('status', 'completed')
+      .gte('completed_at', fromIso)
+      .lt('completed_at', toIsoExclusive);
+    if (apres) q = q.gt('id', apres);
+    return q.order('id').limit(TAILLE_PAGE);
+  });
+}
 
-    const clv = await fetchClientLifetimeValue(50);
-    const ltvAvgCents = clv.length ? Math.round(clv.reduce((s, c) => s + c.total_revenue_cents, 0) / clv.length) : 0;
+/**
+ * Valeur moyenne (TTC) d'un job complété, par mois LOCAL de complétion, et la moyenne
+ * réelle de la période (somme / nombre — pas la moyenne des moyennes mensuelles).
+ * Avant : mois UTC de CRÉATION, statut 'invoiced' inexistant, 5 000 lignes plafonnées à 1 000.
+ */
+export async function fetchAvgJobValueSeries(params: { from: string; to: string; fr: boolean }): Promise<Series & { moyenne: number; nombre: number }> {
+  const parMois = await moisCompletes(params);
+  let somme = 0; let nombre = 0;
+  for (const m of parMois.values()) { somme += m.total; nombre += m.nombre; }
+  const keys = monthKeys(params.from, params.to);
+  return {
+    labels: keys.map((k) => monthLabel(k, params.fr)),
+    vals: keys.map((k) => { const m = parMois.get(k); return m && m.nombre ? Math.round(m.total / m.nombre) : 0; }),
+    moyenne: nombre ? Math.round(somme / nombre) : 0,
+    nombre,
+  };
+}
 
-    const cohorts = await fetchCohortRetention();
-    // months_after = 0 vaut 100 % par définition — l'inclure gonflait la moyenne.
-    const rets = cohorts.filter((c) => Number(c.months_after) >= 1)
-      .map((c) => { const r = c.retention_pct || 0; return r > 0 && r <= 1 ? r * 100 : r; });
-    const retentionPct = rets.length ? Math.round(rets.reduce((s, r) => s + r, 0) / rets.length) : 0;
+/**
+ * Fidélité : part récurrente de la valeur des jobs complétés dans la période (même base
+ * que la valeur moyenne) et rétention moyenne des cohortes. La valeur vie moyenne se
+ * lit à part (fetchValeurVieMoyenne), sur tous les clients.
+ */
+export async function fetchLoyalty(params: { from: string; to: string }): Promise<{ recurringPct: number; retentionPct: number }> {
+  let rec = 0, tot = 0;
+  for (const m of (await moisCompletes(params)).values()) { tot += m.total; rec += m.recurrent; }
+  const recurringPct = tot > 0 ? Math.round((rec / tot) * 100) : 0;
 
-    return { recurringPct, ltvAvgCents, retentionPct };
-  } catch {
-    return { recurringPct: 0, ltvAvgCents: 0, retentionPct: 0 };
-  }
+  const cohorts = await fetchCohortRetention();
+  // months_after = 0 vaut 100 % par définition — l'inclure gonflait la moyenne.
+  const rets = cohorts.filter((c) => Number(c.months_after) >= 1)
+    .map((c) => { const r = c.retention_pct || 0; return r > 0 && r <= 1 ? r * 100 : r; });
+  const retentionPct = rets.length ? Math.round(rets.reduce((s, r) => s + r, 0) / rets.length) : 0;
+
+  return { recurringPct, retentionPct };
 }

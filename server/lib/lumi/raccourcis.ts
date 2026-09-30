@@ -26,6 +26,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { executerOutilGarde } from '../agent/garde';
 import { composerBriefing, type DonneesBriefing } from './briefing';
 import { fichesDuResultat, type Fiche } from './fiches';
+import { jourLocal, minuitLocal } from '../dates-locales';
 
 export type IdRaccourci = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing' | 'top-clients' | 'taches' | 'equipe' | 'devis-attente' | 'ou-equipe' | 'job-numero';
 export const IDS_RACCOURCIS: readonly IdRaccourci[] = ['clients-total', 'agenda', 'revenu-mois', 'retards', 'briefing', 'top-clients', 'taches', 'equipe', 'devis-attente', 'ou-equipe', 'job-numero'];
@@ -264,25 +265,7 @@ export function raccourciDepuisAction(action: string, params: Record<string, unk
 
 // ── Dates dans le fuseau de l'entreprise ────────────────────────
 
-/** « 2026-09-12 » dans le fuseau donné, décalé de n jours. */
-export function jourLocal(fuseau: string, maintenant: Date, decalageJours = 0): string {
-  const d = new Date(maintenant.getTime() + decalageJours * 86_400_000);
-  const p = new Intl.DateTimeFormat('en-CA', { timeZone: fuseau, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
-  const v = (t: string) => p.find((x) => x.type === t)?.value ?? '';
-  return `${v('year')}-${v('month')}-${v('day')}`;
-}
-
-/** Minuit local d'un jour « YYYY-MM-DD » dans le fuseau, en ISO UTC. */
-export function minuitLocal(jour: string, fuseau: string): string {
-  const [y, m, d] = jour.split('-').map(Number);
-  // Première estimation à minuit UTC, puis correction par le décalage réel du fuseau ce jour-là.
-  const estime = Date.UTC(y, m - 1, d, 0, 0, 0);
-  const p = new Intl.DateTimeFormat('en-CA', { timeZone: fuseau, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(estime));
-  const v = (t: string) => Number(p.find((x) => x.type === t)?.value ?? 0);
-  const localCommeUtc = Date.UTC(v('year'), v('month') - 1, v('day'), v('hour'), v('minute'));
-  const decalage = localCommeUtc - estime; // ex. Montréal : -4 h
-  return new Date(estime - decalage).toISOString();
-}
+export { jourLocal, minuitLocal };
 
 /** Bornes [début, fin] d'une période, en ISO UTC, calées sur le fuseau de l'org. */
 /** Jour de la semaine (1 = lundi … 7 = dimanche) d'un « YYYY-MM-DD » dans le fuseau. */
