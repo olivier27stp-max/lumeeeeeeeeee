@@ -562,7 +562,7 @@ export interface FsCommissionRule {
 
 export interface CommissionSettings {
   org_id: string;
-  reversal_policy: 'auto' | 'keep' | 'alert';
+  reversal_policy: 'auto' | 'keep' | 'alert' | 'clawback';
   default_rule_id: string | null;
   created_at: string;
   updated_at: string;

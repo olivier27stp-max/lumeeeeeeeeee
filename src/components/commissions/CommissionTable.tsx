@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { CheckCircle, XCircle, Loader2, Banknote } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, Banknote, Undo2 } from 'lucide-react';
 import UnifiedAvatar from '../ui/UnifiedAvatar';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
@@ -25,6 +25,8 @@ interface Props {
   onApprove?: (id: string) => void;
   onReverse?: (id: string) => void;
   onMarkPaid?: (id: string) => void;
+  /** « Annuler le versement » (versée par erreur) — refusé si la période de paie est versée. */
+  onUnmarkPaid?: (id: string) => void;
   emptyMessage?: string;
   /** Fuseau de l'entreprise (renvoyé par payroll-preview) pour les dates. */
   timeZone?: string;
@@ -40,6 +42,7 @@ export default function CommissionTable({
   onApprove,
   onReverse,
   onMarkPaid,
+  onUnmarkPaid,
   emptyMessage,
   timeZone,
 }: Props) {
@@ -120,6 +123,17 @@ export default function CommissionTable({
                       >
                         {actionLoading === e.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Banknote className="h-3 w-3" />}
                         <span>{fr ? 'Verser' : 'Pay'}</span>
+                      </button>
+                    )}
+                    {showActions && e.status === 'paid' && onUnmarkPaid && (
+                      <button
+                        onClick={() => onUnmarkPaid(e.id)}
+                        disabled={actionLoading === e.id}
+                        aria-label={fr ? 'Annuler le versement' : 'Undo payout'}
+                        className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium text-text-muted hover:bg-surface-elevated transition-colors disabled:opacity-50"
+                        title={fr ? 'Annuler le versement (versée par erreur)' : 'Undo payout (paid by mistake)'}
+                      >
+                        {actionLoading === e.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />}
                       </button>
                     )}
                     {showActions && (e.status === 'pending' || e.status === 'approved') && onReverse && (
