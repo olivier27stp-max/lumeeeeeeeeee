@@ -55,3 +55,18 @@ describe('A-09 — le navigateur envoie la langue de l’interface aux routes de
     vi.unstubAllGlobals();
   });
 });
+
+describe('A-11 — réseau coupé : un message lisible, jamais « Failed to fetch »', () => {
+  it('liste (publication) et pause disent « Connexion perdue », dans la langue de l’interface', async () => {
+    const { changerPublication } = await import('../src/lib/automationBuilderApi');
+    const { basculerPause } = await import('../src/lib/automationWebhooksApi');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    let langue: string | null = null;
+    vi.stubGlobal('localStorage', { getItem: () => langue, setItem: () => {}, removeItem: () => {} });
+    await expect(changerPublication('r1', true)).rejects.toThrow(/^Connexion perdue/);
+    await expect(basculerPause(true)).rejects.toThrow(/^Connexion perdue/);
+    langue = 'en';
+    await expect(changerPublication('r1', true)).rejects.toThrow(/^Connection lost/);
+    vi.unstubAllGlobals();
+  });
+});
