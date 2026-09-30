@@ -791,6 +791,10 @@ export async function resolveEntityVariables(
         etape:pipeline_stages!deals_stage_same_org(name_fr, name_en, kind)
       `)
       .eq('id', entityId)
+      // Client service_role (pas de RLS) : sans ce filtre, un événement de ce
+      // bureau portant l'identifiant d'un deal d'un AUTRE bureau lisait le
+      // courriel et le téléphone de son client — et les envoyait.
+      .eq('org_id', orgId)
       .maybeSingle() as any;
     if (deal) {
       if (deal.client) setClientVars(deal.client);
