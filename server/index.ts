@@ -70,6 +70,7 @@ import requestFormsRouter from './routes/request-forms';
 import marketingRouter from './routes/marketing';
 import salesChatRouter from './routes/sales-chat';
 import routeOptimizationRouter from './routes/route-optimization';
+import agendaTrajetsRouter from './routes/agenda-trajets';
 // Removed: campaigns / booking / recurring-invoices / webhooks-config /
 // quickbooks-export — corresponding UI features deleted.
 import quoteTemplatesRouter from './routes/quote-templates';
@@ -830,6 +831,7 @@ app.use('/api', etiquettesRouter);
 app.use('/api', geocodeRouter);
 app.use('/api', clientErrorsRouter);
 app.use('/api', routeOptimizationRouter);
+app.use('/api', agendaTrajetsRouter);
 app.use('/api', leadsRouter);
 app.use('/api', paymentsRouter);
 app.use('/api', notificationsRouter);

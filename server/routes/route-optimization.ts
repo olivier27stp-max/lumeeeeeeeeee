@@ -95,7 +95,8 @@ router.post('/route-optimization/optimize', async (req, res) => {
 
       if ((lat == null || lng == null) && addr) {
         const geo = await geocodeAddress(addr);
-        if (geo) {
+        // Jamais au centre de la ville : un résultat approximatif = adresse à corriger.
+        if (geo && geo.precision !== 'approximate') {
           lat = geo.latitude;
           lng = geo.longitude;
           // Persist for next time (best-effort, ignore errors).

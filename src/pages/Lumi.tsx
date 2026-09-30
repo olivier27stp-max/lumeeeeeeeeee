@@ -285,6 +285,22 @@ export default function Lumi() {
     // /lumi?c=<id> : la notification du briefing du matin ouvre sa conversation.
     const c = params.get('c');
     if (c && /^[0-9a-f-]{36}$/i.test(c)) { void ouvrirConversation(c); setParams({}, { replace: true }); }
+    // /lumi?action=optimiser-journee&date=AAAA-MM-JJ[&equipe=<id>] : le bouton « Optimiser la journée »
+    // du Calendrier. L'action part directement (0 LLM) : proposition + carte de confirmation.
+    const act = params.get('action');
+    const dateAct = params.get('date');
+    if (act === 'optimiser-journee' && (!dateAct || /^\d{4}-\d{2}-\d{2}$/.test(dateAct))) {
+      const equipeAct = params.get('equipe');
+      const jourLisible = dateAct
+        ? new Intl.DateTimeFormat(fr ? 'fr-CA' : 'en-CA', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${dateAct}T12:00:00Z`))
+        : (fr ? 'aujourd’hui' : 'today');
+      setParams({}, { replace: true });
+      void lancerAction({
+        label: fr ? `Optimiser la journée — ${jourLisible}` : `Optimize the day — ${jourLisible}`,
+        action: 'optimiser-journee',
+        params: { ...(dateAct ? { date: dateAct } : {}), ...(equipeAct && /^[0-9a-f-]{36}$/i.test(equipeAct) ? { equipe: equipeAct } : {}) },
+      }, 'lien');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -478,7 +494,7 @@ export default function Lumi() {
    * serveur ne peut pas (rôle sans accès, outil en échec), le texte part au
    * modèle comme avant : jamais d'action devinée, jamais de page bloquée.
    */
-  async function lancerAction(s: SuggestionLumi) {
+  async function lancerAction(s: SuggestionLumi, origine: 'suggestion' | 'lien' = 'suggestion') {
     if (enCours) return;
     if (voice.state !== 'idle') voice.cancel();
     setInput('');
@@ -491,8 +507,14 @@ export default function Lumi() {
     ]);
     const issue = { valeur: 'ok' as 'ok' | 'indisponible' };
     await lancer(async (onEvent, signal) => {
-      issue.valeur = await executerActionLumi({ conversation_id: conversationId, action: s.action, params: s.params, label: s.label, language: lang, origine: 'suggestion' }, onEvent, signal);
+      issue.valeur = await executerActionLumi({ conversation_id: conversationId, action: s.action, params: s.params, label: s.label, language: lang, origine }, onEvent, signal);
     });
+    if (issue.valeur === 'indisponible' && origine === 'lien') {
+      // Un bouton de l'app (ex. « Optimiser la journée ») ne retombe jamais sur le modèle : 0 LLM, ou rien.
+      setItems((prev) => prev.slice(0, -1));
+      toast.error(fr ? 'Cette action n’est pas disponible pour ton rôle.' : 'This action isn’t available for your role.');
+      return;
+    }
     if (issue.valeur === 'indisponible') {
       // Le message utilisateur est déjà affiché : on renvoie seulement le texte au modèle.
       setItems((prev) => prev.slice(0, -1));
