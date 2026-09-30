@@ -130,9 +130,10 @@ describe.skipIf(!disponible)('commissions — clôture, annulation, reprise, exp
   it('réglages : politique « Reprendre » acceptée par l’API ; une valeur inconnue refusée', async () => {
     expect((await appel(U.olivia, '/commissions/settings', { method: 'PUT', body: { reversal_policy: 'n-importe-quoi' } })).status).toBe(400);
     const r = await appel(U.olivia, '/commissions/settings', { method: 'PUT', body: { reversal_policy: 'clawback' } });
-    // Sans la migration 20261005100400, c'est la contrainte de la BASE qui refuse
-    // encore la valeur (400 « Data validation failed ») ; avec elle, 200.
-    expect([200, 400]).toContain(r.status);
+    // Sans la migration 20261005100400, la base refuse encore la valeur : 409
+    // avec un message clair ; avec elle, 200.
+    expect([200, 409]).toContain(r.status);
+    if (r.status === 409) expect(r.json.code).toBe('clawback_indisponible');
     await appel(U.olivia, '/commissions/settings', { method: 'PUT', body: { reversal_policy: 'auto' } });
   });
 

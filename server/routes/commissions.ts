@@ -500,6 +500,15 @@ router.put('/commissions/settings', validate(commissionSettingsSchema), async (r
     if (reversal_policy) payload.reversal_policy = reversal_policy;
     if (default_rule_id !== undefined) payload.default_rule_id = default_rule_id;
     const { data, error } = await sc.from('commission_settings').upsert(payload, { onConflict: 'org_id' }).select().single();
+    // « Reprendre » exige la migration 20261005100400 : tant qu'elle n'est pas
+    // appliquée, la contrainte de la base refuse la valeur — on le dit clairement
+    // au lieu d'un « Data validation failed » incompréhensible.
+    if (error && error.code === '23514' && reversal_policy === 'clawback') {
+      return res.status(409).json({
+        error: 'L’option « Reprendre » sera disponible après la prochaine mise à jour de la base. Les autres options fonctionnent déjà.',
+        code: 'clawback_indisponible',
+      });
+    }
     if (error) throw error;
     await tracer(sc, auth, req, 'commission_settings.updated', { type: 'commission_settings', id: null }, avant, data);
     res.json(data);
