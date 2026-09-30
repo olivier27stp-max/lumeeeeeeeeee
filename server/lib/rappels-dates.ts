@@ -80,18 +80,22 @@ function decalageDeLaRegle(conditions: Record<string, unknown> | null): number {
 export async function balayerRappelsDates(
   supabase: SupabaseClient,
   maintenant: Date = new Date(),
+  // `options.orgId` : une seule entreprise (suite d'intégration, bureau de test).
+  options: { orgId?: string } = {},
 ): Promise<ResumeRappels> {
   const resume: ResumeRappels = { regles: 0, emis: 0, erreurs: 0 };
 
   // Les règles qui écoutent ce déclencheur, actives seulement : une règle
   // en brouillon ne doit rien envoyer.
-  const { data: regles, error } = await supabase
+  let requete = supabase
     .from('automation_rules')
     .select('id, org_id, conditions')
     .eq('trigger_event', 'date.reached')
     .eq('is_active', true)
     // Une règle à la corbeille ne balaie plus rien.
     .is('deleted_at', null);
+  if (options.orgId) requete = requete.eq('org_id', options.orgId);
+  const { data: regles, error } = await requete;
 
   if (error) {
     logger.error('[rappels-dates] lecture des règles échouée', { message: error.message });

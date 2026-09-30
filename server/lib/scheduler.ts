@@ -590,7 +590,7 @@ function jourDans(fuseau: string, d: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: fuseau, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 
-export async function detectOverdueInvoices(supabase: SupabaseClient) {
+export async function detectOverdueInvoices(supabase: SupabaseClient, options: { orgId?: string } = {}) {
   /*
    * Launch 2026-09-28.
    *   · PAGINÉ : PostgREST plafonne une réponse (souvent 1 000 lignes) SANS
@@ -605,9 +605,11 @@ export async function detectOverdueInvoices(supabase: SupabaseClient) {
   const invoices: any[] = [];
   const PAGE = 1000;
   for (let de = 0; ; de += PAGE) {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('id, org_id, invoice_number, due_date, client_id')
+    // `options.orgId` : une seule entreprise (suite d'intégration, bureau de test).
+    const base = options.orgId
+      ? supabase.from('invoices').select('id, org_id, invoice_number, due_date, client_id').eq('org_id', options.orgId)
+      : supabase.from('invoices').select('id, org_id, invoice_number, due_date, client_id');
+    const { data, error } = await base
       // Liste POSITIVE, comme le cron des relances : un brouillon n'a jamais
       // été reçu par le client — « votre facture est en retard » serait faux
       // (audit V2, D-05 ; 4 brouillons échus en prod au 2026-09-30).
