@@ -73,7 +73,9 @@ import { fmtDollars } from '@/lib/lumi/libelles';
 import { useThemeLumi } from '@/lib/lumi/theme';
 import { MAX_SECONDES, useDictee } from '@/lib/lumi/useDictee';
 import { useLectureVocale } from '@/lib/lumi/useLectureVocale';
+import { suggestionsPour } from '@/lib/lumiSuggestions';
 import { useMembership } from '@/lib/membership-context';
+import { usePermissions } from '@/lib/usePermissions';
 import { IconeLumi } from '@/components/lumi/IconeLumi';
 
 interface Item extends MessageLumi {
@@ -113,6 +115,7 @@ function EcranLumi() {
   const navigation = useNavigation();
   const { session } = useAuth();
   const { current } = useMembership();
+  const { can } = usePermissions();
   const orgId = current?.orgId ?? null;
 
   const [conversations, setConversations] = useState<ConversationLumi[]>([]);
@@ -587,20 +590,15 @@ function EcranLumi() {
     }
   }
 
-  /* ── Suggestions (étage 0 : une action nommée, 0 token) ─────────────── */
-  const suggestions: SuggestionLumi[] = fr
-    ? [
-        { label: 'Quel est mon chiffre du mois ?', action: 'revenu-mois' },
-        { label: 'Quelles factures sont en retard ?', action: 'retards' },
-        { label: 'Prépare ma journée de demain', action: 'agenda', params: { periode: 'demain' } },
-        { label: 'Qui sont mes meilleurs clients ?', action: 'top-clients', params: { limit: 5 } },
-      ]
-    : [
-        { label: 'What is my revenue this month?', action: 'revenu-mois' },
-        { label: 'Which invoices are overdue?', action: 'retards' },
-        { label: 'Prepare my day tomorrow', action: 'agenda', params: { periode: 'demain' } },
-        { label: 'Who are my best clients?', action: 'top-clients', params: { limit: 5 } },
-      ];
+  /* ── Suggestions selon le RÔLE (étage 0 : action nommée, 0 token) ─────
+     Un technicien se faisait proposer « Quel est mon chiffre du mois ? »,
+     cliquait, et récoltait un refus. Confort seulement — la vraie barrière
+     est côté serveur. Même liste et même ordre que le web. ── */
+  const suggestions: SuggestionLumi[] = React.useMemo(
+    () => suggestionsPour(can, lang).map((s) => ({ label: s.label, action: s.action as SuggestionLumi['action'], ...(s.params ? { params: s.params } : {}) })),
+    // `can` change avec le rôle : un droit retiré redessine les suggestions.
+    [can, lang],
+  );
 
   async function lancerAction(s: SuggestionLumi) {
     if (enCoursRef.current || horsLigne) return;
