@@ -201,3 +201,36 @@ describe('L8 — courriel commercial sans identification de l’entreprise', () 
     expect(identiteManquante({ company_name: '  ', company_address: 'x' })).toContain('le nom de l’entreprise manque');
   });
 });
+
+describe('L5 — fenêtre d’envoi bornée à 7 h-22 h', () => {
+  it.each([
+    [{ debut: 0, fin: 24 }], [{ debut: 3, fin: 20 }], [{ debut: 6, fin: 20 }], [{ debut: 8, fin: 23 }], [{ debut: 21, fin: 24 }],
+  ])('refuse %j, message FR et EN', async (fenetre) => {
+    const { automationSettingsSchema } = await import('../../server/lib/validation');
+    const r = automationSettingsSchema.safeParse({ fenetre });
+    expect(r.success).toBe(false);
+    const msg = r.success ? '' : r.error.issues.map((i) => i.message).join(' ');
+    expect(msg).toContain('entre 7 h et 22 h');
+    expect(msg).toContain('between 7 AM and 10 PM');
+  });
+
+  it.each([[{ debut: 7, fin: 22 }], [{ debut: 8, fin: 20 }], [{ debut: 21, fin: 22 }]])('accepte %j', async (fenetre) => {
+    const { automationSettingsSchema } = await import('../../server/lib/validation');
+    expect(automationSettingsSchema.safeParse({ fenetre }).success).toBe(true);
+  });
+
+  it('une règle créée avec une fenêtre 0-24 est refusée par le schéma de la route', async () => {
+    const { automationRuleCreateSchema } = await import('../../server/lib/validation');
+    const r = automationRuleCreateSchema.safeParse({ name: 'x', trigger_event: 'lead.created', actions: [], settings: { fenetre: { debut: 0, fin: 24 } } });
+    expect(r.success).toBe(false);
+    expect(r.success ? '' : r.error.issues.map((i) => i.message).join(' ')).toContain('entre 7 h et 22 h');
+  });
+
+  it('le sélecteur de l’éditeur ne propose que 7 h à 22 h', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../../src/components/automations/OngletReglages.tsx', import.meta.url), 'utf8');
+    expect(src).not.toContain('Array.from({ length: 24 }');
+    expect(src).toContain('Array.from({ length: 15 }, (_, i) => i + 7)');
+    expect(src).toContain('Array.from({ length: 15 }, (_, i) => i + 8)');
+  });
+});
