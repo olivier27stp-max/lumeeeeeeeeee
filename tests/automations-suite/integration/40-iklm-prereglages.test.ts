@@ -183,7 +183,8 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     }).select('id').single();
     expect(error).toBeNull();
     nettoyer.push(() => b.admin.from('invoices').delete().eq('id', inv!.id));
-    await b.admin.from('invoices').update({ status: 'sent' }).eq('id', inv!.id);
+    // « Envoyée » = émise (le statut est dérivé d'issued_at par trigger), comme l'envoi de l'app.
+    await b.admin.from('invoices').update({ issued_at: new Date().toISOString(), status: 'sent' }).eq('id', inv!.id);
     await evenementsBase();
     await new Promise((r) => setTimeout(r, 3000));
     await verifier(['pack_relance_facture'], depuis, true);
