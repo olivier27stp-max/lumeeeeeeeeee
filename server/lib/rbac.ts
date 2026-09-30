@@ -157,11 +157,17 @@ const CACHE_TTL = 60_000; // 1 minute
 export async function getUserContext(
   client: SupabaseClient,
   userId: string,
-  orgId: string
+  orgId: string,
+  /**
+   * `true` = ignorer le cache et relire la base. Les agents (Lumi, MCP) s'en
+   * servent : un retrait de droit doit mordre au message suivant, pas dans la
+   * minute. Les routes HTTP gardent le cache — elles sont brèves.
+   */
+  frais = false,
 ): Promise<UserContext | null> {
   const cacheKey = `${userId}:${orgId}`;
   const cached = contextCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.ctx;
+  if (!frais && cached && Date.now() - cached.ts < CACHE_TTL) return cached.ctx;
 
   const sc = getServiceClient();
   const { data, error } = await sc
