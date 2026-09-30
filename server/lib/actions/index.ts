@@ -555,6 +555,14 @@ export function echapperHtml(v: string): string {
  *   envoyé au client. Les variables qui PORTENT du HTML par conception (nom
  *   en `_html`, ex. [contract_html]) ne sont pas échappées.
  */
+/**
+ * Les SEULES variables qui portent du HTML construit par Lume (jamais une
+ * saisie). L'exemption se faisait sur le NOM (« finit par _html ») : un
+ * champ personnalisé « Notes HTML » (clé notes_html → {{client.notes_html}})
+ * injectait sa valeur brute dans le courriel du client.
+ */
+const VARIABLES_HTML_DE_LUME: ReadonlySet<string> = new Set(['contract_html']);
+
 export function resolveTemplate(
   template: string,
   vars: Record<string, string | null | undefined>,
@@ -569,7 +577,7 @@ export function resolveTemplate(
     return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : undefined;
   };
   const valeur = (cle: string, v: string | null | undefined): string =>
-    options.html && v && !cle.endsWith('_html') ? echapperHtml(v) : (v ?? '');
+    options.html && v && !VARIABLES_HTML_DE_LUME.has(cle) ? echapperHtml(v) : (v ?? '');
   // Support both {var} and [var] syntax for backward compatibility, normalize to {var}
   // Champs personnalisés : {{client.cle}} (format GoHighLevel) = {client_cf_cle}.
   // UNE seule passe : une valeur insérée n'est jamais relue. En trois passes, un
