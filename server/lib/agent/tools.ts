@@ -405,7 +405,23 @@ const getJob: AgentTool = {
       .select('name, qty, unit_price_cents, total_cents, included')
       .eq('job_id', (job as any).id)
       .is('deleted_at', null);
-    return { ...job, line_items: items || [], visits: (visites || []).map((v: any) => ({ visit_id: v.id, start_at: v.start_at, end_at: v.end_at, status: v.status })) };
+    // Les jalons de facturation avec leur id et s'ils sont déjà facturés (audit 2026-09-30) :
+    // aucune lecture ne les donnait, create_invoice_for_milestone devinait.
+    const { data: jalons } = await ctx.client
+      .from('job_billing_milestones')
+      .select('id, label, amount_cents, due_date, position')
+      .eq('org_id', ctx.orgId).eq('job_id', (job as any).id)
+      .order('position', { ascending: true });
+    const idsJalons = (jalons || []).map((j: any) => j.id);
+    const { data: facturesJalons } = idsJalons.length
+      ? await ctx.client.from('invoices').select('billing_milestone_id, invoice_number, status').eq('org_id', ctx.orgId).in('billing_milestone_id', idsJalons).is('deleted_at', null)
+      : { data: [] as any[] };
+    const factureDe = new Map((facturesJalons || []).filter((f: any) => !['void', 'cancelled'].includes(String(f.status))).map((f: any) => [f.billing_milestone_id, f.invoice_number]));
+    return {
+      ...job, line_items: items || [],
+      visits: (visites || []).map((v: any) => ({ visit_id: v.id, start_at: v.start_at, end_at: v.end_at, status: v.status })),
+      ...(jalons && jalons.length ? { billing_milestones: jalons.map((j: any) => ({ milestone_id: j.id, label: j.label, amount_cents: j.amount_cents, due_date: j.due_date, facture: factureDe.get(j.id) ?? null })) } : {}),
+    };
   },
 };
 

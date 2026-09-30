@@ -1111,13 +1111,36 @@ const saveJobBillingMilestonesTool: AgentTool = {
       });
 
       const { data: existants, error: eList } = await ctx.client
-        .from('job_billing_milestones').select('id')
+        .from('job_billing_milestones').select('id, label, amount_cents')
         .eq('org_id', ctx.orgId).eq('job_id', jobId);
       if (eList) throw eList;
       const idsExistants = new Set((existants || []).map((m: any) => String(m.id)));
       const idsGardes = new Set(jalons.map((j) => j.id).filter(Boolean) as string[]);
       for (const id of idsGardes) if (!idsExistants.has(id)) throw new Error('Un jalon cité est introuvable sur ce job — relis l’échéancier avant de le modifier.');
       const aSupprimer = [...idsExistants].filter((id) => !idsGardes.has(id));
+
+      // Un jalon DÉJÀ FACTURÉ ne se supprime pas et ne change pas de montant
+      // (audit 2026-09-30) : supprimé puis recréé, il était facturable une
+      // deuxième fois ; modifié, sa facture ne correspondait plus.
+      const { data: factures, error: eFac } = await ctx.client
+        .from('invoices').select('billing_milestone_id, invoice_number, status')
+        .eq('org_id', ctx.orgId).in('billing_milestone_id', [...idsExistants].length ? [...idsExistants] : ['00000000-0000-0000-0000-000000000000'])
+        .is('deleted_at', null);
+      if (eFac) throw eFac;
+      const facture = new Map<string, string>();
+      for (const f of (factures || []) as any[]) if (!['void', 'cancelled'].includes(String(f.status))) facture.set(String(f.billing_milestone_id), String(f.invoice_number ?? ''));
+      for (const id of aSupprimer) {
+        if (facture.has(id)) {
+          const lab = (existants || []).find((m: any) => String(m.id) === id)?.label ?? '';
+          throw new Error(`Le jalon « ${lab} » est déjà facturé (${facture.get(id)}) : je ne le retire pas de l’échéancier. Garde-le dans la liste.`);
+        }
+      }
+      for (const j of jalons) {
+        const avant = j.id ? (existants || []).find((m: any) => String(m.id) === j.id) : null;
+        if (avant && facture.has(j.id!) && Number(avant.amount_cents) !== j.amount_cents) {
+          throw new Error(`Le jalon « ${avant.label} » est déjà facturé (${facture.get(j.id!)}) : son montant ne change plus. Corrige plutôt la facture.`);
+        }
+      }
 
       if (aSupprimer.length) {
         const { error } = await ctx.client
@@ -1233,7 +1256,7 @@ const createInvoiceForMilestoneTool: AgentTool = {
     description:
       'Invoice ONE billing milestone of a split-billed job (deposit, completion…). Idempotent — one '
       + 'milestone = one invoice. The invoice stays a DRAFT; nothing is sent. Get milestone ids from '
-      + 'save_job_billing_milestones or the job details.',
+      + 'get_job (billing_milestones).',
     parameters: {
       type: 'object',
       properties: {
