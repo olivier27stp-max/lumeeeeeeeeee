@@ -428,6 +428,8 @@ const createAutomationFromText: AgentTool = {
 
       const { genererParcours } = await import('../lumi/generer-parcours');
       const { sequenceEtapes } = await import('../validation');
+      const { trouverDeclencheur } = await import('../../../src/lib/automationCatalogue');
+      const { refAutomatisationInventee } = await import('../automations-publication');
       const admin = getServiceClient();
 
       const resultat = await genererParcours({
@@ -441,13 +443,30 @@ const createAutomationFromText: AgentTool = {
         throw new Error(resultat.erreur ?? 'Je n\'ai pas réussi à construire ce parcours. Reformule-le.');
       }
 
-      // Le même garde-fou que la route : ce qui ne passerait pas le moteur
-      // n'est jamais enregistré. Sans lui, une règle invalide dormirait en
-      // base jusqu'à son premier déclenchement.
+      // Les MÊMES garde-fous que la route « Construire avec Lumi »
+      // (POST /automations/rules/generer) : ce qui ne passerait pas le moteur
+      // n'est jamais enregistré. Sans eux, un déclencheur inventé (aucun CHECK
+      // en base) ou une étape « démarrer » vers une règle inexistante
+      // dormaient en base sans jamais pouvoir partir.
       const verdict = sequenceEtapes.safeParse(resultat.parcours.steps);
       if (!verdict.success) {
         throw new Error('Le parcours proposé ne pourrait pas tourner. Reformule ta demande, ou construis-le avec le « + » dans Automatisations.');
       }
+      if (!trouverDeclencheur(resultat.parcours.trigger_event)) {
+        throw new Error('Lumi a choisi un déclencheur qui n’existe pas. Reformule ta demande.');
+      }
+      if (await refAutomatisationInventee(ctx.client, ctx.orgId, verdict.data)) {
+        throw new Error('Lumi a voulu relier une automatisation qui n’existe pas. Redemande-le autrement.');
+      }
+      // La 2e automatisation (autre déclencheur, ex. « quand le client
+      // répond ») passe les mêmes gardes ; invalide, elle est laissée de côté
+      // sans faire perdre la première — comme dans l'éditeur.
+      const a = resultat.parcours.autre;
+      const verdictAutre = a ? sequenceEtapes.safeParse(a.steps) : null;
+      const autre = a && verdictAutre?.success && trouverDeclencheur(a.trigger_event)
+        && !(await refAutomatisationInventee(ctx.client, ctx.orgId, verdictAutre.data))
+        ? { ...a, steps: verdictAutre.data }
+        : null;
 
       const { data, error } = await ctx.client
         .from('automation_rules')
@@ -467,6 +486,38 @@ const createAutomationFromText: AgentTool = {
       if (error) throw error;
       const row = ligneTouchee(data, 'L\'automatisation');
 
+      // La 2e automatisation, en pause elle aussi, avec sa limite « une fois
+      // par client tous les N jours » (sans elle, une réponse automatique sur
+      // « le client répond » repartirait à chaque texto). Elle était ignorée :
+      // Lumi annonçait la réaction, rien ne la portait.
+      let deuxieme: { rule_id: string; name: string; trigger_event: string } | null = null;
+      let deuxiemeRatee = false;
+      if (autre) {
+        const { data: d2, error: e2 } = await ctx.client
+          .from('automation_rules')
+          .insert({
+            org_id: ctx.orgId,
+            name: autre.nom,
+            description: autre.resume,
+            trigger_event: autre.trigger_event,
+            conditions: {},
+            delay_seconds: 0,
+            actions: [],
+            steps: autre.steps,
+            settings: autre.une_fois_par_client_jours ? { delai_entre_passages_jours: autre.une_fois_par_client_jours } : null,
+            is_active: false,
+          })
+          .select('id, name, trigger_event');
+        // La 1re est déjà en base : on le dit plutôt que de lever (l'empreinte
+        // d'idempotence resterait libérée et une retentative la doublerait).
+        if (e2 || !d2?.[0]) {
+          console.error(`[agent-tool:create_automation_from_text] org=${ctx.orgId} 2e automatisation non créée`, e2?.message ?? 'aucune ligne');
+          deuxiemeRatee = true;
+        } else {
+          deuxieme = { rule_id: d2[0].id, name: d2[0].name, trigger_event: d2[0].trigger_event };
+        }
+      }
+
       return {
         created: true,
         rule_id: row.id,
@@ -474,6 +525,8 @@ const createAutomationFromText: AgentTool = {
         trigger_event: row.trigger_event,
         etapes: verdict.data.length,
         resume: resultat.parcours.resume,
+        ...(deuxieme ? { deuxieme_automatisation: deuxieme } : {}),
+        ...(deuxiemeRatee ? { avertissement: 'La 2e automatisation (autre déclencheur) n’a pas pu être créée : ajoute-la dans Automatisations.' } : {}),
         is_active: false,
         note: 'Créée EN PAUSE : rien ne partira tant qu\'elle n\'est pas activée. Elle est visible dans Automatisations, où le parcours peut être ajusté.',
       };

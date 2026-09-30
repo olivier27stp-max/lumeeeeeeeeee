@@ -102,3 +102,25 @@ export async function changerPublication(
   }
   return { ok: true, id: ligne.id, is_active: ligne.is_active, name: ligne.name };
 }
+
+/**
+ * Renvoie l'identifiant d'une automatisation citée par une étape
+ * (démarrer / arrêter) qui n'existe pas dans ce bureau, ou `null`.
+ * Lu avec le client de l'utilisateur : la RLS borne au bureau.
+ */
+export async function refAutomatisationInventee(
+  client: SupabaseClient,
+  orgId: string,
+  etapes: unknown[],
+): Promise<string | null> {
+  const cibles = etapes
+    .map((e) => (e as { action?: { type?: string; config?: { rule_id?: unknown } } }).action)
+    .filter((act) => act?.type === 'demarrer_automatisation' || act?.type === 'arreter_automatisation')
+    .map((act) => String(act?.config?.rule_id ?? ''));
+  for (const id of cibles) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return id || '(vide)';
+    const { data } = await client.from('automation_rules').select('id').eq('id', id).eq('org_id', orgId).is('deleted_at', null).maybeSingle();
+    if (!data) return id;
+  }
+  return null;
+}
