@@ -2,7 +2,6 @@ import { supabase } from './supabase';
 import { computeTaxLines, getDocumentTaxLines, saveAppliedTaxes, type TaxLine } from './taxApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { pageTrieeParChamp, tousLesIds } from './colonnesTableauApi';
-import { emitQuoteDeclined, emitQuoteApproved } from './automationEventsApi';
 import { syncEntityPin } from './fieldSalesApi';
 import { versDate } from './dateSeule';
 import type { FiltreListe } from './champs/filtresListe';
@@ -536,11 +535,9 @@ export async function updateQuoteStatus(
   if (targetStage) {
     moveLeadDealToStage(quoteData.lead_id, targetStage);
   }
-  if (newStatus === 'approved') {
-    emitQuoteApproved({ quoteId, leadId: quoteData.lead_id || undefined });
-  }
+  // Devis accepté / refusé : Launch 2026-09-28 (bloc 2) : l'événement naît d'un TRIGGER en base, plus du navigateur.
+  // (Le refus depuis l'app appelait une route qui n'existait pas : M3.)
   if (newStatus === 'declined') {
-    emitQuoteDeclined({ quoteId, leadId: quoteData.lead_id || undefined });
     // Sales map: le pin n'est PAS repeint — un refus de devis ne change jamais
     // le statut du pin (règle : seul le lien client/job pilote le pin).
   }

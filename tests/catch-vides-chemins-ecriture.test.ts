@@ -54,6 +54,69 @@ export function catchVidesSurEcriture(source: string): number[] {
   return lignes;
 }
 
+/*
+ * L'AUTRE FORME : `.catch(() => {})` au bout d'une promesse d'écriture.
+ *
+ * Audit des automatisations du 2026-09-28 : `AutomationBuilderPage.tsx`
+ * enregistrait le déclencheur proposé par Lumi avec
+ * `modifierAutomatisation(...).catch(() => {})`. Le détecteur ci-dessus ne
+ * voit que `try { … } catch { }` : cette forme passait. L'écran montrait le
+ * nouveau déclencheur, la base gardait l'ancien.
+ *
+ * Une écriture = celles de `ECRITURE`, ou l'appel d'un helper dont le nom
+ * dit qu'il écrit (modifier…, creer…, supprimer…, enregistrer…, ecrire…).
+ */
+const CATCH_FLECHE_VIDE = /\.catch\(\s*\(\s*\w*\s*\)\s*=>\s*(?:\{\s*(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)?\s*\}|undefined|null|void 0)\s*\)/g;
+const HELPER_ECRITURE = /\b(?:modifier|creer|supprimer|enregistrer|ecrire|changer|restaurer|ranger|renommer)[A-Z\w]*\s*\(/;
+
+export function catchFlechesVidesSurEcriture(source: string): number[] {
+  const lignes: number[] = [];
+  for (const m of source.matchAll(CATCH_FLECHE_VIDE)) {
+    // L'instruction qui porte le `.catch` : depuis la fin de la précédente
+    // (un `;`, ou une accolade qui ouvre/ferme un BLOC — suivie d'un saut de
+    // ligne —, pas celles d'un objet passé en argument).
+    const avant = source.slice(0, m.index);
+    const debut = Math.max(avant.lastIndexOf(';'), avant.lastIndexOf('{\n') + 1, avant.lastIndexOf('}\n') + 1);
+    const instruction = avant.slice(debut + 1);
+    if ((ECRITURE.test(instruction) || HELPER_ECRITURE.test(instruction)) && !STOCKAGE_LOCAL.test(instruction)) {
+      lignes.push(avant.split('\n').length);
+    }
+  }
+  return lignes;
+}
+
+describe('la forme `.catch(() => {})` sur une écriture', () => {
+  it('la voit sur un helper d’écriture', () => {
+    expect(catchFlechesVidesSurEcriture(`x;\nmodifierAutomatisation(id, { a: 1 }).catch(() => {});`)).toEqual([2]);
+    expect(catchFlechesVidesSurEcriture(`x;\nfetch('/a', { method: 'POST' }).catch(() => undefined);`)).toEqual([2]);
+  });
+  it('ignore une lecture et un catch qui journalise', () => {
+    expect(catchFlechesVidesSurEcriture(`x;\ngetAutomationLanguage().then(setOrgLang).catch(() => {});`)).toEqual([]);
+    expect(catchFlechesVidesSurEcriture(`x;\nmodifierAutomatisation(id, {}).catch((e) => console.error(e));`)).toEqual([]);
+  });
+
+  /*
+   * Appliqué à la surface des AUTOMATISATIONS (mission de launch). Le reste
+   * du dépôt en compte d'autres, hors du périmètre de cette mission : ils
+   * sont listés dans le rapport de launch (SUIVI_POST_LAUNCH), pas corrigés
+   * en douce ici.
+   */
+  it('l’éditeur, la liste et les composants d’automatisation sont propres', () => {
+    const cibles = [
+      ...fichiers(resolve(RACINE, 'src/components/automations')),
+      ...['AutomationBuilderPage.tsx', 'Automations.tsx', 'AutomationsApercu.tsx', 'AutomationsReglages.tsx']
+        .map((f) => resolve(RACINE, 'src/pages', f)),
+    ];
+    const trouves: string[] = [];
+    for (const f of cibles) {
+      for (const l of catchFlechesVidesSurEcriture(readFileSync(f, 'utf8'))) {
+        trouves.push(`${relative(RACINE, f).replace(/\\/g, '/')}:${l}`);
+      }
+    }
+    expect(trouves).toEqual([]);
+  });
+});
+
 describe('la détection elle-même', () => {
   it('voit un catch qui ne contient qu un commentaire', () => {
     const src = `try { await db.from('x').insert({}) } catch { ` + '/* silent */' + ` }`;

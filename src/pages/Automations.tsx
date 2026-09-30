@@ -22,7 +22,6 @@ import {
   Settings, FolderPlus, Filter, Building2, Link2, Eye, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { localizeAutomationName } from '../lib/automationNames';
-import { TEXTES_ACTION_PROVISOIRE } from '../lib/sequenceTypes';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
@@ -32,7 +31,6 @@ import InterrupteurPublication from '../components/automations/InterrupteurPubli
 import CopierVersBureauxModal from '../components/automations/CopierVersBureauxModal';
 import {
   chargerAutomatisations,
-  creerAutomatisation,
   dupliquerAutomatisation,
   supprimerAutomatisation,
   restaurerAutomatisation,
@@ -42,19 +40,20 @@ import {
   rangerDansDossier,
   chargerBureauxCibles,
   renommerDossier,
+  changerPublication,
+  changerPublicationEnLot,
+  chargerStatistiques,
+  type StatsRegle,
   type BureauCible,
   type CatalogueAutomatisations,
   type DossierAutomatisation,
 } from '../lib/automationBuilderApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
-import { useModuleAccess } from '../hooks/useModuleAccess';
 import { apercuClientsInactifs } from '../lib/reservationApi';
 import { creerFileBascule } from '../lib/fileBascule';
 import {
   type AutomationRule,
   getAutomationRules,
-  toggleAutomationRule,
-  getFailureCountsByRule,
   getRecentAutomationFailures,
   type AutomationFailure,
   getAutomationLanguage,
@@ -81,8 +80,13 @@ import {
 function raisonLisible(erreur: string | null, fr: boolean): string | null {
   const e = (erreur || '').toLowerCase();
   if (!e) return null;
-  if (e.includes('no recipient phone')) return fr ? 'Ce client n’a pas de numéro de téléphone.' : 'This client has no phone number.';
-  if (e.includes('no recipient email')) return fr ? 'Ce client n’a pas d’adresse courriel.' : 'This client has no email address.';
+  // Les causes de M1 (audit 2026-09-28), telles que la base les porte encore
+  // pour les échecs d'avant le correctif du moteur.
+  if (e.includes('no sms number') || e.includes('no active twilio sms number')) return fr ? 'Aucun numéro texto n’est configuré pour ce bureau.' : 'No texting number is set up for this office.';
+  if (e.includes('no recipient phone') || e.includes('no phone number')) return fr ? 'Ce client n’a pas de numéro de téléphone.' : 'This client has no phone number.';
+  if (e.includes('no recipient email') || e.includes('no email address')) return fr ? 'Ce client n’a pas d’adresse courriel.' : 'This client has no email address.';
+  if (e.includes('injoignable') || e.includes('bounce')) return fr ? 'L’adresse courriel de ce client est injoignable.' : 'This client’s email address bounces.';
+  if (e.includes('review link')) return fr ? 'Aucun lien d’avis Google ou Facebook n’est configuré.' : 'No Google or Facebook review link is set up.';
   if (e.includes('opted out') || e.includes('unsubscribed')) return fr ? 'Ce client s’est désabonné.' : 'This client unsubscribed.';
   if (e.includes('frequency cap')) return fr ? 'Plafond atteint : ce client a déjà reçu plusieurs messages aujourd’hui.' : 'Cap reached: this client already got several messages today.';
   if (e.includes('consentement') || e.includes('consent')) return fr ? 'Le consentement de ce client n’est pas enregistré.' : 'This client’s consent is not recorded.';
@@ -366,7 +370,6 @@ export default function Automations() {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
-  const { isEnabled: sortieParcoursActive } = useModuleAccess('auto_sortie_parcours');
 
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -385,7 +388,9 @@ export default function Automations() {
   useEffect(() => { frRef.current = fr; }, [fr]);
   const confirmationOuverte = useRef(false);
   const [fileBascule] = useState(() => creerFileBascule({
-    envoyer: toggleAutomationRule,
+    // La route serveur de publication (M8) : un parcours cassé est refusé,
+    // avec la liste de ses problèmes dans le message.
+    envoyer: changerPublication,
     surFin: (id, actif) => {
       setRules((prev) => prev.map((r) => (r.id === id ? { ...r, is_active: actif } : r)));
       setVersionBascule((v) => v + 1);
@@ -398,11 +403,21 @@ export default function Automations() {
       console.error('[Automations] bascule publication', erreur);
       setRules((prev) => prev.map((r) => (r.id === id ? { ...r, is_active: retour } : r)));
       setVersionBascule((v) => v + 1);
-      toast.error(frRef.current ? 'Impossible de mettre à jour' : 'Could not update', { id: `bascule-${id}` });
+      // Le message du serveur NOMME ce qui empêche de publier : c'est lui
+      // qu'on montre, pas un « impossible » qui n'aide personne.
+      toast.error(erreur instanceof Error && erreur.message
+        ? erreur.message
+        : (frRef.current ? 'Impossible de mettre à jour' : 'Could not update'), { id: `bascule-${id}`, duration: 10_000 });
     },
   }));
   const [search, setSearch] = useState('');
   const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
+  /** La cause brute du DERNIER échec (7 j), traduite par `raisonLisible`. */
+  const [derniereCause, setDerniereCause] = useState<Record<string, string | null>>({});
+  /** Chiffres réels par automatisation (60 j) — `null` = illisibles. */
+  const [stats, setStats] = useState<Record<string, StatsRegle> | null>(null);
+  /** Le bureau a-t-il un numéro texto ? `false` = bandeau ; `null` = inconnu, rien. */
+  const [textoConfigure, setTextoConfigure] = useState<boolean | null>(null);
   const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
   const [occupeId, setOccupeId] = useState<string | null>(null);
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
@@ -487,10 +502,19 @@ export default function Automations() {
     }
   };
 
+  /*
+   * Deux chargements qui se croisent (une action, puis une autre avant la
+   * réponse) : seul le DERNIER a le droit d'écrire l'écran — une réponse
+   * plus ancienne arrivée après ramenait une liste périmée (launch 2026-09-28).
+   */
+  const dernierChargement = useRef(0);
   const load = useCallback(async () => {
+    const numero = ++dernierChargement.current;
+    const perime = () => numero !== dernierChargement.current;
     setLoading(true);
     try {
       const data = await getAutomationRules();
+      if (perime()) return;
       /*
        * Dédoublonnage par `preset_key` : d'anciennes migrations ont semé le
        * même préréglage plusieurs fois.
@@ -511,15 +535,38 @@ export default function Automations() {
       // Une bascule encore en vol garde l'état du dernier clic.
       }).map((r) => ({ ...r, is_active: fileBascule.etatAffiche(r.id, r.is_active) })));
       try {
-        setFailureCounts(await getFailureCountsByRule());
+        // Une seule lecture : le compte ET la dernière cause par automatisation
+        // (la liste est triée du plus récent au plus ancien).
+        const recents = await getRecentAutomationFailures(200);
+        if (perime()) return;
+        const compte: Record<string, number> = {};
+        const causes: Record<string, string | null> = {};
+        for (const f of recents) {
+          if (!f.automation_rule_id) continue;
+          compte[f.automation_rule_id] = (compte[f.automation_rule_id] ?? 0) + 1;
+          if (!(f.automation_rule_id in causes)) causes[f.automation_rule_id] = f.result_error;
+        }
+        setFailureCounts(compte);
+        setDerniereCause(causes);
       } catch (e: any) {
         console.error('Failed to load automation failures:', e.message);
       }
+      // « Total déclenché », « En cours » et le détail › : la route agrégée.
+      try {
+        const s = await chargerStatistiques();
+        if (perime()) return;
+        setStats(s.par_regle);
+        setTextoConfigure(s.texto_configure ?? null);
+      } catch (e: unknown) {
+        console.error('[automations] statistiques illisibles', e instanceof Error ? e.message : String(e));
+        setStats(null);
+      }
     } catch (e: any) {
+      if (perime()) return;
       console.error('Failed to load rules:', e.message);
       toast.error(fr ? 'Impossible de charger les automatisations' : 'Failed to load automations');
     } finally {
-      setLoading(false);
+      if (!perime()) setLoading(false);
     }
   }, [fr]);
 
@@ -623,7 +670,12 @@ export default function Automations() {
 
   // Changer d'onglet ou de filtre remet à la première page : rester en page 3
   // d'une liste qui n'en a plus qu'une donne un écran vide inexplicable.
-  useEffect(() => { setPage(1); setRestentAffichees(new Set()); }, [onglet, search, filterCategory, filterStatut]);
+  // Le dossier aussi (launch 2026-09-28) : rester en page 3 d'un dossier qui n'en a qu'une donnait « Aucune automatisation ».
+  useEffect(() => { setPage(1); setRestentAffichees(new Set()); }, [onglet, search, filterCategory, filterStatut, dossierActif]);
+
+  // Une sélection ne survit à AUCUN changement de vue (M9) : onglet, dossier,
+  // page, recherche, filtres, taille de page.
+  useEffect(() => { setCochees(new Set()); }, [onglet, dossierActif, page, parPage, search, filterCategory, filterStatut]);
 
   const handleToggle = async (rule: AutomationRule) => {
     // Une confirmation déjà à l'écran : les clics suivants n'en ouvrent pas d'autres.
@@ -658,24 +710,15 @@ export default function Automations() {
     setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, is_active: voulu } : r)));
   };
 
-  const partirDeZero = async (avecLumi: boolean) => {
-    try {
-      const creee = await creerAutomatisation({
-        name: fr ? 'Nouvelle automatisation' : 'New automation',
-        trigger_event: 'quote.sent',
-        delay_seconds: 0,
-        // Action PROVISOIRE (le serveur en exige une) : l'éditeur la reconnaît
-        // et ouvre un parcours vide — voir TEXTES_ACTION_PROVISOIRE.
-        actions: [{ type: 'send_sms', config: { body: TEXTES_ACTION_PROVISOIRE[fr ? 0 : 1] } }],
-        steps: [],
-        // Sortie automatique du parcours : une NOUVELLE automatisation naît
-        // avec la case cochée. Drapeau coupé = rien d'écrit, comme avant.
-        ...(sortieParcoursActive ? { settings: { arreter_si_resolu: true } } : {}),
-      });
-      navigate(`/automations/${creee.id}${avecLumi ? '?lumi=1' : ''}`);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
+  /*
+   * « Partir de zéro » et « Construire avec Lumi » ne créent RIEN en base
+   * (audit 2026-09-28) : l'éditeur ouvre un brouillon local, qui ne naît
+   * qu'à la première vraie sauvegarde. Plus de brouillons orphelins, plus de
+   * double création au double clic, et sans Autopilot l'écran de vente de
+   * Lumi passe avant toute écriture.
+   */
+  const partirDeZero = (avecLumi: boolean) => {
+    navigate(`/automations/nouvelle${avecLumi ? '?lumi=1' : ''}`);
   };
 
   // Multi-bureaux : bureaux où l'on peut copier (vide = un seul bureau, l'option n'apparaît pas).
@@ -846,6 +889,10 @@ export default function Automations() {
   });
 
   const pages = Math.max(1, Math.ceil(filtrees.length / parPage));
+  // Après une suppression (ou un déplacement) sur la dernière page, la page
+  // courante peut ne plus exister : on la ramène dans les bornes au lieu
+  // d'afficher « Aucune automatisation » (launch 2026-09-28).
+  useEffect(() => { setPage((p) => Math.min(p, pages)); }, [pages]);
 
   /** Combien d'automatisations dans chaque dossier — un dossier vide se voit. */
   const compteParDossier = (id: string) => vivantes.filter((r) => r.folder_id === id).length;
@@ -871,7 +918,17 @@ export default function Automations() {
    * une coche peut survivre à un changement de filtre ou à un rechargement,
    * et agir sur un identifiant disparu échouerait ligne par ligne.
    */
-  const reglesCochees = rules.filter((r) => cochees.has(r.id));
+  /*
+   * SEULEMENT CE QUI EST À L'ÉCRAN (audit M9). Cocher 3 lignes dans
+   * « Toutes » puis 2 dans « Modèles » publiait 5 automatisations, dont 3
+   * invisibles. La sélection se vide à chaque changement de vue (voir
+   * l'effet plus haut) et le lot ne porte que sur les lignes visibles.
+   */
+  const reglesCochees = visibles.filter((r) => cochees.has(r.id));
+  /** Ce que chaque bouton du lot touchera VRAIMENT — affiché sur le bouton. */
+  const nbAPublier = reglesCochees.filter((r) => !r.deleted_at && !r.is_active).length;
+  const nbADepublier = reglesCochees.filter((r) => !r.deleted_at && r.is_active).length;
+  const nbASupprimer = reglesCochees.filter((r) => !r.is_preset).length;
 
   /**
    * Applique `action` à chaque règle cochée, en SÉQUENCE.
@@ -917,17 +974,41 @@ export default function Automations() {
    * Publier ou dépublier ne concerne que les règles VIVANTES : une règle à
    * la corbeille est ignorée par le moteur, la publier ne changerait rien.
    */
-  const publierLot = () => agirEnLot(
-    (r) => (r.is_active ? Promise.resolve() : toggleAutomationRule(r.id, true)),
-    { fr: (n) => `${n} automatisation(s) publiée(s)`, en: (n) => `${n} automation(s) published` },
-    reglesCochees.filter((r) => !r.deleted_at),
-  );
-
-  const depublierLot = () => agirEnLot(
-    (r) => (r.is_active ? toggleAutomationRule(r.id, false) : Promise.resolve()),
-    { fr: (n) => `${n} automatisation(s) repassée(s) en brouillon`, en: (n) => `${n} automation(s) unpublished` },
-    reglesCochees.filter((r) => !r.deleted_at),
-  );
+  /*
+   * Le lot passe par la MÊME route serveur que l'interrupteur (M8) : chaque
+   * parcours cassé est refusé, nommé, avec ses problèmes.
+   */
+  const publierEnLot = async (actif: boolean) => {
+    const cibles = reglesCochees.filter((r) => !r.deleted_at && r.is_active !== actif);
+    if (cibles.length === 0) { setCochees(new Set()); return; }
+    setLotEnCours(true);
+    try {
+      const resultats = await changerPublicationEnLot(cibles.map((r) => r.id), actif);
+      const reussis = resultats.filter((r) => r.ok).length;
+      const echecs = resultats.filter((r) => !r.ok);
+      if (reussis > 0) {
+        toast.success(actif
+          ? (fr ? `${reussis} automatisation(s) publiée(s)` : `${reussis} automation(s) published`)
+          : (fr ? `${reussis} automatisation(s) repassée(s) en brouillon` : `${reussis} automation(s) unpublished`));
+      }
+      if (echecs.length > 0) {
+        const nomDe = (id: string) => {
+          const r = rules.find((x) => x.id === id);
+          return r ? localizeAutomationName(r.name, language) : id;
+        };
+        toast.error(echecs.map((e) => `« ${nomDe(e.id)} » — ${e.erreur ?? ''}`).join('\n'), { duration: 15_000 });
+      }
+      setCochees(new Set());
+      await load();
+    } catch (e: unknown) {
+      console.error('[automations] publication en lot échouée', e);
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLotEnCours(false);
+    }
+  };
+  const publierLot = () => publierEnLot(true);
+  const depublierLot = () => publierEnLot(false);
 
   const supprimerLot = async () => {
     /*
@@ -1049,6 +1130,22 @@ export default function Automations() {
           dorment coûte des relances pendant des jours.
         */}
         <BandeauPause fr={fr} onChange={setToutEnPause} />
+
+        {/*
+          Aucun numéro texto (bloqué tant que Trust Hub n'est pas approuvé) :
+          chaque étape texto est SAUTÉE et le parcours continue (M1). On le
+          dit ici, une fois, plutôt que de laisser croire que les textos partent.
+        */}
+        {textoConfigure === false && (
+          <div role="status" className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-light px-3 py-2.5 text-[13px] text-text-primary">
+            <MessageSquare size={15} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+            <span>
+              {fr
+                ? 'Les étapes texto sont sautées tant qu’aucun numéro n’est configuré.'
+                : 'Text message steps are skipped until a number is set up.'}
+            </span>
+          </div>
+        )}
 
         {/* ══ 2. Titre + les trois boutons ══ */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1361,7 +1458,7 @@ export default function Automations() {
                   className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
                 >
                   <RotateCcw size={13} aria-hidden="true" />
-                  {fr ? 'Restaurer' : 'Restore'}
+                  {fr ? `Restaurer (${reglesCochees.length})` : `Restore (${reglesCochees.length})`}
                 </button>
               ) : (
                 <>
@@ -1372,7 +1469,7 @@ export default function Automations() {
                     className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
                   >
                     <ToggleRight size={13} aria-hidden="true" />
-                    {fr ? 'Publier' : 'Publish'}
+                    {fr ? `Publier (${nbAPublier})` : `Publish (${nbAPublier})`}
                   </button>
                   <button
                     type="button"
@@ -1381,7 +1478,7 @@ export default function Automations() {
                     className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
                   >
                     <ToggleLeft size={13} aria-hidden="true" />
-                    {fr ? 'Repasser en brouillon' : 'Unpublish'}
+                    {fr ? `Repasser en brouillon (${nbADepublier})` : `Unpublish (${nbADepublier})`}
                   </button>
                   <button
                     type="button"
@@ -1390,7 +1487,7 @@ export default function Automations() {
                     className="glass-button inline-flex items-center gap-1.5 text-[12px] text-danger disabled:opacity-50"
                   >
                     <Trash2 size={13} aria-hidden="true" />
-                    {fr ? 'Supprimer' : 'Delete'}
+                    {fr ? `Supprimer (${nbASupprimer})` : `Delete (${nbASupprimer})`}
                   </button>
                 </>
               )}
@@ -1527,6 +1624,8 @@ export default function Automations() {
                                   <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-danger">
                                     <AlertTriangle size={11} aria-hidden="true" />
                                     {echecs} {fr ? 'échec(s) dans les 7 derniers jours' : 'failure(s) in the last 7 days'}
+                                    {/* POURQUOI, en mots du métier — jamais le message technique brut. */}
+                                    {raisonLisible(derniereCause[rule.id] ?? null, fr) && ` — ${raisonLisible(derniereCause[rule.id] ?? null, fr)}`}
                                   </span>
                                 )}
                               </span>
@@ -1549,10 +1648,10 @@ export default function Automations() {
                             </span>
                           </td>
 
-                          {/* Total déclenché / En cours : les chiffres arrivent avec
-                              l'onglet Historique (les données sont déjà en base). */}
-                          <td className="px-3 py-3 text-primary">—</td>
-                          <td className="px-3 py-3 text-primary">—</td>
+                          {/* Total déclenché / En cours : les vrais chiffres (60 j),
+                              « — » seulement si la lecture a échoué. */}
+                          <td className="px-3 py-3 tabular-nums text-primary">{stats ? (stats[rule.id]?.declenches ?? 0) : '—'}</td>
+                          <td className="px-3 py-3 tabular-nums text-primary">{stats ? (stats[rule.id]?.en_cours ?? 0) : '—'}</td>
 
                           <td className="hidden px-3 py-3 text-text-secondary lg:table-cell">{dateCourte(rule.updated_at)}</td>
                           <td className="hidden px-3 py-3 text-text-secondary lg:table-cell">{dateCourte(rule.created_at)}</td>
@@ -1585,8 +1684,8 @@ export default function Automations() {
                                 enCours={fileBascule.enCours(rule.id)}
                                 desactive={!!rule.deleted_at}
                                 libelle={rule.is_active
-                                  ? (fr ? `Repasser ${rule.name} en brouillon` : `Unpublish ${rule.name}`)
-                                  : (fr ? `Publier ${rule.name}` : `Publish ${rule.name}`)}
+                                  ? (fr ? `Repasser ${localizeAutomationName(rule.name, language)} en brouillon` : `Unpublish ${localizeAutomationName(rule.name, language)}`)
+                                  : (fr ? `Publier ${localizeAutomationName(rule.name, language)}` : `Publish ${localizeAutomationName(rule.name, language)}`)}
                                 fr={fr}
                               />
 
@@ -1744,15 +1843,33 @@ export default function Automations() {
                         {statsId === rule.id && (
                           <tr className="bg-surface-secondary/30">
                             <td colSpan={9} className="px-6 py-4">
-                              <p className="text-[12px] text-text-secondary">
-                                {echecs > 0
-                                  ? (fr
-                                    ? `${echecs} envoi(s) ont échoué ces 7 derniers jours. Le détail arrivera dans l’onglet « Journaux » de l’automatisation.`
-                                    : `${echecs} send(s) failed in the last 7 days. Details will appear in the automation’s “Logs” tab.`)
-                                  : (fr
-                                    ? 'Aucun échec ces 7 derniers jours. Les chiffres d’envoi arrivent avec l’onglet « Historique ».'
-                                    : 'No failures in the last 7 days. Send counts are coming with the “History” tab.')}
-                              </p>
+                              {(() => {
+                                const s = stats?.[rule.id];
+                                return (
+                                  <p className="text-[12px] text-text-secondary">
+                                    {!stats
+                                      ? (fr ? 'Les chiffres n’ont pas pu être lus.' : 'The numbers could not be read.')
+                                      : fr
+                                        ? `60 derniers jours : ${s?.declenches ?? 0} déclenchement(s), ${s?.envoyes ?? 0} envoi(s), ${s?.sautes ?? 0} étape(s) sautée(s), ${s?.echecs ?? 0} échec(s). ${s?.en_cours ?? 0} en cours.`
+                                        : `Last 60 days: ${s?.declenches ?? 0} enrolled, ${s?.envoyes ?? 0} sent, ${s?.sautes ?? 0} skipped step(s), ${s?.echecs ?? 0} failure(s). ${s?.en_cours ?? 0} active.`}
+                                    {raisonLisible(derniereCause[rule.id] ?? null, fr) && (
+                                      <span className="mt-1 block">
+                                        {fr ? 'Dernier échec : ' : 'Last failure: '}{raisonLisible(derniereCause[rule.id] ?? null, fr)}
+                                      </span>
+                                    )}
+                                    {/* Une étape sautée n'est pas un échec : son motif est
+                                        déjà en français (moteur), affiché tel quel. */}
+                                    {s?.dernier_saut && (
+                                      <span className="mt-1 block">
+                                        {fr ? 'Dernière étape sautée : ' : 'Last skipped step: '}{s.dernier_saut}
+                                      </span>
+                                    )}
+                                    <span className="mt-1 block">
+                                      {fr ? 'Le détail est dans l’onglet « Journaux » de l’automatisation.' : 'Details are in the automation’s “Logs” tab.'}
+                                    </span>
+                                  </p>
+                                );
+                              })()}
                             </td>
                           </tr>
                         )}

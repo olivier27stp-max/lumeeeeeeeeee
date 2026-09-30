@@ -19,7 +19,7 @@ import { Settings2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
   abandonnerDeal, deplacerDeal, fetchRaisonsProposees, majContactDuDeal, majDateFermeture, majSourceDuDeal,
-  marquerPerdu, nomClient, type Deal, type PipelineStage,
+  majTitreDeal, marquerPerdu, nomClient, type Deal, type PipelineStage,
 } from '../../lib/pipelineVentesApi';
 import { poserEtiquette, retirerEtiquette } from '../../lib/etiquettesApi';
 import { captureClientException } from '../../lib/sentry';
@@ -142,6 +142,7 @@ export function DetailsDealEdition({ deal, etapes, membres, montantCents, nomPip
   const qc = useQueryClient();
   const ouvertes = useMemo(() => etapes.filter((e) => e.kind === 'open' && !e.archived_at).sort((a, b) => a.position - b.position), [etapes]);
   const initial = useMemo(() => ({
+    titre: deal.title ?? '',
     courriel: deal.client?.email ?? '',
     telephone: deal.client?.phone ?? '',
     entreprise: deal.client?.company ?? '',
@@ -178,6 +179,7 @@ export function DetailsDealEdition({ deal, etapes, membres, montantCents, nomPip
       if (v.telephone !== initial.telephone) contact.phone = v.telephone.trim() || null;
       if (v.entreprise !== initial.entreprise) contact.company = v.entreprise.trim() || null;
       if (deal.client_id && Object.keys(contact).length) await majContactDuDeal(deal.client_id, contact);
+      if (v.titre !== initial.titre) await majTitreDeal(deal.id, v.titre);
       if (v.source !== initial.source) await majSourceDuDeal(deal.id, v.source);
       if (v.fermeture !== initial.fermeture) await majDateFermeture(deal.id, v.fermeture || null);
       if (v.responsable !== initial.responsable) onAssigner(deal.id, v.responsable || null);
@@ -240,6 +242,11 @@ export function DetailsDealEdition({ deal, etapes, membres, montantCents, nomPip
       </SectionGhl>
 
       <SectionGhl titre={fr ? 'Détails du deal' : 'Deal details'}>
+        <ChampGhl id={`${ids}-titre`} libelle={fr ? 'Titre du deal' : 'Opportunity name'} pleine>
+          <input id={`${ids}-titre`} value={v.titre} maxLength={200} disabled={lectureSeule} onChange={(e) => poser({ titre: e.target.value })}
+            placeholder={fr ? 'Ex. : Lavage de vitres — condo 12e étage (facultatif)' : 'e.g. Window cleaning — 12th floor condo (optional)'}
+            className={CLASSE_SAISIE} />
+        </ChampGhl>
         <ChampGhl libelle="Pipeline">
           <div className={cn(CLASSE_SAISIE, 'flex items-center text-text-secondary')}>{nomPipeline || '—'}</div>
         </ChampGhl>

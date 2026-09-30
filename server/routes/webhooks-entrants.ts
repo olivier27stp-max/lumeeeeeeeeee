@@ -177,10 +177,10 @@ router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, 
      * l'heure que nous avons constatée.
      */
     metadata: {
-      ...(corps !== null && typeof corps === 'object' && !Array.isArray(corps)
-        ? (corps as Record<string, unknown>)
-        : {}),
+      ...champsFiltrables(corps),
       corps,
+      // Le corps reçu, rangé à part (launch 2026-09-28).
+      webhook: corps,
       recu_le: new Date().toISOString(),
     },
   });
@@ -197,5 +197,21 @@ router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, 
 
   return res.json({ ok: true });
 });
+
+/**
+ * Les champs du JSON reçu, étalés au premier niveau pour que les FILTRES
+ * marchent (« source = facebook », voir plus haut) — SANS aucun champ de
+ * contrôle du moteur. Launch 2026-09-28 : un JSON portant `chaine` ou
+ * `suppress_immediate` pilotait l'anti-boucle ou supprimait des
+ * confirmations ; un appel extérieur ne décide jamais de ça.
+ */
+export const CHAMPS_RESERVES_MOTEUR = new Set([
+  'chaine', 'suppress_immediate', 'evenement_base_id', 'origine', 'outboxId', 'reglesTraitees',
+  'rejoueDepuis', 'dejaEnvoyeDepuis', 'corps', 'webhook', 'recu_le',
+]);
+export function champsFiltrables(corps: unknown): Record<string, unknown> {
+  if (corps === null || typeof corps !== 'object' || Array.isArray(corps)) return {};
+  return Object.fromEntries(Object.entries(corps as Record<string, unknown>).filter(([cle]) => !CHAMPS_RESERVES_MOTEUR.has(cle)));
+}
 
 export default router;

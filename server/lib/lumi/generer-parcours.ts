@@ -344,6 +344,20 @@ export async function genererParcours(params: {
         : 'Building with Lumi is included in the Autopilot plan. You can build this path by hand with “+”.',
     };
   }
+  /*
+   * Réservation IMPOSSIBLE (panne de la base, RPC en erreur) : on n'appelle
+   * PAS le modèle (launch 2026-09-28). Le refus « plan_sans_lumi » n'existe
+   * que dans cette RPC — laisser passer faisait tomber l'exclusivité
+   * Autopilot et le plafond du mois à chaque panne.
+   */
+  if (reservation.statut === 'indisponible' || !reservation.id) {
+    return {
+      parcours: null,
+      erreur: fr
+        ? 'Lumi est momentanément indisponible (budget illisible). Réessaie dans un instant, ou construis le parcours à la main avec le « + ».'
+        : 'Lumi is temporarily unavailable (budget unreadable). Try again shortly, or build the path by hand with “+”.',
+    };
+  }
   if (reservation.statut === 'capped') {
     return {
       parcours: null,

@@ -17,8 +17,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Les modules d'envoi ne doivent jamais être touchés ici.
-vi.mock('../../../server/lib/mailer', () => ({ sendEmail: vi.fn(async () => ({ sent: true })), isMailerConfigured: () => true }));
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }), langueEntreprise: () => 'fr' }));
+vi.mock('../../../server/lib/mailer', async () => (await import('../_simulations')).mailerSimule(vi.fn(async () => ({ sent: true }))));
+vi.mock('../../../server/routes/emails', async () => (await import('../_simulations')).emailsSimules());
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 // Le gel des communications lit la base par `getServiceClient()` — le VRAI
 // client, pas le faux du test : la lecture échouait et aucun envoi ne partait.

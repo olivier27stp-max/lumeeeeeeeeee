@@ -56,8 +56,8 @@ describe('SMS commercial vers un client au téléphone formaté', () => {
       twilio: { client: { messages: { create } }, phoneNumber: '+15145550000' }, baseUrl: 'https://lumecrm.net',
     };
     const res = await executeAction('send_sms', { to: '{{client_phone}}', body: 'Promo' }, { client_phone: '+18195550116' }, ctx);
-    expect(res.success).toBe(false);
-    expect(res.error).toMatch(/inconnu du carnet/);
+    // Launch M1 : refus = étape SAUTÉE avec son motif (le parcours continue).
+    expect((res.data as any)?.saute).toMatch(/inconnu du carnet/);
     expect(create).not.toHaveBeenCalled();
   });
 });

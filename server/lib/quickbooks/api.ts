@@ -7,6 +7,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { getValidAccessToken, refreshOAuthToken } from '../integrations/service';
+import { logger } from '../logger';
 
 // Intuit a retiré les minor versions < 75 (août 2025).
 const MINOR_VERSION = 75;
@@ -119,6 +120,16 @@ export async function qboRequest<T = any>(
         retryable: true,
       });
     }
+
+    // intuit_tid de CHAQUE appel (succès compris), exigé par Intuit pour le
+    // dépannage. Chemin sans la chaîne de requête : elle peut contenir un nom de client.
+    logger.info('[quickbooks-api]', {
+      orgId,
+      method,
+      path: path.split('?')[0],
+      status: res.status,
+      intuit_tid: res.headers.get('intuit_tid'),
+    });
 
     if (res.status === 401 && attempt === 0) {
       // Jeton révoqué ou expiré avant l'heure : un renouvellement, un essai.
