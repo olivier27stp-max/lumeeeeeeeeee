@@ -126,6 +126,24 @@ describe('I — create_automation_from_text : les gardes de la route « Construi
   });
 });
 
+describe('I — idempotence des écritures de Lumi', () => {
+  it.fails('[I-035] ROUGE ATTENDU — décision requise : redemander la MÊME automatisation après l’avoir supprimée (moins de 24 h) répond « c’est fait » sans rien créer', async () => {
+    const description = `Relance mes soumissions après un jour ${marque('I-035')}`;
+    reponsesModele.push(PARCOURS_SIMPLE('quote.sent'));
+    const r1 = await outil('create_automation_from_text', { description });
+    expect(r1.created).toBe(true);
+    await b.admin.from('automation_rules').delete().eq('id', r1.rule_id);
+    const depuis = new Date().toISOString();
+    reponsesModele.push(PARCOURS_SIMPLE('quote.sent'));
+    const r2 = await outil('create_automation_from_text', { description });
+    // Aujourd'hui : r2 = { deja_fait: true, ...r1 } — l'empreinte (org, outil,
+    // arguments) vit 24 h dans agent_actions (purge oauth_menage), alors que la
+    // migration 20260903090000 dit que « la fenêtre utile est de quelques minutes ».
+    expect(r2.deja_fait).toBeUndefined();
+    expect((await reglesDepuis(depuis)).length).toBe(1);
+  });
+});
+
 describe('I — list_automations', () => {
   it('[I-034] une automatisation à la corbeille (ou supprimée définitivement) n’est PAS listée comme existante', async () => {
     const m = marque('I-034');

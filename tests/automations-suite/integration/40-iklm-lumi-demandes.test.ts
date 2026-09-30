@@ -31,6 +31,10 @@ beforeAll(async () => {
   b = await demarrerMoteur();
   jeton = (await sessionDe(b.admin, COMPTES.proprioA.email)).jeton;
   await b.admin.from('company_settings').update({ default_language: 'fr' }).eq('org_id', b.orgA);
+  // Empreintes d'idempotence des passes précédentes (24 h) : sans ce ménage, une
+  // 2e passe le même jour reçoit « déjà fait » pour une description identique
+  // et rien n'est créé (voir 40-iklm-lumi-outils [I-035]).
+  await b.admin.from('agent_actions').delete().eq('org_id', b.orgA);
 });
 
 afterAll(async () => {
@@ -133,7 +137,9 @@ async function construire(demande: string, langue: 'fr' | 'en'): Promise<{ r1: R
   }
   const { data } = await b.admin.from('automation_rules')
     .select('id, name, trigger_event, conditions, steps, is_active')
-    .eq('org_id', b.orgA).eq('is_preset', false).gte('created_at', depuis).order('created_at');
+    .eq('org_id', b.orgA).eq('is_preset', false).gte('created_at', depuis)
+    // Les règles d'autres fichiers de la suite portent une marque « [QA-AUTO … ] ».
+    .not('name', 'like', '[QA-AUTO%').order('created_at');
   for (const r of data ?? []) creees.push(r.id as string);
   return { r1, r2, regle: (data?.[0] as Regle | undefined) ?? null };
 }

@@ -32,6 +32,7 @@ beforeAll(async () => {
   b = await demarrerMoteur();
   s = { jeton: (await sessionDe(b.admin, COMPTES.proprioA.email)).jeton, orgId: b.orgA, langue: 'fr' };
   await b.admin.from('company_settings').update({ default_language: 'fr' }).eq('org_id', b.orgA);
+  await b.admin.from('agent_actions').delete().eq('org_id', b.orgA);
   const { data, error } = await b.admin.from('automation_rules').insert([
     {
       org_id: b.orgA, name: NOM_SMS, trigger_event: 'quote.sent', conditions: {}, delay_seconds: 0, actions: [], is_active: false,
