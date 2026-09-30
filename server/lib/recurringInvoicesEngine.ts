@@ -6,6 +6,8 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { addDays, addMonths, addYears, parseISO, formatISO, isAfter } from 'date-fns';
+import { resolveTaxesForOrg, computeTaxLines } from './taxResolve';
+import { eventBus } from './eventBus';
 
 export type Frequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
 
@@ -69,6 +71,15 @@ export async function runOneSchedule(
     0,
   );
 
+  /* Les taxes du client, comme sur une facture faite à la main : région du
+     client, sinon groupe par défaut du bureau, client exempté = aucune.
+     Avant, la facture partait avec tax_cents = 0 et recalculate_invoice_totals
+     ne fait que RELIRE la taxe stockée : chaque facture récurrente d'une
+     entreprise québécoise sortait sans TPS ni TVQ. */
+  const { taxes } = await resolveTaxesForOrg(svc, schedule.org_id, schedule.client_id);
+  const lignesTaxes = computeTaxLines(subtotal, taxes);
+  const taxCents = lignesTaxes.reduce((s, l) => s + l.amount_cents, 0);
+
   // invoices.created_by est NOT NULL : sans auteur, CHAQUE échéance échouait
   // (« null value in column created_by », batterie d'exécution du 2026-09-17).
   // L'auteur = le propriétaire de l'org (à défaut, son premier membre actif).
@@ -95,10 +106,10 @@ export async function runOneSchedule(
       issued_at: null,
       due_date: dueDate,
       subtotal_cents: subtotal,
-      tax_cents: 0,
-      total_cents: subtotal,
+      tax_cents: taxCents,
+      total_cents: subtotal + taxCents,
       paid_cents: 0,
-      balance_cents: subtotal,
+      balance_cents: subtotal + taxCents,
     })
     .select('id, invoice_number')
     .single();
@@ -117,6 +128,24 @@ export async function runOneSchedule(
     if (itemsErr) throw itemsErr;
   }
 
+  // Ventilation par taxe (TPS / TVQ) : ce que la facture publique et le
+  // rapport des taxes lisent. Même forme que saveAppliedTaxes (src/lib/taxApi.ts).
+  if (lignesTaxes.length > 0) {
+    const { error: taxErr } = await svc.from('applied_taxes').insert(lignesTaxes.map((l, idx) => ({
+      document_type: 'invoice',
+      document_id: invoice.id,
+      tax_config_id: l.tax_config_id,
+      name: l.name,
+      rate: l.rate,
+      amount_cents: l.amount_cents,
+      is_compound: l.is_compound,
+      sort_order: idx,
+    })));
+    if (taxErr) {
+      console.error(`[recurring-invoices] applied_taxes failed for invoice ${invoice.id} (schedule ${schedule.id}):`, taxErr.message);
+    }
+  }
+
   // Recalculate totals (handles taxes / triggers)
   // supabase-js ne leve pas : l'erreur doit etre lue, sinon une facture aux
   // totaux faux (taxes absentes) part chez le client sans aucune trace.
@@ -125,20 +154,35 @@ export async function runOneSchedule(
     console.error(`[recurring-invoices] recalculate_invoice_totals failed for invoice ${invoice.id} (schedule ${schedule.id}):`, totalsErr.message);
   }
 
-  // auto_send: mark as sent (issued_at set) — actual email delivery is best
-  // handled by the existing invoice reminder/email pipeline keyed off issued_at.
-  // The /api/emails/send-invoice route requires an authed user; the cron context
-  // has none. For V1, flagging issued_at + sent_at signals the reminders engine
-  // which can fan out the email via its own service-role mailer flow.
+  /* auto_send : la facture part VRAIMENT chez le client.
+     Avant, on posait seulement status « sent » : aucun courriel ne partait,
+     mais la facture passait pour envoyée et les relances de retard visaient
+     un client qui ne l'avait jamais reçue. On passe par l'action
+     « envoyer_facture » des automatisations, qui porte déjà le
+     désabonnement, le gabarit de l'entreprise et la journalisation. La
+     facture n'est marquée envoyée QUE si le courriel est parti ; sinon elle
+     reste en brouillon, visible dans les factures à envoyer. */
   if (schedule.auto_send) {
-    const nowIso = new Date().toISOString();
-    const { error: sendErr } = await svc.from('invoices')
-      .update({ status: 'sent', issued_at: nowIso, sent_at: nowIso })
-      .eq('id', invoice.id);
-    // Non fatal, mais sans issued_at la facture reste en brouillon : le moteur
-    // de relances ne la verra jamais et le client ne sera jamais sollicite.
-    if (sendErr) {
-      console.error(`[recurring-invoices] auto_send flag failed for invoice ${invoice.id} (schedule ${schedule.id}):`, sendErr.message);
+    const envoi = await envoyerParCourriel(svc, schedule, invoice.id);
+    if (envoi.ok) {
+      const nowIso = new Date().toISOString();
+      const { error: sendErr } = await svc.from('invoices')
+        .update({ status: 'sent', issued_at: nowIso, sent_at: nowIso })
+        .eq('id', invoice.id);
+      if (sendErr) {
+        console.error(`[recurring-invoices] auto_send flag failed for invoice ${invoice.id} (schedule ${schedule.id}):`, sendErr.message);
+      } else {
+        eventBus.emit('invoice.sent', {
+          orgId: schedule.org_id,
+          entityType: 'invoice',
+          entityId: invoice.id,
+          relatedEntityType: 'client',
+          relatedEntityId: schedule.client_id,
+          metadata: { invoice_number: invoice.invoice_number, client_id: schedule.client_id, recurring_schedule_id: schedule.id },
+        });
+      }
+    } else {
+      console.error(`[recurring-invoices] auto_send : courriel non parti pour la facture ${invoice.id} (schedule ${schedule.id}), laissée en brouillon :`, envoi.error);
     }
   }
 
@@ -171,6 +215,34 @@ export async function runOneSchedule(
     advanced_to: advancedTo,
     deactivated,
   };
+}
+
+/** Envoie la facture par courriel au client (action « envoyer_facture »). */
+async function envoyerParCourriel(
+  svc: SupabaseClient,
+  schedule: RecurringSchedule,
+  invoiceId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    // Import dynamique : actions/ importe les routes de courriel, inutile de
+    // les charger pour les échéances sans envoi automatique.
+    const { executeEnvoyerFacture, resolveEntityVariables } = await import('./actions');
+    const { getBaseUrl } = await import('./config');
+    const vars = await resolveEntityVariables(svc, schedule.org_id, 'invoice', invoiceId);
+    const { data: cs } = await svc.from('company_settings').select('default_language').eq('org_id', schedule.org_id).maybeSingle();
+    const r = await executeEnvoyerFacture({}, vars, {
+      supabase: svc,
+      orgId: schedule.org_id,
+      entityType: 'invoice',
+      entityId: invoiceId,
+      twilio: null,
+      baseUrl: getBaseUrl(),
+      langue: cs?.default_language === 'en' ? 'en' : 'fr',
+    });
+    return r.success ? { ok: true } : { ok: false, error: r.error || 'envoi refusé' };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
 }
 
 /** Find all schedules due to run today (or earlier) and run them. */
