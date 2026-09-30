@@ -10,6 +10,7 @@
 import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
 import { changerPublication } from './automationBuilderApi';
+import { interfaceEnFrancais } from './champs/messages';
 
 export interface AutomationRule {
   id: string;
@@ -83,6 +84,24 @@ export async function updateRuleMessage(
   body: string,
   subject?: string,
 ): Promise<void> {
+  /*
+   * UN MESSAGE VIDE NE PART PAS (audit V2, A-06).
+   *
+   * Cette écriture passe par PostgREST, donc sans la validation Zod du
+   * serveur : vider le texto d'une règle PUBLIÉE depuis la liste écrivait
+   * `body = ""` et affichait « Message enregistré ». Le serveur, lui, refuse
+   * un message vide — on refuse pareil, ici, pour tous les écrans qui
+   * passent par cette fonction (liste, Réglages › Messagerie et Avis).
+   */
+  const fr = interfaceEnFrancais();
+  const texteVisible = body.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').trim();
+  if (!texteVisible) {
+    throw new Error(fr ? 'Le message ne peut pas être vide.' : 'The message cannot be empty.');
+  }
+  if (actionType === 'send_email' && subject !== undefined && !subject.trim()) {
+    throw new Error(fr ? 'L’objet du courriel ne peut pas être vide.' : 'The email subject cannot be empty.');
+  }
+
   const { data: rule, error: readErr } = await supabase
     .from('automation_rules')
     .select('actions')
