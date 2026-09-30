@@ -2065,6 +2065,7 @@ export async function appelInterne(
   ctx: ToolContext,
   chemin: string,
   corps: Record<string, any>,
+  methode: 'POST' | 'PUT' | 'PATCH' = 'POST',
 ): Promise<{ ok: boolean; status: number; json: any }> {
   if (!ctx.accessToken) {
     throw new Error('Cette action exige votre session Lume — reconnectez le connecteur dans Claude.');
@@ -2075,7 +2076,7 @@ export async function appelInterne(
   let r: Response;
   try {
     r = await fetch(`http://127.0.0.1:${port}/api${chemin}`, {
-      method: 'POST',
+      method: methode,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${ctx.accessToken}`,
