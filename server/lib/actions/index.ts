@@ -576,7 +576,9 @@ export function resolveTemplate(
   // client « [QA] Équipe » ou une note « voir [annexe] » perdait son texte entre
   // crochets, pris pour une ancienne variable [annexe] (constaté le 2026-09-28).
   return template.replace(
-    /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}|\{(\w+)\}|\[(\w+)\]/g,
+    // Une clé commence par une LETTRE (comme `applyTemplate`) : « Rabais [50] % »
+    // ou « Étape {0} » perdaient leur nombre, effacé comme une variable inconnue.
+    /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}|\{([A-Za-z]\w*)\}|\[([A-Za-z]\w*)\]/g,
     (_, objet: string | undefined, cle: string | undefined, accolade: string | undefined, crochet: string | undefined) => {
       // Variables intégrées pointées ({{client.nom}}, {{soumission.total}}…)
       // AVANT les champs personnalisés : un champ perso nommé « nom » ne doit

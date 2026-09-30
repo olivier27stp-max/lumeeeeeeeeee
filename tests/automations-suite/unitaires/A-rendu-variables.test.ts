@@ -98,15 +98,19 @@ describe('A-180…A-189 — formats de variables reconnus', () => {
 // ─────────────────────────────────────────────────────────────
 describe('A-190…A-199 — clés du prototype : jamais Object.prototype', () => {
   const pieges = ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf', '__defineGetter__'];
-  it.each(pieges.flatMap((k) => [`[${k}]`, `{${k}}`, `{{${k}}}`].map((g) => ['A-190', g] as const)))(
-    '[%s] « %s » → vide, sans lever (texte)', (_id, gabarit) => {
-      expect(r(`a${gabarit}b`)).toBe('ab');
+  // Une clé qui commence par une lettre est une variable ABSENTE (vide) ;
+  // `__proto__` ne commence pas par une lettre : ce n'est pas une variable,
+  // le texte reste tel quel. Dans les deux cas, jamais le prototype.
+  const attendu = (k: string, g: string) => (/^[A-Za-z]/.test(k) ? 'ab' : `a${g}b`);
+  it.each(pieges.flatMap((k) => [`[${k}]`, `{${k}}`, `{{${k}}}`].map((g) => ['A-190', k, g] as const)))(
+    '[%s] %s : « %s » ne lit pas le prototype (texte)', (_id, k, gabarit) => {
+      expect(r(`a${gabarit}b`)).toBe(attendu(k, gabarit));
     },
   );
-  it.each(pieges.flatMap((k) => [`[${k}]`, `{${k}}`].map((g) => ['A-191', g] as const)))(
-    '[%s] « %s » → vide, sans lever (corps HTML du courriel)', (_id, gabarit) => {
+  it.each(pieges.flatMap((k) => [`[${k}]`, `{${k}}`].map((g) => ['A-191', k, g] as const)))(
+    '[%s] %s : « %s » ne lit pas le prototype, sans lever (corps HTML du courriel)', (_id, k, gabarit) => {
       expect(() => r(`a${gabarit}b`, VARS, true)).not.toThrow();
-      expect(r(`a${gabarit}b`, VARS, true)).toBe('ab');
+      expect(r(`a${gabarit}b`, VARS, true)).toBe(attendu(k, gabarit));
     },
   );
   it('[A-192] {{client.constructor}} ne lit pas le prototype non plus', () => {
