@@ -7,7 +7,7 @@
 
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -108,7 +108,8 @@ beforeEach(() => {
   api.charger.mockClear();
   api.creer.mockReset();
   api.creer.mockImplementation(async () => regle({ id: 'neuve-1', steps: [] }) as any);
-  api.modifier.mockClear();
+  api.modifier.mockReset();
+  api.modifier.mockImplementation(async (id: string, patch: any) => ({ ...regle({ id }), ...patch }) as any);
   api.apercu.mockClear();
   api.publier.mockClear();
   api.stats.mockReset();
@@ -228,5 +229,59 @@ describe('A-03 — une automatisation publiée et cassée est dite comme telle',
     cliquer(choix);
     await attendre();
     expect(toasts.erreur.join('\n')).toContain('est publiée');
+  });
+});
+
+// ─── A-04 ───────────────────────────────────────────────────────
+
+/** Le bouton « retour » du navigateur : navigate(-1), hors de l'app. */
+function RetourNavigateur() {
+  const naviguer = useNavigate();
+  return <button type="button" data-testid="retour-navigateur" onClick={() => naviguer(-1)}>retour</button>;
+}
+
+async function ouvrirAvecHistorique() {
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={['/automations', `/automations/${ID}`]} initialIndex={1}>
+        <LanguageProvider>
+          <Routes>
+            <Route path="/automations/:id" element={<><AutomationBuilderPage /><RetourNavigateur /></>} />
+            <Route path="/automations" element={<Lieu />} />
+          </Routes>
+        </LanguageProvider>
+      </MemoryRouter>,
+    );
+  });
+  await attendre();
+}
+
+describe('A-04 — le bouton « retour » du navigateur ne perd pas le travail', () => {
+  it('ce qui attendait l’enregistrement automatique part au départ', async () => {
+    await ouvrirAvecHistorique();
+    cliquer(bouton('Relance devis'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v3');
+    api.modifier.mockClear();
+    cliquer(container.querySelector('[data-testid="retour-navigateur"]'));
+    await attendre();
+    expect(lieu()).toBe('/automations');
+    expect(api.modifier).toHaveBeenCalledWith(ID, expect.objectContaining({ name: 'Relance devis v3' }));
+  });
+
+  it('rien à enregistrer : aucune écriture au départ', async () => {
+    await ouvrirAvecHistorique();
+    cliquer(container.querySelector('[data-testid="retour-navigateur"]'));
+    await attendre();
+    expect(api.modifier).not.toHaveBeenCalled();
+  });
+
+  it('un échec au départ est dit', async () => {
+    await ouvrirAvecHistorique();
+    cliquer(bouton('Relance devis'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v4');
+    api.modifier.mockImplementation(async () => { throw new Error('Serveur occupé'); });
+    cliquer(container.querySelector('[data-testid="retour-navigateur"]'));
+    await attendre();
+    expect(toasts.erreur.join('\n')).toContain('n’ont pas pu être enregistrées');
   });
 });

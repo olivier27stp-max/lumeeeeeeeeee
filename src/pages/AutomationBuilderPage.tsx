@@ -1258,6 +1258,41 @@ export default function AutomationBuilderPage() {
     return () => window.removeEventListener('beforeunload', avertir);
   }, [travailNonEnregistre]);
 
+  /*
+   * LE BOUTON « RETOUR » DU NAVIGATEUR (audit V2, A-04).
+   *
+   * `beforeunload` ne couvre que la fermeture de l'onglet, et le routeur de
+   * l'app est déclaratif (`<BrowserRouter>`) : `useBlocker` n'y existe pas,
+   * et `NavigationGuard` n'intercepte pas `popstate`. Revenir en arrière
+   * démontait donc l'éditeur et jetait les 3 dernières secondes de travail.
+   *
+   * On fait ce que fait « ← Mes automatisations » : on ENREGISTRE en
+   * partant — au démontage, avec l'état du dernier rendu. La requête
+   * survit au démontage ; un échec, ou une étape incomplète qui empêche
+   * d'enregistrer, est DIT par un message (le toast vit hors de la page).
+   */
+  const sortieGeree = useRef(false);
+  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle });
+  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle };
+  useEffect(() => () => {
+    const d = etatAuDepart.current;
+    if (sortieGeree.current || !d.aRegle) return;
+    if (d.etat === 'incomplet') {
+      toast.error(d.fr
+        ? 'Automatisation quittée sans enregistrer : une étape était incomplète.'
+        : 'Automation left without saving: a step was incomplete.');
+      return;
+    }
+    if ((d.etat !== 'modifie' && d.etat !== 'en_cours') || d.incompletes > 0) return;
+    d.ecrire({ name: d.nom, steps: d.steps }).catch((e: unknown) => {
+      console.error('[automatisations] enregistrement au départ impossible', e);
+      captureClientException(e, { where: 'AutomationBuilderPage.depart' });
+      toast.error(d.fr
+        ? `Vos dernières modifications n’ont pas pu être enregistrées : ${e instanceof Error ? e.message : String(e)}`
+        : `Your latest changes could not be saved: ${e instanceof Error ? e.message : String(e)}`);
+    });
+  }, []);
+
   /** Quitter l'éditeur — en demandant d'abord si du travail se perdrait. */
   const quitterEditeur = useCallback(async () => {
     /*
@@ -1298,6 +1333,8 @@ export default function AutomationBuilderPage() {
       });
       if (!ok) return;
     }
+    // Déjà enregistré (ou abandon confirmé) : le départ n'a rien à refaire.
+    sortieGeree.current = true;
     navigate('/automations');
   }, [regle, etapesIncompletes, etatSauvegarde, nom, steps, fr, navigate, ecrire]);
 
