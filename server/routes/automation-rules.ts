@@ -134,18 +134,65 @@ router.get('/automations/rules', async (req, res) => {
     return res.status(500).json({ error: 'Impossible de lire les automatisations.' });
   }
 
-  // Le catalogue voyage avec les règles : l'interface n'a pas à le dupliquer,
-  // et une clé retirée ici disparaît du sélecteur sans redéploiement du front.
-  // Un déclencheur réservé à une capacité en rodage n'est offert qu'aux
-  // entreprises qui ont son drapeau : ailleurs, son événement n'est jamais émis.
-  // Client de l'UTILISATEUR (RLS de org_features), comme tout ce fichier.
-  const actifs = new Set<string>();
-  for (const d of DECLENCHEURS) {
-    if (d.drapeau && !actifs.has(d.drapeau) && await drapeauActif(auth.client, auth.orgId, d.drapeau as CleDrapeauAutomatisation)) actifs.add(d.drapeau);
-  }
   return res.json({
     rules: data ?? [],
-    catalogue: { declencheurs: DECLENCHEURS.filter((d) => declencheurOffert(d, actifs)), actions: ACTIONS },
+    catalogue: await catalogueOffert(auth.client, auth.orgId),
+  });
+});
+
+/**
+ * Le catalogue voyage avec les règles : l'interface n'a pas à le dupliquer,
+ * et une clé retirée ici disparaît du sélecteur sans redéploiement du front.
+ * Un déclencheur réservé à une capacité en rodage n'est offert qu'aux
+ * entreprises qui ont son drapeau : ailleurs, son événement n'est jamais émis.
+ * Client de l'UTILISATEUR (RLS de org_features), comme tout ce fichier.
+ */
+async function catalogueOffert(client: SupabaseClient, orgId: string) {
+  const actifs = new Set<string>();
+  for (const d of DECLENCHEURS) {
+    if (d.drapeau && !actifs.has(d.drapeau) && await drapeauActif(client, orgId, d.drapeau as CleDrapeauAutomatisation)) actifs.add(d.drapeau);
+  }
+  return { declencheurs: DECLENCHEURS.filter((d) => declencheurOffert(d, actifs)), actions: ACTIONS };
+}
+
+/*
+ * GET /automations/editeur?rule_id=… — ce que l'ÉDITEUR affiche (PERF-2).
+ *
+ * L'éditeur chargeait TOUTES les règles (316 ko à 400 règles) pour en
+ * afficher une. Il reçoit maintenant sa règle (par id), le catalogue, et la
+ * liste LÉGÈRE (id, nom) des autres automatisations publiées, pour l'action
+ * « Démarrer une automatisation ». Sans `rule_id` (`/nouvelle`) : pas de
+ * règle. Règle absente : `rule: null` (l'écran dit « introuvable »).
+ */
+router.get('/automations/editeur', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const ruleId = typeof req.query.rule_id === 'string' && req.query.rule_id ? req.query.rule_id : null;
+  if (ruleId && !/^[0-9a-f-]{36}$/i.test(ruleId)) {
+    return res.json({ rule: null, catalogue: await catalogueOffert(auth.client, auth.orgId), autres: [] });
+  }
+
+  const [regle, autres] = await Promise.all([
+    ruleId
+      ? auth.client.from('automation_rules').select(COLONNES).eq('id', ruleId).eq('org_id', auth.orgId).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    auth.client
+      .from('automation_rules')
+      .select('id, name')
+      .eq('org_id', auth.orgId)
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .order('name'),
+  ]);
+  if (regle.error || autres.error) {
+    logger.error('[automation-rules] lecture de l’éditeur échouée', { message: (regle.error ?? autres.error)?.message });
+    return res.status(500).json({ error: 'Impossible de lire l’automatisation.' });
+  }
+  return res.json({
+    rule: regle.data ?? null,
+    catalogue: await catalogueOffert(auth.client, auth.orgId),
+    // Jamais la règle ouverte elle-même : une automatisation qui se démarre boucle.
+    autres: ((autres.data ?? []) as Array<{ id: string; name: string }>).filter((r) => r.id !== ruleId),
   });
 });
 

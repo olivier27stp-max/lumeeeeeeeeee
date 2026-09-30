@@ -33,6 +33,12 @@ function regle(over: Record<string, unknown> = {}) {
 const etat = { aLumi: true, regles: [] as any[] };
 const api = {
   charger: vi.fn(async () => ({ rules: etat.regles, catalogue: { declencheurs: [], actions: [] } })),
+  // PERF-2 : l'éditeur lit SA règle (et la liste légère des autres publiées).
+  editeur: vi.fn(async (id: string | null) => ({
+    rule: etat.regles.find((r) => r.id === id) ?? null,
+    catalogue: { declencheurs: [], actions: [] },
+    autres: etat.regles.filter((r) => r.id !== id && r.is_active && !r.deleted_at).map((r) => ({ id: r.id, name: r.name })),
+  })),
   creer: vi.fn(async (_b: any) => regle({ id: 'neuve-1' }) as any),
   modifier: vi.fn(async (id: string, patch: any) => ({ ...regle({ id }), ...patch }) as any),
   apercu: vi.fn(async (_id: string) => ({ client: null, message: 'Aucun client', apercu: [] })),
@@ -53,6 +59,7 @@ vi.mock('sonner', () => ({
 
 vi.mock('../src/lib/automationBuilderApi', () => ({
   chargerAutomatisations: () => api.charger(),
+  chargerEditeur: (id: string | null) => api.editeur(id),
   creerAutomatisation: (b: any) => api.creer(b),
   modifierAutomatisation: (id: string, p: any) => api.modifier(id, p),
   genererParcoursAvecLumi: (...a: any[]) => api.generer(...a),
@@ -106,6 +113,7 @@ beforeEach(() => {
   etat.aLumi = true;
   etat.regles = [regle()];
   api.charger.mockClear();
+  api.editeur.mockClear();
   api.creer.mockReset();
   api.creer.mockImplementation(async () => regle({ id: 'neuve-1', steps: [] }) as any);
   api.modifier.mockReset();
@@ -433,5 +441,23 @@ describe('A-16 — « Dupliquer l’action » suffixe dans la langue de l’inte
     await attendre();
     expect(container.textContent).toContain('Alpha (copy)');
     expect(container.textContent).not.toContain('(copie)');
+  });
+});
+
+// ─── PERF-2 ─────────────────────────────────────────────────────
+
+describe('PERF-2 — l’éditeur lit UNE règle, pas toutes', () => {
+  it('ouvrir une automatisation lit la règle par son id', async () => {
+    etat.regles = [regle(), regle({ id: 'autre-1', name: 'Autre publiée', is_active: true })];
+    await ouvrir(`/automations/${ID}`);
+    expect(container.textContent).toContain('Relance devis');
+    expect(api.editeur).toHaveBeenCalledWith(ID);
+    expect(api.charger).not.toHaveBeenCalled();
+  });
+
+  it('une nouvelle automatisation ne lit aucune règle', async () => {
+    await ouvrir('/automations/nouvelle');
+    expect(api.editeur).toHaveBeenCalledWith(null);
+    expect(api.charger).not.toHaveBeenCalled();
   });
 });

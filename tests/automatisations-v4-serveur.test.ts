@@ -25,11 +25,14 @@ function fauxClient() {
       let patch: Ligne | null = null;
       let insertion = false;
       let inseree: Ligne | null = null;
+      const filtres: Record<string, unknown> = {};
       const chaine: Record<string, unknown> = {
         // Un dossier au nom déjà pris : l'index unique répond 23505.
         insert: (ligne: Ligne) => { insertion = true; inseree = ligne; return chaine; },
         select: () => chaine,
-        eq: (col: string, v: string) => { if (col === 'id') filtreId = v; return chaine; },
+        eq: (col: string, v: unknown) => { if (col === 'id') filtreId = String(v); else filtres[col] = v; return chaine; },
+        is: (col: string, v: unknown) => { filtres[col] = v; return chaine; },
+        order: () => chaine,
         maybeSingle: async () => ({ data: filtreId ? lignes[filtreId] ?? null : null, error: null }),
         single: async () => {
           if (insertion && table === 'automation_folders') return { data: null, error: { code: '23505', message: 'duplicate' } };
@@ -47,6 +50,12 @@ function fauxClient() {
             ecritures.push({ id: filtreId, patch });
             lignes[filtreId] = { ...lignes[filtreId], ...patch };
             return Promise.resolve({ data: [lignes[filtreId]], error: null }).then(ok);
+          }
+          // Une LISTE (select sans id) : les lignes de la table qui passent les filtres.
+          if (!patch && !filtreId && table === 'automation_rules') {
+            const liste = Object.values(lignes).filter((l) => Object.entries(filtres)
+              .every(([c, v]) => c === 'org_id' || (l[c] ?? null) === v));
+            return Promise.resolve({ data: liste, error: null }).then(ok);
           }
           return Promise.resolve({ data: [], error: null }).then(ok);
         },
@@ -209,5 +218,28 @@ describe('A-16 — dupliquer une automatisation suffixe dans la langue de l’in
     expect(en.json.name).toBe('Envoi facture (copy)');
     const fr = await appeler('POST', `/automations/rules/${FACTURE}/duplicate`, {});
     expect(fr.json.name).toBe('Envoi facture (copie)');
+  });
+});
+
+// ─── PERF-2 (serveur) ───────────────────────────────────────────
+
+describe('PERF-2 — la route de l’éditeur renvoie UNE règle', () => {
+  it('sa règle, le catalogue, et les autres publiées vivantes (jamais elle-même)', async () => {
+    lignes['aaaaaaaa-0000-4000-8000-000000000013'] = {
+      id: 'aaaaaaaa-0000-4000-8000-000000000013', name: 'À la corbeille', is_active: true, deleted_at: '2026-09-29T00:00:00Z',
+    };
+    const r = await appeler('GET', `/automations/editeur?rule_id=${FACTURE}`, undefined);
+    expect(r.status).toBe(200);
+    expect(r.json.rule.id).toBe(FACTURE);
+    expect(r.json.catalogue.declencheurs.length).toBeGreaterThan(10);
+    // (le faux client ne projette pas les colonnes : on compare les ids)
+    expect(r.json.autres.map((a: { id: string }) => a.id)).toEqual([CASSEE_PUBLIEE]);
+    expect(r.json.rules).toBeUndefined();
+  });
+
+  it('sans rule_id (nouvelle automatisation) : pas de règle', async () => {
+    const r = await appeler('GET', '/automations/editeur', undefined);
+    expect(r.status).toBe(200);
+    expect(r.json.rule).toBeNull();
   });
 });

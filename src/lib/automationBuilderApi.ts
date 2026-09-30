@@ -104,6 +104,22 @@ export async function chargerAutomatisations(): Promise<{
   return reponse.json();
 }
 
+/**
+ * Ce que l'éditeur affiche : SA règle, le catalogue, et les autres
+ * automatisations publiées (id, nom) — sans télécharger toutes les règles
+ * (PERF-2). `ruleId` null = une nouvelle automatisation.
+ */
+export async function chargerEditeur(ruleId: string | null): Promise<{
+  rule: AutomationRule | null;
+  catalogue: CatalogueAutomatisations;
+  autres: Array<{ id: string; name: string }>;
+}> {
+  const url = ruleId ? `/api/automations/editeur?rule_id=${encodeURIComponent(ruleId)}` : '/api/automations/editeur';
+  const reponse = await appelServeur(url, { headers: await entetes() });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de charger cette automatisation.');
+  return reponse.json();
+}
+
 export async function creerAutomatisation(brouillon: BrouillonAutomatisation): Promise<AutomationRule> {
   const reponse = await appelServeur('/api/automations/rules', {
     method: 'POST',

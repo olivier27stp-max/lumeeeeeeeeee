@@ -35,7 +35,7 @@ import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import type { AutomationRule } from '../lib/automationRulesApi';
 import {
-  chargerAutomatisations,
+  chargerEditeur,
   creerAutomatisation,
   modifierAutomatisation,
   genererParcoursAvecLumi,
@@ -685,9 +685,10 @@ export default function AutomationBuilderPage() {
      * l'éditeur vide : on réessaie deux fois (1,5 s puis 3 s) avant de le
      * dire. Signalé le 2026-09-28 : « y en a qui s'ouvrent pas ».
      */
-    const chargerAvecReprise = async (essai = 1): Promise<Awaited<ReturnType<typeof chargerAutomatisations>>> => {
+    // PERF-2 : SA règle par id, jamais toutes les règles de l'entreprise.
+    const chargerAvecReprise = async (essai = 1): Promise<Awaited<ReturnType<typeof chargerEditeur>>> => {
       try {
-        return await chargerAutomatisations();
+        return await chargerEditeur(estNouvelle ? null : (id ?? null));
       } catch (e) {
         if (essai >= 3 || !vivant) throw e;
         await new Promise((r) => setTimeout(r, 1500 * essai));
@@ -707,7 +708,7 @@ export default function AutomationBuilderPage() {
             steps: [], settings: null, is_active: false, is_preset: false, preset_key: null,
             created_at: '', updated_at: '', lumi_conversation: [],
           } satisfies AutomationRule
-          : d.rules.find((r) => r.id === id) ?? null;
+          : d.rule;
         setRegle(trouvee);
         /*
          * Le nom des préréglages est stocké en ANGLAIS en base
@@ -730,11 +731,7 @@ export default function AutomationBuilderPage() {
         setSteps(etapes);
         setHistorique([etapes]);
         setPosition(0);
-        setAutresAutomatisations(
-          d.rules
-            .filter((r) => r.id !== id && r.is_active && !r.deleted_at)
-            .map((r) => ({ id: r.id, nom: r.name })),
-        );
+        setAutresAutomatisations(d.autres.filter((r) => r.id !== id).map((r) => ({ id: r.id, nom: r.name })));
       })
       .catch((e: unknown) => {
         console.error('[builder] chargement échoué', e instanceof Error ? e.message : String(e));
