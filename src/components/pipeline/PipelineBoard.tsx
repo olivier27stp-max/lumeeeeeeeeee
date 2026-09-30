@@ -804,8 +804,8 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
             {fr ? 'Annuler' : 'Cancel'}
           </button>
           <button type="submit" form={idFormulaire} disabled={envoi}
-            className={cn(CLASSE_BOUTON, 'px-5 font-semibold text-white disabled:opacity-60')}
-            style={{ background: 'var(--color-accent)', borderColor: 'var(--color-accent)' }}>
+            className={cn(CLASSE_BOUTON, 'px-5 font-semibold disabled:opacity-60')}
+            style={{ background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: 'var(--color-primary-foreground)' }}>
             {envoi ? (fr ? 'Création…' : 'Creating…') : (fr ? 'Créer' : 'Create')}
           </button>
         </>
@@ -1176,8 +1176,10 @@ function BarreOutils({
           <button
             type="button"
             onClick={onNouveauDeal}
-            className={cn(CLASSE_BOUTON, 'font-semibold text-white')}
-            style={{ background: 'var(--color-accent)', borderColor: 'var(--color-accent)' }}
+            className={cn(CLASSE_BOUTON, 'font-semibold')}
+            // La couleur principale du CRM, comme « Créer » ailleurs — pas
+            // l'accent rose (Rafba, 2026-09-30 : « pas rapport »).
+            style={{ background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: 'var(--color-primary-foreground)' }}
           >
             <Plus size={13} aria-hidden="true" />
             {fr ? 'Nouveau deal' : 'New deal'}
@@ -1426,8 +1428,8 @@ function ModalEtiquettesLot({ action, fr, nbDeals, nbSansClient, clientIds, onFe
             type="button"
             onClick={() => { void appliquer(); }}
             disabled={tags.length === 0 || nbClients === 0 || enCours}
-            className={cn(CLASSE_BOUTON, 'font-semibold text-white disabled:opacity-60')}
-            style={{ background: 'var(--color-accent)', borderColor: 'var(--color-accent)' }}
+            className={cn(CLASSE_BOUTON, 'font-semibold disabled:opacity-60')}
+            style={{ background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: 'var(--color-primary-foreground)' }}
           >
             {enCours ? (fr ? 'Application…' : 'Applying…') : (fr ? 'Appliquer' : 'Apply')}
           </button>
@@ -2433,8 +2435,8 @@ export default function PipelineBoard({
                 setFiltreEtiquettes(FILTRE_ETIQUETTES_VIDE);
                 setVue('tous');
               }}
-              className={cn(CLASSE_BOUTON, 'font-semibold text-white')}
-              style={{ background: 'var(--color-accent)', borderColor: 'var(--color-accent)' }}
+              className={cn(CLASSE_BOUTON, 'font-semibold')}
+              style={{ background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: 'var(--color-primary-foreground)' }}
             >
               {fr ? 'Effacer les filtres' : 'Clear filters'}
             </button>
