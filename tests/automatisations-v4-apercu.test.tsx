@@ -1,0 +1,84 @@
+// @vitest-environment jsdom
+//
+// VAGUE 4 — la Vue d'ensemble des automatisations (audit V2, 11-interface.md §9).
+
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+const api = {
+  regles: vi.fn(async (): Promise<any[]> => []),
+  echecs: vi.fn(async (): Promise<any[]> => []),
+};
+const naviguer = vi.fn();
+vi.mock('react-router-dom', async (orig) => ({
+  ...(await orig<typeof import('react-router-dom')>()),
+  useNavigate: () => naviguer,
+}));
+vi.mock('../src/lib/automationRulesApi', () => ({
+  getAutomationRules: () => api.regles(),
+  getRecentAutomationFailures: () => api.echecs(),
+}));
+vi.mock('../src/lib/automationJournauxApi', () => ({
+  activiteParSemaine: vi.fn(async () => ({ total: 0, parSemaine: [] })),
+}));
+vi.mock('../src/components/PermissionGate', () => ({
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+import AutomationsApercu from '../src/pages/AutomationsApercu';
+import { LanguageProvider } from '../src/i18n';
+
+let container: HTMLDivElement;
+let root: ReturnType<typeof createRoot>;
+
+beforeEach(() => {
+  api.regles.mockReset();
+  api.regles.mockImplementation(async () => []);
+  api.echecs.mockReset();
+  api.echecs.mockImplementation(async () => []);
+  naviguer.mockClear();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  localStorage.setItem('lume-language', 'fr');
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+});
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+});
+
+async function rendre() {
+  await act(async () => {
+    root.render(<MemoryRouter><LanguageProvider><AutomationsApercu /></LanguageProvider></MemoryRouter>);
+  });
+  for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve(); });
+}
+
+/** La valeur d'une tuile, par son libellé. */
+function tuile(libelle: string): string | undefined {
+  const carte = Array.from(container.querySelectorAll('.section-card'))
+    .find((c) => c.querySelector('p')?.textContent === libelle);
+  return carte?.querySelectorAll('p')[1]?.textContent ?? undefined;
+}
+
+describe('A-08 — des journaux illisibles ne deviennent pas « Aucune erreur »', () => {
+  it('dit que les erreurs n’ont pas pu être lues', async () => {
+    api.echecs.mockImplementation(async () => { throw new Error('500'); });
+    await rendre();
+    const texte = container.textContent ?? '';
+    expect(texte).not.toContain('Aucune erreur');
+    expect(texte).toContain('Les erreurs n’ont pas pu être lues');
+  });
+
+  it('des règles illisibles donnent « — », pas 0', async () => {
+    api.regles.mockImplementation(async () => { throw new Error('500'); });
+    await rendre();
+    expect(tuile('Total des automatisations')).toBe('—');
+    expect(tuile('Automatisations publiées')).toBe('—');
+  });
+});
