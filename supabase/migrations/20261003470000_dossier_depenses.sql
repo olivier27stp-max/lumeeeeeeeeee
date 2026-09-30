@@ -10,6 +10,8 @@
 --   · RENOMMABLE (contrairement aux sections du formulaire), jamais supprimable ;
 --   · 10 champs de base, type montant, avant taxes, libellés dans la langue de
 --     l'entreprise (company_settings.default_language) ;
+--   · retirés de la fenêtre « Nouveau job » (config.masque_creation) : une dépense
+--     se saisit après le travail, sur la fiche ; « Gérer les champs » les y remet ;
 --   · chaque NOUVELLE entreprise le reçoit (trigger existant trg_orgs_dossiers_systeme) ;
 --   · les entreprises EXISTANTES : migration séparée 20261003470001 (backfill),
 --     elle aussi soumise à approbation.
@@ -82,7 +84,7 @@ begin
   -- Les 10 champs de base, sauf ceux dont la clé existe déjà (même archivés).
   insert into public.custom_fields (org_id, object_type, folder_id, key, label, field_type, config, "position", created_by)
   select p_org, 'job', v_dossier, b.cle, case when v_en then b.en else b.fr end, 'monetary',
-         jsonb_build_object('currency', 'CAD'), b."position", null
+         jsonb_build_object('currency', 'CAD', 'masque_creation', true), b."position", null
     from public.cf_depenses_champs_base() b
    where not exists (select 1 from public.custom_fields f
                       where f.org_id = p_org and f.object_type = 'job' and f.key = b.cle);
