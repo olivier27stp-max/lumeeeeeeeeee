@@ -18,7 +18,7 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Des nouvelles de nous",
+      "subject": "Des nouvelles de nous",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable!</p><p>Saviez-vous qu'on offre aussi d'autres services d'entretien? Répondez à ce courriel pour en savoir plus.</p><p>Au plaisir,<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },

@@ -112,10 +112,10 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
       {
         "type": "send_email",
         "config": {
-          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci [client_first_name],</h2><p>Votre contrat avec [company_name] est signé. Vous pouvez le consulter en tout temps ici :</p><p><a href=\"[signed_contract_link]\">[signed_contract_link]</a></p><p>[deposit_line]</p><p>À bientôt!<br/>[company_name]</p></div>",
-          "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Thank you [client_first_name],</h2><p>Your contract with [company_name] is signed. You can view it anytime here:</p><p><a href=\"[signed_contract_link]\">[signed_contract_link]</a></p><p>[deposit_line]</p><p>Talk soon!<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Contrat signé",
-          "subject_en": "[company_name] — Contract signed"
+          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci [client_first_name],</h2><p>Votre contrat avec [company_name] est signé. Vous pouvez le consulter en tout temps ici :</p><p><a href=\"[signed_contract_link]\">Consulter votre contrat signé</a></p><p>[deposit_line]</p><p>À bientôt!<br/>[company_name]</p></div>",
+          "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Thank you [client_first_name],</h2><p>Your contract with [company_name] is signed. You can view it anytime here:</p><p><a href=\"[signed_contract_link]\">View your signed contract</a></p><p>[deposit_line]</p><p>Talk soon!<br/>[company_name]</p></div>",
+          "subject": "Votre contrat est signé",
+          "subject_en": "Your contract is signed"
         }
       }
     ]
@@ -140,8 +140,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre rendez-vous est confirmé :</p><ul><li><strong>Date :</strong> [appointment_date]</li><li><strong>Heure :</strong> [appointment_time]</li><li><strong>Adresse :</strong> [appointment_address]</li></ul><p>À bientôt!<br/>[company_name]</p>[contract_html]</div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Your appointment is confirmed:</p><ul><li><strong>Date:</strong> [appointment_date]</li><li><strong>Time:</strong> [appointment_time]</li><li><strong>Address:</strong> [appointment_address]</li></ul><p>See you soon!<br/>[company_name]</p>[contract_html]</div>",
-          "subject": "[company_name] — Rendez-vous confirmé",
-          "subject_en": "[company_name] — Appointment confirmed"
+          "subject": "Votre rendez-vous est confirmé",
+          "subject_en": "Your appointment is confirmed"
         }
       },
       {
@@ -165,8 +165,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Ça fait déjà un an qu'on a fait des travaux chez vous — merci encore pour votre confiance!</p><p>Si c'est le temps d'une retouche ou d'un entretien, répondez à ce courriel et on vous prépare une soumission.</p><p>Au plaisir,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>It's already been a year since we did work at your place — thank you again for your trust!</p><p>If it's time for a touch-up or some maintenance, just reply to this email and we'll put together a quote for you.</p><p>Looking forward,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Déjà un an!",
-          "subject_en": "[company_name] — Already a year!"
+          "subject": "Déjà un an depuis nos travaux",
+          "subject_en": "A year since our visit"
         }
       },
       {
@@ -200,8 +200,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable!</p><p>Saviez-vous qu'on offre aussi d'autres services d'entretien? Répondez à ce courriel pour en savoir plus.</p><p>Au plaisir,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>It's been a month since we did work at your place — we hope everything still looks great!</p><p>Did you know we also offer other maintenance services? Reply to this email to learn more.</p><p>Looking forward,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Des nouvelles de nous",
-          "subject_en": "[company_name] — Checking in with you"
+          "subject": "Des nouvelles de nous",
+          "subject_en": "Checking in with you"
         }
       },
       {
@@ -260,8 +260,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci [client_first_name]!</h2><p>Votre dépôt a bien été reçu et votre place est réservée à l'horaire.</p><p>On vous recontacte avec les détails du rendez-vous.</p><p>À bientôt,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Thank you [client_first_name]!</h2><p>Your deposit has been received and your spot on the schedule is reserved.</p><p>We'll be in touch with the appointment details.</p><p>Talk soon,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Dépôt reçu, merci!",
-          "subject_en": "[company_name] — Deposit received, thank you!"
+          "subject": "Dépôt reçu, merci!",
+          "subject_en": "Deposit received, thank you!"
         }
       },
       {
@@ -302,8 +302,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Merci d'avoir accepté notre soumission!</p><p>Pour réserver votre place à l'horaire, un dépôt est requis. Répondez à ce courriel si vous avez des questions sur le paiement.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Thank you for accepting our quote!</p><p>To reserve your spot on the schedule, a deposit is required. Reply to this email if you have any questions about payment.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Dépôt requis pour réserver votre place",
-          "subject_en": "[company_name] — Deposit required to reserve your spot"
+          "subject": "Dépôt requis pour réserver votre place",
+          "subject_en": "Deposit required to reserve your spot"
         }
       },
       {
@@ -334,8 +334,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>On vous a envoyé un devis récemment et on voulait faire un suivi.</p><p>Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre.</p><p>Cordialement,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>We sent you an estimate recently and wanted to follow up.</p><p>Any questions? Just reply to this email — we'd be happy to answer them.</p><p>Best regards,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Suivi de votre devis",
-          "subject_en": "[company_name] — Following up on your estimate"
+          "subject": "Suivi de votre devis",
+          "subject_en": "Following up on your estimate"
         }
       },
       {
@@ -382,8 +382,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>La facture <strong>[invoice_number]</strong> de <strong>[invoice_total]</strong> est impayée depuis deux semaines.</p><p>Merci de la régler rapidement. En cas de problème, répondez à ce courriel et on trouvera une solution.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Invoice <strong>[invoice_number]</strong> for <strong>[invoice_total]</strong> has been unpaid for two weeks.</p><p>Please settle it soon. If there's an issue, reply to this email and we'll find a solution.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Facture [invoice_number] impayée depuis 2 semaines",
-          "subject_en": "[company_name] — Invoice [invoice_number] unpaid for 2 weeks"
+          "subject": "Facture [invoice_number] impayée depuis 2 semaines",
+          "subject_en": "Invoice [invoice_number] unpaid for 2 weeks"
         }
       },
       {
@@ -431,8 +431,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Petit rappel amical : la facture <strong>[invoice_number]</strong> de <strong>[invoice_total]</strong> est en attente de paiement.</p><p>Si vous avez déjà payé, ignorez ce message.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Just a friendly reminder: invoice <strong>[invoice_number]</strong> for <strong>[invoice_total]</strong> is awaiting payment.</p><p>If you've already paid, please disregard this message.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Rappel : facture [invoice_number]",
-          "subject_en": "[company_name] — Reminder: invoice [invoice_number]"
+          "subject": "Rappel : facture [invoice_number]",
+          "subject_en": "Reminder: invoice [invoice_number]"
         }
       },
       {
@@ -459,8 +459,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>La facture <strong>[invoice_number]</strong> de <strong>[invoice_total]</strong> est en souffrance depuis 30 jours.</p><p>Merci de la régler sans tarder, ou contactez-nous pour convenir d'une entente de paiement.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Invoice <strong>[invoice_number]</strong> for <strong>[invoice_total]</strong> has been overdue for 30 days.</p><p>Please settle it without further delay, or contact us to arrange a payment plan.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Facture [invoice_number] en souffrance (30 jours)",
-          "subject_en": "[company_name] — Invoice [invoice_number] overdue (30 days)"
+          "subject": "Facture [invoice_number] en souffrance depuis 30 jours",
+          "subject_en": "Invoice [invoice_number] overdue for 30 days"
         }
       },
       {
@@ -509,8 +509,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>La facture <strong>[invoice_number]</strong> de <strong>[invoice_total]</strong> est toujours en attente de paiement.</p><p>Si vous avez déjà payé, ignorez ce message.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Invoice <strong>[invoice_number]</strong> for <strong>[invoice_total]</strong> is still awaiting payment.</p><p>If you've already paid, please disregard this message.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Rappel : facture [invoice_number]",
-          "subject_en": "[company_name] — Reminder: invoice [invoice_number]"
+          "subject": "Facture [invoice_number] toujours en attente",
+          "subject_en": "Invoice [invoice_number] still awaiting payment"
         }
       },
       {
@@ -544,8 +544,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>La facture <strong>[invoice_number]</strong> de <strong>[invoice_total]</strong> est en attente depuis une semaine.</p><p>Merci de la régler dès que possible, ou répondez à ce courriel si quelque chose ne va pas.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Invoice <strong>[invoice_number]</strong> for <strong>[invoice_total]</strong> has been pending for a week.</p><p>Please settle it as soon as possible, or reply to this email if something isn't right.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Facture [invoice_number] en attente depuis 7 jours",
-          "subject_en": "[company_name] — Invoice [invoice_number] pending for 7 days"
+          "subject": "Facture [invoice_number] en attente depuis 7 jours",
+          "subject_en": "Invoice [invoice_number] pending for 7 days"
         }
       },
       {
@@ -593,8 +593,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre rendez-vous est <strong>demain</strong>, le [appointment_date] à [appointment_time].</p><p>Un empêchement? Répondez à ce courriel et on trouvera un autre moment.</p><p>À demain!<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Your appointment is <strong>tomorrow</strong>, [appointment_date] at [appointment_time].</p><p>Something came up? Reply to this email and we'll find another time.</p><p>See you tomorrow!<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Votre rendez-vous est demain",
-          "subject_en": "[company_name] — Your appointment is tomorrow"
+          "subject": "Votre rendez-vous est demain",
+          "subject_en": "Your appointment is tomorrow"
         }
       },
       {
@@ -654,8 +654,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Petit rappel : votre rendez-vous est prévu le <strong>[appointment_date]</strong> à <strong>[appointment_time]</strong>.</p><p>Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous.</p><p>À bientôt!<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Just a reminder: your appointment is scheduled for <strong>[appointment_date]</strong> at <strong>[appointment_time]</strong>.</p><p>Reply to this email if you have any questions or need to reschedule.</p><p>See you soon!<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Rappel : rendez-vous dans une semaine",
-          "subject_en": "[company_name] — Reminder: appointment in one week"
+          "subject": "Rappel : rendez-vous dans une semaine",
+          "subject_en": "Reminder: appointment in one week"
         }
       },
       {
@@ -682,8 +682,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services?</p><p>Un simple mot et on vous prépare une soumission.</p><p>Au plaisir,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>It's been two weeks since your request — are you still looking for our services?</p><p>Just say the word and we'll put together a quote for you.</p><p>Looking forward,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Toujours intéressé?",
-          "subject_en": "[company_name] — Still interested?"
+          "subject": "Votre projet est-il toujours d'actualité?",
+          "subject_en": "Is your project still on?"
         }
       },
       {
@@ -750,8 +750,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Vous nous avez contactés récemment et on veut s'assurer de ne pas vous laisser sans réponse.</p><p>Répondez à ce courriel et on s'occupe de vous rapidement.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>You reached out to us recently and we want to make sure we don't leave you without an answer.</p><p>Reply to this email and we'll take care of you right away.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — On pense à vous",
-          "subject_en": "[company_name] — Thinking of you"
+          "subject": "Votre demande n'est pas oubliée",
+          "subject_en": "We haven't forgotten your request"
         }
       },
       {
@@ -780,8 +780,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Ça fait un moment! Si vous avez des projets d'entretien ou de nettoyage, on serait heureux de vous aider.</p><p>Répondez à ce courriel pour une soumission sans engagement.</p><p>Au plaisir,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>It's been a while! If you have any maintenance or cleaning projects, we'd be happy to help.</p><p>Reply to this email for a no-obligation quote.</p><p>Looking forward,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Toujours des projets?",
-          "subject_en": "[company_name] — Any projects on the go?"
+          "subject": "Des projets d'entretien en vue?",
+          "subject_en": "Any maintenance projects coming up?"
         }
       },
       {
@@ -921,8 +921,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>On voulait faire un dernier suivi au sujet de votre soumission.</p><p>Si le moment n'est pas bon, aucun souci — répondez-nous et on se reprendra quand ça vous conviendra.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>We wanted to do one last follow-up about your quote.</p><p>If now isn't the right time, no problem — just reply and we'll reconnect whenever it suits you.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Dernière relance pour votre soumission",
-          "subject_en": "[company_name] — Final follow-up on your quote"
+          "subject": "Dernière relance pour votre soumission",
+          "subject_en": "Final follow-up on your quote"
         }
       },
       {
@@ -970,8 +970,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>On vous a envoyé une soumission hier et on voulait s'assurer que vous l'avez bien reçue.</p><p>Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>We sent you a quote yesterday and wanted to make sure it reached you.</p><p>Any questions? Just reply to this email — we'd be happy to answer them.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Suivi de votre soumission",
-          "subject_en": "[company_name] — Following up on your quote"
+          "subject": "Avez-vous bien reçu votre soumission?",
+          "subject_en": "Did you receive your quote?"
         }
       },
       {
@@ -998,8 +998,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre soumission.</p><p>Répondez à ce courriel à tout moment.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>We'll keep your file open a while longer in case you'd like to move ahead with your quote.</p><p>Reply to this email anytime.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — On garde votre dossier ouvert",
-          "subject_en": "[company_name] — We're keeping your file open"
+          "subject": "On garde votre dossier ouvert",
+          "subject_en": "We're keeping your file open"
         }
       },
       {
@@ -1040,8 +1040,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Petit rappel au sujet de la soumission qu'on vous a envoyée.</p><p>Si un détail ne convient pas, on peut l'ajuster — dites-le-nous simplement.</p><p>Merci,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Just a reminder about the quote we sent you.</p><p>If any detail doesn't work for you, we can adjust it — just let us know.</p><p>Thank you,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Votre soumission vous attend",
-          "subject_en": "[company_name] — Your quote is waiting for you"
+          "subject": "Votre soumission vous attend",
+          "subject_en": "Your quote is waiting for you"
         }
       },
       {
@@ -1073,10 +1073,10 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
       {
         "type": "send_email",
         "config": {
-          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre soumission est toujours valide et on garde votre place.</p><p>Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel.</p><p>Au plaisir,<br/>[company_name]</p></div>",
-          "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Your quote is still valid and we're holding your spot.</p><p>If you have any questions or would like to move ahead, reply to this email.</p><p>Looking forward,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Votre soumission est toujours valide",
-          "subject_en": "[company_name] — Your quote is still valid"
+          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Avez-vous eu le temps de regarder votre soumission?</p><p>Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel.</p><p>Au plaisir,<br/>[company_name]</p></div>",
+          "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Have you had a chance to look at your quote?</p><p>If you have any questions or would like to move ahead, reply to this email.</p><p>Looking forward,<br/>[company_name]</p></div>",
+          "subject": "Des questions sur votre soumission?",
+          "subject_en": "Any questions about your quote?"
         }
       },
       {
@@ -1110,8 +1110,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû.</p><p>Répondez à ce courriel et on vous trouve une place à l'horaire.</p><p>Au plaisir,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>It's been three months since our last visit — some maintenance might be due.</p><p>Reply to this email and we'll find you a spot on the schedule.</p><p>Looking forward,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — Déjà 3 mois!",
-          "subject_en": "[company_name] — Already 3 months!"
+          "subject": "Un entretien serait-il dû?",
+          "subject_en": "Time for some maintenance?"
         }
       },
       {
@@ -1168,8 +1168,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "config": {
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>La saison avance — c'est le bon moment pour préparer votre propriété.</p><p>Répondez à ce courriel pour une soumission rapide et sans engagement.</p><p>À bientôt,<br/>[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>The season is coming up — now's a good time to get your property ready.</p><p>Reply to this email for a quick, no-obligation quote.</p><p>Talk soon,<br/>[company_name]</p></div>",
-          "subject": "[company_name] — La saison s'en vient",
-          "subject_en": "[company_name] — The season is coming"
+          "subject": "La saison s'en vient",
+          "subject_en": "The season is coming"
         }
       },
       {
@@ -1264,8 +1264,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
       {
         "type": "send_email",
         "config": {
-          "subject": "Merci d'avoir contacté [company_name]",
-          "subject_en": "Thank you for contacting [company_name]",
+          "subject": "Merci de nous avoir contactés",
+          "subject_en": "Thanks for reaching out",
           "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#1a1a1a;font-size:18px;\">Bonjour [client_first_name],</h2><p style=\"color:#333;line-height:1.6;\">Merci d'avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très rapidement.</p><p style=\"color:#333;line-height:1.6;\">Si votre demande est urgente, répondez à ce courriel — nous la traiterons en priorité.</p><p style=\"color:#333;line-height:1.6;\">[company_name]</p></div>",
           "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#1a1a1a;font-size:18px;\">Hi [client_first_name],</h2><p style=\"color:#333;line-height:1.6;\">Thank you for reaching out to us. We've received your request and will get back to you very quickly.</p><p style=\"color:#333;line-height:1.6;\">If your request is urgent, reply to this email — we'll handle it as a priority.</p><p style=\"color:#333;line-height:1.6;\">[company_name]</p></div>"
         }
@@ -1286,3 +1286,36 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
     ]
   }
 ];
+
+/**
+ * Les courriels que SEUL le seed SQL pose (`seed_automation_presets`) : ces
+ * trois préréglages n'ont qu'un texto ici, mais chaque entreprise créée par
+ * la base reçoit aussi un courriel — en ANGLAIS, faute de version française
+ * dans `apply_automation_presets_fr` (constaté le 2026-09-30 : une entreprise
+ * francophone envoyait « We missed you! » à ses clients).
+ *
+ * Source des textes que la migration 20261003600000 pose dans le seed et dans
+ * les règles existantes non personnalisées. Pas ajoutés aux actions ci-dessus :
+ * ce fichier ne sert qu'au filet `ensureAutomationPresets`, et y ajouter un
+ * courriel changerait ce que reçoit une entreprise dont le seed a échoué.
+ */
+export const COURRIELS_HERITES_DU_SEED: Record<string, { subject: string; subject_en: string; body: string; body_en: string }> = {
+  no_show_followup: {
+    subject: 'Votre rendez-vous a été annulé',
+    subject_en: 'Your appointment was cancelled',
+    body: '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Bonjour [client_first_name],</h2><p>Votre rendez-vous a été annulé.</p><p>Si vous souhaitez le reprendre, répondez à ce courriel et on vous trouvera un moment qui vous convient.</p><p>Au plaisir,<br/>[company_name]</p></div>',
+    body_en: '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Hi [client_first_name],</h2><p>Your appointment was cancelled.</p><p>If you would like to reschedule, reply to this email and we will find a time that works for you.</p><p>Talk soon,<br/>[company_name]</p></div>',
+  },
+  post_appointment_survey: {
+    subject: 'Tout est à votre goût?',
+    subject_en: 'Is everything to your liking?',
+    body: '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Bonjour [client_first_name],</h2><p>Est-ce que tout est à votre goût depuis notre passage?</p><p>Votre avis nous aide à nous améliorer : répondez simplement à ce courriel.</p><p>Merci,<br/>[company_name]</p></div>',
+    body_en: '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Hi [client_first_name],</h2><p>Is everything to your liking since our visit?</p><p>Your feedback helps us improve: just reply to this email.</p><p>Thank you,<br/>[company_name]</p></div>',
+  },
+  thank_you_after_job: {
+    subject: 'Merci pour votre confiance',
+    subject_en: 'Thank you for your trust',
+    body: '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Merci [client_first_name]!</h2><p>On espère que le travail vous plaît.</p><p>Si quelque chose n\'est pas parfait, répondez simplement à ce courriel.</p><p>Au plaisir,<br/>[company_name]</p></div>',
+    body_en: '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Thank you [client_first_name]!</h2><p>We hope you are happy with the work.</p><p>If anything is not perfect, just reply to this email.</p><p>Talk soon,<br/>[company_name]</p></div>',
+  },
+};

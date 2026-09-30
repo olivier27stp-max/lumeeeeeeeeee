@@ -23,7 +23,7 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Toujours des projets?",
+      "subject": "Des projets d'entretien en vue?",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Ça fait un moment! Si vous avez des projets d'entretien ou de nettoyage, on serait heureux de vous aider.</p><p>Répondez à ce courriel pour une soumission sans engagement.</p><p>Au plaisir,<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },

@@ -18,7 +18,7 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — On pense à vous",
+      "subject": "Votre demande n'est pas oubliée",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Vous nous avez contactés récemment et on veut s'assurer de ne pas vous laisser sans réponse.</p><p>Répondez à ce courriel et on s'occupe de vous rapidement.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },

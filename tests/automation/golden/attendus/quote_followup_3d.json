@@ -29,7 +29,7 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Votre soumission vous attend",
+      "subject": "Votre soumission vous attend",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Petit rappel au sujet de la soumission qu'on vous a envoyée.</p><p>Si un détail ne convient pas, on peut l'ajuster — dites-le-nous simplement.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },

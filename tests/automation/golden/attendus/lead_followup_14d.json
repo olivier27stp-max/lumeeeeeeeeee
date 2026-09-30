@@ -28,7 +28,7 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Toujours intéressé?",
+      "subject": "Votre projet est-il toujours d'actualité?",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services?</p><p>Un simple mot et on vous prépare une soumission.</p><p>Au plaisir,<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },

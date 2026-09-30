@@ -29,7 +29,7 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Suivi de votre soumission",
+      "subject": "Avez-vous bien reçu votre soumission?",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>On vous a envoyé une soumission hier et on voulait s'assurer que vous l'avez bien reçue.</p><p>Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },

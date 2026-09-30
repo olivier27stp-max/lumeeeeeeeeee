@@ -23,7 +23,7 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Déjà 3 mois!",
+      "subject": "Un entretien serait-il dû?",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû.</p><p>Répondez à ce courriel et on vous trouve une place à l'horaire.</p><p>Au plaisir,<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },

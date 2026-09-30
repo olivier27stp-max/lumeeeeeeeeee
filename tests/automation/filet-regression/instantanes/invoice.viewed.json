@@ -69,8 +69,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Un message de Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Payer la facture…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "c537323ce14413c6"
+    "texte": "Plomberie Tremblay inc. Merci de faire affaire avec Plomberie Tremblay inc. Au plaisir, Plomberie Tremblay inc. Payer la facture…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc. Au plaisir, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "f639705c555a6301"
    }
   ],
   "annulees": []
@@ -248,8 +248,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Un message de Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Payer la facture…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc.. Au plaisir, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "c537323ce14413c6"
+    "texte": "Plomberie Tremblay inc. Merci de faire affaire avec Plomberie Tremblay inc. Au plaisir, Plomberie Tremblay inc. Payer la facture…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc. Au plaisir, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
+    "empreinte": "f639705c555a6301"
    }
   ],
   "annulees": []
