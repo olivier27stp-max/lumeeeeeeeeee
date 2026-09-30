@@ -142,15 +142,23 @@ export async function sendScheduledReport(reportId: string): Promise<void> {
 
   if (!isMailerConfigured()) throw new Error('SMTP not configured');
 
-  await sendEmail({
+  const envoi = await sendEmail({
     from: emailFrom,
     to: report.recipient_email,
     subject: `Ton rapport ${libelleFrequence(report.frequency)} — ${data.orgName}`,
     html,
+    // L'entreprise du rapport : journal des envois (email_deliveries) et bac à sable.
+    suivi: { orgId: report.org_id, entityType: 'scheduled_report', entityId: report.id },
     // Envoi de fond (cron) : last_sent_at est posé juste après, un échec
     // transitoire ne doit donc pas perdre le rapport — il part dans la file de reprise.
     reessayer: true,
   });
+  // Le résultat était ignoré : un envoi refusé marquait quand même le rapport
+  // « envoyé » (last_sent_at), et il ne repartait pas au passage suivant.
+  // Parti en file de reprise = il partira : on le compte comme envoyé.
+  if (!envoi.sent && !envoi.enFile) {
+    throw new Error(`rapport non envoyé : ${envoi.error ?? 'refus du fournisseur'}`);
+  }
 
   // Update last_sent_at
   const { error: stampErr } = await admin.from('scheduled_reports')
