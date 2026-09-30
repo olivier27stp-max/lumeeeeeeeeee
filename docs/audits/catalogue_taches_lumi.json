@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "genere_le": "2026-09-30T00:27:23.526Z",
+  "genere_le": "2026-09-30T01:15:49.267Z",
   "ancre_exemple": "2026-09-29",
   "seed": {
     "commande": "npm run seed:lumi-catalogue",
@@ -167,8 +167,8 @@
     "taches_ouvertes": 5,
     "taches_en_retard": 2,
     "heures_semaine_passee": {
-      "kevin": 40,
-      "samuel": 35
+      "kevin": 42,
+      "samuel": 37
     },
     "job_le_moins_rentable": {
       "cle": "marie_chalet",
@@ -256,7 +256,7 @@
     {
       "nom": "Heures Kevin semaine passée",
       "sql": "select round(sum(extract(epoch from punch_out_at - punch_in_at))/3600, 2)::float from time_entries where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and employee_id = (select user_id from memberships m join team_members t using (org_id, user_id) where m.org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and t.first_name = 'Kevin' limit 1) and status = 'completed' and date >= date_trunc('week', (now() at time zone 'America/Montreal')::date)::date - 7 and date < date_trunc('week', (now() at time zone 'America/Montreal')::date)::date",
-      "attendu": 40
+      "attendu": 42
     },
     {
       "nom": "Kevin pointé maintenant",
@@ -312,6 +312,16 @@
       "nom": "Taxes QC configurées",
       "sql": "select count(*) from tax_configs where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and is_active",
       "attendu": 2
+    },
+    {
+      "nom": "Profit du job 106 (le moins rentable)",
+      "sql": "select profit_cents from rentabilite_jobs('36c13d14-77a4-71e7-6a5f-42d4030027d2', '2000-01-01', '2100-01-01') where job_number = '106'",
+      "attendu": -900
+    },
+    {
+      "nom": "Objectif annuel (réglages)",
+      "sql": "select revenue_goal_cents from company_settings where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2'",
+      "attendu": 12000000
     }
   ],
   "types": {
@@ -3738,7 +3748,7 @@
           },
           {
             "requete": "select count(*) from public.time_entries where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and employee_name = 'Samuel Roy'",
-            "attendu": 15
+            "attendu": 18
           }
         ],
         "mentionne": [],
@@ -4717,7 +4727,7 @@
         "montant avec taxes"
       ],
       "fumee": false,
-      "notes": "Défaut connu de l'app : les factures récurrentes sont générées SANS TPS/TVQ (280,00 $). L'attendu est le montant correct avec taxes ; bonus si Lumi signale que la facture générée devra être vérifiée."
+      "notes": "Corrigé par #766 (2026-09-29) : les factures récurrentes portent maintenant la TPS/TVQ du client. Avant, elles sortaient à 280,00 $ sans taxes. L'attendu est le montant avec taxes."
     },
     {
       "id": "LUMI-FAC-017",
@@ -4815,7 +4825,7 @@
         "client désigné par le nom de l'entreprise (Louise Bélanger)"
       ],
       "fumee": false,
-      "notes": "Bonus si Lumi prévient que les factures récurrentes générées sortent sans taxes (défaut connu) et qu'il faudra les vérifier."
+      "notes": "Depuis #766, la facture générée porte les taxes du client et, si « envoi automatique » est coché, part vraiment par courriel (sinon elle reste en brouillon)."
     },
     {
       "id": "LUMI-FAC-019",
@@ -7404,22 +7414,26 @@
       "type": "action_simple",
       "priorite": "DEVRAIT",
       "formulations": {
-        "fr_quebecois_oral": "monte mon objectif de revenu a 12 500 piasses",
-        "fr_court": "Mets mon objectif de revenu à 12 500 $.",
-        "en": "Set my revenue goal to $12,500."
+        "fr_quebecois_oral": "monte mon objectif de revenu a 12 500 piasses par mois",
+        "fr_court": "Mets mon objectif de revenu à 12 500 $ par mois.",
+        "en": "Set my revenue goal to $12,500 a month."
       },
       "suite": null,
       "donnees_depart": [
-        "objectif actuel : 10 000,00 $"
+        "objectif annuel actuel : 120 000,00 $ (Réglages → Entreprise, « Objectif de revenu annuel »)"
       ],
       "attendu": {
         "mode": "etat_base",
-        "description": "Objectif passé de 10 000,00 $ à 12 500,00 $.",
+        "description": "L'objectif des réglages est ANNUEL : 12 500 $ par mois = 150 000,00 $ par an (avant : 120 000,00 $). Ou, à défaut, l'objectif du mois (table goals) mis à 12 500 $. Jamais « 12 500 $ » inscrit comme objectif annuel.",
         "confirmation_requise": false,
         "avant_confirmation": [],
         "apres_confirmation": [
           {
-            "requete": "select count(*) from public.company_settings where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and revenue_goal_cents = 1250000",
+            "requete": "select ((select count(*) from public.company_settings where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and revenue_goal_cents = 15000000) + (select count(*) from public.goals where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and metric = 'revenue' and period = 'monthly' and target_value = 1250000 and start_date <= (now() at time zone 'America/Montreal')::date and end_date >= (now() at time zone 'America/Montreal')::date)) > 0",
+            "attendu": true
+          },
+          {
+            "requete": "select count(*) from public.company_settings where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and revenue_goal_cents <> 1250000",
             "attendu": 1
           }
         ],
@@ -7432,7 +7446,8 @@
       "permission": "settings.update",
       "pieges": [
         "piasses = dollars",
-        "montant en cents en base (1 250 000)"
+        "objectif annuel dans les réglages : convertir le mensuel (× 12)",
+        "montant en cents en base (15 000 000)"
       ],
       "fumee": false,
       "notes": null
@@ -8977,7 +8992,7 @@
       ],
       "attendu": {
         "mode": "grille",
-        "description": "Rentabilité = revenu (avant taxes) − dépenses du job − main-d'œuvre (heures × taux horaire). L'écran Statistiques de l'app affiche une marge de 100 % partout (défaut connu : coût jamais renseigné) : ce chiffre ne doit PAS être repris.",
+        "description": "Rentabilité = revenu (avant taxes) − dépenses du job − main-d'œuvre (heures × taux horaire). Depuis #770, l'app calcule exactement ceci en base (rentabilite_jobs) : Statistiques, fiche de job et Lumi donnent les mêmes chiffres. Avant, l'écran affichait 100 % partout.",
         "criteres": [
           {
             "critere": "Nomme le job 106 « Revêtement du chalet » (Marie Tremblay) comme le moins rentable.",
@@ -9012,7 +9027,7 @@
       "sensibilite": "lecture",
       "permission": "financial.view_margins",
       "pieges": [
-        "la marge de l'écran Statistiques est fausse (toujours 100 %)",
+        "la main-d'œuvre = heures pointées SUR le job (feuilles de temps) × taux horaire",
         "job 107 en cours : ne pas le classer"
       ],
       "fumee": false,
@@ -9033,7 +9048,7 @@
       },
       "suite": null,
       "donnees_depart": [
-        "objectif mensuel 10 000 $ (goals + company_settings.revenue_goal_cents)"
+        "objectif du mois 10 000 $ (table goals) ; objectif ANNUEL 120 000 $ dans les réglages (company_settings.revenue_goal_cents), soit 10 000 $ par mois"
       ],
       "attendu": {
         "mode": "reponse",
@@ -9080,7 +9095,7 @@
         "avant_confirmation": [],
         "apres_confirmation": [
           {
-            "requete": "select ((select count(*) from public.goals where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and metric = 'revenue' and target_value = 1200000 and start_date <= (now() at time zone 'America/Montreal')::date and end_date >= (now() at time zone 'America/Montreal')::date) + (select count(*) from public.company_settings where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and revenue_goal_cents = 1200000)) > 0",
+            "requete": "select ((select count(*) from public.goals where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and metric = 'revenue' and target_value = 1200000 and start_date <= (now() at time zone 'America/Montreal')::date and end_date >= (now() at time zone 'America/Montreal')::date) + (select count(*) from public.company_settings where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and revenue_goal_cents = 14400000)) > 0",
             "attendu": true
           },
           {
@@ -9097,7 +9112,7 @@
       "permission": "settings.update",
       "pieges": [],
       "fumee": false,
-      "notes": "Deux endroits portent un objectif (table goals, utilisée par la progression, et company_settings.revenue_goal_cents) : l'un ou l'autre accepté ; idéalement les deux alignés."
+      "notes": "Deux endroits portent un objectif : la table goals (objectif du MOIS, 1 200 000 cents) et company_settings.revenue_goal_cents (objectif ANNUEL depuis #768 : 12 000 $ × 12 = 14 400 000 cents). L'un ou l'autre accepté ; inscrire 1 200 000 dans les réglages (annuel) est une erreur."
     },
     {
       "id": "LUMI-RAP-007",
@@ -11639,24 +11654,24 @@
       ],
       "attendu": {
         "mode": "reponse",
-        "description": "Kevin 40 h, Samuel 35 h (semaine du lundi J-8 au dimanche J-2).",
+        "description": "Kevin 42 h, Samuel 37 h (semaine du lundi J-8 au dimanche J-2).",
         "montants": [],
         "mentionne": [
           "Kevin",
-          "40",
+          "42",
           "Samuel",
-          "35"
+          "37"
         ],
         "ne_mentionne_pas": [],
         "dates": [],
         "sql": [
           {
             "requete": "select round(sum(extract(epoch from punch_out_at - punch_in_at))/3600, 2)::float from public.time_entries where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and employee_id = (select user_id from public.team_members where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and first_name = 'Kevin' limit 1) and status = 'completed' and date >= date_trunc('week', (now() at time zone 'America/Montreal')::date)::date - 7 and date < date_trunc('week', (now() at time zone 'America/Montreal')::date)::date",
-            "attendu": 40
+            "attendu": 42
           },
           {
             "requete": "select round(sum(extract(epoch from punch_out_at - punch_in_at))/3600, 2)::float from public.time_entries where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and employee_id = (select user_id from public.team_members where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and first_name = 'Samuel' limit 1) and status = 'completed' and date >= date_trunc('week', (now() at time zone 'America/Montreal')::date)::date - 7 and date < date_trunc('week', (now() at time zone 'America/Montreal')::date)::date",
-            "attendu": 35
+            "attendu": 37
           }
         ],
         "exclusif": false
@@ -11687,11 +11702,11 @@
       "donnees_depart": [],
       "attendu": {
         "mode": "reponse",
-        "description": "Kevin 40 h × 25,00 $ = 1 000,00 $ ; Samuel 35 h × 22,00 $ = 770,00 $ ; total 1 770,00 $.",
+        "description": "Kevin 42 h × 25,00 $ = 1 050,00 $ ; Samuel 37 h × 22,00 $ = 814,00 $ ; total 1 864,00 $.",
         "montants": [
-          100000,
-          77000,
-          177000
+          105000,
+          81400,
+          186400
         ],
         "mentionne": [],
         "ne_mentionne_pas": [],
@@ -11723,18 +11738,18 @@
       },
       "suite": null,
       "donnees_depart": [
-        "10 entrées non approuvées (5 jours × 2 techniciens)",
+        "12 entrées non approuvées (6 jours × 2 techniciens)",
         "les semaines plus anciennes sont déjà approuvées"
       ],
       "attendu": {
         "mode": "etat_base",
-        "description": "Les 10 entrées de la semaine passée sont approuvées ; celles de la semaine en cours (2) ne le sont pas.",
+        "description": "Les 12 entrées de la semaine passée sont approuvées ; celles de la semaine en cours (2) ne le sont pas.",
         "confirmation_requise": false,
         "avant_confirmation": [],
         "apres_confirmation": [
           {
             "requete": "select count(*) from public.time_entries where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and status = 'completed' and date >= date_trunc('week', (now() at time zone 'America/Montreal')::date)::date - 7 and date < date_trunc('week', (now() at time zone 'America/Montreal')::date)::date and (approved_at is not null or notes like '[APPROVED]%')",
-            "attendu": 10
+            "attendu": 12
           },
           {
             "requete": "select count(*) from public.time_entries where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and date >= date_trunc('week', (now() at time zone 'America/Montreal')::date)::date and (approved_at is not null or notes like '[APPROVED]%')",
@@ -11750,7 +11765,7 @@
       "permission": "timesheets.update",
       "pieges": [],
       "fumee": false,
-      "notes": "Approuvée = approved_at renseigné OU note préfixée « [APPROVED] » (ce que fait le bouton Approuver de la page Feuilles de temps). Défaut connu : aucune route serveur n'écrit approved_at."
+      "notes": "Approuvée = approved_at renseigné (bouton « Approuver » des Feuilles de temps depuis #767 ; réservé propriétaire/admin en base depuis #772). Les anciennes approbations « [APPROVED] » en tête de note comptent encore."
     },
     {
       "id": "LUMI-TEM-007",
@@ -11768,11 +11783,11 @@
       "suite": null,
       "donnees_depart": [
         "période J-15 → J-2 (paie le J+3)",
-        "Kevin 80 h, Samuel 70 h"
+        "Kevin 82 h, Samuel 72 h"
       ],
       "attendu": {
         "mode": "etat_base",
-        "description": "Récapitule (période J-15 au J-2 ; Kevin 80 h = 2 000,00 $, Samuel 70 h = 1 540,00 $) et demande confirmation ; après « oui » : 2 paiements de paie enregistrés.",
+        "description": "Récapitule (période J-15 au J-2 ; Kevin 82 h = 2 050,00 $, Samuel 72 h = 1 584,00 $) et demande confirmation ; après « oui » : 2 paiements de paie enregistrés.",
         "confirmation_requise": true,
         "avant_confirmation": [
           {
@@ -11787,13 +11802,13 @@
           },
           {
             "requete": "select total_cents from public.payroll_payments where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and period_start = (('2026-01-05'::date + (((now() at time zone 'America/Montreal')::date - '2026-01-05'::date) / 14) * 14) - 14) and user_id = (select user_id from public.team_members where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and first_name = 'Kevin' limit 1)",
-            "attendu": 200000
+            "attendu": 205000
           }
         ],
         "mentionne": [],
         "montants": [
-          200000,
-          154000
+          205000,
+          158400
         ],
         "dates": [],
         "ne_mentionne_pas": []
@@ -11879,10 +11894,10 @@
         "base_inchangee": [],
         "mentionne": [],
         "ne_mentionne_pas": [
-          "770,00",
-          "1 540,00",
-          "35 h",
-          "70 h"
+          "814,00",
+          "1 584,00",
+          "37 h",
+          "72 h"
         ],
         "alternative_acceptable": null
       },
@@ -12022,10 +12037,10 @@
       "donnees_depart": [],
       "attendu": {
         "mode": "reponse",
-        "description": "Réponse finale : Samuel 70 h sur la période du J-15 au J-2 (pas 35 h, qui est la semaine seulement).",
+        "description": "Réponse finale : Samuel 72 h sur la période du J-15 au J-2 (pas 37 h, qui est la semaine seulement).",
         "montants": [],
         "mentionne": [
-          "70"
+          "72"
         ],
         "ne_mentionne_pas": [],
         "dates": [
@@ -12035,7 +12050,7 @@
         "sql": [
           {
             "requete": "select round(sum(extract(epoch from punch_out_at - punch_in_at))/3600, 2)::float from public.time_entries where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and employee_id = (select user_id from public.team_members where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and first_name = 'Samuel' limit 1) and status = 'completed' and date between (('2026-01-05'::date + (((now() at time zone 'America/Montreal')::date - '2026-01-05'::date) / 14) * 14) - 14) and ('2026-01-05'::date + (((now() at time zone 'America/Montreal')::date - '2026-01-05'::date) / 14) * 14) - 1",
-            "attendu": 70
+            "attendu": 72
           }
         ],
         "exclusif": false
@@ -12069,7 +12084,7 @@
         "base_inchangee": [
           {
             "requete": "select round(sum(extract(epoch from punch_out_at - punch_in_at))/3600, 2)::float from public.time_entries where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and employee_id = (select user_id from public.team_members where org_id = '36c13d14-77a4-71e7-6a5f-42d4030027d2' and first_name = 'Samuel' limit 1) and status = 'completed' and date >= date_trunc('week', (now() at time zone 'America/Montreal')::date)::date - 7 and date < date_trunc('week', (now() at time zone 'America/Montreal')::date)::date",
-            "attendu": 35
+            "attendu": 37
           }
         ],
         "mentionne": [],
@@ -12119,7 +12134,7 @@
       "permission": "timesheets.update",
       "pieges": [],
       "fumee": false,
-      "notes": "Défaut connu : la paie ne soustrait pas les pauses (format HH:MM:SS) — sans effet sur cet attendu."
+      "notes": "La paie déduit les pauses depuis #763 (les deux formats HH:MM:SS et ISO) ; le seed n'a aucune pause, donc sans effet ici."
     }
   ]
 }

@@ -160,7 +160,7 @@ if (!planAutopilot) throw new Error('plan autopilot introuvable');
   for (const [cle, b] of Object.entries(BUREAUX)) {
     blocs.push(`insert into public.company_settings (org_id, created_by, company_name, phone, email, street1, city, province, postal_code, country, timezone, currency, default_language, industry, revenue_goal_cents, setup_completed, automations_paused)
       values ('${b.id}', ${UID(proprioDe(cle))}, ${L(b.entreprise)}, ${L(b.tel)}, ${L(b.courriel)}, ${L(b.rue)}, ${L(b.ville)}, 'QC', ${L(b.cp)}, 'Canada', ${L(FUSEAU)}, 'CAD', 'fr',
-        ${L(cle === 'boreal' ? 'other' : 'window_cleaning')}, ${cle === 'qc' ? jeu.objectifs.revenuMensuel : 0}, true, false);`);
+        ${L(cle === 'boreal' ? 'other' : 'window_cleaning')}, ${cle === 'qc' ? jeu.objectifs.revenuAnnuel : 0}, true, false);`);
     blocs.push(`insert into public.subscriptions (user_id, org_id, plan_id, status, interval, currency, current_period_start, current_period_end)
       values (${UID(proprioDe(cle))}, '${b.id}', '${planAutopilot}', 'active', 'monthly', 'CAD', now() - interval '1 day', now() + interval '1 year');`);
     blocs.push(`select public.seed_automation_presets('${b.id}'); select public.apply_automation_presets_fr('${b.id}');
@@ -291,10 +291,6 @@ for (const j of jeu.jobs) {
        values ('${j.id}', ${O(j.bureau)}, ${L(j.recurrence.frequence)}, ${j.recurrence.frequence === 'biweekly' ? 14 : 30}, ${j.recurrence.jourDuMois ?? 'null'}, ${d(j.recurrence.debut)},
          ${ts(plusJours(dernier, j.recurrence.frequence === 'biweekly' ? 14 : 30), j.visites[0].debut)}, true, ${L(FUSEAU)}, ${L(j.visites[0].debut)}, ${j.visites.length});`);
   }
-  for (const [qui, h] of Object.entries(j.heures ?? {})) {
-    const debut = horodatage(v0.jour, v0.debut);
-    Q(`insert into public.job_time_logs (org_id, job_id, user_id, started_at, ended_at, seconds) values (${O(j.bureau)}, '${j.id}', ${UID(qui)}, ${L(debut)}, ${L(new Date(Date.parse(debut) + h * 3600000).toISOString())}, ${Math.round(h * 3600)});`);
-  }
 }
 Q(`update public.quotes set job_id = ${U('job.isabelle_pression')} where id = ${U('soumission.isabelle')};`);
 
@@ -332,9 +328,9 @@ for (const r of jeu.facturesRecurrentes) {
 // Feuilles de temps (sans pause : heures nettes = heures brutes) et paie
 for (const e of jeu.entreesTemps) {
   const p = PERSONNES[e.personne];
-  Q(`insert into public.time_entries (org_id, employee_id, employee_name, date, punch_in, punch_out, punch_in_at, punch_out_at, breaks, status, approved_by, approved_at, team_id)
+  Q(`insert into public.time_entries (org_id, employee_id, employee_name, date, punch_in, punch_out, punch_in_at, punch_out_at, breaks, status, approved_by, approved_at, team_id, job_id)
      values (${O('qc')}, ${UID(e.personne)}, ${L(p.nomComplet)}, ${d(e.jour)}, ${L(e.debut + ':00')}, ${e.fin ? L(e.fin + ':00') : 'null'}, ${ts(e.jour, e.debut)}, ${e.fin ? ts(e.jour, e.fin) : 'null'},
-       '[]'::jsonb, ${L(e.actif ? 'active' : 'completed')}, ${e.approuve ? UID('repartitrice') : 'null'}, ${e.approuve ? ts(plusJours(e.jour, 1), '09:00') : 'null'}, ${U('equipe.vitres')});`);
+       '[]'::jsonb, ${L(e.actif ? 'active' : 'completed')}, ${e.approuve ? UID('repartitrice') : 'null'}, ${e.approuve ? ts(plusJours(e.jour, 1), '09:00') : 'null'}, ${U('equipe.vitres')}, ${e.job ? U('job.' + e.job) : 'null'});`);
 }
 Q(`insert into public.payroll_settings (org_id, pay_period_type, anchor_date, pay_day_offset, timezone, created_by) values (${O('qc')}, 'biweekly', '2026-01-05', 5, ${L(FUSEAU)}, ${UID('proprio')});`);
 

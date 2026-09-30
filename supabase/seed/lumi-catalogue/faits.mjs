@@ -141,5 +141,8 @@ export function verificationsSql(f, jeu, cal) {
     { nom: 'Taxe TPS+TVQ facture 1004', attendu: f.factures.find((x) => x.cle === 'clinique').tax, sql: `select tax_cents from invoices where org_id = ${qc} and invoice_number = '1004'` },
     { nom: 'Sans-texto Karine', attendu: 1, sql: `select count(*) from sms_opt_outs where org_id = ${qc}` },
     { nom: 'Taxes QC configurées', attendu: 2, sql: `select count(*) from tax_configs where org_id = ${qc} and is_active` },
+    // Même calcul que l'app (rentabilite_jobs : revenu HT − main-d'œuvre pointée × taux − dépenses).
+    { nom: 'Profit du job 106 (le moins rentable)', attendu: f.rentabilite[0].marge, sql: `select profit_cents from rentabilite_jobs(${qc}, '2000-01-01', '2100-01-01') where job_number = '${f.rentabilite[0].numero}'` },
+    { nom: 'Objectif annuel (réglages)', attendu: jeu.objectifs.revenuAnnuel, sql: `select revenue_goal_cents from company_settings where org_id = ${qc}` },
   ];
 }

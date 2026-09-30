@@ -1,5 +1,5 @@
 /** Module PAR — paramètres de l'entreprise, modèles de courriel, produits et services. */
-import { tache, reponse, etat, refus, clarification, q, compte } from './_outils.mjs';
+import { tache, reponse, etat, refus, clarification, q, compte, ORG, AUJ } from './_outils.mjs';
 
 export default function ({ jeu, argent, BUREAUX, SERVICES }) {
   const M = 'PAR';
@@ -67,13 +67,14 @@ export default function ({ jeu, argent, BUREAUX, SERVICES }) {
       notes: 'Pour la formulation orale (sans accents), accepter « Votre soumission Eclat Lavage vous attend » : le contrôle SQL vise la formulation courte / anglaise.' }),
 
     t(7, { role: 'proprio', type: 'action_simple', priorite: 'DEVRAIT', sensibilite: 'ecriture', permission: 'settings.update',
-      oral: 'monte mon objectif de revenu a 12 500 piasses',
-      court: 'Mets mon objectif de revenu à 12 500 $.',
-      en: 'Set my revenue goal to $12,500.',
-      donnees: [`objectif actuel : ${argent(jeu.objectifs.revenuMensuel)}`],
-      attendu: etat({ description: `Objectif passé de ${argent(jeu.objectifs.revenuMensuel)} à 12 500,00 $.`,
-        apres: [reglages('revenue_goal_cents = 1250000')] }),
-      pieges: ['piasses = dollars', 'montant en cents en base (1 250 000)'] }),
+      oral: 'monte mon objectif de revenu a 12 500 piasses par mois',
+      court: 'Mets mon objectif de revenu à 12 500 $ par mois.',
+      en: 'Set my revenue goal to $12,500 a month.',
+      donnees: [`objectif annuel actuel : ${argent(jeu.objectifs.revenuAnnuel)} (Réglages → Entreprise, « Objectif de revenu annuel »)`],
+      attendu: etat({ description: `L'objectif des réglages est ANNUEL : 12 500 $ par mois = 150 000,00 $ par an (avant : ${argent(jeu.objectifs.revenuAnnuel)}). Ou, à défaut, l'objectif du mois (table goals) mis à 12 500 $. Jamais « 12 500 $ » inscrit comme objectif annuel.`,
+        apres: [q(`select ((select count(*) from public.company_settings where org_id = '${ORG.qc}' and revenue_goal_cents = 15000000) + (select count(*) from public.goals where org_id = '${ORG.qc}' and metric = 'revenue' and period = 'monthly' and target_value = 1250000 and start_date <= ${AUJ} and end_date >= ${AUJ})) > 0`, true),
+                reglages('revenue_goal_cents <> 1250000')] }),
+      pieges: ['piasses = dollars', 'objectif annuel dans les réglages : convertir le mensuel (× 12)', 'montant en cents en base (15 000 000)'] }),
 
     t(8, { role: 'proprio', type: 'action_simple', priorite: 'DEVRAIT', sensibilite: 'ecriture', permission: 'settings.update',
       oral: 'mets mon lien davis google cest http://g.page/r/eclat-lavage/review',

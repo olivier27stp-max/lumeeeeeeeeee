@@ -186,7 +186,7 @@ export default function ({ client, cal, f, argent, taxes, iso, plusJours }) {
       attendu: reponse({ description: `Facture mensuelle « Vitres commerciales — mensuel » : prochaine le ${iso(plusJours(cal.ancre, 7))} (J+7), 280,00 $ avant taxes, soit ${argent(recGinette.total)} taxes incluses (TPS ${argent(recGinette.tps)}, TVQ ${argent(recGinette.tvq)}) ; envoi automatique désactivé (générée en brouillon à envoyer).`,
         montants: [recGinette.total], dates: ['J+7'], mentionne: ['mensuel'],
         sql: [q(`select next_run_date - ${AUJ} from public.recurring_invoice_schedules where id = '${id('recurrente.ginette')}'`, 7)] }),
-      notes: 'Défaut connu de l\'app : les factures récurrentes sont générées SANS TPS/TVQ (280,00 $). L\'attendu est le montant correct avec taxes ; bonus si Lumi signale que la facture générée devra être vérifiée.',
+      notes: 'Corrigé par #766 (2026-09-29) : les factures récurrentes portent maintenant la TPS/TVQ du client. Avant, elles sortaient à 280,00 $ sans taxes. L\'attendu est le montant avec taxes.',
       pieges: ['ne pas confondre avec la facture 1008 déjà envoyée ce mois-ci', 'montant avec taxes'] }),
 
     t(17, { role: 'comptable', type: 'action_simple', priorite: 'DEVRAIT', sensibilite: 'ecriture', permission: 'invoices.update',
@@ -209,7 +209,7 @@ export default function ({ client, cal, f, argent, taxes, iso, plusJours }) {
         dates: ['J+1'],
         apres: [compte('recurring_invoice_schedules', `client_id = '${client('gite').id}' and frequency = 'biweekly' and is_active and (items->0->>'unit_price_cents')::int = 20000`, 1),
                 compte('recurring_invoice_schedules', `client_id = '${client('gite').id}' and next_run_date = ${AUJ} + 1`, 1)] }),
-      notes: 'Bonus si Lumi prévient que les factures récurrentes générées sortent sans taxes (défaut connu) et qu\'il faudra les vérifier.',
+      notes: 'Depuis #766, la facture générée porte les taxes du client et, si « envoi automatique » est coché, part vraiment par courriel (sinon elle reste en brouillon).',
       pieges: ['client désigné par le nom de l\'entreprise (Louise Bélanger)'] }),
 
     t(19, { role: 'comptable', type: 'aide_produit', priorite: 'DEVRAIT', sensibilite: 'lecture', permission: 'invoices.update',

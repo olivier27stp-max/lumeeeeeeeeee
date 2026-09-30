@@ -92,7 +92,7 @@ export default function ({ jeu, cal, f, argent, iso, plusJours, PERSONNES }) {
       attendu: etat({ description: `Les ${semPassee.length} entrées de la semaine passée sont approuvées ; celles de la semaine en cours (${semCourante.length}) ne le sont pas.`,
         apres: [q(`select count(*) from public.time_entries where org_id = '${ORG.qc}' and status = 'completed' and ${SEM_PASSEE} and ${APPROUVEE}`, semPassee.length),
                 q(`select count(*) from public.time_entries where org_id = '${ORG.qc}' and date >= date_trunc('week', ${AUJ})::date and ${APPROUVEE}`, 0)] }),
-      notes: 'Approuvée = approved_at renseigné OU note préfixée « [APPROVED] » (ce que fait le bouton Approuver de la page Feuilles de temps). Défaut connu : aucune route serveur n\'écrit approved_at.' }),
+      notes: 'Approuvée = approved_at renseigné (bouton « Approuver » des Feuilles de temps depuis #767 ; réservé propriétaire/admin en base depuis #772). Les anciennes approbations « [APPROVED] » en tête de note comptent encore.' }),
 
     t(7, { role: 'comptable', type: 'action_sensible', priorite: 'DOIT', sensibilite: 'sensible', permission: 'timesheets.update',
       oral: 'jai faite les depots, marque la paie de kevin pis samuel payee pour la derniere periode',
@@ -173,6 +173,6 @@ export default function ({ jeu, cal, f, argent, iso, plusJours, PERSONNES }) {
       donnees: [`time_entries (Kevin pointé depuis ${heure(actif.debut)}, aucune pause)`],
       attendu: etat({ description: 'Une pause démarrée sur l\'entrée active de Kevin ; il reste pointé (pas de sortie).',
         apres: [kevinAujourdhui("status = 'active' and jsonb_array_length(breaks) = 1", 1)] }),
-      notes: 'Défaut connu : la paie ne soustrait pas les pauses (format HH:MM:SS) — sans effet sur cet attendu.' }),
+      notes: 'La paie déduit les pauses depuis #763 (les deux formats HH:MM:SS et ISO) ; le seed n\'a aucune pause, donc sans effet ici.' }),
   ];
 }

@@ -287,18 +287,31 @@ export function construireJeu(cal = construireCalendrier()) {
       debut: moisPasse(5), prochaine: plusJours(J(0), 7), delai: 30, envoiAuto: false },
   ];
 
-  // ── Feuilles de temps : chaque jour ouvrable de J-21 à J-1 ──
-  // Sans pause (heures nettes = heures pointées) : Kevin 8 h → 16 h = 8 h ; Samuel 8 h → 15 h = 7 h.
-  const entreesTemps = [];
+  // ── Feuilles de temps ──
+  // La semaine passée et la courante attendent l'approbation ; avant, approuvé.
+  const approuveLe = (jour) => iso(jour) < iso(cal.lundiPasse);
+  const hhmm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+  // 1. Les heures faites SUR un job : pointage rattaché au job (time_entries.job_id) —
+  //    c'est ce que la rentabilité de l'app (rentabilite_jobs) multiplie par le taux.
+  const entreesJobs = [];
+  for (const j of jobs) {
+    const v = j.visites[0];
+    for (const [qui, h] of Object.entries(j.heures ?? {})) {
+      const [hh, mm] = v.debut.split(':').map(Number);
+      entreesJobs.push({ personne: qui, jour: v.jour, debut: v.debut, fin: hhmm(hh * 60 + mm + Math.round(h * 60)), pause: 0, approuve: approuveLe(v.jour), job: j.cle });
+    }
+  }
+  // 2. Chaque jour ouvrable de J-21 à J-1, sans pause (heures nettes = pointées) :
+  //    Kevin 8 h → 16 h = 8 h ; Samuel 8 h → 15 h = 7 h — sauf un jour où il a déjà un job pointé.
+  const entreesTemps = [...entreesJobs];
   for (let n = 21; n >= 1; n--) {
     const jour = J(-n);
     const dow = new Date(Date.UTC(jour.y, jour.m - 1, jour.d)).getUTCDay();
     if (dow === 0 || dow === 6) continue;
-    const semainePassee = iso(jour) >= iso(cal.lundiPasse) && iso(jour) < iso(cal.lundiCourant);
-    const semaineCourante = iso(jour) >= iso(cal.lundiCourant);
-    const approuve = !semainePassee && !semaineCourante; // la semaine passée attend l'approbation
-    entreesTemps.push({ personne: 'tech1', jour, debut: '08:00', fin: '16:00', pause: 0, approuve });
-    entreesTemps.push({ personne: 'tech2', jour, debut: '08:00', fin: '15:00', pause: 0, approuve });
+    for (const [qui, fin] of [['tech1', '16:00'], ['tech2', '15:00']]) {
+      if (entreesJobs.some((e) => e.personne === qui && iso(e.jour) === iso(jour))) continue;
+      entreesTemps.push({ personne: qui, jour, debut: '08:00', fin, pause: 0, approuve: approuveLe(jour) });
+    }
   }
   // Kevin est pointé en ce moment (entrée ouverte, aujourd'hui 7 h 30).
   entreesTemps.push({ personne: 'tech1', jour: J(0), debut: '07:30', fin: null, pause: 0, approuve: false, actif: true });
@@ -379,7 +392,9 @@ export function construireJeu(cal = construireCalendrier()) {
     { cle: 'chalet', entite: ['job', 'job.marie_chalet'], texte: 'Travail plus long que prévu : moisissure tenace côté nord, 2 techniciens toute la journée.', auteur: 'tech1' },
   ];
 
-  const objectifs = { revenuMensuel: 1000000 };
+  // Objectif ANNUEL dans les réglages de l'entreprise (comme à la création
+  // d'espace) ; la table goals porte l'objectif du MOIS (1/12).
+  const objectifs = { revenuAnnuel: 12000000, revenuMensuel: 1000000 };
   const paie = { periode: 'biweekly', ancre: cal.lundiPasse, delaiPaie: 5 };
 
   return { cal, soumissions, jobs, factures, facturesRecurrentes, entreesTemps, taches, deals, conversations, courrielsEntrants,
