@@ -9,6 +9,7 @@
 
 import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
+import { changerPublication } from './automationBuilderApi';
 
 export interface AutomationRule {
   id: string;
@@ -54,19 +55,13 @@ export async function getAutomationRules(): Promise<AutomationRule[]> {
   return (data || []) as AutomationRule[];
 }
 
+/**
+ * Publier / dépublier. Passe par la route serveur de publication (audit M8) :
+ * l'écriture directe dans PostgREST publiait un parcours cassé sans aucune
+ * vérification. Conservé pour les pages Réglages (Messagerie, Avis).
+ */
 export async function toggleAutomationRule(id: string, isActive: boolean): Promise<void> {
-  // .select() force PostgREST à retourner les lignes touchées : si la RLS
-  // filtre la ligne (0 ligne mise à jour), l'update « réussit » silencieusement
-  // et l'UI afficherait un faux succès. On vérifie que l'écriture a bien pris.
-  const { data, error } = await supabase
-    .from('automation_rules')
-    .update({ is_active: isActive })
-    .eq('id', id)
-    .select('is_active');
-  if (error) throw error;
-  if (!data?.length || data[0].is_active !== isActive) {
-    throw new Error('Automation rule update was not applied');
-  }
+  await changerPublication(id, isActive);
 }
 
 /**

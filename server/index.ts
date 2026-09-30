@@ -51,6 +51,8 @@ import communicationsRouter from './routes/communications';
 import automationTestRouter from './routes/automation-test';
 import automationEventsRouter from './routes/automation-events';
 import automationRulesRouter from './routes/automation-rules';
+import automationPublicationRouter from './routes/automation-publication';
+import automationStatsRouter from './routes/automation-stats';
 import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
 import sendingDomainsRouter from './routes/sending-domains';
@@ -843,6 +845,8 @@ app.use('/api', communicationsRouter);
 app.use('/api', automationTestRouter);
 app.use('/api', automationEventsRouter);
 app.use('/api', automationRulesRouter);
+app.use('/api', automationPublicationRouter);
+app.use('/api', automationStatsRouter);
 app.use('/api', portalRouter);
 app.use('/api', connectRouter);
 // Domaine d'envoi propre à l'entreprise (Resend Domains) — owner/admin, sous son propre préfixe.

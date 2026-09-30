@@ -9,7 +9,7 @@
    C'est pour ça que `settings` reste NULL tant que rien n'est changé.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useId, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { Loader2, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -73,6 +73,16 @@ export default function OngletReglages({ ruleId, reglages, fr, onChange }: Props
   const [local, setLocal] = useState<ReglagesAutomatisation>(reglages ?? {});
   const [enregistre, setEnregistre] = useState(false);
   const [aJour, setAJour] = useState(true);
+  /*
+   * Changements SÉRIALISÉS (launch 2026-09-28). Deux réglages changés vite
+   * partaient en parallèle, le second calculé sur l'état d'AVANT le premier :
+   * il l'effaçait en arrivant, et l'écran pouvait finir différent de la base.
+   * `voulu` = le dernier état demandé ; chaque envoi part après le précédent
+   * et envoie `voulu` tel qu'il est à ce moment-là.
+   */
+  const voulu = useRef<ReglagesAutomatisation>(reglages ?? {});
+  const confirme = useRef<ReglagesAutomatisation>(reglages ?? {});
+  const file = useRef<Promise<void>>(Promise.resolve());
 
   /**
    * Applique un changement et l'enregistre.
@@ -81,26 +91,36 @@ export default function OngletReglages({ ruleId, reglages, fr, onChange }: Props
    * les réglages par défaut ne doit pas garder un `{}` en base, sinon on ne
    * distingue plus « jamais touché » de « remis comme avant ».
    */
-  const appliquer = async (patch: Partial<ReglagesAutomatisation>) => {
-    const suivant = { ...local, ...patch };
+  const appliquer = (patch: Partial<ReglagesAutomatisation>): Promise<void> => {
+    const suivant = { ...voulu.current, ...patch };
     // Retirer les clés remises à leur valeur par défaut.
     for (const [k, v] of Object.entries(suivant)) {
       if (v === false || v === undefined) delete (suivant as Record<string, unknown>)[k];
     }
-    const vide = Object.keys(suivant).length === 0;
+    voulu.current = suivant;
     setLocal(suivant);
     setAJour(false);
     setEnregistre(true);
-    try {
-      await modifierAutomatisation(ruleId, { settings: vide ? null : suivant });
-      onChange(vide ? null : suivant);
-      setAJour(true);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
-      setLocal(local);
-    } finally {
-      setEnregistre(false);
-    }
+    file.current = file.current.then(async () => {
+      const aEnvoyer = voulu.current;
+      if (aEnvoyer === confirme.current) return; // déjà envoyé par un passage précédent
+      const vide = Object.keys(aEnvoyer).length === 0;
+      try {
+        await modifierAutomatisation(ruleId, { settings: vide ? null : (aEnvoyer as Record<string, unknown>) });
+        confirme.current = aEnvoyer;
+        onChange(vide ? null : aEnvoyer);
+        if (voulu.current === aEnvoyer) { setAJour(true); setEnregistre(false); }
+      } catch (e: unknown) {
+        console.error('[OngletReglages] réglages non enregistrés', e);
+        toast.error(e instanceof Error ? e.message : String(e));
+        // Retour à ce que la base a vraiment.
+        voulu.current = confirme.current;
+        setLocal(confirme.current);
+        setAJour(true);
+        setEnregistre(false);
+      }
+    });
+    return file.current;
   };
 
   const fenetre = local.fenetre ?? { debut: 8, fin: 20 };

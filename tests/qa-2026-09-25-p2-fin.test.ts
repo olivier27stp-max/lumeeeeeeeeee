@@ -46,7 +46,8 @@ describe('P2-13 — quitter l’éditeur ne perd rien', () => {
     // « Avertir ou garantir la sauvegarde dans tous les cas » : on garantit.
     const i = ed.indexOf('const quitterEditeur');
     const bloc = ed.slice(i, i + 2500);
-    expect(bloc).toMatch(/await modifierAutomatisation\(regle\.id/);
+    // `ecrire` : modifie la règle, ou la crée si c'est un brouillon neuf.
+    expect(bloc).toMatch(/await ecrire\(\{ name: nom\.trim\(\) \|\| regle\.name, steps \}\)/);
   });
 
   it('« en cours d’enregistrement » compte aussi comme travail non enregistré', () => {
