@@ -24,7 +24,7 @@ import GererChampsFenetre from './GererChampsFenetre';
 import { usePermissions } from '../../hooks/usePermissions';
 import { listerChamps } from '../../lib/champsPersoApi';
 import { LIBELLES_OBJET } from '../../lib/champs/types';
-import { nomDossier } from '../../lib/champs/standard';
+import { nomDossier, CLE_DOSSIER_DEPENSES } from '../../lib/champs/standard';
 import { Settings2 } from 'lucide-react';
 
 interface Props {
@@ -97,8 +97,8 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
     }
     const ordonnes = data.folders
       .filter((d) => parDossier.has(d.id))
-      .map((d) => ({ id: d.id, nom: nomDossier(d, fr), champs: parDossier.get(d.id)! }));
-    if (parDossier.has(null)) ordonnes.push({ id: '__sans', nom: fr ? 'Sans dossier' : 'No folder', champs: parDossier.get(null)! });
+      .map((d) => ({ id: d.id, nom: nomDossier(d, fr), cle: d.cle_systeme ?? null, champs: parDossier.get(d.id)! }));
+    if (parDossier.has(null)) ordonnes.push({ id: '__sans', nom: fr ? 'Sans dossier' : 'No folder', cle: null, champs: parDossier.get(null)! });
     return ordonnes;
   }, [data, fr, sections, exclureSections]);
 
@@ -264,9 +264,21 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
                       ) : c.help_text ? (
                         <p id={idAide} className="mt-1 text-[11px] text-text-tertiary">{c.help_text}</p>
                       ) : null}
+                      {g.cle === CLE_DOSSIER_DEPENSES && c.field_type !== 'monetary' && (
+                        <p className="mt-1 text-[11px] text-text-tertiary">{fr ? 'Pas un montant : non compté dans la rentabilité.' : 'Not an amount: not counted in profitability.'}</p>
+                      )}
                     </div>
                   );
                 })}
+                {g.cle === CLE_DOSSIER_DEPENSES && (
+                  // Même règle que la rentabilité : les champs « montant » actifs du dossier, même retirés de la fiche.
+                  <p className="flex justify-between border-t border-outline-subtle pt-2 text-[12px] font-semibold text-text-primary">
+                    <span>{fr ? 'Total des dépenses' : 'Total expenses'}</span>
+                    <span className="tabular-nums">{new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD' }).format(
+                      data.fields.filter((c) => c.folder_id === g.id && c.field_type === 'monetary' && !c.archived_at)
+                        .reduce((t, c) => t + (Number(data.values[c.id]?.value) || 0), 0) / 100)}</span>
+                  </p>
+                )}
               </div>
             )}
           </div>
