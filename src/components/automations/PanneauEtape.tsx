@@ -425,7 +425,7 @@ export default function PanneauEtape({
                       // Une famille qui n'en garde aucune disparaît, plutôt
                       // que d'afficher un groupe vide.
                       const offertes = ACTIONS.filter(
-                        (a) => a.famille === famille.cle
+                        (a) => a.famille === famille.cle && !a.indisponible
                           && (!declencheur || actionCompatible(a, declencheur, objetChamps)),
                       );
                       if (!offertes.length) return null;

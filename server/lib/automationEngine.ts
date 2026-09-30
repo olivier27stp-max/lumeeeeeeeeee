@@ -1055,6 +1055,9 @@ function isTransientFailure(error?: string | null): boolean {
     // apprendra à l'entrepreneur qu'il doit agir.
     'consentement',
     'consent',
+    // Action pas encore disponible (catalogue : `indisponible`) : la
+    // réessayer ne la rendra pas disponible.
+    'pas encore disponible',
   ];
   const lower = error.toLowerCase();
   return !definitifs.some((d) => lower.includes(d));

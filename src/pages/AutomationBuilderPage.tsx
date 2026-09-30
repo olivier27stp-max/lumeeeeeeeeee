@@ -328,7 +328,9 @@ export default function AutomationBuilderPage() {
       titre: fr ? a.fr : a.en,
       aide: fr ? a.aide_fr : a.aide_en,
       famille: a.famille,
-      indisponible: actionCompatible(a, decl, objetRegle)
+      indisponible: a.indisponible
+        ? (fr ? a.indisponible.fr : a.indisponible.en)
+        : actionCompatible(a, decl, objetRegle)
         ? undefined
         : (fr
           ? 'Ne va pas avec ce déclencheur'

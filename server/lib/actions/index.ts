@@ -2427,19 +2427,19 @@ export async function executeEnvoyerSlack(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  const texte = resolveTemplate(config.body || '', vars).trim();
-  if (!texte) return { success: false, error: 'Le message est vide.' };
-
-  try {
-    const { isSlackConfigured, canalSupport, envoyerMessageSlack } = await import('../slack');
-    if (!isSlackConfigured()) {
-      return { success: false, error: 'Slack n’est pas configuré sur ce serveur.' };
-    }
-    await envoyerMessageSlack({ channel: canalSupport(), text: texte });
-    return { success: true, data: { longueur: texte.length } };
-  } catch (e: unknown) {
-    return { success: false, error: e instanceof Error ? e.message : String(e) };
-  }
+  /*
+   * Aucune connexion Slack PAR ENTREPRISE n'existe encore. Le Slack configuré
+   * sur ce serveur est celui du SUPPORT DE LUME : y publier enverrait les
+   * messages d'un client (noms, suivis) dans notre canal interne, alors que
+   * l'écran promet « le canal Slack de votre entreprise » (audit V2,
+   * 2026-09-29). On ne publie donc nulle part, et on le dit. L'éditeur grise
+   * l'action et la publication la refuse (catalogue : `indisponible`).
+   */
+  void config; void vars; void ctx;
+  return {
+    success: false,
+    error: 'Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié.',
+  };
 }
 
 // ── Action : webhook ────────────────────────────────────────
