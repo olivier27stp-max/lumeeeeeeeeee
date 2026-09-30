@@ -53,7 +53,7 @@ export const TOPICS: readonly Topic[] = [
     description: 'Factures, paiements, retards, relances, factures récurrentes, modèles de facture, taxes, catalogue de services, revenus, rentabilité, comparaisons de périodes.',
     outils: ['list_invoices', 'get_overdue_payments', 'get_revenue_summary', 'get_financial_overview', 'compare_revenue', 'analyze_profitability', 'get_top_services',
       'create_invoice', 'create_invoice_from_job', 'send_invoice', 'mark_invoice_paid', 'send_payment_reminders'],
-    refuse: 'Un devis (soumission) → devis ; planifier une visite → planification ; fiche d’un client → clients.',
+    refuse: 'Un devis (soumission) → devis ; planifier une visite → planification ; fiche d’un client → clients ; CRÉER une automatisation ou un parcours automatique (même de relance de facture) → rapports.',
   },
   {
     id: 'clients',
@@ -83,7 +83,7 @@ export const TOPICS: readonly Topic[] = [
   },
   {
     id: 'rapports',
-    description: 'Rapports et documents (PDF financier, retards, jobs, client), survol du jour, automatisations, réglages de l’entreprise.',
+    description: 'Rapports et documents (PDF financier, retards, jobs, client), survol du jour, réglages de l’entreprise, automatisations : en CRÉER une (« crée un parcours / une relance automatique / un rappel automatique », attentes, conditions, textos, tâches), l’activer, la mettre en pause, changer ses messages ou leur langue.',
     outils: ['build_report', 'get_morning_briefing', 'list_automations', 'get_automation_health', 'get_company_info'],
     refuse: 'Un chiffre précis sans document → le topic du chiffre (facturation, planification).',
   },
