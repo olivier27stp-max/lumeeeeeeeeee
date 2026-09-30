@@ -124,6 +124,36 @@ interface TimeEntryLike {
   breaks: BreakSpan[] | null;
 }
 
+/** Secondes depuis minuit d'une heure « HH:MM » ou « HH:MM:SS » (la partie heure d'un ISO aussi). */
+function secondesDuJour(v: string): number | null {
+  const m = /(?:^|T)(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(v);
+  if (!m) return null;
+  const [h, min, s] = [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)];
+  if (h > 23 || min > 59 || s > 59) return null;
+  return h * 3600 + min * 60 + s;
+}
+
+/**
+ * Durée d'une pause fermée, en ms. Deux formats coexistent en base : les routes
+ * de pointage écrivent « HH:MM:SS » (heure seule), l'édition à la main écrit un
+ * horodatage ISO. `Date.parse('12:00:00')` vaut NaN : ces pauses n'étaient
+ * jamais déduites et chaque pause était PAYÉE.
+ */
+function dureePauseMs(b: BreakSpan): number {
+  if (!b?.start || !b?.end) return 0;
+  const complet = (v: string) => /^\d{4}-\d{2}-\d{2}T/.test(v);
+  if (complet(b.start) && complet(b.end)) {
+    const bs = Date.parse(b.start);
+    const be = Date.parse(b.end);
+    return !Number.isNaN(bs) && !Number.isNaN(be) && be > bs ? be - bs : 0;
+  }
+  const s = secondesDuJour(b.start);
+  const e = secondesDuJour(b.end);
+  if (s == null || e == null || e === s) return 0;
+  // Heure seule : une fin avant le début = pause qui a traversé minuit.
+  return ((e - s + 86_400) % 86_400) * 1000;
+}
+
 /** Net worked hours for a single completed entry (gross minus closed breaks). */
 export function computeEntryHours(entry: TimeEntryLike): number {
   if (!entry.punch_in_at || !entry.punch_out_at) return 0;
@@ -132,12 +162,7 @@ export function computeEntryHours(entry: TimeEntryLike): number {
   if (Number.isNaN(inMs) || Number.isNaN(outMs) || outMs <= inMs) return 0;
 
   let breakMs = 0;
-  for (const b of entry.breaks || []) {
-    if (!b?.start || !b?.end) continue;
-    const bs = Date.parse(b.start);
-    const be = Date.parse(b.end);
-    if (!Number.isNaN(bs) && !Number.isNaN(be) && be > bs) breakMs += be - bs;
-  }
+  for (const b of entry.breaks || []) breakMs += dureePauseMs(b);
 
   const net = outMs - inMs - breakMs;
   return net > 0 ? net / 3_600_000 : 0;
