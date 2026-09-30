@@ -21,31 +21,56 @@
 create or replace function public.stats_norm(t text)
 returns text language sql stable as $$ select lower(extensions.unaccent(btrim(coalesce(t, '')))) $$;
 
--- Le technicien a-t-il travaillé ce job ?
-create or replace function public.stats_job_a_technicien(p_org uuid, p_job uuid, p_user uuid)
-returns boolean language sql stable as $$
-  select exists (select 1 from public.time_entries te where te.org_id = p_org and te.job_id = p_job and te.employee_id = p_user)
-      or exists (select 1 from public.schedule_events e where e.org_id = p_org and e.job_id = p_job and e.deleted_at is null
-                   and (e.assigned_user = p_user
-                        or e.team_id in (select ta.team_id from public.team_assignments ta where ta.user_id = p_user and ta.org_id = p_org
-                                         union select m.team_id from public.memberships m where m.user_id = p_user and m.org_id = p_org and m.team_id is not null
-                                         union select tm.team_id from public.team_members tm where tm.user_id = p_user and tm.org_id = p_org and tm.team_id is not null)))
+-- Les jobs qui passent les filtres « job » (équipe, technicien, service), calculés UNE fois par
+-- requête : les appelants testent « j.id in (select public.stats_jobs_filtres(org, f)) », que
+-- Postgres évalue en une table de hachage. (Une version par ligne — sous-requêtes rejouées pour
+-- chaque paiement — dépassait 20 s sur 3 ans à 50 000 jobs avec technicien + service.)
+--   équipe     : l'équipe du job, ou une visite faite par cette équipe ;
+--   technicien : a pointé sur le job, ou visite assignée à lui ou à une de ses équipes ;
+--   service    : une ligne du job (incluse, non supprimée) porte le nom du service du catalogue
+--                (casse et accents ignorés).
+create or replace function public.stats_jobs_filtres(p_org uuid, f jsonb)
+returns setof uuid language plpgsql stable security definer set search_path = public as $$
+declare
+  v_equipe uuid := nullif(f->>'equipe', '')::uuid;
+  v_tech uuid := nullif(f->>'technicien', '')::uuid;
+  v_service uuid := nullif(f->>'service', '')::uuid;
+  v_nom text;
+begin
+  if v_service is not null then
+    select public.stats_norm(s.name) into v_nom from public.predefined_services s where s.id = v_service and s.org_id = p_org;
+    if v_nom is null then return; end if; -- service inconnu : aucun job
+  end if;
+  return query
+  select j.id from public.jobs j
+   where j.org_id = p_org
+     and (v_equipe is null or j.team_id = v_equipe
+          or j.id in (select e.job_id from public.schedule_events e where e.org_id = p_org and e.deleted_at is null and e.team_id = v_equipe))
+     and (v_tech is null
+          or j.id in (select te.job_id from public.time_entries te where te.org_id = p_org and te.employee_id = v_tech and te.job_id is not null)
+          or j.id in (select e.job_id from public.schedule_events e
+                       where e.org_id = p_org and e.deleted_at is null and e.job_id is not null
+                         and (e.assigned_user = v_tech
+                              or e.team_id in (select ta.team_id from public.team_assignments ta where ta.user_id = v_tech and ta.org_id = p_org
+                                               union select m.team_id from public.memberships m where m.user_id = v_tech and m.org_id = p_org and m.team_id is not null
+                                               union select tm.team_id from public.team_members tm where tm.user_id = v_tech and tm.org_id = p_org and tm.team_id is not null))))
+     and (v_service is null
+          or j.id in (select li.job_id from public.job_line_items li
+                       where li.org_id = p_org and li.deleted_at is null and coalesce(li.included, true)
+                         and public.stats_norm(li.name) = v_nom));
+end;
 $$;
 
--- Un job passe-t-il les filtres ? (colonnes du job passées pour éviter une relecture)
-create or replace function public.stats_job_retenu(p_org uuid, p_job uuid, p_team uuid, p_client uuid, p_vendeur uuid, f jsonb)
-returns boolean language sql stable as $$
-  select (nullif(f->>'equipe', '') is null
-            or p_team = (f->>'equipe')::uuid
-            or exists (select 1 from public.schedule_events e where e.org_id = p_org and e.job_id = p_job and e.deleted_at is null and e.team_id = (f->>'equipe')::uuid))
-     and (nullif(f->>'client', '') is null or p_client = (f->>'client')::uuid)
+-- Client et vendeur : comparaison simple (inlinée par Postgres, aucun coût par ligne).
+create or replace function public.stats_client_vendeur_ok(p_client uuid, p_vendeur uuid, f jsonb)
+returns boolean language sql immutable as $$
+  select (nullif(f->>'client', '') is null or p_client = (f->>'client')::uuid)
      and (nullif(f->>'vendeur', '') is null or p_vendeur = (f->>'vendeur')::uuid)
-     and (nullif(f->>'technicien', '') is null or public.stats_job_a_technicien(p_org, p_job, (f->>'technicien')::uuid))
-     and (nullif(f->>'service', '') is null or exists (
-            select 1 from public.job_line_items li join public.predefined_services s on s.id = (f->>'service')::uuid
-             where li.job_id = p_job and li.deleted_at is null and coalesce(li.included, true)
-               and public.stats_norm(li.name) = public.stats_norm(s.name)))
 $$;
+
+-- Remplacées par les deux fonctions ci-dessus (présentes sur staging seulement).
+drop function if exists public.stats_job_retenu(uuid, uuid, uuid, uuid, uuid, jsonb);
+drop function if exists public.stats_job_a_technicien(uuid, uuid, uuid);
 
 -- Des filtres « job » (équipe, technicien, service) sont-ils actifs ?
 create or replace function public.stats_filtre_job_actif(f jsonb)
@@ -54,17 +79,19 @@ returns boolean language sql immutable as $$
 $$;
 
 revoke all on function public.stats_norm(text) from public, anon;
-revoke all on function public.stats_job_a_technicien(uuid, uuid, uuid) from public, anon;
-revoke all on function public.stats_job_retenu(uuid, uuid, uuid, uuid, uuid, jsonb) from public, anon;
+revoke all on function public.stats_jobs_filtres(uuid, jsonb) from public, anon, authenticated;
+revoke all on function public.stats_client_vendeur_ok(uuid, uuid, jsonb) from public, anon;
 revoke all on function public.stats_filtre_job_actif(jsonb) from public, anon;
 grant execute on function public.stats_norm(text) to authenticated, service_role;
-grant execute on function public.stats_job_a_technicien(uuid, uuid, uuid) to authenticated, service_role;
-grant execute on function public.stats_job_retenu(uuid, uuid, uuid, uuid, uuid, jsonb) to authenticated, service_role;
+grant execute on function public.stats_jobs_filtres(uuid, jsonb) to service_role;
+grant execute on function public.stats_client_vendeur_ok(uuid, uuid, jsonb) to authenticated, service_role;
 grant execute on function public.stats_filtre_job_actif(jsonb) to authenticated, service_role;
 
 -- ── Encaissements (source de la courbe, des modes, du top clients) ──────────
 drop function if exists public.stats_encaissements(uuid, timestamptz, timestamptz);
-create or replace function public.stats_encaissements(p_org uuid, p_debut timestamptz, p_fin timestamptz, f jsonb default '{}'::jsonb)
+-- Chemin FILTRÉ (équipe, technicien, service, vendeur) : jointure aux jobs, et l'ensemble des jobs
+-- retenus calculé une fois (stats_jobs_filtres).
+create or replace function public.stats_encaissements_filtres(p_org uuid, p_debut timestamptz, p_fin timestamptz, f jsonb)
 returns table(quand timestamptz, cents bigint, methode text, source text, source_id uuid, client_id uuid, libelle text)
 language sql stable security definer set search_path = public as $$
   select p.payment_date, (p.amount_cents - coalesce(p.refunded_cents, 0))::bigint, p.method, 'paiement', p.id,
@@ -76,7 +103,7 @@ language sql stable security definer set search_path = public as $$
      and p.payment_date >= p_debut and p.payment_date < p_fin
      and (nullif(f->>'client', '') is null or coalesce(p.client_id, i.client_id) = (f->>'client')::uuid)
      and (nullif(f->>'vendeur', '') is null or coalesce(i.salesperson_id, j.salesperson_id) = (f->>'vendeur')::uuid)
-     and (not public.stats_filtre_job_actif(f) or (j.id is not null and public.stats_job_retenu(p_org, j.id, j.team_id, null, null, f - 'client' - 'vendeur')))
+     and (not public.stats_filtre_job_actif(f) or (j.id is not null and (public.stats_client_vendeur_ok(null, null, f - 'client' - 'vendeur') and (not public.stats_filtre_job_actif(f - 'client' - 'vendeur') or j.id in (select public.stats_jobs_filtres(p_org, f - 'client' - 'vendeur'))))))
   union all
   select coalesce(i.paid_at, i.issued_at), i.paid_cents::bigint, null, 'facture', i.id, i.client_id, i.invoice_number
     from public.invoices i
@@ -86,7 +113,44 @@ language sql stable security definer set search_path = public as $$
      and coalesce(i.paid_at, i.issued_at) >= p_debut and coalesce(i.paid_at, i.issued_at) < p_fin
      and (nullif(f->>'client', '') is null or i.client_id = (f->>'client')::uuid)
      and (nullif(f->>'vendeur', '') is null or coalesce(i.salesperson_id, j.salesperson_id) = (f->>'vendeur')::uuid)
-     and (not public.stats_filtre_job_actif(f) or (j.id is not null and public.stats_job_retenu(p_org, j.id, j.team_id, null, null, f - 'client' - 'vendeur')));
+     and (not public.stats_filtre_job_actif(f) or (j.id is not null and (public.stats_client_vendeur_ok(null, null, f - 'client' - 'vendeur') and (not public.stats_filtre_job_actif(f - 'client' - 'vendeur') or j.id in (select public.stats_jobs_filtres(p_org, f - 'client' - 'vendeur'))))));
+$$;
+revoke all on function public.stats_encaissements_filtres(uuid, timestamptz, timestamptz, jsonb) from public, anon, authenticated;
+grant execute on function public.stats_encaissements_filtres(uuid, timestamptz, timestamptz, jsonb) to service_role;
+
+create or replace function public.stats_encaissements(p_org uuid, p_debut timestamptz, p_fin timestamptz, f jsonb default '{}'::jsonb)
+returns table(quand timestamptz, cents bigint, methode text, source text, source_id uuid, client_id uuid, libelle text)
+-- Encaissé : paiements nets des remboursements + factures payées sans paiement (imports Jobber).
+-- SANS filtre de job ni de vendeur (la page à l'ouverture) : ni jointure aux jobs ni appel de
+-- fonction par ligne. AVEC : stats_encaissements_filtres. (Une version SQL inlinable, essayée :
+-- plus rapide sans filtre, mais délai dépassé avec un filtre technicien.)
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_client uuid := nullif(f->>'client', '')::uuid;
+  v_vendeur uuid := nullif(f->>'vendeur', '')::uuid;
+  v_job boolean := public.stats_filtre_job_actif(f);
+begin
+  if not v_job and v_vendeur is null then
+    return query
+    select p.payment_date, (p.amount_cents - coalesce(p.refunded_cents, 0))::bigint, p.method, 'paiement'::text, p.id,
+           coalesce(p.client_id, i.client_id), coalesce(i.invoice_number, 'Paiement')
+      from public.payments p
+      left join public.invoices i on i.id = p.invoice_id and i.org_id = p.org_id
+     where p.org_id = p_org and p.deleted_at is null and p.status in ('succeeded', 'refunded')
+       and p.payment_date >= p_debut and p.payment_date < p_fin
+       and (v_client is null or coalesce(p.client_id, i.client_id) = v_client)
+    union all
+    select coalesce(i.paid_at, i.issued_at), i.paid_cents::bigint, null::text, 'facture'::text, i.id, i.client_id, i.invoice_number
+      from public.invoices i
+     where i.org_id = p_org and i.deleted_at is null and i.status in ('paid', 'partial') and i.paid_cents > 0
+       and not exists (select 1 from public.payments p where p.invoice_id = i.id and p.deleted_at is null)
+       and coalesce(i.paid_at, i.issued_at) >= p_debut and coalesce(i.paid_at, i.issued_at) < p_fin
+       and (v_client is null or i.client_id = v_client);
+    return;
+  end if;
+
+  return query select * from public.stats_encaissements_filtres(p_org, p_debut, p_fin, f);
+end;
 $$;
 revoke all on function public.stats_encaissements(uuid, timestamptz, timestamptz, jsonb) from public, anon, authenticated;
 grant execute on function public.stats_encaissements(uuid, timestamptz, timestamptz, jsonb) to service_role;
@@ -127,7 +191,7 @@ begin
        and coalesce(i.issued_at, i.created_at) >= v_debut and coalesce(i.issued_at, i.created_at) < v_fin
        and (nullif(f->>'client', '') is null or i.client_id = (f->>'client')::uuid)
        and (nullif(f->>'vendeur', '') is null or coalesce(i.salesperson_id, j.salesperson_id) = (f->>'vendeur')::uuid)
-       and (not public.stats_filtre_job_actif(f) or (j.id is not null and public.stats_job_retenu(v_org, j.id, j.team_id, null, null, f - 'client' - 'vendeur')))
+       and (not public.stats_filtre_job_actif(f) or (j.id is not null and (public.stats_client_vendeur_ok(null, null, f - 'client' - 'vendeur') and (not public.stats_filtre_job_actif(f - 'client' - 'vendeur') or j.id in (select public.stats_jobs_filtres(v_org, f - 'client' - 'vendeur'))))))
      group by 1)
   select bk.b, coalesce(r.c, 0)::bigint, coalesce(i.c, 0)::bigint
     from buckets bk left join rev r on r.b = bk.b left join inv i on i.b = bk.b order by bk.b;
@@ -171,7 +235,7 @@ begin
     select j.id, coalesce(j.subtotal_cents, 0) as st from public.jobs j
      where j.org_id = p_org and j.deleted_at is null and j.status = 'completed'
        and j.completed_at >= p_from::timestamp at time zone v_tz and j.completed_at < (p_to + 1)::timestamp at time zone v_tz
-       and public.stats_job_retenu(p_org, j.id, j.team_id, j.client_id, j.salesperson_id, f - 'service')
+       and (public.stats_client_vendeur_ok(j.client_id, j.salesperson_id, f - 'service') and (not public.stats_filtre_job_actif(f - 'service') or j.id in (select public.stats_jobs_filtres(p_org, f - 'service'))))
   ),
   lignes as (
     select li.job_id, li.name, li.total_cents from public.job_line_items li join js on js.id = li.job_id
@@ -207,7 +271,7 @@ begin
     from public.jobs j
    where j.org_id = p_org and j.deleted_at is null and j.status = 'completed'
      and j.completed_at >= p_from::timestamp at time zone v_tz and j.completed_at < (p_to + 1)::timestamp at time zone v_tz
-     and public.stats_job_retenu(p_org, j.id, j.team_id, j.client_id, j.salesperson_id, f)
+     and (public.stats_client_vendeur_ok(j.client_id, j.salesperson_id, f) and (not public.stats_filtre_job_actif(f) or j.id in (select public.stats_jobs_filtres(p_org, f))))
    group by 1 order by 1;
 end;
 $function$;
@@ -240,7 +304,7 @@ begin
          then (sum(j.total_cents) filter (where j.status = 'completed') / count(j.id) filter (where j.status = 'completed'))::bigint else 0 end
   from teams tm
   left join jobs j on j.team_id = tm.id and j.org_id = v_org and j.deleted_at is null and j.created_at >= v_debut and j.created_at < v_fin
-                  and public.stats_job_retenu(v_org, j.id, j.team_id, j.client_id, j.salesperson_id, f - 'equipe')
+                  and (public.stats_client_vendeur_ok(j.client_id, j.salesperson_id, f - 'equipe') and (not public.stats_filtre_job_actif(f - 'equipe') or j.id in (select public.stats_jobs_filtres(v_org, f - 'equipe'))))
   where tm.org_id = v_org and tm.deleted_at is null and tm.is_active = true
     and (nullif(f->>'equipe', '') is null or tm.id = (f->>'equipe')::uuid)
   group by tm.id, tm.name order by 6 desc, 2;
@@ -262,7 +326,7 @@ begin
     select c.id, count(j.id) as nb, coalesce(sum(j.total_cents), 0) as rev
       from public.clients c
       join public.jobs j on j.client_id = c.id and j.org_id = c.org_id and j.deleted_at is null and j.status not in ('draft', 'cancelled')
-                         and public.stats_job_retenu(p_org, j.id, j.team_id, j.client_id, j.salesperson_id, f)
+                         and (public.stats_client_vendeur_ok(j.client_id, j.salesperson_id, f) and (not public.stats_filtre_job_actif(f) or j.id in (select public.stats_jobs_filtres(p_org, f))))
      where c.org_id = p_org and c.deleted_at is null group by c.id
   ),
   ir as (select i.client_id, sum(i.total_cents) as inv from public.invoices i
@@ -381,7 +445,7 @@ begin
      where i.org_id = v_org and i.deleted_at is null
        and (nullif(f->>'client', '') is null or i.client_id = (f->>'client')::uuid)
        and (nullif(f->>'vendeur', '') is null or coalesce(i.salesperson_id, j.salesperson_id) = (f->>'vendeur')::uuid)
-       and (not public.stats_filtre_job_actif(f) or (j.id is not null and public.stats_job_retenu(v_org, j.id, j.team_id, null, null, f - 'client' - 'vendeur')))
+       and (not public.stats_filtre_job_actif(f) or (j.id is not null and (public.stats_client_vendeur_ok(null, null, f - 'client' - 'vendeur') and (not public.stats_filtre_job_actif(f - 'client' - 'vendeur') or j.id in (select public.stats_jobs_filtres(v_org, f - 'client' - 'vendeur'))))))
   ),
   base as (select fi.status from fi where coalesce(fi.issued_at, fi.created_at) >= v_debut and coalesce(fi.issued_at, fi.created_at) < v_fin),
   open_inv as (select fi.balance_cents, fi.due_date from fi where fi.status in ('sent', 'partial') and fi.balance_cents > 0)
@@ -455,7 +519,7 @@ begin
      and exists (select 1 from public.schedule_events e
                   where e.org_id = p_org and e.job_id = j.id and e.deleted_at is null
                     and e.start_at >= p_from::timestamp at time zone v_tz and e.start_at < (p_to + 1)::timestamp at time zone v_tz)
-     and public.stats_job_retenu(p_org, j.id, j.team_id, j.client_id, j.salesperson_id, f)
+     and (public.stats_client_vendeur_ok(j.client_id, j.salesperson_id, f) and (not public.stats_filtre_job_actif(f) or j.id in (select public.stats_jobs_filtres(p_org, f))))
    group by j.property_address;
 end;
 $function$;
@@ -496,7 +560,7 @@ begin
     with js as (
       select j.* from public.jobs j
        where j.org_id = p_org and j.deleted_at is null and j.status = 'completed' and j.completed_at >= v_debut and j.completed_at < v_fin
-         and public.stats_job_retenu(p_org, j.id, j.team_id, j.client_id, j.salesperson_id, f - 'service')
+         and (public.stats_client_vendeur_ok(j.client_id, j.salesperson_id, f - 'service') and (not public.stats_filtre_job_actif(f - 'service') or j.id in (select public.stats_jobs_filtres(p_org, f - 'service'))))
     ),
     catalogue as (select distinct on (public.stats_norm(s.name)) public.stats_norm(s.name) as n, s.name from public.predefined_services s
                    where s.org_id = p_org order by public.stats_norm(s.name), s.is_active desc, s.created_at)
@@ -518,9 +582,9 @@ begin
      where j.org_id = p_org and j.deleted_at is null
        and case p_carte
              when 'valeur_moyenne' then j.status = 'completed' and j.completed_at >= v_debut and j.completed_at < v_fin
-                                        and public.stats_job_retenu(p_org, j.id, j.team_id, j.client_id, j.salesperson_id, f)
+                                        and (public.stats_client_vendeur_ok(j.client_id, j.salesperson_id, f) and (not public.stats_filtre_job_actif(f) or j.id in (select public.stats_jobs_filtres(p_org, f))))
              when 'equipe' then j.team_id = p_cle::uuid and j.created_at >= v_debut and j.created_at < v_fin
-                                and public.stats_job_retenu(p_org, j.id, j.team_id, j.client_id, j.salesperson_id, f - 'equipe')
+                                and (public.stats_client_vendeur_ok(j.client_id, j.salesperson_id, f - 'equipe') and (not public.stats_filtre_job_actif(f - 'equipe') or j.id in (select public.stats_jobs_filtres(p_org, f - 'equipe'))))
              else j.id in (select jsonb_array_elements_text(p_cle::jsonb)::uuid)
            end
      order by 5 desc;
@@ -535,7 +599,7 @@ begin
      where i.org_id = p_org and i.deleted_at is null
        and (nullif(f->>'client', '') is null or i.client_id = (f->>'client')::uuid)
        and (nullif(f->>'vendeur', '') is null or coalesce(i.salesperson_id, j.salesperson_id) = (f->>'vendeur')::uuid)
-       and (not public.stats_filtre_job_actif(f) or (j.id is not null and public.stats_job_retenu(p_org, j.id, j.team_id, null, null, f - 'client' - 'vendeur')))
+       and (not public.stats_filtre_job_actif(f) or (j.id is not null and (public.stats_client_vendeur_ok(null, null, f - 'client' - 'vendeur') and (not public.stats_filtre_job_actif(f - 'client' - 'vendeur') or j.id in (select public.stats_jobs_filtres(p_org, f - 'client' - 'vendeur'))))))
        and case p_carte
              when 'a_recevoir' then i.status in ('sent', 'partial') and i.balance_cents > 0
              when 'en_retard' then i.status in ('sent', 'partial') and i.balance_cents > 0 and i.due_date < v_today

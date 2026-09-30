@@ -328,7 +328,19 @@ Exactitude (oracle SQL, filtres compris) 171/171 · sécurité 104/104 (E-9 inve
 
 ### Performance (T4 : 50 000 jobs)
 
-Chargement complet 230 / 304 ms (p50 / p95) ; changement de filtre 405 / 470 ms. M-15 : pagination par curseur de `toutLire` toujours ouverte (rentabilité sur très gros volume).
+Mesuré après ce lot, 14 appels de la page (dont un filtre technicien + service) :
+
+| | p50 | p95 |
+|---|---|---|
+| Chargement complet (appels en parallèle, 12 mois) | 291 ms | 791 ms |
+| Passage à « 3 dernières années » | 1,26 s | 2,74 s |
+| Revenu filtré technicien + service, 3 ans | ≈ 0,7 s | — |
+
+Deux défauts trouvés par cette mesure, et corrigés dans la migration C avant toute application en prod :
+- **Filtres évalués ligne par ligne** : pour chaque paiement, le filtre technicien / service rejouait ses sous-requêtes (pointages, visites, équipes, noms de lignes sans accents). Sur 3 ans avec technicien + service : **plus de 20 s**, donc délai dépassé. Désormais, l'ensemble des jobs retenus est calculé **une fois** (`stats_jobs_filtres`) et chaque carte teste l'appartenance : **0,7 s**. Au passage, revenu par service 98 → 15 ms, équipes 242 → 17 ms, valeur vie 630 → 102 ms (p50).
+- **Encaissé sans filtre** : les jointures aux jobs étaient faites même sans filtre. Il y a maintenant un chemin direct (revenu 3 ans 1,4 → 0,6–0,9 s, modes de paiement 1,1 → 0,3–0,5 s). Une version « inlinable » a été essayée : plus rapide sans filtre, mais délai dépassé avec un filtre technicien, donc écartée.
+
+M-15 (inchangé) : la carte Rentabilité, à 50 000 jobs, sature encore le pool de connexions (`toutLire` pagine par OFFSET) ; aucun effet aux volumes actuels.
 
 ### Encore ouvert
 
