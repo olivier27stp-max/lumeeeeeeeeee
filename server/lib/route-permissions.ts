@@ -124,6 +124,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'PATCH /api/automations/rules/:id': 'automations.update',
   'DELETE /api/automations/rules/:id': 'automations.update',
   'POST /api/automations/rules/:id/duplicate': 'automations.update',
+  'GET /api/automations/templates': 'automations.read',
+  'POST /api/automations/templates/utiliser': 'automations.update',
   'POST /api/automations/rules/:id/copier-bureaux': 'automations.update',
   // Publier / repasser en brouillon, un par un ou en lot (audit M8).
   'POST /api/automations/rules/:id/publication': 'automations.update',

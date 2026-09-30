@@ -1261,6 +1261,14 @@ export const conversationAssignSchema = z.object({
   assigned_to: z.string().uuid().nullable(),
 });
 
+/**
+ * « Utiliser ce modèle » : SEULEMENT l'identifiant du modèle. L'entreprise
+ * vient de la session, jamais du corps de la requête.
+ */
+export const automationModeleUtiliserSchema = z.object({
+  templateId: z.string().min(1).max(80).regex(/^[a-z0-9_]+$/),
+}).strict();
+
 /** Copier une automatisation vers d'autres bureaux de l'entreprise. */
 export const automationCopieBureauxSchema = z.object({
   org_ids: z.array(z.string().uuid()).min(1).max(50),
