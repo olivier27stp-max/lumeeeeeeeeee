@@ -31,9 +31,17 @@ export default defineConfig({
     outputFile: { json: 'rapports/automatisations/resultats.json' },
     projects: [
       {
-        extends: './vitest.config.ts',
+        // Pas de `extends: './vitest.config.ts'` : Vitest FUSIONNE les listes
+        // `include`/`exclude` au lieu de les remplacer. Le projet héritait
+        // donc de `tests/**/*.test.ts` (toute la suite du dépôt) ET de
+        // l'exclusion `tests/automations-suite/**` : aucun test unitaire de la
+        // suite n'était trouvé (« No test files found »).
         test: {
           name: 'unitaires',
+          environment: 'node',
+          globals: true,
+          setupFiles: ['./vitest.setup.ts'],
+          testTimeout: 10000,
           include: ['tests/automations-suite/unitaires/**/*.test.ts', ...AUTOMATISATIONS_EXISTANTS],
           exclude: ['node_modules', 'dist', 'tests/quarantaine/**'],
         },
