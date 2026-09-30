@@ -7,6 +7,7 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { createClient } from '@supabase/supabase-js';
 import { API, ANON_KEY, DB_URL, SERVICE_KEY, brancherServeurSurLocal, pileLocaleDisponible } from './env-local';
+// (ANON_KEY sert aussi à lire la base « comme le navigateur » d'un technicien.)
 import { ORG, U, MEMBRES, MOT_DE_PASSE, R, f } from './fixture';
 
 const EXPRESS = process.env.COMMISSIONS_AUDIT_EXPRESS || 'http://localhost:3012';
@@ -127,20 +128,29 @@ describe.skipIf(!disponible)('commissions — clôture, annulation, reprise, exp
     expect((await appel(U.theo, '/commissions/export.csv')).status).toBe(403);
   });
 
-  it('réglages : politique « Reprendre » acceptée par l’API ; une valeur inconnue refusée', async () => {
+  it('réglages : « Reprendre » s’enregistre SANS migration et se relit ; une valeur inconnue est refusée', async () => {
     expect((await appel(U.olivia, '/commissions/settings', { method: 'PUT', body: { reversal_policy: 'n-importe-quoi' } })).status).toBe(400);
     const r = await appel(U.olivia, '/commissions/settings', { method: 'PUT', body: { reversal_policy: 'clawback' } });
-    // Sans la migration 20261005100400, la base refuse encore la valeur : 409
-    // avec un message clair ; avec elle, 200.
-    expect([200, 409]).toContain(r.status);
-    if (r.status === 409) expect(r.json.code).toBe('clawback_indisponible');
-    await appel(U.olivia, '/commissions/settings', { method: 'PUT', body: { reversal_policy: 'auto' } });
+    expect(r.status).toBe(200);
+    expect(r.json.reversal_policy).toBe('clawback');
+    expect((await appel(U.olivia, '/commissions/settings')).json.reversal_policy).toBe('clawback');
+    // Et la ligne de réglages terrain créée pour ça n'ouvre PAS la visibilité entre collègues.
+    const { rows } = await db.query(`select show_peer_payouts, feature_enabled from field_settings where org_id=$1`, [ORG.A]);
+    expect(rows[0]).toEqual({ show_peer_payouts: false, feature_enabled: false });
+    expect((await appel(U.olivia, '/commissions/settings', { method: 'PUT', body: { reversal_policy: 'auto' } })).json.reversal_policy).toBe('auto');
   });
 
-  it('reprise [exige M5] : remboursée après versement → ligne négative visible dans la période en cours, une seule fois', async () => {
-    const { rows: cons } = await db.query(`select pg_get_constraintdef(oid) d from pg_constraint where conname='commission_settings_reversal_policy_check'`);
-    if (!String(cons[0]?.d).includes('clawback')) return; // M5 pas appliquée
-    await db.query(`update commission_settings set reversal_policy='clawback' where org_id=$1`, [ORG.A]);
+  it('Loi 25 : l’app ne peut jamais activer la visibilité des commissions entre collègues', async () => {
+    const r = await appel(U.olivia, '/field-sales/settings', { method: 'PUT', body: { show_peer_payouts: true, voice_notes_enabled: true } });
+    expect(r.status).toBe(200);
+    expect(r.json.show_peer_payouts).toBe(false);
+    const theo = createClient(API, ANON_KEY, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${await jeton(U.theo)}` } } });
+    const { data } = await theo.from('fs_commission_entries').select('id').eq('org_id', ORG.A);
+    expect(data ?? []).toEqual([]);
+  });
+
+  it('reprise : remboursée après versement → ligne négative visible dans la période en cours, une seule fois (sans migration)', async () => {
+    expect((await appel(U.olivia, '/commissions/settings', { method: 'PUT', body: { reversal_policy: 'clawback' } })).status).toBe(200);
     const sc = createClient(API, SERVICE_KEY, { auth: { persistSession: false } });
     const moteur = await import('../../server/lib/field-sales/commission-engine');
     const i6 = await statut(f('I6').id);
@@ -152,7 +162,7 @@ describe.skipIf(!disponible)('commissions — clôture, annulation, reprise, exp
     expect(Number(rows[0].amount)).toBe(-30);
     expect(rows[0].status).toBe('approved');
     expect((await statut(f('I6').id)).status).toBe('paid'); // août ne bouge pas
-    await db.query(`update commission_settings set reversal_policy='auto' where org_id=$1`, [ORG.A]);
+    await appel(U.olivia, '/commissions/settings', { method: 'PUT', body: { reversal_policy: 'auto' } });
     void R;
   });
 });

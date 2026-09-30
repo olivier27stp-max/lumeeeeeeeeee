@@ -11,7 +11,11 @@ import { API, ANON_KEY, DB_URL, exigerLocal } from './env-local';
 import { ORG } from './fixture';
 
 exigerLocal();
-const SERVEURS = { avant: 'http://localhost:3013', apres: 'http://localhost:3012' };
+const TOUS = { avant: 'http://localhost:3013', apres: 'http://localhost:3012' };
+// Seulement les serveurs qui répondent (le code d'origine n'est lancé que pour la comparaison).
+const SERVEURS = Object.fromEntries((await Promise.all(Object.entries(TOUS).map(async ([k, u]) =>
+  [k, u, await fetch(`${u}/api/health`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok).catch(() => false)] as const)))
+  .filter(([, , ok]) => ok).map(([k, u]) => [k, u]));
 const CAS = [
   { nom: 'liste du mois (page)', chemin: '/commissions?from=2026-09-01&to=2026-09-30' },
   { nom: 'totaux du mois (page)', chemin: '/commissions/payroll-preview?from=2026-09-01&to=2026-09-30' },

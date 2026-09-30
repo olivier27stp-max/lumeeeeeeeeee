@@ -18,6 +18,7 @@ import {
 } from './commission-periode';
 import { toLocalDate } from '../reports/dates';
 import { dateDeRattachement } from './commission-verrou';
+import { politiqueRemboursement } from './commission-reglages';
 
 /**
  * Cumul du mois pour les paliers de performance : ce que le rep a GAGNÉ ce
@@ -545,8 +546,20 @@ export async function generateCommissionsForInvoice(
     }
 
     if (!confirmed) {
-      const { error } = await supabase.from('fs_commission_entries')
+      let { error } = await supabase.from('fs_commission_entries')
         .insert({ org_id: orgId, user_id: r.user_id, lead_id: null, ...entryFields });
+      // Facture REFAITE sur un job (payée → remboursée → annulée → supprimée →
+      // nouvelle facture) : l'ancienne commission, reprise, occupe encore la
+      // place (job, rep) de l'index uniq_job_rep et bloquait la nouvelle — le
+      // rep n'était jamais payé. Sans toucher la base : la nouvelle commission
+      // est enregistrée sans lien direct au job (la facture reste liée, unique
+      // par uniq_invoice_rep) ; le job est gardé dans calc_breakdown.
+      if (error && error.code === '23505' && /uniq_job_rep/.test(error.message) && entryFields.job_id) {
+        ({ error } = await supabase.from('fs_commission_entries').insert({
+          org_id: orgId, user_id: r.user_id, lead_id: null, ...entryFields,
+          job_id: null, calc_breakdown: { ...entryFields.calc_breakdown, job_id: entryFields.job_id, facture_refaite: true },
+        }));
+      }
       if (error) {
         // Doublon concurrent (même facture, même rep) = déjà écrit par un
         // appel parallèle : pas un échec. Tout autre refus en est un — dont
@@ -572,10 +585,8 @@ export async function handleInvoiceReversal(
   invoiceId: string,
   reason: string
 ): Promise<{ action: 'auto_reversed' | 'kept' | 'alert' | 'clawback'; affected: number }> {
-  const { data: settings, error: setErr } = await supabase.from('commission_settings')
-    .select('reversal_policy').eq('org_id', orgId).maybeSingle();
-  if (setErr) console.error(`[commissions] reversal settings load failed (org ${orgId}):`, setErr.message);
-  const policy = settings?.reversal_policy || 'alert';
+  // Politique effective, « Reprendre » compris (drapeau hors migration).
+  const policy = await politiqueRemboursement(supabase, orgId);
 
   const { data: entries, error: entriesErr } = await supabase.from('fs_commission_entries')
     .select('id, status, user_id, rule_id, amount, base_amount').eq('org_id', orgId).eq('invoice_id', invoiceId)
@@ -720,10 +731,12 @@ function requeteEntrees(supabase: SupabaseClient, orgId: string, colonnes: strin
 
 /**
  * Toutes les entrées du filtre, sans jamais être tronqué à max_rows.
- * Pagination par clé (`id > dernier`, clé primaire) et non par décalage : un
- * OFFSET re-triait toute la période à chaque page (mesuré : 42 s pour une
- * année de 100 000 commissions ; linéaire ici). Les totaux n'ont pas besoin
- * d'ordre chronologique.
+ * Pagination par clé (triggered_at, id) plutôt que par décalage (un OFFSET
+ * re-triait toute la période à chaque page : 42 s mesurés sur une année de
+ * 100 000 commissions). Lire la période en tranches parallèles a été essayé
+ * et mesuré SANS gain (15 s contre 14-18 s) : sans index de période, chaque
+ * page parcourt toute la table de l'org et les tranches se disputent le même
+ * processeur. Le vrai levier est l'index (migration proposée M3).
  */
 export async function toutesLesEntrees(supabase: SupabaseClient, orgId: string, colonnes: string, o: FiltreEntrees): Promise<any[]> {
   const out: any[] = [];
@@ -787,7 +800,10 @@ export async function getCommissionEntries(
  */
 export async function enrichirEntrees(supabase: SupabaseClient, orgId: string, rows: any[]) {
   const uniques = (k: string) => [...new Set(rows.map((e) => e[k]).filter(Boolean))] as string[];
-  const [userIds, ruleIds, invoiceIds, jobIds] = [uniques('user_id'), uniques('rule_id'), uniques('invoice_id'), uniques('job_id')];
+  // Job d'une facture refaite : gardé dans calc_breakdown (voir generateCommissionsForInvoice).
+  const jobDe = (e: any): string | null => e.job_id || e.calc_breakdown?.job_id || null;
+  const [userIds, ruleIds, invoiceIds] = [uniques('user_id'), uniques('rule_id'), uniques('invoice_id')];
+  const jobIds = [...new Set(rows.map(jobDe).filter(Boolean))] as string[];
   const parLots = async (table: string, colonnes: string, cle: string, ids: string[]) => {
     const out: any[] = [];
     for (let i = 0; i < ids.length; i += 200) {
@@ -812,7 +828,7 @@ export async function enrichirEntrees(supabase: SupabaseClient, orgId: string, r
   return rows.map((entry) => {
     const member = memberMap.get(entry.user_id);
     const inv = entry.invoice_id ? invoiceMap.get(entry.invoice_id) : null;
-    const job = entry.job_id ? jobMap.get(entry.job_id) : null;
+    const job = jobDe(entry) ? jobMap.get(jobDe(entry) as string) : null;
     return {
       ...entry,
       rep_name: member?.full_name || 'Unknown',
