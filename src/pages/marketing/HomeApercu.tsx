@@ -234,8 +234,8 @@ const HOME_APERCU_CSS = `
 .ha-c1 { width:520px; height:170px; left:-120px; top:140px; } .ha-c2 { width:380px; height:130px; right:-60px; top:100px; }
 .ha-head { position:relative; z-index:2; max-width:820px; margin:0 auto; padding:26px 24px 8px; text-align:center; }
 .ha-h1 { font-size:clamp(34px,3.6vw,50px); font-weight:800; letter-spacing:-.035em; line-height:1.05; margin:12px auto 0; max-width:20ch; color:#111; text-wrap:balance; }
-.ha-sub { font-size:15px; line-height:1.55; color:#3a3a3a; max-width:52ch; margin:14px auto 0; }
-.ha-ctas { display:flex; justify-content:center; gap:10px; margin-top:16px; flex-wrap:wrap; }
+.ha-sub { font-size:clamp(18px,1.7vw,23px); line-height:1.45; color:#3a3a3a; max-width:46ch; margin:20px auto 0; }
+.ha-ctas { display:flex; justify-content:center; gap:10px; margin-top:26px; flex-wrap:wrap; }
 .ha-btn { display:inline-flex; align-items:center; gap:8px; padding:13px 20px; border-radius:12px; border:0; font-size:14.5px; font-weight:700; cursor:pointer; text-decoration:none; }
 .ha-dark { background:#111; color:#fff; } .ha-dark:hover { background:#000; }
 .ha-ghost { background:rgba(255,255,255,.7); color:#171717; border:1.5px solid rgba(0,0,0,.22); font-weight:600; } .ha-ghost:hover { background:#fff; }
