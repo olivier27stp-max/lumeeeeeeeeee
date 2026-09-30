@@ -32,7 +32,7 @@ vi.mock('../../../server/lib/migration/gel-communications', () => ({
   MESSAGE_GEL: 'gel',
 }));
 
-import { clientEnregistreur, requetes, type Requete } from './_enregistreur';
+import { clientEnregistreur, requetes, executionsJournalisees, type Requete } from './_enregistreur';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const VISITE = '55555555-5555-4555-8555-555555555555';
@@ -105,33 +105,37 @@ describe('T10.1 — fournisseur SMS en panne : reprises à délai croissant, pui
   });
 });
 
-describe('T10.2 — erreur définitive : abandon immédiat, sans reprise', () => {
-  for (const [cause, monter] of [
-    ['destinataire sans téléphone', (m: any) => { m.schedule_events.data.job.clients.phone = null; }],
-    ['désabonné (STOP)', (m: any) => { m.sms_opt_outs = { data: { id: 'optout' } }; }],
-  ] as Array<[string, (m: any) => void]>) {
+// M1 (launch) : ces deux cas ne sont plus des échecs — l'étape est SAUTÉE avec un
+// motif lisible (saute_code), la tâche se termine et le parcours continue.
+describe('T10.2 — destinataire impossible : étape sautée, jamais reprise', () => {
+  for (const [cause, monter, code] of [
+    ['destinataire sans téléphone', (m: any) => { m.schedule_events.data.job.clients.phone = null; }, 'sans_telephone'],
+    ['désabonné (STOP)', (m: any) => { m.sms_opt_outs = { data: { id: 'optout' } }; }, 'desabonne'],
+  ] as Array<[string, (m: any) => void, string]>) {
     it(cause, async () => {
       const m = monde(); monter(m);
       const { processScheduledTasks, client, journal } = await moteur({ ...m, automation_scheduled_tasks: { data: [tache('t', 0)] } });
       await processScheduledTasks(client);
       const fin = requetes(journal, 'automation_scheduled_tasks', 'update').map((r) => r.valeur as any).at(-1);
-      expect(fin.status).toBe('failed');
+      expect(fin.status).toBe('completed');
+      expect(executionsJournalisees(journal).map((r) => (r.valeur as any).result_data?.saute_code)).toEqual([code]);
       expect(twilio.messages.create).not.toHaveBeenCalled();
     });
   }
 });
 
 describe('T10.3 — après un échec définitif, l’administrateur est prévenu', () => {
-  it('ROUGE ATTENDU : une notification à l’org existe avec le motif en clair', async () => {
-    // `phone` est inféré `string` depuis le fixture ; le cas testé est justement son absence.
-    const m = monde(); (m.schedule_events.data.job.clients as { phone: string | null }).phone = null;
-    const { processScheduledTasks, client, journal } = await moteur({ ...m, automation_scheduled_tasks: { data: [tache('t', 0)] } });
+  // Un client sans numéro est désormais SAUTÉ (M1), plus en échec : l'échec
+  // définitif éprouvé ici est la 4e panne du fournisseur, sans autre reprise.
+  it('une notification à l’org existe avec le motif en clair', async () => {
+    twilio.messages.create.mockRejectedValueOnce(new Error('Twilio 503 Service Unavailable'));
+    const { processScheduledTasks, client, journal } = await moteur({ ...monde(), automation_scheduled_tasks: { data: [tache('t', 3)] } });
     await processScheduledTasks(client);
     const fin = requetes(journal, 'automation_scheduled_tasks', 'update').map((r) => r.valeur as any).at(-1);
     expect(fin.status).toBe('failed');
-    const notifs = requetes(journal, 'notifications', 'insert').map((r) => r.valeur as any);
+    const notifs = requetes(journal, 'notifications', 'insert').flatMap((r) => [r.valeur as any].flat());
     expect(notifs.length, 'aucune notification après un échec définitif : l’entrepreneur ne saura jamais que son client n’a rien reçu').toBeGreaterThan(0);
-    expect(`${notifs[0]?.title} ${notifs[0]?.body}`).not.toMatch(/No recipient phone/); // cause traduite, pas l'erreur brute
+    expect(`${notifs[0]?.title} ${notifs[0]?.body}`).toMatch(/Rappel/); // nomme l'automatisation concernée
   });
 });
 
