@@ -6,7 +6,9 @@ Légende effort : XS < 1 h · S ½ journée · M 1 jour · L plusieurs jours. Ri
 
 ---
 
-## Vague 0 — mettre en prod ce qui est prêt (toi : merges + migrations)
+## Vague 0 — mettre en prod ce qui est prêt — ✅ FAIT le 2026-09-30
+
+#753, #755 (+ D-01), #756, #757 (incluait #752) mergées ; migrations 20261003100000, 20261003100010 et 20261003100100 (après déploiement) appliquées en prod et vérifiées.
 
 Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont pas mergées, tous les défauts du 28 sont encore en prod** (réconciliation : 120 tests des PR échouent sur `main`).
 
@@ -18,7 +20,7 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | 4 | **Après déploiement** : `db:apply:prod` **20261003100100** (sécurité) | l'ancienne interface lit `api_key` : pas avant |
 | 5 | `check:broken-objects`, `check:db-coherence`, `check:schema-refs -- --prod` | |
 
-## Vague 1 — livrée ce soir (PR prêtes, à merger)
+## Vague 1 — ✅ FAIT le 2026-09-30 (#760, #764, #771 mergées ; secret `app_base_url` posé en prod, 20261003100200 appliquée staging + prod)
 
 | PR | Contenu | Preuve | Migration |
 |---|---|---|---|
@@ -81,8 +83,8 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 
 ## Ce qui t'attend (décisions, pas du code)
 
-1. **Merges** vague 0 puis vague 1 (#760, #764, #771).
-2. **Migrations à approuver** : 20261003100010 (D-01), 20261003100200 (cron) — et le secret `app_base_url` en prod avant la seconde.
+1. ~~Merges vague 0 et 1~~ — fait.
+2. ~~Migrations~~ — faites (staging puis prod).
 3. **Railway** : `CRON_SECRET` de prod à changer (staging le partage) ; y a-t-il des crons pour `rappels-dates`, `recurring-invoices`, `webhook-retries` ?
 4. **F11** : étalement des rafales, oui ou non ?
 5. **Cache Haiku** de Lumi (< 4 096 tokens, rien n'est mis en cache) : accepter (0,49 ¢/génération) ou allonger le prompt ?
