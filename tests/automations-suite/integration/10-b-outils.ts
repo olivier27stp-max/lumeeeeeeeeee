@@ -290,3 +290,24 @@ export const SIGNATURE_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEA
 
 /** Un navigateur de bureau ordinaire (les robots ne comptent pas comme une ouverture). */
 export const NAVIGATEUR = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36';
+
+/**
+ * Un texto ENTRANT signé comme Twilio le signe (POST /api/messages/inbound).
+ * Exige TWILIO_AUTH_TOKEN et TWILIO_WEBHOOK_BASE_URL posés par le test AVANT
+ * l'import du serveur, et le routeur des messages monté dans `api`.
+ */
+export async function smsEntrant(api: Api, de: string, vers: string, texte: string) {
+  const corps = { From: de, To: vers, Body: texte, MessageSid: `SMqa${Date.now()}${Math.random().toString(36).slice(2, 8)}` };
+  const twilio = (await import('twilio')).default;
+  const base = String(process.env.TWILIO_WEBHOOK_BASE_URL).replace(/\/$/, '');
+  const signature = twilio.getExpectedTwilioSignature(String(process.env.TWILIO_AUTH_TOKEN), `${base}/api/messages/inbound`, corps);
+  return api.publique('POST', '/api/messages/inbound', new URLSearchParams(corps).toString(), {
+    'Content-Type': 'application/x-www-form-urlencoded', 'X-Twilio-Signature': signature,
+  });
+}
+
+/** Le numéro doit désigner UNE seule fiche (et conversation) du bureau : on libère celles d'avant. */
+export async function reserverTelephone(b: Bureau, telephone: string) {
+  await b.admin.from('clients').update({ phone: null }).eq('org_id', b.orgA).eq('phone', telephone);
+  await b.admin.from('conversations').delete().eq('org_id', b.orgA).eq('phone_number', telephone);
+}
