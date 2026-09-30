@@ -1,0 +1,245 @@
+/**
+ * VAGUE 4 — les gardes SERVEUR de l'interface des automatisations
+ * (audit V2, 11-interface.md §9). Les VRAIES routes devant un faux client
+ * Supabase qui compte les écritures (même harnais que
+ * automatisations-publication-serveur.test.ts).
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import express from 'express';
+import type { AddressInfo } from 'node:net';
+
+const ORG = '11111111-2222-3333-4444-555555555555';
+const FACTURE = 'aaaaaaaa-0000-4000-8000-000000000011';
+const CASSEE_PUBLIEE = 'aaaaaaaa-0000-4000-8000-000000000012';
+
+type Ligne = Record<string, unknown>;
+let lignes: Record<string, Ligne> = {};
+const ecritures: Array<{ id: string; patch: Ligne }> = [];
+
+/** Un faux client qui lit `lignes` et note chaque update. */
+function fauxClient() {
+  return {
+    from: (table: string) => {
+      let filtreId: string | null = null;
+      let patch: Ligne | null = null;
+      let insertion = false;
+      let inseree: Ligne | null = null;
+      const filtres: Record<string, unknown> = {};
+      const chaine: Record<string, unknown> = {
+        // Un dossier au nom déjà pris : l'index unique répond 23505.
+        insert: (ligne: Ligne) => { insertion = true; inseree = ligne; return chaine; },
+        select: () => chaine,
+        eq: (col: string, v: unknown) => { if (col === 'id') filtreId = String(v); else filtres[col] = v; return chaine; },
+        is: (col: string, v: unknown) => { filtres[col] = v; return chaine; },
+        order: () => chaine,
+        maybeSingle: async () => ({ data: filtreId ? lignes[filtreId] ?? null : null, error: null }),
+        single: async () => {
+          if (insertion && table === 'automation_folders') return { data: null, error: { code: '23505', message: 'duplicate' } };
+          if (insertion) return { data: inseree, error: null };
+          if (patch && filtreId && lignes[filtreId]) {
+            ecritures.push({ id: filtreId, patch });
+            lignes[filtreId] = { ...lignes[filtreId], ...patch };
+          }
+          return { data: filtreId ? lignes[filtreId] ?? null : null, error: null };
+        },
+        update: (p: Ligne) => { patch = p; return chaine; },
+        then: (ok: (r: unknown) => unknown) => {
+          // `update(...).eq(...).eq(...).select(...)` attendu directement.
+          if (patch && filtreId && lignes[filtreId]) {
+            ecritures.push({ id: filtreId, patch });
+            lignes[filtreId] = { ...lignes[filtreId], ...patch };
+            return Promise.resolve({ data: [lignes[filtreId]], error: null }).then(ok);
+          }
+          // Une LISTE (select sans id) : les lignes de la table qui passent les filtres.
+          if (!patch && !filtreId && table === 'automation_rules') {
+            const liste = Object.values(lignes).filter((l) => Object.entries(filtres)
+              .every(([c, v]) => c === 'org_id' || (l[c] ?? null) === v));
+            return Promise.resolve({ data: liste, error: null }).then(ok);
+          }
+          return Promise.resolve({ data: [], error: null }).then(ok);
+        },
+      };
+      return chaine;
+    },
+  };
+}
+
+vi.mock('../server/lib/supabase', () => ({
+  requireAuthedClient: async () => ({ client: fauxClient(), orgId: ORG, user: { id: 'u1' } }),
+  getServiceClient: () => fauxClient(),
+}));
+vi.mock('../server/lib/automatisations-bureaux', () => ({
+  bureauxCibles: vi.fn(), copierVersBureaux: vi.fn(), propagerAuxCopies: vi.fn(async () => []),
+}));
+
+const { default: routeurPublication } = await import('../server/routes/automation-publication');
+const { default: routeurRegles } = await import('../server/routes/automation-rules');
+
+async function appeler(methode: string, chemin: string, corps: unknown, entetes: Record<string, string> = {}) {
+  const app = express();
+  app.use(express.json());
+  app.use('/api', routeurRegles);
+  app.use('/api', routeurPublication);
+  const serveur = app.listen(0);
+  try {
+    const { port } = serveur.address() as AddressInfo;
+    const res = await fetch(`http://127.0.0.1:${port}/api${chemin}`, {
+      method: methode,
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer x', ...entetes },
+      body: JSON.stringify(corps),
+    });
+    return { status: res.status, json: await res.json().catch(() => null) as any };
+  } finally {
+    serveur.close();
+  }
+}
+
+beforeEach(() => {
+  ecritures.length = 0;
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  lignes = {
+    // PUBLIÉE, saine : « Envoyer la facture » sur « Facture envoyée ».
+    [FACTURE]: {
+      id: FACTURE, name: 'Envoi facture', trigger_event: 'invoice.sent', conditions: {}, is_preset: false,
+      is_active: true, deleted_at: null, actions: [], delay_seconds: 0, modele_id: null,
+      steps: [{ id: 'e1', type: 'action', action: { type: 'envoyer_facture', config: {} }, suivant: null }],
+    },
+    // PUBLIÉE mais DÉJÀ cassée (règle d'avant la garde) : un courriel sans objet.
+    [CASSEE_PUBLIEE]: {
+      id: CASSEE_PUBLIEE, name: 'Ancienne cassée', trigger_event: 'quote.sent', conditions: {}, is_preset: false,
+      is_active: true, deleted_at: null, actions: [], delay_seconds: 0, modele_id: null,
+      steps: [{ id: 'e1', type: 'action', action: { type: 'send_email', config: { subject: '', body: '' } }, suivant: null }],
+    },
+  };
+});
+
+// ─── A-03 ───────────────────────────────────────────────────────
+
+describe('A-03 — une automatisation PUBLIÉE ne peut pas être rendue cassée', () => {
+  it('changer son déclencheur pour un déclencheur incompatible est refusé (422), rien n’est écrit', async () => {
+    const r = await appeler('PATCH', `/automations/rules/${FACTURE}`, { trigger_event: 'lead.created' });
+    expect(r.status).toBe(422);
+    expect(r.json.code).toBe('publiee_cassee');
+    expect(r.json.error).toMatch(/publiée/);
+    expect(r.json.error).toMatch(/brouillon/);
+    expect(ecritures).toHaveLength(0);
+    expect(lignes[FACTURE].trigger_event).toBe('invoice.sent');
+  });
+
+  it('remplacer ses étapes par une action qui ne va pas avec le déclencheur est refusé', async () => {
+    // « Envoyer le devis » sur « Facture envoyée » : il n'y a pas de devis.
+    const r = await appeler('PATCH', `/automations/rules/${FACTURE}`, {
+      steps: [{ id: 'e1', type: 'action', action: { type: 'envoyer_soumission', config: {} }, suivant: null }],
+    });
+    expect(r.status).toBe(422);
+    expect(ecritures).toHaveLength(0);
+  });
+
+  it('la même modification sur un BROUILLON passe : on construit librement', async () => {
+    lignes[FACTURE].is_active = false;
+    const r = await appeler('PATCH', `/automations/rules/${FACTURE}`, { trigger_event: 'lead.created' });
+    expect(r.status).toBe(200);
+    expect(lignes[FACTURE].trigger_event).toBe('lead.created');
+  });
+
+  it('la dépublier dans le même envoi passe (repasser en brouillon n’est jamais refusé)', async () => {
+    const r = await appeler('PATCH', `/automations/rules/${FACTURE}`, { trigger_event: 'lead.created', is_active: false });
+    expect(r.status).toBe(200);
+    expect(lignes[FACTURE].is_active).toBe(false);
+  });
+
+  it('renommer ou ranger une publiée ne rejoue rien', async () => {
+    const r = await appeler('PATCH', `/automations/rules/${FACTURE}`, { name: 'Envoi facture v2' });
+    expect(r.status).toBe(200);
+  });
+
+  it('une publiée DÉJÀ cassée reste modifiable tant que la modification n’ajoute pas de problème', async () => {
+    // On corrige l'objet sans encore écrire le corps : un problème en moins, aucun de plus.
+    const r = await appeler('PATCH', `/automations/rules/${CASSEE_PUBLIEE}`, {
+      steps: [{ id: 'e1', type: 'action', action: { type: 'send_email', config: { subject: 'Suivi', body: 'Bonjour' } }, suivant: null }],
+    });
+    expect(r.status).toBe(200);
+  });
+});
+
+// ─── A-09 ───────────────────────────────────────────────────────
+
+describe('A-09 — le serveur répond dans la langue de l’interface', () => {
+  const EN = { 'Accept-Language': 'en' };
+
+  it('refus de publication en anglais pour un utilisateur anglais', async () => {
+    lignes[FACTURE].is_active = false;
+    lignes[FACTURE].steps = [{ id: 'e1', type: 'action', action: { type: 'envoyer_soumission', config: {} }, suivant: null }];
+    const r = await appeler('POST', `/automations/rules/${FACTURE}/publication`, { actif: true }, EN);
+    expect(r.status).toBe(422);
+    expect(r.json.error).toMatch(/^Publishing refused/);
+    expect(r.json.error).not.toMatch(/Publication refusée|déclencheur/);
+  });
+
+  it('… et en français par défaut', async () => {
+    lignes[FACTURE].is_active = false;
+    lignes[FACTURE].steps = [{ id: 'e1', type: 'action', action: { type: 'envoyer_soumission', config: {} }, suivant: null }];
+    const r = await appeler('POST', `/automations/rules/${FACTURE}/publication`, { actif: true });
+    expect(r.json.error).toMatch(/^Publication refusée/);
+  });
+
+  it('une publiée qu’on casserait : refus en anglais', async () => {
+    const r = await appeler('PATCH', `/automations/rules/${FACTURE}`, { trigger_event: 'lead.created' }, EN);
+    expect(r.status).toBe(422);
+    expect(r.json.error).toMatch(/is published/);
+  });
+
+  it('dossier en double : message anglais', async () => {
+    const r = await appeler('POST', '/automations/folders', { name: 'Relances' }, EN);
+    expect(r.status).toBe(409);
+    expect(r.json.error).toBe('A folder already has this name.');
+  });
+
+  it('chaque message d’erreur écrit en dur dans les routes a sa traduction anglaise', async () => {
+    const { MESSAGES_EN } = await import('../server/lib/automations-langue');
+    const { readFileSync } = await import('node:fs');
+    const sources = ['server/routes/automation-rules.ts', 'server/lib/automations-publication.ts']
+      .map((f) => readFileSync(f, 'utf8')).join('\n');
+    // `error: '…'` dans les routes, `erreur: t('…')` dans la publication.
+    const litteraux = [...sources.matchAll(/\b(?:error|erreur): (?:t\()?'((?:[^'\\]|\\.)+)'/g)].map((m) => m[1].replace(/\\'/g, "'"));
+    const enMoins = litteraux.filter((m) => !(m in MESSAGES_EN));
+    expect(enMoins).toEqual([]);
+    expect(litteraux.length).toBeGreaterThan(30);
+  });
+});
+
+// ─── A-16 (serveur) ─────────────────────────────────────────────
+
+describe('A-16 — dupliquer une automatisation suffixe dans la langue de l’interface', () => {
+  it('« (copy) » en anglais, « (copie) » en français', async () => {
+    const en = await appeler('POST', `/automations/rules/${FACTURE}/duplicate`, {}, { 'Accept-Language': 'en' });
+    expect(en.status).toBe(201);
+    expect(en.json.name).toBe('Envoi facture (copy)');
+    const fr = await appeler('POST', `/automations/rules/${FACTURE}/duplicate`, {});
+    expect(fr.json.name).toBe('Envoi facture (copie)');
+  });
+});
+
+// ─── PERF-2 (serveur) ───────────────────────────────────────────
+
+describe('PERF-2 — la route de l’éditeur renvoie UNE règle', () => {
+  it('sa règle, le catalogue, et les autres publiées vivantes (jamais elle-même)', async () => {
+    lignes['aaaaaaaa-0000-4000-8000-000000000013'] = {
+      id: 'aaaaaaaa-0000-4000-8000-000000000013', name: 'À la corbeille', is_active: true, deleted_at: '2026-09-29T00:00:00Z',
+    };
+    const r = await appeler('GET', `/automations/editeur?rule_id=${FACTURE}`, undefined);
+    expect(r.status).toBe(200);
+    expect(r.json.rule.id).toBe(FACTURE);
+    expect(r.json.catalogue.declencheurs.length).toBeGreaterThan(10);
+    // (le faux client ne projette pas les colonnes : on compare les ids)
+    expect(r.json.autres.map((a: { id: string }) => a.id)).toEqual([CASSEE_PUBLIEE]);
+    expect(r.json.rules).toBeUndefined();
+  });
+
+  it('sans rule_id (nouvelle automatisation) : pas de règle', async () => {
+    const r = await appeler('GET', '/automations/editeur', undefined);
+    expect(r.status).toBe(200);
+    expect(r.json.rule).toBeNull();
+  });
+});

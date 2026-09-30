@@ -35,7 +35,7 @@ import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import type { AutomationRule } from '../lib/automationRulesApi';
 import {
-  chargerAutomatisations,
+  chargerEditeur,
   creerAutomatisation,
   modifierAutomatisation,
   genererParcoursAvecLumi,
@@ -56,6 +56,7 @@ import {
   etapeVierge,
   insererEtape,
   retirerEtape,
+  finDuParcours,
   estFormatOrigine,
   projeterFormatOrigine,
   apercuConversion,
@@ -684,9 +685,10 @@ export default function AutomationBuilderPage() {
      * l'éditeur vide : on réessaie deux fois (1,5 s puis 3 s) avant de le
      * dire. Signalé le 2026-09-28 : « y en a qui s'ouvrent pas ».
      */
-    const chargerAvecReprise = async (essai = 1): Promise<Awaited<ReturnType<typeof chargerAutomatisations>>> => {
+    // PERF-2 : SA règle par id, jamais toutes les règles de l'entreprise.
+    const chargerAvecReprise = async (essai = 1): Promise<Awaited<ReturnType<typeof chargerEditeur>>> => {
       try {
-        return await chargerAutomatisations();
+        return await chargerEditeur(estNouvelle ? null : (id ?? null));
       } catch (e) {
         if (essai >= 3 || !vivant) throw e;
         await new Promise((r) => setTimeout(r, 1500 * essai));
@@ -706,7 +708,7 @@ export default function AutomationBuilderPage() {
             steps: [], settings: null, is_active: false, is_preset: false, preset_key: null,
             created_at: '', updated_at: '', lumi_conversation: [],
           } satisfies AutomationRule
-          : d.rules.find((r) => r.id === id) ?? null;
+          : d.rule;
         setRegle(trouvee);
         /*
          * Le nom des préréglages est stocké en ANGLAIS en base
@@ -729,11 +731,7 @@ export default function AutomationBuilderPage() {
         setSteps(etapes);
         setHistorique([etapes]);
         setPosition(0);
-        setAutresAutomatisations(
-          d.rules
-            .filter((r) => r.id !== id && r.is_active && !r.deleted_at)
-            .map((r) => ({ id: r.id, nom: r.name })),
-        );
+        setAutresAutomatisations(d.autres.filter((r) => r.id !== id).map((r) => ({ id: r.id, nom: r.name })));
       })
       .catch((e: unknown) => {
         console.error('[builder] chargement échoué', e instanceof Error ? e.message : String(e));
@@ -825,7 +823,8 @@ export default function AutomationBuilderPage() {
       id: nouvelIdEtape(steps),
       // Le nom porte « (copie) » : deux cartes au même nom seraient
       // impossibles à distinguer sur le canevas.
-      nom: source.nom ? `${source.nom} (copie)` : null,
+      // Suffixe dans la langue de l'interface (audit V2, A-16).
+      nom: source.nom ? `${source.nom} ${fr ? '(copie)' : '(copy)'}` : null,
       action: { ...source.action, config: { ...source.action.config } },
       suivant: null,
     };
@@ -970,10 +969,21 @@ export default function AutomationBuilderPage() {
    * il fait partie de la promesse — mais on respire, on réessaie, et
    * l'utilisateur ne voit jamais l'erreur technique.
    */
+  /*
+   * Échecs d'affilée de l'enregistrement automatique (audit V2, A-12).
+   *
+   * Un échec repassait l'état à « modifié », ce qui relançait l'effet — donc
+   * un essai toutes les 3 s, sans fin — et le `toast.error` n'était jamais
+   * atteint : le nettoyage de l'effet (relancé par `en_cours`) avait déjà
+   * posé `annule`. On DIT l'échec, et on espace les reprises (3, 6, 12, 24,
+   * puis 48 s au plus) jusqu'au retour du serveur.
+   */
+  const echecsSauvegarde = useRef(0);
   useEffect(() => {
     if (etatSauvegarde !== 'modifie' || !regle) return;
     if (etapesIncompletes > 0) { setEtatSauvegarde('incomplet'); return; }
     let annule = false;
+    const delai = 3000 * 2 ** Math.min(echecsSauvegarde.current, 4);
 
     const minuterie = setTimeout(async () => {
       /*
@@ -1003,6 +1013,7 @@ export default function AutomationBuilderPage() {
         if (annule) return;
         try {
           await ecrire({ name: nom.trim() || regle.name, steps });
+          echecsSauvegarde.current = 0;
           /*
            * On confirme même si l'effet a été relancé : le serveur a bien
            * reçu `envoye`. Si l'écran a changé depuis, le nouvel état
@@ -1021,20 +1032,23 @@ export default function AutomationBuilderPage() {
             await new Promise((r) => setTimeout(r, attentes[essai]));
             continue;
           }
-          // Même raison : ne jamais rester bloqué sur « en cours ».
-          setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
-          if (annule) return;
+          echecsSauvegarde.current += 1;
+          // Dit AVANT de relancer (un seul toast, remplacé à chaque essai).
           // Jamais l'erreur brute : « Too many requests » en anglais ne dit
           // rien à un entrepreneur qui écrivait son message.
           toast.error(tropVite
             ? (fr
               ? 'Trop de modifications d’un coup — on réessaie dans un instant.'
               : 'Too many changes at once — retrying in a moment.')
-            : message);
+            : (fr
+              ? `Enregistrement impossible pour le moment — nouvel essai automatique. (${message})`
+              : `Could not save right now — retrying automatically. (${message})`), { id: 'enregistrement-auto' });
+          // Même raison : ne jamais rester bloqué sur « en cours ».
+          setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
           return;
         }
       }
-    }, 3000);
+    }, delai);
     return () => { annule = true; clearTimeout(minuterie); };
   }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire]);
 
@@ -1098,13 +1112,26 @@ export default function AutomationBuilderPage() {
           console.error('[AutomationBuilderPage] aperçu clients inactifs', e);
         }
       }
+      /*
+       * « de vrais messages à vos clients » SEULEMENT s'il en part : sinon la
+       * confirmation se contredisait avec l'avertissement « aucun message ne
+       * part au client » juste en dessous (audit V2, A-15).
+       */
+      const actionsPubliees = (steps.length > 0
+        ? steps.flatMap((e) => (e.type === 'action' ? [e.action] : []))
+        : (regle.actions ?? [])) as Array<{ type?: string }>;
+      const ecritAuClient = actionsPubliees.some((a) => trouverAction(String(a?.type ?? ''))?.vers_client);
       confirmationPublication.current = true;
       const ok = await confirmer({
         title: fr ? 'Publier cette automatisation ?' : 'Publish this automation?',
         message: [
-          fr
-            ? 'Elle commencera à envoyer de vrais messages à vos clients dès le prochain déclenchement.'
-            : 'It will start sending real messages to your clients at the next trigger.',
+          ecritAuClient
+            ? (fr
+              ? 'Elle commencera à envoyer de vrais messages à vos clients dès le prochain déclenchement.'
+              : 'It will start sending real messages to your clients at the next trigger.')
+            : (fr
+              ? 'Elle se déclenchera dès le prochain événement — pour du travail interne seulement.'
+              : 'It will run at the next event — internal work only.'),
           ...(visesAujourdhui ? [visesAujourdhui] : []),
           ...avertissements.map((a) => `⚠ ${a.message}`),
         ].join('\n\n'),
@@ -1258,6 +1285,41 @@ export default function AutomationBuilderPage() {
     return () => window.removeEventListener('beforeunload', avertir);
   }, [travailNonEnregistre]);
 
+  /*
+   * LE BOUTON « RETOUR » DU NAVIGATEUR (audit V2, A-04).
+   *
+   * `beforeunload` ne couvre que la fermeture de l'onglet, et le routeur de
+   * l'app est déclaratif (`<BrowserRouter>`) : `useBlocker` n'y existe pas,
+   * et `NavigationGuard` n'intercepte pas `popstate`. Revenir en arrière
+   * démontait donc l'éditeur et jetait les 3 dernières secondes de travail.
+   *
+   * On fait ce que fait « ← Mes automatisations » : on ENREGISTRE en
+   * partant — au démontage, avec l'état du dernier rendu. La requête
+   * survit au démontage ; un échec, ou une étape incomplète qui empêche
+   * d'enregistrer, est DIT par un message (le toast vit hors de la page).
+   */
+  const sortieGeree = useRef(false);
+  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle });
+  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle };
+  useEffect(() => () => {
+    const d = etatAuDepart.current;
+    if (sortieGeree.current || !d.aRegle) return;
+    if (d.etat === 'incomplet') {
+      toast.error(d.fr
+        ? 'Automatisation quittée sans enregistrer : une étape était incomplète.'
+        : 'Automation left without saving: a step was incomplete.');
+      return;
+    }
+    if ((d.etat !== 'modifie' && d.etat !== 'en_cours') || d.incompletes > 0) return;
+    d.ecrire({ name: d.nom, steps: d.steps }).catch((e: unknown) => {
+      console.error('[automatisations] enregistrement au départ impossible', e);
+      captureClientException(e, { where: 'AutomationBuilderPage.depart' });
+      toast.error(d.fr
+        ? `Vos dernières modifications n’ont pas pu être enregistrées : ${e instanceof Error ? e.message : String(e)}`
+        : `Your latest changes could not be saved: ${e instanceof Error ? e.message : String(e)}`);
+    });
+  }, []);
+
   /** Quitter l'éditeur — en demandant d'abord si du travail se perdrait. */
   const quitterEditeur = useCallback(async () => {
     /*
@@ -1298,6 +1360,8 @@ export default function AutomationBuilderPage() {
       });
       if (!ok) return;
     }
+    // Déjà enregistré (ou abandon confirmé) : le départ n'a rien à refaire.
+    sortieGeree.current = true;
     navigate('/automations');
   }, [regle, etapesIncompletes, etatSauvegarde, nom, steps, fr, navigate, ecrire]);
 
@@ -1728,9 +1792,15 @@ export default function AutomationBuilderPage() {
                     <div className="rounded-xl border border-danger/40 bg-danger/5 p-3">
                       <p className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-danger">
                         <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                        {fr
-                          ? `${bloquantsVivants.length} chose(s) à corriger avant de publier`
-                          : `${bloquantsVivants.length} thing(s) to fix before publishing`}
+                        {/* Publiée ET cassée (règle d'avant la garde serveur,
+                            A-03) : « avant de publier » mentait — elle l'est. */}
+                        {regle.is_active
+                          ? (fr
+                            ? `Publiée mais cassée : ${bloquantsVivants.length} chose(s) à corriger — rien ne part correctement`
+                            : `Published but broken: ${bloquantsVivants.length} thing(s) to fix — nothing goes out correctly`)
+                          : (fr
+                            ? `${bloquantsVivants.length} chose(s) à corriger avant de publier`
+                            : `${bloquantsVivants.length} thing(s) to fix before publishing`)}
                       </p>
                       <ul className="space-y-1">
                         {bloquantsVivants.slice(0, 4).map((p, i) => (
@@ -1960,12 +2030,18 @@ export default function AutomationBuilderPage() {
                   className="absolute inset-0 z-20 cursor-default focus:outline-none"
                 />
                 <div className="absolute left-1/2 top-24 z-30 w-[260px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-surface-card py-1 shadow-lg">
-                  {([
-                    ['dupliquer', fr ? 'Dupliquer l’action' : 'Duplicate action'],
-                    ['modifier', fr ? 'Modifier l’action' : 'Edit action'],
-                    ['supprimer', fr ? 'Supprimer l’action' : 'Delete action'],
-                    ['depuis', fr ? 'Supprimer à partir d’ici' : 'Delete from here'],
-                  ] as const).map(([cle, libelle]) => (
+                  {/* Seule une ACTION se duplique : « Dupliquer » proposé sur une
+                      condition ne faisait rien et laissait le menu ouvert
+                      (audit V2, A-13). Les autres étapes disent « l'étape ». */}
+                  {(() => {
+                    const estAction = steps.find((e) => e.id === menuEtape)?.type === 'action';
+                    return ([
+                      ['dupliquer', fr ? 'Dupliquer l’action' : 'Duplicate action'],
+                      ['modifier', estAction ? (fr ? 'Modifier l’action' : 'Edit action') : (fr ? 'Modifier l’étape' : 'Edit step')],
+                      ['supprimer', estAction ? (fr ? 'Supprimer l’action' : 'Delete action') : (fr ? 'Supprimer l’étape' : 'Delete step')],
+                      ['depuis', fr ? 'Supprimer à partir d’ici' : 'Delete from here'],
+                    ] as const).filter(([cle]) => cle !== 'dupliquer' || estAction);
+                  })().map(([cle, libelle]) => (
                     <button
                       key={cle}
                       type="button"
@@ -2051,13 +2127,16 @@ export default function AutomationBuilderPage() {
                             ) : (
                               Object.entries(e.rendu).map(([cle, valeur]) => {
                                 const champ = modele?.champs?.find((c) => c.cle === cle);
+                                // Un CHOIX se lit par son libellé (« Le propriétaire »),
+                                // jamais par sa clé brute (audit V2, A-15).
+                                const option = champ?.type === 'choix' ? champ.options?.find((o) => o.cle === valeur) : undefined;
                                 return (
                                   <div key={cle} className="mt-1.5">
                                     <span className="block text-[10px] uppercase text-text-tertiary">
                                       {champ ? (fr ? champ.fr : champ.en) : cle}
                                     </span>
                                     <span className="block whitespace-pre-wrap text-[13px] text-text-primary">
-                                      {valeur}
+                                      {option ? (fr ? option.fr : option.en) : valeur}
                                     </span>
                                   </div>
                                 );
@@ -2089,21 +2168,27 @@ export default function AutomationBuilderPage() {
 
             {/* Ajouter — en haut à droite, comme chez GHL.
                 Il ouvrait un simple message : il ajoute maintenant une étape
-                à la FIN du parcours, ce que son libellé promettait. */}
+                à la FIN du parcours, ce que son libellé promettait.
+                PAS sur une règle au format d'origine (lecture seule) : une
+                étape ajoutée enregistrait `steps`, et le moteur, qui suit
+                `steps` dès qu'il y en a, abandonnait en silence le texto et
+                la tâche d'origine (audit V2, A-02). On passe par
+                « Convertir », qui montre ce qui change. */}
+            {!formatOrigine && (
             <button
               type="button"
               onClick={() => {
-                // La dernière étape du fil principal : la nouvelle s'y accroche.
-                const dernier = steps.length
-                  ? [...steps].reverse().find((e) => e.type !== 'si' && e.type !== 'arreter')
-                  : null;
-                ouvrirAjout(dernier?.id ?? null);
+                // La vraie fin du chemin principal, parcourue depuis la tête —
+                // pas le dernier élément du tableau (A-05).
+                const fin = finDuParcours(steps);
+                ouvrirAjout(fin.apresId, fin.branche);
               }}
               className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-text-primary shadow-sm transition-colors hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
               {fr ? 'Ajouter' : 'Add'}
             </button>
+            )}
 
             {/* Zoom et déplacement — en bas à gauche, comme chez GHL. */}
             <div className="absolute bottom-4 left-4 flex flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-sm">

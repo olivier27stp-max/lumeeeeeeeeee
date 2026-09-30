@@ -13,6 +13,8 @@
 
 import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
+import { interfaceEnFrancais } from './champs/messages';
+import { appelServeur } from './appelServeur';
 
 export interface AdresseDAppel {
   id: string;
@@ -37,6 +39,9 @@ async function entetes(): Promise<HeadersInit> {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
+    // La langue de l'INTERFACE : le serveur répond dans cette langue
+    // (server/lib/automations-langue.ts — audit V2, A-09).
+    'Accept-Language': interfaceEnFrancais() ? 'fr' : 'en',
     ...(orgId ? { 'x-org-id': orgId } : {}),
   };
 }
@@ -53,14 +58,14 @@ async function erreur(reponse: Response): Promise<Error> {
 }
 
 export async function listerAdressesDAppel(): Promise<AdresseDAppel[]> {
-  const reponse = await fetch('/api/automations/webhooks', { headers: await entetes() });
+  const reponse = await appelServeur('/api/automations/webhooks', { headers: await entetes() });
   if (!reponse.ok) throw await erreur(reponse);
   const corps = await reponse.json();
   return corps.webhooks ?? [];
 }
 
 export async function creerAdresseDAppel(name: string): Promise<AdresseDAppel> {
-  const reponse = await fetch('/api/automations/webhooks', {
+  const reponse = await appelServeur('/api/automations/webhooks', {
     method: 'POST',
     headers: await entetes(),
     body: JSON.stringify({ name }),
@@ -70,7 +75,7 @@ export async function creerAdresseDAppel(name: string): Promise<AdresseDAppel> {
 }
 
 export async function basculerAdresseDAppel(id: string, enabled: boolean): Promise<AdresseDAppel> {
-  const reponse = await fetch(`/api/automations/webhooks/${id}`, {
+  const reponse = await appelServeur(`/api/automations/webhooks/${id}`, {
     method: 'PATCH',
     headers: await entetes(),
     body: JSON.stringify({ enabled }),
@@ -81,7 +86,7 @@ export async function basculerAdresseDAppel(id: string, enabled: boolean): Promi
 
 /** Nouvelle clé : l'ancienne adresse cesse de fonctionner. Rend la clé complète, une seule fois. */
 export async function regenererAdresseDAppel(id: string): Promise<AdresseDAppel> {
-  const reponse = await fetch(`/api/automations/webhooks/${id}/regenerer`, {
+  const reponse = await appelServeur(`/api/automations/webhooks/${id}/regenerer`, {
     method: 'POST',
     headers: await entetes(),
   });
@@ -90,7 +95,7 @@ export async function regenererAdresseDAppel(id: string): Promise<AdresseDAppel>
 }
 
 export async function supprimerAdresseDAppel(id: string): Promise<void> {
-  const reponse = await fetch(`/api/automations/webhooks/${id}`, {
+  const reponse = await appelServeur(`/api/automations/webhooks/${id}`, {
     method: 'DELETE',
     headers: await entetes(),
   });
@@ -109,14 +114,14 @@ export interface EtatPause {
 }
 
 export async function lireEtatPause(): Promise<EtatPause> {
-  const reponse = await fetch('/api/automations/pause', { headers: await entetes() });
+  const reponse = await appelServeur('/api/automations/pause', { headers: await entetes() });
   if (!reponse.ok) throw await erreur(reponse);
   return reponse.json();
 }
 
 /** Rend l'état RÉEL relu de la base après la bascule (pas celui demandé). */
 export async function basculerPause(paused: boolean): Promise<EtatPause> {
-  const reponse = await fetch('/api/automations/pause', {
+  const reponse = await appelServeur('/api/automations/pause', {
     method: 'POST',
     headers: await entetes(),
     body: JSON.stringify({ paused }),

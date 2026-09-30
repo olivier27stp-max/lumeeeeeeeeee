@@ -10,6 +10,7 @@
 import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
 import { changerPublication } from './automationBuilderApi';
+import { interfaceEnFrancais } from './champs/messages';
 
 export interface AutomationRule {
   id: string;
@@ -83,6 +84,24 @@ export async function updateRuleMessage(
   body: string,
   subject?: string,
 ): Promise<void> {
+  /*
+   * UN MESSAGE VIDE NE PART PAS (audit V2, A-06).
+   *
+   * Cette écriture passe par PostgREST, donc sans la validation Zod du
+   * serveur : vider le texto d'une règle PUBLIÉE depuis la liste écrivait
+   * `body = ""` et affichait « Message enregistré ». Le serveur, lui, refuse
+   * un message vide — on refuse pareil, ici, pour tous les écrans qui
+   * passent par cette fonction (liste, Réglages › Messagerie et Avis).
+   */
+  const fr = interfaceEnFrancais();
+  const texteVisible = body.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').trim();
+  if (!texteVisible) {
+    throw new Error(fr ? 'Le message ne peut pas être vide.' : 'The message cannot be empty.');
+  }
+  if (actionType === 'send_email' && subject !== undefined && !subject.trim()) {
+    throw new Error(fr ? 'L’objet du courriel ne peut pas être vide.' : 'The email subject cannot be empty.');
+  }
+
   const { data: rule, error: readErr } = await supabase
     .from('automation_rules')
     .select('actions')
@@ -244,11 +263,23 @@ export async function getAutomationLanguage(): Promise<'fr' | 'en'> {
 export async function setAutomationLanguage(lang: 'fr' | 'en'): Promise<void> {
   const orgId = await getCurrentOrgId();
   if (!orgId) throw new Error('No organization');
-  const { error } = await supabase
+  /*
+   * `.select()` : un rôle sans droit sur `company_settings` (membre avec
+   * seulement `automations.update`) voyait sa mise à jour filtrée par la RLS
+   * — 0 ligne, aucune erreur — et l'écran affichait « Messages en anglais »
+   * alors que rien n'avait changé (audit V2, A-07).
+   */
+  const { data, error } = await supabase
     .from('company_settings')
     .update({ default_language: lang })
-    .eq('org_id', orgId);
+    .eq('org_id', orgId)
+    .select('org_id');
   if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error(interfaceEnFrancais()
+      ? 'Seul un administrateur peut changer la langue des messages. Rien n’a été modifié.'
+      : 'Only an administrator can change the message language. Nothing was changed.');
+  }
 }
 
 /**

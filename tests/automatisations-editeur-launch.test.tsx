@@ -53,6 +53,16 @@ vi.mock('sonner', () => ({
 
 vi.mock('../src/lib/automationBuilderApi', () => ({
   chargerAutomatisations: () => api.charger(),
+  // PERF-2 (vague 4) : l'éditeur lit sa règle par id ; le harnais dérive la
+  // réponse de `api.charger` pour garder ses comptes d'appels.
+  chargerEditeur: async (id: string | null) => {
+    const d = await api.charger();
+    return {
+      rule: d.rules.find((r: { id: string }) => r.id === id) ?? null,
+      catalogue: d.catalogue,
+      autres: d.rules.filter((r: { id: string; is_active: boolean }) => r.id !== id && r.is_active).map((r: { id: string; name: string }) => ({ id: r.id, name: r.name })),
+    };
+  },
   creerAutomatisation: (b: any) => api.creer(b),
   modifierAutomatisation: (id: string, p: any) => api.modifier(id, p),
   genererParcoursAvecLumi: (...a: any[]) => api.generer(...a),
