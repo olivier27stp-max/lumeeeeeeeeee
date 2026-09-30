@@ -81,6 +81,11 @@ export function regleViseCetEvenement(rule: AutomationRule, event: CRMEvent): bo
   const m = event.metadata ?? {};
   if (rule.pipeline_id && m.pipeline_id && rule.pipeline_id !== m.pipeline_id) return false;
   if (rule.stage_id && m.stage_id && rule.stage_id !== m.stage_id) return false;
+  // « Sans mouvement depuis N jours » : la détection (pipeline_detecter_stagnation)
+  // écrit UNE alerte par règle, avec le seuil de CETTE règle. Rejouée sur les
+  // autres règles du même déclencheur, une règle « 7 jours » partait dès
+  // l'alerte d'une règle « 3 jours » de la même étape.
+  if (event.type === 'deal.stage_idle' && m.rule_id && m.rule_id !== rule.id) return false;
   return true;
 }
 
