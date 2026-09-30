@@ -234,6 +234,15 @@ export function evaluateConditions(
         return false;
       }
 
+      // « l'un de » sans LISTE : illisible. Ignoré, il laissait tout passer
+      // (une règle écrite hors de l'éditeur — Lumi, préréglage — ne passe
+      // pas par Zod).
+      const listeIllisible = (['in', 'not_in'] as const).find((op) => op in expected && !Array.isArray(expected[op]));
+      if (listeIllisible) {
+        console.warn(`[automationEngine] condition ignorée — « ${key} » : « ${listeIllisible} » attend une liste`);
+        return false;
+      }
+
       if ('eq' in expected && !memeValeur(actual, expected.eq)) return false;
       if ('neq' in expected && memeValeur(actual, expected.neq)) return false;
       if ('in' in expected && Array.isArray(expected.in)
