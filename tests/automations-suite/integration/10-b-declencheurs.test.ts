@@ -13,7 +13,7 @@
  *
  * Matrice : tests/automations-suite/matrice/B.md (B-001 à B-099).
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { marque, attendre } from '../harnais/moteur';
 import {
   preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux,
@@ -56,6 +56,10 @@ beforeAll(async () => {
     { routeur: champs.default }, { routeur: messages.default },
   ]);
 });
+// Une règle laissée active réagirait aux événements des tests suivants.
+afterEach(async () => {
+  await supprimerRegles(b.admin, regles.splice(0));
+});
 afterAll(async () => {
   await supprimerRegles(b.admin, regles);
   await api?.fermer();
@@ -92,7 +96,7 @@ async function verifier(p: { faux: string; vrai: string; idVrai: string }, atten
   // Une action lente (> 5 s) est d'abord journalisée « en attente du résultat »,
   // puis la MÊME ligne est complétée : on attend le résultat définitif.
   const lireLog = async () => (await journaux(b.admin, p.idVrai)).filter((l) => l.entity_id === attendu.entityId);
-  const log = await attendre(lireLog, (l) => l.length > 0 && l.every((x) => x.result_success || !String(x.result_error ?? '').includes('attente')), 20_000);
+  const log = await attendre(lireLog, (l) => l.length > 0 && l.every((x) => x.result_success || !/attente|^en cours$/.test(String(x.result_error ?? ''))), 20_000);
   expect(taches, `aucune tâche — journal : ${JSON.stringify(log)}`).toHaveLength(1);
   const [tache] = taches;
   expect(tache).toMatchObject({
