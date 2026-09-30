@@ -350,26 +350,43 @@ const getJob: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'get_job',
-    description: 'Get the full details of a single job by its id.',
+    description: 'Get the full details of a single job (with its visits and their visit_id) by its id OR its displayed number (« job 26 »).',
     parameters: {
       type: 'object',
-      properties: { job_id: { type: 'string', description: 'The job id.' } },
+      properties: { job_id: { type: 'string', description: 'The job id, or the job number shown in Lume.' } },
       required: ['job_id'],
     },
   },
   handler: async (args, ctx) => {
+    // Un NUMÉRO de job (« la job 26 ») n'est pas un identifiant : la requête par
+    // id échouait (uuid invalide) et Lumi répondait « souci de connexion à Lume »
+    // (éval des outils, 2026-09-30). On cherche alors par numéro affiché.
+    const cle = String(args.job_id ?? '').trim().replace(/^#/, '');
+    const parNumero = !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cle);
     const { data, error } = await ctx.client
       .from('jobs_active')
       .select('id, job_number, title, description, client_name, client_id, property_address, scheduled_at, end_at, status, derived_status, total_cents, subtotal_cents, tax_cents, tax_lines, currency, job_type, requires_invoicing, notes')
       .eq('org_id', ctx.orgId)
-      .eq('id', String(args.job_id))
+      .eq(parNumero ? 'job_number' : 'id', cle)
+      .limit(1)
       .maybeSingle();
     if (error) return toolError('db', error);
+    let job: any = data;
+    if (!job && parNumero && /^\d+$/.test(cle)) {
+      // Numéro avec préfixe de bureau (« MTL-26 ») : on accepte une fin de numéro UNIQUE.
+      const { data: proches } = await ctx.client.from('jobs_active').select('id').eq('org_id', ctx.orgId).ilike('job_number', `%-${cle}`).limit(2);
+      if ((proches ?? []).length === 1) {
+        const { data: j2 } = await ctx.client.from('jobs_active')
+          .select('id, job_number, title, description, client_name, client_id, property_address, scheduled_at, end_at, status, derived_status, total_cents, subtotal_cents, tax_cents, tax_lines, currency, job_type, requires_invoicing, notes')
+          .eq('org_id', ctx.orgId).eq('id', (proches as any[])[0].id).maybeSingle();
+        job = j2;
+      }
+    }
     // `introuvable`, pas `error` : le job n'existe pas, ce n'est PAS une panne.
     // Avec `error`, Lumi répondait « la consultation a échoué côté Lume »
     // (mesuré le 2026-09-22 sur le job 33, qui n'existe simplement pas) — le
     // client croit à un bug et le signale, alors que tout fonctionne.
-    if (!data) return { introuvable: true, message: "Ce job n'existe pas (ou plus) dans cette entreprise. Si un NUMÉRO de job a été donné, le chercher avec list_jobs — cet outil-ci attend l'identifiant interne, pas le numéro affiché." };
+    if (!job) return { introuvable: true, message: "Aucun job avec ce numéro ou cet identifiant dans cette entreprise (il a peut-être été supprimé). Vérifie le numéro avec l'utilisateur, ou cherche-le avec list_jobs." };
     // Le job complet inclut ses lignes d'items — sans elles, « c'est quoi le
     // détail du job » ne sait répondre que le total.
     // Les visites du job avec leur identifiant : « facture la visite d'hier »
@@ -378,7 +395,7 @@ const getJob: AgentTool = {
       .from('schedule_events')
       .select('id, start_at, end_at, status')
       .eq('org_id', ctx.orgId)
-      .eq('job_id', (data as any).id)
+      .eq('job_id', (job as any).id)
       // Une visite annulée (supprimée) ne ressort plus « planifiée » (audit 2026-09-30).
       .is('deleted_at', null)
       .order('start_at', { ascending: true })
@@ -386,9 +403,9 @@ const getJob: AgentTool = {
     const { data: items } = await ctx.client
       .from('job_line_items')
       .select('name, qty, unit_price_cents, total_cents, included')
-      .eq('job_id', (data as any).id)
+      .eq('job_id', (job as any).id)
       .is('deleted_at', null);
-    return { ...data, line_items: items || [], visits: (visites || []).map((v: any) => ({ visit_id: v.id, start_at: v.start_at, end_at: v.end_at, status: v.status })) };
+    return { ...job, line_items: items || [], visits: (visites || []).map((v: any) => ({ visit_id: v.id, start_at: v.start_at, end_at: v.end_at, status: v.status })) };
   },
 };
 
