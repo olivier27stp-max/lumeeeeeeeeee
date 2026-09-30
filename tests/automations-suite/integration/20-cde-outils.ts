@@ -115,7 +115,11 @@ export async function avancer(b: Bureau, ruleId: string): Promise<void> {
 
 /** Les envois simulés depuis `depuis` qui portent la marque `m`. */
 export async function envoisMarques(b: Bureau, depuis: string, m: string) {
-  return (await envoisSimules(b.admin, b.orgA, depuis)).filter((r) =>
+  // La marque est unique : on élargit la fenêtre de 10 min pour ne pas
+  // dépendre de l'écart d'horloge entre ce poste et la base (test instable
+  // constaté sur D-003 : horodatage de la base < `depuis` local).
+  const large = new Date(Date.parse(depuis) - 10 * 60_000).toISOString();
+  return (await envoisSimules(b.admin, b.orgA, large)).filter((r) =>
     String(r.corps ?? '').includes(m) || String(r.sujet ?? '').includes(m));
 }
 
