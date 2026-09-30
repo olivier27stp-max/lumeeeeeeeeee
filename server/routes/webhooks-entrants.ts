@@ -34,6 +34,7 @@ import { getServiceClient } from '../lib/supabase';
 import { eventBus } from '../lib/eventBus';
 import { logger } from '../lib/logger';
 import { messageTropDeDemandes } from '../lib/message-429';
+import { extractIP } from '../lib/security';
 
 const router = Router();
 
@@ -60,6 +61,39 @@ function tropDeDemandes(cle: string): number | null {
   return null;
 }
 
+/**
+ * Débit des ÉCHECS par adresse IP (audit V2, C22).
+ *
+ * Le limiteur par clé ne voit rien d'un curieux qui essaie une clé
+ * DIFFÉRENTE à chaque appel : 80 clés au hasard = 80 × 404 et 80 requêtes
+ * SQL, sans aucun 429 (la route est montée avant le limiteur global). On
+ * compte donc les 404 par IP : au-delà de 20 par minute, 429 sans toucher
+ * la base. Seuls les ÉCHECS comptent — Zapier appelle depuis des IP
+ * partagées par tous ses clients, une vraie clé ne doit jamais être freinée
+ * par le trafic des autres.
+ */
+const MAX_ECHECS_PAR_IP = 20;
+const echecsParIp = new Map<string, { n: number; finFenetre: number }>();
+
+function ipBloquee(ip: string): number | null {
+  const e = echecsParIp.get(ip);
+  if (!e || Date.now() > e.finFenetre) return null;
+  return e.n >= MAX_ECHECS_PAR_IP ? Math.ceil((e.finFenetre - Date.now()) / 1000) : null;
+}
+
+function noterEchec(ip: string): void {
+  const maintenant = Date.now();
+  const e = echecsParIp.get(ip);
+  if (!e || maintenant > e.finFenetre) echecsParIp.set(ip, { n: 1, finFenetre: maintenant + FENETRE_MS });
+  else e.n++;
+}
+
+/** Pour les tests : repartir d'une mémoire vide. */
+export function oublierCompteursWebhooks(): void {
+  compteurs.clear();
+  echecsParIp.clear();
+}
+
 /*
  * Ménage : sans ça, une clé appelée une seule fois resterait en mémoire
  * pour toujours. Un processus qui tourne des mois finirait par garder
@@ -68,6 +102,7 @@ function tropDeDemandes(cle: string): number | null {
 setInterval(() => {
   const maintenant = Date.now();
   for (const [cle, e] of compteurs) if (maintenant > e.finFenetre) compteurs.delete(cle);
+  for (const [ip, e] of echecsParIp) if (maintenant > e.finFenetre) echecsParIp.delete(ip);
 }, 5 * FENETRE_MS).unref();
 
 /**
@@ -80,11 +115,19 @@ setInterval(() => {
  */
 router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, res) => {
   const cle = String(req.params.cle ?? '');
+  const ip = extractIP(req);
+
+  const bloquee = ipBloquee(ip);
+  if (bloquee !== null) {
+    res.set('Retry-After', String(bloquee));
+    return res.status(429).json({ error: messageTropDeDemandes(bloquee) });
+  }
 
   // Forme attendue : 64 caractères hexadécimaux. On écarte tout le reste
   // sans toucher la base — un scanner d'URL ne doit pas nous coûter une
   // requête SQL par essai.
   if (!/^[0-9a-f]{64}$/.test(cle)) {
+    noterEchec(ip);
     return res.status(404).json({ error: 'Webhook introuvable.' });
   }
 
@@ -111,6 +154,7 @@ router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, 
   // Même réponse pour « inconnue » et « désactivé » : sinon on confirme
   // l'existence d'une clé à qui la devine.
   if (!hook || !hook.enabled) {
+    noterEchec(ip);
     return res.status(404).json({ error: 'Webhook introuvable.' });
   }
 
