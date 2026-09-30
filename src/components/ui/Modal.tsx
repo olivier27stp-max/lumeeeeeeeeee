@@ -28,16 +28,26 @@ export default function Modal({ open, onClose, title, description, children, siz
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<Element | null>(null);
+  // `onClose` change à chaque rendu chez la plupart des appelants : s'il était une
+  // dépendance de l'effet, CHAQUE rendu du parent remettait le focus sur la fenêtre
+  // (requestAnimationFrame plus bas) — un menu ouvert par un clic (ex. « + Étiquette »
+  // du Nouveau deal) perdait le focus et se refermait aussitôt : « il ne se passe rien ».
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
     // Save and restore focus
     previousFocusRef.current = document.activeElement;
-    // Focus the dialog after render
-    requestAnimationFrame(() => dialogRef.current?.focus());
+    // Focus sur la fenêtre après le rendu — sauf si un champ à l'intérieur l'a déjà
+    // (autoFocus) : le lui reprendre le faisait « blur » et refermait sa liste.
+    requestAnimationFrame(() => {
+      const d = dialogRef.current;
+      if (d && !d.contains(document.activeElement)) d.focus();
+    });
 
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'Escape') { onCloseRef.current(); return; }
       // Focus trap — Tab cycles within modal
       if (e.key === 'Tab' && dialogRef.current) {
         const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
@@ -59,7 +69,7 @@ export default function Modal({ open, onClose, title, description, children, siz
       // Restore previous focus
       if (previousFocusRef.current instanceof HTMLElement) previousFocusRef.current.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
