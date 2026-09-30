@@ -31,7 +31,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { clientAnthropic, isLumiConfigured } from './llm';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AGENT_TOOLS, TOOLS_BY_NAME } from '../agent/tools';
-import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../agent/garde';
+import { executerOutilGarde, PERMISSION_PAR_OUTIL, resoudreNumeros } from '../agent/garde';
 import { masquerIds, demasquerIds } from '../agent/refs';
 import { CONSIGNES_COLLEGUE } from '../agent/consignesCollegue';
 import type { Rapport } from '../agent/tools-rapports';
@@ -460,7 +460,10 @@ export async function tourLumi(opts: {
       if (outil.kind === 'write') {
         // Plusieurs écritures dans la même réponse (créer le job, l'assigner,
         // texter le client) = une seule carte à confirmer, exécutées dans l'ordre.
-        enAttente.push({ tool_use_id: appel.id, tool: appel.name, args });
+        // Numéros affichés (« facture INV-000017 », « job 33 ») résolus AVANT la carte :
+        // la carte et l'exécution visent le même identifiant (audit 2026-09-30).
+        const resolus = await resoudreNumeros(args, opts.orgId).catch(() => null);
+        enAttente.push({ tool_use_id: appel.id, tool: appel.name, args: resolus && 'args' in resolus ? resolus.args : args });
         continue;
       }
 

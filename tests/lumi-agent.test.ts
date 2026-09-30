@@ -171,6 +171,7 @@ vi.mock('@anthropic-ai/sdk', () => ({ default: class { messages = { stream: stre
 
 const outilsExecutes: Array<{ name: string; args: any }> = [];
 vi.mock('../server/lib/agent/garde', () => ({
+  resoudreNumeros: async (args: any) => ({ args }),
   PERMISSION_PAR_OUTIL: { list_invoices: { cle: 'invoices.read', capacite: 'la consultation des factures' }, create_job: { cle: 'jobs.create', capacite: 'la création de jobs' } },
   executerOutilGarde: async (o: any) => {
     outilsExecutes.push({ name: o.name, args: o.args });

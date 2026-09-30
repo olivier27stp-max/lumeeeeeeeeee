@@ -235,6 +235,10 @@ export async function apercuAction(args: Record<string, any>, ctx: Ctx): Promise
     if (estUuid(v) || /(^|_)id$/.test(cle)) {
       // Identifiant sans résolveur : on dit qu'il y a un élément visé, sans l'inventer.
       if (estUuid(v)) cibles.push({ libelle: L('Élément visé', 'Target'), valeur: cle.replace(/_id$/, '').replace(/_/g, ' ') });
+      // Une fiche (client, job, facture, membre…) désignée par autre chose qu'un
+      // identifiant — un nom devenu « jean-pierre-gagnon », un numéro introuvable :
+      // le modèle l'a inventé. La carte le SIGNALE (audit 2026-09-30, éval des outils).
+      else if (res && typeof v === 'string' && v.trim()) cibles.push({ ...introuvable(L(cle.replace(/_id$/, '').replace(/_/g, ' '), cle.replace(/_id$/, '').replace(/_/g, ' '))), valeur: `« ${v.slice(0, 60)} » ne correspond à aucune fiche de l'entreprise`, valeur_en: `“${v.slice(0, 60)}” matches no record in this company` });
       continue;
     }
     const d = detail(cle, v, fuseau);

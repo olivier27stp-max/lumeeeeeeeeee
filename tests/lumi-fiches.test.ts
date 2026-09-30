@@ -177,3 +177,12 @@ describe('rendreMessages : le reçu survit à la relecture', () => {
     expect(carte.proposal?.fiche).toEqual(fiche);
   });
 });
+
+describe('carte : identifiant inventé', () => {
+  it('une fiche désignée par un nom (« jean-pierre-gagnon ») est signalée, jamais cachée', async () => {
+    const { apercuProposition } = await import('../server/lib/lumi/fiches');
+    const a: any = await apercuProposition('delete_client', { client_id: 'jean-pierre-gagnon' }, ctx());
+    expect(a.cibles[0]).toMatchObject({ alerte: true });
+    expect(a.cibles[0].valeur).toMatch(/ne correspond à aucune fiche/);
+  });
+});

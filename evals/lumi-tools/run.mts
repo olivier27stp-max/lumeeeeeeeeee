@@ -21,7 +21,8 @@
  *   PORT=3012 LUMI_ROUTEUR=actif LUMI_TOURS_PAR_HEURE=0 node --env-file=.env.local --import tsx server/index.ts
  *   node --env-file=.env.local --import tsx evals/lumi-tools/run.mts [--api http://localhost:3012] [--section facturation]
  *        [--seulement void_invoice,refund_payment] [--sortie evals/lumi-tools/resultats/apres.json] [--parallele 3]
- *        [--forfait autopilot]   (staging : forfait avec Lumi le temps de la batterie, remis à la fin)
+ *        [--reprendre resultats/avant.json]   (rejoue les cas en erreur et fusionne)
+ *        [--forfait autopilot] [--budget 100000]   (staging : forfait avec Lumi et budget relevé le temps de la batterie, remis à la fin)   (staging : forfait avec Lumi le temps de la batterie, remis à la fin)
  */
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -127,7 +128,12 @@ async function main() {
   const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', { auth: { persistSession: false, autoRefreshToken: false } });
   const anon = createClient(url, process.env.VITE_SUPABASE_ANON_KEY ?? '', { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const tous = chargerCas().filter((c) => (!SECTION || c.section === SECTION) && (!SEULEMENT || SEULEMENT.has(c.outil ?? c.id)));
+  // --reprendre fichier.json : rejoue seulement les cas en ERREUR (serveur tombé, réseau) et fusionne.
+  const REPRENDRE = arg('--reprendre', '');
+  const precedents: Resultat[] = REPRENDRE ? JSON.parse(readFileSync(REPRENDRE, 'utf8')).resultats : [];
+  const aRejouer = new Set(precedents.filter((r) => r.verdict_outil === 'erreur').map((r) => r.id));
+  const tous = chargerCas().filter((c) => (!SECTION || c.section === SECTION) && (!SEULEMENT || SEULEMENT.has(c.outil ?? c.id))
+    && (!REPRENDRE || aRejouer.has(c.id) || !precedents.some((r) => r.id === c.id)));
   const { data: l, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email: COMPTE });
   if (error) throw new Error(`lien magique : ${error.message}`);
   const { data: s, error: e2 } = await anon.auth.verifyOtp({ token_hash: l.properties.hashed_token, type: 'magiclink' });
@@ -201,6 +207,19 @@ async function main() {
     await admin.from('subscriptions').update({ plan_id: (plan as any).id }).eq('id', (abo as any).id);
     console.log(`forfait temporaire : ${FORFAIT} (sera remis à la fin)`);
   }
+  // --budget 100000 (cents, staging) : le budget mensuel du forfait de l'org est relevé le
+  // temps de la batterie, puis remis. Sans ça, la batterie épuise le mois ou déclenche le
+  // plafond journalier (palier « restreint ») en cours de route, et la comparaison est faussée.
+  const BUDGET = Number(arg('--budget', '0')) || 0;
+  let budgetAvant: { planId: string; cents: number } | null = null;
+  if (BUDGET > 0) {
+    const { data: abo } = await admin.from('subscriptions').select('plan_id').eq('org_id', orgId).eq('status', 'active').limit(1).maybeSingle();
+    const { data: plan } = await admin.from('plans').select('id, ai_monthly_budget_cents').eq('id', (abo as any)?.plan_id).maybeSingle();
+    if (!plan) throw new Error('budget temporaire impossible (forfait introuvable)');
+    budgetAvant = { planId: (plan as any).id, cents: Number((plan as any).ai_monthly_budget_cents) || 0 };
+    await admin.from('plans').update({ ai_monthly_budget_cents: BUDGET }).eq('id', budgetAvant.planId);
+    console.log(`budget temporaire : ${BUDGET} ¢ (sera remis à ${budgetAvant.cents} ¢)`);
+  }
   // Mode « demander » le temps de la batterie : aucune écriture ne s'exécute.
   await admin.from('memberships').update({ lumi_mode: 'demander' }).eq('user_id', userId).eq('org_id', orgId);
   const resultats: Resultat[] = [];
@@ -217,12 +236,20 @@ async function main() {
     }));
   } finally {
     await admin.from('memberships').update({ lumi_mode: (m as any).lumi_mode }).eq('user_id', userId).eq('org_id', orgId);
+    if (budgetAvant) {
+      await admin.from('plans').update({ ai_monthly_budget_cents: budgetAvant.cents }).eq('id', budgetAvant.planId);
+      console.log('budget d’origine remis');
+    }
     if (forfaitAvant) {
       await admin.from('subscriptions').update({ plan_id: forfaitAvant.plan_id }).eq('id', forfaitAvant.id);
       console.log('forfait d’origine remis');
     }
   }
 
+  if (REPRENDRE) {
+    const nouveaux = new Set(resultats.map((r) => r.id));
+    resultats.unshift(...precedents.filter((r) => !nouveaux.has(r.id)));
+  }
   const bilan = bilanDe(resultats);
   mkdirSync(dirname(SORTIE), { recursive: true });
   writeFileSync(SORTIE, JSON.stringify({ date: new Date().toISOString(), api: API, bilan, resultats }, null, 1));
