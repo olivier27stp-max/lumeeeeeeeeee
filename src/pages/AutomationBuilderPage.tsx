@@ -638,6 +638,20 @@ export default function AutomationBuilderPage() {
         : 'Lumi built the path — paused, publish it when you are ready.');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
+      /*
+       * Rien n'a été construit : le serveur a retiré le brouillon VIDE né de
+       * cet envoi (il restait en base, « Nouvelle automatisation » sans
+       * étape — audit V2, L-7). L'éditeur redevient un brouillon local ; la
+       * prochaine sauvegarde le recrée. Aucune suppression ici : elle vit
+       * dans la liste, jamais à côté de « Publier ».
+       */
+      if ((e as { brouillonRetire?: boolean } | null)?.brouillonRetire) {
+        idReel.current = null;
+        creationEnVol.current = null;
+        setRegle((r) => (r ? { ...r, id: '' } : r));
+        passageALaRegleCreee.current = true;
+        navigate('/automations/nouvelle?lumi=1', { replace: true });
+      }
     } finally {
       setGenere(false);
     }

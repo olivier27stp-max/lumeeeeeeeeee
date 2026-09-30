@@ -331,7 +331,13 @@ export async function genererParcoursAvecLumi(
       rule_id: contexte?.ruleId ?? null,
     }),
   });
-  if (!reponse.ok) throw await erreurDe(reponse, 'Lumi n’a pas pu construire ce parcours.');
+  if (!reponse.ok) {
+    // `brouillon_retire` : le serveur a retiré le brouillon vide né de cet envoi.
+    const corps = await reponse.clone().json().catch(() => null) as { brouillon_retire?: boolean } | null;
+    const erreur = await erreurDe(reponse, 'Lumi n’a pas pu construire ce parcours.');
+    if (corps?.brouillon_retire) (erreur as Error & { brouillonRetire?: boolean }).brouillonRetire = true;
+    throw erreur;
+  }
   return reponse.json();
 }
 

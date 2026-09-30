@@ -207,6 +207,36 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
 // ── Lumi construit un parcours ──────────────────────────────
 
 /**
+ * Retire (suppression douce) une règle SI elle est un brouillon vide et tout
+ * juste né : inactive, sans étape, sans conversation, créée il y a moins de
+ * 10 minutes. Rien d'autre n'est jamais touché. Vrai si elle a été retirée.
+ */
+async function retirerBrouillonVide(client: SupabaseClient, orgId: string, ruleId: string): Promise<boolean> {
+  if (!/^[0-9a-f-]{36}$/i.test(ruleId)) return false;
+  const { data, error } = await client
+    .from('automation_rules')
+    .select('id, is_active, steps, lumi_conversation, created_at')
+    .eq('id', ruleId).eq('org_id', orgId).is('deleted_at', null)
+    .maybeSingle();
+  if (error || !data) return false;
+  const vide = !data.is_active
+    && (!Array.isArray(data.steps) || data.steps.length === 0)
+    && (!Array.isArray(data.lumi_conversation) || data.lumi_conversation.length === 0)
+    && Date.now() - Date.parse(String(data.created_at)) < 10 * 60_000;
+  if (!vide) return false;
+  const { error: eRetrait } = await client
+    .from('automation_rules')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', ruleId).eq('org_id', orgId).is('deleted_at', null);
+  if (eRetrait) {
+    logger.error('[lumi/parcours] brouillon vide non retiré', { rule_id: ruleId, message: eRetrait.message });
+    return false;
+  }
+  return true;
+}
+
+
+/**
  * POST /api/automations/rules/generer
  *
  * Lumi PROPOSE un parcours ; il n'enregistre rien. La proposition est
@@ -222,6 +252,18 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
 router.post('/automations/rules/generer', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
+  /*
+   * Une génération qui échoue ne laisse pas de brouillon vide : l'éditeur
+   * crée la règle au PREMIER envoi (pour y garder la conversation) et elle
+   * restait en base, « Nouvelle automatisation » sans étape, quand rien
+   * n'était construit (audit V2, L-7). Le serveur sait ce qui est vide.
+   */
+  const ruleIdEnvoye = typeof (req.body as { rule_id?: unknown })?.rule_id === 'string'
+    ? String((req.body as { rule_id: string }).rule_id) : null;
+  const refuser = async (corpsReponse: Record<string, unknown>) => {
+    const retire = ruleIdEnvoye ? await retirerBrouillonVide(auth.client, auth.orgId, ruleIdEnvoye) : false;
+    return res.status(422).json({ ...corpsReponse, brouillon_retire: retire });
+  };
 
   const demande = String((req.body as { demande?: unknown })?.demande ?? '').trim();
   if (demande.length < 10) {
@@ -264,7 +306,7 @@ router.post('/automations/rules/generer', async (req, res) => {
 
   if (!resultat.parcours) {
     // `sans_lumi` : l'écran propose Autopilot au lieu d'afficher une erreur.
-    return res.status(422).json({ error: resultat.erreur ?? 'Lumi n’a rien pu construire.', sans_lumi: resultat.sansLumi === true });
+    return refuser({ error: resultat.erreur ?? 'Lumi n’a rien pu construire.', sans_lumi: resultat.sansLumi === true });
   }
 
   // Le garde-fou : ce que Lumi propose doit passer la validation humaine.
@@ -274,7 +316,7 @@ router.post('/automations/rules/generer', async (req, res) => {
       org_id: auth.orgId,
       motifs: verdict.error.issues.map((i) => i.message).slice(0, 3),
     });
-    return res.status(422).json({
+    return refuser({
       error: langue === 'fr'
         ? 'Lumi a proposé un parcours que le moteur ne saurait pas exécuter. Reformule, ou construis-le avec le « + ».'
         : 'Lumi proposed a path the engine could not run. Rephrase, or build it with “+”.',
@@ -283,7 +325,7 @@ router.post('/automations/rules/generer', async (req, res) => {
 
   const decl = trouverDeclencheur(resultat.parcours.trigger_event);
   if (!decl) {
-    return res.status(422).json({
+    return refuser({
       error: langue === 'fr'
         ? 'Lumi a choisi un déclencheur qui n’existe pas. Reformule ta demande.'
         : 'Lumi picked a trigger that does not exist. Rephrase your request.',
@@ -298,7 +340,7 @@ router.post('/automations/rules/generer', async (req, res) => {
   const inventee = await refAutomatisationInventee(auth.client, auth.orgId, verdict.data);
   if (inventee) {
     logger.error('[lumi/parcours] référence à une automatisation inexistante', { org_id: auth.orgId, rule_id: inventee });
-    return res.status(422).json({
+    return refuser({
       error: langue === 'fr'
         ? 'Lumi a voulu relier une automatisation qui n’existe pas. Redemande-le autrement (ex. : « quand le client répond, envoie mon lien Calendly »).'
         : 'Lumi tried to link an automation that does not exist. Ask again differently.',

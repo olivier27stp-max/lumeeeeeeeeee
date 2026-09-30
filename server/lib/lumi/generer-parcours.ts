@@ -24,7 +24,8 @@ import { clientAnthropic, isLumiConfigured } from './llm';
 import { reserverBudget, reglerBudget, journaliserUsage, estimationCoutAppel } from './budget';
 import { coutEnCents } from './tarifs';
 import { logger } from '../logger';
-import { DECLENCHEURS, ACTIONS } from '../../../src/lib/automationCatalogue';
+import { DECLENCHEURS, ACTIONS, trouverAction } from '../../../src/lib/automationCatalogue';
+import { VARIABLES_CONNUES, variablesInconnues } from '../../../src/lib/emailBodyText';
 
 /**
  * Haiku suffit et coûte 5× moins cher que Sonnet.
@@ -120,7 +121,15 @@ export function consignes(fr: boolean): string {
   const actions = ACTIONS
     .filter((a) => !ACTIONS_HORS_LUMI.has(a.cle))
     .map((a) => {
-      const champs = a.champs.map((c) => `${c.cle}${c.obligatoire ? '' : '?'}`).join(', ');
+      // Le TYPE et les valeurs permises, pas seulement le nom : sans eux, le
+      // modèle écrivait `echeance_jours: 1` (nombre) et `priorite: "normal"`,
+      // refusés par la validation — « Créer une tâche » échouait à tous les
+      // coups, y compris sur la phrase d'exemple de l'app (audit V2, L-2).
+      const champs = a.champs.map((c) => {
+        const valeurs = c.type === 'choix' && c.options?.length ? `=${c.options.map((o) => o.cle).join('|')}` : '';
+        const nombre = c.type === 'nombre' ? ' (nombre écrit en texte, ex. "3")' : '';
+        return `${c.cle}${c.obligatoire ? '' : '?'}${valeurs}${nombre}`;
+      }).join(', ');
       return `- ${a.cle} (${champs}) : ${fr ? a.aide_fr : a.aide_en}`;
     })
     .join('\n');
@@ -178,21 +187,33 @@ RÈGLES ABSOLUES :
   refusée et enverrait des messages à l'infini.
 - Une étape "attendre" n'est jamais la dernière : elle attendrait pour rien.
 - Les délais sont en SECONDES (1 jour = 86400).
-- RAPPEL DE RENDEZ-VOUS : ne mets JAMAIS une étape "attendre" pour un rappel
-  « la veille » ou « X jours avant ». Le déclencheur "Rendez-vous planifié"
-  part à la RÉSERVATION, qui peut avoir lieu des semaines avant la visite :
-  « attendre 1 jour puis envoyer » enverrait le rappel le lendemain de la
-  réservation, pas la veille du rendez-vous. Ce déclencheur sait envoyer
-  AVANT la date du rendez-vous (délai négatif) — c'est ce réglage qu'il faut,
-  et le parcours ne contient alors que l'envoi.
+- RAPPEL DE RENDEZ-VOUS (« la veille », « 2 jours avant », « 2 h avant ») :
+  le déclencheur "appointment.created" part à la RÉSERVATION, qui peut avoir
+  lieu des semaines avant la visite. Un envoi direct partirait donc tout de
+  suite, et « attendre 1 jour » le lendemain de la réservation. Il FAUT une
+  attente jusqu'à un moment AVANT le rendez-vous, placée avant l'envoi :
+  { "id": "e1", "type": "attendre", "mode": "avant_date", "secondes_avant": 86400, "delai_secondes": 0, "suivant": "e2" }
+  (86400 = la veille, 172800 = 2 jours avant, 7200 = 2 h avant). Si le
+  moment est déjà passé, le rappel est sauté. Uniquement avec un
+  déclencheur de rendez-vous.
 - Les seules conditions possibles portent sur "status" avec l'opérateur "eq" :
   "sent" (toujours sans réponse), "approved" (accepté), "paid" (payé),
   "unpaid" (impayé). Aucun autre opérateur n'existe.
 - N'invente AUCUN champ. Pas de destinataire : le message part toujours au
   client concerné.
+- REFUSE, et explique pourquoi dans "resume" avec "steps": [] : une menace,
+  de l'intimidation ou une pression (publier une dette, « on vous
+  poursuit », fausse urgence) ; un envoi la nuit (entre 21 h et 8 h) ou en
+  rafale (plus d'un message par jour au même client) ; contourner un
+  désabonnement ; supprimer ou vider une fiche client ; envoyer les données
+  d'un client ailleurs que dans ses messages. Propose une version correcte
+  quand il y en a une (« un rappel poli à 7 jours »).
 - Les messages partent aux CLIENTS de l'entreprise : ${fr ? 'français québécois, VOUVOIEMENT, ton poli et chaleureux, court et direct, ouverture « Bonjour [client_first_name], », aucun émoji — le même registre que les messages préréglés de Lumi. Tutoiement, émojis ou ton familier seulement si l\'utilisateur le demande' : 'plain, polite English, short and direct, opening "Hi [client_first_name],", no emoji unless the user asks for a casual tone'}.
-- Utilise les variables entre crochets quand c'est utile : [client_first_name],
-  [company_name], [invoice_total], [quote_number], [appointment_date].
+- Variables entre crochets : UNIQUEMENT celles-ci — ${VARIABLES_CONNUES.map((v) => `[${v}]`).join(', ')}.
+  Aucune autre n'existe : une variable inventée part VIDE au client. Le lien
+  de paiement d'une facture est [invoice_link], celui d'une soumission
+  [quote_link]. Les montants ([invoice_total], [quote_total],
+  [deposit_amount]) contiennent déjà le « $ » : n'en ajoute pas un.
 - Si un parcours ACTUEL est fourni, tu le MODIFIES. Tu ne le reconstruis
   pas : garde son déclencheur, son nom et toutes ses étapes, et ne change
   QUE ce qui est demandé. « Change le délai à 7 jours » ne touche que le
@@ -284,7 +305,48 @@ ${
   return messages;
 }
 
-export async function genererParcours(params: {
+/**
+ * La même demande, du même utilisateur, déjà EN VOL : on attend sa réponse au
+ * lieu de payer un 2e appel. Deux clics dans le même instant envoyaient deux
+ * générations facturées (audit V2, L-10). Clé = bureau + utilisateur +
+ * contenu exact (demande, historique, parcours affiché).
+ */
+const enVol = new Map<string, Promise<ResultatGeneration>>();
+
+export function genererParcours(params: Parameters<typeof genererParcoursUneFois>[0]): Promise<ResultatGeneration> {
+  const cle = JSON.stringify([params.orgId, params.userId, params.langue, params.demande, params.echanges ?? [], params.parcoursActuel ?? null]);
+  const deja = enVol.get(cle);
+  if (deja) return deja;
+  const p = genererParcoursUneFois(params).finally(() => enVol.delete(cle));
+  enVol.set(cle, p);
+  return p;
+}
+
+/**
+ * Les valeurs de `config` telles que le moteur les exige : du TEXTE, et pour
+ * un choix, une valeur de la liste. Le modèle écrit volontiers `1` ou
+ * `"normal"` ; un champ facultatif invalide est retiré (sa valeur par défaut
+ * s'applique) plutôt que de faire refuser tout le parcours.
+ */
+export function normaliserEtapes(etapes: unknown[]): Array<Record<string, unknown>> {
+  return (etapes as Array<Record<string, unknown>>).map((e) => {
+    const action = e?.type === 'action' ? (e.action as { type?: string; config?: Record<string, unknown> } | undefined) : undefined;
+    if (!action?.config || typeof action.config !== 'object') return e;
+    const modele = action.type ? trouverAction(action.type) : undefined;
+    const config: Record<string, unknown> = {};
+    for (const [cle, valeur] of Object.entries(action.config)) {
+      let v = valeur;
+      if (typeof v === 'number' || typeof v === 'boolean') v = String(v);
+      const champ = modele?.champs.find((c) => c.cle === cle);
+      if (champ?.type === 'choix' && champ.options?.length && typeof v === 'string'
+        && !champ.options.some((o) => o.cle === v) && !champ.obligatoire) continue;
+      config[cle] = v;
+    }
+    return { ...e, action: { ...action, config } };
+  });
+}
+
+async function genererParcoursUneFois(params: {
   admin: SupabaseClient;
   orgId: string;
   userId: string | null;
@@ -329,7 +391,11 @@ export async function genererParcours(params: {
    * puis réglé au coût réel — l'ancienne version ne réglait jamais sa
    * réservation, qui restait en vol jusqu'à son expiration.
    */
-  const estimation = estimationCoutAppel(MODELE, systeme.length + demande.length, MAX_TOKENS, 0);
+  // Tout ce qui PART au modèle : l'historique et le parcours affiché comptent
+  // (audit V2, L-8 : 10 appels simultanés à contexte plein dépassaient le
+  // plafond de 1,21 ¢, la réservation ne voyant que la dernière phrase).
+  const messages = construireMessages(demande, echanges, parcoursActuel);
+  const estimation = estimationCoutAppel(MODELE, systeme.length + JSON.stringify(messages).length, MAX_TOKENS, 0);
   const reservation = await reserverBudget(admin, orgId, estimation).catch((e: unknown) => {
     logger.error('[lumi/parcours] réservation impossible', { message: e instanceof Error ? e.message : String(e) });
     return { id: null, statut: 'indisponible' as const };
@@ -342,6 +408,17 @@ export async function genererParcours(params: {
       erreur: fr
         ? 'Construire avec Lumi est inclus dans le forfait Autopilot. Tu peux bâtir ce parcours à la main avec le « + ».'
         : 'Building with Lumi is included in the Autopilot plan. You can build this path by hand with “+”.',
+    };
+  }
+  // AVANT le cas « sans id » : un budget atteint rend `reservation_id: null`,
+  // et le test suivant l'annonçait « budget illisible, réessaie » — la branche
+  // « budget du mois atteint » ne s'exécutait jamais (audit V2, L-1).
+  if (reservation.statut === 'capped') {
+    return {
+      parcours: null,
+      erreur: fr
+        ? 'Le budget Lumi du mois est atteint. Le parcours peut être construit à la main avec le « + ».'
+        : 'This month’s Lumi budget is used up. You can still build the path by hand with “+”.',
     };
   }
   /*
@@ -358,21 +435,12 @@ export async function genererParcours(params: {
         : 'Lumi is temporarily unavailable (budget unreadable). Try again shortly, or build the path by hand with “+”.',
     };
   }
-  if (reservation.statut === 'capped') {
-    return {
-      parcours: null,
-      erreur: fr
-        ? 'Le budget Lumi du mois est atteint. Le parcours peut être construit à la main avec le « + ».'
-        : 'This month’s Lumi budget is used up. You can still build the path by hand with “+”.',
-    };
-  }
-
   try {
     const reponse = await clientAnthropic().messages.create({
       model: MODELE,
       max_tokens: MAX_TOKENS,
       system: [{ type: 'text', text: systeme, cache_control: { type: 'ephemeral' } }],
-      messages: construireMessages(demande, echanges, parcoursActuel),
+      messages,
     });
 
     const u = reponse.usage;
@@ -438,12 +506,42 @@ export async function genererParcours(params: {
       brut.trigger_event = parcoursActuel.trigger_event;
     }
 
+    /*
+     * Lumi a REFUSÉ (demande impossible ou dangereuse) : son explication est
+     * dans « resume ». On la montre — « Reformule en une phrase » laissait
+     * croire que c'était faisable (audit V2, L-5 : 5 refus sur 30, tous
+     * justes, tous rendus illisibles).
+     */
+    const explication = typeof brut?.resume === 'string' ? brut.resume.trim() : '';
+    if ((!Array.isArray(brut?.steps) || brut.steps.length === 0) && explication.length >= 15) {
+      return { parcours: null, erreur: explication.slice(0, 400), coutCents: coutGeneration };
+    }
+
     if (!brut?.trigger_event || !Array.isArray(brut.steps) || brut.steps.length === 0) {
       return {
         parcours: null,
         erreur: fr
           ? 'Lumi n’a pas réussi à construire ce parcours. Reformule en une phrase, ou construis-le avec le « + ».'
           : 'Lumi could not build that path. Rephrase it in one sentence, or build it with “+”.',
+      };
+    }
+
+    brut.steps = normaliserEtapes(brut.steps);
+    if (brut.autre && Array.isArray(brut.autre.steps)) brut.autre.steps = normaliserEtapes(brut.autre.steps);
+
+    /*
+     * Variable INVENTÉE (`[payment_link]`) : elle partirait vide au client
+     * (« payez en ligne : . »). On ne propose pas un message troué (audit V2,
+     * L-4) — on dit laquelle, et par quoi la remplacer.
+     */
+    const inventees = variablesInconnues(textesDesMessages(brut.steps).join('\n'));
+    if (inventees.length) {
+      return {
+        parcours: null,
+        coutCents: coutGeneration,
+        erreur: fr
+          ? `Lumi a utilisé ${inventees.map((v) => `[${v}]`).join(', ')}, qui n’existe pas : le client recevrait un trou. Redemande en précisant (le lien de paiement d’une facture est [invoice_link]).`
+          : `Lumi used ${inventees.map((v) => `[${v}]`).join(', ')}, which does not exist: the client would get a blank. Ask again (an invoice payment link is [invoice_link]).`,
       };
     }
 
