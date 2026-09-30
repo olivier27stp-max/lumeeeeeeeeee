@@ -381,12 +381,17 @@ describe('factures', () => {
     expect(f.rpcs.length).toBe(0);
   });
 
-  it('record_invoice_payment : paiement partiel via la RPC apply_invoice_payment (service), filtrée org', async () => {
+  it('record_invoice_payment : un VRAI paiement manuel (ligne payments), plus la RPC qui modifiait la facture sans paiement', async () => {
+    // Audit V2 (2026-09-30) : apply_invoice_payment modifiait la facture SANS
+    // ligne de paiement — absent des Paiements/rapports/QuickBooks, et effacé
+    // au premier paiement Stripe suivant (recalcul depuis payments).
     const admin = fauxClient(() => ({ data: { invoice_number: 'INV-0042', balance_cents: 9000, status: 'partial' }, error: null }));
     h.admin = admin.client;
     const f = fauxClient(() => ({ data: facture, error: null }));
     const r = await lancer('record_invoice_payment', { invoice_id: 'i1', amount_cents: 2500, method: 'cash' }, f.client);
-    expect(admin.rpcs).toEqual([{ name: 'apply_invoice_payment', params: { p_invoice_id: 'i1', p_org_id: ORG, p_amount_cents: 2500 } }]);
+    expect(admin.rpcs).toEqual([]);
+    const paiement = corps(appels(admin.journal, 'payments')[0], 'insert');
+    expect(paiement).toMatchObject({ org_id: ORG, created_by: 'user-1', invoice_id: 'i1', provider: 'manual', status: 'succeeded', method: 'cash', amount_cents: 2500 });
     expect(r).toMatchObject({ recorded: true, amount_cents: 2500, balance_cents: 9000, methode_paiement: 'cash', invoice: { statut: 'partiellement payée' } });
     expect(estFrancais(r.note)).toBe(true);
     expect(filtreOrg(f.journal[0])).toBe(true);

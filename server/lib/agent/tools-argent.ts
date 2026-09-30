@@ -31,6 +31,7 @@ import type { AgentTool, ToolContext } from './tools';
 import {
   executerIdempotent, champRequis, appelInterne, AppelInterneIncertain,
   traduireStatut, STATUT_DEVIS, STATUT_FACTURE,
+  enregistrerPaiementManuel,
 } from './tools-etendus';
 
 /* ── Garde-fous locaux ─────────────────────────────────────────── */
@@ -1213,7 +1214,7 @@ const recordInvoicePaymentTool: AgentTool = {
       if (!Number.isFinite(montant) || montant <= 0) throw new Error('Le montant doit être un nombre de cents strictement positif.');
       verifierPlafond(montant);
       // Lecture À L'IDENTITÉ (RLS garantit l'appartenance à l'org).
-      const inv = await lireFacture(ctx, invoiceId, 'id, invoice_number, status, total_cents, paid_cents, balance_cents, client_id');
+      const inv = await lireFacture(ctx, invoiceId, 'id, invoice_number, status, total_cents, paid_cents, balance_cents, client_id, job_id, currency');
       if (inv.status === 'paid' || (Number(inv.balance_cents) <= 0 && Number(inv.paid_cents) > 0)) {
         return { already_paid: true, invoice: { invoice_number: inv.invoice_number }, note: 'Cette facture est déjà payée — rien à enregistrer.' };
       }
@@ -1227,10 +1228,9 @@ const recordInvoicePaymentTool: AgentTool = {
         throw new Error('Ce montant règle la facture au complet — utilise mark_invoice_paid pour la marquer payée.');
       }
       const methode = ['cash', 'e-transfer', 'check', 'card'].includes(String(args.method)) ? String(args.method) : null;
-      // Même RPC (service_role) que mark_invoice_paid : paid/balance/statut mis à jour atomiquement, filtrée org.
+      // Un VRAI paiement manuel : le trigger recalcule la facture (solde, statut).
       const admin = getServiceClient();
-      const { error: eApply } = await admin.rpc('apply_invoice_payment', { p_invoice_id: invoiceId, p_org_id: ctx.orgId, p_amount_cents: montant });
-      if (eApply) throw eApply;
+      await enregistrerPaiementManuel(ctx, { id: invoiceId, client_id: inv.client_id, job_id: inv.job_id, currency: inv.currency }, montant, methode);
       const { data: apres } = await admin.from('invoices').select('invoice_number, balance_cents, status').eq('org_id', ctx.orgId).eq('id', invoiceId).maybeSingle();
 
       // Facture soldée → commissions du rep. Stripe les génère par webhook et
