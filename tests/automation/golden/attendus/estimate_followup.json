@@ -18,7 +18,7 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Suivi de votre devis",
+      "subject": "Suivi de votre devis",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>On vous a envoyé un devis récemment et on voulait faire un suivi.</p><p>Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre.</p><p>Cordialement,<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },

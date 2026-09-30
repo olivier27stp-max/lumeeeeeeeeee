@@ -40,7 +40,7 @@ import {
   evaluerCondition, LIBELLES_OPERATEUR, OPERATEURS_DUREE, OPERATEURS_PAR_FAMILLE,
   type Operateur, type UniteDuree,
 } from '../../lib/champs/filtres';
-import { nomDossier, nomSection, type ChampStandard } from '../../lib/champs/standard';
+import { nomDossier, nomSection, dossierRenommable, CLE_DOSSIER_DEPENSES, type ChampStandard } from '../../lib/champs/standard';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core';
@@ -807,16 +807,20 @@ function LigneDossier({ d, fr, glissable, nb, edition, onEdition, onRenommer, on
           onBlur={onRenommer} className="glass-input h-8 flex-1 text-[13px]" />
       ) : (
         <span className="flex flex-1 items-center gap-1.5 text-[13px] font-medium text-text-primary">{nomDossier(d, fr)}
-          {d.cle_systeme && <Lock size={12} className="text-text-tertiary" aria-label={fr ? 'Section du formulaire : ni renommée ni supprimée' : 'Form section: cannot be renamed or deleted'} />}
+          {d.cle_systeme && (d.cle_systeme === CLE_DOSSIER_DEPENSES
+            ? <Lock size={12} className="text-text-tertiary" aria-label={fr ? 'Dossier Dépenses : ses champs « montant » comptent dans la rentabilité des jobs ; renommable, pas supprimable' : 'Expenses folder: its money fields count in job profitability; can be renamed, not deleted'} />
+            : <Lock size={12} className="text-text-tertiary" aria-label={fr ? 'Section du formulaire : ni renommée ni supprimée' : 'Form section: cannot be renamed or deleted'} />)}
           <span className="ml-1 text-[12px] font-normal text-text-tertiary">{fr ? LIBELLES_OBJET[d.object_type].fr : LIBELLES_OBJET[d.object_type].en} · {nb} {fr ? 'champ(s)' : 'field(s)'}</span>
         </span>
       )}
       <button type="button" onClick={onNouveauChamp} className="text-[12px] font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded">
         {fr ? '+ Champ' : '+ Field'}
       </button>
-      {!d.cle_systeme && <>
-        <button type="button" aria-label={fr ? `Renommer ${d.name}` : `Rename ${d.name}`} onClick={() => onEdition(d.name)}
+      {dossierRenommable(d) && (
+        <button type="button" aria-label={fr ? `Renommer ${nomDossier(d, fr)}` : `Rename ${nomDossier(d, fr)}`} onClick={() => onEdition(nomDossier(d, fr))}
           className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Pencil size={13} aria-hidden /></button>
+      )}
+      {!d.cle_systeme && <>
         <button type="button" aria-label={fr ? `Supprimer ${d.name}` : `Delete ${d.name}`} onClick={() => onSupprimer(nb)}
           className="rounded p-1 text-text-tertiary hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Trash2 size={13} aria-hidden /></button>
       </>}

@@ -40,6 +40,19 @@ describe('bouton d’automatisation', () => {
     expect(b?.texte).toBe('Pay invoice');
   });
 
+  it('le libellé suit l’état : jamais « Payer » sous un paiement reçu, ni « Approuver » une soumission acceptée', async () => {
+    const lib = async (type: string, status: string, langue: 'fr' | 'en' = 'fr') =>
+      (await boutonPourEntite(faussDb({ data: { view_token: 'j', status } }), 'org1', type, 'x', langue))?.texte ?? null;
+    expect(await lib('invoice', 'paid')).toBe('Voir le reçu');
+    expect(await lib('invoice', 'paid', 'en')).toBe('View receipt');
+    expect(await lib('invoice', 'partial')).toBe('Voir la facture');
+    expect(await lib('invoice', 'sent')).toBe('Payer la facture');
+    expect(await lib('invoice', 'void')).toBeNull();
+    expect(await lib('quote', 'approved')).toBe('Voir la soumission');
+    expect(await lib('quote', 'converted', 'en')).toBe('View quote');
+    expect(await lib('quote', 'awaiting_response')).toBe('Approuver la soumission');
+  });
+
   it('REFUSE une entité sans page publique : un lead n’a rien à ouvrir', async () => {
     const b = await boutonPourEntite(faussDb({ data: { view_token: 'x' } }), 'org1', 'lead', 'l1');
     expect(b).toBeNull();

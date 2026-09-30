@@ -1,12 +1,13 @@
 /**
- * Profitability by job — the real P&L table. Revenue is the job total; labour is
+ * Profitability by job — the real P&L table, from the server action
+ * analyze_profitability (same numbers as Lumi). Revenue is invoiced before taxes; labour is
  * derived from time entries × each employee's hourly rate; expenses are entered
  * per job right here (inline-editable "Dépenses" cell → margin updates live).
  * Monochrome, wired to fetchJobPnL over the selected period.
  */
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchJobPnL, updateJobExpenses } from '../../lib/profitabilityApi';
+import { fetchJobPnL, updateJobExpenses, RentabiliteRefusee } from '../../lib/profitabilityApi';
 import { useTranslation } from '../../i18n';
 import PeriodSelector from './PeriodSelector';
 import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
@@ -58,7 +59,8 @@ export default function ProfitabilityCard({
   const qc = useQueryClient();
 
   const key = ['job-pnl', range.from, range.to];
-  const q = useQuery({ queryKey: key, queryFn: () => fetchJobPnL({ from: range.from, to: range.to }), staleTime: 30_000 });
+  const q = useQuery({ queryKey: key, queryFn: () => fetchJobPnL({ from: range.from, to: range.to }), staleTime: 30_000,
+    retry: (n, err) => !(err instanceof RentabiliteRefusee) && n < 2 });
 
   const k = (cents: number) => new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
   const data = q.data;
@@ -74,8 +76,14 @@ export default function ProfitabilityCard({
 
       {q.isLoading ? (
         <div className="h-[140px] mx-6 mt-4 rounded-lg bg-surface-secondary/40 animate-pulse" />
+      ) : q.isError ? (
+        <div role="status" className="h-[120px] flex items-center justify-center px-6 text-center text-[12.5px] text-text-tertiary">
+          {q.error instanceof RentabiliteRefusee
+            ? (fr ? 'Rentabilité réservée aux rôles qui voient les marges et profits (page Rôles).' : 'Profitability is limited to roles that can view margins & profits (Roles page).')
+            : (fr ? 'Rentabilité indisponible pour le moment. Réessaie dans un instant.' : 'Profitability is unavailable right now. Try again in a moment.')}
+        </div>
       ) : rows.length === 0 ? (
-        <div className="h-[120px] flex items-center justify-center text-[12.5px] text-text-tertiary">{fr ? 'Aucun job complété sur la période' : 'No completed jobs for this period'}</div>
+        <div className="h-[120px] flex items-center justify-center text-[12.5px] text-text-tertiary">{fr ? 'Aucun job sur la période' : 'No jobs for this period'}</div>
       ) : (
         <>
           <div className="overflow-x-auto mt-3">
@@ -86,6 +94,7 @@ export default function ProfitabilityCard({
                   <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">Job&nbsp;#</th>
                   <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Montant' : 'Amount'}</th>
                   <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? "Main-d'œuvre" : 'Labour'}</th>
+                  <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">Commissions</th>
                   <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Dépenses' : 'Expenses'}</th>
                   <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">Profit</th>
                   <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Marge' : 'Margin'}</th>
@@ -98,10 +107,15 @@ export default function ProfitabilityCard({
                     <td className="px-6 py-3 text-right font-semibold text-text-secondary tabular-nums border-b border-border-light">{r.job_number}</td>
                     <td className="px-6 py-3 text-right text-text-tertiary tabular-nums border-b border-border-light">{k(r.revenue_cents)}</td>
                     <td className="px-6 py-3 text-right text-text-tertiary tabular-nums border-b border-border-light">{k(r.labour_cents)}</td>
-                    <td className="px-6 py-3 text-right border-b border-border-light"><ExpenseInput jobId={r.job_id} cents={r.expenses_cents} onSaved={onSaved} /></td>
+                    <td className="px-6 py-3 text-right text-text-tertiary tabular-nums border-b border-border-light">{k(r.commissions_cents)}</td>
+                    <td className="px-6 py-3 text-right border-b border-border-light">{r.expenses_editable
+                      ? <ExpenseInput jobId={r.job_id} cents={r.expenses_cents} onSaved={onSaved} />
+                      : <span className="text-text-tertiary tabular-nums" title={fr ? 'Dépenses du dossier « Dépenses » de la fiche du job' : 'Expenses from the job’s “Expenses” fields'}>{k(r.expenses_cents)}</span>}</td>
                     <td className="px-6 py-3 text-right font-bold text-text-primary tabular-nums border-b border-border-light">{k(r.profit_cents)}</td>
                     <td className="px-6 py-3 text-right font-bold text-text-primary tabular-nums border-b border-border-light">
-                      <span className="inline-block w-11 h-[5px] rounded-full bg-surface-tertiary overflow-hidden align-middle mr-2"><span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, r.margin_pct))}%`, background: 'var(--color-text-primary)' }} /></span>{r.margin_pct} %
+                      {r.margin_pct == null ? <span className="text-text-tertiary" title={fr ? 'Pas assez de données pour une marge' : 'Not enough data for a margin'}>—</span> : (<>
+                        <span className="inline-block w-11 h-[5px] rounded-full bg-surface-tertiary overflow-hidden align-middle mr-2"><span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, r.margin_pct))}%`, background: 'var(--color-text-primary)' }} /></span>{r.margin_is_maximum ? '≤ ' : ''}{r.margin_pct} %
+                      </>)}
                     </td>
                   </tr>
                 ))}
@@ -111,15 +125,16 @@ export default function ProfitabilityCard({
                   <td className="px-6 py-3.5 border-t border-border">Total</td><td className="border-t border-border" />
                   <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{k(data?.total_revenue_cents || 0)}</td>
                   <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{k(data?.total_labour_cents || 0)}</td>
+                  <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{k(data?.total_commissions_cents || 0)}</td>
                   <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{k(data?.total_expenses_cents || 0)}</td>
                   <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{k(data?.total_profit_cents || 0)}</td>
-                  <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{data?.margin_pct ?? 0} %</td>
+                  <td className="px-6 py-3.5 text-right tabular-nums border-t border-border">{data?.margin_pct == null ? '—' : `${data.margin_is_maximum ? '≤ ' : ''}${data.margin_pct} %`}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
-          {(data?.total_expenses_cents || 0) === 0 && (data?.total_labour_cents || 0) === 0 && (
-            <div className="px-6 mt-3 text-[11.5px] text-text-tertiary">{fr ? '↑ Tape les dépenses par job pour une marge réelle. La main-d’œuvre se calcule à partir des heures × taux horaire des employés.' : '↑ Enter expenses per job for a real margin. Labour is computed from hours × employee hourly rate.'}</div>
+          {(fr ? data?.summary_fr : data?.summary_en) && (
+            <div className="px-6 mt-3 text-[11.5px] text-text-tertiary leading-relaxed">{fr ? data?.summary_fr : data?.summary_en}</div>
           )}
         </>
       )}

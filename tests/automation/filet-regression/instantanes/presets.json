@@ -300,10 +300,10 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000002",
      "action_type": "send_email",
      "action_config": {
-      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci [client_first_name],</h2><p>Votre contrat avec [company_name] est signé. Vous pouvez le consulter en tout temps ici :</p><p><a href=\"[signed_contract_link]\">[signed_contract_link]</a></p><p>[deposit_line]</p><p>À bientôt!<br/>[company_name]</p></div>",
-      "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Thank you [client_first_name],</h2><p>Your contract with [company_name] is signed. You can view it anytime here:</p><p><a href=\"[signed_contract_link]\">[signed_contract_link]</a></p><p>[deposit_line]</p><p>Talk soon!<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Contrat signé",
-      "subject_en": "[company_name] — Contract signed"
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci [client_first_name],</h2><p>Votre contrat avec [company_name] est signé. Vous pouvez le consulter en tout temps ici :</p><p><a href=\"[signed_contract_link]\">Consulter votre contrat signé</a></p><p>[deposit_line]</p><p>À bientôt!<br/>[company_name]</p></div>",
+      "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Thank you [client_first_name],</h2><p>Your contract with [company_name] is signed. You can view it anytime here:</p><p><a href=\"[signed_contract_link]\">View your signed contract</a></p><p>[deposit_line]</p><p>Talk soon!<br/>[company_name]</p></div>",
+      "subject": "Votre contrat est signé",
+      "subject_en": "Your contract is signed"
      },
      "result_success": false,
      "result_error": "en cours",
@@ -321,7 +321,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Contrat signé",
+      "subject": "Votre contrat est signé",
       "source": "automation"
      }
     }
@@ -338,15 +338,15 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000002",
      "action_type": "send_email",
      "action_config": {
-      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci [client_first_name],</h2><p>Votre contrat avec [company_name] est signé. Vous pouvez le consulter en tout temps ici :</p><p><a href=\"[signed_contract_link]\">[signed_contract_link]</a></p><p>[deposit_line]</p><p>À bientôt!<br/>[company_name]</p></div>",
-      "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Thank you [client_first_name],</h2><p>Your contract with [company_name] is signed. You can view it anytime here:</p><p><a href=\"[signed_contract_link]\">[signed_contract_link]</a></p><p>[deposit_line]</p><p>Talk soon!<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Contrat signé",
-      "subject_en": "[company_name] — Contract signed"
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci [client_first_name],</h2><p>Votre contrat avec [company_name] est signé. Vous pouvez le consulter en tout temps ici :</p><p><a href=\"[signed_contract_link]\">Consulter votre contrat signé</a></p><p>[deposit_line]</p><p>À bientôt!<br/>[company_name]</p></div>",
+      "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Thank you [client_first_name],</h2><p>Your contract with [company_name] is signed. You can view it anytime here:</p><p><a href=\"[signed_contract_link]\">View your signed contract</a></p><p>[deposit_line]</p><p>Talk soon!<br/>[company_name]</p></div>",
+      "subject": "Votre contrat est signé",
+      "subject_en": "Your contract is signed"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Contrat signé"
+      "subject": "Votre contrat est signé"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -364,9 +364,9 @@
     "moment": "immediat",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Contrat signé",
-    "texte": "Plomberie Tremblay inc. Merci Marie, Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie, Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps ici : À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "77b8a1ca205b9b53"
+    "subject": "Votre contrat est signé",
+    "texte": "Plomberie Tremblay inc. Merci Marie, Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie, Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps ici : Consulter votre contrat signé À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "b776ad065cd7f497"
    }
   ],
   "annulees": []
@@ -447,8 +447,8 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre rendez-vous est confirmé :</p><ul><li><strong>Date :</strong> [appointment_date]</li><li><strong>Heure :</strong> [appointment_time]</li><li><strong>Adresse :</strong> [appointment_address]</li></ul><p>À bientôt!<br/>[company_name]</p>[contract_html]</div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Your appointment is confirmed:</p><ul><li><strong>Date:</strong> [appointment_date]</li><li><strong>Time:</strong> [appointment_time]</li><li><strong>Address:</strong> [appointment_address]</li></ul><p>See you soon!<br/>[company_name]</p>[contract_html]</div>",
-      "subject": "[company_name] — Rendez-vous confirmé",
-      "subject_en": "[company_name] — Appointment confirmed"
+      "subject": "Votre rendez-vous est confirmé",
+      "subject_en": "Your appointment is confirmed"
      },
      "result_success": false,
      "result_error": "en cours",
@@ -466,7 +466,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Rendez-vous confirmé",
+      "subject": "Votre rendez-vous est confirmé",
       "source": "automation"
      }
     }
@@ -485,13 +485,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre rendez-vous est confirmé :</p><ul><li><strong>Date :</strong> [appointment_date]</li><li><strong>Heure :</strong> [appointment_time]</li><li><strong>Adresse :</strong> [appointment_address]</li></ul><p>À bientôt!<br/>[company_name]</p>[contract_html]</div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Your appointment is confirmed:</p><ul><li><strong>Date:</strong> [appointment_date]</li><li><strong>Time:</strong> [appointment_time]</li><li><strong>Address:</strong> [appointment_address]</li></ul><p>See you soon!<br/>[company_name]</p>[contract_html]</div>",
-      "subject": "[company_name] — Rendez-vous confirmé",
-      "subject_en": "[company_name] — Appointment confirmed"
+      "subject": "Votre rendez-vous est confirmé",
+      "subject_en": "Your appointment is confirmed"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Rendez-vous confirmé"
+      "subject": "Votre rendez-vous est confirmé"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -560,7 +560,7 @@
     "moment": "immediat",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Rendez-vous confirmé",
+    "subject": "Votre rendez-vous est confirmé",
     "texte": "Plomberie Tremblay inc. Votre rendez-vous est confirmé : Date : 2026-09-25 Heure : 09 h 00 Adresse : 412 rue des Érables,…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est confirmé : Date : 2026-09-25 Heure : 09 h 00 Adresse : 412 rue des Érables, Longueuil À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "bb02c3292b5e9db8"
    }
@@ -594,7 +594,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000002",
      "action_config": {
       "type": "send_email",
-      "config": "#d96fb9778ffc",
+      "config": "#25247803c687",
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -730,7 +730,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Déjà un an!",
+      "subject": "Déjà un an depuis nos travaux",
       "source": "automation"
      }
     }
@@ -750,13 +750,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Ça fait déjà un an qu'on a fait des travaux chez vous — merci encore pour votre confiance!</p><p>Si c'est le temps d'une retouche ou d'un entretien, répondez à ce courriel et on vous prépare une soumission.</p><p>Au plaisir,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>It's already been a year since we did work at your place — thank you again for your trust!</p><p>If it's time for a touch-up or some maintenance, just reply to this email and we'll put together a quote for you.</p><p>Looking forward,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Déjà un an!",
-      "subject_en": "[company_name] — Already a year!"
+      "subject": "Déjà un an depuis nos travaux",
+      "subject_en": "A year since our visit"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Déjà un an!"
+      "subject": "Déjà un an depuis nos travaux"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -997,7 +997,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Déjà un an!",
+    "subject": "Déjà un an depuis nos travaux",
     "texte": "Plomberie Tremblay inc. Ça fait déjà un an qu&#39;on a fait des travaux chez vous — merci encore pour votre confiance! Si c&#39;est le…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait déjà un an qu'on a fait des travaux chez vous — merci encore pour votre confiance! Si c'est le temps d'une retouche ou d'un entretien, répondez à ce courriel et on vous prépare une soumission. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "9fee40a0c1916057"
    },
@@ -1033,7 +1033,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000002",
      "action_config": {
       "type": "send_email",
-      "config": "#feb2a53c44ce",
+      "config": "#83b62d770b8e",
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -1146,7 +1146,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Des nouvelles de nous",
+      "subject": "Des nouvelles de nous",
       "source": "automation"
      }
     }
@@ -1166,13 +1166,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable!</p><p>Saviez-vous qu'on offre aussi d'autres services d'entretien? Répondez à ce courriel pour en savoir plus.</p><p>Au plaisir,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>It's been a month since we did work at your place — we hope everything still looks great!</p><p>Did you know we also offer other maintenance services? Reply to this email to learn more.</p><p>Looking forward,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Des nouvelles de nous",
-      "subject_en": "[company_name] — Checking in with you"
+      "subject": "Des nouvelles de nous",
+      "subject_en": "Checking in with you"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Des nouvelles de nous"
+      "subject": "Des nouvelles de nous"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -1299,7 +1299,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Des nouvelles de nous",
+    "subject": "Des nouvelles de nous",
     "texte": "Plomberie Tremblay inc. Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable! Saviez-vous qu&#39;on…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable! Saviez-vous qu'on offre aussi d'autres services d'entretien? Répondez à ce courriel pour en savoir plus. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "e8967fafcce14e77"
    }
@@ -1596,8 +1596,8 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci [client_first_name]!</h2><p>Votre dépôt a bien été reçu et votre place est réservée à l'horaire.</p><p>On vous recontacte avec les détails du rendez-vous.</p><p>À bientôt,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Thank you [client_first_name]!</h2><p>Your deposit has been received and your spot on the schedule is reserved.</p><p>We'll be in touch with the appointment details.</p><p>Talk soon,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Dépôt reçu, merci!",
-      "subject_en": "[company_name] — Deposit received, thank you!"
+      "subject": "Dépôt reçu, merci!",
+      "subject_en": "Deposit received, thank you!"
      },
      "result_success": false,
      "result_error": "en cours",
@@ -1615,7 +1615,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Dépôt reçu, merci!",
+      "subject": "Dépôt reçu, merci!",
       "source": "automation"
      }
     }
@@ -1634,13 +1634,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci [client_first_name]!</h2><p>Votre dépôt a bien été reçu et votre place est réservée à l'horaire.</p><p>On vous recontacte avec les détails du rendez-vous.</p><p>À bientôt,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Thank you [client_first_name]!</h2><p>Your deposit has been received and your spot on the schedule is reserved.</p><p>We'll be in touch with the appointment details.</p><p>Talk soon,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Dépôt reçu, merci!",
-      "subject_en": "[company_name] — Deposit received, thank you!"
+      "subject": "Dépôt reçu, merci!",
+      "subject_en": "Deposit received, thank you!"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Dépôt reçu, merci!"
+      "subject": "Dépôt reçu, merci!"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -1834,9 +1834,9 @@
     "moment": "immediat",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Dépôt reçu, merci!",
-    "texte": "Plomberie Tremblay inc. Merci Marie! Votre dépôt a bien été reçu et votre place est réservée à l&#39;horaire. On vous recontacte avec…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie! Votre dépôt a bien été reçu et votre place est réservée à l'horaire. On vous recontacte avec les détails du rendez-vous. À bientôt, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "a222bbb2c73848a1"
+    "subject": "Dépôt reçu, merci!",
+    "texte": "Plomberie Tremblay inc. Merci Marie! Votre dépôt a bien été reçu et votre place est réservée à l&#39;horaire. On vous recontacte avec…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie! Votre dépôt a bien été reçu et votre place est réservée à l'horaire. On vous recontacte avec les détails du rendez-vous. À bientôt, Plomberie Tremblay inc. Voir le reçu Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "deafba9a21cdf162"
    }
   ],
   "annulees": []
@@ -1868,7 +1868,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "send_email",
-      "config": "#d0b51fc80f5e",
+      "config": "#aff9f8fcd428",
       "trigger_event": "quote.approved",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -2517,7 +2517,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
      "action_config": {
       "type": "send_email",
-      "config": "#c9e523082683",
+      "config": "#dc9f2179e243",
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -2699,7 +2699,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Facture INV-000042 impayée depuis 2 semaines",
+      "subject": "Facture INV-000042 impayée depuis 2 semaines",
       "source": "automation"
      }
     }
@@ -2719,13 +2719,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>La facture <strong>[invoice_number]</strong> de <strong>[invoice_total]</strong> est impayée depuis deux semaines.</p><p>Merci de la régler rapidement. En cas de problème, répondez à ce courriel et on trouvera une solution.</p><p>Merci,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Invoice <strong>[invoice_number]</strong> for <strong>[invoice_total]</strong> has been unpaid for two weeks.</p><p>Please settle it soon. If there's an issue, reply to this email and we'll find a solution.</p><p>Thank you,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Facture [invoice_number] impayée depuis 2 semaines",
-      "subject_en": "[company_name] — Invoice [invoice_number] unpaid for 2 weeks"
+      "subject": "Facture [invoice_number] impayée depuis 2 semaines",
+      "subject_en": "Invoice [invoice_number] unpaid for 2 weeks"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Facture INV-000042 impayée depuis 2 semaines"
+      "subject": "Facture INV-000042 impayée depuis 2 semaines"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -3166,7 +3166,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Facture INV-000042 impayée depuis 2 semaines",
+    "subject": "Facture INV-000042 impayée depuis 2 semaines",
     "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est impayée depuis deux semaines. Merci de la régler rapidement. En…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est impayée depuis deux semaines. Merci de la régler rapidement. En cas de problème, répondez à ce courriel et on trouvera une solution. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "23a664cba0cb4e11"
    },
@@ -3202,7 +3202,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
      "action_config": {
       "type": "send_email",
-      "config": "#6b3769ce2fe9",
+      "config": "#16a179c66fb2",
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -3315,7 +3315,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042",
+      "subject": "Rappel : facture INV-000042",
       "source": "automation"
      }
     }
@@ -3335,13 +3335,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Petit rappel amical : la facture <strong>[invoice_number]</strong> de <strong>[invoice_total]</strong> est en attente de paiement.</p><p>Si vous avez déjà payé, ignorez ce message.</p><p>Merci,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Just a friendly reminder: invoice <strong>[invoice_number]</strong> for <strong>[invoice_total]</strong> is awaiting payment.</p><p>If you've already paid, please disregard this message.</p><p>Thank you,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Rappel : facture [invoice_number]",
-      "subject_en": "[company_name] — Reminder: invoice [invoice_number]"
+      "subject": "Rappel : facture [invoice_number]",
+      "subject_en": "Reminder: invoice [invoice_number]"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042"
+      "subject": "Rappel : facture INV-000042"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -3468,7 +3468,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042",
+    "subject": "Rappel : facture INV-000042",
     "texte": "Plomberie Tremblay inc. Petit rappel amical : la facture INV-000042 de 1 626,90 $ est en attente de paiement. Si vous avez déjà…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel amical : la facture INV-000042 de 1 626,90 $ est en attente de paiement. Si vous avez déjà payé, ignorez ce message. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "1f9d61fd4e25ff1e"
    }
@@ -3510,7 +3510,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
      "action_config": {
       "type": "send_email",
-      "config": "#39fa0d7279db",
+      "config": "#0b97620f2be6",
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -3692,7 +3692,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Facture INV-000042 en souffrance (30 jours)",
+      "subject": "Facture INV-000042 en souffrance depuis 30 jours",
       "source": "automation"
      }
     }
@@ -3712,13 +3712,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>La facture <strong>[invoice_number]</strong> de <strong>[invoice_total]</strong> est en souffrance depuis 30 jours.</p><p>Merci de la régler sans tarder, ou contactez-nous pour convenir d'une entente de paiement.</p><p>Merci,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Invoice <strong>[invoice_number]</strong> for <strong>[invoice_total]</strong> has been overdue for 30 days.</p><p>Please settle it without further delay, or contact us to arrange a payment plan.</p><p>Thank you,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Facture [invoice_number] en souffrance (30 jours)",
-      "subject_en": "[company_name] — Invoice [invoice_number] overdue (30 days)"
+      "subject": "Facture [invoice_number] en souffrance depuis 30 jours",
+      "subject_en": "Invoice [invoice_number] overdue for 30 days"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Facture INV-000042 en souffrance (30 jours)"
+      "subject": "Facture INV-000042 en souffrance depuis 30 jours"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -4161,7 +4161,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Facture INV-000042 en souffrance (30 jours)",
+    "subject": "Facture INV-000042 en souffrance depuis 30 jours",
     "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est en souffrance depuis 30 jours. Merci de la régler sans tarder, ou…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est en souffrance depuis 30 jours. Merci de la régler sans tarder, ou contactez-nous pour convenir d'une entente de paiement. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "d73ee690df0fda6f"
    },
@@ -4201,7 +4201,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
      "action_config": {
       "type": "send_email",
-      "config": "#5676173dc2bb",
+      "config": "#c77c8211c829",
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -4337,7 +4337,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042",
+      "subject": "Facture INV-000042 toujours en attente",
       "source": "automation"
      }
     }
@@ -4357,13 +4357,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>La facture <strong>[invoice_number]</strong> de <strong>[invoice_total]</strong> est toujours en attente de paiement.</p><p>Si vous avez déjà payé, ignorez ce message.</p><p>Merci,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Invoice <strong>[invoice_number]</strong> for <strong>[invoice_total]</strong> is still awaiting payment.</p><p>If you've already paid, please disregard this message.</p><p>Thank you,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Rappel : facture [invoice_number]",
-      "subject_en": "[company_name] — Reminder: invoice [invoice_number]"
+      "subject": "Facture [invoice_number] toujours en attente",
+      "subject_en": "Invoice [invoice_number] still awaiting payment"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042"
+      "subject": "Facture INV-000042 toujours en attente"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -4604,7 +4604,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042",
+    "subject": "Facture INV-000042 toujours en attente",
     "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est toujours en attente de paiement. Si vous avez déjà payé, ignorez…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est toujours en attente de paiement. Si vous avez déjà payé, ignorez ce message. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "41411ca010f4bc02"
    },
@@ -4648,7 +4648,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000005",
      "action_config": {
       "type": "send_email",
-      "config": "#e4dce85e84e6",
+      "config": "#eb32d21e5378",
       "trigger_event": "invoice.sent",
       "event_metadata": {
        "invoice_number": "INV-000042",
@@ -4807,7 +4807,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Facture INV-000042 en attente depuis 7 jours",
+      "subject": "Facture INV-000042 en attente depuis 7 jours",
       "source": "automation"
      }
     }
@@ -4827,13 +4827,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>La facture <strong>[invoice_number]</strong> de <strong>[invoice_total]</strong> est en attente depuis une semaine.</p><p>Merci de la régler dès que possible, ou répondez à ce courriel si quelque chose ne va pas.</p><p>Merci,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Invoice <strong>[invoice_number]</strong> for <strong>[invoice_total]</strong> has been pending for a week.</p><p>Please settle it as soon as possible, or reply to this email if something isn't right.</p><p>Thank you,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Facture [invoice_number] en attente depuis 7 jours",
-      "subject_en": "[company_name] — Invoice [invoice_number] pending for 7 days"
+      "subject": "Facture [invoice_number] en attente depuis 7 jours",
+      "subject_en": "Invoice [invoice_number] pending for 7 days"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Facture INV-000042 en attente depuis 7 jours"
+      "subject": "Facture INV-000042 en attente depuis 7 jours"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -5173,7 +5173,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Facture INV-000042 en attente depuis 7 jours",
+    "subject": "Facture INV-000042 en attente depuis 7 jours",
     "texte": "Plomberie Tremblay inc. La facture INV-000042 de 1 626,90 $ est en attente depuis une semaine. Merci de la régler dès que…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La facture INV-000042 de 1 626,90 $ est en attente depuis une semaine. Merci de la régler dès que possible, ou répondez à ce courriel si quelque chose ne va pas. Merci, Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "fa19930f59b9b506"
    },
@@ -5237,7 +5237,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
      "action_config": {
       "type": "send_email",
-      "config": "#8a4359fd7fc9",
+      "config": "#7fac4f076238",
       "trigger_event": "appointment.created",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -5466,7 +5466,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Votre rendez-vous est demain",
+      "subject": "Votre rendez-vous est demain",
       "source": "automation"
      }
     }
@@ -5486,13 +5486,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre rendez-vous est <strong>demain</strong>, le [appointment_date] à [appointment_time].</p><p>Un empêchement? Répondez à ce courriel et on trouvera un autre moment.</p><p>À demain!<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Your appointment is <strong>tomorrow</strong>, [appointment_date] at [appointment_time].</p><p>Something came up? Reply to this email and we'll find another time.</p><p>See you tomorrow!<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Votre rendez-vous est demain",
-      "subject_en": "[company_name] — Your appointment is tomorrow"
+      "subject": "Votre rendez-vous est demain",
+      "subject_en": "Your appointment is tomorrow"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Votre rendez-vous est demain"
+      "subject": "Votre rendez-vous est demain"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -5625,7 +5625,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Votre rendez-vous est demain",
+    "subject": "Votre rendez-vous est demain",
     "texte": "Plomberie Tremblay inc. Votre rendez-vous est demain , le 2026-09-25 à 09 h 00. Un empêchement? Répondez à ce courriel et on…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est demain , le 2026-09-25 à 09 h 00. Un empêchement? Répondez à ce courriel et on trouvera un autre moment. À demain! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "d75a3e6965d2e10b"
    }
@@ -5966,7 +5966,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
      "action_config": {
       "type": "send_email",
-      "config": "#d248c41280e7",
+      "config": "#e3b94c23ff0f",
       "trigger_event": "appointment.created",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",
@@ -6195,7 +6195,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Rappel : rendez-vous dans une semaine",
+      "subject": "Rappel : rendez-vous dans une semaine",
       "source": "automation"
      }
     }
@@ -6215,13 +6215,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Petit rappel : votre rendez-vous est prévu le <strong>[appointment_date]</strong> à <strong>[appointment_time]</strong>.</p><p>Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous.</p><p>À bientôt!<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Just a reminder: your appointment is scheduled for <strong>[appointment_date]</strong> at <strong>[appointment_time]</strong>.</p><p>Reply to this email if you have any questions or need to reschedule.</p><p>See you soon!<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Rappel : rendez-vous dans une semaine",
-      "subject_en": "[company_name] — Reminder: appointment in one week"
+      "subject": "Rappel : rendez-vous dans une semaine",
+      "subject_en": "Reminder: appointment in one week"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Rappel : rendez-vous dans une semaine"
+      "subject": "Rappel : rendez-vous dans une semaine"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -6354,7 +6354,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Rappel : rendez-vous dans une semaine",
+    "subject": "Rappel : rendez-vous dans une semaine",
     "texte": "Plomberie Tremblay inc. Petit rappel : votre rendez-vous est prévu le 2026-09-25 à 09 h 00 . Répondez à ce courriel si vous avez…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel : votre rendez-vous est prévu le 2026-09-25 à 09 h 00 . Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous. À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "2bd157b08d831c74"
    }
@@ -6392,7 +6392,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_config": {
       "type": "send_email",
-      "config": "#cabf0dd55ca5",
+      "config": "#1261efb4ad38",
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -6559,7 +6559,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Toujours intéressé?",
+      "subject": "Votre projet est-il toujours d'actualité?",
       "source": "automation"
      }
     }
@@ -6579,13 +6579,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services?</p><p>Un simple mot et on vous prépare une soumission.</p><p>Au plaisir,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>It's been two weeks since your request — are you still looking for our services?</p><p>Just say the word and we'll put together a quote for you.</p><p>Looking forward,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Toujours intéressé?",
-      "subject_en": "[company_name] — Still interested?"
+      "subject": "Votre projet est-il toujours d'actualité?",
+      "subject_en": "Is your project still on?"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Toujours intéressé?"
+      "subject": "Votre projet est-il toujours d'actualité?"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -6912,7 +6912,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Toujours intéressé?",
+    "subject": "Votre projet est-il toujours d'actualité?",
     "texte": "Plomberie Tremblay inc. Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services? Un simple…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services? Un simple mot et on vous prépare une soumission. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "365e62598b169917"
    }
@@ -7227,7 +7227,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_config": {
       "type": "send_email",
-      "config": "#db2387cbfd24",
+      "config": "#28c5ada64ef1",
       "trigger_event": "lead.created",
       "event_metadata": {
        "name": "Marie Tremblay",
@@ -7344,7 +7344,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — On pense à vous",
+      "subject": "Votre demande n'est pas oubliée",
       "source": "automation"
      }
     }
@@ -7364,13 +7364,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Vous nous avez contactés récemment et on veut s'assurer de ne pas vous laisser sans réponse.</p><p>Répondez à ce courriel et on s'occupe de vous rapidement.</p><p>Merci,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>You reached out to us recently and we want to make sure we don't leave you without an answer.</p><p>Reply to this email and we'll take care of you right away.</p><p>Thank you,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — On pense à vous",
-      "subject_en": "[company_name] — Thinking of you"
+      "subject": "Votre demande n'est pas oubliée",
+      "subject_en": "We haven't forgotten your request"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — On pense à vous"
+      "subject": "Votre demande n'est pas oubliée"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -7497,7 +7497,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — On pense à vous",
+    "subject": "Votre demande n'est pas oubliée",
     "texte": "Plomberie Tremblay inc. Vous nous avez contactés récemment et on veut s&#39;assurer de ne pas vous laisser sans réponse. Répondez à ce…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Vous nous avez contactés récemment et on veut s'assurer de ne pas vous laisser sans réponse. Répondez à ce courriel et on s'occupe de vous rapidement. Merci, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "835d821e5f850911"
    }
@@ -8031,8 +8031,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Paiement reçu — merci Marie!",
-    "texte": "Plomberie Tremblay inc. Merci Marie! Nous confirmons la réception de votre paiement pour la facture INV-000042. Merci de votre…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie! Nous confirmons la réception de votre paiement pour la facture INV-000042. Merci de votre confiance. Plomberie Tremblay inc. Payer la facture Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "3240a6bb01323064"
+    "texte": "Plomberie Tremblay inc. Merci Marie! Nous confirmons la réception de votre paiement pour la facture INV-000042. Merci de votre…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Merci Marie! Nous confirmons la réception de votre paiement pour la facture INV-000042. Merci de votre confiance. Plomberie Tremblay inc. Voir le reçu Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "42416b2eab2b4f14"
    }
   ],
   "annulees": []
@@ -8377,7 +8377,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "send_email",
-      "config": "#bb9d7df67203",
+      "config": "#c17208d867fe",
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -8654,7 +8654,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Dernière relance pour votre soumission",
+      "subject": "Dernière relance pour votre soumission",
       "source": "automation"
      }
     }
@@ -8674,13 +8674,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>On voulait faire un dernier suivi au sujet de votre soumission.</p><p>Si le moment n'est pas bon, aucun souci — répondez-nous et on se reprendra quand ça vous conviendra.</p><p>Merci,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>We wanted to do one last follow-up about your quote.</p><p>If now isn't the right time, no problem — just reply and we'll reconnect whenever it suits you.</p><p>Thank you,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Dernière relance pour votre soumission",
-      "subject_en": "[company_name] — Final follow-up on your quote"
+      "subject": "Dernière relance pour votre soumission",
+      "subject_en": "Final follow-up on your quote"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Dernière relance pour votre soumission"
+      "subject": "Dernière relance pour votre soumission"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -9013,7 +9013,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Dernière relance pour votre soumission",
+    "subject": "Dernière relance pour votre soumission",
     "texte": "Plomberie Tremblay inc. On voulait faire un dernier suivi au sujet de votre soumission. Si le moment n&#39;est pas bon, aucun souci —…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, On voulait faire un dernier suivi au sujet de votre soumission. Si le moment n'est pas bon, aucun souci — répondez-nous et on se reprendra quand ça vous conviendra. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "3df0de4d3698cb1e"
    }
@@ -9071,7 +9071,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "send_email",
-      "config": "#480ff439b138",
+      "config": "#e0b23edf40ee",
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -9300,7 +9300,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Suivi de votre soumission",
+      "subject": "Avez-vous bien reçu votre soumission?",
       "source": "automation"
      }
     }
@@ -9320,13 +9320,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>On vous a envoyé une soumission hier et on voulait s'assurer que vous l'avez bien reçue.</p><p>Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre.</p><p>Merci,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>We sent you a quote yesterday and wanted to make sure it reached you.</p><p>Any questions? Just reply to this email — we'd be happy to answer them.</p><p>Thank you,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Suivi de votre soumission",
-      "subject_en": "[company_name] — Following up on your quote"
+      "subject": "Avez-vous bien reçu votre soumission?",
+      "subject_en": "Did you receive your quote?"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Suivi de votre soumission"
+      "subject": "Avez-vous bien reçu votre soumission?"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -9459,7 +9459,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Suivi de votre soumission",
+    "subject": "Avez-vous bien reçu votre soumission?",
     "texte": "Plomberie Tremblay inc. On vous a envoyé une soumission hier et on voulait s&#39;assurer que vous l&#39;avez bien reçue. Des questions?…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, On vous a envoyé une soumission hier et on voulait s'assurer que vous l'avez bien reçue. Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "79a3c449736714d5"
    }
@@ -9493,7 +9493,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "send_email",
-      "config": "#f87e044a2563",
+      "config": "#f5190bbb895e",
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -9632,7 +9632,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — On garde votre dossier ouvert",
+      "subject": "On garde votre dossier ouvert",
       "source": "automation"
      }
     }
@@ -9652,13 +9652,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre soumission.</p><p>Répondez à ce courriel à tout moment.</p><p>Merci,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>We'll keep your file open a while longer in case you'd like to move ahead with your quote.</p><p>Reply to this email anytime.</p><p>Thank you,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — On garde votre dossier ouvert",
-      "subject_en": "[company_name] — We're keeping your file open"
+      "subject": "On garde votre dossier ouvert",
+      "subject_en": "We're keeping your file open"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — On garde votre dossier ouvert"
+      "subject": "On garde votre dossier ouvert"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -9884,7 +9884,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — On garde votre dossier ouvert",
+    "subject": "On garde votre dossier ouvert",
     "texte": "Plomberie Tremblay inc. On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, On garde votre dossier ouvert encore quelque temps si jamais vous souhaitez donner suite à votre soumission. Répondez à ce courriel à tout moment. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "4ca67d32d32cbeeb"
    }
@@ -9942,7 +9942,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "send_email",
-      "config": "#b8b67a612a7a",
+      "config": "#0c83f8e16e48",
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -10171,7 +10171,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Votre soumission vous attend",
+      "subject": "Votre soumission vous attend",
       "source": "automation"
      }
     }
@@ -10191,13 +10191,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Petit rappel au sujet de la soumission qu'on vous a envoyée.</p><p>Si un détail ne convient pas, on peut l'ajuster — dites-le-nous simplement.</p><p>Merci,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Just a reminder about the quote we sent you.</p><p>If any detail doesn't work for you, we can adjust it — just let us know.</p><p>Thank you,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Votre soumission vous attend",
-      "subject_en": "[company_name] — Your quote is waiting for you"
+      "subject": "Votre soumission vous attend",
+      "subject_en": "Your quote is waiting for you"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Votre soumission vous attend"
+      "subject": "Votre soumission vous attend"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -10330,7 +10330,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Votre soumission vous attend",
+    "subject": "Votre soumission vous attend",
     "texte": "Plomberie Tremblay inc. Petit rappel au sujet de la soumission qu&#39;on vous a envoyée. Si un détail ne convient pas, on peut…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel au sujet de la soumission qu'on vous a envoyée. Si un détail ne convient pas, on peut l'ajuster — dites-le-nous simplement. Merci, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "b504d34f16127abf"
    }
@@ -10392,7 +10392,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_config": {
       "type": "send_email",
-      "config": "#4a7c46be79ce",
+      "config": "#1f69f9c94df1",
       "trigger_event": "quote.sent",
       "event_metadata": {
        "quote_number": "Q-2026-042",
@@ -10645,7 +10645,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Votre soumission est toujours valide",
+      "subject": "Des questions sur votre soumission?",
       "source": "automation"
      }
     }
@@ -10663,15 +10663,15 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000004",
      "action_type": "send_email",
      "action_config": {
-      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre soumission est toujours valide et on garde votre place.</p><p>Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel.</p><p>Au plaisir,<br/>[company_name]</p></div>",
-      "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Your quote is still valid and we're holding your spot.</p><p>If you have any questions or would like to move ahead, reply to this email.</p><p>Looking forward,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Votre soumission est toujours valide",
-      "subject_en": "[company_name] — Your quote is still valid"
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Avez-vous eu le temps de regarder votre soumission?</p><p>Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel.</p><p>Au plaisir,<br/>[company_name]</p></div>",
+      "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>Have you had a chance to look at your quote?</p><p>If you have any questions or would like to move ahead, reply to this email.</p><p>Looking forward,<br/>[company_name]</p></div>",
+      "subject": "Des questions sur votre soumission?",
+      "subject_en": "Any questions about your quote?"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Votre soumission est toujours valide"
+      "subject": "Des questions sur votre soumission?"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -10903,9 +10903,9 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Votre soumission est toujours valide",
-    "texte": "Plomberie Tremblay inc. Votre soumission est toujours valide et on garde votre place. Si vous avez des questions ou souhaitez…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre soumission est toujours valide et on garde votre place. Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel. Au plaisir, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "fd8020ba2fe18a85"
+    "subject": "Des questions sur votre soumission?",
+    "texte": "Plomberie Tremblay inc. Avez-vous eu le temps de regarder votre soumission? Si vous avez des questions ou souhaitez aller de…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Avez-vous eu le temps de regarder votre soumission? Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel. Au plaisir, Plomberie Tremblay inc. Approuver la soumission Le bouton ne fonctionne pas ? Ouvrir le lien +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "7a246a83d0ad29fb"
    }
   ],
   "annulees": []
@@ -10937,7 +10937,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000002",
      "action_config": {
       "type": "send_email",
-      "config": "#cb407824dd19",
+      "config": "#03578ceff410",
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -11073,7 +11073,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Déjà 3 mois!",
+      "subject": "Un entretien serait-il dû?",
       "source": "automation"
      }
     }
@@ -11093,13 +11093,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû.</p><p>Répondez à ce courriel et on vous trouve une place à l'horaire.</p><p>Au plaisir,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>It's been three months since our last visit — some maintenance might be due.</p><p>Reply to this email and we'll find you a spot on the schedule.</p><p>Looking forward,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — Déjà 3 mois!",
-      "subject_en": "[company_name] — Already 3 months!"
+      "subject": "Un entretien serait-il dû?",
+      "subject_en": "Time for some maintenance?"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Déjà 3 mois!"
+      "subject": "Un entretien serait-il dû?"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -11340,7 +11340,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — Déjà 3 mois!",
+    "subject": "Un entretien serait-il dû?",
     "texte": "Plomberie Tremblay inc. Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû. Répondez à ce courriel…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Ça fait trois mois depuis notre dernier passage — un entretien serait peut-être dû. Répondez à ce courriel et on vous trouve une place à l'horaire. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "56b662e70869cf34"
    },
@@ -11656,7 +11656,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000002",
      "action_config": {
       "type": "send_email",
-      "config": "#ddefafe50a98",
+      "config": "#1b1b9e168680",
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -11792,7 +11792,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — La saison s'en vient",
+      "subject": "La saison s'en vient",
       "source": "automation"
      }
     }
@@ -11812,13 +11812,13 @@
      "action_config": {
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>La saison avance — c'est le bon moment pour préparer votre propriété.</p><p>Répondez à ce courriel pour une soumission rapide et sans engagement.</p><p>À bientôt,<br/>[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Hi [client_first_name],</h2><p>The season is coming up — now's a good time to get your property ready.</p><p>Reply to this email for a quick, no-obligation quote.</p><p>Talk soon,<br/>[company_name]</p></div>",
-      "subject": "[company_name] — La saison s'en vient",
-      "subject_en": "[company_name] — The season is coming"
+      "subject": "La saison s'en vient",
+      "subject_en": "The season is coming"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — La saison s'en vient"
+      "subject": "La saison s'en vient"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -12059,7 +12059,7 @@
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Plomberie Tremblay inc. — La saison s'en vient",
+    "subject": "La saison s'en vient",
     "texte": "Plomberie Tremblay inc. La saison avance — c&#39;est le bon moment pour préparer votre propriété. Répondez à ce courriel pour une…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, La saison avance — c'est le bon moment pour préparer votre propriété. Répondez à ce courriel pour une soumission rapide et sans engagement. À bientôt, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "dda588c45ddcd52c"
    },
@@ -12835,8 +12835,8 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "send_email",
      "action_config": {
-      "subject": "Merci d'avoir contacté [company_name]",
-      "subject_en": "Thank you for contacting [company_name]",
+      "subject": "Merci de nous avoir contactés",
+      "subject_en": "Thanks for reaching out",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#1a1a1a;font-size:18px;\">Bonjour [client_first_name],</h2><p style=\"color:#333;line-height:1.6;\">Merci d'avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très rapidement.</p><p style=\"color:#333;line-height:1.6;\">Si votre demande est urgente, répondez à ce courriel — nous la traiterons en priorité.</p><p style=\"color:#333;line-height:1.6;\">[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#1a1a1a;font-size:18px;\">Hi [client_first_name],</h2><p style=\"color:#333;line-height:1.6;\">Thank you for reaching out to us. We've received your request and will get back to you very quickly.</p><p style=\"color:#333;line-height:1.6;\">If your request is urgent, reply to this email — we'll handle it as a priority.</p><p style=\"color:#333;line-height:1.6;\">[company_name]</p></div>"
      },
@@ -12856,7 +12856,7 @@
      "event_type": "email_sent",
      "metadata": {
       "to": "marie.tremblay@example.test",
-      "subject": "Merci d'avoir contacté Plomberie Tremblay inc.",
+      "subject": "Merci de nous avoir contactés",
       "source": "automation"
      }
     }
@@ -12873,15 +12873,15 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "send_email",
      "action_config": {
-      "subject": "Merci d'avoir contacté [company_name]",
-      "subject_en": "Thank you for contacting [company_name]",
+      "subject": "Merci de nous avoir contactés",
+      "subject_en": "Thanks for reaching out",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#1a1a1a;font-size:18px;\">Bonjour [client_first_name],</h2><p style=\"color:#333;line-height:1.6;\">Merci d'avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très rapidement.</p><p style=\"color:#333;line-height:1.6;\">Si votre demande est urgente, répondez à ce courriel — nous la traiterons en priorité.</p><p style=\"color:#333;line-height:1.6;\">[company_name]</p></div>",
       "body_en": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#1a1a1a;font-size:18px;\">Hi [client_first_name],</h2><p style=\"color:#333;line-height:1.6;\">Thank you for reaching out to us. We've received your request and will get back to you very quickly.</p><p style=\"color:#333;line-height:1.6;\">If your request is urgent, reply to this email — we'll handle it as a priority.</p><p style=\"color:#333;line-height:1.6;\">[company_name]</p></div>"
      },
      "result_success": true,
      "result_data": {
       "to": "marie.tremblay@example.test",
-      "subject": "Merci d'avoir contacté Plomberie Tremblay inc."
+      "subject": "Merci de nous avoir contactés"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -13008,7 +13008,7 @@
     "moment": "immediat",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
-    "subject": "Merci d'avoir contacté Plomberie Tremblay inc.",
+    "subject": "Merci de nous avoir contactés",
     "texte": "Plomberie Tremblay inc. Merci d&#39;avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Merci d'avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très rapidement. Si votre demande est urgente, répondez à ce courriel — nous la traiterons en priorité. Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
     "empreinte": "546ddaced4ca1dc1"
    }

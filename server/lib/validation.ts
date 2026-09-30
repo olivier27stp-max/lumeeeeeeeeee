@@ -1483,3 +1483,21 @@ export const publicationLotSchema = z.object({
   actif: z.boolean(),
   ids: z.array(z.string().uuid()).min(1).max(200),
 }).strict();
+
+/**
+ * Rentabilité (GET /api/profitability) : paramètres de requête, tous facultatifs.
+ * L'org ne vient JAMAIS d'ici : elle vient de la session.
+ */
+const jourIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date attendue au format AAAA-MM-JJ.');
+export const rentabiliteQuerySchema = z.object({
+  job_id: z.string().uuid().optional(),
+  technician_id: z.string().uuid().optional(),
+  rep_id: z.string().uuid().optional(),
+  client_id: z.string().uuid().optional(),
+  service_id: z.string().uuid().optional(),
+  date_from: jourIso.optional(),
+  date_to: jourIso.optional(),
+  group_by: z.enum(['job', 'technicien', 'rep', 'client', 'service', 'mois']).optional(),
+  sort: z.enum(['revenus_desc', 'profit_desc', 'profit_asc', 'marge_desc', 'marge_asc']).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+}).strict();

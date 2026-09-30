@@ -30,7 +30,7 @@ import {
 import { OBJETS, TYPES_CHAMP, LIBELLES_OBJET, LIBELLES_TYPE, conversionPermise, variableAffichee, type ConfigChamp, type ValeurChamp } from '../../../lib/champs/types';
 import { slugCle } from '../../../lib/champs/valeurs';
 import { peutAllerAuFormulaire } from '../../../lib/champs/questionsFormulaire';
-import { SECTIONS_SYSTEME, clesStandard, nomDossier } from '../../../lib/champs/standard';
+import { SECTIONS_SYSTEME, clesStandard, nomDossier, CLE_DOSSIER_DEPENSES } from '../../../lib/champs/standard';
 import { TITRE_FORMULAIRE, lirePlan, planFormulaire, type ElementPlan } from '../../../lib/champs/placement';
 import ApercuFormulaire from '../ApercuFormulaire';
 import ApercuVraiFormulaire, { OBJETS_VRAI_FORMULAIRE, type PlaceFormulaire } from '../ApercuVraiFormulaire';
@@ -439,14 +439,15 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                             ? <option value="">{fr ? 'Sans dossier' : 'No folder'}</option>
                             : <option value="" disabled>{objetChoisi ? (fr ? 'Sélectionner un dossier' : 'Select folder') : (fr ? 'Choisis d’abord l’objet' : 'Choose the object first')}</option>}
                           {/* Dossiers de base : les sections du formulaire, créés d'office pour chaque objet. */}
-                          {dossiers.some((d) => d.cle_systeme) && (
+                          {dossiers.some((d) => d.cle_systeme && d.cle_systeme !== CLE_DOSSIER_DEPENSES) && (
                             <optgroup label={fr ? `Sections du formulaire « ${TITRE_FORMULAIRE[objet].fr} »` : `“${TITRE_FORMULAIRE[objet].en}” form sections`}>
-                              {dossiers.filter((d) => d.cle_systeme).map((d) => <option key={d.id} value={d.id}>{nomDossier(d, fr)}</option>)}
+                              {dossiers.filter((d) => d.cle_systeme && d.cle_systeme !== CLE_DOSSIER_DEPENSES).map((d) => <option key={d.id} value={d.id}>{nomDossier(d, fr)}</option>)}
                             </optgroup>
                           )}
-                          {dossiers.some((d) => !d.cle_systeme) && (
+                          {/* Le dossier Dépenses (système, hors formulaire) se range avec les dossiers de l'entreprise. */}
+                          {dossiers.some((d) => !d.cle_systeme || d.cle_systeme === CLE_DOSSIER_DEPENSES) && (
                             <optgroup label={fr ? 'Tes dossiers' : 'Your folders'}>
-                              {dossiers.filter((d) => !d.cle_systeme).map((d) => <option key={d.id} value={d.id}>{nomDossier(d, fr)}</option>)}
+                              {dossiers.filter((d) => !d.cle_systeme || d.cle_systeme === CLE_DOSSIER_DEPENSES).map((d) => <option key={d.id} value={d.id}>{nomDossier(d, fr)}</option>)}
                             </optgroup>
                           )}
                           <option value="__nouveau__">{fr ? '+ Créer un dossier' : '+ Create folder'}</option>
@@ -464,6 +465,13 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
                           <button type="button" onClick={() => setNouveauDossier(null)} aria-label={fr ? 'Annuler la création du dossier' : 'Cancel folder creation'}
                             className="rounded p-1 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><X size={14} aria-hidden /></button>
                         </div>
+                      )}
+                      {dossiers.find((d) => d.id === dossier)?.cle_systeme === CLE_DOSSIER_DEPENSES && (
+                        <p className="mt-1 text-[12px] text-text-tertiary">
+                          {type === 'monetary'
+                            ? (fr ? 'Compté automatiquement dans la rentabilité du job (montant avant taxes).' : 'Counted automatically in the job’s profitability (amount before taxes).')
+                            : (fr ? 'Ce champ n’est pas un montant : il ne sera PAS compté dans la rentabilité. Choisis le type « Monétaire » pour qu’il le soit.' : 'This field is not an amount: it will NOT be counted in profitability. Pick the “Monetary” type for it to count.')}
+                        </p>
                       )}
                     </div>
                   </div>

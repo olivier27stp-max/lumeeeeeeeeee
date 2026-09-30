@@ -524,7 +524,10 @@ export type ActionType =
  */
 export function sansPrenomVide(texte: string): string {
   return texte
-    .replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s+([,!.?])/g, '$1$2');
+    .replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s+([,!.?])/g, '$1$2')
+    // Un nom qui finit déjà par un point (« Plomberie Tremblay inc. ») suivi
+    // du point de la phrase donnait « inc.. ». Les points de suspension restent.
+    .replace(/([A-Za-zÀ-ÿ])\.\.(?!\.)/g, '$1.');
 }
 
 export function echapperHtml(v: string): string {

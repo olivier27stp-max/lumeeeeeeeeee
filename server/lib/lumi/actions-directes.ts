@@ -29,6 +29,8 @@ import { executerEcriture, type ReçuExecution } from './execution';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
 import { normaliser } from './normaliser';
 import { fmtDollars, jourLocal, minuitLocal } from './raccourcis';
+import { REFUS_PERMISSION } from '../rentabilite';
+import { resumer } from '../rentabilite/resume';
 
 export type GenreDirect = 'lecture' | 'directe' | 'carte' | 'fixe';
 
@@ -163,6 +165,55 @@ function champsFiche(reste: string): { first_name: string; last_name: string; ph
 
 const NOM = "([a-zà-ÿ][a-zà-ÿ' -]{1,40}?)";
 
+/* ── Rentabilité : questions simples → analyze_profitability + son résumé gabarit ── */
+const PERIODE_RENTA = '(?: (?:pour |sur |depuis |for |over )?(ce mois ci|ce mois|cette annee|this month|this year|le mois passe|le mois dernier|mois passe|last month))?';
+const MOT_RENTA = '(?:rentabilite|profitabilite|marge|marges|marge de profit|profit|profits|profitability|profit margin|margin|margins)';
+const GROUPES_RENTA: Record<string, string> = {
+  technicien: 'technicien', techniciens: 'technicien', tech: 'technicien', techs: 'technicien', technician: 'technicien', technicians: 'technicien',
+  client: 'client', clients: 'client', customer: 'client', customers: 'client',
+  service: 'service', services: 'service', mois: 'mois', month: 'mois',
+  vendeur: 'rep', vendeurs: 'rep', vendeuse: 'rep', rep: 'rep', reps: 'rep', 'sales rep': 'rep',
+  job: 'job', jobs: 'job',
+  gars: 'technicien', employes: 'technicien', employe: 'technicien', equipe: 'technicien', cliente: 'client',
+};
+const QUI_RENTA = Object.keys(GROUPES_RENTA).join('|');
+/** Pur. La période reste un mot (« ce mois ») : les dates se calculent au moment de répondre, dans le fuseau de l'org. */
+export function detecterRentabilite(s: string): ActionDirecte | null {
+  let m = new RegExp(`^(?:c est quoi |quelle est |quel est |montre moi |donne moi |what is |whats |show me )?(?:la |le |ma |mon |the |my )?${MOT_RENTA}(?: du| de la| de| sur le| sur la| sur| on| of| for)?(?: the)? job ${NUM}$`).exec(s)
+    // « ma job 42 était-tu rentable », « est-ce que le job 42 est rentable », « was job 42 profitable »
+    ?? new RegExp(`^(?:est ce que |is |was )?(?:ma |mon |le |la |the )?job ${NUM} (?:(?:est|etait|a ete|is|was)(?: tu| ti)? )?(?:rentable|profitable)$`).exec(s);
+  if (m) return { id: 'rentabilite-job', genre: 'lecture', tool: 'analyze_profitability', args: { job_numbers: [m[1]] } };
+  // « rentabilité par technicien », « rentabilité de mes gars ce mois-ci »
+  m = new RegExp(`^(?:c est quoi |quelle est |quel est |montre moi |donne moi |what is |whats |show me )?(?:ma |mon |mes |la |le |notre |nos |my |our |the )?${MOT_RENTA} (?:par|de|des|by|of|for) (?:mes |nos |my |our |les )?(${QUI_RENTA})${PERIODE_RENTA}$`).exec(s);
+  if (m) return { id: 'rentabilite-groupe', genre: 'lecture', tool: 'analyze_profitability', args: { group_by: GROUPES_RENTA[m[1]], sort: 'profit_desc', limit: 10 }, cible: { quand: m[2] } };
+  // « quel rep me rapporte le plus », « mon service le plus rentable », « quel client est le moins rentable »
+  m = new RegExp(`^(?:c est quoi |c est qui |quel est |quels sont |which )?(?:quel |quelle |quels |qui |mon |ma |mes |le |la |les |my )?(${QUI_RENTA}) (?:(?:me |nous )?(?:rapporte|rapportent|fait|donne|brings me|makes me)|(?:est |sont )?(?:le |la |les )?) ?(?:le |la |les )?(plus|moins|the most|the least|most|least) ?(?:rentable|rentables|profitable|payant|payants|d argent|de cash|money)?${PERIODE_RENTA}$`).exec(s);
+  if (m) return { id: 'rentabilite-classement', genre: 'lecture', tool: 'analyze_profitability', args: { group_by: GROUPES_RENTA[m[1]], sort: /moins|least/.test(m[2]) ? 'profit_asc' : 'profit_desc', limit: 5 }, cible: { quand: m[3] } };
+  // « marge du client Tremblay cette année » : le client se retrouve par son nom (unique), sinon le modèle
+  m = new RegExp(`^(?:c est quoi |quelle est |quel est |montre moi |donne moi )?(?:la |ma |mon |le )?${MOT_RENTA} (?:du |de la |de |avec |sur |of |for |with )?(?:le |the )?(?:client|cliente|customer) ${NOM}${PERIODE_RENTA}$`).exec(s);
+  if (m) return { id: 'rentabilite-client', genre: 'lecture', tool: 'analyze_profitability', args: { group_by: 'job', sort: 'profit_desc', limit: 5 }, cible: { nom: m[1].trim(), quand: m[2] } };
+  m = new RegExp(`^(?:montre moi |quels sont |c est quoi |show me |what are )?(?:mes |les |my |the )?(?:jobs (?:les )?(moins|plus) rentables|(least|most) profitable jobs)${PERIODE_RENTA}$`).exec(s);
+  if (m) return { id: 'rentabilite-classement', genre: 'lecture', tool: 'analyze_profitability', args: { group_by: 'job', sort: m[1] === 'moins' || m[2] === 'least' ? 'profit_asc' : 'profit_desc', limit: 5 }, cible: { quand: m[3] } };
+  m = new RegExp(`^(?:est ce que )?(?:je suis|j suis|chu|suis je|on est|sommes nous|am i|are we) (?:rentable|rentables|profitable|en profit|making money)${PERIODE_RENTA}$`).exec(s)
+    ?? new RegExp(`^(?:c est quoi |quelle est |quel est |montre moi |donne moi |combien |what is |whats |show me )?(?:ma |mon |mes |la |le |notre |nos |my |our )?${MOT_RENTA}${PERIODE_RENTA}$`).exec(s);
+  if (m) return { id: 'rentabilite', genre: 'lecture', tool: 'analyze_profitability', args: { group_by: 'job', limit: 5 }, cible: { quand: m[1] } };
+  return null;
+}
+/** « ce mois », « cette année », « le mois passé » → bornes locales. Sans mot : la valeur par défaut de l'action (1er janvier → aujourd'hui). */
+export function periodeRentabilite(quand: string | undefined, fuseau: string, maintenant: Date): { date_from?: string; date_to?: string } {
+  if (!quand) return {};
+  const aujourdhui = jourLocal(fuseau, maintenant, 0);
+  if (/annee|year/.test(quand)) return { date_from: `${aujourdhui.slice(0, 4)}-01-01`, date_to: aujourdhui };
+  if (/passe|dernier|last/.test(quand)) {
+    const [y, mo] = aujourdhui.split('-').map(Number);
+    const py = mo === 1 ? y - 1 : y;
+    const pm = mo === 1 ? 12 : mo - 1;
+    const fin = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+    return { date_from: `${py}-${String(pm).padStart(2, '0')}-01`, date_to: `${py}-${String(pm).padStart(2, '0')}-${String(fin).padStart(2, '0')}` };
+  }
+  return { date_from: `${aujourdhui.slice(0, 8)}01`, date_to: aujourdhui };
+}
+
 /** Motifs étendus (2026-09-17, deuxième vague) : créations avec champs, messages dictés, listes par client, report par numéro, relances, revenus. */
 const CONJONCTIONS = /\b(?:et|pis|puis|ensuite|apres|then|and)\b/;
 function detecterExtension(s: string, brut: string, mots: string[]): ActionDirecte | null {
@@ -209,6 +260,9 @@ function detecterExtension(s: string, brut: string, mots: string[]): ActionDirec
   if (/^(?:relance|relances|relance les|relance moi|relance mes|envoie les relances|chase|remind)(?: (?:mes |les |tous mes |tous les ))?(?:retards|retardataires|factures en retard|impayes|impayees|comptes en retard|clients en retard|overdue|late payers)$|^relance les$/.test(s)) {
     return { id: 'relance-retards', genre: 'carte', tool: 'send_payment_reminders', args: {}, cible: {} };
   }
+  // Rentabilité (analyze_profitability) : la réponse gabarit de l'action est complète, 0 token
+  const renta = detecterRentabilite(s);
+  if (renta) return renta;
   // Revenus : cette année, 30 derniers jours (le raccourci existant couvre ce mois-ci)
   if (/^(?:mes |mon |ma |les )?(?:(?:combien )?(?:j ai |jai )?(?:encaisse|facture|gagne|revenu|revenus|chiffre|ventes|ca) )?(?:(?:de |depuis |sur )?(?:cette annee|l annee|this year|annuel|annuelle)|(?:les |des )?30 derniers jours|last 30 days|le dernier mois)$/.test(s) && mots.some((x) => ['encaisse', 'facture', 'revenu', 'revenus', 'chiffre', 'ventes', 'ca', 'gagne', 'annee', 'year', '30', 'derniers'].includes(x))) {
     const annee = /annee|year|annuel/.test(s);
@@ -476,6 +530,15 @@ export function rendreActionDirecte(a: ActionDirecte, resultat: any, opts: { fr:
     ];
     return lignes.join('\n');
   }
+  if (a.tool === 'analyze_profitability') {
+    if (typeof resultat?.resume_fr !== 'string' || !resultat?.totaux) return null;
+    const l = fr ? 'fr' : 'en';
+    // Classement demandé : les lignes viennent juste après le chiffre (même gabarit que l'action)
+    const lignes = a.id === 'rentabilite-classement' || a.id === 'rentabilite-groupe'
+      ? (resultat.groupes ?? []).filter((g: any) => g.completude !== 'insuffisante').map((g: any) => `• ${g.nom} : ${g.marge_est_un_maximum ? (fr ? 'profit d’au plus ' : 'profit of at most ') : 'profit '}${fmtDollars(g.profit_cents, fr)}${g.marge_pct != null ? ` (${fr ? 'marge' : 'margin'} ${fr ? String(g.marge_pct).replace('.', ',') + ' %' : g.marge_pct + '%'})` : ''}`)
+      : [];
+    return lignes.length ? resumer(resultat, l, resultat.groupes, lignes) : (fr ? resultat.resume_fr : resultat.resume_en);
+  }
   if (a.id === 'revenu-annee' || a.id === 'revenu-30-jours') {
     const enc = Number(resultat?.revenue_cents ?? 0); const fac = Number(resultat?.invoiced_cents ?? 0);
     const quand = a.id === 'revenu-annee' ? (fr ? 'cette année' : 'this year') : (fr ? 'sur les 30 derniers jours' : 'over the last 30 days');
@@ -618,6 +681,24 @@ export async function repondreActionDirecte(a: ActionDirecte, ctx: ContexteDirec
     if (a.genre === 'fixe') {
       const texte = fr ? a.fixe!.fr : a.fixe!.en;
       return { genre: 'texte', texte, fiches: [], outils: [], messages: [{ role: 'assistant', content: [{ type: 'text', text: texte }] }] };
+    }
+    if (a.genre === 'lecture' && a.tool === 'analyze_profitability') {
+      // Sans la permission : on le dit, sans chiffre, sans passer par le modèle.
+      // detail : le gabarit a besoin du résultat complet (aucun modèle ne le lit ici, il ne coûte rien).
+      const args: Record<string, any> = { ...a.args, detail: true, ...periodeRentabilite(a.cible?.quand, ctx.fuseau, ctx.maintenant ?? new Date()) };
+      if (a.id === 'rentabilite-client') {
+        const c = await clientUnique(a.cible?.nom ?? '', ctx);
+        if (!c?.id) return null; // introuvable ou homonymes : le modèle demande lequel
+        args.client_id = c.id;
+      }
+      const r = await executerOutilGarde({ name: a.tool, args, userId: ctx.userId, orgId: ctx.orgId, client: ctx.client, accessToken: ctx.accessToken });
+      const res: any = 'refus' in r ? { acces_refuse: true } : r.result;
+      let texte: string | null;
+      if (res?.acces_refuse || res?.montants_masques) texte = fr ? REFUS_PERMISSION.fr : REFUS_PERMISSION.en;
+      else if (!res || res.error) return null; // job introuvable, date invalide… : le modèle explique
+      else texte = rendreActionDirecte(a, res, { fr, fuseau: ctx.fuseau });
+      if (!texte) return null;
+      return { genre: 'texte', texte, fiches: [], outils: [a.tool], messages: [{ role: 'assistant', content: [{ type: 'text', text: texte }] }] };
     }
     if (a.genre === 'lecture') {
       let argsLecture = a.args;
