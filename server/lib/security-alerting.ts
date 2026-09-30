@@ -60,7 +60,7 @@ export function corpsHtml(evts: Evenement[]): string {
   const critiques = evts.filter((e) => e.severity === 'critical').length;
   return rendreCourrielLume({
     langue: 'fr',
-    preheader: `${evts.length} évènement(s) high/critical non résolus — ${evts[0]?.event_type ?? ''}`,
+    preheader: `${evts.length} ${evts.length > 1 ? 'évènements high/critical non résolus' : 'évènement high/critical non résolu'} — ${evts[0]?.event_type ?? ''}`,
     titre: `${evts.length} évènement${evts.length > 1 ? 's' : ''} de sécurité`,
     intro: 'Sévérité high ou critical, non résolus, depuis le dernier passage. Le détail complet est dans security_events.',
     lignes: [
@@ -123,7 +123,7 @@ async function verifierUneFois(): Promise<void> {
   try {
     await sendEmail({
       to: destination,
-      subject: `[Lume] ${evts.length} évènement(s) de sécurité — ${evts[0].severity}`,
+      subject: `[Lume] ${evts.length} ${evts.length > 1 ? 'évènements' : 'évènement'} de sécurité — ${evts[0].severity}`,
       html: corpsHtml(evts),
     });
   } catch (err: any) {

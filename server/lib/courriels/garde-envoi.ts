@@ -79,6 +79,20 @@ const REF_INTERNE = /#[A-Z0-9]{2,}[-_][A-Z0-9-]{2,}|#[0-9a-f]{8,}\b/i;
 export const OBJET_MAX = 60;
 
 /** Les écarts d'un objet aux règles permanentes — vide si tout va bien. */
+/**
+ * Le premier objet qui tient en OBJET_MAX caractères, du plus précis au plus
+ * court ; le dernier est coupé à un mot si rien ne tient. Un nom d'entreprise
+ * ou de personne long ne doit jamais pousser un objet au-delà de la limite.
+ */
+export function premierObjetQuiTient(candidats: string[]): string {
+  const propres = candidats.map((c) => c.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const bon = propres.find((c) => c.length <= OBJET_MAX);
+  if (bon) return bon;
+  const dernier = propres[propres.length - 1] || '';
+  const coupe = dernier.slice(0, OBJET_MAX - 1);
+  return `${coupe.slice(0, Math.max(coupe.lastIndexOf(' '), 40)).replace(/[\s,;:(—–-]+$/, '')}…`;
+}
+
 export function ecartsObjet(objet: string): string[] {
   const o = String(objet ?? '');
   const ecarts: string[] = [];

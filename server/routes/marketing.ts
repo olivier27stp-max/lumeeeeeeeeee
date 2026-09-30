@@ -6,6 +6,7 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { sendSafeError } from '../lib/error-handler';
 import { getServiceClient } from '../lib/supabase';
 import { rendreCourrielLume, echapper, type LigneDetail } from '../lib/courriels/gabarit';
+import { premierObjetQuiTient } from '../lib/courriels/garde-envoi';
 
 const router = Router();
 
@@ -74,7 +75,7 @@ export interface DemandeDemo {
 }
 
 /**
- * Alerte à l'exploitant : « [ref] Nouveau lead Lume — … ». Interne (sans
+ * Alerte à l'exploitant : « Nouveau lead : entreprise (secteur) ». Interne (sans
  * signature), les champs du lead en lignes, le message en contenu libre.
  * Pur — aperçu : scripts/qa/courriels-exemples/abonnement.mts.
  */
@@ -94,7 +95,11 @@ export function courrielNouveauLead(d: DemandeDemo, meta: { recuLe: string; ip: 
     { libelle: 'Parrainage', valeur: d.referral_code || '—' },
   ];
   return {
-    sujet: `[${d.reference}] Nouveau lead Lume — ${d.company_name} (${d.industry})`,
+    // La référence est dans les lignes du courriel : l'objet reste court et lisible.
+    sujet: premierObjetQuiTient([
+      `Nouveau lead : ${d.company_name} (${secteur})`,
+      `Nouveau lead : ${d.company_name}`,
+    ]),
     html: rendreCourrielLume({
       langue: 'fr',
       preheader: `${d.full_name} · ${d.phone} · ${secteur}`,
