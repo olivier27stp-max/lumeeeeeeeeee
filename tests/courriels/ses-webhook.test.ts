@@ -99,3 +99,20 @@ describe('C4 — un rebond SES prévient l’entreprise comme Resend', () => {
     expect(notifications(journal)).toHaveLength(0);
   });
 });
+
+describe('C5 — une écriture ratée n’est plus perdue', () => {
+  it('échec de mise à jour : 500 (SNS rejoue) et aucun accusé « counted »', async () => {
+    const journal = monde({ email_deliveries: { data: null, error: { message: 'panne' } } });
+    const r = await poster(sns(rebond(), 'sns-panne'));
+    expect(r.status).toBe(500);
+    expect(requetes(journal, 'webhook_receipts', 'insert')).toHaveLength(0);
+    expect(notifications(journal)).toHaveLength(0);
+  });
+
+  it('succès : 200 et accusé consigné', async () => {
+    const journal = monde();
+    const r = await poster(sns(rebond(), 'sns-ok'));
+    expect(r.status).toBe(200);
+    expect(requetes(journal, 'webhook_receipts', 'insert')).toHaveLength(1);
+  });
+});

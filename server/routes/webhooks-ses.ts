@@ -158,7 +158,11 @@ export async function sesWebhookHandler(req: express.Request, res: express.Respo
     }
   } catch (err: any) {
     logger.error('[webhooks/ses] évènement non enregistré', { error: err?.message || String(err), type: evenement.type, messageId: evenement.messageId });
-    // 200 quand même : SNS rejouerait sans fin, et la ligne est déjà journalisée.
+    // Audit V2, C5 : répondre 200 ici perdait le rebond pour de bon (SNS ne
+    // rejoue que sur un échec). 500 = SNS rejoue, selon sa politique de
+    // livraison HTTP (nombre d'essais BORNÉ, pas « sans fin ») ; aucun accusé
+    // `counted` n'est écrit, le rejeu sera donc traité.
+    return res.status(500).json({ error: 'Event not recorded.' });
   }
 
   if (reference) {
