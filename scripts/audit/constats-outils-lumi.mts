@@ -19,7 +19,7 @@ const severiteDe = (t: string) => SEV.find(([r]) => r.test(t))?.[1] ?? null;
 
 export function lireConstats(): Constat[] {
   const out: Constat[] = [];
-  for (const f of readdirSync(DOSSIER).filter((x) => x.endsWith('.md')).sort()) {
+  for (const f of readdirSync(DOSSIER).filter((x) => x.endsWith('.md') && !x.startsWith('rapport-')).sort()) {
     const lignes = readFileSync(resolve(DOSSIER, f), 'utf8').split(/\r?\n/);
     let severiteSection = 'moyen';
     let entete: string[] = [];

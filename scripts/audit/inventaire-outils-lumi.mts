@@ -72,3 +72,4 @@ console.log(`actions sensibles ${n((l) => l.genre === 'action' && l.sensible)} �
 console.log(`actions non idempotentes ${n((l) => l.genre === 'action' && !l.idempotent)} · actions sans entrée au registre ${n((l) => l.genre === 'action' && !l.registre)}`);
 console.log(`actions qui écrivent en direct (sans route de l'app ni RPC) ${n((l) => l.genre === 'action' && !l.routes_app.length && !l.rpc.length && l.tables_ecrites.length > 0)}`);
 console.log(`outils sans aucun test qui les nomme ${n((l) => l.tests.length === 0)}`);
+process.exit(0);

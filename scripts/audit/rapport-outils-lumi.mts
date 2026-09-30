@@ -92,7 +92,7 @@ p(lire('docs/audits/outils-lumi/rapport-permissions.md'));
 
 p('## 4. Évaluation avant / après');
 p();
-p('Jeu : `evals/lumi-tools/cas/` (456 cas : 3 par action sensible — français, anglais, désambiguïsation ou clarification —, 1 par autre action, 1 par lecture). Runner : `evals/lumi-tools/run.mts` (mode « demander » : aucune écriture ne s\'exécute ; serveurs d\'éval sans aucun identifiant d\'envoi). « Avant » = `origin/main` au moment de l\'audit ; « après » = cette branche.');
+p('Jeu : `evals/lumi-tools/cas/` (456 cas : 3 par action sensible — français, anglais, désambiguïsation ou clarification —, 1 par autre action, 1 par lecture). Runner : `evals/lumi-tools/run.mts` (mode « demander » : aucune écriture ne s\'exécute ; serveurs d\'éval sans aucun identifiant d\'envoi). « Avant » = `origin/main` au moment de l\'audit ; « après » = cette branche fusionnée avec `origin/main` (passe finale). Une passe intermédiaire, avant les dernières corrections, donnait 82,0 % / 96,4 % / 89,7 %.');
 p();
 const ligneEval = (nom: string, a: any, b: any) => {
   const f = (x: any, k: string, suf = '') => (x && x[k] != null ? `${x[k]}${suf}` : '—');
@@ -131,3 +131,4 @@ p(lire('docs/audits/outils-lumi/rapport-non-garanti.md'));
 
 writeFileSync(resolve(RACINE, 'LUMI_TOOLS_AUDIT.md'), md.join('\n'));
 console.log(`LUMI_TOOLS_AUDIT.md : ${inventaire.length} outils, ${constats.length} constats, éval ${avant ? 'avant ' : ''}${apres ? 'après' : ''}`);
+process.exit(0);
