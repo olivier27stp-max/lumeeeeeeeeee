@@ -10,6 +10,16 @@ import { getUserContext, hasPermission } from '../lib/rbac';
 import { logger } from '../lib/logger';
 import { intervalleLu } from '../lib/abonnement-intervalle';
 import { installerModele } from '../lib/champs/service';
+
+/**
+ * Le plafond IA interne (¢ US de coût réel) ne part JAMAIS vers le navigateur :
+ * le client voit des crédits Lumi (2026-09-30). `/billing/plans` est public.
+ */
+function sansCoutIa<T>(plan: T): T {
+  if (!plan || typeof plan !== 'object') return plan;
+  const { ai_monthly_budget_cents: _interne, ...reste } = plan as Record<string, unknown>;
+  return reste as T;
+}
 import { estIndustrieModele } from '../../src/lib/champs/modeles';
 
 const router = Router();
@@ -73,7 +83,7 @@ router.get('/billing/plans', async (_req, res) => {
       return res.status(500).json({ error: 'Failed to load plans.' });
     }
 
-    return res.json({ plans: plans || [] });
+    return res.json({ plans: (plans || []).map(sansCoutIa) });
   } catch (err: any) {
     console.error('[billing/plans]', err.message);
     return res.status(500).json({ error: 'Internal server error.' });
@@ -172,7 +182,7 @@ router.get('/billing/current', async (req, res) => {
             status: s.status,
             interval: s.interval ?? null,
             current_period_end: s.current_period_end ?? null,
-            plans: s.plans ?? null,
+            plans: sansCoutIa(s.plans ?? null),
           }
         : null;
       // `grace` accompagne la version restreinte : un employé sans droit
@@ -181,7 +191,7 @@ router.get('/billing/current', async (req, res) => {
       return res.json({ subscription: redacted, billing_profile: null, restricted: true, grace, feature_overrides });
     }
 
-    return res.json({ subscription: subRes.data, billing_profile: profileRes.data, grace, feature_overrides });
+    return res.json({ subscription: subRes.data ? { ...subRes.data, plans: sansCoutIa((subRes.data as any).plans) } : subRes.data, billing_profile: profileRes.data, grace, feature_overrides });
   } catch (err: any) {
     console.error('[billing/current]', err.message);
     return res.status(500).json({ error: 'Internal server error.' });

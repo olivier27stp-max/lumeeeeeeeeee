@@ -31,6 +31,7 @@ import { getServiceClient, isOrgAdminOrOwner, companyOrgIds } from '../supabase'
 import type { IdTopic } from '../lumi/topics';
 import type { AgentTool, ToolContext } from './tools';
 import { executerIdempotent, champRequis, appelInterne, traduireStatut, AppelInterneIncertain } from './tools-etendus';
+import { etatCredits } from '../lumi/budget';
 
 /* ── Petits utilitaires locaux ─────────────────────────────────── */
 
@@ -1412,7 +1413,41 @@ const deleteNotification: AgentTool = {
    EXPORTS
    ════════════════════════════════════════════════════════════════ */
 
+/*
+ * « Il me reste combien ? » — les crédits Lumi du bureau (2026-09-30).
+ *
+ * EN CRÉDITS SEULEMENT : aucun montant en dollars ne sort, jamais (ni coût
+ * réel, ni équivalence). Le bureau vient de la session (ctx.orgId) ; la
+ * lecture passe par le client de service parce que les fonctions de crédits
+ * ne sont pas ouvertes à `authenticated`.
+ */
+const getLumiCredits: AgentTool = {
+  kind: 'read',
+  declaration: {
+    name: 'get_lumi_credits',
+    description: 'How many Lumi credits the company has left this period, the monthly total, the percentage used and the renewal date. '
+      + 'Answer in Lumi credits only: never convert credits to dollars or mention a cost in dollars.',
+    parameters: { type: 'object', properties: {} },
+  },
+  handler: async (_args, ctx) => {
+    const e = await etatCredits(getServiceClient(), ctx.orgId);
+    if (!e.inclus) return { inclus: false, note: 'Lumi n’est pas inclus dans le forfait de l’entreprise (inclus dans Autopilot).' };
+    return {
+      inclus: true,
+      credits_restants: e.restants,
+      credits_inclus: e.total,
+      credits_utilises: e.utilises,
+      pourcentage_utilise: e.pourcentage,
+      renouvellement_le: e.renouvellement_le,
+      epuise: e.palier === 'epuise',
+      note: 'Crédits non utilisés : pas de report. À l’épuisement, l’assistant avancé se met en pause jusqu’au renouvellement ; le reste de Lume fonctionne.',
+    };
+  },
+};
+
 export const OUTILS_REGLAGES: AgentTool[] = [
+  // Crédits Lumi (lecture)
+  getLumiCredits,
   // Messages
   markConversationRead,
   // Modèles de courriel
@@ -1473,6 +1508,7 @@ export const REGISTRE_REGLAGES: Record<string, { sensible: boolean; reversible: 
 
 /** Clé de la page Rôles exigée par chaque outil (même format que PERMISSION_PAR_OUTIL). */
 export const PERMISSIONS_REGLAGES: Record<string, { cle: PermissionKey; capacite: string }> = {
+  get_lumi_credits:            { cle: 'external_agent.use',     capacite: 'la consultation des crédits Lumi' },
   mark_conversation_read:      { cle: 'messages.read',          capacite: 'la lecture des SMS' },
   list_email_templates:        { cle: 'settings.read',          capacite: 'la consultation des modèles de courriel' },
   create_email_template:       { cle: 'settings.update',        capacite: 'la gestion des modèles de courriel' },
@@ -1514,6 +1550,7 @@ export const TOPICS_REGLAGES: Partial<Record<IdTopic, string[]>> = {
     'list_email_templates', 'create_email_template', 'update_email_template', 'set_default_email_template', 'delete_email_template', 'duplicate_email_template',
   ],
   facturation: [
+    'get_lumi_credits',
     'get_tax_config', 'setup_taxes', 'create_tax_config', 'update_tax_config', 'delete_tax_config', 'set_default_tax_group',
     'create_service', 'update_service', 'archive_service',
   ],
