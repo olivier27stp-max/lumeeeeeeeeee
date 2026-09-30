@@ -883,17 +883,21 @@ router.delete('/automations/folders/:id', async (req, res) => {
   // La clé étrangère est en `on delete set null` : les automatisations du
   // dossier reviennent à la racine et CONTINUENT de tourner. Un rangement
   // ne doit jamais faire disparaître un envoi.
-  const { error } = await auth.client
+  const { data, error } = await auth.client
     .from('automation_folders')
     .delete()
     .eq('id', req.params.id)
-    .eq('org_id', auth.orgId);
+    .eq('org_id', auth.orgId)
+    .select('id');
 
   if (error) {
     if (error.code === '42501') return res.status(403).json({ error: 'Votre rôle ne permet pas de supprimer un dossier.' });
     logger.error('[automation-folders] suppression échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de supprimer le dossier.' });
   }
+  // Audit V2, S9 : 0 ligne (dossier d'un autre bureau, inexistant, ou refusé
+  // par la RLS) répondait 204 « supprimé » sans rien supprimer.
+  if (!data?.length) return res.status(404).json({ error: 'Dossier introuvable.' });
   return res.status(204).end();
 });
 
@@ -1164,16 +1168,21 @@ router.delete('/automations/webhooks/:id', async (req, res) => {
 
   // Effacement DOUX, comme partout : le journal des appels reçus garde son
   // sens, et une suppression par erreur reste réparable.
-  const { error } = await auth.client
+  const { data, error } = await auth.client
     .from('automation_webhooks')
     .update({ deleted_at: new Date().toISOString(), enabled: false })
     .eq('id', req.params.id)
-    .eq('org_id', auth.orgId);
+    .eq('org_id', auth.orgId)
+    .is('deleted_at', null)
+    .select('id');
 
   if (error) {
+    if (error.code === '42501') return res.status(403).json({ error: 'Votre rôle ne permet pas de supprimer cette adresse.' });
     logger.error('[automation-rules] suppression webhook échouée', { message: error.message });
     return res.status(500).json({ error: 'Impossible de supprimer l’adresse d’appel.' });
   }
+  // Audit V2, S9 : 0 ligne répondait { ok: true } sans rien supprimer.
+  if (!data?.length) return res.status(404).json({ error: 'Adresse d’appel introuvable.' });
   return res.json({ ok: true });
 });
 
