@@ -70,9 +70,9 @@
   "note": "Canal demandé non parti = dit"
  },
  "argent.md:26": {
-  "statut": "ouvert",
-  "vague": "",
-  "note": "Route de l'écran (préfixe public /api/payment-requests) : hors outils de Lumi, à corriger dans route-permissions.ts"
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Préfixe public limité à GET (statut) : créer/renvoyer un lien passe par la clé financial.view_payments"
  },
  "clients-devis.md:8": {
   "statut": "corrigé",
