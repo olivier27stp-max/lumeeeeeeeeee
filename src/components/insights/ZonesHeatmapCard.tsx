@@ -16,7 +16,8 @@ import L from 'leaflet';
 import type { Geometry } from 'geojson';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../../i18n';
-import { fetchMapJobsInRange } from '../../lib/mapApi';
+import { fetchZonesParAdresse } from '../../lib/insightsApi';
+import ErreurCarte from './ErreurCarte';
 import PeriodSelector from './PeriodSelector';
 import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
 import { BASEMAP_LIGHT, BASEMAP_DARK, BASEMAP_ATTR } from '../../lib/basemap';
@@ -31,11 +32,6 @@ const MAP_CSS = `
 .leaflet-tooltip.zone-tip{background:var(--color-surface-card);color:var(--color-text-primary);border:1px solid var(--color-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.22);padding:7px 11px;font-weight:600;font-family:inherit;}
 .leaflet-tooltip.zone-tip::before{display:none;}
 `;
-
-function isDone(status?: string | null): boolean {
-  const s = String(status || '').toLowerCase().trim();
-  return s === 'completed' || s === 'complete' || s === 'done' || s === 'terminé' || s === 'termine' || s === 'invoiced' || s === 'paid';
-}
 
 function useIsDark() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -174,30 +170,26 @@ export default function ZonesHeatmapCard({
 
   const q = useQuery({
     queryKey: ['zones-heat', range.from, range.to],
-    queryFn: () => fetchMapJobsInRange(`${range.from}T00:00:00.000Z`, `${range.to}T23:59:59.999Z`),
+    // Jobs complétés regroupés par adresse (fuseau de l'entreprise) ; la ville se lit dans l'adresse.
+    queryFn: () => fetchZonesParAdresse({ from: range.from, to: range.to }),
     staleTime: 60_000,
+    refetchOnMount: 'always',
   });
 
   const kc = (cents: number) => new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
   const { zones, stats, maxRev, center } = useMemo(() => {
-    const valid = (q.data?.pins || []).filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && !(p.latitude === 0 && p.longitude === 0));
-    const center: L.LatLngTuple = valid.length
-      ? [valid.reduce((s, p) => s + p.latitude, 0) / valid.length, valid.reduce((s, p) => s + p.longitude, 0) / valid.length]
+    // Une ligne par adresse ; chaque job complété n'y compte qu'une fois, même à plusieurs visites.
+    const lignes = q.data || [];
+    const nJobs = lignes.reduce((s, z) => s + z.jobs, 0);
+    const center: L.LatLngTuple = nJobs
+      ? [lignes.reduce((s, z) => s + z.lat_somme, 0) / nJobs, lignes.reduce((s, z) => s + z.lng_somme, 0) / nJobs]
       : DEFAULT_CENTER;
-    // Un pin par schedule_event : un job multi-visites ajoutait son total à
-    // chaque visite. On ne garde qu'un pin par job.
-    const seenJobs = new Set<string>();
-    const done = valid.filter((p) => isDone(p.status)).filter((p) => {
-      if (seenJobs.has(p.jobId)) return false;
-      seenJobs.add(p.jobId);
-      return true;
-    });
     const agg = new Map<string, { rev: number; jobs: number; lat: number; lng: number }>();
-    for (const p of done) {
-      const name = cityFromAddress(p.address) || (fr ? 'Autres' : 'Other');
+    for (const z of lignes) {
+      const name = cityFromAddress(z.adresse) || (fr ? 'Autres' : 'Other');
       const e = agg.get(name) || { rev: 0, jobs: 0, lat: 0, lng: 0 };
-      e.rev += p.totalCents || 0; e.jobs += 1; e.lat += p.latitude; e.lng += p.longitude;
+      e.rev += z.revenu_cents; e.jobs += z.jobs; e.lat += z.lat_somme; e.lng += z.lng_somme;
       agg.set(name, e);
     }
     const zones: Zone[] = Array.from(agg.entries()).map(([name, v]) => ({ name, rev: v.rev, jobs: v.jobs, lat: v.lat / v.jobs, lng: v.lng / v.jobs })).sort((a, b) => b.rev - a.rev);
@@ -261,7 +253,7 @@ export default function ZonesHeatmapCard({
                 <Tooltip sticky direction="top" offset={[0, -6]} opacity={1} className="zone-tip">
                   <div style={{ textAlign: 'center', lineHeight: 1.4 }}>
                     <div style={{ fontWeight: 800, fontSize: 12.5 }}>{z.name}</div>
-                    <div style={{ fontSize: 12 }}>{kc(z.rev)} · {z.jobs} jobs</div>
+                    <div style={{ fontSize: 12 }}>{kc(z.rev)} · {z.jobs} job{z.jobs > 1 ? 's' : ''}</div>
                   </div>
                 </Tooltip>
               );
@@ -313,7 +305,12 @@ export default function ZonesHeatmapCard({
             </div>
           </div>
 
-          {empty && (
+          {q.isError && (
+            <div className="absolute inset-0 z-[400] flex items-center justify-center bg-surface-card/80 backdrop-blur-sm">
+              <ErreurCarte onRetry={() => q.refetch()} />
+            </div>
+          )}
+          {empty && !q.isError && (
             <div className="absolute inset-0 z-[400] flex items-center justify-center bg-surface-card/70 backdrop-blur-sm">
               <div className="text-center px-6">
                 <div className="text-[13px] font-semibold text-text-secondary">{fr ? 'Aucun job réalisé géocodé sur la période' : 'No geocoded completed jobs for this period'}</div>
@@ -337,7 +334,7 @@ export default function ZonesHeatmapCard({
                     <span className="text-[13px] font-bold text-text-primary tabular-nums shrink-0">{kc(z.rev)}</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-surface-tertiary overflow-hidden mt-2"><span className="block h-full rounded-full" style={{ width: `${Math.round((z.rev / maxRev) * 100)}%`, background: 'var(--color-text-primary)' }} /></div>
-                  <div className="text-[11px] text-text-tertiary font-semibold mt-1.5">{z.jobs} jobs · {kc(z.jobs ? z.rev / z.jobs : 0)} {fr ? 'moy.' : 'avg'}</div>
+                  <div className="text-[11px] text-text-tertiary font-semibold mt-1.5">{z.jobs} job{z.jobs > 1 ? 's' : ''} · {kc(z.jobs ? z.rev / z.jobs : 0)} {fr ? 'moy.' : 'avg'}</div>
                 </div>
               ))}
             </div>

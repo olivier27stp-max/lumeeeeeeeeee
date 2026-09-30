@@ -3,7 +3,7 @@
  * prototype's mini chart. Monochrome (text-primary ink), hero + delta, crosshair
  * tooltip, borderless header with the shared period selector.
  */
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import PeriodSelector from './PeriodSelector';
 import { type InsightsPeriod } from '../../lib/insightsPeriod';
 
@@ -42,6 +42,9 @@ export default function MiniTrendCard({
   fmt: (v: number) => string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  // Id de dégradé SANS espaces ni apostrophe : « mfill-Valeur moyenne d'un job » rendait
+  // url(#…) invalide et le navigateur remplissait la courbe en noir plein.
+  const idDegrade = `mfill${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
   const model = useMemo(() => {
     const s = series;
@@ -83,12 +86,12 @@ export default function MiniTrendCard({
               <line key={i} x1={0} y1={y} x2={W} y2={y} stroke={i === 3 ? 'var(--color-border)' : 'var(--color-border-light)'} strokeWidth={1} vectorEffect="non-scaling-stroke" />
             ))}
             <defs>
-              <linearGradient id={`mfill-${title}`} x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={idDegrade} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="var(--color-text-primary)" stopOpacity="0.09" />
                 <stop offset="100%" stopColor="var(--color-text-primary)" stopOpacity="0" />
               </linearGradient>
             </defs>
-            {model.area && <path d={model.area} fill={`url(#mfill-${title})`} />}
+            {model.area && <path d={model.area} fill={`url(#${idDegrade})`} />}
             <path d={model.line} fill="none" stroke="var(--color-text-primary)" strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           </svg>
         </div>

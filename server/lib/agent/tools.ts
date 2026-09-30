@@ -17,6 +17,14 @@ import {
   STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, STATUT_CLIENT, traduireStatut,
 } from './tools-etendus';
 import { OUTILS_RAPPORTS } from './tools-rapports';
+import { jourLocal } from '../dates-locales';
+
+const FUSEAU_ORG = 'America/Montreal';
+/** « 2026-02-28 » : dernier jour du mois d'un « YYYY-MM-DD ». */
+function dernierJourDuMois(jour: string): string {
+  const [y, m] = jour.split('-').map(Number);
+  return `${jour.slice(0, 7)}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
+}
 import { searchHelp } from './tools-aide';
 import { OUTILS_DOMAINES } from './outils-domaines';
 
@@ -647,22 +655,16 @@ const getRevenueSummary: AgentTool = {
     },
   },
   handler: async (args, ctx) => {
-    const now = new Date();
-    let from: Date;
-    let to: Date;
+    // Bornes dans le fuseau de l'entreprise : le serveur est en UTC, et le 30 à 21 h
+    // (Montréal) « ce mois-ci » devenait le mois suivant, vide.
+    const aujourdhui = jourLocal(FUSEAU_ORG, new Date());
     const period = String(args.period || 'this_month');
-    if (period === 'this_year') {
-      from = new Date(now.getFullYear(), 0, 1);
-      to = new Date(now.getFullYear(), 11, 31);
-    } else if (period === 'last_30_days') {
-      to = now;
-      from = new Date(now.getTime() - 30 * 86400000);
-    } else {
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
-      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    }
-    const fromStr = from.toISOString().slice(0, 10);
-    const toStr = to.toISOString().slice(0, 10);
+    const fromStr = period === 'this_year' ? `${aujourdhui.slice(0, 4)}-01-01`
+      : period === 'last_30_days' ? jourLocal(FUSEAU_ORG, new Date(), -30)
+        : `${aujourdhui.slice(0, 7)}-01`;
+    const toStr = period === 'this_year' ? `${aujourdhui.slice(0, 4)}-12-31`
+      : period === 'last_30_days' ? aujourdhui
+        : dernierJourDuMois(aujourdhui);
 
     const { data: series, error } = await ctx.client.rpc('rpc_insights_revenue_series', {
       p_org: ctx.orgId,

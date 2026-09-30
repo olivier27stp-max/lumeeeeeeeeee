@@ -1,7 +1,8 @@
 /**
  * Statistiques (/insights) — the business-overview dashboard, monochrome, every
  * card wired to real data over the selected period and linking to its source
- * page. Gated to owner/admin (company-wide financials).
+ * page. Gated by the Roles page permission financial.view_analytics (the same key
+ * the database checks), not by role name.
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -9,8 +10,11 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { useCompany } from '../contexts/CompanyContext';
+import { usePermissions } from '../hooks/usePermissions';
+import { hasPermission } from '../lib/permissions';
 import {
-  fetchClientLifetimeValue,
+  fetchTopClientsParRevenu,
+  fetchValeurVieMoyenne,
   fetchInsightsInvoicesSummary,
   fetchInsightsLeadConversion,
   fetchTeamPerformance,
@@ -27,11 +31,16 @@ import PaymentMixCard from '../components/insights/PaymentMixCard';
 import MiniTrendCard from '../components/insights/MiniTrendCard';
 import ZonesHeatmapCard from '../components/insights/ZonesHeatmapCard';
 import ProfitabilityCard from '../components/insights/ProfitabilityCard';
+import ErreurCarte from '../components/insights/ErreurCarte';
 
 const EMPTY_SERIES = { labels: [] as string[], vals: [] as number[] };
-function mean(a: number[]) { return a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0; }
-/** 0–1 fraction OR already-scaled percent → rounded percent. */
-function ratePct(v: number | null | undefined): number { const n = v ?? 0; return Math.round(Math.abs(n) <= 1 && n !== 0 ? n * 100 : n); }
+/**
+ * Pourcentage affichable. conversion_rate arrive en fraction (0–1) ; win_rate et
+ * completion_rate arrivent DÉJÀ en pourcentage. L'ancienne heuristique « ≤ 1 → ×100 »
+ * affichait 30 % pour un taux de complétion réel de 0,3 %.
+ */
+function pctDeFraction(v: number | null | undefined): number { const n = Number(v ?? 0); return Number.isFinite(n) ? Math.round(n * 100) : 0; }
+function pctArrondi(v: number | null | undefined): number { const n = Number(v ?? 0); return Number.isFinite(n) ? Math.round(n) : 0; }
 
 /* ── shared shell (boxless, underlined header) ── */
 function SectionHead({ title }: { title: string }) {
@@ -47,7 +56,9 @@ function CardHead({ title, right }: { title: string; right?: ReactNode }) {
 }
 function LinkCard({ to, children }: { to: string; children: ReactNode }) {
   const navigate = useNavigate();
-  return <div role="button" tabIndex={0} onClick={() => navigate(to)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(to); } }} className="cursor-pointer rounded-xl transition-colors hover:bg-surface-secondary/40">{children}</div>;
+  // Entrée/Espace sur un contrôle INTÉRIEUR (sélecteur de période) ne doit pas naviguer :
+  // au clavier, ouvrir le menu de période quittait la page.
+  return <div role="button" tabIndex={0} onClick={() => navigate(to)} onKeyDown={(e) => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(to); } }} className="cursor-pointer rounded-xl transition-colors hover:bg-surface-secondary/40">{children}</div>;
 }
 
 /* ── leaderboard (teams / clients) ── */
@@ -90,8 +101,9 @@ export default function Statistiques() {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const navigate = useNavigate();
-  const { currentRole, currentOrgId } = useCompany();
-  const isAdmin = currentRole === 'owner' || currentRole === 'admin';
+  const { currentOrgId } = useCompany();
+  const perms = usePermissions();
+  const isAdmin = hasPermission(perms.permissions, 'financial.view_analytics', perms.role ?? undefined);
 
   const [period, setPeriod] = useState<InsightsPeriod>(DEFAULT_INSIGHTS_PERIOD);
   const range = useMemo(() => periodRange(period), [period]);
@@ -99,16 +111,21 @@ export default function Statistiques() {
 
   const kc = (cents: number) => new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
-  const clientQ = useQuery({ queryKey: ['stats-clv'], queryFn: () => fetchClientLifetimeValue(6), staleTime: 60_000, enabled: isAdmin });
-  const invQ = useQuery({ queryKey: ['stats-inv', from, to], queryFn: () => fetchInsightsInvoicesSummary({ from, to }), staleTime: 60_000, enabled: isAdmin });
-  const convQ = useQuery({ queryKey: ['stats-conv', from, to], queryFn: () => fetchInsightsLeadConversion({ from, to }), staleTime: 60_000, enabled: isAdmin });
-  const teamQ = useQuery({ queryKey: ['stats-team', from, to], queryFn: () => fetchTeamPerformance({ from, to }), staleTime: 60_000, enabled: isAdmin });
-  const veloQ = useQuery({ queryKey: ['stats-velo', from, to], queryFn: () => fetchPipelineVelocity({ from, to }), staleTime: 60_000, enabled: isAdmin });
-  const quoteQ = useQuery({ queryKey: ['stats-quote', from, to], queryFn: () => fetchQuoteKpis({ from, to }), staleTime: 60_000, enabled: isAdmin });
+  // Rafraîchi à chaque visite (une facture ou un paiement créé ailleurs doit apparaître
+  // en revenant sur la page) ; 60 s de fraîcheur pour les allers-retours de période.
+  const opts = { staleTime: 60_000, refetchOnMount: 'always' as const, enabled: isAdmin };
+  const clientQ = useQuery({ queryKey: ['stats-top-clients'], queryFn: () => fetchTopClientsParRevenu(5), ...opts });
+  const ltvQ = useQuery({ queryKey: ['stats-ltv'], queryFn: fetchValeurVieMoyenne, ...opts });
+  const invQ = useQuery({ queryKey: ['stats-inv', from, to], queryFn: () => fetchInsightsInvoicesSummary({ from, to }), ...opts });
+  const convQ = useQuery({ queryKey: ['stats-conv', from, to], queryFn: () => fetchInsightsLeadConversion({ from, to }), ...opts });
+  const teamQ = useQuery({ queryKey: ['stats-team', from, to], queryFn: () => fetchTeamPerformance({ from, to }), ...opts });
+  const veloQ = useQuery({ queryKey: ['stats-velo', from, to], queryFn: () => fetchPipelineVelocity({ from, to }), ...opts });
+  const quoteQ = useQuery({ queryKey: ['stats-quote', from, to], queryFn: () => fetchQuoteKpis({ from, to }), ...opts });
   const payoutQ = useQuery({ queryKey: ['stats-payout', currentOrgId], queryFn: () => fetchPayoutSummary({ orgId: currentOrgId as string, provider: 'stripe' }), enabled: isAdmin && !!currentOrgId, retry: false, staleTime: 60_000 });
-  const avgQ = useQuery({ queryKey: ['stats-ajv', from, to, fr], queryFn: () => fetchAvgJobValueSeries({ from, to, fr }), staleTime: 60_000, enabled: isAdmin });
-  const loyQ = useQuery({ queryKey: ['stats-loy', from, to], queryFn: () => fetchLoyalty({ from, to }), staleTime: 60_000, enabled: isAdmin });
+  const avgQ = useQuery({ queryKey: ['stats-ajv', from, to, fr], queryFn: () => fetchAvgJobValueSeries({ from, to, fr }), ...opts });
+  const loyQ = useQuery({ queryKey: ['stats-loy', from, to], queryFn: () => fetchLoyalty({ from, to }), ...opts });
 
+  if (perms.loading) return null;
   if (!isAdmin) {
     return (
       <div>
@@ -123,14 +140,16 @@ export default function Statistiques() {
   }
 
   // Teams (used for both the revenue ranking and the completion ranking).
+  const nJobs = (n: number) => `${n} job${n > 1 ? 's' : ''}`;
   const teams = (teamQ.data || []).slice();
   const teamsByRev = teams.slice().sort((a, b) => b.revenue_cents - a.revenue_cents).slice(0, 5)
-    .map((t) => ({ name: t.team_name, primary: kc(t.revenue_cents), secondary: `${t.jobs_count} jobs · ${kc(t.avg_job_value_cents)} ${fr ? 'moy.' : 'avg'}`, weight: t.revenue_cents }));
-  const teamsByCompletion = teams.slice().sort((a, b) => ratePct(b.completion_rate) - ratePct(a.completion_rate)).slice(0, 5)
-    .map((t) => ({ name: t.team_name, primary: `${ratePct(t.completion_rate)} %`, secondary: `${t.jobs_completed}/${t.jobs_count} jobs`, weight: ratePct(t.completion_rate) }));
-  const clientRows = (clientQ.data || []).slice().sort((a, b) => b.total_revenue_cents - a.total_revenue_cents).slice(0, 5).map((c) => ({ name: c.client_name, primary: kc(c.total_revenue_cents), secondary: `${c.total_jobs} jobs`, weight: c.total_revenue_cents }));
+    .map((t) => ({ name: t.team_name, primary: kc(t.revenue_cents), secondary: `${nJobs(t.jobs_count)} · ${kc(t.avg_job_value_cents)} ${fr ? 'moy.' : 'avg'}`, weight: t.revenue_cents }));
+  const teamsByCompletion = teams.slice().sort((a, b) => b.completion_rate - a.completion_rate).slice(0, 5)
+    .map((t) => ({ name: t.team_name, primary: `${pctArrondi(t.completion_rate)} %`, secondary: `${t.jobs_completed}/${nJobs(t.jobs_count)}`, weight: t.completion_rate }));
+  // Les 5 clients qui ont le plus rapporté (triés par la base, sur TOUS les clients).
+  const clientRows = (clientQ.data || []).slice(0, 5).map((c) => ({ name: c.client_name, primary: kc(c.total_revenue_cents), secondary: nJobs(c.total_jobs), weight: c.total_revenue_cents }));
 
-  const loy = loyQ.data || { recurringPct: 0, ltvAvgCents: 0, retentionPct: 0 };
+  const loy = { recurringPct: loyQ.data?.recurringPct ?? 0, retentionPct: loyQ.data?.retentionPct ?? 0, ltvAvgCents: ltvQ.data ?? 0 };
   const conv = convQ.data;
   const velo = veloQ.data;
   const quote = quoteQ.data;
@@ -145,12 +164,15 @@ export default function Statistiques() {
   ];
   const funnelMax = Math.max(1, ...funnel.map((s) => s.v));
 
+  // Le chiffre principal est la VRAIE moyenne de la période (somme / nombre de jobs), pas
+  // la moyenne des moyennes mensuelles (un mois à 1 job pesait autant qu'un mois à 100).
+  const ajvMoyenne = avgQ.data?.moyenne ?? 0;
   const ajvDerive = (vals: number[]) => {
     const nz = vals.filter((v) => v > 0);
     if (!nz.length) return { hero: '—', delta: '', sub: `${fr ? 'moyenne par job' : 'avg per job'} · ${periodLabel(period, fr)}` };
     const first = nz[0]; const last = nz[nz.length - 1];
     const p = first > 0 ? Math.round(((last - first) / first) * 100) : 0;
-    return { hero: kc(Math.round(mean(nz))), delta: nz.length > 1 ? `${p >= 0 ? '↑' : '↓'} ${Math.abs(p)}% ${fr ? 'sur la période' : 'over period'}` : '', sub: `${fr ? 'moyenne par job' : 'avg per job'} · ${periodLabel(period, fr)}` };
+    return { hero: kc(ajvMoyenne), delta: nz.length > 1 ? `${p >= 0 ? '↑' : '↓'} ${Math.abs(p)}% ${fr ? 'sur la période' : 'over period'}` : '', sub: `${fr ? 'moyenne par job' : 'avg per job'} · ${periodLabel(period, fr)}` };
   };
 
   return (
@@ -177,22 +199,23 @@ export default function Statistiques() {
       {/* Valeur & récurrence */}
       <SectionHead title={fr ? 'Valeur & récurrence' : 'Value & recurring'} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <LinkCard to="/jobs"><MiniTrendCard title={fr ? "Valeur moyenne d'un job" : 'Average job value'} series={avgQ.data || EMPTY_SERIES} loading={avgQ.isLoading} period={period} onPeriod={setPeriod} derive={ajvDerive} fmt={kc} /></LinkCard>
+        <LinkCard to="/jobs">{avgQ.isError ? <><CardHead title={fr ? "Valeur moyenne d'un job" : 'Average job value'} /><ErreurCarte onRetry={() => avgQ.refetch()} /></> : <MiniTrendCard title={fr ? "Valeur moyenne d'un job" : 'Average job value'} series={avgQ.data || EMPTY_SERIES} loading={avgQ.isLoading} period={period} onPeriod={setPeriod} derive={ajvDerive} fmt={kc} />}</LinkCard>
       </div>
 
       {/* Équipes */}
       <SectionHead title={fr ? 'Équipes' : 'Teams'} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <LinkCard to="/leaderboard"><CardHead title={fr ? 'Classement par revenu' : 'Ranked by revenue'} right={<PeriodSelector value={period} onChange={setPeriod} />} /><Leaderboard rows={teamsByRev} loading={teamQ.isLoading} emptyLabel={fr ? 'Aucune donnée' : 'No data'} /></LinkCard>
-        <LinkCard to="/leaderboard"><CardHead title={fr ? 'Taux de complétion' : 'Completion rate'} right={<PeriodSelector value={period} onChange={setPeriod} />} /><Leaderboard rows={teamsByCompletion} loading={teamQ.isLoading} emptyLabel={fr ? 'Aucune donnée' : 'No data'} /></LinkCard>
+        <LinkCard to="/leaderboard"><CardHead title={fr ? 'Classement par revenu' : 'Ranked by revenue'} right={<PeriodSelector value={period} onChange={setPeriod} />} />{teamQ.isError ? <ErreurCarte onRetry={() => teamQ.refetch()} /> : <Leaderboard rows={teamsByRev} loading={teamQ.isLoading} emptyLabel={fr ? 'Aucune donnée' : 'No data'} />}</LinkCard>
+        <LinkCard to="/leaderboard"><CardHead title={fr ? 'Taux de complétion' : 'Completion rate'} right={<PeriodSelector value={period} onChange={setPeriod} />} />{teamQ.isError ? <ErreurCarte onRetry={() => teamQ.refetch()} /> : <Leaderboard rows={teamsByCompletion} loading={teamQ.isLoading} emptyLabel={fr ? 'Aucune donnée' : 'No data'} />}</LinkCard>
       </div>
 
       {/* Clients */}
       <SectionHead title="Clients" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <LinkCard to="/clients"><CardHead title={fr ? 'Top clients par revenu' : 'Top clients by revenue'} /><Leaderboard rows={clientRows} loading={clientQ.isLoading} emptyLabel={fr ? 'Aucune donnée' : 'No data'} /></LinkCard>
+        <LinkCard to="/clients"><CardHead title={fr ? 'Top clients par revenu' : 'Top clients by revenue'} />{clientQ.isError ? <ErreurCarte onRetry={() => clientQ.refetch()} /> : <Leaderboard rows={clientRows} loading={clientQ.isLoading} emptyLabel={fr ? 'Aucune donnée' : 'No data'} />}</LinkCard>
         <LinkCard to="/clients">
           <CardHead title={fr ? 'Fidélité & valeur client' : 'Loyalty & client value'} right={<PeriodSelector value={period} onChange={setPeriod} />} />
+          {loyQ.isError || ltvQ.isError ? <ErreurCarte onRetry={() => { loyQ.refetch(); ltvQ.refetch(); }} /> : <>
           <div className="px-6 pt-4">
             <div className="flex h-3 rounded-full overflow-hidden bg-surface-tertiary gap-0.5">
               <span className="block h-full rounded-l-full" style={{ width: `${loy.recurringPct}%`, background: 'var(--color-text-primary)' }} />
@@ -207,6 +230,7 @@ export default function Statistiques() {
             <div><div className="text-[24px] font-bold tracking-tight tabular-nums text-text-primary leading-none">{kc(loy.ltvAvgCents)}</div><div className="text-[11.5px] text-text-tertiary mt-1.5">{fr ? 'Valeur vie moy. (LTV)' : 'Avg lifetime value'}</div></div>
             <div><div className="text-[24px] font-bold tracking-tight tabular-nums text-text-primary leading-none">{loy.retentionPct} %</div><div className="text-[11.5px] text-text-tertiary mt-1.5">{fr ? 'Taux de rétention' : 'Retention rate'}</div></div>
           </div>
+          </>}
         </LinkCard>
       </div>
 
@@ -216,7 +240,7 @@ export default function Statistiques() {
         <div className="xl:col-span-2">
           <LinkCard to="/pipeline">
             <CardHead title={fr ? 'Entonnoir des leads' : 'Lead funnel'} right={<PeriodSelector value={period} onChange={setPeriod} />} />
-            {convQ.isLoading ? <div className="h-[196px] mx-6 mt-4 rounded-lg bg-surface-secondary/40 animate-pulse" /> : (
+            {convQ.isError || quoteQ.isError ? <ErreurCarte hauteur={196} onRetry={() => { convQ.refetch(); quoteQ.refetch(); }} /> : convQ.isLoading ? <div className="h-[196px] mx-6 mt-4 rounded-lg bg-surface-secondary/40 animate-pulse" /> : (
               <div className="flex items-end gap-3 h-[196px] px-6 pt-4 pb-5">
                 {funnel.map((s, i) => {
                   const convPct = i > 0 && funnel[i - 1].v > 0 ? Math.round((s.v / funnel[i - 1].v) * 100) : null;
@@ -233,20 +257,20 @@ export default function Statistiques() {
         </div>
         <div className="pb-5">
           <CardHead title={fr ? 'Taux de conversion' : 'Conversion rate'} right={<PeriodSelector value={period} onChange={setPeriod} />} />
-          <div className="text-[30px] font-bold tracking-tight leading-none tabular-nums text-text-primary px-6 mt-3">{ratePct(conv?.conversion_rate)} %</div>
+          <div className="text-[30px] font-bold tracking-tight leading-none tabular-nums text-text-primary px-6 mt-3">{convQ.isError ? '—' : `${pctDeFraction(conv?.conversion_rate)} %`}</div>
           <div className="text-[12.5px] text-text-tertiary px-6 mt-2">{fr ? 'leads convertis / créés' : 'leads converted / created'}</div>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-        <Tile value={velo && velo.avg_days_to_close != null ? `${Math.round(velo.avg_days_to_close)} ${fr ? 'j' : 'd'}` : '—'} label={fr ? 'Délai de conversion' : 'Time to convert'} sub={fr ? 'lead → gagné' : 'lead → won'} />
-        <Tile value={`${ratePct(velo?.win_rate)} %`} label={fr ? 'Taux de réussite' : 'Win rate'} sub={fr ? 'deals gagnés / total' : 'deals won / total'} />
+        <Tile value={velo && velo.won_deals > 0 ? `${Math.round(velo.avg_days_to_close)} ${fr ? 'j' : 'd'}` : '—'} label={fr ? 'Délai de conversion' : 'Time to convert'} sub={fr ? 'lead → gagné' : 'lead → won'} />
+        <Tile value={veloQ.isError ? '—' : velo && velo.won_deals + velo.lost_deals > 0 ? `${pctArrondi(velo.win_rate)} %` : '—'} label={fr ? 'Taux de réussite' : 'Win rate'} sub={fr ? 'deals gagnés / total' : 'deals won / total'} />
         <div className="pb-5"><CardHead title={fr ? 'Valeur des devis' : 'Quote value'} /><div className="flex gap-8 px-6 mt-3"><div><div className="text-[26px] font-bold tracking-tight tabular-nums text-text-primary leading-none">{kc(quote?.total_value_cents ?? 0)}</div><div className="text-[11.5px] text-text-tertiary mt-1.5">{fr ? 'Total' : 'Total'}</div></div><div><div className="text-[26px] font-bold tracking-tight tabular-nums text-text-primary leading-none">{kc(quote?.approved_value_cents ?? 0)}</div><div className="text-[11.5px] text-text-tertiary mt-1.5">{fr ? 'Approuvés' : 'Approved'}</div></div></div><div className="text-[12.5px] text-text-tertiary px-6 mt-4">{quote && quote.total_value_cents > 0 ? Math.round((quote.approved_value_cents / quote.total_value_cents) * 100) : 0} % {fr ? 'de la valeur approuvée' : 'of value approved'}</div></div>
       </div>
 
       {/* Trésorerie */}
       <SectionHead title={fr ? 'Trésorerie' : 'Cash flow'} />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <LinkCard to="/invoices"><Tile value={kc(inv?.total_outstanding_cents ?? 0)} label={fr ? 'À recevoir' : 'Receivables'} sub={`${inv?.count_past_due ?? 0} ${fr ? 'en retard' : 'past due'}`} /></LinkCard>
+        <LinkCard to="/invoices"><Tile value={invQ.isError ? '—' : kc(inv?.total_outstanding_cents ?? 0)} label={fr ? 'À recevoir' : 'Receivables'} sub={`${inv?.count_past_due ?? 0} ${fr ? 'en retard' : 'past due'}`} /></LinkCard>
         <LinkCard to="/payments"><Tile value={payoutQ.isError || !payout ? '—' : kc(payout.on_the_way || 0)} label={fr ? 'Versements à venir' : 'Upcoming payouts'} sub={payoutQ.isError || !payout ? (fr ? 'aucun compte connecté' : 'no account connected') : (fr ? 'en transit' : 'in transit')} /></LinkCard>
         <Tile value={inv && inv.avg_payment_time_days != null ? `${Math.round(inv.avg_payment_time_days)} ${fr ? 'j' : 'd'}` : '—'} label={fr ? 'Délai de paiement' : 'Payment time'} sub={fr ? 'facture → payée' : 'invoice → paid'} />
       </div>
