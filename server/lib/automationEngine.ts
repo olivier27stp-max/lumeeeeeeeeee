@@ -407,9 +407,19 @@ function corrigerChangementDHeure(reference: number, cible: number, tz: string =
  * voyait ses deux moitiés partir à des heures différentes, le SMS étant seul
  * reporté.
  */
-function shouldRespectQuietHours(actionType: string, delaySeconds: number): boolean {
-  if (actionType === 'send_sms') return true;
-  if (actionType !== 'send_email') return false;
+/** Les actions qui ENVOIENT un message au client. */
+const ACTIONS_MESSAGE = new Set(['send_sms', 'send_email', 'request_review', 'envoyer_facture', 'envoyer_soumission']);
+
+function shouldRespectQuietHours(actionType: string, delaySeconds: number, reglages?: ReglagesRegle | null): boolean {
+  if (!ACTIONS_MESSAGE.has(actionType)) return false;
+  // Le texto, et la demande d'avis (une SOLLICITATION, jamais attendue par
+  // le client) : toujours dans la fenêtre — une demande d'avis partait à
+  // 20 h 01 (audit V2, L4).
+  if (actionType === 'send_sms' || actionType === 'request_review') return true;
+  // Une fenêtre RÉGLÉE par l'entreprise vaut pour tous ses messages :
+  // l'écran promet « aucun message ne part en dehors de ces heures », et un
+  // courriel immédiat partait à 20 h 18 avec une fenêtre 9 h-17 h (D-13).
+  if (reglages?.fenetre || reglages?.jours_ouvrables) return true;
   // Délai non nul (positif OU négatif, comme les rappels « X h avant ») =
   // message programmé, donc pas une confirmation attendue dans l'instant.
   return delaySeconds !== 0;
@@ -642,7 +652,7 @@ async function executeRuleActions(
     // Reporte à la prochaine fenêtre d'envoi les actions déclenchées en heures
     // calmes. Une règle immédiate (délai 0) porte une confirmation attendue :
     // seuls ses SMS sont reportés, jamais ses courriels.
-    if (shouldRespectQuietHours(action.type, rule.delay_seconds) && horsFenetre(rule.settings, new Date(), fuseau)) {
+    if (shouldRespectQuietHours(action.type, rule.delay_seconds, rule.settings) && horsFenetre(rule.settings, new Date(), fuseau)) {
       // supabase-js ne lève jamais : l'erreur (dont le doublon 23505) arrive
       // dans la réponse, pas dans un catch.
       const { error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
@@ -1458,7 +1468,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     const fuseauTache = task.org_id
       ? await fuseauOrg(supabase, task.org_id)
       : FUSEAU_DEFAUT;
-    if ((taskType === 'send_sms' || taskType === 'send_email') && horsFenetre(reglagesRegle, new Date(), fuseauTache)) {
+    if (ACTIONS_MESSAGE.has(String(taskType)) && horsFenetre(reglagesRegle, new Date(), fuseauTache)) {
       const prochaine = nextSendTime(new Date(), reglagesRegle, fuseauTache);
 
       /**
