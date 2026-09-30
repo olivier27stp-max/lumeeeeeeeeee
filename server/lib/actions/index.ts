@@ -2317,6 +2317,34 @@ export async function executeMoveDealStage(
     return { success: false, error: "Aucun deal touché — l'écriture a été refusée." };
   }
 
+  /*
+   * Anti-boucle. Le déplacement produit ses événements `deal.stage_*` par
+   * TRIGGER (pipeline_events), sans la chaîne des règles qui l'ont causé :
+   * « A : S1→S2 » et « B : S2→S1 » se relançaient à chaque tick, sans fin
+   * (test D-042 : 6 déplacements en 6 ticks). On pose la chaîne sur les
+   * événements encore en attente de ce deal, comme le font les étiquettes ;
+   * le moteur saute alors toute règle déjà dans la chaîne.
+   */
+  const chaine = chaineSuivante(ctx);
+  if (chaine.length) {
+    const { data: enAttente, error: eLecture } = await ctx.supabase
+      .from('pipeline_events')
+      .select('id, payload')
+      .eq('org_id', ctx.orgId)
+      .eq('deal_id', deal.id)
+      .is('processed_at', null);
+    if (eLecture) console.error('[actions/move_deal_stage] chaîne anti-boucle non posée (lecture)', eLecture.message);
+    for (const ev of (enAttente ?? []) as Array<{ id: number; payload: Record<string, unknown> | null }>) {
+      const dejaLa = Array.isArray(ev.payload?.chaine) ? (ev.payload!.chaine as string[]) : [];
+      const { error: eChaine } = await ctx.supabase
+        .from('pipeline_events')
+        .update({ payload: { ...(ev.payload ?? {}), chaine: [...new Set([...dejaLa, ...chaine])] } })
+        .eq('id', ev.id)
+        .is('processed_at', null);
+      if (eChaine) console.error('[actions/move_deal_stage] chaîne anti-boucle non posée', eChaine.message);
+    }
+  }
+
   // L'historique dit QUI et POURQUOI : sans ça, le déplacement apparaît
   // comme « Système », sans explication. Le déclencheur d'historique vient
   // d'écrire la ligne ; on la complète.
