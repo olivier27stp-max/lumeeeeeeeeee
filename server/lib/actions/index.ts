@@ -1036,8 +1036,10 @@ export async function resolveEntityVariables(
          * Le repli ne sert que si la ligne de réglages n'existe pas encore.
          */
         const fuseau = (company?.timezone as string | undefined) || FUSEAU_CLIENT;
-        vars.appointment_date = d.toLocaleDateString('fr-CA', { timeZone: fuseau });
-        vars.appointment_time = d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', timeZone: fuseau });
+        // Dans la LANGUE de l'entreprise : « 14 h 00 » dans un texto anglais
+        // était un défaut visible. `fr-CA` reste pour une entreprise française.
+        vars.appointment_date = d.toLocaleDateString(locale, { timeZone: fuseau });
+        vars.appointment_time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: fuseau });
       }
       vars.appointment_title = evt.job?.title || '';
       // `jobs.property_address` a pour DEFAULT '-' : sans ce filtre, le client
