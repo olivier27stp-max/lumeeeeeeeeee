@@ -1,5 +1,4 @@
 import { format, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
-import { commissionEnArrierePlan, generateCommissionsForInvoice } from './commissionsApi';
 import { supabase } from './supabase';
 import { getDocumentTaxLines } from './taxApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
@@ -963,12 +962,8 @@ export async function markInvoicePaidManually(invoiceId: string, input: MarkInvo
   // « Facture payée » : émis par le SERVEUR dans la route mark-paid, après
   // l'écriture du paiement (launch 2026-09-28) — plus depuis le navigateur.
 
-  // Generate/confirm sales commissions for this now-paid invoice (Stripe does
-  // this via webhook; manual payments need this explicit trigger). Ne bloque
-  // pas le flux de paiement, mais un échec est journalisé (Sentry + dead_letters
-  // côté serveur) au lieu d'être avalé.
-  void commissionEnArrierePlan('generate-for-invoice', { invoiceId, orgId }, () =>
-    generateCommissionsForInvoice(invoiceId));
+  // Les commissions sont générées par le SERVEUR dans la route mark-paid
+  // (audit commissions 2026-09-30) — plus depuis le navigateur.
 }
 
 // ── Job line items for invoice prefill ──

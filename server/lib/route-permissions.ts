@@ -244,15 +244,26 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/sending-domain/verify': 'settings.update',
   'DELETE /api/sending-domain': 'settings.update',
 
-  // ── Commissions ── (financial: reports)
-  'GET /api/commissions': 'financial.view_reports',
+  // ── Commissions ──
+  // Lecture : `commissions.read` (la permission de la page). Le serveur
+  // restreint lui-même un non-admin à SES commissions et à SON plan. Avec
+  // `financial.view_reports`, un sales_rep (qui a commissions.read mais pas
+  // les rapports) recevait 403 sur sa propre page (audit 2026-09-30).
+  'GET /api/commissions': 'commissions.read',
+  'GET /api/commissions/payroll-preview': 'commissions.read',
+  'GET /api/commissions/rules': 'commissions.read',
+  'GET /api/commissions/settings': 'commissions.read',
   'POST /api/commissions/calculate': 'financial.view_reports',
+  // Écritures : même permission pour approuver, verser et reprendre (verser
+  // n'en demandait aucune ; approuver, si).
   'POST /api/commissions/:id/approve': 'team.update',
   'POST /api/commissions/:id/reverse': 'team.update',
-  'GET /api/commissions/rules': 'financial.view_reports',
+  'POST /api/commissions/:id/mark-paid': 'team.update',
   'POST /api/commissions/rules': 'settings.update',
   'PUT /api/commissions/rules/:id': 'settings.update',
-  'GET /api/commissions/payroll-preview': 'financial.view_reports',
+  'DELETE /api/commissions/rules/:id': 'settings.update',
+  'POST /api/commissions/rules/assign-member': 'settings.update',
+  'PUT /api/commissions/settings': 'settings.update',
 
   // ── Integrations ──
   'GET /api/integrations': 'integrations.read',

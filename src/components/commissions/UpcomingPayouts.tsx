@@ -7,6 +7,8 @@ interface Props {
   entries: FsCommissionEntry[];
   /** Limit number of rows rendered (default 5) */
   limit?: number;
+  /** Fuseau de l'entreprise pour les dates. */
+  timeZone?: string;
 }
 
 const statusStyles: Record<string, string> = {
@@ -15,28 +17,18 @@ const statusStyles: Record<string, string> = {
   paid:     'bg-success text-white',
 };
 
-function fmtMoney(n: number, locale: string) {
-  return '$' + Number(n || 0).toLocaleString(locale);
-}
-
-function fmtDate(iso: string, locale: string) {
-  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-}
+import { fmtArgent, fmtDateCommission, libelleVente, libelleStatut, estEstimation } from './format';
 
 /**
  * Upcoming payouts panel — shows entries that are not yet paid, sorted by
  * approval date (then created date). Designed to drop into either dashboard.
  */
-export default function UpcomingPayouts({ entries, limit = 5 }: Props) {
+export default function UpcomingPayouts({ entries, limit = 5, timeZone }: Props) {
   const { language } = useTranslation();
   const fr = language === 'fr';
-  const locale = fr ? 'fr-CA' : 'en-US';
-  const statusLabel = (s: string) =>
-    fr
-      ? ({ pending: 'en attente', approved: 'approuvé', paid: 'versé', reversed: 'reversé' }[s] ?? s)
-      : s;
+  // Une estimation (job pas encore payé) n'est pas un versement à venir.
   const upcoming = entries
-    .filter((e) => e.status === 'pending' || e.status === 'approved')
+    .filter((e) => (e.status === 'pending' || e.status === 'approved') && !estEstimation(e))
     .sort((a, b) => {
       const ax = a.approved_at ?? a.created_at;
       const bx = b.approved_at ?? b.created_at;
@@ -55,10 +47,10 @@ export default function UpcomingPayouts({ entries, limit = 5 }: Props) {
             <li key={e.id} className="flex items-center justify-between px-5 py-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-text-primary">
-                  {e.description ?? e.lead_id ?? '—'}
+                  {libelleVente(e, fr)}
                 </p>
                 <p className="text-xs text-text-muted">
-                  {fr ? `Conclu le ${fmtDate(e.created_at, locale)}` : `Closed ${fmtDate(e.created_at, locale)}`}
+                  {fr ? `Gagnée le ${fmtDateCommission(e.triggered_at || e.created_at, fr, timeZone, false)}` : `Earned ${fmtDateCommission(e.triggered_at || e.created_at, fr, timeZone, false)}`}
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -66,9 +58,9 @@ export default function UpcomingPayouts({ entries, limit = 5 }: Props) {
                   'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize',
                   statusStyles[e.status] ?? 'bg-surface-elevated text-text-muted'
                 )}>
-                  {statusLabel(e.status)}
+                  {libelleStatut(e, fr)}
                 </span>
-                <span className="text-sm font-semibold text-text-primary">{fmtMoney(e.amount, locale)}</span>
+                <span className="text-sm font-semibold tabular-nums text-text-primary">{fmtArgent(e.amount, fr)}</span>
               </div>
             </li>
           ))}

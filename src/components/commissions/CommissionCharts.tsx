@@ -3,16 +3,22 @@ import UnifiedAvatar from '../ui/UnifiedAvatar';
 
 /** Locale suit la langue de l'app (document.documentElement.lang, posé par LanguageProvider). */
 function currentLocale(): string {
-  return typeof document !== 'undefined' && document.documentElement.lang === 'fr' ? 'fr-CA' : 'en-US';
+  return typeof document !== 'undefined' && document.documentElement.lang === 'fr' ? 'fr-CA' : 'en-CA';
 }
 
-/** $ formatter — compact for axis, full for values. */
+/**
+ * Montant en dollars → « 1 234,56 $ » (fr-CA) / « $1,234.56 » (en-CA).
+ * Avant : « $ » en préfixe et arrondi au DOLLAR — un KPI de 1 234,56 $
+ * s'affichait « $1 235 » (audit commissions 2026-09-30).
+ */
 export function fmtMoney(n: number): string {
-  return '$' + Math.round(Number(n || 0)).toLocaleString(currentLocale());
+  return new Intl.NumberFormat(currentLocale(), { style: 'currency', currency: 'CAD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    .format(Number(n || 0));
 }
+/** Axe du graphique : compact (« 1,2 k $ »), jamais utilisé pour un montant exact. */
 function fmtCompact(n: number): string {
-  if (Math.abs(n) >= 1000) return '$' + (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k';
-  return '$' + Math.round(n);
+  return new Intl.NumberFormat(currentLocale(), { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 })
+    .format(Number(n || 0));
 }
 
 /* ── Hero: big number + trend vs previous period + area sparkline ─────────── */
@@ -88,7 +94,7 @@ export function AreaChart({
   return (
     <div className="relative">
       <div className="absolute left-0 top-1.5 bottom-6 flex flex-col justify-between text-[9.5px] tabular-nums text-text-tertiary">
-        <span>{fmtCompact(max)}</span><span>{fmtCompact(max / 2)}</span><span>$0</span>
+        <span>{fmtCompact(max)}</span><span>{fmtCompact(max / 2)}</span><span>{fmtCompact(0)}</span>
       </div>
       <div className="ml-9">
         <svg viewBox={`0 0 ${W} ${H + 2}`} width="100%" height={height + 10} preserveAspectRatio="none" style={{ overflow: 'visible' }}>

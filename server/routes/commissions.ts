@@ -3,13 +3,17 @@ import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { sendSafeError } from '../lib/error-handler';
 import { withDeadLetter } from '../lib/dead-letter';
+import { logger } from '../lib/logger';
+import {
+  validate, commissionRuleCreateSchema, commissionRuleUpdateSchema, commissionAssignSchema,
+  commissionSettingsSchema, commissionReverseSchema,
+} from '../lib/validation';
 import {
   getCommissionEntries,
   approveCommission,
   reverseCommission,
   getCommissionRules,
   createCommissionRule,
-  updateCommissionRule,
   getPayrollPreview,
   markCommissionPaid,
   generateCommissionsForInvoice,
@@ -60,6 +64,38 @@ async function commissionAvecTrace<T extends { skipped?: string | null; voided?:
   return res.json(result);
 }
 
+/**
+ * Trace d'audit (qui, quand, avant/après) de toute écriture qui touche à
+ * l'argent d'un rep : règle, plan, réglages, approbation, versement, reprise.
+ * Avant : aucune — impossible de savoir qui avait changé un taux ou versé une
+ * commission. Un échec d'écriture de la trace est journalisé, jamais avalé.
+ */
+async function tracer(
+  sc: ReturnType<typeof getServiceClient>,
+  auth: { orgId: string; user: { id: string } },
+  req: { ip?: string; headers: Record<string, unknown> },
+  action: string,
+  entite: { type: string; id: string | null },
+  avant: unknown,
+  apres: unknown,
+) {
+  const { error } = await sc.from('audit_events').insert({
+    org_id: auth.orgId,
+    actor_id: auth.user.id,
+    action,
+    event_type: 'commissions',
+    entity_type: entite.type,
+    entity_id: entite.id,
+    old_values: avant ?? null,
+    new_values: apres ?? null,
+    metadata: { source: 'api/commissions' },
+    user_agent: typeof req.headers['user-agent'] === 'string' ? String(req.headers['user-agent']).slice(0, 500) : null,
+  });
+  if (error) logger.error('[commissions] trace d\'audit non écrite', { action, orgId: auth.orgId, entityId: entite.id, message: error.message });
+}
+
+const DATE_SEULE = /^\d{4}-\d{2}-\d{2}$/;
+
 // GET /api/commissions?userId=...&status=...&from=...&to=...
 // Reps see only their own commissions; owners/admins see all (and can filter by userId).
 router.get('/commissions', async (req, res) => {
@@ -70,6 +106,9 @@ router.get('/commissions', async (req, res) => {
   const status = req.query.status as string | undefined;
   const from = req.query.from as string | undefined;
   const to = req.query.to as string | undefined;
+  if ((from && !DATE_SEULE.test(from)) || (to && !DATE_SEULE.test(to))) {
+    return res.status(400).json({ error: 'from and to must be YYYY-MM-DD dates.' });
+  }
 
   try {
     const sc = getServiceClient();
@@ -161,6 +200,8 @@ router.post('/commissions/:id/mark-paid', async (req, res) => {
   try {
     const sc = getServiceClient();
     const entry = await markCommissionPaid(sc, auth.orgId, req.params.id);
+    await tracer(sc, auth, req, 'commission.paid', { type: 'fs_commission_entry', id: req.params.id },
+      { status: 'approved' }, { status: 'paid', amount: entry?.amount, user_id: entry?.user_id, paid_at: entry?.paid_at });
     res.json(entry);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
@@ -175,6 +216,8 @@ router.post('/commissions/:id/approve', async (req, res) => {
   try {
     const sc = getServiceClient();
     const entry = await approveCommission(sc, auth.orgId, req.params.id, auth.user.id);
+    await tracer(sc, auth, req, 'commission.approved', { type: 'fs_commission_entry', id: req.params.id },
+      { status: 'pending' }, { status: 'approved', amount: entry?.amount, user_id: entry?.user_id });
     res.json(entry);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
@@ -182,7 +225,7 @@ router.post('/commissions/:id/approve', async (req, res) => {
 });
 
 // POST /api/commissions/:id/reverse (admin)
-router.post('/commissions/:id/reverse', async (req, res) => {
+router.post('/commissions/:id/reverse', validate(commissionReverseSchema), async (req, res) => {
   const auth = await requireAdmin(req, res);
   if (!auth) return;
 
@@ -190,15 +233,21 @@ router.post('/commissions/:id/reverse', async (req, res) => {
 
   try {
     const sc = getServiceClient();
+    const { data: avant } = await sc.from('fs_commission_entries').select('status, amount, user_id')
+      .eq('id', req.params.id).eq('org_id', auth.orgId).maybeSingle();
     const entry = await reverseCommission(sc, auth.orgId, req.params.id, reason);
+    await tracer(sc, auth, req, 'commission.reversed', { type: 'fs_commission_entry', id: req.params.id },
+      avant, { status: 'reversed', reason });
     res.json(entry);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 
-// GET /api/commissions/rules — anyone can read (rep needs to see their own rate),
-// but only admin can write.
+// GET /api/commissions/rules — un admin voit toutes les règles ; tout autre
+// membre ne voit QUE son plan (règle qui lui est assignée, sinon le plan par
+// défaut), sans la liste des autres bénéficiaires. Avant, chaque membre
+// lisait les taux, paliers et assignations de tous ses collègues (Loi 25).
 router.get('/commissions/rules', async (req, res) => {
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
@@ -206,14 +255,38 @@ router.get('/commissions/rules', async (req, res) => {
   try {
     const sc = getServiceClient();
     const rules = await getCommissionRules(sc, auth.orgId);
-    res.json(rules);
+    if (await isOrgAdminOrOwner(sc, auth.user.id, auth.orgId)) return res.json(rules);
+    const { data: reglages } = await sc.from('commission_settings').select('default_rule_id').eq('org_id', auth.orgId).maybeSingle();
+    const assignee = rules.find((r: any) => r.is_active && Array.isArray(r.assigned_user_ids) && r.assigned_user_ids.includes(auth.user.id));
+    const plan = assignee ?? rules.find((r: any) => r.is_active && r.id === reglages?.default_rule_id);
+    if (!plan) return res.json([]);
+    const splits = plan.attribution?.mode === 'split' && Array.isArray(plan.attribution.splits)
+      ? plan.attribution.splits.filter((s: any) => s.user_id === auth.user.id) : undefined;
+    return res.json([{
+      ...plan,
+      assigned_user_ids: assignee ? [auth.user.id] : [],
+      attribution: splits ? { mode: 'split', splits } : plan.attribution,
+    }]);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 
+/** Tous les bénéficiaires nommés dans une règle doivent être membres de l'org. */
+async function membresInconnus(sc: ReturnType<typeof getServiceClient>, orgId: string, body: any): Promise<string[]> {
+  const ids = new Set<string>([
+    ...(Array.isArray(body.assigned_user_ids) ? body.assigned_user_ids : []),
+    ...(Array.isArray(body.attribution?.splits) ? body.attribution.splits.map((s: any) => s.user_id) : []),
+  ]);
+  if (ids.size === 0) return [];
+  const { data, error } = await sc.from('memberships').select('user_id').eq('org_id', orgId).in('user_id', [...ids]);
+  if (error) throw new Error(error.message);
+  const connus = new Set((data ?? []).map((m: any) => m.user_id));
+  return [...ids].filter((id) => !connus.has(id));
+}
+
 // POST /api/commissions/rules (admin)
-router.post('/commissions/rules', async (req, res) => {
+router.post('/commissions/rules', validate(commissionRuleCreateSchema), async (req, res) => {
   const auth = await requireAdmin(req, res);
   if (!auth) return;
 
@@ -223,10 +296,11 @@ router.post('/commissions/rules', async (req, res) => {
     product_overrides, performance_tiers, bonuses,
     attribution, assigned_user_ids,
   } = req.body;
-  if (!name) return res.status(400).json({ error: 'name is required.' });
 
   try {
     const sc = getServiceClient();
+    const inconnus = await membresInconnus(sc, auth.orgId, req.body);
+    if (inconnus.length) return res.status(400).json({ error: 'Some users are not members of this organization.' });
     const rule = await createCommissionRule(sc, auth.orgId, {
       name,
       description: description ?? null,
@@ -244,34 +318,35 @@ router.post('/commissions/rules', async (req, res) => {
       attribution: attribution ?? { mode: 'solo' },
       assigned_user_ids: assigned_user_ids ?? [],
     });
+    await tracer(sc, auth, req, 'commission_rule.created', { type: 'fs_commission_rule', id: rule?.id ?? null }, null, rule);
     res.json(rule);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
 });
 
-// PUT /api/commissions/rules/:id (admin) — the client API called this route
-// but it never existed server-side (silent 404 on every rule edit).
-router.put('/commissions/rules/:id', async (req, res) => {
+// PUT /api/commissions/rules/:id (admin). Le changement de taux n'est PAS
+// rétroactif : les commissions déjà calculées gardent leur montant (et leur
+// taux dans calc_breakdown) ; la trace garde l'avant/après.
+router.put('/commissions/rules/:id', validate(commissionRuleUpdateSchema), async (req, res) => {
   const auth = await requireAdmin(req, res);
   if (!auth) return;
 
-  const ALLOWED = [
-    'name', 'description', 'priority', 'is_active',
-    'base_kind', 'base_percent', 'base_value_cents',
-    'product_overrides', 'performance_tiers', 'bonuses',
-    'attribution', 'assigned_user_ids',
-  ];
   const payload: Record<string, any> = {};
   // `!= null` : un null explicite du client atteignait sinon des colonnes
   // NOT NULL (name, is_active, priority) → 23502.
-  for (const key of ALLOWED) {
-    if (req.body[key] != null) payload[key] = req.body[key];
+  for (const [key, value] of Object.entries(req.body)) {
+    if (value != null) payload[key] = value;
   }
   if (Object.keys(payload).length === 0) return res.status(400).json({ error: 'No editable fields provided.' });
 
   try {
     const sc = getServiceClient();
+    const inconnus = await membresInconnus(sc, auth.orgId, payload);
+    if (inconnus.length) return res.status(400).json({ error: 'Some users are not members of this organization.' });
+    const { data: avant } = await sc.from('fs_commission_rules').select('*')
+      .eq('id', req.params.id).eq('org_id', auth.orgId).is('deleted_at', null).maybeSingle();
+    if (!avant) return res.status(404).json({ error: 'Commission rule not found.' });
     const { data, error } = await sc
       .from('fs_commission_rules')
       .update({ ...payload, updated_at: new Date().toISOString() })
@@ -281,6 +356,7 @@ router.put('/commissions/rules/:id', async (req, res) => {
       .select()
       .single();
     if (error) throw new Error(error.message);
+    await tracer(sc, auth, req, 'commission_rule.updated', { type: 'fs_commission_rule', id: req.params.id }, avant, data);
     res.json(data);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
@@ -290,16 +366,18 @@ router.put('/commissions/rules/:id', async (req, res) => {
 // POST /api/commissions/rules/assign-member (admin) — atomically move a rep
 // onto ONE plan: removed from every other active rule's assigned_user_ids,
 // added to the target (rule_id null = default plan only).
-router.post('/commissions/rules/assign-member', async (req, res) => {
+router.post('/commissions/rules/assign-member', validate(commissionAssignSchema), async (req, res) => {
   const auth = await requireAdmin(req, res);
   if (!auth) return;
 
-  const userId = String(req.body?.user_id || '').trim();
-  const ruleId = req.body?.rule_id ? String(req.body.rule_id).trim() : null;
-  if (!userId) return res.status(400).json({ error: 'user_id is required.' });
+  const userId = String(req.body.user_id);
+  const ruleId = req.body.rule_id ? String(req.body.rule_id) : null;
 
   try {
     const sc = getServiceClient();
+    if ((await membresInconnus(sc, auth.orgId, { assigned_user_ids: [userId] })).length) {
+      return res.status(400).json({ error: 'This user is not a member of this organization.' });
+    }
     const { data: rules, error } = await sc
       .from('fs_commission_rules')
       .select('id, assigned_user_ids')
@@ -309,6 +387,7 @@ router.post('/commissions/rules/assign-member', async (req, res) => {
     if (ruleId && !(rules || []).some((r: any) => r.id === ruleId)) {
       return res.status(404).json({ error: 'Commission rule not found.' });
     }
+    const planAvant = (rules || []).find((r: any) => Array.isArray(r.assigned_user_ids) && r.assigned_user_ids.includes(userId))?.id ?? null;
 
     for (const rule of rules || []) {
       const current: string[] = Array.isArray(rule.assigned_user_ids) ? rule.assigned_user_ids : [];
@@ -324,6 +403,7 @@ router.post('/commissions/rules/assign-member', async (req, res) => {
       if (upErr) throw new Error(upErr.message);
     }
 
+    await tracer(sc, auth, req, 'commission_plan.assigned', { type: 'membership', id: userId }, { rule_id: planAvant }, { rule_id: ruleId });
     res.json({ ok: true, rule_id: ruleId });
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
@@ -336,10 +416,13 @@ router.delete('/commissions/rules/:id', async (req, res) => {
   if (!auth) return;
   try {
     const sc = getServiceClient();
-    const { error } = await sc.from('fs_commission_rules')
+    const { data: avant, error } = await sc.from('fs_commission_rules')
       .update({ deleted_at: new Date().toISOString() })
-      .eq('id', req.params.id).eq('org_id', auth.orgId);
+      .eq('id', req.params.id).eq('org_id', auth.orgId).is('deleted_at', null)
+      .select('*');
     if (error) throw new Error(error.message);
+    if (!avant?.length) return res.status(404).json({ error: 'Commission rule not found.' });
+    await tracer(sc, auth, req, 'commission_rule.deleted', { type: 'fs_commission_rule', id: req.params.id }, avant[0], { deleted: true });
     res.json({ ok: true });
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
@@ -352,7 +435,8 @@ router.get('/commissions/settings', async (req, res) => {
   if (!auth) return;
   try {
     const sc = getServiceClient();
-    const { data } = await sc.from('commission_settings').select('*').eq('org_id', auth.orgId).maybeSingle();
+    const { data, error } = await sc.from('commission_settings').select('*').eq('org_id', auth.orgId).maybeSingle();
+    if (error) throw new Error(error.message);
     res.json(data || { org_id: auth.orgId, reversal_policy: 'alert', default_rule_id: null });
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
@@ -360,35 +444,24 @@ router.get('/commissions/settings', async (req, res) => {
 });
 
 // PUT /api/commissions/settings (admin)
-router.put('/commissions/settings', async (req, res) => {
+router.put('/commissions/settings', validate(commissionSettingsSchema), async (req, res) => {
   const auth = await requireAdmin(req, res);
   if (!auth) return;
   const { reversal_policy, default_rule_id } = req.body;
   try {
     const sc = getServiceClient();
-    const payload: Record<string, any> = { org_id: auth.orgId, updated_at: new Date().toISOString() };
-    if (reversal_policy) {
-      if (!['auto','keep','alert'].includes(reversal_policy)) return res.status(400).json({ error: 'Invalid reversal_policy.' });
-      payload.reversal_policy = reversal_policy;
+    if (default_rule_id) {
+      const { data: regle } = await sc.from('fs_commission_rules').select('id').eq('id', default_rule_id).eq('org_id', auth.orgId).is('deleted_at', null).maybeSingle();
+      if (!regle) return res.status(404).json({ error: 'Commission rule not found.' });
     }
+    const { data: avant } = await sc.from('commission_settings').select('*').eq('org_id', auth.orgId).maybeSingle();
+    const payload: Record<string, any> = { org_id: auth.orgId, updated_at: new Date().toISOString() };
+    if (reversal_policy) payload.reversal_policy = reversal_policy;
     if (default_rule_id !== undefined) payload.default_rule_id = default_rule_id;
     const { data, error } = await sc.from('commission_settings').upsert(payload, { onConflict: 'org_id' }).select().single();
     if (error) throw error;
+    await tracer(sc, auth, req, 'commission_settings.updated', { type: 'commission_settings', id: null }, avant, data);
     res.json(data);
-  } catch (err: any) {
-    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
-  }
-});
-
-// PUT /api/commissions/rules/:id (admin)
-router.put('/commissions/rules/:id', async (req, res) => {
-  const auth = await requireAdmin(req, res);
-  if (!auth) return;
-
-  try {
-    const sc = getServiceClient();
-    const rule = await updateCommissionRule(sc, auth.orgId, req.params.id, req.body);
-    res.json(rule);
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
   }
@@ -404,8 +477,8 @@ router.get('/commissions/payroll-preview', async (req, res) => {
   const from = req.query.from as string;
   const to = req.query.to as string;
 
-  if (!from || !to) {
-    return res.status(400).json({ error: 'from and to query parameters are required.' });
+  if (!from || !to || !DATE_SEULE.test(from) || !DATE_SEULE.test(to)) {
+    return res.status(400).json({ error: 'from and to query parameters are required (YYYY-MM-DD).' });
   }
 
   try {

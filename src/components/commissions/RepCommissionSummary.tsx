@@ -4,6 +4,7 @@ import { Avatar } from '../d2d/avatar';
 import { getRepAvatar } from '../../lib/constants/avatars';
 import { useTranslation } from '../../i18n';
 import type { FsCommissionEntry } from '../../types';
+import { fmtArgent, estEstimation } from './format';
 
 interface Props {
   entries: FsCommissionEntry[];
@@ -18,11 +19,8 @@ interface RepRow {
   deals: number;
   totalEarned: number;
   pending: number;
+  approved: number;
   paid: number;
-}
-
-function fmtMoney(n: number, locale: string) {
-  return '$' + Number(n || 0).toLocaleString(locale);
 }
 
 /**
@@ -32,21 +30,29 @@ function fmtMoney(n: number, locale: string) {
 export default function RepCommissionSummary({ entries, profileMap, onSelectRep }: Props) {
   const { language } = useTranslation();
   const fr = language === 'fr';
-  const locale = fr ? 'fr-CA' : 'en-US';
-  const byRep = new Map<string, RepRow>();
+  // « Total gagné » = en attente + approuvé + versé, en cents entiers. Avant, les
+  // commissions REVERSÉES et les estimations (jobs non payés) y étaient
+  // additionnées, et l'approuvé n'apparaissait dans aucune colonne.
+  const byRep = new Map<string, RepRow & { factures: Set<string> }>();
   for (const e of entries) {
+    if (e.status === 'reversed' || estEstimation(e)) continue;
     const row = byRep.get(e.user_id) ?? {
       userId: e.user_id,
       name: profileMap[e.user_id] ?? e.rep_name ?? e.user_id,
       deals: 0,
       totalEarned: 0,
       pending: 0,
+      approved: 0,
       paid: 0,
+      factures: new Set<string>(),
     };
-    row.deals += 1;
-    row.totalEarned += Number(e.amount || 0);
-    if (e.status === 'pending') row.pending += Number(e.amount || 0);
-    if (e.status === 'paid') row.paid += Number(e.amount || 0);
+    const cents = Math.round(Number(e.amount || 0) * 100);
+    if (e.invoice_id) row.factures.add(e.invoice_id);
+    row.deals = row.factures.size;
+    row.totalEarned += cents;
+    if (e.status === 'pending') row.pending += cents;
+    if (e.status === 'approved') row.approved += cents;
+    if (e.status === 'paid') row.paid += cents;
     byRep.set(e.user_id, row);
   }
   const rows = Array.from(byRep.values()).sort((a, b) => b.totalEarned - a.totalEarned);
@@ -64,6 +70,7 @@ export default function RepCommissionSummary({ entries, profileMap, onSelectRep 
                 <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{fr ? 'Représentant' : 'Rep'}</th>
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{fr ? 'Ventes' : 'Deals'}</th>
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{fr ? 'En attente' : 'Pending'}</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{fr ? 'Approuvé' : 'Approved'}</th>
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{fr ? 'Versé' : 'Paid'}</th>
                 <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{fr ? 'Total gagné' : 'Total earned'}</th>
               </tr>
@@ -92,14 +99,15 @@ export default function RepCommissionSummary({ entries, profileMap, onSelectRep 
                     )}
                   </td>
                   <td className="px-5 py-2.5 text-right text-sm text-text-secondary">{r.deals}</td>
-                  <td className="px-5 py-2.5 text-right text-sm text-warning">{fmtMoney(r.pending, locale)}</td>
-                  <td className="px-5 py-2.5 text-right text-sm text-success">{fmtMoney(r.paid, locale)}</td>
-                  <td className="px-5 py-2.5 text-right text-sm font-semibold text-text-primary">{fmtMoney(r.totalEarned, locale)}</td>
+                  <td className="px-5 py-2.5 text-right text-sm tabular-nums text-warning">{fmtArgent(r.pending / 100, fr)}</td>
+                  <td className="px-5 py-2.5 text-right text-sm tabular-nums text-info">{fmtArgent(r.approved / 100, fr)}</td>
+                  <td className="px-5 py-2.5 text-right text-sm tabular-nums text-success">{fmtArgent(r.paid / 100, fr)}</td>
+                  <td className="px-5 py-2.5 text-right text-sm font-semibold tabular-nums text-text-primary">{fmtArgent(r.totalEarned / 100, fr)}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-8 text-center text-sm text-text-muted">
+                  <td colSpan={6} className="px-5 py-8 text-center text-sm text-text-muted">
                     {fr ? 'Aucun représentant avec des commissions pour le moment' : 'No sales reps with commissions yet'}
                   </td>
                 </tr>
