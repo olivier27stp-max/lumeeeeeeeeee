@@ -25,17 +25,21 @@ import { reserverBudget, reglerBudget, journaliserUsage, estimationCoutAppel } f
 import { coutEnCents } from './tarifs';
 import { logger } from '../logger';
 import { DECLENCHEURS, ACTIONS, trouverAction } from '../../../src/lib/automationCatalogue';
-import { VARIABLES_CONNUES, variablesInconnues } from '../../../src/lib/emailBodyText';
+import { VARIABLES_CONNUES, variablesInconnues, htmlVersTexte } from '../../../src/lib/emailBodyText';
 
 /**
- * Haiku suffit et coûte 5× moins cher que Sonnet.
+ * Sonnet, pas Haiku (2026-09-30).
  *
- * La tâche est du remplissage de gabarit : on donne le catalogue, la forme
- * attendue et un exemple. Si un cas réel montrait que Haiku se trompe de
- * déclencheur ou câble mal une branche, passer à Sonnet ne coûte qu'une
- * ligne — mais commencer par le moins cher est le bon sens.
+ * Haiku avait été choisi pour le prix (2× moins cher au tarif actuel, pas
+ * 5×). Le cas réel est arrivé : un client demande « plus court, plus
+ * intéressant », puis « trop long », puis « tu l'as même pas changé » —
+ * Haiku écrit des textes plats (« Vous avez reçu votre soumission. Des
+ * questions? »), retire « Bonjour [client_first_name] » au 3e tour et
+ * répète la même phrase trois fois. Rejoué sur Sonnet : le lien du devis
+ * est ajouté, l'ouverture gardée, chaque tour répond à ce qui est dit.
+ * ≈ 1,2 ¢ la demande au lieu de 0,6 ¢, au budget Lumi du client.
  */
-const MODELE = 'claude-haiku-4-5';
+const MODELE = 'claude-sonnet-5';
 
 /** Plafond de sortie : un parcours réaliste tient largement dedans. */
 const MAX_TOKENS = 1_500;
@@ -113,6 +117,60 @@ function textesDesMessages(valeur: unknown): string[] {
     ((cle === 'body' || cle === 'subject') && typeof v === 'string' ? [v] : textesDesMessages(v)));
 }
 
+/**
+ * Les messages au client d'un parcours, par étape : texto (corps) et
+ * courriel (objet + corps en texte).
+ */
+function messagesDuParcours(steps: unknown): Map<string, { type: string; objet: string; corps: string }> {
+  const res = new Map<string, { type: string; objet: string; corps: string }>();
+  for (const e of Array.isArray(steps) ? steps : []) {
+    const etape = e as { id?: unknown; action?: { type?: unknown; config?: Record<string, unknown> } };
+    const type = String(etape?.action?.type ?? '');
+    if (type !== 'send_sms' && type !== 'send_email') continue;
+    const config = etape.action?.config ?? {};
+    res.set(`${String(etape.id ?? res.size)}:${type}`, {
+      type,
+      objet: String(config.subject ?? '').trim(),
+      corps: (type === 'send_email' ? htmlVersTexte(String(config.body ?? '')) : String(config.body ?? '')).replace(/\s+/g, ' ').trim(),
+    });
+  }
+  return res;
+}
+
+/**
+ * CE QUI A CHANGÉ, écrit par le serveur sous la phrase de Lumi.
+ *
+ * Mesuré en prod le 2026-09-30 : « plus court, plus intéressant » → « trop
+ * long » → « tu l'as même pas changé le message ». Les textes changeaient à
+ * chaque tour, mais Lumi répondait trois fois la MÊME phrase, qui décrivait
+ * le parcours sans jamais citer un mot envoyé au client. Rejoué sur un
+ * meilleur modèle, il finissait par « avouer » à tort que rien n'avait
+ * changé : il ne voit pas l'écran. On ne s'en remet donc pas au modèle —
+ * on compare avant/après et on montre le nouveau texte, ou on dit
+ * franchement que rien n'a bougé.
+ */
+export function ceQuiAChange(avant: unknown, apres: unknown, fr: boolean): string {
+  const a = messagesDuParcours(avant);
+  const b = messagesDuParcours(apres);
+  const lignes: string[] = [];
+  for (const [cle, m] of b) {
+    const ancien = a.get(cle);
+    if (ancien && ancien.objet === m.objet && ancien.corps === m.corps) continue;
+    const corps = m.corps.length > 280 ? `${m.corps.slice(0, 277)}…` : m.corps;
+    lignes.push(m.type === 'send_sms'
+      ? `• ${fr ? 'Texto' : 'Text'} : « ${corps} »`
+      : `• ${fr ? 'Courriel' : 'Email'} — ${fr ? 'objet' : 'subject'} « ${m.objet} » : « ${corps} »`);
+  }
+  if (lignes.length) return `\n\n${fr ? 'Nouveau texte :' : 'New wording:'}\n${lignes.join('\n')}`;
+  const avaitUnParcours = Array.isArray(avant) && avant.length > 0;
+  if (avaitUnParcours && JSON.stringify(avant) === JSON.stringify(apres)) {
+    return fr
+      ? '\n\nJe n’ai rien changé au parcours. Dis-moi quel message modifier (le texto ou le courriel) et comment.'
+      : '\n\nI did not change anything. Tell me which message to change (the text or the email) and how.';
+  }
+  return '';
+}
+
 /** Le prompt système : le catalogue, la forme, et les interdits. */
 export function consignes(fr: boolean): string {
   const declencheurs = DECLENCHEURS
@@ -146,7 +204,7 @@ FORME DE LA RÉPONSE — un objet JSON, rien autour :
 {
   "nom": "nom court de l'automatisation",
   "trigger_event": "une clé de la liste ci-dessus",
-  "resume": "une phrase qui dit ce que ça fait",
+  "resume": "une phrase, au tutoiement, qui dit CE QUE TU AS FAIT à cette demande",
   "steps": [
     { "id": "e1", "type": "action", "action": { "type": "send_sms", "config": { "body": "..." } }, "suivant": "e2" },
     { "id": "e2", "type": "attendre", "delai_secondes": 259200, "suivant": "e3" },
@@ -218,6 +276,24 @@ RÈGLES ABSOLUES :
   pas : garde son déclencheur, son nom et toutes ses étapes, et ne change
   QUE ce qui est demandé. « Change le délai à 7 jours » ne touche que le
   délai ; « le deuxième c'est 2 jours » ne touche que la deuxième attente.
+- "resume" répond à la DERNIÈRE demande : ce que tu viens de changer (« J'ai
+  raccourci le texto et le courriel, avec le lien du devis. »), jamais une
+  redescription du parcours. Ne recopie pas le texte des messages : il est
+  affiché automatiquement sous ta phrase. Parle à l'utilisateur au
+  tutoiement ; ce sont les MESSAGES AU CLIENT qui sont au vouvoiement.
+- « Trop long », « plus court », « plus punché », « change le message »,
+  « t'as rien changé » visent les MESSAGES envoyés au client, pas ta phrase.
+  Réécris-les vraiment et visiblement : un texto court tient en une ou deux
+  phrases (160 caractères au plus), garde « Bonjour [client_first_name], »
+  et la signature [company_name], et ajoute le lien utile ([quote_link],
+  [invoice_link]) quand il y en a un. Ne prétends jamais avoir changé ce que
+  tu n'as pas changé, et n'invente pas que rien n'avait changé : si
+  l'utilisateur dit « t'as rien changé » alors que le texte a changé (il est
+  cité dans ta réponse précédente), ne t'excuse pas — écris une version
+  NETTEMENT différente et dis-le simplement (« Voici une autre version. »).
+- [quote_valid_until] est VIDE quand la soumission n'a pas de date limite
+  (« valide jusqu'au . ») : ne l'utilise que si l'utilisateur parle
+  d'échéance.
 - Si tu ne comprends pas la demande, renvoie le parcours ACTUEL inchangé et
   dis-le dans "resume". Ne reste jamais silencieux : l'utilisateur croirait
   que sa correction a été prise en compte.
@@ -573,7 +649,9 @@ async function genererParcoursUneFois(params: {
       parcours: {
         nom: String(brut.nom ?? (fr ? 'Nouvelle automatisation' : 'New automation')).slice(0, 120),
         trigger_event: String(brut.trigger_event),
-        resume: String(brut.resume ?? '').slice(0, 300),
+        // La phrase de Lumi, PUIS le nouveau texte (après la coupe à 300 :
+        // c'est la partie que l'utilisateur doit voir en entier).
+        resume: String(brut.resume ?? '').slice(0, 300) + ceQuiAChange(parcoursActuel?.steps, brut.steps, fr),
         steps: brut.steps as Array<Record<string, unknown>>,
         autre,
       },

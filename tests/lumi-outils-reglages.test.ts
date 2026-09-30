@@ -208,6 +208,28 @@ describe('écritures directes : filtrées par org_id = ctx.orgId, note en franç
     expect(sans.r.error).toMatch(/n’envoie pas de courriel/);
   });
 
+  it('update_automation_message sur une automatisation à ÉTAPES réécrit l’étape que le moteur exécute (pas seulement le reflet `actions`)', async () => {
+    // Cas réel prod 2026-09-30 : le moteur lit `steps` ; réécrire `actions` seul = « mis à jour » et ancien texte envoyé.
+    const steps = [
+      { id: 'e1', type: 'attendre', delai_secondes: 86400, suivant: 'e2' },
+      { id: 'e2', type: 'action', action: { type: 'send_sms', config: { body: 'court' } }, suivant: 'e3' },
+      { id: 'e3', type: 'action', action: { type: 'send_email', config: { body: 'c', subject: 'o' } }, suivant: null },
+    ];
+    const regle = { id: 'r1', name: 'Relance devis à 1 jour', actions: [{ type: 'send_sms', config: { body: 'long' } }], steps };
+    const { r, appels } = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_sms', body: 'Nouveau texto' }, { automation_rules: { data: [regle] } });
+    expect(r.error).toBeUndefined();
+    const maj = appels[1].ops.find(([m]) => m === 'update')![1];
+    expect(maj.steps[1].action.config.body).toBe('Nouveau texto');
+    expect(maj.steps[2]).toEqual(steps[2]);
+    expect(maj.steps[0]).toEqual(steps[0]);
+    expect(maj.actions[0].config.body).toBe('Nouveau texto');
+
+    // Deux textos à des moments différents : on ne devine pas lequel.
+    const deux = [...steps.slice(0, 2), { id: 'e4', type: 'action', action: { type: 'send_sms', config: { body: 'rappel' } }, suivant: null }];
+    const ambigu = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_sms', body: 'x' }, { automation_rules: { data: [{ ...regle, steps: deux }] } });
+    expect(ambigu.r.error).toMatch(/envoie 2 textos à des moments différents/);
+  });
+
   it('delete_goal : visibilité prouvée à l identité (org_id) AVANT la suppression service filtrée par org_id ; introuvable = rien', async () => {
     const service = clientEnregistreur({ goals: { data: null } });
     vi.mocked(getServiceClient).mockReturnValue(service.client);
