@@ -35,7 +35,10 @@ describe('outilsClaude(sousAgent)', () => {
     expect(charges.map((t) => t.name)).toContain('get_overdue_payments');
     expect(charges.map((t) => t.name)).not.toContain('query_schedule'); // planification, différé
     expect(differes.map((t) => t.name)).toContain('query_schedule');
-    expect(charges[charges.length - 1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+        // 5 minutes, pas 1 h : 214 des 241 écarts entre appels mesurés en prod
+    // sont sous 5 min, et une lecture rafraîchit le minuteur gratuitement.
+    // L'écriture 1 h coûte 2× l'entrée, la 5 min 1,25×. Voir CACHE_1H.
+    expect(charges[charges.length - 1].cache_control).toEqual({ type: 'ephemeral' });
     expect(charges.slice(0, -1).every((t) => !t.cache_control)).toBe(true);
     // Le jeu de base (sans sous-agent) est inchangé.
     const base = (outilsClaude() as any[]).filter((t) => t.type !== 'tool_search_tool_regex_20251119' && !t.defer_loading);

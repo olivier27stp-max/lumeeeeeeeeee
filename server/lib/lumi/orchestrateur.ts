@@ -58,6 +58,23 @@ export function parametresReflexion(model: string, effort: 'low' | 'medium'): Pi
 }
 
 /** Point de cache d'une heure (voir l'en-tête). Même objet partout : un seul endroit à changer. */
+/**
+ * TTL des points de cache.
+ *
+ * ⚠️ Mesuré en prod le 2026-09-30 : **214 des 241 écarts entre appels
+ * consécutifs sont sous 5 minutes** (6 entre 5 et 60 min, 21 au-delà d'une
+ * heure). Or une LECTURE rafraîchit le minuteur gratuitement — donc à ce
+ * rythme, une entrée 5 min reste chaude indéfiniment d'elle-même.
+ *
+ * Le TTL d'une heure coûte 2× le tarif d'entrée à l'écriture ; celui de 5 min
+ * coûte 1,25×. Dans 97 % des cas mesurés (les < 5 min ET les > 1 h, où aucun
+ * TTL ne sauve la mise et où l'écriture la moins chère gagne), le 5 min est
+ * strictement moins cher. Seuls les 6 écarts entre 5 et 60 min profitaient
+ * du 1 h — 2,5 % du trafic pour un surcoût sur les 97,5 % restants.
+ *
+ * Garde 1 h ici seulement si le trafic change de forme (beaucoup d'écarts
+ * entre 5 et 60 min) : rejouer la mesure avant de trancher, pas au flair.
+ */
 const CACHE_1H: Anthropic.Messages.CacheControlEphemeral = { type: 'ephemeral', ttl: '1h' };
 /** Point de cache 5 min pour la CONVERSATION (les appels d'un tour sont à quelques secondes, les tours à quelques minutes). */
 const CACHE_5M: Anthropic.Messages.CacheControlEphemeral = { type: 'ephemeral' };
@@ -171,7 +188,7 @@ export function outilsClaude(sousAgent: IdTopic | null = null, permis: ReadonlyS
   const base = defs.filter((d) => charges.has(d.name));
   const differes = defs.filter((d) => !charges.has(d.name)).map((d) => ({ ...d, defer_loading: true }));
   const dernier = base[base.length - 1];
-  if (dernier) dernier.cache_control = CACHE_1H;
+  if (dernier) dernier.cache_control = CACHE_5M;
   return [OUTIL_RECHERCHE, ...base, ...differes];
 }
 
@@ -252,7 +269,7 @@ ${CONSIGNES_COLLEGUE}`;
     : `Company: ${company}. Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`) + memoire
     + (ctx.focus ? `\n\n${ctx.focus}` : '');
   return [
-    { type: 'text', text: stable, cache_control: CACHE_1H },
+    { type: 'text', text: stable, cache_control: CACHE_5M },
     { type: 'text', text: variable },
   ];
 }
