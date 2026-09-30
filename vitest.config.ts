@@ -15,7 +15,9 @@ export default defineConfig({
     // mais hors CI tant que les failles ne sont pas corrigées : une CI rouge en
     // permanence ne signale plus rien. Voir tests/quarantaine/README.md.
     // Pour les lancer : npm run test:quarantaine
-    exclude: ['node_modules', 'dist', 'tests/courses/run-*.mjs', 'tests/quarantaine/**'],
+    // tests/automations-suite/ : lancés par `npm run test:automations`
+    // (vitest.automations.config.ts) — l'intégration exige staging.
+    exclude: ['node_modules', 'dist', 'tests/courses/run-*.mjs', 'tests/quarantaine/**', 'tests/automations-suite/**'],
     testTimeout: 10000,
     coverage: {
       provider: 'v8',
