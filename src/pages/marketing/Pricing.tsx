@@ -21,7 +21,6 @@ import { useTranslation } from '../../i18n';
 import { useRegion } from '../../hooks/useRegion';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Language } from '../../i18n';
-import { creditsParMois } from '../../lib/lumiCreditsFormat';
 
 // Copie bilingue locale — les dictionnaires i18n globaux ne couvrent pas ces
 // clés et ne doivent pas être modifiés d'ici.
@@ -131,8 +130,7 @@ const PLANS: Plan[] = [
     highlights: [
       // Lumi n'existe QUE sur Autopilot depuis le 2026-09-19 (migration
       // 20260919000000) : c'est ce qui distingue ce forfait de Scale.
-      // En crédits Lumi (2026-09-30) : jamais « illimité », jamais un montant en dollars d'IA.
-      { en: `Lumi, the AI assistant — ${creditsParMois('en')}, only on Autopilot`, fr: `Lumi, l'assistant IA — ${creditsParMois('fr')}, exclusif à Autopilot` },
+      { en: 'Lumi, the AI assistant — only on Autopilot', fr: 'Lumi, l\'assistant IA — exclusif à Autopilot' },
       { en: 'Door-to-door: pipeline, commissions, leaderboard', fr: 'Porte-à-porte : pipeline, commissions, leaderboard' },
       // Remplace « Formations de l'équipe (LMS) » : ce qui vend, ce n'est pas
       // l'outil de cours, c'est la bibliothèque de procédures et de vidéos
@@ -193,9 +191,8 @@ const COMPARISON: CompareGroup[] = [
   {
     title: { en: 'Artificial intelligence', fr: 'Intelligence artificielle' },
     rows: [
-      // Une ligne : Lumi (texte ET voix) est exclusif à Autopilot et se compte
-      // en crédits Lumi par mois (2026-09-30). Scale n'a pas de Lumi.
-      { label: { en: 'Lumi, the AI assistant — text & voice', fr: 'Lumi, l\'assistant IA — texte et voix' }, cells: [false, false, { en: creditsParMois('en'), fr: creditsParMois('fr') }] },
+      { label: { en: 'Lume AI Agent — text', fr: 'Agent IA Lume — texte' }, cells: [false, { en: 'Monthly quota', fr: 'Quota mensuel' }, { en: 'Unlimited', fr: 'Illimité' }] },
+      { label: { en: 'Lume AI Agent — voice', fr: 'Agent IA Lume — voix' }, cells: [false, false, { en: 'Unlimited', fr: 'Illimité' }] },
     ],
   },
   {
@@ -302,8 +299,8 @@ const NEEDS: NeedGroup[] = [
       { key: 'batch', label: { en: 'Batch messaging', fr: 'Messages groupés' }, plan: 1, rows: ['Batch messaging'] },
       { key: 'chat', label: { en: 'Team chat', fr: 'Clavardage d\'équipe' }, plan: 1, rows: ['Internal team chat'] },
       // Lumi est exclusif à Autopilot depuis le 2026-09-19 (plan 2, pas 1).
-      { key: 'lumi-text', label: { en: 'Lumi answers by text (AI)', fr: 'Lumi répond par texte (IA)' }, plan: 2, rows: ['Lumi, the AI assistant — text & voice'] },
-      { key: 'lumi-voice', label: { en: 'Lumi answers the phone (AI)', fr: 'Lumi répond au téléphone (IA)' }, plan: 2, rows: ['Lumi, the AI assistant — text & voice'] },
+      { key: 'lumi-text', label: { en: 'Lumi answers by text (AI)', fr: 'Lumi répond par texte (IA)' }, plan: 2, rows: ['Lume AI Agent — text'] },
+      { key: 'lumi-voice', label: { en: 'Lumi answers the phone (AI)', fr: 'Lumi répond au téléphone (IA)' }, plan: 2, rows: ['Lume AI Agent — voice'] },
     ],
   },
   {

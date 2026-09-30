@@ -16,8 +16,6 @@ import {
   type Subscription,
 } from '../../lib/billingApi';
 import { translatePlanFeature } from '../../lib/planFeatures';
-import SectionCreditsLumi from '../../components/lumi/SectionCreditsLumi';
-import { fmtCredits, remplir, textesCredits } from '../../lib/lumiCreditsFormat';
 
 /* ═══════════════════════════════════════════════════════════════
    Plan & billing — connected to real Stripe/DB data.
@@ -290,11 +288,6 @@ export default function BillingSettings() {
       {/* ── Seats usage banner ── */}
       {subscription && subscription.status !== 'canceled' && (
         <SeatsBanner onChange={refresh} />
-      )}
-
-      {/* ── Crédits Lumi (Autopilot) : en crédits seulement, jamais en dollars ── */}
-      {subscription && subscription.status !== 'canceled' && currentPlan?.includes_ai && (
-        <SectionCreditsLumi />
       )}
 
       {/* ── Plans Grid — Premium cards ── */}
@@ -632,17 +625,7 @@ function DowngradeModal({
   type LostItem = { label: string; key: string };
   const lostFlags: LostItem[] = [];
   if (fromPlan.includes_sms && !toPlan.includes_sms) lostFlags.push({ label: isFr ? 'SMS bidirectionnel avec clients' : 'Two-way SMS with customers', key: 'sms' });
-  if (fromPlan.includes_ai && !toPlan.includes_ai) {
-    // En crédits Lumi, jamais « illimité » ni un montant en dollars (2026-09-30).
-    const cl = textesCredits(isFr ? 'fr' : 'en');
-    const n = fromPlan.lumi_credits_mensuels ?? 0;
-    lostFlags.push({
-      label: n > 0
-        ? remplir(cl.downgradeLost, { n: fmtCredits(n, isFr ? 'fr' : 'en'), unit: cl.unit })
-        : (isFr ? 'Lumi, l’assistant IA' : 'Lumi, the AI assistant'),
-      key: 'ai',
-    });
-  }
+  if (fromPlan.includes_ai && !toPlan.includes_ai) lostFlags.push({ label: isFr ? 'Lume Agent IA (voix + illimité)' : 'Lume AI Agent (voice + unlimited)', key: 'ai' });
   if (fromPlan.includes_d2d && !toPlan.includes_d2d) lostFlags.push({ label: isFr ? 'Suite porte-à-porte complète' : 'Full door-to-door suite', key: 'd2d' });
   if (fromPlan.includes_courses && !toPlan.includes_courses) lostFlags.push({ label: isFr ? 'Formations / LMS interne' : 'Courses / LMS for team', key: 'lms' });
   if (fromPlan.includes_api && !toPlan.includes_api) lostFlags.push({ label: isFr ? 'Accès API + webhooks' : 'API + webhooks access', key: 'api' });

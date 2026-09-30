@@ -2,15 +2,14 @@
  * Lumi — l'assistant IA dans l'application (Claude, outils Lume).
  *
  * Remplace la page « Lume Agent » cachée. Le serveur garde l'historique,
- * applique le plan (includes_ai), les crédits Lumi de la période (jamais un
- * montant en dollars à l'écran, décision du 2026-09-30) et les permissions
- * par rôle ; cette page affiche le flux (SSE), les outils
+ * applique le plan (includes_ai), le budget mensuel en dollars et les
+ * permissions par rôle ; cette page affiche le flux (SSE), les outils
  * consultés, et les PROPOSITIONS d'écriture à confirmer ou annuler.
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowUp, AudioLines, AlertTriangle, ChevronDown, Copy, Download, FileText, History, Loader2, MessageSquarePlus, Mic, RotateCcw, Shield, Square, Trash2, Volume2, VolumeX, XCircle } from 'lucide-react';
+import { ArrowUp, AudioLines, AlertTriangle, ChevronDown, Copy, Download, FileText, History, Loader2, MessageSquarePlus, Mic, RotateCcw, Shield, Sparkles, Square, Trash2, Volume2, VolumeX, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useVoiceInput, MAX_SECONDS } from '../features/agent/hooks/useVoiceInput';
 import { useSpeakReplies } from '../features/agent/hooks/useSpeakReplies';
@@ -23,11 +22,9 @@ import { supabase } from '../lib/supabase';
 import {
   chargerConversationLumi, deciderPropositionLumi, envoyerMessageLumi, listerConversationsLumi, quotaLumi, supprimerConversationLumi,
   listerAutorisationsLumi, definirAutorisationLumi, modeLumi, definirModeLumi, executerActionLumi, type ModeLumi, type OrigineMessageLumi, type SuggestionLumi, type ActionLumi,
-  ErreurLumi, type EtatCredits, type ConversationLumi, type EvenementFlux, type FicheLumi, type MessageLumi, type PropositionLumi, type RapportLumi,
+  ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type FicheLumi, type MessageLumi, type PropositionLumi, type RapportLumi,
  type UsageLumi } from '../lib/lumiApi';
 import { CarteAutorisation, FichesLiees, avecLiensFiches } from '../components/lumi/CarteAutorisation';
-import { AvisCreditsLumi, CompteurCreditsLumi, creditsEpuises, useTextesCredits } from '../components/lumi/CreditsLumi';
-import { remplir } from '../lib/lumiCreditsApi';
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import { suggestionsPour } from '../lib/lumiSuggestions';
@@ -206,6 +203,10 @@ function TexteLumi({ texte }: { texte: string }) {
 /** Un message du micro (« je n'ai rien entendu ») s'efface après ce délai. */
 const DUREE_ERREUR_VOIX_MS = 6000;
 
+function fmtDollars(cents: number): string {
+  return `${(cents / 100).toFixed(2)} $`;
+}
+
 export default function Lumi() {
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -249,13 +250,10 @@ export default function Lumi() {
   const [erreur, setErreur] = useState<{ code: string; message: string } | null>(null);
   const voixTimerRef = useRef<number | null>(null);
   useEffect(() => () => { if (voixTimerRef.current) window.clearTimeout(voixTimerRef.current); }, []);
-  /** Crédits Lumi de la période (/api/lumi/quota, puis chaque `done` du flux). */
-  const [credits, setCredits] = useState<EtatCredits | null>(null);
-  /** false : Lumi n'est pas activé sur ce serveur (clé absente). */
-  const [configure, setConfigure] = useState<boolean | null>(null);
-  /** Total tokens de la conversation chargée depuis l'historique (ai_usage). */
+  const [budget, setBudget] = useState<BudgetLumi | null>(null);
+  /** Total tokens/coût de la conversation chargée depuis l'historique (ai_usage). */
   const [usageConversation, setUsageConversation] = useState<UsageLumi | null>(null);
-  /** Compte interne (@lume-test.ca : bots d'évaluation, équipe Lume) : voit modèle et tokens. Un client n'en voit rien — et personne ne voit de dollars. */
+  /** Compte interne (@lume-test.ca : bots d'évaluation, équipe Lume) : voit modèle et tokens. Un client ne voit que le coût. */
   const [interne, setInterne] = useState(false);
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setInterne(/@lume-test\.ca$/i.test(data.user?.email || ''))).catch(() => setInterne(false));
@@ -274,14 +272,13 @@ export default function Lumi() {
   const nextId = () => idRef.current++;
 
   useEffect(() => {
-    quotaLumi().then((q) => {
-      setConfigure(q.configured !== false);
-      setCredits(q.credits ?? null);
+    quotaLumi().then((b) => {
+      setBudget(b);
       // Dire tout de suite POURQUOI Lumi est indisponible, sans attendre un envoi.
-      if (q.configured === false) setErreur({ code: 'lumi_not_configured', message: '' });
-      else if (q.credits && !q.credits.inclus) setErreur({ code: 'plan_sans_lumi', message: '' });
-      // Crédits épuisés : l'avis dédié le dit (AvisCreditsLumi), les actions rapides restent offertes.
-    }).catch(() => setCredits(null));
+      if (b.configured === false) setErreur({ code: 'lumi_not_configured', message: '' });
+      else if (!b.includes_ai) setErreur({ code: 'plan_sans_lumi', message: '' });
+      // Plafond atteint : Lumi ralentit (un tour par minute), il n'est pas indisponible — rien à annoncer d'avance.
+    }).catch(() => setBudget(null));
     listerConversationsLumi().then(setConversations).catch(() => setConversations([]));
     listerAutorisationsLumi().then((t) => setAutorisations(new Set(t))).catch(() => {});
     modeLumi().then(setMode).catch(() => {});
@@ -407,12 +404,13 @@ export default function Lumi() {
         case 'usage': {
           // Un tour = un ou plusieurs appels au modèle : on additionne. C'est ce
           // que le rapport coûts/tokens du 2026-09-15 n'arrivait pas à vérifier.
-          const u = dernier.usage ?? { model: null, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, appels: 0 };
+          const u = dernier.usage ?? { model: null, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cost_cents: 0, appels: 0 };
           dernier.usage = {
             model: e.model || u.model,
             input_tokens: u.input_tokens + (e.usage?.input_tokens ?? 0),
             output_tokens: u.output_tokens + (e.usage?.output_tokens ?? 0),
             cache_read_input_tokens: u.cache_read_input_tokens + (e.usage?.cache_read_input_tokens ?? 0),
+            cost_cents: u.cost_cents + (e.cost_cents ?? 0),
             appels: u.appels + 1,
           };
           break;
@@ -443,7 +441,7 @@ export default function Lumi() {
           return prev;
         });
       }
-      if (e.credits) setCredits(e.credits);
+      setBudget(e.budget);
       if (!conversationId) {
         setConversationId(e.conversation_id);
         listerConversationsLumi().then(setConversations).catch(() => {});
@@ -462,7 +460,7 @@ export default function Lumi() {
       if (ctrl.signal.aborted) return;
       const e = err as ErreurLumi;
       setErreur({ code: e.code || 'reseau', message: e.message || (fr ? 'Erreur de connexion.' : 'Connection error.') });
-      if (e.credits) setCredits(e.credits);
+      if (e.budget) setBudget(e.budget);
       setItems((prev) => prev.filter((m) => !(m.role === 'assistant' && m.enCours && !m.text)));
     } finally {
       setEnCours(false);
@@ -582,13 +580,8 @@ export default function Lumi() {
     [permissions, role, lang],
   );
 
-  // Indisponible (serveur sans clé, forfait sans Lumi) : plus rien ne part.
-  const indisponible = configure === false || (!!credits && !credits.inclus);
-  // Crédits épuisés : la saisie libre s'arrête, mais les actions rapides
-  // (étage 0, sans modèle) et tout le reste de Lume continuent.
-  const epuise = creditsEpuises(credits);
-  const bloque = indisponible || epuise;
-  const textesCredits = useTextesCredits(credits);
+  const bloque = budget && (!budget.includes_ai || budget.epuise || budget.configured === false);
+  const pctBudget = budget && budget.budget_cents > 0 ? Math.min(100, Math.round((budget.depense_cents / budget.budget_cents) * 100)) : 0;
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
@@ -598,11 +591,20 @@ export default function Lumi() {
         title="Lumi"
         subtitle={fr ? 'Votre assistant. Il connaît vos clients, vos jobs, vos devis et vos factures.' : 'Your assistant. It knows your clients, jobs, quotes and invoices.'}
       >
-        {credits && credits.inclus && <CompteurCreditsLumi credits={credits} />}
-        {/* Comptes internes seulement : tokens de la conversation, jamais de dollars. */}
-        {interne && usageConversation && conversationId && (
-          <span className="text-[11px] tabular-nums text-text-tertiary" title={fr ? 'Cette conversation (historique) : tokens entrés → sortis' : 'This conversation (history): tokens in → out'}>
-            {`${fmtTokens(usageConversation.input_tokens, fr)} → ${fmtTokens(usageConversation.output_tokens, fr)} tokens`}
+        {budget && budget.includes_ai && (
+          <span
+            className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] tabular-nums', pctBudget >= 90 ? 'border-danger/30 bg-danger/10 text-danger' : 'border-outline bg-surface text-text-secondary')}
+            title={fr ? 'Budget IA du mois' : 'AI budget this month'}
+          >
+            <Sparkles size={12} className={pctBudget >= 90 ? 'text-danger' : 'text-primary'} />
+            {fmtDollars(budget.depense_cents)} / {fmtDollars(budget.budget_cents)}
+            {usageConversation && conversationId && (
+              <span className="ml-2 text-text-tertiary" title={fr ? 'Cette conversation (historique) : tokens entrés → sortis, coût' : 'This conversation (history): tokens in → out, cost'}>
+                {interne
+                  ? `· ${fmtTokens(usageConversation.input_tokens, fr)} → ${fmtTokens(usageConversation.output_tokens, fr)} tokens · ${fmtDollars(usageConversation.cost_cents)}`
+                  : `· ${fr ? 'cette conversation' : 'this conversation'} ${fmtDollars(usageConversation.cost_cents)}`}
+              </span>
+            )}
           </span>
         )}
         <div className="relative">
@@ -708,7 +710,7 @@ export default function Lumi() {
                     : 'I know your whole workspace. Ask anything, or have me draft a quote, invoice, job or message: you confirm before every action.'}
                 </p>
               </div>
-              {!indisponible && (
+              {!bloque && (
                 <div className="flex flex-wrap justify-center gap-2 mt-2">
                   {suggestions.map((s) => (
                     <button key={s.label} type="button" onClick={() => lancerAction(s)} className="px-3.5 py-2 rounded-full border border-outline bg-surface text-[12.5px] text-text-secondary hover:bg-surface-secondary transition-colors">
@@ -746,10 +748,11 @@ export default function Lumi() {
                             ? (fr ? 'Lumi réfléchit…' : 'Lumi is thinking…')
                             : `${fr ? 'Réflexion' : 'Thinking'}${secondes ? ` · ${secondes} s` : ''}`}
                         </span>
-                        {/* Modèle et tokens : comptes internes seulement. Aucun coût affiché, à personne. */}
-                        {!reflechit && interne && m.usage && (
+                        {!reflechit && m.usage && (
                           <span className="text-[11px] font-normal text-text-tertiary" title={fr ? `${m.usage.appels} appel(s) au modèle · ${fmtTokens(m.usage.cache_read_input_tokens, fr)} tokens lus en cache` : `${m.usage.appels} model call(s) · ${fmtTokens(m.usage.cache_read_input_tokens, fr)} cached tokens read`}>
-                            {`· ${nomModele(m.usage.model)} · ${fmtTokens(m.usage.input_tokens, fr)} → ${fmtTokens(m.usage.output_tokens, fr)} tokens`}
+                            {interne
+                              ? `· ${nomModele(m.usage.model)} · ${fmtTokens(m.usage.input_tokens, fr)} → ${fmtTokens(m.usage.output_tokens, fr)} tokens · ${fmtDollars(m.usage.cost_cents)}`
+                              : `· ${fmtDollars(m.usage.cost_cents)}`}
                           </span>
                         )}
                         {etapes.length > 0 && <ChevronDown size={12} className="lumi-chev text-text-tertiary" />}
@@ -799,19 +802,16 @@ export default function Lumi() {
           })}
         </div>
 
-        {/* Avis de crédits (80 % / épuisé) — sauf si le refus quota_epuise le dit déjà. */}
-        {erreur?.code !== 'quota_epuise' && <AvisCreditsLumi credits={credits} className="mb-2" />}
-
         {erreur && (
           <div className="mb-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-danger/10 border border-danger/30 text-danger text-[12px]" role="alert">
             <AlertTriangle size={14} className="shrink-0 mt-0.5" />
             <span>
               {erreur.code === 'ralenti'
-                ? remplir(textesCredits.c.slowed, { unit: textesCredits.unit, Unit: textesCredits.Unit, date: textesCredits.date })
+                ? (fr ? 'Gros mois pour Lumi : il répond une fois par minute jusqu’au 1er. Réessaie dans un instant.' : 'Busy month for Lumi: one reply per minute until the 1st. Try again in a moment.')
                 : erreur.code === 'http_429'
                   ? (fr ? 'Lumi souffle deux minutes : beaucoup de demandes d’un coup. Réessaie tout à l’heure.' : 'Lumi is catching its breath: a lot of requests at once. Try again shortly.')
                   : erreur.code === 'quota_epuise'
-                ? remplir(textesCredits.c.exhausted, { unit: textesCredits.unit, Unit: textesCredits.Unit, date: textesCredits.date })
+                ? (fr ? 'Le budget IA du mois est atteint. Lumi reprend le 1er du mois prochain.' : 'This month’s AI budget is reached. Lumi resumes on the 1st of next month.')
                 : erreur.code === 'plan_sans_lumi'
                   ? (fr ? 'Lumi est inclus dans le forfait Autopilot.' : 'Lumi is included in the Autopilot plan.')
                   : erreur.code === 'lumi_not_configured'
@@ -836,9 +836,7 @@ export default function Lumi() {
               disabled={!!bloque}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void envoyer(input); } }}
-              placeholder={epuise && !indisponible
-                ? remplir(textesCredits.c.exhaustedInput, { unit: textesCredits.unit, Unit: textesCredits.Unit, date: textesCredits.date })
-                : bloque
+              placeholder={bloque
                 ? (fr ? 'Lumi est indisponible pour le moment.' : 'Lumi is unavailable for now.')
                 : (fr ? 'Pose-moi une question ou donne-moi une instruction…' : 'Ask a question or give an instruction…')}
               className="w-full resize-none bg-transparent px-4 pt-3.5 pb-12 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus-visible:ring-0 leading-relaxed disabled:opacity-60"

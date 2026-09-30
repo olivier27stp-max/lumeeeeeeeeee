@@ -10,7 +10,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { journaliserTrace, usageGemini } from '../lib/lumi/traces';
-import { journaliserUsage } from '../lib/lumi/budget';
 import { sendSafeError } from '../lib/error-handler';
 import { validate, agentTranscribeSchema } from '../lib/validation';
 import { isGeminiConfigured } from '../lib/agent/gemini';
@@ -53,16 +52,6 @@ router.post('/agent/transcribe', validate(agentTranscribeSchema), async (req, re
       ? coutEnCents(r.model, { input_tokens: u.input_tokens, output_tokens: u.output_tokens, cache_read_input_tokens: u.cache_lu, cache_creation_input_tokens: 0 })
       : null;
     if (coutGemini) ajouterDepense('voix', coutGemini);
-    // Crédits Lumi (2026-09-30) : la dictée est un usage payant du client —
-    // au grand livre comme le chat. Elle n'y était pas : gratuite par oubli.
-    if (u && coutGemini != null) {
-      void journaliserUsage(getServiceClient(), {
-        orgId: authed.orgId, userId: authed.user.id, conversationId: null, model: r.model,
-        input_tokens: u.input_tokens, output_tokens: u.output_tokens,
-        cache_creation_input_tokens: 0, cache_read_input_tokens: u.cache_lu,
-        cost_cents: coutGemini, source: 'voix', requestId: r.requestId ?? null,
-      }).catch((e: unknown) => console.error('[agent/transcribe] usage non journalisé :', e instanceof Error ? e.message : e));
-    }
     // Trace (lumi_traces) : la dictée coûte un appel Gemini avant le tour Lumi.
     // org/user = contexte serveur ; le texte transcrit n'est pas stocké ici.
     void journaliserTrace(getServiceClient(), {

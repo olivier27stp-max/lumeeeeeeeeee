@@ -39,8 +39,6 @@ export interface Plan {
   extra_seat_price_cad?: number | null;
   includes_sms?: boolean;
   includes_ai?: boolean;
-  /** Crédits Lumi inclus par période mensuelle (Autopilot : 1000 ; 0 sans Lumi). Remplace ai_monthly_budget_cents. */
-  lumi_credits_mensuels?: number;
   includes_d2d?: boolean;
   /** Pipeline de ventes — Scale (slug `pro`) et Autopilot. */
   includes_pipeline?: boolean;

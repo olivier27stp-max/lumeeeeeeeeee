@@ -10,7 +10,7 @@ import { LEGAL_LABELS } from '../content/legal';
  * ⚠️ Template content — must be reviewed by legal counsel before production use.
  */
 
-const LAST_UPDATED = '2026-09-30';
+const LAST_UPDATED = '2026-09-10';
 const CONTACT_EMAIL = 'willhebert30@gmail.com';
 
 const SECTIONS = {
@@ -284,7 +284,6 @@ export default function Terms() {
                     "Vos échanges : les messages que vous soumettez à Lumi sont traités pour générer une réponse. Ne lui transmettez pas de renseignements sensibles dont vous n'avez pas besoin dans la conversation. Le traitement se fait via nos sous-traitants d'IA, avec caviardage des renseignements personnels lorsque applicable (voir la page Sous-traitants).",
                     "Pas de décision automatisée déterminante : Lumi ne rend aucune décision produisant un effet juridique sur vous ou vos clients ; il vous assiste, la décision finale vous revient.",
                     "Usage conforme : vous vous engagez à ne pas utiliser Lumi pour générer un contenu illégal, trompeur ou portant atteinte aux droits d'autrui, ni à tenter de contourner ses limites de sécurité.",
-                    "Crédits Lumi : le forfait Autopilot inclut un nombre de crédits Lumi par période de facturation mensuelle. Les crédits non utilisés ne sont pas reportés. Lorsque les crédits sont épuisés, l'assistant IA avancé se met en pause jusqu'au renouvellement ; le reste du service n'est pas affecté.",
                   ]
                 : [
                     'For information only: Lumi’s answers are provided for general information. They are non-binding and are not a substitute for professional advice (accounting, tax, legal). For your rights and obligations, refer to this agreement and the official sources.',
@@ -292,7 +291,6 @@ export default function Terms() {
                     'Your inputs: the messages you submit to Lumi are processed to generate a response. Do not share sensitive information you do not need in the conversation. Processing occurs through our AI subprocessors, with personal information redacted where applicable (see the Subprocessors page).',
                     'No determinative automated decision: Lumi does not make any decision producing legal effects on you or your customers; it assists you, and the final decision remains yours.',
                     'Acceptable use: you agree not to use Lumi to generate unlawful, deceptive, or infringing content, nor to attempt to bypass its safety limits.',
-                    'Lumi credits: the Autopilot plan includes a number of Lumi credits per monthly billing period. Unused credits do not roll over. When the credits run out, the advanced AI assistant pauses until the renewal; the rest of the Service is not affected.',
                   ]
               ).map((item) => <li key={item}>{item}</li>)}
             </ul>

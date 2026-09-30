@@ -62,8 +62,7 @@ describe('reçu sans modèle après Confirmer / Annuler', () => {
     const bloc = r.slice(r.indexOf("router.post('/lumi/execute'"), r.indexOf('// ── Mode de confirmation'));
     expect(bloc).not.toContain('executerTourSse(');
     expect(bloc).toContain('texteRecus(lignes, decision');
-    // Crédits Lumi (2026-09-30) : l'événement de fin porte l'état en crédits, plus aucun coût en $.
-    expect(bloc).toContain("emettreSse('done', { conversation_id, credits: await etatCredits(");
+    expect(bloc).toContain("emettreSse('done', { conversation_id, cost_cents: 0");
     expect(bloc).toContain("origine: 'carte'");
     expect(bloc).toContain('etage: ETAGE.interface');
   });

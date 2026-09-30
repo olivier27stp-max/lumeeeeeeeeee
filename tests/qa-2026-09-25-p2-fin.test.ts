@@ -82,18 +82,14 @@ describe('P2-9 — la pause se voit sur chaque ligne', () => {
   });
 });
 
-describe('P2-10 (révisé le 2026-09-28) — construire avec Lumi est déduit des crédits Lumi, et on le dit', () => {
+describe('P2-10 (révisé le 2026-09-28) — construire avec Lumi est facturé au budget Lumi, et on le dit', () => {
   it('le serveur mesure le coût, sous une source distincte', () => {
-    // Crédits Lumi (2026-09-30) : le coût est mesuré et débité, mais aucun montant en $ ne repart vers l'écran.
-    expect(lire('server/routes/automation-rules.ts')).not.toMatch(/cout_cents/);
+    expect(lire('server/routes/automation-rules.ts')).toMatch(/cout_cents: resultat\.coutCents \?\? null/);
     expect(lire('server/lib/lumi/generer-parcours.ts')).toContain("source: 'automatisations'");
   });
 
-  it('l’écran dit que c’est déduit des crédits Lumi, et réserve Lumi à Autopilot', () => {
-    // Depuis le 2026-09-30, le texte vit dans l'i18n (lumiCredits.deducted) :
-    // on vérifie que l'encadré l'affiche, et ce que dit la clé.
-    expect(lire('src/components/automations/ClavardageLumi.tsx')).toMatch(/\.deducted/);
-    expect(lire('src/i18n/fr.ts')).toMatch(/deducted: 'Déduit de tes \{unit\}'/);
+  it('l’écran dit que c’est déduit du budget Lumi, et réserve Lumi à Autopilot', () => {
+    expect(lire('src/components/automations/ClavardageLumi.tsx')).toMatch(/Déduit de ton budget Lumi/);
     expect(lire('src/pages/AutomationBuilderPage.tsx')).toMatch(/usePlanFeature\('includes_ai'\)/);
   });
 });

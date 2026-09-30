@@ -15,7 +15,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Loader2, PanelLeftClose, Sparkles } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { remplir, textesCredits } from '../../lib/lumiCreditsFormat';
 
 export interface TourLumi { role: 'user' | 'assistant'; content: string }
 
@@ -124,7 +123,7 @@ export default function ClavardageLumi({
       />
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-[11px] text-text-muted">
-          {remplir(textesCredits(fr ? 'fr' : 'en').deducted, { unit: textesCredits(fr ? 'fr' : 'en').unit })}
+          {fr ? 'Déduit de ton budget Lumi' : 'Uses your Lumi budget'}
         </span>
         <button
           type="button"
