@@ -44,15 +44,24 @@ import {
  *   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS — repli SMTP
  */
 
-let transporter: nodemailer.Transporter | null = null;
-let transporteurSes: nodemailer.Transporter | null = null;
+/**
+ * Le transport rendu par nodemailer. DÉDUIT de `createTransport` plutôt que
+ * nommé : depuis la v10, la librairie embarque ses propres types et n'expose
+ * plus de namespace `nodemailer`, donc `nodemailer.Transporter` ne résout
+ * plus. Ce type-ci suit la librairie tout seul, sans qu'on ait à le renommer
+ * au prochain saut de version.
+ */
+type Transporteur = ReturnType<typeof nodemailer.createTransport>;
+
+let transporter: Transporteur | null = null;
+let transporteurSes: Transporteur | null = null;
 
 /**
  * Transport SES : le SMTP d'Amazon, pas un SDK. Séparé du transport SMTP
  * générique pour que les deux puissent coexister (SES en principal, Gmail en
  * repli local) sans se marcher dessus.
  */
-function getTransporteurSes(): nodemailer.Transporter {
+function getTransporteurSes(): Transporteur {
   if (transporteurSes) return transporteurSes;
   const reglages = reglagesSmtpSes();
   if (!reglages) throw new Error('SES demandé mais SES_SMTP_USER / SES_SMTP_PASS manquent.');
@@ -61,7 +70,7 @@ function getTransporteurSes(): nodemailer.Transporter {
   return transporteurSes;
 }
 
-function getTransporter(): nodemailer.Transporter {
+function getTransporter(): Transporteur {
   if (transporter) return transporter;
 
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';

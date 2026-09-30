@@ -516,3 +516,15 @@ export async function restaurerAutomatisation(id: string): Promise<AutomationRul
   if (!r.ok) throw await erreurDe(r, "Impossible de restaurer l'automatisation.");
   return r.json();
 }
+
+/**
+ * Vide une ligne de la corbeille : l'automatisation ne se restaure plus et
+ * disparaît des listes. Son historique d'envois est conservé (preuve de ce
+ * qui a été envoyé aux clients).
+ */
+export async function supprimerDefinitivementAutomatisation(id: string): Promise<void> {
+  const r = await appelServeur(`/api/automations/rules/${id}/definitivement`, {
+    method: 'DELETE', headers: await entetes(),
+  });
+  if (!r.ok) throw await erreurDe(r, 'Impossible de supprimer définitivement l’automatisation.');
+}

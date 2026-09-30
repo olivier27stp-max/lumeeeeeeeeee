@@ -26,11 +26,31 @@ interface Props {
   subtitle?: string;
 }
 
-function defaultRange() {
+/** Mois courant en dates locales (sans toISOString, qui décale d'un jour à l'est de Greenwich). */
+export function defaultRange() {
   const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-  return { from, to };
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const fmt = (dd: number) => `${y}-${String(m + 1).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  return { from: fmt(1), to: fmt(new Date(y, m + 1, 0).getDate()) };
+}
+
+/** Série cumulée par jour de la période, à partir des totaux serveur (fuseau de l'entreprise). */
+export function serieCumulee(from: string, to: string, parJour: Array<{ date: string; du_cents: number }>) {
+  const debut = Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10));
+  const fin = Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10));
+  const days = Math.max(1, Math.round((fin - debut) / 86_400_000) + 1);
+  const buckets = new Array(days).fill(0);
+  for (const j of parJour) {
+    const idx = Math.round((Date.UTC(+j.date.slice(0, 4), +j.date.slice(5, 7) - 1, +j.date.slice(8, 10)) - debut) / 86_400_000);
+    if (idx >= 0 && idx < days) buckets[idx] += j.du_cents / 100;
+  }
+  let run = 0;
+  const series = buckets.map((v) => (run += v));
+  const step = Math.max(1, Math.floor(days / 6));
+  const xLabels: string[] = [];
+  for (let i = 0; i < days; i += step) xLabels.push(String(new Date(debut + i * 86_400_000).getUTCDate()));
+  return { series, xLabels };
 }
 
 /**
@@ -93,31 +113,22 @@ export default function PersonalCommissionView({
 
   useEffect(() => { void load(); }, [load]);
 
+  // Tous les chiffres viennent des totaux SERVEUR (même fonction que la Paie) :
+  // avant, « Commissions gagnées » additionnait la liste, reprises et
+  // estimations comprises, et « Ventes conclues » comptait chaque ligne.
   const dash = useMemo(() => {
-    const list = entries ?? [];
-    const total = list.reduce((s, e) => s + Number(e.amount || 0), 0);
-    const pending = payroll?.pending ?? 0;
-    const paid = payroll?.paid ?? 0;
-    const next = list.filter((e) => e.status === 'approved').reduce((s, e) => s + Number(e.amount || 0), 0);
-
-    // Cumulative earnings over the range.
-    const from = new Date(filters.from + 'T00:00:00');
-    const to = new Date(filters.to + 'T00:00:00');
-    const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
-    const buckets = new Array(days).fill(0);
-    for (const e of list) {
-      const d = new Date(e.triggered_at || e.created_at);
-      const idx = Math.floor((d.getTime() - from.getTime()) / 86_400_000);
-      if (idx >= 0 && idx < days) buckets[idx] += Number(e.amount || 0);
-    }
-    let run = 0;
-    const series = buckets.map((v) => (run += v));
-    const step = Math.max(1, Math.floor(days / 6));
-    const xLabels: string[] = [];
-    for (let i = 0; i < days; i += step) xLabels.push(String(new Date(from.getTime() + i * 86_400_000).getDate()));
-
-    return { total, pending, paid, next, series, xLabels, deals: list.length };
-  }, [entries, payroll, filters.from, filters.to]);
+    const { series, xLabels } = serieCumulee(filters.from, filters.to, payroll?.par_jour ?? []);
+    return {
+      total: payroll?.total ?? 0,
+      pending: payroll?.pending ?? 0,
+      paid: payroll?.paid ?? 0,
+      next: payroll?.approved ?? 0,
+      estimated: payroll?.estimated ?? 0,
+      series,
+      xLabels,
+      deals: payroll?.sales ?? 0,
+    };
+  }, [payroll, filters.from, filters.to]);
 
   return (
     <div className="space-y-6">
@@ -158,6 +169,13 @@ export default function PersonalCommissionView({
             <KpiCard label={isFr ? 'Prochain versement' : 'Next payout'} value={fmtMoney(dash.next)} money note={isFr ? 'approuvé' : 'approved'} />
             <KpiCard label={isFr ? 'Ventes conclues' : 'Deals closed'} value={String(dash.deals)} note={isFr ? 'sur la période' : 'this period'} />
           </div>
+          {dash.estimated > 0 && (
+            <p className="text-xs text-text-tertiary">
+              {isFr
+                ? `Estimé sur des jobs pas encore payés : ${fmtMoney(dash.estimated)} — gagné seulement au paiement de la facture, jamais compté ci-dessus.`
+                : `Estimated on jobs not paid yet: ${fmtMoney(dash.estimated)} — earned only when the invoice is paid, never counted above.`}
+            </p>
+          )}
 
           <Card>
             <CardHeader>
@@ -170,11 +188,12 @@ export default function PersonalCommissionView({
                 showRep={false}
                 showActions={false}
                 emptyMessage={isFr ? 'Aucune vente conclue sur la période sélectionnée' : 'No closes for the selected period'}
+                timeZone={payroll?.timezone}
               />
             </CardContent>
           </Card>
 
-          <UpcomingPayouts entries={entries ?? []} />
+          <UpcomingPayouts entries={entries ?? []} timeZone={payroll?.timezone} />
         </>
       )}
     </div>

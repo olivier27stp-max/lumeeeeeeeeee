@@ -67,6 +67,8 @@
     "qa:pack": "tsx --env-file=.env.local scripts/qa/eprouver-pack-base.mts",
     "qa:evenements-base": "node --env-file=.env.local --import tsx scripts/qa/eprouver-evenements-base.mts",
     "qa:lumi": "node --env-file=.env.local scripts/qa/evaluer-lumi.mjs",
+    "qa:construire-lumi": "tsx --env-file=.env.local scripts/qa/evaluer-construire-lumi.mts",
+    "qa:surveiller-construire-lumi": "tsx --env-file=.env.local scripts/qa/surveiller-construire-lumi.mts",
     "qa:paywall": "node --env-file=.env.local scripts/qa/verifier-paywall.mjs",
     "qa:workflow-bout-en-bout": "tsx --env-file=.env.local scripts/qa/verifier-workflow-bout-en-bout.mjs",
     "qa:panneau-automatisation": "node --env-file=.env.local scripts/qa/verifier-panneau-automatisation.mjs",
@@ -130,7 +132,7 @@
     "lucide-react": "^0.546.0",
     "mapbox-gl": "^3.21.0",
     "motion": "^12.23.24",
-    "nodemailer": "^9.0.3",
+    "nodemailer": "^10.0.13",
     "papaparse": "^5.5.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -148,6 +150,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/cors": "^2.8.19",
     "@types/dompurify": "^3.0.5",
     "@types/express": "^4.17.21",

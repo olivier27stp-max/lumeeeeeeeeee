@@ -407,9 +407,19 @@ function corrigerChangementDHeure(reference: number, cible: number, tz: string =
  * voyait ses deux moitiés partir à des heures différentes, le SMS étant seul
  * reporté.
  */
-function shouldRespectQuietHours(actionType: string, delaySeconds: number): boolean {
-  if (actionType === 'send_sms') return true;
-  if (actionType !== 'send_email') return false;
+/** Les actions qui ENVOIENT un message au client. */
+const ACTIONS_MESSAGE = new Set(['send_sms', 'send_email', 'request_review', 'envoyer_facture', 'envoyer_soumission']);
+
+function shouldRespectQuietHours(actionType: string, delaySeconds: number, reglages?: ReglagesRegle | null): boolean {
+  if (!ACTIONS_MESSAGE.has(actionType)) return false;
+  // Le texto, et la demande d'avis (une SOLLICITATION, jamais attendue par
+  // le client) : toujours dans la fenêtre — une demande d'avis partait à
+  // 20 h 01 (audit V2, L4).
+  if (actionType === 'send_sms' || actionType === 'request_review') return true;
+  // Une fenêtre RÉGLÉE par l'entreprise vaut pour tous ses messages :
+  // l'écran promet « aucun message ne part en dehors de ces heures », et un
+  // courriel immédiat partait à 20 h 18 avec une fenêtre 9 h-17 h (D-13).
+  if (reglages?.fenetre || reglages?.jours_ouvrables) return true;
   // Délai non nul (positif OU négatif, comme les rappels « X h avant ») =
   // message programmé, donc pas une confirmation attendue dans l'instant.
   return delaySeconds !== 0;
@@ -438,18 +448,34 @@ export function nextSendTime(
  * Langue des communications automatiques de l'org (company_settings.
  * default_language). Défaut 'fr' si absent/erreur — jamais bloquant.
  */
+/**
+ * Langue de l'entreprise, gardée 5 minutes comme le fuseau (T6.2 : elle
+ * était relue à CHAQUE événement et à chaque tâche). Une lecture ratée n'est
+ * pas mise en cache : on retombe sur le français pour cette fois seulement.
+ */
+const cacheLangue = new Map<string, { langue: 'fr' | 'en'; expire: number }>();
+const DUREE_CACHE_LANGUE_MS = 5 * 60_000;
+
 async function langueOrg(supabase: SupabaseClient, orgId: string): Promise<'fr' | 'en'> {
+  const connue = cacheLangue.get(orgId);
+  if (connue && connue.expire > Date.now()) return connue.langue;
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('company_settings')
       .select('default_language')
       .eq('org_id', orgId)
       .maybeSingle();
-    return data?.default_language === 'en' ? 'en' : 'fr';
+    if (error) return 'fr';
+    const langue: 'fr' | 'en' = data?.default_language === 'en' ? 'en' : 'fr';
+    cacheLangue.set(orgId, { langue, expire: Date.now() + DUREE_CACHE_LANGUE_MS });
+    return langue;
   } catch {
     return 'fr';
   }
 }
+
+/** Pour les tests : oublier la langue gardée en mémoire. */
+export function oublierLanguesOrg(): void { cacheLangue.clear(); }
 
 /**
  * Fenêtre anti-doublon des actions IMMÉDIATES (F3).
@@ -479,6 +505,84 @@ type LigneJournal = {
 };
 
 /**
+ * ÉTALEMENT des rafales de textos (F11, décision du 2026-09-23 revue par
+ * l'audit V2) : on ne PLAFONNE pas les messages d'une entreprise à ses
+ * clients — tout part —, mais au-delà de DEBIT_SMS_PAR_MINUTE textos
+ * d'automatisation dans la dernière minute pour un bureau, les suivants
+ * sont reportés d'une minute. Une rafale (webhook entrant, synchro) devient
+ * un flux qu'un humain a le temps de voir et d'arrêter (« Tout arrêter »).
+ * Lecture ratée = on envoie.
+ */
+export const DEBIT_SMS_PAR_MINUTE = 30;
+
+export async function rafaleDeTextos(supabase: SupabaseClient, orgId: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('automation_execution_logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .eq('action_type', 'send_sms')
+    .eq('result_success', true)
+    .gte('created_at', new Date(Date.now() - 60_000).toISOString());
+  if (error) {
+    console.error('[automationEngine] débit de textos illisible — envoi sans étalement:', error.message);
+    return false;
+  }
+  return (count ?? 0) >= DEBIT_SMS_PAR_MINUTE;
+}
+
+/**
+ * Une facture = au plus UNE relance par jour, toutes automatisations
+ * confondues (audit V2, D-16).
+ *
+ * « Facture en retard », les préréglages « Invoice Reminder X jours » (sur
+ * invoice.sent) et le parcours « Relance de facture » ne se parlaient pas :
+ * une facture en retard recevait la relance « en retard » ET la relance J+1
+ * le même jour. Ici : si une AUTRE règle de relance a déjà envoyé un message
+ * pour cette facture dans les 20 dernières heures, celle-ci est sautée.
+ * Lecture ratée = on envoie (une relance de trop vaut mieux qu'aucune).
+ */
+export function estRegleDeRelanceFacture(r: { trigger_event?: string | null; preset_key?: string | null } | null | undefined): boolean {
+  if (!r) return false;
+  return r.trigger_event === 'invoice.overdue'
+    || (typeof r.preset_key === 'string' && (r.preset_key.startsWith('invoice_sent_reminder') || r.preset_key === 'pack_relance_facture'));
+}
+
+export const RELANCE_FACTURE_DEJA_PARTIE = 'Une autre relance de cette facture est déjà partie aujourd’hui';
+
+export async function relanceFactureDejaPartie(supabase: SupabaseClient, orgId: string, invoiceId: string, ruleId: string): Promise<boolean> {
+  try {
+    const { data: regles, error } = await supabase
+      .from('automation_rules')
+      .select('id, trigger_event, preset_key')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .or('trigger_event.eq.invoice.overdue,preset_key.like.invoice_sent_reminder%,preset_key.eq.pack_relance_facture');
+    if (error) throw new Error(error.message);
+    const autres = ((regles ?? []) as Array<{ id: string; trigger_event: string | null; preset_key: string | null }>)
+      .filter((r) => r.id !== ruleId && estRegleDeRelanceFacture(r))
+      .map((r) => r.id);
+    if (!autres.length) return false;
+    const { data: envois, error: eEnvois } = await supabase
+      .from('automation_execution_logs')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('entity_type', 'invoice')
+      .eq('entity_id', invoiceId)
+      .eq('result_success', true)
+      .is('result_data->saute', null)
+      .in('action_type', ['send_email', 'send_sms'])
+      .in('automation_rule_id', autres)
+      .gte('created_at', new Date(Date.now() - 20 * 3600_000).toISOString())
+      .limit(1);
+    if (eEnvois) throw new Error(eEnvois.message);
+    return (envois?.length ?? 0) > 0;
+  } catch (e) {
+    console.error('[automationEngine] relances de facture illisibles — envoi quand même:', e instanceof Error ? e.message : String(e));
+    return false;
+  }
+}
+
+/**
  * Réserve l'exécution d'une action immédiate.
  *
  * @returns l'id de la ligne de journal réservée ; `null` s'il ne faut PAS
@@ -497,6 +601,32 @@ async function reserverActionImmediate(
   const base = buildExecutionKey(rule.id, event.entityId, index);
   const tranche = Math.floor(maintenant / FENETRE_ANTI_DOUBLON_MS);
   const action = rule.actions[index];
+
+  /*
+   * REJEU par l'outbox (le traitement a été coupé, > 2 min) : la fenêtre de
+   * 2 min ne voit plus la première exécution. Le courriel et le texto ont
+   * leur propre garde « déjà envoyé » ; une TÂCHE, un WEBHOOK, une
+   * étiquette, eux, repartaient (audit V2, D-15 : 2 tâches, 2 POST mesurés).
+   * Toute action réussie — ou encore en cours — depuis l'heure du rejeu
+   * n'est pas refaite.
+   */
+  if (event.rejoueDepuis) {
+    const { data: faite, error: errRejeu } = await supabase
+      .from('automation_execution_logs')
+      .select('id')
+      .eq('org_id', event.orgId)
+      .like('execution_key', `${base}@%`)
+      .gte('created_at', event.rejoueDepuis)
+      .or('result_success.eq.true,result_error.eq."en cours"')
+      .limit(1)
+      .maybeSingle();
+    if (errRejeu) {
+      console.error(`[automationEngine] rejeu : exécution précédente illisible (${base}) — exécution quand même:`, errRejeu.message);
+    } else if (faite) {
+      logger.info(`[automationEngine] rejeu : action déjà exécutée depuis ${event.rejoueDepuis}, pas refaite : ${base}`);
+      return null;
+    }
+  }
 
   const { data: precedente, error: errLecture } = await supabase
     .from('automation_execution_logs')
@@ -567,17 +697,32 @@ async function journaliserAction(
   }
 }
 
+/**
+ * Les variables d'un ÉVÉNEMENT ne dépendent pas de la règle : elles étaient
+ * pourtant relues pour chaque règle (réglages de l'entreprise, fiche client,
+ * champs personnalisés — le N+1 T6.2). Résolues une fois par événement ;
+ * chaque règle en reçoit une COPIE, pour qu'une action qui ajoute une
+ * variable (lien de sondage…) ne déborde pas sur la règle suivante.
+ */
+const variablesParEvenement = new WeakMap<CRMEvent, Promise<Record<string, string>>>();
+
+async function variablesDeLEvenement(event: CRMEvent, config: EngineConfig): Promise<Record<string, string>> {
+  let promesse = variablesParEvenement.get(event);
+  if (!promesse) {
+    promesse = resolveEntityVariables(config.supabase, event.orgId, event.entityType, event.entityId);
+    variablesParEvenement.set(event, promesse);
+    // Une lecture ratée ne doit pas être resservie aux règles suivantes.
+    promesse.catch(() => variablesParEvenement.delete(event));
+  }
+  return { ...(await promesse) };
+}
+
 async function executeRuleActions(
   rule: AutomationRule,
   event: CRMEvent,
   config: EngineConfig,
 ) {
-  const vars = await resolveEntityVariables(
-    config.supabase,
-    event.orgId,
-    event.entityType,
-    event.entityId,
-  );
+  const vars = await variablesDeLEvenement(event, config);
 
   const ctx: ActionContext = {
     supabase: config.supabase,
@@ -600,14 +745,14 @@ async function executeRuleActions(
   // Désabonnement par canal : chaque envoi porte son type. Drapeau OFF =
   // contexte inchangé (une action immédiate n'est pas commerciale).
   const parCanal = await drapeauActif(config.supabase, event.orgId, DRAPEAUX_AUTOMATISATIONS.desabonnementCanal);
-  const contextePour = (action: { type: ActionType; config: Record<string, any> }): ActionContext =>
-    parCanal
-      ? {
-          ...ctx,
-          parCanal: true,
-          commercial: typeEnvoi({ actionType: action.type, config: action.config, declencheur: event.type, delaiSecondes: rule.delay_seconds, presetKey: rule.preset_key }) === 'marketing',
-        }
-      : ctx;
+  const contextePour = (action: { type: ActionType; config: Record<string, any> }): ActionContext => {
+    // Le TYPE de l'envoi, drapeau ou pas : il décide de la mention STOP d'un
+    // texto et de l'identification exigée d'un courriel (LCAP, audit V2 L7/L8).
+    const marketing = typeEnvoi({ actionType: action.type, config: action.config, declencheur: event.type, delaiSecondes: rule.delay_seconds, presetKey: rule.preset_key }) === 'marketing';
+    return parCanal
+      ? { ...ctx, parCanal: true, commercial: marketing, marketing }
+      : { ...ctx, marketing };
+  };
 
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
@@ -616,7 +761,7 @@ async function executeRuleActions(
     // Reporte à la prochaine fenêtre d'envoi les actions déclenchées en heures
     // calmes. Une règle immédiate (délai 0) porte une confirmation attendue :
     // seuls ses SMS sont reportés, jamais ses courriels.
-    if (shouldRespectQuietHours(action.type, rule.delay_seconds) && horsFenetre(rule.settings, new Date(), fuseau)) {
+    if (shouldRespectQuietHours(action.type, rule.delay_seconds, rule.settings) && horsFenetre(rule.settings, new Date(), fuseau)) {
       // supabase-js ne lève jamais : l'erreur (dont le doublon 23505) arrive
       // dans la réponse, pas dans un catch.
       const { error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
@@ -643,6 +788,38 @@ async function executeRuleActions(
       continue;
     }
 
+    if (action.type === 'send_sms' && await rafaleDeTextos(config.supabase, event.orgId)) {
+      const { error: etaleError } = await config.supabase.from('automation_scheduled_tasks').insert({
+        org_id: event.orgId,
+        automation_rule_id: rule.id,
+        entity_type: event.entityType,
+        entity_id: event.entityId,
+        // Même traitement que le report d'heures calmes : une confirmation
+        // reportée reste transactionnelle.
+        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata, report_heures_calmes: true, report_rafale: true },
+        execute_at: new Date(Date.now() + 60_000).toISOString(),
+        status: 'pending',
+        execution_key: executionKey,
+      });
+      if (etaleError && etaleError.code !== '23505') {
+        console.error(`[automationEngine] texto de rafale non reporté (rule ${rule.id}, org ${event.orgId}):`, etaleError.message);
+      } else {
+        logger.info(`[automationEngine] texto reporté d'une minute (rafale > ${DEBIT_SMS_PAR_MINUTE}/min) — règle "${rule.name}"`);
+      }
+      continue;
+    }
+
+    if (event.entityType === 'invoice' && (action.type === 'send_email' || action.type === 'send_sms')
+      && estRegleDeRelanceFacture(rule) && await relanceFactureDejaPartie(config.supabase, event.orgId, event.entityId, rule.id)) {
+      await journaliserAction(config.supabase, undefined, rule, event, i, {
+        result_success: true,
+        result_data: { saute: RELANCE_FACTURE_DEJA_PARTIE, saute_code: 'deja_envoye' },
+        result_error: null,
+        duration_ms: 0,
+      });
+      continue;
+    }
+
     const reservation = await reserverActionImmediate(config.supabase, rule, event, i);
     if (reservation === null) continue;
 
@@ -652,11 +829,39 @@ async function executeRuleActions(
       // Délai max, comme la file : l'outbox tient pour orphelin un événement
       // non coché après 3 min et le rejoue. Une action immédiate sans borne
       // pouvait encore tourner à ce moment-là → double envoi (launch M5).
-      const result = await avecDelaiMax(
-        executeAction(action.type, action.config, vars, contextePour(action)),
-        DELAI_MAX_ACTION_MS,
-        `${action.type} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
-      );
+      const execution = executeAction(action.type, action.config, vars, contextePour(action));
+      let result: Awaited<typeof execution>;
+      try {
+        result = await avecDelaiMax(
+          execution,
+          DELAI_MAX_ACTION_MS,
+          `${action.type} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
+        );
+      } catch (e) {
+        if (!estDelaiDepasse(e) || !reservation) throw e;
+        /*
+         * Délai dépassé : l'action CONTINUE et réussit souvent (courriel livré
+         * 11 s plus tard). Elle était journalisée « échec » pour de bon —
+         * statistiques et raisons fausses, 66/150 sous charge (audit V2,
+         * D-08). On l'écrit « en attente », puis on complète la MÊME ligne
+         * avec le vrai résultat dès qu'il arrive.
+         */
+        await journaliserAction(config.supabase, reservation, rule, event, i, {
+          result_success: false,
+          result_data: null,
+          result_error: `${(e as Error).message}${EN_ATTENTE_DU_RESULTAT}`,
+          duration_ms: Date.now() - startTime,
+        });
+        void execution.then(
+          (tardif) => journaliserAction(config.supabase, reservation, rule, event, i, {
+            result_success: tardif.success, result_data: tardif.data || null, result_error: tardif.error || null, duration_ms: Date.now() - startTime,
+          }),
+          (erreur: unknown) => journaliserAction(config.supabase, reservation, rule, event, i, {
+            result_success: false, result_data: null, result_error: erreur instanceof Error ? erreur.message : String(erreur), duration_ms: Date.now() - startTime,
+          }),
+        );
+        continue;
+      }
       const durationMs = Date.now() - startTime;
 
       await journaliserAction(config.supabase, reservation, rule, event, i, {
@@ -864,6 +1069,12 @@ async function handleEvent(event: CRMEvent) {
    */
   if (await orgEnPause(engineConfig.supabase, event.orgId)) return;
 
+  // Le client a répondu : ses attentes « jusqu'à réponse » n'attendent plus
+  // l'échéance (audit V2, D-07). Indépendant des règles sur client.replied.
+  if (event.type === 'client.replied' && event.entityType === 'client' && event.entityId) {
+    await reveillerAttentesReponse(engineConfig.supabase, event.orgId, event.entityId);
+  }
+
   try {
     // ── 1. Match automation_rules (legacy system) ──
     // L'ordre est EXPLICITE : sans `order by`, PostgreSQL n'en garantit aucun.
@@ -987,7 +1198,11 @@ async function lancerRegle(rule: AutomationRule, event: CRMEvent, config: Engine
           ruleId: rule.id,
           entityType: event.entityType,
           entityId: event.entityId,
-          contexte: event.metadata ?? {},
+          // « Laisser le client repasser » : ce passage a ses propres clés
+          // d'étape, qui le suivent jusqu'au bout (audit V2, D-12).
+          contexte: rule.settings?.reentree === true
+            ? { ...(event.metadata ?? {}), passage: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` }
+            : (event.metadata ?? {}),
           franchies: 0,
         },
         rule.steps,
@@ -1113,13 +1328,19 @@ const DELAI_MAX_ACTION_MS = 5_000;
  * qu'il faut, puisque le but est de libérer le tick, pas de garantir que
  * rien n'est parti (la reprise et l'idempotence s'en chargent).
  */
+/** L'action a dépassé son délai : elle continue peut-être, son résultat est INCONNU. */
+export const estDelaiDepasse = (e: unknown): boolean => (e as { delaiDepasse?: boolean } | null)?.delaiDepasse === true;
+
+/** Le texte provisoire d'une action qui a dépassé son délai. */
+const EN_ATTENTE_DU_RESULTAT = ' — résultat en attente (l’action continue)';
+
 async function avecDelaiMax<T>(promesse: Promise<T>, delaiMs: number, message: string): Promise<T> {
   let minuterie: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
       promesse,
       new Promise<never>((_, rejeter) => {
-        minuterie = setTimeout(() => rejeter(new Error(message)), delaiMs);
+        minuterie = setTimeout(() => rejeter(Object.assign(new Error(message), { delaiDepasse: true })), delaiMs);
       }),
     ]);
   } finally {
@@ -1136,7 +1357,7 @@ async function avecDelaiMax<T>(promesse: Promise<T>, delaiMs: number, message: s
  * client sans adresse courriel n'en méritera jamais — le réessayer trois fois
  * ne ferait que retarder l'inévitable et polluer les journaux.
  */
-function isTransientFailure(error?: string | null): boolean {
+export function isTransientFailure(error?: string | null): boolean {
   if (!error) return true; // cause inconnue → on laisse sa chance à la reprise
   const definitifs = [
     'no recipient',           // pas d'adresse / pas de téléphone
@@ -1154,6 +1375,9 @@ function isTransientFailure(error?: string | null): boolean {
     // Action pas encore disponible (catalogue : `indisponible`) : la
     // réessayer ne la rendra pas disponible.
     'pas encore disponible',
+    // Webhook vers une adresse interne ou non publique (garde SSRF) : la
+    // même adresse sera refusée à chaque essai (audit V2, C25).
+    'adresse refusée',
   ];
   const lower = error.toLowerCase();
   return !definitifs.some((d) => lower.includes(d));
@@ -1392,7 +1616,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     const fuseauTache = task.org_id
       ? await fuseauOrg(supabase, task.org_id)
       : FUSEAU_DEFAUT;
-    if ((taskType === 'send_sms' || taskType === 'send_email') && horsFenetre(reglagesRegle, new Date(), fuseauTache)) {
+    if (ACTIONS_MESSAGE.has(String(taskType)) && horsFenetre(reglagesRegle, new Date(), fuseauTache)) {
       const prochaine = nextSendTime(new Date(), reglagesRegle, fuseauTache);
 
       /**
@@ -1653,6 +1877,30 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         }
       }
 
+      // Étalement (F11) : repoussé d'une minute, sans consommer de tentative
+      // (la prise avait incrémenté `attempts` en base ; on remet la valeur lue).
+      if (actionType === 'send_sms' && await rafaleDeTextos(supabase, task.org_id)) {
+        await supabase.from('automation_scheduled_tasks')
+          .update({ status: 'pending', execute_at: new Date(Date.now() + 60_000).toISOString(), attempts: Number(task.attempts || 0), last_error: `Rafale de textos (> ${DEBIT_SMS_PAR_MINUTE}/min) : reporté d'une minute` })
+          .eq('id', task.id);
+        continue;
+      }
+
+      if (task.entity_type === 'invoice' && (actionType === 'send_email' || actionType === 'send_sms')
+        && estRegleDeRelanceFacture(task.automation_rules)
+        && await relanceFactureDejaPartie(supabase, task.org_id, task.entity_id, task.automation_rule_id)) {
+        await supabase.from('automation_execution_logs').insert({
+          org_id: task.org_id, automation_rule_id: task.automation_rule_id, scheduled_task_id: task.id,
+          trigger_event: actionConfig.trigger_event || 'scheduled', entity_type: task.entity_type, entity_id: task.entity_id,
+          action_type: actionType, action_config: config, result_success: true,
+          result_data: { saute: RELANCE_FACTURE_DEJA_PARTIE, saute_code: 'deja_envoye' }, result_error: null, duration_ms: 0,
+        });
+        await supabase.from('automation_scheduled_tasks')
+          .update({ status: 'completed', completed_at: new Date().toISOString(), last_error: RELANCE_FACTURE_DEJA_PARTIE })
+          .eq('id', task.id);
+        continue;
+      }
+
       const vars = await resolveEntityVariables(
         supabase,
         task.org_id,
@@ -1689,27 +1937,83 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
           // Règle simple différée : la chaîne est dans les métadonnées de l'événement.
           : Array.isArray(actionConfig.event_metadata?.chaine) ? (actionConfig.event_metadata.chaine as string[]) : undefined,
       };
+      // Le TYPE de l'envoi (transactionnel / marketing), drapeau ou pas : il
+      // décide de la mention STOP d'un texto et de l'identification exigée
+      // d'un courriel (LCAP, audit V2 L7/L8).
+      ctx.marketing = typeEnvoi({
+        actionType,
+        config,
+        declencheur: actionConfig.trigger_event ?? task.automation_rules?.trigger_event,
+        // Une étape de séquence est planifiée : elle compte comme différée.
+        delaiSecondes: task.step_id ? Math.max(1, Number(task.automation_rules?.delay_seconds ?? 0)) : Number(task.automation_rules?.delay_seconds ?? 0),
+        presetKey: task.automation_rules?.preset_key ?? null,
+      }) === 'marketing';
       // Désabonnement par canal : « différé » ne veut plus dire « commercial ».
       // Un rappel de rendez-vous ou de facture est transactionnel même s'il
       // part plus tard ; c'est le TYPE de l'envoi qui décide.
       if (await drapeauActif(supabase, task.org_id, DRAPEAUX_AUTOMATISATIONS.desabonnementCanal)) {
         ctx.parCanal = true;
-        ctx.commercial = typeEnvoi({
-          actionType,
-          config,
-          declencheur: actionConfig.trigger_event ?? task.automation_rules?.trigger_event,
-          // Une étape de séquence est planifiée : elle compte comme différée.
-          delaiSecondes: task.step_id ? Math.max(1, Number(task.automation_rules?.delay_seconds ?? 0)) : Number(task.automation_rules?.delay_seconds ?? 0),
-          presetKey: task.automation_rules?.preset_key ?? null,
-        }) === 'marketing';
+        ctx.commercial = ctx.marketing;
       }
 
       const startTime = Date.now();
-      const result = await avecDelaiMax(
-        executeAction(actionType, config, vars, ctx),
-        DELAI_MAX_ACTION_MS,
-        `${actionType} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
-      );
+      const execution = executeAction(actionType, config, vars, ctx);
+      let result: Awaited<typeof execution>;
+      try {
+        result = await avecDelaiMax(
+          execution,
+          DELAI_MAX_ACTION_MS,
+          `${actionType} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
+        );
+      } catch (e) {
+        if (!estDelaiDepasse(e)) throw e;
+        /*
+         * Délai dépassé : la tâche part en reprise (on libère le tick), mais
+         * l'action continue. Si elle RÉUSSIT ensuite, la reprise est annulée
+         * et le parcours continue — sinon un webhook lent était envoyé DEUX
+         * fois et une tâche créée deux fois (audit V2, C24 / D-08).
+         */
+        const etatReprise = nextStateAfterFailure(task.attempts, `${(e as Error).message}${EN_ATTENTE_DU_RESULTAT}`);
+        await supabase.from('automation_scheduled_tasks').update(etatReprise).eq('id', task.id);
+        const tacheSuivie = task;
+        void execution.then(async (tardif) => {
+          await supabase.from('automation_execution_logs').insert({
+            org_id: tacheSuivie.org_id,
+            automation_rule_id: tacheSuivie.automation_rule_id,
+            scheduled_task_id: tacheSuivie.id,
+            trigger_event: actionConfig.trigger_event || 'scheduled',
+            entity_type: tacheSuivie.entity_type,
+            entity_id: tacheSuivie.entity_id,
+            action_type: actionType,
+            action_config: config,
+            result_success: tardif.success,
+            result_data: tardif.data || null,
+            result_error: tardif.error || null,
+            duration_ms: Date.now() - startTime,
+          });
+          if (!tardif.success) return; // la reprise prévue suit son cours
+          const { data: close } = await supabase
+            .from('automation_scheduled_tasks')
+            .update({ status: 'completed', completed_at: new Date().toISOString(), last_error: 'Terminée après le délai de 5 s : reprise annulée.' })
+            .eq('id', tacheSuivie.id)
+            .eq('status', 'pending')
+            .select('id');
+          if (close && close.length && tacheSuivie.step_id && Array.isArray(etapesRegle)) {
+            const etape = trouverEtape(etapesRegle, tacheSuivie.step_id);
+            const contexte = (tacheSuivie.sequence_context ?? {}) as Record<string, unknown>;
+            if (etape) {
+              await planifierEtape({
+                supabase, orgId: tacheSuivie.org_id, ruleId: tacheSuivie.automation_rule_id,
+                entityType: tacheSuivie.entity_type, entityId: tacheSuivie.entity_id,
+                contexte, franchies: Number(contexte.franchies ?? 0),
+              }, etapesRegle, etapeSuivante(etape));
+            }
+          }
+        }, (erreur: unknown) => {
+          console.error(`[automationEngine] tâche ${tacheSuivie.id} : échec après le délai —`, erreur instanceof Error ? erreur.message : String(erreur));
+        });
+        continue;
+      }
       const durationMs = Date.now() - startTime;
 
       // Log execution
@@ -1834,12 +2138,18 @@ async function metadonneesFraiches(
   const base: Record<string, any> = { ...contexte };
 
   /** Table et colonnes à relire selon le type d'entité. */
+  // `created_at` partout : l'éditeur propose « created_at >= … » en exemple,
+  // et la clé n'était relue nulle part — condition toujours fausse (audit
+  // V2, D-11). Un prospect vit dans `clients` : la vue `leads_active`
+  // n'existe plus, la lecture échouait et chaque branche était jugée sur
+  // l'état d'ORIGINE.
   const source: Record<string, { table: string; colonnes: string }> = {
-    quote: { table: 'quotes', colonnes: 'status, total_cents' },
-    invoice: { table: 'invoices', colonnes: 'status, total_cents, balance_cents' },
-    job: { table: 'jobs', colonnes: 'status' },
-    lead: { table: 'leads_active', colonnes: 'status, lead_status' },
-    appointment: { table: 'schedule_events', colonnes: 'status' },
+    quote: { table: 'quotes', colonnes: 'status, total_cents, created_at' },
+    invoice: { table: 'invoices', colonnes: 'status, total_cents, balance_cents, created_at' },
+    job: { table: 'jobs', colonnes: 'status, created_at' },
+    lead: { table: 'clients', colonnes: 'status, lead_status, source, created_at' },
+    client: { table: 'clients', colonnes: 'status, lead_status, source, created_at' },
+    appointment: { table: 'schedule_events', colonnes: 'status, created_at' },
   };
 
   const cible = source[task.entity_type];
@@ -1864,8 +2174,11 @@ async function metadonneesFraiches(
 
   // `data` est typé `unknown` par PostgREST quand les colonnes sont choisies
   // dynamiquement : la forme est garantie par `source` juste au-dessus.
-  const frais = { ...(data as unknown as Record<string, unknown>) };
+  const frais: Record<string, unknown> = { ...(data as unknown as Record<string, unknown>) };
   if (typeof frais.status === 'string') frais.status = statutAvecAlias(task.entity_type, frais.status);
+  // Les noms français des exemples de l'éditeur (« statut = », « montant > »).
+  if (frais.status !== undefined) frais.statut = frais.status;
+  if (typeof frais.total_cents === 'number') frais.montant = frais.total_cents / 100;
   return { ...base, ...frais };
 }
 
@@ -1955,6 +2268,47 @@ async function clientDeLaTache(
  * Même prudence que `checkStopConditions` : ne jamais supprimer un envoi sur
  * une information qu'on n'a pas pu vérifier.
  */
+/**
+ * Réveille les attentes « jusqu'à réponse » d'un client qui vient de répondre :
+ * leur échéance passe à maintenant, et le worker suit la branche « réponse »
+ * au tick suivant (il revérifie la réponse lui-même — rien n'est décidé ici).
+ *
+ * Sans ça, « attendre la réponse, au plus 3 jours » ne réagissait qu'au bout
+ * des 3 jours. Ne lève jamais : un réveil raté laisse l'attente aller à son
+ * échéance, qui tranchera correctement.
+ */
+export async function reveillerAttentesReponse(supabase: SupabaseClient, orgId: string, clientId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from('automation_scheduled_tasks')
+      .select('id, entity_type, entity_id, execute_at')
+      .eq('org_id', orgId)
+      .eq('status', 'pending')
+      .eq('action_config->>mode', 'reponse')
+      .gt('execute_at', new Date().toISOString())
+      .limit(200);
+    if (error) throw new Error(error.message);
+    const aReveiller: string[] = [];
+    for (const t of (data ?? []) as Array<{ id: string; entity_type: string; entity_id: string }>) {
+      if (await clientDeLaTache(supabase, orgId, t.entity_type, t.entity_id) === clientId) aReveiller.push(t.id);
+    }
+    if (!aReveiller.length) return 0;
+    const { error: eMaj } = await supabase
+      .from('automation_scheduled_tasks')
+      .update({ execute_at: new Date().toISOString() })
+      .eq('org_id', orgId)
+      .eq('status', 'pending')
+      .in('id', aReveiller);
+    if (eMaj) throw new Error(eMaj.message);
+    return aReveiller.length;
+  } catch (e) {
+    logger.error('[automationEngine] réveil des attentes de réponse impossible — elles iront à leur échéance', {
+      org_id: orgId, message: e instanceof Error ? e.message : String(e),
+    });
+    return 0;
+  }
+}
+
 async function clientARepondu(
   supabase: SupabaseClient,
   orgId: string,
@@ -1975,7 +2329,32 @@ async function clientARepondu(
     console.error('[automationEngine] arrêt sur réponse indéterminable — tâche conservée:', error.message);
     return false;
   }
-  return Boolean(data && data.length > 0);
+  if (data && data.length > 0) return true;
+
+  /*
+   * La réponse par COURRIEL compte aussi (audit V2, C12) : un courriel
+   * entrant de l'adresse du client, reçu dans une boîte connectée du bureau
+   * depuis la mise en attente. Même prudence : illisible = pas de réponse.
+   */
+  const { data: fiche } = await supabase.from('clients').select('email')
+    .eq('id', clientId).eq('org_id', orgId).maybeSingle();
+  const adresse = String((fiche as { email?: string | null } | null)?.email ?? '').trim();
+  if (!adresse) return false;
+  const { data: boites, error: eBoites } = await supabase.from('email_accounts').select('id').eq('org_id', orgId);
+  if (eBoites || !boites?.length) return false;
+  const { data: courriels, error: eCourriels } = await supabase
+    .from('email_messages')
+    .select('id')
+    .in('account_id', (boites as Array<{ id: string }>).map((b) => b.id))
+    .eq('direction', 'inbound')
+    .ilike('from_email', adresse.replace(/[%_\\]/g, (c) => `\\${c}`))
+    .gte('created_at', depuis)
+    .limit(1);
+  if (eCourriels) {
+    console.error('[automationEngine] réponse par courriel indéterminable — tâche conservée:', eCourriels.message);
+    return false;
+  }
+  return Boolean(courriels && courriels.length > 0);
 }
 
 async function checkStopConditions(

@@ -881,6 +881,15 @@ const CLES_LUES_PAR_LE_MOTEUR_PAR_ACTION: Record<string, string[]> = {
   create_task: ['description'],
 };
 const CLES_LUES_PAR_LE_MOTEUR = Object.values(CLES_LUES_PAR_LE_MOTEUR_PAR_ACTION).flat();
+/**
+ * Actions exécutées par le moteur mais jamais proposées dans l'éditeur
+ * (audit V2, D-14) : `log_activity` vient des préréglages. Seules les clés
+ * listées ici sont admises pour elles ; toute autre clé reste refusée.
+ */
+const CLES_ACTIONS_INTERNES: Readonly<Record<string, readonly string[]>> = {
+  log_activity: ['event_type', 'metadata'],
+};
+export const ACTIONS_INTERNES: readonly string[] = Object.keys(CLES_ACTIONS_INTERNES);
 
 const configAction = z.object(
   Object.fromEntries(
@@ -894,18 +903,31 @@ const configAction = z.object(
       [`${cle}_en`, z.string().trim().max(10000).optional()],
     ]),
   ) as Record<string, z.ZodOptional<z.ZodString>>,
-);
+).extend({
+  event_type: z.string().trim().max(100).optional(),
+  // Seule valeur non textuelle : les métadonnées d'un journal d'activité.
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
 
 const actionAutomatisation = z
   .object({
-    type: z.enum(CLES_ACTIONS as [string, ...string[]], { message: 'Unknown action.' }),
+    type: z.enum([...CLES_ACTIONS, ...ACTIONS_INTERNES] as [string, ...string[]], { message: 'Unknown action.' }),
     // `strict` : une cle inconnue est refusee, pas ignoree.
     config: configAction.strict(),
   })
   .superRefine((action, ctx) => {
     const modele = trouverAction(action.type);
-    if (!modele) return;
+    const internes = new Set(CLES_ACTIONS_INTERNES[action.type] ?? []);
     const config = action.config as Record<string, unknown>;
+    if (!modele) {
+      // Action interne : seules ses clés internes sont admises.
+      for (const cle of Object.keys(config)) {
+        if (!internes.has(cle)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['config', cle], message: `« ${action.type} » n'utilise pas le champ « ${cle} ».` });
+        }
+      }
+      return;
+    }
 
     for (const champ of modele.champs) {
       const valeur = config[champ.cle];
@@ -1159,6 +1181,12 @@ export const sequenceEtapes = z
  * que ça marche — c'est justement ce qui distingue Lume de GoHighLevel, où
  * ces réglages dorment dans un onglet que personne n'ouvre.
  */
+/** Fenêtre d'envoi : jamais avant 7 h ni après 22 h, heure de l'entreprise (L5). */
+export const FENETRE_PLANCHER = 7;
+export const FENETRE_PLAFOND = 22;
+const MSG_FENETRE_BORNES =
+  'Fenêtre d’envoi : entre 7 h et 22 h seulement — aucun texto ne part la nuit. / Send window: between 7 AM and 10 PM only — no text goes out at night.';
+
 export const automationSettingsSchema = z
   .object({
     /** Le même client peut-il repasser dans le parcours ? */
@@ -1167,15 +1195,18 @@ export const automationSettingsSchema = z
     arret_sur_reponse: z.boolean().optional(),
     /**
      * Heures pendant lesquelles un message peut partir, en heure locale.
-     * Bornées à 0-23 et `debut < fin` : une fenêtre inversée ne laisserait
-     * jamais rien passer, et le moteur attendrait pour toujours.
+     * `debut < fin` : une fenêtre inversée ne laisserait jamais rien passer,
+     * et le moteur attendrait pour toujours.
+     *
+     * Bornée à 7 h-22 h (audit V2, L5) : la fenêtre s'applique aux textos, et
+     * 0-24 était accepté — une automatisation pouvait texter à 3 h du matin.
      */
     fenetre: z
       .object({
-        debut: z.number().int().min(0).max(23),
-        fin: z.number().int().min(1).max(24),
+        debut: z.number().int().min(FENETRE_PLANCHER, MSG_FENETRE_BORNES).max(FENETRE_PLAFOND - 1, MSG_FENETRE_BORNES),
+        fin: z.number().int().min(FENETRE_PLANCHER + 1, MSG_FENETRE_BORNES).max(FENETRE_PLAFOND, MSG_FENETRE_BORNES),
       })
-      .refine((f) => f.debut < f.fin, 'The window must start before it ends.')
+      .refine((f) => f.debut < f.fin, 'La fenêtre doit commencer avant de finir. / The window must start before it ends.')
       .optional(),
     /** Lundi au vendredi seulement. */
     jours_ouvrables: z.boolean().optional(),
@@ -1492,3 +1523,61 @@ export const rentabiliteQuerySchema = z.object({
   sort: z.enum(['revenus_desc', 'profit_desc', 'profit_asc', 'marge_desc', 'marge_asc']).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
 }).strict();
+
+// ─── Commissions (audit 2026-09-30) ─────────────────────────────────────────
+// Avant : aucune validation — un taux de 1 000 %, un forfait négatif ou un
+// split à 150 % passaient tels quels et se retrouvaient dans la paie.
+const pourcentCommission = z.number().min(0).max(100);
+const centsCommission = z.number().int().min(0).max(100_000_000);
+const modificateursCommission = {
+  modifier_percent: pourcentCommission.nullable().optional(),
+  modifier_flat_cents: centsCommission.nullable().optional(),
+};
+const regleCommissionChamps = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(2000).nullable().optional(),
+  priority: z.number().int().min(-1000).max(1000).optional(),
+  is_active: z.boolean().optional(),
+  base_kind: z.enum(['percent', 'flat']).optional(),
+  base_percent: pourcentCommission.nullable().optional(),
+  base_value_cents: centsCommission.nullable().optional(),
+  product_overrides: z.array(z.object({
+    category: z.string().trim().min(1).max(200),
+    base_kind: z.enum(['percent', 'flat']),
+    base_percent: pourcentCommission.nullable().optional(),
+    base_value_cents: centsCommission.nullable().optional(),
+  })).max(50).optional(),
+  performance_tiers: z.array(z.object({
+    metric: z.enum(['revenue_cents', 'sale_count']),
+    threshold: z.number().min(0).max(1_000_000_000),
+    ...modificateursCommission,
+  })).max(20).optional(),
+  bonuses: z.array(z.object({
+    condition: z.enum(['min_sale_amount']),
+    value: z.number().min(0).max(1_000_000_000),
+    ...modificateursCommission,
+  })).max(20).optional(),
+  attribution: z.object({
+    mode: z.enum(['solo', 'split']),
+    splits: z.array(z.object({ user_id: z.string().uuid(), pct: z.number().gt(0).max(100) })).max(10).optional(),
+  }).optional(),
+  assigned_user_ids: z.array(z.string().uuid()).max(500).optional(),
+}).strict();
+
+/** Un split doit nommer au moins un bénéficiaire et ne jamais dépasser 100 %. */
+function splitValide(v: { attribution?: { mode: string; splits?: Array<{ pct: number }> } }, ctx: z.RefinementCtx) {
+  const a = v.attribution;
+  if (!a || a.mode !== 'split') return;
+  const somme = (a.splits ?? []).reduce((s, x) => s + x.pct, 0);
+  if (!a.splits?.length) ctx.addIssue({ code: 'custom', path: ['attribution', 'splits'], message: 'A split needs at least one recipient.' });
+  if (somme > 100 + 1e-9) ctx.addIssue({ code: 'custom', path: ['attribution', 'splits'], message: 'Split percentages cannot exceed 100%.' });
+}
+
+export const commissionRuleCreateSchema = regleCommissionChamps.superRefine(splitValide);
+export const commissionRuleUpdateSchema = regleCommissionChamps.partial().superRefine(splitValide);
+export const commissionAssignSchema = z.object({ user_id: z.string().uuid(), rule_id: z.string().uuid().nullable().optional() }).strict();
+export const commissionSettingsSchema = z.object({
+  reversal_policy: z.enum(['auto', 'keep', 'alert']).optional(),
+  default_rule_id: z.string().uuid().nullable().optional(),
+}).strict();
+export const commissionReverseSchema = z.object({ reason: z.string().trim().max(500).nullable().optional() }).strict();

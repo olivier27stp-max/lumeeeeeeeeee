@@ -72,8 +72,8 @@ export const EXEMPLES: Exemple[] = [
     bouton: { texte: 'Ouvrir Lume', url: 'https://lumecrm.net/insights' },
     note: 'Tu reçois ce rapport parce qu’il est programmé dans Lume. Pour changer sa fréquence ou l’arrêter, demande-le à Lumi.',
   }) },
-  { nom: 'securite-alerte', de: 'Lume', sujet: '[Lume] 2 évènement(s) de sécurité — critical', html: rendreCourrielLume({
-    langue: 'fr', preheader: '2 évènement(s) high/critical non résolus — invariant_violation', titre: '2 évènements de sécurité',
+  { nom: 'securite-alerte', de: 'Lume', sujet: '[Lume] 2 évènements de sécurité — critical', html: rendreCourrielLume({
+    langue: 'fr', preheader: '2 évènements high/critical non résolus — invariant_violation', titre: '2 évènements de sécurité',
     intro: 'Sévérité high ou critical, non résolus, depuis le dernier passage. Le détail complet est dans security_events.',
     lignes: [{ libelle: 'Critiques', valeur: '1', fort: true }, { libelle: 'Élevés (high)', valeur: '1' }, { libelle: 'Le plus récent', valeur: '2026-09-17 03:10:42 UTC' }],
     corpsHtml: [

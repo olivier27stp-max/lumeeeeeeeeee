@@ -12,6 +12,7 @@ import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '.
 import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
 import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegale } from '../consentement/base-legale';
 import { motifSaut } from '../desabonnement';
+import { avecMentionCommerciale } from '../desabonnement/mention-sms';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../automations-drapeaux';
 import { raisonLisible } from '../paiement-echoue';
 import { creerLienReservation, demandeLienReservation } from '../client-inactif';
@@ -70,6 +71,19 @@ export interface ActionContext {
    *     continue, le motif est dans le journal. Le transactionnel part.
    */
   parCanal?: boolean;
+  /**
+   * Le TYPE de l'envoi selon `typeEnvoi` (server/lib/desabonnement) :
+   * `true` = marketing. Posé par le moteur, drapeau ou pas. Il décide du
+   * CONTENU exigé par la LCAP : mention STOP et nom sur un texto (L7),
+   * identification de l'entreprise sur un courriel (L8). Absent (appel hors
+   * moteur) = `commercial`.
+   */
+  marketing?: boolean;
+}
+
+/** Envoi commercial au sens de la LCAP (contenu exigé : identification, retrait). */
+function estCommercialLcap(ctx: ActionContext): boolean {
+  return ctx.marketing ?? ctx.commercial === true;
 }
 
 /**
@@ -117,7 +131,8 @@ export type CodeSaut =
   | 'date_absente'
   | 'desabonne'
   | 'deja_envoye'
-  | 'boucle';
+  | 'boucle'
+  | 'identite_manquante';
 
 /** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
 function saute(motif: string, code: CodeSaut = 'desabonne'): ActionResult {
@@ -513,6 +528,19 @@ export function sansPrenomVide(texte: string): string {
     // Un nom qui finit déjà par un point (« Plomberie Tremblay inc. ») suivi
     // du point de la phrase donnait « inc.. ». Les points de suspension restent.
     .replace(/([A-Za-zÀ-ÿ])\.\.(?!\.)/g, '$1.');
+}
+
+/**
+ * « 1 vue(s) » → « 1 vue », « 3 vue(s) » → « 3 vues » : un nombre suivi d'un
+ * mot à « (s) » est accordé (normes des courriels, 2026-09-29). En français,
+ * 0 et 1 sont au singulier ; en anglais, seul 1 l'est.
+ */
+export function accorderPluriels(texte: string, langue: 'fr' | 'en' = 'fr'): string {
+  return texte.replace(/(\d[\d   ]*)\s+(\p{L}+)\(s\)/gu, (_t, n: string, mot: string) => {
+    const valeur = Number(n.replace(/\D/g, ''));
+    const singulier = langue === 'fr' ? valeur < 2 : valeur === 1;
+    return `${n.trimEnd()} ${mot}${singulier ? '' : 's'}`;
+  });
 }
 
 export function echapperHtml(v: string): string {
@@ -1095,6 +1123,36 @@ export async function dealLie(
 
 // ── Action: Send Email ──────────────────────────────────────
 
+/**
+ * Le motif lisible d'un envoi de courriel raté (audit V2, C7).
+ *
+ * Une panne du fournisseur remontait brute dans le journal (« connect
+ * ECONNREFUSED 127.0.0.1:2599 »). Les pannes RÉSEAU sont traduites (FR / EN),
+ * le détail technique est gardé entre parenthèses. Le message reste
+ * TRANSITOIRE pour le moteur (aucun mot de `isTransientFailure` n'y figure) :
+ * la reprise à 5 min, 30 min et 2 h continue de s'appliquer.
+ */
+export function messageEchecCourriel(brut: string | null | undefined): string {
+  const detail = String(brut ?? '').trim();
+  if (!detail) return 'Envoi du courriel refusé par le fournisseur / Email rejected by the provider';
+  if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EAI_AGAIN|EHOSTUNREACH|ESOCKET|timed? ?out|Greeting never received/i.test(detail)) {
+    return `Service d’envoi de courriels injoignable, nouvel essai automatique / Email service unreachable, retrying automatically (${detail.slice(0, 200)})`;
+  }
+  return detail;
+}
+
+/**
+ * Ce qui manque à l'entreprise pour envoyer un courriel commercial (LCAP :
+ * nom et adresse postale), sous forme de motif de journal — ou `null`.
+ */
+export function identiteManquante(company: { company_name?: string | null; company_address?: string | null }): string | null {
+  const manque: string[] = [];
+  if (!String(company.company_name ?? '').trim()) manque.push('le nom');
+  if (!String(company.company_address ?? '').trim()) manque.push('l’adresse postale');
+  if (manque.length === 0) return null;
+  return `Courriel commercial non envoyé : ${manque.join(' et ')} de l’entreprise ${manque.length > 1 ? 'manquent' : 'manque'} (Paramètres → Entreprise). La loi exige que le client sache qui lui écrit.`;
+}
+
 export async function executeSendEmail(
   config: {
     to?: string; subject: string; body: string;
@@ -1154,6 +1212,19 @@ export async function executeSendEmail(
       }
     }
 
+    const { getCompanySettings, buildEmailLayout, senderForOrg, langueEntreprise } = await import('../../routes/emails');
+    const { boutonPourEntite } = await import('../courriels/bouton-automatisation');
+    const company = await getCompanySettings(ctx.orgId);
+    /* LCAP (audit V2, L8) : un courriel COMMERCIAL identifie l'expéditeur —
+       nom ET adresse postale. Le pied de page les affiche quand l'entreprise
+       les a saisis ; sans eux, le courriel partait de « noreply » sans nom,
+       sans adresse, sans contact. Sauté avec un motif lisible (le parcours
+       continue) ; le transactionnel part comme avant. */
+    if (estCommercialLcap(ctx)) {
+      const manque = identiteManquante(company);
+      if (manque) return saute(manque, 'identite_manquante');
+    }
+
     // Consentement (F7) : le retrait ci-dessus traite ceux qui se sont
     // désabonnés ; ici on vérifie qu'une base légale existe — un consentement
     // exprès, ou la relation d'affaires elle-même (LCAP).
@@ -1173,9 +1244,6 @@ export async function executeSendEmail(
       return { success: false, error: `Frequency cap reached for ${to} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
     }
 
-    const { getCompanySettings, buildEmailLayout, senderForOrg, langueEntreprise } = await import('../../routes/emails');
-    const { boutonPourEntite } = await import('../courriels/bouton-automatisation');
-    const company = await getCompanySettings(ctx.orgId);
     /* Le lien de désabonnement n'a de sens que sur un message COMMERCIAL.
        Il était posé sur tout, y compris l'accusé de réception d'un formulaire :
        quelqu'un qui vient de demander une soumission n'est sur aucune liste de
@@ -1273,7 +1341,7 @@ export async function executeSendEmail(
           }
         : {}),
     });
-    if (!result.sent) return { success: false, error: result.error || 'Send failed' };
+    if (!result.sent) return { success: false, error: messageEchecCourriel(result.error) };
 
     // Trace visible dans l'app : sans cette ligne, un courriel d'automatisation
     // n'existait que chez le fournisseur SMTP (les SMS, eux, sont loggés dans
@@ -1293,14 +1361,44 @@ export async function executeSendEmail(
 
     return { success: true, data: { to, subject } };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: messageEchecCourriel(err?.message) };
   }
 }
 
 // ── Action: Send SMS ────────────────────────────────────────
 
+/**
+ * Le nom qui identifie l'entreprise auprès du client : celui des réglages,
+ * sinon celui du bureau (toujours présent). Vide seulement si les deux
+ * lectures échouent — la mention STOP part alors quand même.
+ */
+async function nomEntreprise(ctx: ActionContext): Promise<string> {
+  const { data: reglages, error } = await ctx.supabase
+    .from('company_settings')
+    .select('company_name')
+    .eq('org_id', ctx.orgId)
+    .maybeSingle();
+  if (error) console.error(`[actions] nom de l'entreprise illisible (org ${ctx.orgId}):`, error.message);
+  const nom = String((reglages as { company_name?: string | null } | null)?.company_name ?? '').trim();
+  if (nom) return nom;
+  const { data: org, error: errOrg } = await ctx.supabase
+    .from('orgs')
+    .select('name')
+    .eq('id', ctx.orgId)
+    .maybeSingle();
+  if (errOrg) console.error(`[actions] nom du bureau illisible (org ${ctx.orgId}):`, errOrg.message);
+  return String((org as { name?: string | null } | null)?.name ?? '').trim();
+}
+
 export async function executeSendSms(
-  config: { to?: string; body: string },
+  config: {
+    to?: string; body: string;
+    /**
+     * Sollicitation envoyée tout de suite (demande d'avis) : commerciale même
+     * si le moteur ne la marque pas comme telle (L7).
+     */
+    sollicitation?: boolean;
+  },
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
@@ -1345,7 +1443,12 @@ export async function executeSendSms(
   }
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'body', ctx.langue));
-  const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
+  let body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
+  // LCAP (audit V2, L7) : un texto commercial nomme l'entreprise et offre le
+  // retrait. Ajouté ici plutôt qu'exigé à la saisie : personne ne l'oublie.
+  if (estCommercialLcap(ctx) || config.sollicitation === true) {
+    body = avecMentionCommerciale(body, await nomEntreprise(ctx), ctx.langue === 'en' ? 'en' : 'fr');
+  }
 
   // Toujours partir du numero DE L'ORG, jamais du numero partage de la
   // plateforme : sinon les automatisations d'un locataire arrivent chez ses
@@ -1531,8 +1634,8 @@ export async function executeCreateNotification(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  const title = resolveTemplate(config.title, vars);
-  const body = resolveTemplate(config.body ?? '', vars);
+  const title = accorderPluriels(resolveTemplate(config.title, vars));
+  const body = accorderPluriels(resolveTemplate(config.body ?? '', vars));
   const lien = config.lien ? resolveTemplate(config.lien, vars) : null;
   const entityId = config.reference_id || ctx.entityId;
   // « Aussi par courriel » : les mêmes personnes que la cloche, à leur adresse
@@ -1541,7 +1644,16 @@ export async function executeCreateNotification(
     if (config.par_courriel !== 'true' || destinataires.size === 0) return 0;
     const { getServiceClient } = await import('../supabase');
     const { envoyerNotificationParCourriel } = await import('../notificationCourriel');
-    return envoyerNotificationParCourriel(getServiceClient(), ctx.orgId, destinataires, { title, body, lien },
+    const cfg = config as Record<string, unknown>;
+    const en = typeof cfg.title_en === 'string' && cfg.title_en.trim()
+      ? { title: accorderPluriels(resolveTemplate(cfg.title_en, vars), 'en'), body: accorderPluriels(resolveTemplate(String(cfg.body_en ?? ''), vars), 'en') }
+      : null;
+    // « Bon moment pour appeler » sans le numéro obligeait à ouvrir l'app pour
+    // le trouver : le courriel porte le lien tel: quand l'alerte parle d'appeler.
+    const appeler = /\bappel|\bcall\b/i.test(`${title} ${body}`) && vars.client_phone
+      ? { nom: vars.client_name || vars.client_first_name || '', telephone: vars.client_phone }
+      : null;
+    return envoyerNotificationParCourriel(getServiceClient(), ctx.orgId, destinataires, { title, body, lien, en, appeler },
       { entityType: ctx.entityType, entityId });
   };
 
@@ -1901,7 +2013,7 @@ export async function executeRequestReview(
     ? { success: false, error: 'Client has no phone number.' }
     : await depassePlafondFrequence(ctxPlafond, 'sms', vars.client_phone)
       ? auPlafond('sms', vars.client_phone)
-      : await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx);
+      : await executeSendSms({ body: reviewSmsBody(cs, messageVars), sollicitation: true }, vars, ctx);
 
   // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
   const sent = estEnvoye(emailResult) || estEnvoye(smsResult);
@@ -1938,7 +2050,7 @@ export async function executeRequestReview(
     return {
       success: false,
       error: `Demande d'avis envoyée mais son suivi n'a pas été enregistré (${trackError.message}) — l'anti-doublon ne la verra pas`,
-      data: { token, surveyUrl, emailSent: emailResult.success, smsSent: smsResult.success },
+      data: { token, surveyUrl, emailSent: estEnvoye(emailResult), smsSent: estEnvoye(smsResult) },
     };
   }
 
@@ -1953,8 +2065,9 @@ export async function executeRequestReview(
     metadata: {
       client_name: clientGreeting,
       survey_token: token,
-      email_sent: emailResult.success,
-      sms_sent: smsResult.success,
+      // Un canal SAUTÉ n'est pas « envoyé » (audit V2, D-10).
+      email_sent: estEnvoye(emailResult),
+      sms_sent: estEnvoye(smsResult),
     },
   });
   if (activityError) {
@@ -1978,7 +2091,7 @@ export async function executeRequestReview(
 
   return {
     success: true,
-    data: { token, surveyUrl, emailSent: emailResult.success, smsSent: smsResult.success },
+    data: { token, surveyUrl, emailSent: estEnvoye(emailResult), smsSent: estEnvoye(smsResult) },
   };
 }
 
@@ -2620,7 +2733,11 @@ export async function executeWebhook(
       // client et les montants, pas des identifiants à recroiser.
       data: vars,
       sent_at: new Date().toISOString(),
-    });
+    }, ctx.cleIdempotence
+      // La même clé à chaque reprise : le destinataire peut reconnaître un
+      // renvoi (audit V2, C24).
+      ? { entetes: { 'Idempotency-Key': ctx.cleIdempotence } }
+      : {});
     if (!reponse.ok) {
       return { success: false, error: `Le serveur distant a répondu ${reponse.status}.` };
     }
@@ -2801,7 +2918,65 @@ async function envoyerDocument(
         : (en ? `Here is your quote ${numero}. You can review and approve it online with the button below.` : `Voici votre soumission ${numero}. Vous pouvez la consulter et l’approuver en ligne avec le bouton ci-dessous.`)),
     ].join('');
 
-  return executeSendEmail({ subject: objet, body: corps }, vars, ctx);
+  const resultat = await executeSendEmail({ subject: objet, body: corps }, vars, ctx);
+  // Parti pour de vrai (ni échec, ni étape sautée) : le document est ENVOYÉ.
+  if (resultat.success && !(resultat.data as { saute?: string } | undefined)?.saute) {
+    await marquerDocumentEnvoye(type, ctx);
+  }
+  return resultat;
+}
+
+/**
+ * Même effet que l'envoi manuel (`/emails/send-invoice`, `/quotes/:id/send-email`) :
+ * sans lui, « Envoyer la facture » laissait le document en BROUILLON — absent
+ * des impayés, sans `invoice.sent`, relances jamais lancées (audit V2, D-06).
+ *
+ * Facture : brouillon → envoyée (le trigger en base émet alors `invoice.sent`,
+ * une seule fois). Soumission : avant réponse → « en attente de réponse », et
+ * `quote.sent` n'est émis QUE si elle sortait du brouillon — un renvoi ne
+ * relance pas la séquence, et une règle « quote.sent → envoyer la soumission »
+ * ne peut pas boucler. Ne lève jamais : le courriel est déjà parti.
+ */
+async function marquerDocumentEnvoye(type: 'invoice' | 'quote', ctx: ActionContext): Promise<void> {
+  const maintenant = new Date().toISOString();
+  try {
+    if (type === 'invoice') {
+      const { data: facture, error } = await ctx.supabase.from('invoices').select('status')
+        .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!facture) return;
+      const { error: eMaj } = await ctx.supabase.from('invoices').update({
+        ...(facture.status === 'draft' ? { status: 'sent', issued_at: maintenant } : {}),
+        sent_at: maintenant,
+      }).eq('id', ctx.entityId).eq('org_id', ctx.orgId);
+      if (eMaj) throw new Error(eMaj.message);
+      return;
+    }
+    const { data: devis, error } = await ctx.supabase.from('quotes').select('status, quote_number, lead_id')
+      .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!devis) return;
+    const avance = ['draft', 'awaiting_response', 'changes_requested'].includes(String(devis.status));
+    const { error: eMaj } = await ctx.supabase.from('quotes').update({
+      sent_via_email_at: maintenant,
+      last_sent_channel: 'email',
+      ...(avance ? { status: 'awaiting_response' } : {}),
+      updated_at: maintenant,
+    }).eq('id', ctx.entityId).eq('org_id', ctx.orgId);
+    if (eMaj) throw new Error(eMaj.message);
+    if (devis.status === 'draft') {
+      const { eventBus } = await import('../eventBus');
+      await eventBus.emit('quote.sent', {
+        orgId: ctx.orgId,
+        entityType: 'quote',
+        entityId: ctx.entityId,
+        metadata: { lead_id: devis.lead_id ?? null, channel: 'email', quote_number: devis.quote_number ?? '', origine: 'automatisation' },
+      });
+    }
+  } catch (e) {
+    console.error(`[actions/envoyer_document] courriel parti, statut du ${type} ${ctx.entityId} non mis à jour (org ${ctx.orgId}):`,
+      e instanceof Error ? e.message : String(e));
+  }
 }
 
 export async function executeEnvoyerFacture(

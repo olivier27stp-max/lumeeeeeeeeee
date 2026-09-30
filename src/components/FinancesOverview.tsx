@@ -22,7 +22,7 @@ import { getRevenueSeries } from '../lib/revenueSeriesApi';
 import { getPayrollPreview } from '../lib/commissionsApi';
 import { fetchTaxesCollected, type TaxesCollected } from '../lib/taxApi';
 import RevenueOverviewCard from './RevenueOverviewCard';
-import type { FsCommissionEntry } from '../types';
+import type { CommissionPayrollPreview } from '../types';
 import { versDate } from '../lib/dateSeule';
 
 /* ── Aging computation ─────────────────────────────────────────── */
@@ -82,24 +82,19 @@ function computeAging(rows: InvoiceRow[], fr: boolean) {
 /* ── Commissions grouping (per rep) ───────────────────────────── */
 type RepRow = { name: string; base: number; commission: number; status: string };
 
-function groupCommissions(entries: FsCommissionEntry[], fr: boolean): RepRow[] {
-  const map = new Map<string, { name: string; base: number; commission: number; statuses: Set<string> }>();
-  for (const e of entries) {
-    const k = e.user_id;
-    const prev = map.get(k) || { name: e.rep_name || '—', base: 0, commission: 0, statuses: new Set<string>() };
-    prev.base += Number(e.base_amount || 0);
-    prev.commission += Number(e.amount || 0);
-    prev.statuses.add(e.status);
-    map.set(k, prev);
-  }
-  const statusLabel = (s: Set<string>): string => {
-    if (s.has('pending')) return fr ? 'À approuver' : 'To approve';
-    if (s.has('approved')) return fr ? 'Approuvé' : 'Approved';
-    if (s.has('paid')) return fr ? 'Payé' : 'Paid';
+// Totaux par rep calculés par le SERVEUR (même fonction que la page
+// Commissions et la Paie). Avant : somme de la liste brute, reprises et
+// estimations comprises, et « — » comme nom (la liste n'avait pas les noms).
+function groupCommissions(parRep: CommissionPayrollPreview['par_rep'], fr: boolean): RepRow[] {
+  const statusLabel = (r: CommissionPayrollPreview['par_rep'][number]): string => {
+    if (r.en_attente_cents > 0) return fr ? 'À approuver' : 'To approve';
+    if (r.approuve_cents > 0) return fr ? 'Approuvé' : 'Approved';
+    if (r.verse_cents > 0) return fr ? 'Payé' : 'Paid';
     return '—';
   };
-  return Array.from(map.values())
-    .map((r) => ({ name: r.name, base: r.base, commission: r.commission, status: statusLabel(r.statuses) }))
+  return parRep
+    .filter((r) => r.du_cents > 0)
+    .map((r) => ({ name: r.rep_name || '—', base: r.base_cents / 100, commission: r.du_cents / 100, status: statusLabel(r) }))
     .sort((a, b) => b.commission - a.commission);
 }
 
@@ -217,7 +212,7 @@ export default function FinancesOverview() {
   });
 
   const aging = useMemo(() => computeAging(outstanding || [], fr), [outstanding, fr]);
-  const reps = useMemo(() => groupCommissions(payroll?.entries || [], fr), [payroll, fr]);
+  const reps = useMemo(() => groupCommissions(payroll?.par_rep || [], fr), [payroll, fr]);
   const maxBucket = Math.max(1, ...aging.buckets.map((b) => b.cents));
   const nextPayroll = (payroll?.pending || 0) + (payroll?.approved || 0);
 

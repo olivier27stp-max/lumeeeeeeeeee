@@ -12,6 +12,43 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { companyOrgIds } from '../supabase';
+import { fuseauOrg } from '../automations-fuseau-org';
+import {
+  bornesPeriode, debutDuMoisLocal, enCents, totauxCommissions, repartirParts, baseAvantTaxesCents,
+} from './commission-periode';
+import { toLocalDate } from '../reports/dates';
+
+/**
+ * Cumul du mois pour les paliers de performance : ce que le rep a GAGNÉ ce
+ * mois-ci (mois civil de l'entreprise) avant l'instant `avant`.
+ *
+ * Corrige trois défauts de l'ancien calcul :
+ *  - `base_amount` est en DOLLARS : il était additionné au total de la facture
+ *    en CENTS, donc un seuil de 2 500 $ n'était jamais atteint par le cumul ;
+ *  - le mois était celui du fuseau du SERVEUR (UTC), pas de l'entreprise ;
+ *  - les estimations (jobs non payés, dont celui de la facture en cours) et
+ *    les commissions reversées gonflaient le cumul.
+ */
+async function cumulDuMois(
+  supabase: SupabaseClient,
+  orgId: string,
+  userId: string,
+  avant: string,
+): Promise<{ revenueCents: number; ventes: number; error: string | null }> {
+  const tz = await fuseauOrg(supabase, orgId);
+  const { data, error } = await supabase.from('fs_commission_entries')
+    .select('base_amount, invoice_id')
+    .eq('org_id', orgId).eq('user_id', userId)
+    .is('deleted_at', null).not('invoice_id', 'is', null).neq('status', 'reversed')
+    .gte('triggered_at', debutDuMoisLocal(avant, tz)).lt('triggered_at', avant);
+  if (error) return { revenueCents: 0, ventes: 0, error: error.message };
+  const lignes = data ?? [];
+  return {
+    revenueCents: lignes.reduce((s: number, e: any) => s + enCents(e.base_amount), 0),
+    ventes: new Set(lignes.map((e: any) => e.invoice_id)).size,
+    error: null,
+  };
+}
 
 /**
  * Un membre est payé à commission OU à l'heure (fiche Équipe,
@@ -41,16 +78,6 @@ export async function membrePayeACommission(
   return data.compensation_mode === 'commission' || data.compensation_mode === 'both';
 }
 
-/**
- * Borne haute d'une plage sur une colonne timestamptz. Une date seule
- * ('2026-09-30') est interprétée par Postgres comme minuit → un `.lte` exclut
- * toutes les entrées de CE jour-là. On étend à la fin de journée pour inclure
- * le dernier jour de la période (sinon zone morte en fin de mois). Une valeur
- * qui porte déjà une heure (contient 'T') est laissée telle quelle.
- */
-function finDeJour(borne: string): string {
-  return /T/.test(borne) ? borne : `${borne}T23:59:59.999`;
-}
 
 // ---------------------------------------------------------------------------
 // Core calculator — pure function, no DB
@@ -183,7 +210,7 @@ export async function projectCommissionForJob(
   // 1. Load the job
   const { data: job, error: jobErr } = await supabase
     .from('jobs')
-    .select('id, org_id, salesperson_id, created_by, total_cents, total, deleted_at')
+    .select('id, org_id, salesperson_id, created_by, subtotal_cents, tax_cents, total_cents, total, deleted_at')
     .eq('id', jobId)
     .eq('org_id', orgId)
     .maybeSingle();
@@ -234,25 +261,23 @@ export async function projectCommissionForJob(
     return { created: 0, skipped: 'no_rule' };
   }
 
-  // 5. Estimate base from the job total
-  const baseCents = Number(job.total_cents || 0) || Math.round(Number(job.total || 0) * 100);
+  // 5. Estimate base from the job — AVANT taxes, comme la commission réelle.
+  const baseCents = job.subtotal_cents != null
+    ? baseAvantTaxesCents({ subtotal_cents: job.subtotal_cents })
+    : baseAvantTaxesCents({ total_cents: Number(job.total_cents || 0) || Math.round(Number(job.total || 0) * 100), tax_cents: job.tax_cents });
   if (baseCents <= 0) return { created: 0, skipped: 'no_amount' };
 
-  // 6. Rep period stats (calendar month) up to now
-  const now = new Date();
-  const nowIso = now.toISOString();
-  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const { data: priorEntries, error: priorErr } = await supabase.from('fs_commission_entries')
-    .select('base_amount').eq('org_id', orgId).eq('user_id', repUserId)
-    .is('deleted_at', null).gte('triggered_at', periodStart).lt('triggered_at', nowIso);
+  // 6. Rep period stats (calendar month, company time zone) up to now
+  const nowIso = new Date().toISOString();
+  const cumul = await cumulDuMois(supabase, orgId, repUserId, nowIso);
   // Les paliers de performance se calculent sur ce cumul : une lecture ratée
   // sous-évaluerait la commission sans rien signaler.
-  if (priorErr) {
-    console.error(`[commissions] period stats load failed (org ${orgId}, rep ${repUserId}, job ${jobId}):`, priorErr.message);
+  if (cumul.error) {
+    console.error(`[commissions] period stats load failed (org ${orgId}, rep ${repUserId}, job ${jobId}):`, cumul.error);
     return { created: 0, skipped: 'period_stats_failed' };
   }
-  const repPeriodRevenueCents = (priorEntries ?? []).reduce((s: number, e: any) => s + Number(e.base_amount || 0), 0);
-  const repPeriodSaleCount = (priorEntries ?? []).length;
+  const repPeriodRevenueCents = cumul.revenueCents;
+  const repPeriodSaleCount = cumul.ventes;
 
   // 7. Calculate the estimate
   const calc = calculateCommissionAmount(rule, {
@@ -338,7 +363,7 @@ export async function generateCommissionsForInvoice(
   //    dans la table `invoice_items` et le lien vers le devis passe par `job_id`.
   const { data: invoice, error: invErr } = await supabase
     .from('invoices')
-    .select('id, org_id, total_cents, paid_at, status, client_id, job_id')
+    .select('id, org_id, subtotal_cents, discount_cents, tax_cents, total_cents, paid_at, status, client_id, job_id')
     .eq('id', invoiceId)
     .eq('org_id', orgId)
     .single();
@@ -398,20 +423,20 @@ export async function generateCommissionsForInvoice(
     return { created: 0, skipped: 'no_rule' };
   }
 
-  // 5. Compute rep's period stats (calendar month) BEFORE this invoice
-  const paidDate = new Date(invoice.paid_at);
-  const periodStart = new Date(paidDate.getFullYear(), paidDate.getMonth(), 1).toISOString();
-  const { data: priorEntries, error: priorErr } = await supabase.from('fs_commission_entries')
-    .select('base_amount').eq('org_id', orgId).eq('user_id', repUserId)
-    .is('deleted_at', null).gte('triggered_at', periodStart).lt('triggered_at', invoice.paid_at);
+  // 5. Compute rep's period stats (calendar month, company time zone) BEFORE this invoice
+  const cumul = await cumulDuMois(supabase, orgId, repUserId, invoice.paid_at);
   // Les paliers de performance dépendent de ce cumul : une lecture ratée
   // fausserait silencieusement le montant versé au rep.
-  if (priorErr) {
-    console.error(`[commissions] period stats load failed (org ${orgId}, rep ${repUserId}, invoice ${invoiceId}):`, priorErr.message);
+  if (cumul.error) {
+    console.error(`[commissions] period stats load failed (org ${orgId}, rep ${repUserId}, invoice ${invoiceId}):`, cumul.error);
     return { created: 0, skipped: 'period_stats_failed' };
   }
-  const repPeriodRevenueCents = (priorEntries ?? []).reduce((s: number, e: any) => s + Number(e.base_amount || 0), 0);
-  const repPeriodSaleCount = (priorEntries ?? []).length;
+  const repPeriodRevenueCents = cumul.revenueCents;
+  const repPeriodSaleCount = cumul.ventes;
+
+  // Base de la commission : sous-total − rabais, AVANT taxes. `total_cents`
+  // inclut TPS/TVQ : la commission était gonflée de 14,975 % au Québec.
+  const baseCents = baseAvantTaxesCents(invoice);
 
   // 6. Surcharges par produit (rule.product_overrides). La catégorie d'une
   //    ligne vit sur le service prédéfini qu'elle référence
@@ -454,7 +479,7 @@ export async function generateCommissionsForInvoice(
   // 7. Calculate — surcharges par catégorie appliquées le cas échéant ; sinon
   //    taux de base sur le total de la facture, exactement comme avant.
   const calc = calculateCommissionAmount(rule, {
-    invoiceTotalCents: Number(invoice.total_cents || 0),
+    invoiceTotalCents: baseCents,
     invoicePaidAt: invoice.paid_at,
     lineItems,
     repPeriodRevenueCents,
@@ -466,7 +491,8 @@ export async function generateCommissionsForInvoice(
   const recipients: Array<{ user_id: string; pct: number }> = attribution.mode === 'split' && Array.isArray(attribution.splits)
     ? attribution.splits.filter((s: any) => s.user_id).map((s: any) => ({ user_id: s.user_id, pct: Number(s.pct || 0) }))
     : [{ user_id: repUserId, pct: 100 }];
-  const sumPct = recipients.reduce((s, r) => s + r.pct, 0) || 100;
+  // Parts exactes (plus grand reste) : Σ parts = commission, jamais 1 ¢ de plus.
+  const parts = repartirParts(calc.amountCents, recipients);
 
   // 8. Insert/confirm one entry per recipient.
   //    When the invoice is tied to a job, confirm the rep's pre-projected
@@ -474,8 +500,9 @@ export async function generateCommissionsForInvoice(
   //    and mark it approved (= earned) since the invoice is now paid.
   const confirmStatus = invoice.job_id ? 'approved' : 'pending';
   let created = 0;
-  for (const r of recipients) {
-    const share = Math.round(calc.amountCents * (r.pct / sumPct));
+  let echecs = 0;
+  for (const r of parts) {
+    const share = r.part_cents;
     if (share <= 0) continue;
 
     const entryFields = {
@@ -484,7 +511,7 @@ export async function generateCommissionsForInvoice(
       job_id: invoice.job_id || null,
       status: confirmStatus,
       amount: share / 100,
-      base_amount: Number(invoice.total_cents || 0) / 100,
+      base_amount: baseCents / 100,
       description: 'Commission on invoice payment',
       triggered_at: invoice.paid_at,
       calc_breakdown: { ...calc.breakdown, split_pct: r.pct, total_calculated_cents: calc.amountCents },
@@ -504,6 +531,7 @@ export async function generateCommissionsForInvoice(
         const { error } = await supabase.from('fs_commission_entries')
           .update(entryFields).eq('id', projected[0].id);
         if (error) {
+          echecs++;
           console.error(`[commissions] entry confirm failed (org ${orgId}, rep ${r.user_id}, invoice ${invoiceId}, entry ${projected[0].id}):`, error.message);
         } else { created++; confirmed = true; }
       }
@@ -513,11 +541,18 @@ export async function generateCommissionsForInvoice(
       const { error } = await supabase.from('fs_commission_entries')
         .insert({ org_id: orgId, user_id: r.user_id, lead_id: null, ...entryFields });
       if (error) {
+        // Doublon concurrent (même facture, même rep) = déjà écrit par un
+        // appel parallèle : pas un échec. Tout autre refus en est un — dont
+        // l'index uniq_job_rep qui bloque une facture refaite sur le même job.
+        const doublonFacture = error.code === '23505' && /uniq_invoice_rep/.test(error.message);
+        if (!doublonFacture) echecs++;
         console.error(`[commissions] entry insert failed (org ${orgId}, rep ${r.user_id}, invoice ${invoiceId}):`, error.message);
       } else created++;
     }
   }
-  return { created, skipped: null };
+  // Avant : { created: 0, skipped: null } même quand l'écriture échouait —
+  // un « succès » muet, aucune lettre morte, un rep jamais payé.
+  return { created, skipped: echecs > 0 ? 'insert_failed' : null };
 }
 
 // ---------------------------------------------------------------------------
@@ -540,6 +575,9 @@ export async function handleInvoiceReversal(
     .is('deleted_at', null);
   if (entriesErr) {
     console.error(`[commissions] reversal entries load failed (org ${orgId}, invoice ${invoiceId}):`, entriesErr.message);
+    // Sans lecture, « 0 commission touchée » serait un mensonge : on lève pour
+    // que l'appelant consigne l'échec (lettre morte) et qu'on le rejoue.
+    throw new Error(`Commission reversal failed for invoice ${invoiceId}: ${entriesErr.message}`);
   }
 
   const affected = (entries ?? []).length;
@@ -548,7 +586,7 @@ export async function handleInvoiceReversal(
   if (policy === 'keep') return { action: 'kept', affected };
 
   if (policy === 'auto') {
-    const ids = (entries ?? []).filter((e: any) => e.status !== 'paid').map((e: any) => e.id);
+    const ids = (entries ?? []).filter((e: any) => e.status !== 'paid' && e.status !== 'reversed').map((e: any) => e.id);
     if (ids.length > 0) {
       const { error: revErr } = await supabase.from('fs_commission_entries')
         .update({ status: 'reversed', auto_reversed: true, reverse_reason: reason, updated_at: new Date().toISOString() })
@@ -559,6 +597,17 @@ export async function handleInvoiceReversal(
         throw new Error(`Commission auto-reversal failed for invoice ${invoiceId}: ${revErr.message}`);
       }
     }
+    // Une commission DÉJÀ VERSÉE n'est jamais modifiée (la période payée ne
+    // bouge pas) — mais elle ne doit plus passer inaperçue : on la marque
+    // « remboursée après versement », affiché sur la page. La reprise
+    // éventuelle (ajustement négatif) est une décision en attente (D4).
+    const versees = (entries ?? []).filter((e: any) => e.status === 'paid').map((e: any) => e.id);
+    if (versees.length > 0) {
+      const { error: flagErr } = await supabase.from('fs_commission_entries')
+        .update({ reverse_reason: `${reason} (après versement)`, updated_at: new Date().toISOString() })
+        .in('id', versees);
+      if (flagErr) throw new Error(`Commission refund flag failed for invoice ${invoiceId}: ${flagErr.message}`);
+    }
     return { action: 'auto_reversed', affected: ids.length };
   }
 
@@ -568,6 +617,9 @@ export async function handleInvoiceReversal(
     .eq('org_id', orgId).eq('invoice_id', invoiceId).is('deleted_at', null);
   if (alertErr) {
     console.error(`[commissions] reversal alert flag failed (org ${orgId}, invoice ${invoiceId}):`, alertErr.message);
+    // Le drapeau EST la politique « alert » : s'il n'est pas posé, personne ne
+    // saura qu'une commission porte sur une facture remboursée.
+    throw new Error(`Commission reversal flag failed for invoice ${invoiceId}: ${alertErr.message}`);
   }
   return { action: 'alert', affected };
 }
@@ -590,72 +642,135 @@ export async function markCommissionPaid(
 }
 
 // ---------------------------------------------------------------------------
-// Query
+// Query — période = date où la commission est GAGNÉE (triggered_at), dans le
+// fuseau de l'entreprise. Voir commission-periode.ts.
 // ---------------------------------------------------------------------------
+
+const TAILLE_PAGE = 1000; // = max_rows de PostgREST : au-delà, la réponse est tronquée EN SILENCE
+// Liste affichée : les 1 000 plus récentes (plafond PostgREST). Les TOTAUX,
+// eux, portent toujours sur toute la période (toutesLesEntrees).
+const LIMITE_LISTE = 1000;
+
+export interface FiltreEntrees {
+  userId?: string | null;
+  status?: string;
+  dateRange?: { from: string; to: string };
+}
+
+/** Bornes UTC de la période, dans le fuseau de l'entreprise (null = pas de filtre de date). */
+async function bornesDuFiltre(supabase: SupabaseClient, orgId: string, o: FiltreEntrees) {
+  if (!o.dateRange) return null;
+  return bornesPeriode(o.dateRange.from, o.dateRange.to, await fuseauOrg(supabase, orgId));
+}
+
+// Synchrone exprès : attendre un builder PostgREST l'EXÉCUTE (avant le .range()).
+function requeteEntrees(supabase: SupabaseClient, orgId: string, colonnes: string, o: FiltreEntrees, bornes: { debut: string; finExclusive: string } | null) {
+  let q = supabase.from('fs_commission_entries').select(colonnes).eq('org_id', orgId).is('deleted_at', null);
+  if (o.userId) q = q.eq('user_id', o.userId);
+  if (o.status) q = q.eq('status', o.status);
+  if (bornes) q = q.gte('triggered_at', bornes.debut).lt('triggered_at', bornes.finExclusive);
+  return q;
+}
+
+/**
+ * Toutes les entrées du filtre, sans jamais être tronqué à max_rows.
+ * Pagination par clé (`id > dernier`, clé primaire) et non par décalage : un
+ * OFFSET re-triait toute la période à chaque page (mesuré : 42 s pour une
+ * année de 100 000 commissions ; linéaire ici). Les totaux n'ont pas besoin
+ * d'ordre chronologique.
+ */
+export async function toutesLesEntrees(supabase: SupabaseClient, orgId: string, colonnes: string, o: FiltreEntrees): Promise<any[]> {
+  const out: any[] = [];
+  const bornes = await bornesDuFiltre(supabase, orgId, o);
+  const cols = colonnes.trim() === '*' ? colonnes : `id, triggered_at, ${colonnes}`;
+  // Clé (triggered_at, id) par PLAGE (`triggered_at >= dernier`) : suit
+  // l'index de période proposé (M3). Un OR « (t > x) ou (t = x et id > y) »
+  // faisait relire la plage depuis le début à chaque page (36 ms/page contre
+  // 0,9 ms mesurés). Les lignes déjà vues à l'instant-frontière sont écartées.
+  const lire = async (filtre: (q: any) => any) => {
+    const { data, error } = await filtre(requeteEntrees(supabase, orgId, cols, o, bornes))
+      .order('triggered_at', { ascending: true }).order('id', { ascending: true }).limit(TAILLE_PAGE);
+    if (error) throw new Error(error.message);
+    return (data ?? []) as any[];
+  };
+  let depuis: string | null = null;
+  let strict = false; // vrai : reprendre STRICTEMENT après `depuis`
+  let vusALaFrontiere = new Set<string>();
+  for (;;) {
+    const page = await lire((q) => (depuis ? (strict ? q.gt('triggered_at', depuis) : q.gte('triggered_at', depuis)) : q));
+    out.push(...page.filter((r) => !(r.triggered_at === depuis && vusALaFrontiere.has(r.id))));
+    if (page.length < TAILLE_PAGE) return out;
+    const fin: string = page[page.length - 1].triggered_at;
+    if (fin === depuis && !strict) {
+      // Une page entière au même instant (import en masse) : on vide cet
+      // instant par id, puis on reprend strictement après lui.
+      let apresId = page[page.length - 1].id as string;
+      for (;;) {
+        const suite = await lire((q) => q.eq('triggered_at', fin).gt('id', apresId));
+        out.push(...suite.filter((r) => !vusALaFrontiere.has(r.id)));
+        if (suite.length < TAILLE_PAGE) break;
+        apresId = suite[suite.length - 1].id;
+      }
+      strict = true;
+      vusALaFrontiere = new Set();
+      continue;
+    }
+    strict = false;
+    vusALaFrontiere = new Set(page.filter((r) => r.triggered_at === fin).map((r) => r.id));
+    depuis = fin;
+  }
+}
 
 export async function getCommissionEntries(
   supabase: SupabaseClient,
   orgId: string,
-  options: {
-    userId?: string;
-    dateRange?: { from: string; to: string };
-    status?: string;
-  } = {}
+  options: FiltreEntrees = {}
 ) {
-  let query = supabase
-    .from('fs_commission_entries')
-    .select('*')
-    .eq('org_id', orgId)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false });
-
-  if (options.userId) query = query.eq('user_id', options.userId);
-  if (options.status) query = query.eq('status', options.status);
-  if (options.dateRange) {
-    query = query
-      .gte('created_at', options.dateRange.from)
-      .lte('created_at', finDeJour(options.dateRange.to));
-  }
-
-  const { data, error } = await query;
+  const bornes = await bornesDuFiltre(supabase, orgId, options);
+  const { data, error } = await requeteEntrees(supabase, orgId, '*', options, bornes)
+    .order('triggered_at', { ascending: false }).order('id', { ascending: true })
+    .range(0, LIMITE_LISTE - 1);
   if (error) throw new Error(error.message);
+  const rows: any[] = data ?? [];
+  const uniques = (k: string) => [...new Set(rows.map((e) => e[k]).filter(Boolean))] as string[];
+  const [userIds, ruleIds, invoiceIds, jobIds] = [uniques('user_id'), uniques('rule_id'), uniques('invoice_id'), uniques('job_id')];
 
-  // Enrich with member names
-  const userIds = [...new Set((data ?? []).map((e) => e.user_id))];
-  const { data: members } = await supabase
-    .from('memberships')
-    .select('user_id, full_name, avatar_url')
-    .eq('org_id', orgId)
-    .in('user_id', userIds);
+  // Enrichissements en parallèle, tous bornés à l'org (l'ancienne lecture des
+  // règles n'avait pas de filtre d'org).
+  const vide = Promise.resolve({ data: [] as any[] });
+  const [members, rules, invoices, jobs] = await Promise.all([
+    userIds.length ? supabase.from('memberships').select('user_id, full_name, avatar_url').eq('org_id', orgId).in('user_id', userIds) : vide,
+    ruleIds.length ? supabase.from('fs_commission_rules').select('id, name').eq('org_id', orgId).in('id', ruleIds) : vide,
+    invoiceIds.length ? supabase.from('invoices').select('id, invoice_number, client_name_snapshot').eq('org_id', orgId).in('id', invoiceIds) : vide,
+    jobIds.length ? supabase.from('jobs').select('id, job_number, title, client_name').eq('org_id', orgId).in('id', jobIds) : vide,
+  ]);
+  const index = (l: any[] | null | undefined, k: string) => new Map<string, any>((l ?? []).map((x: any) => [x[k], x]));
+  const memberMap = index(members.data, 'user_id');
+  const ruleMap = index(rules.data, 'id');
+  const invoiceMap = index(invoices.data, 'id');
+  const jobMap = index(jobs.data, 'id');
 
-  const memberMap = new Map(
-    (members ?? []).map((m) => [m.user_id, m])
-  );
-
-  // Enrich with rule names
-  const ruleIds = [...new Set((data ?? []).map((e) => e.rule_id))];
-  const { data: rules } = await supabase
-    .from('fs_commission_rules')
-    .select('id, name')
-    .in('id', ruleIds);
-
-  const ruleMap = new Map(
-    (rules ?? []).map((r) => [r.id, r.name])
-  );
-
-  return (data ?? []).map((entry) => {
+  return rows.map((entry) => {
     const member = memberMap.get(entry.user_id);
+    const inv = entry.invoice_id ? invoiceMap.get(entry.invoice_id) : null;
+    const job = entry.job_id ? jobMap.get(entry.job_id) : null;
     return {
       ...entry,
       rep_name: member?.full_name || 'Unknown',
       rep_avatar: member?.avatar_url || null,
-      rule_name: ruleMap.get(entry.rule_id) || 'Unknown',
+      rule_name: ruleMap.get(entry.rule_id)?.name || 'Unknown',
+      invoice_number: inv?.invoice_number ?? null,
+      job_number: job?.job_number ?? null,
+      job_title: job?.title ?? null,
+      client_name: inv?.client_name_snapshot || job?.client_name || null,
+      is_estimate: !entry.invoice_id && entry.status === 'pending',
     };
   });
 }
 
 // ---------------------------------------------------------------------------
-// Payroll Preview
+// Payroll Preview — totaux de la période, en cents entiers, sur TOUTES les
+// entrées (paginé), + ventilation par rep et par jour pour les graphiques.
 // ---------------------------------------------------------------------------
 
 export async function getPayrollPreview(
@@ -665,40 +780,54 @@ export async function getPayrollPreview(
   periodStart: string,
   periodEnd: string
 ) {
-  let query = supabase
-    .from('fs_commission_entries')
-    .select('*')
-    .eq('org_id', orgId)
-    .is('deleted_at', null)
-    .gte('created_at', periodStart)
-    .lte('created_at', finDeJour(periodEnd));
+  const tz = await fuseauOrg(supabase, orgId);
+  const entries = await toutesLesEntrees(supabase, orgId,
+    'id, user_id, invoice_id, job_id, status, amount, base_amount, triggered_at, reverse_reason',
+    { userId, dateRange: { from: periodStart, to: periodEnd } });
+  const t = totauxCommissions(entries);
 
-  if (userId) query = query.eq('user_id', userId);
+  const parRep = new Map<string, any[]>();
+  for (const e of entries) {
+    const liste = parRep.get(e.user_id);
+    if (liste) liste.push(e); else parRep.set(e.user_id, [e]);
+  }
+  const ids = [...parRep.keys()];
+  const { data: noms } = ids.length
+    ? await supabase.from('memberships').select('user_id, full_name').eq('org_id', orgId).in('user_id', ids)
+    : { data: [] as any[] };
+  const nomDe = new Map((noms ?? []).map((m: any) => [m.user_id, m.full_name]));
+  const par_rep = ids.map((uid) => {
+    const lignes = parRep.get(uid)!;
+    const base_cents = lignes.filter((e) => e.invoice_id && e.status !== 'reversed').reduce((s, e) => s + enCents(e.base_amount), 0);
+    return { user_id: uid, rep_name: nomDe.get(uid) || null, base_cents, ...totauxCommissions(lignes) };
+  }).sort((a, b) => b.du_cents - a.du_cents);
 
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const entries = data ?? [];
-  const byStatus = (s: string) =>
-    entries.filter((e) => e.status === s).reduce((sum, e) => sum + Number(e.amount), 0);
-
-  const pending = byStatus('pending');
-  const approved = byStatus('approved');
-  const paid = byStatus('paid');
-  const reversed = byStatus('reversed');
+  const jours = new Map<string, number>();
+  for (const e of entries) {
+    if (!e.invoice_id || e.status === 'reversed') continue;
+    const j = toLocalDate(e.triggered_at, tz);
+    jours.set(j, (jours.get(j) ?? 0) + enCents(e.amount));
+  }
+  const par_jour = [...jours.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, du_cents]) => ({ date, du_cents }));
 
   return {
-    // `total` = ce qui est réellement dû/gagné : en attente + approuvé + versé.
-    // Une commission REVERSÉE (clawback) est de l'argent REPRIS — la compter
-    // dans le total gonflait les chiffres et faisait surpayer. On l'expose à
-    // part (reversed), jamais dans le total.
-    total: pending + approved + paid,
-    pending,
-    approved,
-    paid,
-    reversed,
+    // Dollars (contrat historique de l'API) — dérivés des cents exacts.
+    // `total` = gagné et dû (en attente + approuvé + versé) : ni les
+    // estimations (jobs non payés), ni les reprises.
+    total: t.du_cents / 100,
+    pending: t.en_attente_cents / 100,
+    approved: t.approuve_cents / 100,
+    paid: t.verse_cents / 100,
+    reversed: t.repris_cents / 100,
+    estimated: t.estime_cents / 100,
     count: entries.length,
-    entries,
+    sales: t.ventes,
+    timezone: tz,
+    totals_cents: t,
+    par_rep,
+    par_jour,
+    /** Commissions versées dont la facture a été remboursée depuis. */
+    flagged_ids: entries.filter((e) => e.reverse_reason && e.status !== 'reversed').map((e) => e.id as string),
   };
 }
 
@@ -723,6 +852,9 @@ export async function approveCommission(
     .eq('id', entryId)
     .eq('org_id', orgId)
     .eq('status', 'pending')
+    // Jamais une ESTIMATION (job pas encore payé, sans facture) : l'approuver
+    // puis la « Verser » payait un rep pour une vente non encaissée.
+    .not('invoice_id', 'is', null)
     .select()
     .single();
 
@@ -745,7 +877,9 @@ export async function reverseCommission(
     .from('fs_commission_entries')
     .update({
       status: 'reversed',
-      ...(reason ? { description: `Reversed: ${reason}` } : {}),
+      // La raison va dans reverse_reason : écraser `description` effaçait ce
+      // que la ligne représentait.
+      reverse_reason: reason || null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', entryId)

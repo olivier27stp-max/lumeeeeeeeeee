@@ -91,7 +91,7 @@ export function buildEmailHtml(data: ReportData, frequency: string, lienApp: str
     : '';
   return rendreCourrielLume({
     langue: 'fr',
-    preheader: `${data.orgName} — ${fmtMoney(data.revenue)} de revenus, ${data.newLeads} nouveaux prospects, ${data.newJobs} nouveaux travaux`,
+    preheader: `${data.orgName} — ${fmtMoney(data.revenue)} de revenus, ${data.newLeads} ${data.newLeads > 1 ? 'nouveaux prospects' : 'nouveau prospect'}, ${data.newJobs} ${data.newJobs > 1 ? 'nouveaux travaux' : 'nouveau travail'}`,
     titre: `Ton rapport ${periode}`,
     intro: `Voici où en est ${data.orgName} (${data.period}).`,
     montant: { libelle: 'Revenus encaissés', valeur: fmtMoney(data.revenue), sous: `Facturé : ${fmtMoney(data.invoiced)}` },

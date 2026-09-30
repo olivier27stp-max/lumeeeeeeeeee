@@ -738,10 +738,11 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
           inviteLink,
           inviterName: inviter?.full_name || null,
           branding,
+          rappel: true,
         });
         const envoi = await sendEmail({
           to: invitation.email,
-          subject: `Rappel : ${rendered.subject}`,
+          subject: rendered.subject,
           html: rendered.html,
         });
         if (envoi && envoi.sent === false) courrielParti = false;

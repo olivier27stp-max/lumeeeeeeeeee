@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import { computeTaxLines, getDocumentTaxLines, saveAppliedTaxes, type TaxLine } from './taxApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
+import { TAILLE_PAGE, toutesLesLignesParId } from './lignesPaginees';
+import { toIsoRange } from './insightsApi';
 import { pageTrieeParChamp, tousLesIds } from './colonnesTableauApi';
 import { syncEntityPin } from './fieldSalesApi';
 import { versDate } from './dateSeule';
@@ -892,54 +894,45 @@ export async function fetchQuoteKpis(range?: { from?: string; to?: string }): Pr
   const orgId = await getCurrentOrgIdOrThrow();
   // Un devis converti en job a d'abord été approuvé — l'exclure sous-comptait
   // les approbations dès la conversion.
-  const withRange = (q: any) => {
-    let out = q;
-    if (range?.from) out = out.gte('created_at', range.from);
-    if (range?.to) out = out.lte('created_at', `${range.to}T23:59:59.999Z`);
-    return out;
-  };
-  const [allRes, pendingRes, approvedRes] = await Promise.all([
-    withRange(supabase.from('quotes').select('total_cents', { count: 'exact' }).eq('org_id', orgId).is('deleted_at', null)),
-    withRange(supabase.from('quotes').select('total_cents, lead_id, client_id').eq('org_id', orgId).is('deleted_at', null).in('status', PENDING_QUOTE_STATUSES)),
-    withRange(supabase.from('quotes').select('total_cents', { count: 'exact' }).eq('org_id', orgId).is('deleted_at', null).in('status', ['approved', 'converted'])),
+  // Bornes au minuit LOCAL (la fin en UTC comptait le 31 à 23 h 30 dans le mois suivant),
+  // et toutes les lignes : les sommes se faisaient sur 1 000 soumissions au plus.
+  const bornes = range?.from && range?.to ? toIsoRange(range.from, range.to) : null;
+  const lire = (colonnes: string, statuts?: string[]) => toutesLesLignesParId<any>((apres) => {
+    let q = supabase.from('quotes').select(`id, ${colonnes}`).eq('org_id', orgId).is('deleted_at', null);
+    if (statuts) q = q.in('status', statuts);
+    if (bornes) q = q.gte('created_at', bornes.fromIso).lt('created_at', bornes.toIsoExclusive);
+    if (apres) q = q.gt('id', apres);
+    return q.order('id').limit(TAILLE_PAGE);
+  });
+  const [allRows, pendingQuotes, approvedRows] = await Promise.all([
+    lire('total_cents'),
+    lire('total_cents, lead_id, client_id', PENDING_QUOTE_STATUSES),
+    lire('total_cents', ['approved', 'converted']),
   ]);
 
   const sumCents = (rows: any[]) => rows.reduce((s, r) => s + Number(r.total_cents || 0), 0);
 
   // Filter pending quotes: exclude those whose linked lead or client has been soft-deleted
-  const pendingQuotes = pendingRes.data || [];
   let pendingRows = pendingQuotes;
 
   if (pendingQuotes.length > 0) {
-    const leadIds = [...new Set(pendingQuotes.filter((q: any) => q.lead_id).map((q: any) => q.lead_id))];
-    const clientIds = [...new Set(pendingQuotes.filter((q: any) => q.client_id).map((q: any) => q.client_id))];
-
-    const [leadsRes, clientsRes] = await Promise.all([
-      leadIds.length > 0
-        ? supabase.from('clients').select('id, deleted_at').eq('org_id', orgId).in('id', leadIds)
-        : Promise.resolve({ data: [] }),
-      clientIds.length > 0
-        ? supabase.from('clients').select('id, deleted_at').eq('org_id', orgId).in('id', clientIds)
-        : Promise.resolve({ data: [] }),
-    ]);
-
-    const deletedLeadIds = new Set((leadsRes.data || []).filter((l: any) => l.deleted_at).map((l: any) => l.id));
-    const deletedClientIds = new Set((clientsRes.data || []).filter((c: any) => c.deleted_at).map((c: any) => c.id));
-
-    pendingRows = pendingQuotes.filter((q: any) => {
-      if (q.lead_id && deletedLeadIds.has(q.lead_id)) return false;
-      if (q.client_id && deletedClientIds.has(q.client_id)) return false;
-      return true;
-    });
+    // Les clients/leads SUPPRIMÉS (peu nombreux) plutôt qu'un in('id', …) de tous les
+    // clients liés : au-delà de ~1 000 ids, l'URL débordait et le filtre sautait en silence.
+    const supprimes = new Set((await toutesLesLignesParId<{ id: string }>((apres) => {
+      let q = supabase.from('clients').select('id').eq('org_id', orgId).not('deleted_at', 'is', null);
+      if (apres) q = q.gt('id', apres);
+      return q.order('id').limit(TAILLE_PAGE);
+    })).map((c) => c.id));
+    pendingRows = pendingQuotes.filter((q: any) => !(q.lead_id && supprimes.has(q.lead_id)) && !(q.client_id && supprimes.has(q.client_id)));
   }
 
   return {
-    total_count: allRes.count || 0,
+    total_count: allRows.length,
     pending_count: pendingRows.length,
-    approved_count: approvedRes.count || 0,
-    total_value_cents: sumCents(allRes.data || []),
+    approved_count: approvedRows.length,
+    total_value_cents: sumCents(allRows),
     pending_value_cents: sumCents(pendingRows),
-    approved_value_cents: sumCents(approvedRes.data || []),
+    approved_value_cents: sumCents(approvedRows),
   };
 }
 

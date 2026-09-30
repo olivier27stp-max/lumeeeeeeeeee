@@ -29,7 +29,7 @@ import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
 import { type Fiche } from '../lib/lumi/fiches';
 import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, PLAFOND_ECRITURES_PAR_CONVERSATION, compterEcritures, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
-import { getUserContext } from '../lib/rbac';
+import { getUserContext, hasPermission } from '../lib/rbac';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, OUTILS_DE_BASE, type EvenementLumi, type ResultatTour } from '../lib/lumi/orchestrateur';
 import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOURCIS, type IdRaccourci } from '../lib/lumi/raccourcis';
 // Lumi répond aussi aux questions de support : le client ne sait pas qu'il y
@@ -51,7 +51,7 @@ import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout'
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
-import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
+import { PERMISSION_PAR_OUTIL, outilsPermis, membreVoitLesMontants, restrictionsDe } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
 import { maintenantPourLumi } from '../lib/lumi/temps';
@@ -89,6 +89,24 @@ const actionSchema = z.object({
   language: z.enum(['fr', 'en']).optional(),
   origine: z.enum(['suggestion', 'lien']).optional(),
 });
+
+/**
+ * Les outils permis à cette personne (rôle + overrides), recalculés à chaque
+ * tour. Sert à ne montrer au modèle que ce qu'elle peut réellement faire ;
+ * executerOutilGarde revérifie à l'exécution.
+ */
+async function outilsPermisDe(userId: string, orgId: string): Promise<ReadonlySet<string> | null> {
+  try {
+    const ctxRole = await getUserContext(getServiceClient(), userId, orgId, true);
+    if (!ctxRole) return new Set();
+    return outilsPermis(ctxRole, await membreVoitLesMontants(userId, orgId));
+  } catch (e: any) {
+    // Indéterminable : on NE retire rien (la garde d'exécution reste la vraie
+    // barrière) plutôt que de casser le tour. Signalé pour être vu.
+    logger.error('[lumi] outils permis indéterminables', { message: e?.message });
+    return null;
+  }
+}
 
 /** « non », « pas ça », « c'est pas ça »… : l'utilisateur rejette la réponse précédente. Liste courte, exacte. */
 const REPLIS: ReadonlySet<string> = new Set(['non', 'no', 'nope', 'pas ca', 'non pas ca', 'c est pas ca', 'ce n est pas ca', 'pas du tout', 'not that', 'wrong', 'mauvaise reponse', 'c est pas la bonne reponse']);
@@ -244,13 +262,34 @@ async function contexteTour(req: Request, res: Response) {
   const userName = (auth.user.user_metadata as any)?.full_name || (auth.user.user_metadata as any)?.name || auth.user.email || null;
   const language: 'fr' | 'en' = req.body?.language === 'en' ? 'en' : 'fr';
   // Ce que Lumi a retenu (org_knowledge « assistant ») entre dans son prompt : il n'a plus à le rechercher.
+  //
+  // ⚠️ GARDE (audit RBAC 2026-09-30). Ces notes valent pour TOUTE l'org et
+  // peuvent porter une marge, un taux horaire, une consigne de prix. Elles
+  // étaient chargées avec le client de service et collées dans le prompt de
+  // TOUS les rôles, sans contrôle : une note du propriétaire ressortait mot
+  // pour mot chez un technicien, et comme aucun outil n'était appelé, AUCUNE
+  // garde ne se déclenchait.
+  //
+  // Même clé que les écrire ou les oublier (settings.update) — surtout pas
+  // settings.read, que les quatre rôles possèdent. Relue à chaque tour : un
+  // changement de rôle s'applique au message suivant.
   let souvenirs: Array<{ key: string; value: string }> = [];
   try {
+    const ctxSouvenirs = await getUserContext(getServiceClient(), auth.user.id, auth.orgId, true);
+    if (!ctxSouvenirs || !hasPermission(ctxSouvenirs, 'settings.update')) throw new Error('sans droit');
     const { data } = await admin.from('org_knowledge').select('key, value').eq('org_id', auth.orgId).eq('category', 'assistant').eq('is_active', true).order('updated_at', { ascending: false }).limit(30);
     souvenirs = (data ?? []).map((n: any) => ({ key: String(n.key), value: String(n.value ?? '') }));
   } catch { /* non-fatal : Lumi peut encore les relire avec recall_notes */ }
+  // Ce que le rôle ne permet pas, en mots simples, pour que Lumi le dise
+  // clairement au lieu de proposer un chemin qui n'existe pas. Ce n'est PAS
+  // une garde — les outils interdits ne lui sont déjà pas remis.
+  let restrictions: string | null = null;
+  try {
+    const ctxRole = await getUserContext(getServiceClient(), auth.user.id, auth.orgId, true);
+    restrictions = restrictionsDe(ctxRole, await membreVoitLesMontants(auth.user.id, auth.orgId), language);
+  } catch { /* non-fatal : sans ce texte, Lumi refuse quand même, juste moins bien */ }
   // Jour ET heure dans le fuseau de l'entreprise, avec le décalage à écrire dans les dates d'outils (audit 2026-09-30).
-  const promptCtx = { companyName, userName, language, todayIso: maintenantPourLumi(fuseau, language), souvenirs };
+  const promptCtx = { companyName, userName, language, todayIso: maintenantPourLumi(fuseau, language), souvenirs, restrictions };
   const systeme = promptSystemeLumi(promptCtx);
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
   return { auth, admin, budget, systeme, promptCtx, language, accessToken, fuseau, userName };
@@ -362,6 +401,10 @@ async function executerTourSse(opts: {
         return focus ? promptSystemeLumi({ ...ctx.promptCtx, focus }) : ctx.systeme;
       })(),
       sousAgent: opts.sousAgent ?? null,
+      // RBAC : le modèle ne voit que les outils permis à cette personne.
+      // Recalculé à CHAQUE tour → un changement de rôle s'applique au message
+      // suivant, rien n'est figé dans la conversation.
+      outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId),
       reglages,
       budget: {
         reserver: (cents) => reserverBudget(ctx.admin, ctx.auth.orgId, cents),
@@ -943,7 +986,7 @@ router.put('/lumi/mode', validate(modeSchema), async (req, res) => {
     // « Tout faire sans demander » = un texto peut partir sans être vu (R11) :
     // réservé au propriétaire de l'entreprise, jamais à un employé.
     if (mode === 'tout') {
-      const ctxRole = await getUserContext(getServiceClient(), auth.user.id, auth.orgId);
+      const ctxRole = await getUserContext(getServiceClient(), auth.user.id, auth.orgId, true);
       if (ctxRole?.role !== 'owner') {
         return res.status(403).json({ error: 'Only the owner can let Lumi act without asking.', code: 'mode_reserve_proprietaire' });
       }

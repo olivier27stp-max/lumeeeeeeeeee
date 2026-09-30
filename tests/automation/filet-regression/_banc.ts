@@ -81,7 +81,7 @@ export function monde(regle: Regle & { id: string }, surcharges: Record<string, 
     automation_rules: (req: { filtres: Array<[string, string, unknown]> }) => ({
       data: req.filtres.some(([op, col, val]) => op === 'eq' && col === 'id' && val === IDS.autreRegle) ? [autreRegle] : [ligneRegle],
     }),
-    company_settings: { data: [{ org_id: ORG, company_name: 'Plomberie Tremblay inc.', phone: '+14505550199', email: 'info@plomberie.test', default_language: 'fr', timezone: 'America/Montreal', google_review_url: 'https://g.page/r/plomberie-tremblay/review', facebook_review_url: null, review_enabled: true, automations_paused: false }] },
+    company_settings: { data: [{ org_id: ORG, company_name: 'Plomberie Tremblay inc.', phone: '+14505550199', email: 'info@plomberie.test', street1: '120 rue Principale', city: 'Granby', province: 'QC', postal_code: 'J2G 2V1', default_language: 'fr', timezone: 'America/Montreal', google_review_url: 'https://g.page/r/plomberie-tremblay/review', facebook_review_url: null, review_enabled: true, automations_paused: false }] },
     clients: { data: [CLIENT] },
     jobs: { data: [{ id: IDS.job, org_id: ORG, title: 'Nettoyage de gouttières', client_id: IDS.client, status: 'completed', deposit_status: 'unpaid', currency: 'CAD', created_at: VEILLE, deleted_at: null, property_address: '412 rue des Érables, Longueuil' }] },
     schedule_events: { data: [{ id: IDS.visite, org_id: ORG, job_id: IDS.job, start_at: '2026-09-25T13:00:00Z', end_at: '2026-09-25T14:00:00Z', status: 'scheduled', deleted_at: null, job: { id: IDS.job, title: 'Nettoyage de gouttières', property_address: '412 rue des Érables, Longueuil', client_id: IDS.client, client_name: 'Marie Tremblay', clients: CLIENT } }] },

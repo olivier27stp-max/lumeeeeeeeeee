@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchInsightsRevenueSeries } from '../../lib/insightsApi';
 import { useTranslation } from '../../i18n';
 import PeriodSelector from './PeriodSelector';
+import ErreurCarte from './ErreurCarte';
 import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
 
 const W = 1000;
@@ -42,12 +43,14 @@ export default function RevenueTrendCard({
     queryKey: ['rev-trend', range.from, range.to, range.granularity],
     queryFn: () => fetchInsightsRevenueSeries({ from: range.from, to: range.to, granularity: range.granularity }),
     staleTime: 60_000,
+    refetchOnMount: 'always',
   });
 
   const money = (cents: number) =>
     new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+  // Au cent près, comme les factures (l'infobulle arrondissait au dollar).
   const moneyFull = (cents: number) =>
-    new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
+    new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format((cents || 0) / 100);
 
   const model = useMemo(() => {
     const pts = q.data || [];
@@ -62,7 +65,9 @@ export default function RevenueTrendCard({
     const line = co.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
     const area = co.length ? `${line} L${co[co.length - 1].x.toFixed(1)},${H} L${co[0].x.toFixed(1)},${H} Z` : '';
     const labels = pts.map((p) => {
-      const d = new Date(p.bucket_start);
+      // bucket_start est une DATE (« 2026-09-01 ») : new Date() la lisait à minuit UTC, soit
+      // le 31 août au soir à Montréal — chaque mois portait le nom du mois précédent.
+      const d = new Date(`${p.bucket_start}T12:00:00`);
       return range.granularity === 'week'
         ? new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(d)
         : new Intl.DateTimeFormat(locale, { month: 'short' }).format(d);
@@ -79,7 +84,7 @@ export default function RevenueTrendCard({
         <div>
           <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Revenu' : 'Revenue'}</div>
           <div className="flex items-baseline gap-3 mt-3">
-            <span className="text-[34px] font-bold tracking-tight leading-none tabular-nums text-text-primary">{money(model.total)}</span>
+            <span className="text-[34px] font-bold tracking-tight leading-none tabular-nums text-text-primary" title={moneyFull(model.total)} data-cents={model.total}>{q.isError ? '—' : money(model.total)}</span>
             {deltaPct != null && !Number.isNaN(deltaPct) && (
               <span className="text-[13px] font-bold text-text-secondary">
                 {deltaPct >= 0 ? '↑' : '↓'} {Math.abs(Math.round(deltaPct))}%
@@ -90,7 +95,9 @@ export default function RevenueTrendCard({
         <PeriodSelector value={period} onChange={onPeriod} />
       </div>
 
-      {q.isLoading ? (
+      {q.isError ? (
+        <ErreurCarte hauteur={250} onRetry={() => q.refetch()} />
+      ) : q.isLoading ? (
         <div className="h-[250px] mx-6 mt-4 rounded-lg bg-surface-secondary/40 animate-pulse" />
       ) : model.n === 0 ? (
         <div className="h-[250px] flex items-center justify-center text-[12.5px] text-text-tertiary">{fr ? 'Aucune donnée sur la période' : 'No data for this period'}</div>

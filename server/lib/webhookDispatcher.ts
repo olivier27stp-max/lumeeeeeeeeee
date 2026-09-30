@@ -15,9 +15,9 @@
 
 import crypto from 'crypto';
 import { getServiceClient } from './supabase';
+import { posterSansSsrf } from './url-sortante';
 
 const MAX_ATTEMPTS = 5;
-const REQUEST_TIMEOUT_MS = 10_000;
 
 export type WebhookEventName = string;
 
@@ -183,25 +183,23 @@ export async function attemptDelivery(deliveryId: string): Promise<{
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = computeSignature(endpoint.secret, timestamp, rawBody);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
   let httpStatus: number | null = null;
   let responseBody = '';
   let networkErr: string | null = null;
 
   try {
-    const resp = await fetch(endpoint.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    // Audit V2, C26 : même garde SSRF que l'action « webhook » des
+    // automatisations — adresse publique seulement, IP revérifiée à la
+    // connexion, redirections suivies À LA MAIN et revérifiées (3 au plus),
+    // délai total de 10 s.
+    const resp = await posterSansSsrf(endpoint.url, null, {
+      corpsBrut: rawBody,
+      entetes: {
         'User-Agent': 'Lume-CRM-Webhooks/1.0',
         'X-Lume-Event': (delivery as DeliveryRow).event_name,
         'X-Lume-Delivery': deliveryId,
         'X-Lume-Signature': signature,
       },
-      body: rawBody,
-      signal: controller.signal,
     });
     httpStatus = resp.status;
     try {
@@ -211,9 +209,13 @@ export async function attemptDelivery(deliveryId: string): Promise<{
       console.error('[webhookDispatcher] response read failed:', err);
     }
   } catch (err: any) {
-    networkErr = err?.name === 'AbortError' ? 'timeout' : err?.message || 'network error';
-  } finally {
-    clearTimeout(timer);
+    const message = String(err?.message || '');
+    // Adresse interne ou non publique : la même sera refusée à chaque essai.
+    if (message.startsWith('Adresse refusée')) {
+      await abandon(message);
+      return { ok: false, error: message };
+    }
+    networkErr = err?.name === 'AbortError' || err?.name === 'TimeoutError' ? 'timeout' : message || 'network error';
   }
 
   const success = httpStatus !== null && httpStatus >= 200 && httpStatus < 300;

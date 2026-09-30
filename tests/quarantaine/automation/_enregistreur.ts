@@ -39,6 +39,7 @@ export function clientEnregistreur(reponses: Record<string, Preparee>) {
     const o: any = {};
     const self = () => o;
     for (const m of ['select', 'order', 'limit', 'or', 'ilike', 'neq', 'lt', 'gt', 'gte', 'lte', 'not', 'range']) o[m] = self;
+    o.like = (col: string, val: unknown) => { req.filtres.push(['like', col, val]); return o; };
     for (const m of ['eq', 'in', 'is']) o[m] = (col: string, val: unknown) => { req.filtres.push([m, col, val]); return o; };
     o.insert = (v: unknown) => { req.op = 'insert'; req.valeur = v; return o; };
     o.upsert = (v: unknown) => { req.op = 'insert'; req.valeur = v; return o; };

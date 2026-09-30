@@ -10,6 +10,7 @@ import { normalizeAmountToCents } from './helpers';
 import type { PaymentInsertInput } from './helpers';
 import { sanitizeCellForDisplay } from './migration/masks';
 import { eventBus } from './eventBus';
+import { commissionsFacturePayee } from './field-sales/commission-declencheurs';
 
 // ── Types ──
 
@@ -1035,6 +1036,10 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
         job_id: input.job_id || null,
       },
     });
+    // Commissions de la facture soldée — tous fournisseurs, PayPal compris
+    // (qui n'en créait jamais). Idempotent : le webhook Stripe peut aussi
+    // l'appeler sans doublon.
+    await commissionsFacturePayee(admin, input.org_id, input.invoice_id, `payment-${input.provider}`);
   }
 
   return { id: String(data.id), inserted: true };

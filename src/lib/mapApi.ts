@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
+import { TAILLE_PAGE, toutesLesLignesParId } from './lignesPaginees';
 
 export type MapDateRange = 'today' | 'tomorrow' | 'this_week' | 'all';
 
@@ -178,24 +179,26 @@ export async function fetchMapJobs(range: MapDateRange): Promise<MapJobResult> {
 export async function fetchMapJobsInRange(startISO: string, endISO: string): Promise<MapJobResult> {
   const orgId = await getCurrentOrgIdOrThrow();
 
-  const { data, error } = await supabase
-    .from('schedule_events')
-    .select(
-      `
-      id, start_at, end_at, status, team_id,
-      team:teams!schedule_events_team_id_fkey(name, color_hex),
-      job:jobs!schedule_events_job_id_fkey(id, client_id, lead_id, job_number, title, client_name, property_address, status, total_cents, latitude, longitude)
-      `
-    )
-    .eq('org_id', orgId)
-    .is('deleted_at', null)
-    .gte('start_at', startISO)
-    .lt('start_at', endISO)
-    .order('start_at', { ascending: true });
-
-  if (error) throw error;
-
-  const rows = (data || []) as any[];
+  // Toutes les visites de la plage : plafonnée à 1 000, la carte « Revenu par ville »
+  // ne voyait que les 1 000 plus anciennes d'une année chargée.
+  // Curseur sur id, puis tri par heure de début (l'ordre qu'avait la carte).
+  const rows = ((await toutesLesLignesParId<any>((apres) => {
+    let q = supabase
+      .from('schedule_events')
+      .select(
+        `
+        id, start_at, end_at, status, team_id,
+        team:teams!schedule_events_team_id_fkey(name, color_hex),
+        job:jobs!schedule_events_job_id_fkey(id, client_id, lead_id, job_number, title, client_name, property_address, status, total_cents, latitude, longitude)
+        `
+      )
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .gte('start_at', startISO)
+      .lt('start_at', endISO);
+    if (apres) q = q.gt('id', apres);
+    return q.order('id', { ascending: true }).limit(TAILLE_PAGE);
+  })) as any[]).sort((x, y) => String(x.start_at).localeCompare(String(y.start_at)));
   const withCoords = rows.filter(hasValidCoords);
 
   const pins: MapJobPin[] = withCoords.map((event) => ({

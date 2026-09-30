@@ -1224,7 +1224,7 @@ const recordInvoicePaymentTool: AgentTool = {
       if (!Number.isFinite(montant) || montant <= 0) throw new Error('Le montant doit être un nombre de cents strictement positif.');
       verifierPlafond(montant);
       // Lecture À L'IDENTITÉ (RLS garantit l'appartenance à l'org).
-      const inv = await lireFacture(ctx, invoiceId, 'id, invoice_number, status, total_cents, paid_cents, balance_cents, client_id');
+      const inv = await lireFacture(ctx, invoiceId, 'id, invoice_number, status, total_cents, paid_cents, balance_cents, client_id, job_id, currency');
       if (inv.status === 'paid' || (Number(inv.balance_cents) <= 0 && Number(inv.paid_cents) > 0)) {
         return { already_paid: true, invoice: { invoice_number: inv.invoice_number }, note: 'Cette facture est déjà payée — rien à enregistrer.' };
       }

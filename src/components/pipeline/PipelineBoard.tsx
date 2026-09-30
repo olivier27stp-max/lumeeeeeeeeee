@@ -18,7 +18,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  ArrowRightLeft, ArrowUpDown, Filter, GripVertical, LayoutGrid, List, Plus, Search, Tag, X,
+  ArrowRightLeft, ArrowUpDown, ChevronsLeftRight, ChevronsRightLeft, Filter, GripVertical, LayoutGrid, List, Plus, Search, Tag, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -344,8 +344,14 @@ function CarteDeal({
 
 function Colonne({
   etape, etapes, rangOuvert, deals, membres, montants, onOuvrir, onAssigner, onChangement,
-  selection, onBasculerSelection, modeCouleur, extraCarte, etiquettesClients,
+  selection, onBasculerSelection, modeCouleur, extraCarte, etiquettesClients, repliee = false, onBasculerRepli,
 }: {
+  /**
+   * Colonne REPLIÉE (comme GoHighLevel) : une bande étroite avec le nom et le
+   * compte. Elle reçoit toujours les cartes qu'on y dépose.
+   */
+  repliee?: boolean;
+  onBasculerRepli?: () => void;
   /** Contenu ajouté au bas de chaque carte (champs personnalisés). */
   extraCarte?: (deal: Deal) => ReactNode;
   /** Étiquettes par client (une requête groupée pour tout le board). */
@@ -381,6 +387,36 @@ function Colonne({
   // 19 deals affichant 7 243 $ pendant que les cartes visibles disent
   // « Montant à venir » ressemble à une erreur.
   const chiffres = deals.filter((d) => (montants[d.id] ?? 0) > 0).length;
+  const nomEtape = fr ? etape.name_fr : etape.name_en;
+
+  if (repliee) {
+    return (
+      <div
+        ref={setNodeRef}
+        className={cn(
+          'flex w-11 shrink-0 flex-col items-center gap-2 rounded-xl border border-outline bg-surface-secondary py-2.5',
+          isOver && 'outline-2 outline-dashed outline-offset-2 outline-text-tertiary',
+        )}
+      >
+        <button
+          type="button"
+          onClick={onBasculerRepli}
+          aria-label={fr ? `Déplier la colonne « ${nomEtape} »` : `Expand the “${nomEtape}” column`}
+          title={fr ? 'Déplier' : 'Expand'}
+          className="rounded-md p-1 text-text-tertiary hover:bg-surface-tertiary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          <ChevronsLeftRight size={14} aria-hidden="true" />
+        </button>
+        {modeCouleur !== 'none' && (
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: v.teinte }} aria-hidden="true" />
+        )}
+        <span className="rounded-full bg-surface-card px-1.5 text-[11px] font-semibold tabular-nums text-text-secondary">{deals.length}</span>
+        <h3 className="mt-1 text-[12.5px] font-semibold tracking-tight text-text-primary [writing-mode:vertical-rl]">
+          {nomEtape}
+        </h3>
+      </div>
+    );
+  }
 
   return (
     <div className="flex w-[292px] shrink-0 flex-col">
@@ -401,9 +437,20 @@ function Colonne({
             était une suite de textes sans structure — rien ne disait où
             commençait une colonne.
           */}
-          <h3 className="truncate text-[12.5px] font-semibold tracking-tight text-text-primary">
-            {fr ? etape.name_fr : etape.name_en}
+          <h3 className="min-w-0 flex-1 truncate text-[12.5px] font-semibold tracking-tight text-text-primary">
+            {nomEtape}
           </h3>
+          {onBasculerRepli && (
+            <button
+              type="button"
+              onClick={onBasculerRepli}
+              aria-label={fr ? `Replier la colonne « ${nomEtape} »` : `Collapse the “${nomEtape}” column`}
+              title={fr ? 'Replier' : 'Collapse'}
+              className="shrink-0 rounded-md p-1 text-text-tertiary hover:bg-surface-tertiary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              <ChevronsRightLeft size={13} aria-hidden="true" />
+            </button>
+          )}
         </div>
         <p className={`mt-1 flex gap-2 text-[11.5px] text-text-secondary ${modeCouleur === 'none' ? '' : 'pl-4'}`}>
           <span className="tabular-nums">
@@ -1750,6 +1797,28 @@ export default function PipelineBoard({
    * objets figés afficherait des cartes périmées dans la barre d'actions.
    */
   const [selection, setSelection] = useState<Set<string>>(new Set());
+  /**
+   * Colonnes repliées (comme GoHighLevel), retenues PAR pipeline dans ce
+   * navigateur : c'est une préférence d'affichage, pas une donnée.
+   */
+  const cleRepli = `lume.pipeline.repliees.${pipelineActif ?? ''}`;
+  const [repliees, setRepliees] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const brut = localStorage.getItem(cleRepli);
+      setRepliees(new Set(brut ? (JSON.parse(brut) as string[]) : []));
+    } catch {
+      setRepliees(new Set());
+    }
+  }, [cleRepli]);
+  const basculerRepli = useCallback((etapeId: string) => {
+    setRepliees((prev) => {
+      const n = new Set(prev);
+      if (n.has(etapeId)) n.delete(etapeId); else n.add(etapeId);
+      try { localStorage.setItem(cleRepli, JSON.stringify([...n])); } catch { /* stockage bloqué : le repli dure la visite */ }
+      return n;
+    });
+  }, [cleRepli]);
   /** La fenêtre « Déplacer vers une autre pipeline » pour la sélection. */
   const [changerPipeline, setChangerPipeline] = useState(false);
   const autresPipelines = pipelinesCibles.filter((p) => p.id !== pipelineActif);
@@ -2502,6 +2571,8 @@ export default function PipelineBoard({
                 onBasculerSelection={basculerSelection}
                 modeCouleur={modeCouleur}
                 etiquettesClients={etiquettesClients}
+                repliee={repliees.has(etape.id)}
+                onBasculerRepli={() => basculerRepli(etape.id)}
                 extraCarte={champsPipeline.champsCarte.length ? (d) => (
                   <ChampsSurCarte champs={champsPipeline.champsCarte} valeurs={champsPipeline.valeurs[d.id]} fr={fr} />
                 ) : undefined}

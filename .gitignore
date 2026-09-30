@@ -49,3 +49,8 @@ qa-lumi-evaluation.json
 
 # Rapports JSON des batteries de qualité du support (réponses complètes, coûts)
 scripts/qa/rapports/
+
+# Audit Statistiques : résultats générés localement
+tests/stats/.resultats/
+test-results/
+playwright-report/
