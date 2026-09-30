@@ -1,0 +1,1496 @@
+{
+ "memoire": [
+  {
+   "nom": "search_help",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": null
+  },
+  {
+   "nom": "recall_notes",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": null
+  },
+  {
+   "nom": "forget_note",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "get_recent_agent_actions",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "reports.read"
+  },
+  {
+   "nom": "remember_this",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  }
+ ],
+ "clients": [
+  {
+   "nom": "search_clients",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "clients.read"
+  },
+  {
+   "nom": "search_leads",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "leads.read"
+  },
+  {
+   "nom": "list_request_submissions",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "leads.read"
+  },
+  {
+   "nom": "get_client_profile",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "clients.read"
+  },
+  {
+   "nom": "get_top_clients",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "get_churn_risk",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "create_client",
+   "genre": "action",
+   "sensible": false,
+   "permission": "clients.create"
+  },
+  {
+   "nom": "update_client",
+   "genre": "action",
+   "sensible": false,
+   "permission": "clients.update"
+  },
+  {
+   "nom": "merge_clients",
+   "genre": "action",
+   "sensible": true,
+   "permission": "clients.delete"
+  },
+  {
+   "nom": "add_note",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "convert_lead_to_client",
+   "genre": "action",
+   "sensible": false,
+   "permission": "leads.update"
+  },
+  {
+   "nom": "create_lead",
+   "genre": "action",
+   "sensible": false,
+   "permission": "leads.create"
+  },
+  {
+   "nom": "update_lead",
+   "genre": "action",
+   "sensible": false,
+   "permission": "leads.update"
+  },
+  {
+   "nom": "update_lead_status",
+   "genre": "action",
+   "sensible": false,
+   "permission": "leads.update"
+  },
+  {
+   "nom": "delete_lead",
+   "genre": "action",
+   "sensible": true,
+   "permission": "leads.delete"
+  },
+  {
+   "nom": "convert_lead_to_job",
+   "genre": "action",
+   "sensible": true,
+   "permission": "jobs.create"
+  },
+  {
+   "nom": "process_request_submission",
+   "genre": "action",
+   "sensible": false,
+   "permission": "leads.update"
+  },
+  {
+   "nom": "delete_request_submission",
+   "genre": "action",
+   "sensible": true,
+   "permission": "leads.delete"
+  },
+  {
+   "nom": "delete_client",
+   "genre": "action",
+   "sensible": true,
+   "permission": "clients.delete"
+  },
+  {
+   "nom": "list_properties",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "clients.read"
+  },
+  {
+   "nom": "create_property",
+   "genre": "action",
+   "sensible": false,
+   "permission": "clients.update"
+  },
+  {
+   "nom": "update_property",
+   "genre": "action",
+   "sensible": false,
+   "permission": "clients.update"
+  },
+  {
+   "nom": "delete_property",
+   "genre": "action",
+   "sensible": true,
+   "permission": "clients.update"
+  },
+  {
+   "nom": "list_notes",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "update_note",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "delete_note",
+   "genre": "action",
+   "sensible": true,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "list_custom_fields",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "clients.read"
+  },
+  {
+   "nom": "set_custom_field",
+   "genre": "action",
+   "sensible": false,
+   "permission": "clients.update"
+  },
+  {
+   "nom": "list_client_tags",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "clients.read"
+  },
+  {
+   "nom": "add_client_tag",
+   "genre": "action",
+   "sensible": false,
+   "permission": "clients.update"
+  },
+  {
+   "nom": "remove_client_tag",
+   "genre": "action",
+   "sensible": false,
+   "permission": "clients.update"
+  },
+  {
+   "nom": "list_deals",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "leads.read"
+  },
+  {
+   "nom": "update_deal_stage",
+   "genre": "action",
+   "sensible": false,
+   "permission": "leads.update"
+  },
+  {
+   "nom": "delete_deal",
+   "genre": "action",
+   "sensible": true,
+   "permission": "leads.delete"
+  }
+ ],
+ "planification": [
+  {
+   "nom": "list_jobs",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "get_job",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "find_dates_in_location",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "query_schedule",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "get_day_route",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "get_weather",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": null
+  },
+  {
+   "nom": "create_job",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.create"
+  },
+  {
+   "nom": "get_team_locations",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "gps.read"
+  },
+  {
+   "nom": "find_free_slot",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "calendar.read"
+  },
+  {
+   "nom": "optimize_route",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "update_job_status",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "assign_job",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.assign"
+  },
+  {
+   "nom": "reschedule_job",
+   "genre": "action",
+   "sensible": true,
+   "permission": "calendar.update"
+  },
+  {
+   "nom": "archive_job",
+   "genre": "action",
+   "sensible": true,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "add_visit",
+   "genre": "action",
+   "sensible": false,
+   "permission": "calendar.update"
+  },
+  {
+   "nom": "update_job",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "cancel_visit",
+   "genre": "action",
+   "sensible": true,
+   "permission": "calendar.update"
+  },
+  {
+   "nom": "set_job_expenses",
+   "genre": "action",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "delete_job",
+   "genre": "action",
+   "sensible": true,
+   "permission": "jobs.delete"
+  },
+  {
+   "nom": "list_recurrence_rules",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "create_recurrence_rule",
+   "genre": "action",
+   "sensible": true,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "deactivate_recurrence_rule",
+   "genre": "action",
+   "sensible": true,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "create_job_template",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.create"
+  },
+  {
+   "nom": "schedule_job",
+   "genre": "action",
+   "sensible": false,
+   "permission": "calendar.update"
+  },
+  {
+   "nom": "unschedule_job",
+   "genre": "action",
+   "sensible": true,
+   "permission": "calendar.update"
+  },
+  {
+   "nom": "list_job_checklists",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "create_job_checklist",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "update_job_checklist",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "delete_job_checklist",
+   "genre": "action",
+   "sensible": true,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "list_checklist_templates",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "create_checklist_template",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "update_checklist_template",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "delete_checklist_template",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "list_job_tags",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "create_job_tag",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "set_job_tags",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "save_job_billing_milestones",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.create"
+  },
+  {
+   "nom": "create_invoice_for_visit",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.create"
+  },
+  {
+   "nom": "create_invoice_for_milestone",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.create"
+  },
+  {
+   "nom": "list_job_agreements",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "create_job_agreement",
+   "genre": "action",
+   "sensible": true,
+   "permission": "jobs.update"
+  },
+  {
+   "nom": "send_agreement_email",
+   "genre": "action",
+   "sensible": true,
+   "permission": "messages.send"
+  },
+  {
+   "nom": "send_agreement_sms",
+   "genre": "action",
+   "sensible": true,
+   "permission": "messages.send"
+  },
+  {
+   "nom": "list_availability",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "calendar.read"
+  },
+  {
+   "nom": "create_availability",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "delete_availability",
+   "genre": "action",
+   "sensible": true,
+   "permission": "team.update"
+  },
+  {
+   "nom": "set_default_availability",
+   "genre": "action",
+   "sensible": true,
+   "permission": "team.update"
+  }
+ ],
+ "devis": [
+  {
+   "nom": "list_quotes",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "quotes.read"
+  },
+  {
+   "nom": "create_quote",
+   "genre": "action",
+   "sensible": true,
+   "permission": "quotes.create"
+  },
+  {
+   "nom": "list_services",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "send_quote",
+   "genre": "action",
+   "sensible": true,
+   "permission": "quotes.send"
+  },
+  {
+   "nom": "convert_quote_to_job",
+   "genre": "action",
+   "sensible": true,
+   "permission": "quotes.approve"
+  },
+  {
+   "nom": "cancel_quote",
+   "genre": "action",
+   "sensible": true,
+   "permission": "quotes.update"
+  },
+  {
+   "nom": "update_quote",
+   "genre": "action",
+   "sensible": true,
+   "permission": "quotes.update"
+  },
+  {
+   "nom": "duplicate_quote",
+   "genre": "action",
+   "sensible": true,
+   "permission": "quotes.create"
+  },
+  {
+   "nom": "delete_quote",
+   "genre": "action",
+   "sensible": true,
+   "permission": "quotes.delete"
+  },
+  {
+   "nom": "unarchive_quote",
+   "genre": "action",
+   "sensible": false,
+   "permission": "quotes.update"
+  },
+  {
+   "nom": "send_quote_sms",
+   "genre": "action",
+   "sensible": true,
+   "permission": "quotes.send"
+  },
+  {
+   "nom": "convert_quote_to_invoice",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.create"
+  },
+  {
+   "nom": "list_quote_presets",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "quotes.read"
+  },
+  {
+   "nom": "create_quote_preset",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "update_quote_preset",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "delete_quote_preset",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "duplicate_quote_preset",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "list_quote_templates",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "quotes.read"
+  },
+  {
+   "nom": "create_quote_template",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "update_quote_template",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "delete_quote_template",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.update"
+  }
+ ],
+ "facturation": [
+  {
+   "nom": "list_invoices",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "invoices.read"
+  },
+  {
+   "nom": "get_overdue_payments",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_invoices"
+  },
+  {
+   "nom": "get_revenue_summary",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "create_invoice",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.create"
+  },
+  {
+   "nom": "get_financial_overview",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "compare_revenue",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "analyze_profitability",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_margins"
+  },
+  {
+   "nom": "get_top_services",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "send_invoice",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.send"
+  },
+  {
+   "nom": "send_payment_reminders",
+   "genre": "action",
+   "sensible": true,
+   "permission": "messages.send"
+  },
+  {
+   "nom": "create_invoice_from_job",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.create"
+  },
+  {
+   "nom": "mark_invoice_paid",
+   "genre": "action",
+   "sensible": true,
+   "permission": "payments.create"
+  },
+  {
+   "nom": "update_invoice",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.update"
+  },
+  {
+   "nom": "void_invoice",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.update"
+  },
+  {
+   "nom": "revert_invoice_to_draft",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.update"
+  },
+  {
+   "nom": "duplicate_invoice",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.create"
+  },
+  {
+   "nom": "delete_invoice",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.delete"
+  },
+  {
+   "nom": "record_invoice_payment",
+   "genre": "action",
+   "sensible": true,
+   "permission": "payments.create"
+  },
+  {
+   "nom": "list_recurring_invoices",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "invoices.read"
+  },
+  {
+   "nom": "create_recurring_invoice",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.create"
+  },
+  {
+   "nom": "update_recurring_invoice",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.update"
+  },
+  {
+   "nom": "delete_recurring_invoice",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.delete"
+  },
+  {
+   "nom": "run_recurring_invoice_now",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.create"
+  },
+  {
+   "nom": "list_invoice_templates",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "invoices.read"
+  },
+  {
+   "nom": "create_invoice_template",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.create"
+  },
+  {
+   "nom": "update_invoice_template",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.update"
+  },
+  {
+   "nom": "delete_invoice_template",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.delete"
+  },
+  {
+   "nom": "create_payment_request",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.send"
+  },
+  {
+   "nom": "resend_payment_request",
+   "genre": "action",
+   "sensible": true,
+   "permission": "invoices.send"
+  },
+  {
+   "nom": "refund_payment",
+   "genre": "action",
+   "sensible": true,
+   "permission": "payments.refund"
+  },
+  {
+   "nom": "charge_card_on_file",
+   "genre": "action",
+   "sensible": true,
+   "permission": "payments.create"
+  },
+  {
+   "nom": "remove_card_on_file",
+   "genre": "action",
+   "sensible": true,
+   "permission": "clients.update"
+  },
+  {
+   "nom": "get_reminder_settings",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "settings.read"
+  },
+  {
+   "nom": "update_reminder_settings",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "list_payments",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "payments.read"
+  },
+  {
+   "nom": "get_tax_config",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "settings.read"
+  },
+  {
+   "nom": "setup_taxes",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "create_tax_config",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "update_tax_config",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "delete_tax_config",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "set_default_tax_group",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "create_service",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "update_service",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "archive_service",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.update"
+  }
+ ],
+ "rapports": [
+  {
+   "nom": "get_company_info",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": null
+  },
+  {
+   "nom": "list_automations",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "automations.read"
+  },
+  {
+   "nom": "get_automation_health",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "automations.read"
+  },
+  {
+   "nom": "get_morning_briefing",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "build_report",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "create_automation_from_text",
+   "genre": "action",
+   "sensible": true,
+   "permission": "automations.update"
+  },
+  {
+   "nom": "toggle_automation_rule",
+   "genre": "action",
+   "sensible": true,
+   "permission": "automations.update"
+  },
+  {
+   "nom": "update_automation_message",
+   "genre": "action",
+   "sensible": true,
+   "permission": "automations.update"
+  },
+  {
+   "nom": "update_automation_sms_body",
+   "genre": "action",
+   "sensible": true,
+   "permission": "automations.update"
+  },
+  {
+   "nom": "set_automation_language",
+   "genre": "action",
+   "sensible": true,
+   "permission": "automations.update"
+  },
+  {
+   "nom": "list_goals",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "reports.read"
+  },
+  {
+   "nom": "set_goal",
+   "genre": "action",
+   "sensible": false,
+   "permission": "reports.read"
+  },
+  {
+   "nom": "delete_goal",
+   "genre": "action",
+   "sensible": true,
+   "permission": "reports.read"
+  },
+  {
+   "nom": "list_scheduled_reports",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "create_scheduled_report",
+   "genre": "action",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "update_scheduled_report",
+   "genre": "action",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "delete_scheduled_report",
+   "genre": "action",
+   "sensible": true,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "send_scheduled_report_now",
+   "genre": "action",
+   "sensible": true,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "list_notifications",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "settings.read"
+  },
+  {
+   "nom": "mark_notifications_read",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.read"
+  },
+  {
+   "nom": "delete_notification",
+   "genre": "action",
+   "sensible": false,
+   "permission": "settings.read"
+  }
+ ],
+ "communications": [
+  {
+   "nom": "send_sms",
+   "genre": "action",
+   "sensible": true,
+   "permission": "messages.send"
+  },
+  {
+   "nom": "get_conversations",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "messages.read"
+  },
+  {
+   "nom": "get_conversation_messages",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "messages.read"
+  },
+  {
+   "nom": "send_email",
+   "genre": "action",
+   "sensible": true,
+   "permission": "messages.send"
+  },
+  {
+   "nom": "mark_conversation_read",
+   "genre": "action",
+   "sensible": false,
+   "permission": "messages.read"
+  },
+  {
+   "nom": "list_email_templates",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "settings.read"
+  },
+  {
+   "nom": "create_email_template",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "update_email_template",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "set_default_email_template",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "delete_email_template",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "duplicate_email_template",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  }
+ ],
+ "equipe": [
+  {
+   "nom": "get_team",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "team.read"
+  },
+  {
+   "nom": "get_timesheets",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "timesheets.read"
+  },
+  {
+   "nom": "list_tasks",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "get_payroll_summary",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "create_task",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "update_task_status",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "update_task",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "delete_task",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "reschedule_task",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "duplicate_task",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "bulk_update_task_status",
+   "genre": "action",
+   "sensible": false,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "bulk_delete_tasks",
+   "genre": "action",
+   "sensible": true,
+   "permission": "jobs.read"
+  },
+  {
+   "nom": "list_teams",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "team.read"
+  },
+  {
+   "nom": "list_invitations",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "users.invite"
+  },
+  {
+   "nom": "invite_member",
+   "genre": "action",
+   "sensible": true,
+   "permission": "users.invite"
+  },
+  {
+   "nom": "resend_invitation",
+   "genre": "action",
+   "sensible": true,
+   "permission": "users.invite"
+  },
+  {
+   "nom": "revoke_invitation",
+   "genre": "action",
+   "sensible": true,
+   "permission": "users.invite"
+  },
+  {
+   "nom": "update_member_role",
+   "genre": "action",
+   "sensible": true,
+   "permission": "users.update_role"
+  },
+  {
+   "nom": "remove_member",
+   "genre": "action",
+   "sensible": true,
+   "permission": "users.disable"
+  },
+  {
+   "nom": "reactivate_member",
+   "genre": "action",
+   "sensible": true,
+   "permission": "users.disable"
+  },
+  {
+   "nom": "create_team",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "update_team",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "delete_team",
+   "genre": "action",
+   "sensible": true,
+   "permission": "team.update"
+  },
+  {
+   "nom": "set_hourly_rate",
+   "genre": "action",
+   "sensible": true,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "punch_in",
+   "genre": "action",
+   "sensible": true,
+   "permission": "timesheets.update"
+  },
+  {
+   "nom": "punch_out",
+   "genre": "action",
+   "sensible": true,
+   "permission": "timesheets.update"
+  },
+  {
+   "nom": "start_break",
+   "genre": "action",
+   "sensible": true,
+   "permission": "timesheets.update"
+  },
+  {
+   "nom": "end_break",
+   "genre": "action",
+   "sensible": true,
+   "permission": "timesheets.update"
+  },
+  {
+   "nom": "approve_timesheet",
+   "genre": "action",
+   "sensible": true,
+   "permission": "timesheets.update"
+  },
+  {
+   "nom": "add_payroll_adjustment",
+   "genre": "action",
+   "sensible": true,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "mark_payroll_period_paid",
+   "genre": "action",
+   "sensible": true,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "unmark_payroll_period_paid",
+   "genre": "action",
+   "sensible": true,
+   "permission": "financial.view_reports"
+  },
+  {
+   "nom": "update_payroll_settings",
+   "genre": "action",
+   "sensible": true,
+   "permission": "settings.update"
+  },
+  {
+   "nom": "update_role_preset",
+   "genre": "action",
+   "sensible": true,
+   "permission": "users.update_role"
+  },
+  {
+   "nom": "set_member_permissions",
+   "genre": "action",
+   "sensible": true,
+   "permission": "users.update_role"
+  },
+  {
+   "nom": "reset_member_permissions",
+   "genre": "action",
+   "sensible": true,
+   "permission": "users.update_role"
+  }
+ ],
+ "terrain": [
+  {
+   "nom": "get_d2d_stats",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "door_to_door.access"
+  },
+  {
+   "nom": "list_courses",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": null
+  },
+  {
+   "nom": "list_houses",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "door_to_door.access"
+  },
+  {
+   "nom": "list_territories",
+   "genre": "lecture",
+   "sensible": false,
+   "permission": "door_to_door.access"
+  },
+  {
+   "nom": "create_house",
+   "genre": "action",
+   "sensible": false,
+   "permission": "door_to_door.edit"
+  },
+  {
+   "nom": "update_house",
+   "genre": "action",
+   "sensible": false,
+   "permission": "door_to_door.edit"
+  },
+  {
+   "nom": "log_house_event",
+   "genre": "action",
+   "sensible": false,
+   "permission": "door_to_door.edit"
+  },
+  {
+   "nom": "create_territory",
+   "genre": "action",
+   "sensible": false,
+   "permission": "door_to_door.edit"
+  },
+  {
+   "nom": "update_territory",
+   "genre": "action",
+   "sensible": false,
+   "permission": "door_to_door.edit"
+  },
+  {
+   "nom": "create_rep",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "create_d2d_team",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "update_d2d_pipeline_item",
+   "genre": "action",
+   "sensible": false,
+   "permission": "door_to_door.convert"
+  },
+  {
+   "nom": "update_d2d_settings",
+   "genre": "action",
+   "sensible": false,
+   "permission": "door_to_door.edit"
+  },
+  {
+   "nom": "start_field_session",
+   "genre": "action",
+   "sensible": false,
+   "permission": "door_to_door.access"
+  },
+  {
+   "nom": "end_field_session",
+   "genre": "action",
+   "sensible": true,
+   "permission": "door_to_door.access"
+  },
+  {
+   "nom": "pause_field_session",
+   "genre": "action",
+   "sensible": false,
+   "permission": "door_to_door.access"
+  },
+  {
+   "nom": "resume_field_session",
+   "genre": "action",
+   "sensible": false,
+   "permission": "door_to_door.access"
+  },
+  {
+   "nom": "create_badge",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "create_challenge",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "create_battle",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "create_course",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "update_course",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "publish_course",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "assign_course",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "create_course_module",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "create_course_lesson",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  },
+  {
+   "nom": "update_course_lesson",
+   "genre": "action",
+   "sensible": false,
+   "permission": "team.update"
+  }
+ ]
+}

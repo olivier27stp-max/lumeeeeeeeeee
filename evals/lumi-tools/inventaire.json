@@ -1,0 +1,7221 @@
+[
+ {
+  "nom": "search_help",
+  "module": "tools-aide.ts",
+  "topic": "(différé)",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": null,
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": null,
+  "tests": [
+   "lumi-items8-14.test.ts",
+   "support\\support-ia.test.ts",
+   "support\\support-moins-cher.test.ts"
+  ]
+ },
+ {
+  "nom": "search_clients",
+  "module": "tools.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "clients.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-fiches.test.ts",
+   "lumi-items8-14.test.ts",
+   "lumi-raccourcis.test.ts",
+   "lumi-registre.test.ts"
+  ]
+ },
+ {
+  "nom": "search_leads",
+  "module": "tools.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "leads.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-execution-correctifs.test.ts",
+   "lumi-items8-14.test.ts"
+  ]
+ },
+ {
+  "nom": "list_jobs",
+  "module": "tools.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes-2.test.ts",
+   "lumi-caches.test.ts",
+   "lumi-etages12.test.ts",
+   "lumi-fiches.test.ts",
+   "lumi-items8-14.test.ts",
+   "lumi-raccourcis.test.ts"
+  ]
+ },
+ {
+  "nom": "get_job",
+  "module": "tools.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "find_dates_in_location",
+  "module": "tools.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "query_schedule",
+  "module": "tools.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-raccourcis.test.ts",
+   "lumi-sous-agents.test.ts"
+  ]
+ },
+ {
+  "nom": "list_quotes",
+  "module": "tools.ts",
+  "topic": "devis",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "quotes.read",
+  "financier": true,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-etages12.test.ts",
+   "lumi-fiches.test.ts",
+   "lumi-items8-14.test.ts"
+  ]
+ },
+ {
+  "nom": "list_invoices",
+  "module": "tools.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "invoices.read",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "agent-office-isolation.test.tsx",
+   "lumi-actions-directes.test.ts",
+   "lumi-agent.test.ts"
+  ]
+ },
+ {
+  "nom": "get_company_info",
+  "module": "tools.ts",
+  "topic": "rapports",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": null,
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": null,
+  "tests": [
+   "lumi-fiches.test.ts"
+  ]
+ },
+ {
+  "nom": "get_overdue_payments",
+  "module": "tools.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_invoices",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-raccourcis.test.ts",
+   "lumi-sous-agents.test.ts",
+   "lumi-traces.test.ts"
+  ]
+ },
+ {
+  "nom": "get_revenue_summary",
+  "module": "tools.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-etage0.test.ts",
+   "lumi-raccourcis.test.ts"
+  ]
+ },
+ {
+  "nom": "get_day_route",
+  "module": "tools.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "get_weather",
+  "module": "tools.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": null,
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": null,
+  "tests": [
+   "lumi-meteo.test.ts"
+  ]
+ },
+ {
+  "nom": "create_quote",
+  "module": "tools.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "quotes.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-agent.test.ts",
+   "lumi-documents-taxes.test.ts",
+   "lumi-etage0.test.ts",
+   "lumi-fiches.test.ts"
+  ]
+ },
+ {
+  "nom": "create_invoice",
+  "module": "tools.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-documents-taxes.test.ts",
+   "lumi-fiches.test.ts"
+  ]
+ },
+ {
+  "nom": "create_job",
+  "module": "tools.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.create",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes-2.test.ts",
+   "lumi-agent.test.ts",
+   "lumi-confirmation-sms.test.ts",
+   "lumi-extraction.test.ts",
+   "lumi-fiches.test.ts",
+   "lumi-garde-fous.test.ts"
+  ]
+ },
+ {
+  "nom": "send_sms",
+  "module": "tools.ts",
+  "topic": "communications",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "messages.send",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "automatisations-arret-sur-reponse.test.ts",
+   "automatisations-avant-publication.test.ts",
+   "automatisations-champs-editeur.test.tsx",
+   "automatisations-champs-serveur.test.ts",
+   "automatisations-coherence-declencheur-action.test.ts",
+   "automatisations-editeur-launch.test.tsx",
+   "automatisations-format-origine.test.ts",
+   "automatisations-liste-launch.test.tsx",
+   "automatisations-panneau-brouillon.test.tsx",
+   "automatisations-personnalisees.test.ts",
+   "automatisations-publication-serveur.test.ts",
+   "automatisations-rappels-dates.test.ts",
+   "automatisations-sequences.test.ts",
+   "automatisations-v4-apercu.test.tsx",
+   "automatisations-v4-editeur.test.tsx",
+   "automatisations-v4-message.test.tsx",
+   "automatisations-v4-parcours.test.ts",
+   "bureaux-automatisations-partagees.test.ts",
+   "consentement-telephones-formates.test.ts",
+   "lumi-actions-directes-2.test.ts",
+   "lumi-agent.test.ts",
+   "lumi-confirmation-sms.test.ts",
+   "lumi-deuxieme-automatisation.test.ts",
+   "lumi-doublon.test.ts",
+   "lumi-fiches.test.ts",
+   "lumi-garde-fous.test.ts",
+   "lumi-outils-reglages.test.ts",
+   "lumi-parcours-audit-v2.test.ts",
+   "lumi-registre.test.ts",
+   "qa-2026-09-25-p0.test.ts",
+   "qa-2026-09-25-p2-fin.test.ts",
+   "sms-fil-lumi.test.ts",
+   "automation\\client-inactif.test.ts",
+   "automation\\desabonnement-canal.test.ts",
+   "automation\\filet-regression.test.ts",
+   "automation\\launch-anti-doublon.test.ts",
+   "automation\\launch-demarrer.test.ts",
+   "automation\\launch-erreurs-avalees.test.ts",
+   "automation\\launch-f18-f7.test.ts",
+   "automation\\launch-m10-temps.test.ts",
+   "automation\\launch-plan-visites.test.ts",
+   "automation\\launch-rebonds.test.ts",
+   "automation\\launch-texto-impossible.test.ts",
+   "automation\\paiement-echoue.test.ts",
+   "automation\\sortie-parcours.test.ts",
+   "emails\\automation-editeur.test.ts",
+   "emails\\automation-presets.test.ts",
+   "emails\\delivery-reliability.test.ts",
+   "migration\\activer-compte-automatisations.test.ts",
+   "automation\\golden\\golden.test.ts",
+   "quarantaine\\automation\\cout-volume.unit.test.ts",
+   "quarantaine\\automation\\declenchement-conditions.unit.test.ts",
+   "quarantaine\\automation\\erreurs.unit.test.ts",
+   "quarantaine\\automation\\front-automations.unit.test.tsx",
+   "quarantaine\\automation\\idempotence.unit.test.ts",
+   "quarantaine\\automation\\perf.unit.test.ts",
+   "quarantaine\\automation\\permissions.unit.test.ts",
+   "quarantaine\\automation\\temps.unit.test.ts",
+   "quarantaine\\automation-integration\\conformite.test.ts",
+   "quarantaine\\automation-integration\\cout-volume.test.ts",
+   "quarantaine\\automation-integration\\idempotence.test.ts",
+   "quarantaine\\automation-integration\\perf.test.ts",
+   "quarantaine\\automation-integration\\permissions.test.ts",
+   "quarantaine\\automation-integration\\temps.test.ts"
+  ]
+ },
+ {
+  "nom": "get_conversations",
+  "module": "tools-etendus.ts",
+  "topic": "communications",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "messages.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "get_conversation_messages",
+  "module": "tools-etendus.ts",
+  "topic": "communications",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "messages.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "get_team",
+  "module": "tools-etendus.ts",
+  "topic": "equipe",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "team.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-etages12.test.ts"
+  ]
+ },
+ {
+  "nom": "get_timesheets",
+  "module": "tools-etendus.ts",
+  "topic": "equipe",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "timesheets.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts"
+  ]
+ },
+ {
+  "nom": "list_tasks",
+  "module": "tools-etendus.ts",
+  "topic": "equipe",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-etages12.test.ts"
+  ]
+ },
+ {
+  "nom": "list_request_submissions",
+  "module": "tools-etendus.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "leads.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "get_d2d_stats",
+  "module": "tools-etendus.ts",
+  "topic": "terrain",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "door_to_door.access",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "list_courses",
+  "module": "tools-etendus.ts",
+  "topic": "terrain",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": null,
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": null,
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "list_automations",
+  "module": "tools-etendus.ts",
+  "topic": "rapports",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "automations.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "get_automation_health",
+  "module": "tools-etendus.ts",
+  "topic": "rapports",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "automations.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "get_payroll_summary",
+  "module": "tools-etendus.ts",
+  "topic": "equipe",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_reports",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-agent.test.ts"
+  ]
+ },
+ {
+  "nom": "get_financial_overview",
+  "module": "tools-etendus.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "get_team_locations",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "gps.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-etages12.test.ts"
+  ]
+ },
+ {
+  "nom": "get_client_profile",
+  "module": "tools-etendus.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "clients.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes-2.test.ts",
+   "lumi-fiches.test.ts"
+  ]
+ },
+ {
+  "nom": "get_morning_briefing",
+  "module": "tools-etendus.ts",
+  "topic": "rapports",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-raccourcis.test.ts"
+  ]
+ },
+ {
+  "nom": "recall_notes",
+  "module": "tools-etendus.ts",
+  "topic": "memoire",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": null,
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": null,
+  "tests": []
+ },
+ {
+  "nom": "forget_note",
+  "module": "tools-etendus.ts",
+  "topic": "memoire",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": true
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "get_recent_agent_actions",
+  "module": "tools-etendus.ts",
+  "topic": "memoire",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "reports.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "compare_revenue",
+  "module": "tools-etendus.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "get_top_clients",
+  "module": "tools-etendus.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-etage0.test.ts"
+  ]
+ },
+ {
+  "nom": "get_churn_risk",
+  "module": "tools-etendus.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "analyze_profitability",
+  "module": "tools-etendus.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_margins",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "rentabilite.test.ts"
+  ]
+ },
+ {
+  "nom": "get_top_services",
+  "module": "tools-etendus.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "list_services",
+  "module": "tools-etendus.ts",
+  "topic": "devis",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "find_free_slot",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "calendar.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "optimize_route",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "create_client",
+  "module": "tools-etendus.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.create",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes-2.test.ts",
+   "lumi-extraction.test.ts"
+  ]
+ },
+ {
+  "nom": "create_task",
+  "module": "tools-etendus.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "automatisations-avant-publication.test.ts",
+   "automatisations-chainer.test.ts",
+   "automatisations-coherence-declencheur-action.test.ts",
+   "automatisations-format-origine.test.ts",
+   "automatisations-v4-editeur.test.tsx",
+   "lumi-actions-directes.test.ts",
+   "lumi-agent.test.ts",
+   "lumi-caches.test.ts",
+   "lumi-etage0.test.ts",
+   "lumi-fiches.test.ts",
+   "lumi-garde-fous.test.ts",
+   "lumi-outils-differes.test.ts",
+   "lumi-outils-reglages.test.ts",
+   "lumi-parcours-audit-v2.test.ts",
+   "automation\\filet-regression.test.ts",
+   "automation\\launch-evenements-base.test.ts",
+   "emails\\automation-variables.test.ts",
+   "quarantaine\\automation\\perf.unit.test.ts",
+   "quarantaine\\automation\\permissions.unit.test.ts"
+  ]
+ },
+ {
+  "nom": "update_job_status",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-agent.test.ts",
+   "lumi-garde-fous.test.ts"
+  ]
+ },
+ {
+  "nom": "assign_job",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.assign",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-etage0.test.ts"
+  ]
+ },
+ {
+  "nom": "remember_this",
+  "module": "tools-etendus.ts",
+  "topic": "memoire",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": true
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-agent.test.ts"
+  ]
+ },
+ {
+  "nom": "send_quote",
+  "module": "tools-etendus.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "quotes.send",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-fiches.test.ts"
+  ]
+ },
+ {
+  "nom": "send_invoice",
+  "module": "tools-etendus.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "invoices.send",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-confirmation-sms.test.ts"
+  ]
+ },
+ {
+  "nom": "send_payment_reminders",
+  "module": "tools-etendus.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "messages.send",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes-2.test.ts",
+   "lumi-agent.test.ts",
+   "lumi-doublon.test.ts",
+   "sms-fil-lumi.test.ts"
+  ]
+ },
+ {
+  "nom": "reschedule_job",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "calendar.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes-2.test.ts",
+   "lumi-extraction.test.ts"
+  ]
+ },
+ {
+  "nom": "update_client",
+  "module": "tools-etendus.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "merge_clients",
+  "module": "tools-etendus.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.delete",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-agent.test.ts",
+   "lumi-fiches.test.ts"
+  ]
+ },
+ {
+  "nom": "update_task_status",
+  "module": "tools-etendus.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "add_note",
+  "module": "tools-etendus.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes-2.test.ts",
+   "lumi-actions-directes.test.ts",
+   "lumi-execution-correctifs.test.ts"
+  ]
+ },
+ {
+  "nom": "archive_job",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-agent.test.ts"
+  ]
+ },
+ {
+  "nom": "create_invoice_from_job",
+  "module": "tools-etendus.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "convert_quote_to_job",
+  "module": "tools-etendus.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "quotes.approve",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-etage0.test.ts"
+  ]
+ },
+ {
+  "nom": "convert_lead_to_client",
+  "module": "tools-etendus.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "leads.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "add_visit",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "calendar.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-confirmation-sms.test.ts"
+  ]
+ },
+ {
+  "nom": "update_job",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "cancel_visit",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "calendar.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "update_task",
+  "module": "tools-etendus.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "delete_task",
+  "module": "tools-etendus.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-garde-fous.test.ts"
+  ]
+ },
+ {
+  "nom": "cancel_quote",
+  "module": "tools-etendus.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "quotes.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts"
+  ]
+ },
+ {
+  "nom": "mark_invoice_paid",
+  "module": "tools-etendus.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "payments.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-agent.test.ts",
+   "lumi-confirmation-sms.test.ts"
+  ]
+ },
+ {
+  "nom": "set_job_expenses",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "financial.view_reports",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "send_email",
+  "module": "tools-etendus.ts",
+  "topic": "communications",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "messages.send",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "automatisations-arret-sur-reponse.test.ts",
+   "automatisations-avant-publication.test.ts",
+   "automatisations-chainer.test.ts",
+   "automatisations-coherence-declencheur-action.test.ts",
+   "automatisations-format-origine.test.ts",
+   "automatisations-liste-launch.test.tsx",
+   "automatisations-personnalisees.test.ts",
+   "automatisations-publication-serveur.test.ts",
+   "automatisations-sequences.test.ts",
+   "automatisations-v4-message.test.tsx",
+   "automatisations-v4-serveur.test.ts",
+   "lumi-actions-directes-2.test.ts",
+   "lumi-agent.test.ts",
+   "lumi-outils-reglages.test.ts",
+   "qa-2026-09-25-p0.test.ts",
+   "automation\\desabonnement-canal.test.ts",
+   "automation\\filet-regression.test.ts",
+   "automation\\launch-f18-f7.test.ts",
+   "automation\\launch-rebonds.test.ts",
+   "automation\\launch-texto-impossible.test.ts",
+   "courriels\\prereglages-courriels.test.ts",
+   "emails\\automation-editeur.test.ts",
+   "emails\\automation-presets.test.ts",
+   "emails\\delivery-reliability.test.ts",
+   "emails\\email-body-text.test.ts",
+   "automation\\golden\\golden.test.ts",
+   "quarantaine\\automation\\cout-volume.unit.test.ts",
+   "quarantaine\\automation\\erreurs.unit.test.ts",
+   "quarantaine\\automation\\front-automations.unit.test.tsx",
+   "quarantaine\\automation\\perf.unit.test.ts",
+   "quarantaine\\automation-integration\\conformite.test.ts"
+  ]
+ },
+ {
+  "nom": "build_report",
+  "module": "tools-rapports.ts",
+  "topic": "rapports",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-agent.test.ts",
+   "lumi-rapports.test.ts"
+  ]
+ },
+ {
+  "nom": "create_lead",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "leads.create",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes-2.test.ts",
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "update_lead",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "leads.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "update_lead_status",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "leads.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_lead",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "leads.delete",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "convert_lead_to_job",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.create",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "process_request_submission",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "leads.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_request_submission",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "leads.delete",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_client",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.delete",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-fiches.test.ts",
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "list_properties",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "clients.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "create_property",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "update_property",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_property",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "list_notes",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "update_note",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_note",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "list_custom_fields",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "clients.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "set_custom_field",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "list_client_tags",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "clients.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": []
+ },
+ {
+  "nom": "add_client_tag",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "remove_client_tag",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "list_deals",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "leads.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "update_deal_stage",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "leads.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_deal",
+  "module": "tools-leads.ts",
+  "topic": "clients",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "leads.delete",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-leads.test.ts"
+  ]
+ },
+ {
+  "nom": "update_quote",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "quotes.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "duplicate_quote",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "quotes.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": []
+ },
+ {
+  "nom": "delete_quote",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "quotes.delete",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "unarchive_quote",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "quotes.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "send_quote_sms",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "quotes.send",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "convert_quote_to_invoice",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "list_quote_presets",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "quotes.read",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "create_quote_preset",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "update_quote_preset",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_quote_preset",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "duplicate_quote_preset",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "list_quote_templates",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "quotes.read",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "create_quote_template",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "update_quote_template",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_quote_template",
+  "module": "tools-argent.ts",
+  "topic": "devis",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "update_invoice",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "void_invoice",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "revert_invoice_to_draft",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "duplicate_invoice",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_invoice",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.delete",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "record_invoice_payment",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "payments.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "list_recurring_invoices",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "invoices.read",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "create_recurring_invoice",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "update_recurring_invoice",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_recurring_invoice",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.delete",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "run_recurring_invoice_now",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "list_invoice_templates",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "invoices.read",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "create_invoice_template",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "update_invoice_template",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_invoice_template",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.delete",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "create_payment_request",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "invoices.send",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "resend_payment_request",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "invoices.send",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "refund_payment",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "payments.refund",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-confirmation-sms.test.ts",
+   "lumi-fiches.test.ts",
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "charge_card_on_file",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "payments.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-doublon.test.ts",
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "remove_card_on_file",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "clients.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "get_reminder_settings",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "settings.read",
+  "financier": true,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts"
+  ]
+ },
+ {
+  "nom": "update_reminder_settings",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "list_payments",
+  "module": "tools-argent.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "payments.read",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-argent.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_job",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.delete",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "list_recurrence_rules",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "create_recurrence_rule",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "deactivate_recurrence_rule",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "create_job_template",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.create",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "schedule_job",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "calendar.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "unschedule_job",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "calendar.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "list_job_checklists",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "create_job_checklist",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "update_job_checklist",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_job_checklist",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "list_checklist_templates",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "create_checklist_template",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "update_checklist_template",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_checklist_template",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "list_job_tags",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "create_job_tag",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "set_job_tags",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "save_job_billing_milestones",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "create_invoice_for_visit",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "create_invoice_for_milestone",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "invoices.create",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "list_job_agreements",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "create_job_agreement",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "send_agreement_email",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "messages.send",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "send_agreement_sms",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": true,
+   "anodine": false
+  },
+  "permission": "messages.send",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "list_availability",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "calendar.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "create_availability",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_availability",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "set_default_availability",
+  "module": "tools-terrain.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "reschedule_task",
+  "module": "tools-terrain.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "duplicate_task",
+  "module": "tools-terrain.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "bulk_update_task_status",
+  "module": "tools-terrain.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "bulk_delete_tasks",
+  "module": "tools-terrain.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "jobs.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-terrain.test.ts"
+  ]
+ },
+ {
+  "nom": "list_teams",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "team.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "list_invitations",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "users.invite",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "invite_member",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "users.invite",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/invitations/send"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "resend_invitation",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": false,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "users.invite",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/invitations/resend"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "revoke_invitation",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "users.invite",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/invitations/revoke"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "update_member_role",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "users.update_role",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/invitations/update-role"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "remove_member",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "users.disable",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/invitations/remove-member"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "reactivate_member",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "users.disable",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/invitations/reactivate-member"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "create_team",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "update_team",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_team",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "set_hourly_rate",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "paie",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "punch_in",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "paie",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "timesheets.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/timesheets/punch-in"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-doublon.test.ts",
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "punch_out",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "paie",
+  "registre": {
+   "sensible": false,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "timesheets.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/timesheets/punch-out"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "start_break",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "paie",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "timesheets.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/timesheets/break/start"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "end_break",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "paie",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "timesheets.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/timesheets/break/end"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "approve_timesheet",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "paie",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "timesheets.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "add_payroll_adjustment",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "paie",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/payroll/adjustments"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "mark_payroll_period_paid",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/payroll/mark-paid"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "unmark_payroll_period_paid",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "financial.view_reports",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/payroll/unmark-paid"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "update_payroll_settings",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "paie",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": true,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "update_role_preset",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "users.update_role",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/roles/update-preset"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "set_member_permissions",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "users.update_role",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/roles/member-permissions"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "reset_member_permissions",
+  "module": "tools-equipe.ts",
+  "topic": "equipe",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "droits",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "users.update_role",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/roles/member-permissions/reset"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-equipe.test.ts"
+  ]
+ },
+ {
+  "nom": "mark_conversation_read",
+  "module": "tools-reglages.ts",
+  "topic": "communications",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "messages.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "list_email_templates",
+  "module": "tools-reglages.ts",
+  "topic": "communications",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "settings.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "create_email_template",
+  "module": "tools-reglages.ts",
+  "topic": "communications",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "update_email_template",
+  "module": "tools-reglages.ts",
+  "topic": "communications",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "set_default_email_template",
+  "module": "tools-reglages.ts",
+  "topic": "communications",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_email_template",
+  "module": "tools-reglages.ts",
+  "topic": "communications",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "duplicate_email_template",
+  "module": "tools-reglages.ts",
+  "topic": "communications",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "create_automation_from_text",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "automations.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-cree-automatisation.test.ts"
+  ]
+ },
+ {
+  "nom": "toggle_automation_rule",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "automations.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "update_automation_message",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "automations.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "update_automation_sms_body",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "automations.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "set_automation_language",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "automations.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "get_tax_config",
+  "module": "tools-reglages.ts",
+  "topic": "facturation",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "settings.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "setup_taxes",
+  "module": "tools-reglages.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "create_tax_config",
+  "module": "tools-reglages.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-indices-outils.test.ts",
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "update_tax_config",
+  "module": "tools-reglages.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_tax_config",
+  "module": "tools-reglages.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "set_default_tax_group",
+  "module": "tools-reglages.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "argent",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "create_service",
+  "module": "tools-reglages.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "update_service",
+  "module": "tools-reglages.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "archive_service",
+  "module": "tools-reglages.ts",
+  "topic": "facturation",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "list_goals",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "reports.read",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "set_goal",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "reports.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_goal",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "reports.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "list_scheduled_reports",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "financial.view_reports",
+  "financier": false,
+  "identite_requise": false,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "create_scheduled_report",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "financial.view_reports",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "update_scheduled_report",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "financial.view_reports",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_scheduled_report",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "financial.view_reports",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "send_scheduled_report_now",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "envoi client",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "financial.view_reports",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "list_notifications",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "settings.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "mark_notifications_read",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-actions-directes.test.ts",
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "delete_notification",
+  "module": "tools-reglages.ts",
+  "topic": "rapports",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "settings.read",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "lumi-outils-reglages.test.ts"
+  ]
+ },
+ {
+  "nom": "list_houses",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "door_to_door.access",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "list_territories",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "lecture",
+  "sensible": false,
+  "categorie": null,
+  "registre": null,
+  "permission": "door_to_door.access",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": false,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "create_house",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.edit",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/field-sales/houses"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "update_house",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.edit",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "log_house_event",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.edit",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/field-sales/houses/${id}/events"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "create_territory",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.edit",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/field-sales/territories"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "update_territory",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.edit",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "create_rep",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/field-sales/reps"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "create_d2d_team",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/field-sales/teams"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "update_d2d_pipeline_item",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.convert",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "update_d2d_settings",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.edit",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "start_field_session",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.access",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/field-sessions/start"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "end_field_session",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": false,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.access",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/field-sessions/${s.id}/end"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "pause_field_session",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.access",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/field-sessions/${s.id}/pause"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "resume_field_session",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "door_to_door.access",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/field-sessions/${s.id}/resume"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "create_badge",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/gamification/badges"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "create_challenge",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/gamification/challenges"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "create_battle",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/gamification/battles"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "create_course",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/courses"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "update_course",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "publish_course",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "assign_course",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/courses/${id}/assign"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "create_course_module",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/courses/${id}/modules"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "create_course_lesson",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [
+   "/courses/modules/${id}/lessons"
+  ],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ },
+ {
+  "nom": "update_course_lesson",
+  "module": "tools-d2d-formations.ts",
+  "topic": "terrain",
+  "genre": "action",
+  "sensible": false,
+  "categorie": null,
+  "registre": {
+   "sensible": false,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "team.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-outils-d2d-formations.test.ts"
+  ]
+ }
+]
