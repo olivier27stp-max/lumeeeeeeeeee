@@ -129,7 +129,6 @@ export default function HomeApercu() {
           </div>
         ))}
         <div className="ha-head">
-          <p className="ha-kicker">{fr ? 'Lume · CRM + assistant IA pour entreprises de services' : 'Lume · CRM + AI assistant for service businesses'}</p>
           <h1 className="ha-h1">
             <span>{h.titleStopManaging}{' '}<span className="relative inline-block">{h.titleManually}<Underline color="text-red-500" /></span></span>
             <br />
