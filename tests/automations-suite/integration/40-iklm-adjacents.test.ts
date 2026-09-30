@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { demarrerMoteur, marque } from '../harnais/moteur';
 import { sessionDe, COMPTES } from '../harnais/bureau-test';
+import { TABLE_REPRISES } from '../../../server/lib/courriels/reprises';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
 const nettoyer: Array<() => PromiseLike<unknown>> = [];
@@ -329,9 +330,24 @@ describe('K — rapports planifiés', () => {
     expect((await courrielsVers(adresse, depuis)).length).toBe(1);
   });
 
-  it('[K-051] fournisseur en panne : le rapport n’est PAS marqué envoyé (il repartira au prochain passage)', async () => {
+  it('[K-051] le rapport d’une entreprise en bac à sable est consigné AU NOM de l’entreprise (journal des envois, bac à sable), même vers une adresse ordinaire', async () => {
     const { processScheduledReports } = await import('../../../server/lib/scheduled-reports');
-    const id = await rapport(b.orgA, { recipient_email: `k051-${Date.now().toString(36)}@qa.invalid` });
+    const depuis = new Date().toISOString();
+    const adresse = `k051-${Date.now().toString(36)}@qa.invalid`;
+    await rapport(b.orgA, { recipient_email: adresse });
+    await processScheduledReports({ orgId: b.orgA });
+    const envois = await courrielsVers(adresse, depuis);
+    expect(envois.length).toBe(1);
+    // Sans `suivi`, le courriel n'était rattaché à aucune entreprise : seul le
+    // domaine .invalid le retenait — vers une vraie adresse, le bac à sable de
+    // l'entreprise ne s'appliquait pas.
+    expect((envois[0].meta as { raison?: string }).raison).toBe('entreprise');
+  });
+
+  it('[K-053] fournisseur en panne : le rapport n’est pas perdu (non marqué envoyé, ou en file de reprise)', async () => {
+    const { processScheduledReports } = await import('../../../server/lib/scheduled-reports');
+    const depuis = new Date().toISOString();
+    const id = await rapport(b.orgA, { recipient_email: `k053-${Date.now().toString(36)}@qa.invalid` });
     await mode(b.orgA, 'panne');
     try {
       await processScheduledReports({ orgId: b.orgA });
@@ -339,7 +355,9 @@ describe('K — rapports planifiés', () => {
       await mode(b.orgA, 'succes');
     }
     const { data } = await b.admin.from('scheduled_reports').select('last_sent_at').eq('id', id).single();
-    expect(data!.last_sent_at).toBeNull();
+    const { data: file } = await b.admin.from(TABLE_REPRISES).select('id').eq('org_id', b.orgA).gte('created_at', depuis);
+    for (const f of file ?? []) nettoyer.push(() => b.admin.from(TABLE_REPRISES).delete().eq('id', f.id));
+    expect(data!.last_sent_at === null || (file ?? []).length > 0).toBe(true);
     await b.admin.from('scheduled_reports').update({ enabled: false }).eq('id', id);
   });
 
