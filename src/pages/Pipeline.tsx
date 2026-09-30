@@ -108,6 +108,13 @@ export default function Pipeline() {
     staleTime: 300_000,
   });
   const pipelines = useMemo(() => pipelinesQ.data ?? [], [pipelinesQ.data]);
+  // Où un deal peut être DÉPLACÉ : tous les pipelines pour un patron, sinon
+  // ceux qu'on lui a confiés en « Modifier ». Un deal envoyé dans un pipeline
+  // qu'on ne voit pas disparaîtrait de ses écrans.
+  const pipelinesCibles = useMemo(
+    () => (estPatron ? pipelines : pipelines.filter((p) => mesModifiables.has(p.id))),
+    [estPatron, pipelines, mesModifiables],
+  );
 
   // Le pipeline REGARDÉ, qui n'est pas forcément celui par défaut : consulter
   // un autre tableau ne doit pas changer un réglage d'organisation.
@@ -447,6 +454,7 @@ export default function Pipeline() {
             onOuvrir={setDealOuvert}
             onDeplacer={deplacer}
             pipelines={pipelines}
+            pipelinesCibles={pipelinesCibles}
           pipelineActif={pipelineId}
           modeCouleur={pipelines.find((p) => p.id === pipelineId)?.color_mode ?? 'dot'}
           onChangerPipeline={choisirPipeline}
@@ -523,6 +531,7 @@ export default function Pipeline() {
         deal={dealAffiche}
         etapes={etapes}
         nomPipeline={dealAffiche ? pipelines.find((p) => p.id === dealAffiche.pipeline_id)?.name : undefined}
+        pipelinesCibles={pipelinesCibles}
         membres={membresQ.data ?? []}
         // La provenance vient de la BASE, elle n'est plus devinée depuis
         // `job_id`/`quote_id` : `pipeline_montants` connaît le cas « dernier
