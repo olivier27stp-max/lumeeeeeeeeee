@@ -232,3 +232,42 @@ describe('A-16 — un seul nom pour un déclencheur, celui du catalogue (comme l
     expect(container.textContent).not.toContain('Lead créé');
   });
 });
+
+// ─── A-17 ───────────────────────────────────────────────────────
+
+/** Les noms des lignes du tableau, dans l'ordre affiché. */
+function ordre(): string[] {
+  return Array.from(container.querySelectorAll('tbody tr td:nth-child(2) button span span:first-child'))
+    .map((s) => s.textContent?.trim() ?? '');
+}
+
+function entete(texte: string) {
+  return Array.from(container.querySelectorAll('thead th button')).find((b) => b.textContent?.includes(texte));
+}
+
+describe('A-17 — les colonnes de la liste se trient', () => {
+  it('Nom (A→Z puis Z→A), Créée le, Total déclenché ; l’en-tête dit le sens (aria-sort)', async () => {
+    reglesServies = [
+      regle({ id: 'b', name: 'Bravo', created_at: '2026-09-03T00:00:00Z', updated_at: '2026-09-03T00:00:00Z' }),
+      regle({ id: 'a', name: 'Alpha', created_at: '2026-09-05T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' }),
+      regle({ id: 'c', name: 'Charlie', created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-02T00:00:00Z' }),
+    ];
+    statsMock.mockImplementation(async () => ({
+      par_regle: { a: { declenches: 1, en_cours: 0 }, b: { declenches: 9, en_cours: 2 }, c: { declenches: 4, en_cours: 1 } },
+      par_etape: null,
+    }));
+    await rendre();
+    await attendre();
+    cliquer(entete('Nom'));
+    expect(ordre()).toEqual(['Alpha', 'Bravo', 'Charlie']);
+    expect(entete('Nom')?.closest('th')?.getAttribute('aria-sort')).toBe('ascending');
+    cliquer(entete('Nom'));
+    expect(ordre()).toEqual(['Charlie', 'Bravo', 'Alpha']);
+    expect(entete('Nom')?.closest('th')?.getAttribute('aria-sort')).toBe('descending');
+    cliquer(entete('Créée le'));
+    expect(ordre()).toEqual(['Charlie', 'Bravo', 'Alpha']);
+    cliquer(entete('Total déclenché'));
+    expect(ordre()).toEqual(['Alpha', 'Charlie', 'Bravo']);
+    expect(entete('Nom')?.closest('th')?.getAttribute('aria-sort')).toBe('none');
+  });
+});
