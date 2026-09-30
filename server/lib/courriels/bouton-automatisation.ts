@@ -35,16 +35,34 @@ const PAGES: Record<string, {
   table: string;
   chemin: string;
   texte: { fr: string; en: string };
+  /**
+   * Le libellé selon l'état du document : le bouton dit la VRAIE prochaine
+   * action. « Payer la facture » sous « Paiement reçu, merci » ou « Approuver
+   * la soumission » sous « Merci d'avoir accepté » (audit des courriels du
+   * 2026-09-29) démentaient le message. `null` = pas de bouton du tout.
+   */
+  selonStatut?: Record<string, { fr: string; en: string } | null>;
 }> = {
   quote: {
     table: 'quotes',
     chemin: 'quote',
     texte: { fr: 'Approuver la soumission', en: 'Approve quote' },
+    selonStatut: Object.fromEntries(
+      ['draft', 'approved', 'converted', 'declined', 'expired', 'archived']
+        .map((s) => [s, { fr: 'Voir la soumission', en: 'View quote' }]),
+    ),
   },
   invoice: {
     table: 'invoices',
     chemin: 'invoice',
     texte: { fr: 'Payer la facture', en: 'Pay invoice' },
+    selonStatut: {
+      paid: { fr: 'Voir le reçu', en: 'View receipt' },
+      // Après un dépôt : « Payer » sous « Dépôt reçu, merci » sonnerait faux,
+      // et la page de la facture porte de toute façon le bouton de paiement.
+      partial: { fr: 'Voir la facture', en: 'View invoice' },
+      void: null, // facture annulée : rien à payer ni à voir
+    },
   },
 };
 
@@ -87,7 +105,7 @@ export async function boutonPourEntite(
   try {
     const { data, error } = await db
       .from(page.table)
-      .select('view_token')
+      .select('view_token, status')
       .eq('id', entityId)
       .eq('org_id', orgId) // garde-fou tenant : jamais l'entité d'une autre org
       .maybeSingle();
@@ -102,8 +120,12 @@ export async function boutonPourEntite(
     const jeton = data?.view_token;
     if (!jeton) return null;
 
+    const statut = String((data as { status?: string | null }).status || '');
+    const texte = page.selonStatut && statut in page.selonStatut ? page.selonStatut[statut] : page.texte;
+    if (!texte) return null;
+
     return {
-      texte: page.texte[langue],
+      texte: texte[langue],
       url: `${base}/${page.chemin}/${jeton}`,
     };
   } catch (err: unknown) {

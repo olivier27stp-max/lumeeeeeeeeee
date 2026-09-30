@@ -13,7 +13,7 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Rendez-vous confirmé",
+      "subject": "Votre rendez-vous est confirmé",
       "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Votre rendez-vous est confirmé :</p><ul><li><strong>Date :</strong> 2026-09-25</li><li><strong>Heure :</strong> 09 h 00</li><li><strong>Adresse :</strong> 412 rue des Érables, Longueuil</li></ul><p>À bientôt!<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "immediat"
     },
