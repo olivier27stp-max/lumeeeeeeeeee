@@ -32,7 +32,6 @@ import MessageEditor from '../components/automations/MessageEditor';
 import InterrupteurPublication from '../components/automations/InterrupteurPublication';
 import CopierVersBureauxModal from '../components/automations/CopierVersBureauxModal';
 import {
-  chargerAutomatisations,
   dupliquerAutomatisation,
   supprimerAutomatisation,
   restaurerAutomatisation,
@@ -47,7 +46,6 @@ import {
   chargerStatistiques,
   type StatsRegle,
   type BureauCible,
-  type CatalogueAutomatisations,
   type DossierAutomatisation,
 } from '../lib/automationBuilderApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
@@ -424,7 +422,6 @@ export default function Automations() {
   const [stats, setStats] = useState<Record<string, StatsRegle> | null>(null);
   /** Le bureau a-t-il un numéro texto ? `false` = bandeau ; `null` = inconnu, rien. */
   const [textoConfigure, setTextoConfigure] = useState<boolean | null>(null);
-  const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
   const [occupeId, setOccupeId] = useState<string | null>(null);
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
   const [savingLang, setSavingLang] = useState(false);
@@ -693,15 +690,12 @@ export default function Automations() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    let vivant = true;
-    chargerAutomatisations()
-      .then((d) => { if (vivant) setCatalogue(d.catalogue); })
-      .catch((e: unknown) => {
-        console.error('[Automations] catalogue indisponible', e instanceof Error ? e.message : String(e));
-      });
-    return () => { vivant = false; };
-  }, []);
+  /*
+   * PERF-1 (audit V2) : la liste relisait ICI toutes les règles une deuxième
+   * fois (`/api/automations/rules`, 316 ko à 400 règles) pour un catalogue
+   * qu'elle ne lisait jamais. Les libellés viennent du catalogue embarqué
+   * (`automationCatalogue.ts`) : une seule lecture des règles suffit.
+   */
 
   // Fermer les menus au clic ailleurs.
   useEffect(() => {

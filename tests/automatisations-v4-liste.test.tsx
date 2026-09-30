@@ -271,3 +271,15 @@ describe('A-17 — les colonnes de la liste se trient', () => {
     expect(entete('Nom')?.closest('th')?.getAttribute('aria-sort')).toBe('none');
   });
 });
+
+// ─── PERF-1 ─────────────────────────────────────────────────────
+
+describe('PERF-1 — la liste ne télécharge les règles qu’une fois', () => {
+  it('pas de 2e lecture complète (catalogue jamais lu) : /api/automations/rules n’est pas appelé', async () => {
+    reglesServies = [regle()];
+    await rendre();
+    await attendre();
+    expect(container.textContent).toContain('Relance devis');
+    expect(catalogueMock).not.toHaveBeenCalled();
+  });
+});
