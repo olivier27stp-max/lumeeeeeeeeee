@@ -7,15 +7,18 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 
-// Seules les taxes sont simulées ; le reste du module (handlers, outils) reste réel
-// pour que la route Lumi, importée plus bas, se charge normalement.
-vi.mock('../server/lib/agent/tools-etendus', async (importActual) => ({
-  ...(await importActual<typeof import('../server/lib/agent/tools-etendus')>()),
-  taxesParDefaut: async () => [
-    { code: 'TPS', label: 'TPS', rate: 5, enabled: true },
-    { code: 'TVQ', label: 'TVQ', rate: 9.975, enabled: true },
-    { code: 'X', label: 'Inactive', rate: 50, enabled: false },
-  ],
+// Seule la résolution des taxes du client est simulée (groupe TPS + TVQ) ; le
+// calcul (taxesPourDocument → computeTaxLines) et le reste du module sont réels.
+vi.mock('../server/lib/taxResolve', async (importActual) => ({
+  ...(await importActual<typeof import('../server/lib/taxResolve')>()),
+  resolveTaxesForOrg: async () => ({
+    taxes: [
+      { id: 't1', name: 'TPS', rate: 5, is_active: true },
+      { id: 't2', name: 'TVQ', rate: 9.975, is_active: true },
+      { id: 't3', name: 'TPS', rate: 5, is_active: true }, // doublon de tax_configs : compté une fois
+    ],
+    group: null, region: 'QC',
+  }),
 }));
 
 const C1 = '11111111-1111-4111-8111-111111111111';
@@ -61,7 +64,7 @@ describe('fichesDuResultat', () => {
 });
 
 describe('apercuProposition', () => {
-  it('devis : lignes, sous-total, taxes ACTIVES de l org, total, client', async () => {
+  it('devis : lignes, sous-total, taxes DU CLIENT (même calcul que l outil), total, client', async () => {
     const { apercuProposition } = await import('../server/lib/lumi/fiches');
     const a: any = await apercuProposition('create_quote', {
       client_id: C1, title: 'Vitres', valid_days: 30,

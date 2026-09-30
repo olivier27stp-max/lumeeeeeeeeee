@@ -82,6 +82,7 @@ export function texteRecus(lignes: LigneRecu[], decision: 'confirm' | 'cancel', 
           : `${cap(nomAction(outil, fr))}: I didn't get confirmation it went through.${note || ' Check in Lume before trying again.'}`;
       }
       if (resultat?.incomplet) return fr ? `Fait en partie seulement : ${quoi}${montant}.${note}${avert}` : `Only partly done: ${quoi}${montant}.${note}${avert}`;
+      if (resultat?.deja_existante) return fr ? `Rien de nouveau : ${quoi} existait déjà.${note}` : `Nothing new: ${quoi} already existed.${note}`;
       if (resultat?.deja_fait) return fr ? `C'était déjà fait : ${quoi}${montant}.${avert}` : `Already done earlier: ${quoi}${montant}.${avert}`;
       return fr ? `C'est fait : ${quoi}${montant}.${avert}` : `Done: ${quoi}${montant}.${avert}`;
     }

@@ -13,7 +13,7 @@
  * Rien ici ne part au modèle : fiches et aperçus voyagent en SSE seulement.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { taxesParDefaut } from '../agent/tools-etendus';
+import { taxesPourDocument } from '../agent/tools-etendus';
 import { drapeauxEcriture } from '../agent/registre';
 import { apercuAction, apercuTexto, type ApercuAction } from './apercu-action';
 
@@ -168,10 +168,11 @@ async function apercuDocument(genre: 'quote' | 'invoice', args: Record<string, a
     return { name: texte(it.name), description: texte(it.description) || null, quantity, unit_price_cents: unit, total_cents: Math.round(quantity * unit) };
   });
   const subtotal = lignes.reduce((s, l) => s + l.total_cents, 0);
-  const taxes = args.no_taxes ? [] : (await taxesParDefaut(ctx)).filter((t) => t.enabled).map((t) => ({
-    label: t.label, rate: t.rate, amount_cents: Math.round(subtotal * (t.rate / 100)),
-  }));
-  const total = subtotal + taxes.reduce((s, t) => s + t.amount_cents, 0);
+  // MÊME fonction que create_quote / create_invoice (audit 2026-09-30) : taxes
+  // du client (région, exemption). Avant : toutes les taxes actives de l'org.
+  const calcul = await taxesPourDocument(ctx, args.client_id || args.lead_id, subtotal, Boolean(args.no_taxes));
+  const taxes = calcul.lignes.map((t) => ({ label: t.name, rate: t.rate, amount_cents: t.amount_cents }));
+  const total = subtotal + calcul.tax_cents;
 
   let client: ApercuDocument['client'] = null;
   const id = args.client_id || args.lead_id;

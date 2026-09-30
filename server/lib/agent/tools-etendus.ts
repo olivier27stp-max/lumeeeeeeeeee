@@ -36,6 +36,7 @@ import {
 import { analyserRentabilite, pourAgent } from '../rentabilite';
 import { ecrireValeurs } from '../champs/service';
 import { etatDesabonnement } from '../desabonnement';
+import { resolveTaxesForOrg, computeTaxLines, type TaxLine as LigneTaxe } from '../taxResolve';
 import { adresseInjoignable } from '../mailer';
 import type { AgentTool, ToolContext } from './tools';
 
@@ -453,6 +454,49 @@ export async function taxesParDefaut(ctx: ToolContext): Promise<TaxLine[]> {
     });
   }
   return taxes;
+}
+
+/**
+ * Taxes d'un DEVIS ou d'une FACTURE, comme l'écran (audit 2026-09-30) :
+ * groupe de taxes de la région du client (ou par défaut), client exempté =
+ * aucune taxe, puis ventilation au cent (taxes composées comprises).
+ * Avant : la carte montrait TPS+TVQ, la facture était créée à 0 $ de taxes
+ * et le devis au taux par défaut de la table, quelles que soient les taxes.
+ * La carte (fiches.ts) et les outils appellent CETTE fonction : même total.
+ */
+export async function taxesPourDocument(
+  ctx: { client: ToolContext['client']; orgId: string },
+  clientId: string | null | undefined,
+  baseCents: number,
+  sansTaxes = false,
+): Promise<{ lignes: LigneTaxe[]; tax_cents: number; taux: number; libelle: string; exempt: boolean }> {
+  if (sansTaxes || baseCents <= 0) return { lignes: [], tax_cents: 0, taux: 0, libelle: '', exempt: false };
+  const r = await resolveTaxesForOrg(ctx.client, ctx.orgId, clientId || null);
+  // tax_configs peut contenir des doublons (voir taxesParDefaut) : un seul par (nom, taux).
+  const vues = new Set<string>();
+  const taxes = (r.taxes || []).filter((t: any) => {
+    const cle = `${String(t.name).trim().toLowerCase()}|${Number(t.rate)}`;
+    if (vues.has(cle)) return false;
+    vues.add(cle);
+    return true;
+  });
+  const lignes = computeTaxLines(baseCents, taxes);
+  const tax_cents = lignes.reduce((s, l) => s + l.amount_cents, 0);
+  const taux = Math.round((tax_cents / baseCents) * 100 * 10000) / 10000;
+  const libelle = lignes.map((l) => `${l.name} (${String(l.rate).replace('.', ',')} %)`).join(' + ');
+  return { lignes, tax_cents, taux, libelle, exempt: Boolean(r.exempt) };
+}
+
+/** Écrit la ventilation par taxe d'un document (applied_taxes), comme l'écran. */
+async function enregistrerTaxesAppliquees(ctx: ToolContext, type: 'quote' | 'invoice', id: string, lignes: LigneTaxe[]): Promise<void> {
+  const { error: delErr } = await ctx.client.from('applied_taxes').delete().eq('document_type', type).eq('document_id', id);
+  if (delErr) throw delErr;
+  if (!lignes.length) return;
+  const { error } = await ctx.client.from('applied_taxes').insert(lignes.map((l, i) => ({
+    document_type: type, document_id: id, tax_config_id: l.tax_config_id, name: l.name, rate: l.rate,
+    amount_cents: l.amount_cents, is_compound: l.is_compound, sort_order: i,
+  })));
+  if (error) throw error;
 }
 
 /** Nom affichable d'un client (même logique que l'app). */
@@ -1584,6 +1628,16 @@ export const handlerCreateQuote = async (args: Record<string, any>, ctx: ToolCon
     const quoteId = String((rpcResult as any)?.quote_id || '');
     if (!quoteId) throw new Error('Le devis a été créé mais son id est introuvable.');
 
+    // Taxes du client (région, exemption), comme l'écran : le taux par défaut
+    // de la table (14,975 %) valait pour tout le monde, Ontario compris.
+    const taxes = await taxesPourDocument(ctx, args.client_id || args.lead_id, totalCents, Boolean(args.no_taxes));
+    {
+      const { error: tauxErr } = await ctx.client.from('quotes')
+        .update({ tax_rate: taxes.taux, tax_rate_label: taxes.libelle || (taxes.exempt ? 'Exempté de taxes' : 'Sans taxes') })
+        .eq('id', quoteId).eq('org_id', ctx.orgId);
+      if (tauxErr) throw tauxErr;
+    }
+
     const lignes = items.map((it, i) => ({
       quote_id: quoteId,
       name: String(it.name).trim(),
@@ -1603,7 +1657,24 @@ export const handlerCreateQuote = async (args: Record<string, any>, ctx: ToolCon
     const { error: recalcErr } = await ctx.client.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
     if (recalcErr) throw recalcErr;
 
-    return { created: true, quote_id: quoteId, total_cents: totalCents, statut: 'brouillon' };
+    // Les totaux ANNONCÉS sont ceux enregistrés (avant : le total hors taxes).
+    const { data: totaux, error: totErr } = await ctx.client.from('quotes')
+      .select('quote_number, subtotal_cents, tax_cents, total_cents').eq('id', quoteId).eq('org_id', ctx.orgId).maybeSingle();
+    if (totErr) throw totErr;
+    const taxeEnBase = Number(totaux?.tax_cents) || 0;
+    // Ventilation TPS/TVQ alignée sur la taxe enregistrée (écart d'arrondi reporté sur la dernière ligne).
+    const ventilation = taxes.lignes.map((l) => ({ ...l }));
+    const ecart = taxeEnBase - ventilation.reduce((t, l) => t + l.amount_cents, 0);
+    if (ventilation.length && ecart !== 0) ventilation[ventilation.length - 1].amount_cents += ecart;
+    await enregistrerTaxesAppliquees(ctx, 'quote', quoteId, ventilation);
+
+    return {
+      created: true, quote_id: quoteId, quote_number: totaux?.quote_number ?? null, statut: 'brouillon',
+      subtotal_cents: Number(totaux?.subtotal_cents) || totalCents, tax_cents: taxeEnBase,
+      total_cents: Number(totaux?.total_cents) || totalCents,
+      taxes: ventilation.map((l) => ({ nom: l.name, taux: l.rate, montant_cents: l.amount_cents })),
+      ...(taxes.exempt ? { note: 'Client exempté de taxes : aucune taxe appliquée.' } : {}),
+    };
   });
 
 export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolContext) =>
@@ -1621,9 +1692,12 @@ export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolC
       }))
       .filter((it) => it.description && it.qty > 0 && it.unit_price_cents >= 0);
     if (!lignesRetenues.length) throw new Error('Aucune ligne valide (description, quantité > 0 et prix requis).');
-    const totalCents = lignesRetenues.reduce(
-      (s, it) => s + Math.round(it.qty * it.unit_price_cents), 0)
-      + Math.max(0, Math.round(Number(args.tax_cents) || 0));
+    const sousTotal = lignesRetenues.reduce((s, it) => s + Math.round(it.qty * it.unit_price_cents), 0);
+    // Taxes calculées ICI, comme l'écran (audit 2026-09-30) : avant, la facture
+    // prenait le tax_cents écrit par le modèle — 0 par défaut — alors que la
+    // carte affichait TPS + TVQ.
+    const taxes = await taxesPourDocument(ctx, String(args.client_id), sousTotal, Boolean(args.no_taxes));
+    const totalCents = sousTotal + taxes.tax_cents;
     const cap = depassePlafond(totalCents);
     if (cap) throw new Error(cap.error);
 
@@ -1643,16 +1717,30 @@ export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolC
       p_invoice_id: invoiceId,
       p_subject: args.subject ? String(args.subject) : null,
       p_due_date: args.due_date || null,
-      p_tax_cents: Math.max(0, Math.round(Number(args.tax_cents) || 0)),
+      p_tax_cents: taxes.tax_cents,
       p_discount_cents: 0,
       p_notes: null,
       p_internal_notes: 'Créée par l\'agent (MCP).',
       p_items: lignesRetenues,
     });
-    if (e2) throw e2;
+    if (e2) {
+      // La facture EXISTE (brouillon vide) : on le dit, on ne la laisse pas passer pour faite.
+      console.error('[agent-tool:create_invoice] save failed', e2.message);
+      return {
+        created: true, incomplet: true, invoice_id: invoiceId, statut: 'brouillon',
+        note: 'Le brouillon de facture a été créé, mais ses lignes n’ont pas pu être enregistrées. Complète-le dans Lume ; ne relance pas la création.',
+      };
+    }
+    try {
+      await enregistrerTaxesAppliquees(ctx, 'invoice', invoiceId, taxes.lignes);
+    } catch (e: any) {
+      // Le total (tax_cents) est juste ; seule la ventilation TPS/TVQ manque.
+      console.error('[agent-tool:create_invoice] applied_taxes', e?.message || e);
+    }
 
     return {
-      created: true, invoice_id: invoiceId, statut: 'brouillon', total_cents: totalCents,
+      created: true, invoice_id: invoiceId, statut: 'brouillon', subtotal_cents: sousTotal, tax_cents: taxes.tax_cents, total_cents: totalCents,
+      taxes: taxes.lignes.map((l) => ({ nom: l.name, taux: l.rate, montant_cents: l.amount_cents })),
       note: 'Facture en BROUILLON — elle ne part pas chez le client. L\'envoi se fait depuis Lume.',
     };
   });
@@ -3133,8 +3221,45 @@ const createInvoiceFromJobTool: AgentTool = {
       const row: any = Array.isArray(data) ? data[0] : data;
       const invoiceId = String(row?.invoice_id || '');
       if (!invoiceId) throw new Error('La préparation a réussi mais la facture est introuvable.');
+      // Une facture existait déjà pour ce job : on la désigne, on n'y touche pas
+      // (avant : « facture préparée », comme si elle venait d'être créée).
+      if (row?.already_exists) {
+        return {
+          created: false, deja_existante: true, invoice_id: invoiceId,
+          note: 'Ce job avait déjà une facture : je n’en ai pas créé une deuxième. Ouvre celle-ci dans Lume.',
+        };
+      }
+      // La RPC crée la facture SANS taxes (l'écran les pose dans l'éditeur, à
+      // l'enregistrement). Un brouillon préparé par Lumi pouvait donc partir
+      // au client sans TPS/TVQ (audit 2026-09-30) : on pose ici les taxes du
+      // client, le trigger de la facture recalcule le total.
+      const { data: fac, error: errFac } = await ctx.client.from('invoices')
+        .select('client_id, status, subtotal_cents, discount_cents, tax_cents')
+        .eq('org_id', ctx.orgId).eq('id', invoiceId).maybeSingle();
+      if (errFac) throw errFac;
+      let taxesPosees: { tax_cents: number; total_cents: number } | null = null;
+      if (fac && fac.status === 'draft' && !Number(fac.tax_cents)) {
+        const base = Math.max(0, (Number(fac.subtotal_cents) || 0) - (Number(fac.discount_cents) || 0));
+        const taxes = await taxesPourDocument(ctx, fac.client_id, base);
+        if (taxes.tax_cents > 0) {
+          const { error: errTaxe } = await ctx.client.from('invoices')
+            .update({ tax_cents: taxes.tax_cents }).eq('org_id', ctx.orgId).eq('id', invoiceId).eq('status', 'draft');
+          if (errTaxe) {
+            console.error('[agent-tool:create_invoice_from_job] taxes', errTaxe.message);
+            return {
+              created: true, incomplet: true, invoice_id: invoiceId, statut: 'brouillon',
+              note: 'Facture préparée en brouillon, mais SANS les taxes : je n’ai pas pu les appliquer. Ouvre-la dans Lume et enregistre-la pour que les taxes s’ajoutent avant tout envoi.',
+            };
+          }
+          try { await enregistrerTaxesAppliquees(ctx, 'invoice', invoiceId, taxes.lignes); } catch (e: any) {
+            console.error('[agent-tool:create_invoice_from_job] applied_taxes', e?.message || e);
+          }
+        }
+        taxesPosees = { tax_cents: taxes.tax_cents, total_cents: base + taxes.tax_cents };
+      }
       return {
         created: true, invoice_id: invoiceId, statut: 'brouillon',
+        ...(taxesPosees ? { subtotal_cents: Number(fac?.subtotal_cents) || 0, tax_cents: taxesPosees.tax_cents, total_cents: taxesPosees.total_cents } : {}),
         note: sansMontant
           ? 'Facture préparée en BROUILLON, mais le job n\u2019avait AUCUN montant : elle est à 0 $. Demande à l\u2019utilisateur les items et montants à y mettre (ou qu\u2019il la complète dans Lume) AVANT tout envoi.'
           : 'Facture préparée depuis le job, en BROUILLON — rien n\u2019est parti chez le client. send_invoice pour l\u2019envoyer, avec confirmation.',
