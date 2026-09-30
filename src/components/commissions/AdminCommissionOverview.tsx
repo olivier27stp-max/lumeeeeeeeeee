@@ -16,6 +16,8 @@ import CommissionTable from './CommissionTable';
 import UpcomingPayouts from './UpcomingPayouts';
 import { CommissionHero, RepLeaderboard, StatusDonut, KpiCard, fmtMoney, type LeaderRep } from './CommissionCharts';
 import { useTranslation } from '../../i18n';
+import { confirmer } from '../ui/ConfirmDialog';
+import { serieCumulee } from './PersonalCommissionView';
 
 interface Props {
   /** Called when the admin clicks a rep — host page can open the drilldown view */
@@ -96,7 +98,8 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
     setActionLoading(id);
     try {
       const updated = await approveCommission(id);
-      setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
+      setEntries((prev) => prev?.map((e) => (e.id === id ? { ...e, ...updated } : e)) ?? null);
+      setPayroll(await getPayrollPreview(filters.from, filters.to, filters.repId));
     } catch (err: any) {
       setError(err?.message || (isFr ? "Échec de l'approbation" : 'Approve failed'));
     } finally {
@@ -105,10 +108,23 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
   };
 
   const handleReverse = async (id: string) => {
+    // Irréversible et touche la paie d'un rep : confirmation obligatoire (avant :
+    // un seul clic sur une petite croix, sans raison ni retour possible).
+    const cible = entries?.find((e) => e.id === id);
+    const ok = await confirmer({
+      title: isFr ? 'Reverser cette commission ?' : 'Reverse this commission?',
+      message: isFr
+        ? `${cible ? fmtMoney(Number(cible.amount)) + ' — ' : ''}la commission ne sera plus due au représentant. Cette action ne peut pas être annulée.`
+        : `${cible ? fmtMoney(Number(cible.amount)) + ' — ' : ''}the commission will no longer be owed to the rep. This cannot be undone.`,
+      confirmLabel: isFr ? 'Reverser' : 'Reverse',
+      danger: true,
+    });
+    if (!ok) return;
     setActionLoading(id);
     try {
-      const updated = await reverseCommission(id);
-      setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
+      const updated = await reverseCommission(id, isFr ? 'Reversée manuellement' : 'Manually reversed');
+      setEntries((prev) => prev?.map((e) => (e.id === id ? { ...e, ...updated } : e)) ?? null);
+      setPayroll(await getPayrollPreview(filters.from, filters.to, filters.repId));
     } catch (err: any) {
       setError(err?.message || (isFr ? 'Échec du reversement' : 'Reverse failed'));
     } finally {
@@ -120,7 +136,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
     setActionLoading(id);
     try {
       const updated = await markCommissionPaid(id);
-      setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
+      setEntries((prev) => prev?.map((e) => (e.id === id ? { ...e, ...updated } : e)) ?? null);
       // Reflète le versement dans les totaux (payé/en attente).
       const p = await getPayrollPreview(filters.from, filters.to, filters.repId);
       setPayroll(p);
@@ -133,7 +149,6 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
 
   // Dashboard derivations — total + cumulative time series + leaderboard + split.
   const dash = useMemo(() => {
-    const list = entries ?? [];
     const paid = payroll?.paid ?? 0;
     const pending = payroll?.pending ?? 0;
     const reversed = payroll?.reversed ?? 0;
@@ -148,39 +163,19 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
     // qui est réellement dû : en attente + approuvé + versé (reversed exclu).
     const total = payroll?.total ?? (pending + approved + paid);
 
-    // Cumulative amount over the selected range (bucketed by day of the period).
-    const from = new Date(filters.from + 'T00:00:00');
-    const to = new Date(filters.to + 'T00:00:00');
-    const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
-    const buckets = new Array(days).fill(0);
-    for (const e of list) {
-      const d = new Date(e.triggered_at || e.created_at);
-      const idx = Math.floor((d.getTime() - from.getTime()) / 86_400_000);
-      if (idx >= 0 && idx < days) buckets[idx] += Number(e.amount || 0);
-    }
-    let run = 0;
-    const series = buckets.map((v) => (run += v));
-    // ~7 evenly spaced x labels (day-of-month).
-    const step = Math.max(1, Math.floor(days / 6));
-    const xLabels: string[] = [];
-    for (let i = 0; i < days; i += step) xLabels.push(String(new Date(from.getTime() + i * 86_400_000).getDate()));
-
-    // Per-rep totals → leaderboard.
-    const byRep = new Map<string, { amount: number; deals: number }>();
-    for (const e of list) {
-      const r = byRep.get(e.user_id) ?? { amount: 0, deals: 0 };
-      r.amount += Number(e.amount || 0);
-      r.deals += 1;
-      byRep.set(e.user_id, r);
-    }
-    const leaderboard: LeaderRep[] = [...byRep.entries()]
-      .map(([userId, v]) => ({ userId, name: profileMap[userId] ?? userId, amount: v.amount, deals: v.deals }))
-      .sort((a, b) => b.amount - a.amount)
+    // Courbe, classement, ventes et moyenne : totaux SERVEUR sur toute la
+    // période (la liste est bornée et suit le filtre de statut). Avant, ils
+    // additionnaient la liste — reprises et estimations comprises — et chaque
+    // part d'un split comptait comme une vente.
+    const { series, xLabels } = serieCumulee(filters.from, filters.to, payroll?.par_jour ?? []);
+    const actifs = (payroll?.par_rep ?? []).filter((r) => r.du_cents > 0);
+    const leaderboard: LeaderRep[] = actifs
+      .map((r) => ({ userId: r.user_id, name: profileMap[r.user_id] ?? r.rep_name ?? r.user_id, amount: r.du_cents / 100, deals: r.ventes }))
       .slice(0, 5);
-
-    const avgPerDeal = list.length ? total / list.length : 0;
-    return { total, paid, pending, approved, reversed, series, xLabels, leaderboard, deals: list.length, avgPerDeal, repCount: byRep.size };
-  }, [entries, payroll, profileMap, filters.from, filters.to]);
+    const deals = payroll?.sales ?? 0;
+    const avgPerDeal = deals ? total / deals : 0;
+    return { total, paid, pending, approved, reversed, estimated: payroll?.estimated ?? 0, series, xLabels, leaderboard, deals, avgPerDeal, repCount: actifs.length };
+  }, [payroll, profileMap, filters.from, filters.to]);
 
   // Rep list for the filter dropdown — loaded once from the org's members, so
   // it stays STABLE. (Deriving it from the filtered entries collapsed the list
@@ -260,7 +255,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
             <KpiCard label={isFr ? 'En attente' : 'Pending'} value={fmtMoney(dash.pending)} money note={isFr ? "en attente d'approbation" : 'awaiting approval'} />
             <KpiCard label={isFr ? 'Approuvé' : 'Approved'} value={fmtMoney(dash.approved)} money note={isFr ? 'à verser' : 'to pay out'} />
             <KpiCard label={isFr ? 'Versé' : 'Paid'} value={fmtMoney(dash.paid)} money note={isFr ? 'réglé' : 'settled'} />
-            <KpiCard label={isFr ? 'Reversé' : 'Reversed'} value={fmtMoney(dash.reversed)} note={isFr ? 'annulé' : 'clawed back'} />
+            <KpiCard label={isFr ? 'Reversé' : 'Reversed'} value={fmtMoney(dash.reversed)} money note={isFr ? 'annulé' : 'clawed back'} />
           </div>
 
           {/* Leaderboard + status donut */}
@@ -299,11 +294,19 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
                 onApprove={handleApprove}
                 onReverse={handleReverse}
                 onMarkPaid={handleMarkPaid}
+                timeZone={payroll?.timezone}
               />
             </CardContent>
           </Card>
 
-          <UpcomingPayouts entries={entries ?? []} />
+          {dash.estimated > 0 && (
+            <p className="text-xs text-text-tertiary">
+              {isFr
+                ? `Estimé sur des jobs pas encore payés : ${fmtMoney(dash.estimated)} — jamais compté dans les totaux.`
+                : `Estimated on jobs not paid yet: ${fmtMoney(dash.estimated)} — never counted in the totals.`}
+            </p>
+          )}
+          <UpcomingPayouts entries={entries ?? []} timeZone={payroll?.timezone} />
         </>
       )}
     </div>

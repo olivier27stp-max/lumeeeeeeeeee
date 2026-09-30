@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { logDataExport } from '../lib/data-export-log';
-import { getPayrollPreview } from '../lib/field-sales/commission-engine';
+import { getPayrollPreview, toutesLesEntrees } from '../lib/field-sales/commission-engine';
+import { bornesPeriode, totauxCommissions } from '../lib/field-sales/commission-periode';
+import { fuseauOrg } from '../lib/automations-fuseau-org';
 import {
   DEFAULT_PAYROLL_SETTINGS,
   computePayPeriod,
-  periodToIsoRange,
   sumEntryHours,
   type PayPeriodType,
 } from '../lib/payroll';
@@ -93,7 +94,8 @@ router.get('/payroll/current-period', async (req, res) => {
 
     const settings = await loadSettings(sc, auth.orgId);
     const period = computePayPeriod(settings, ref);
-    const { fromIso, toIso } = periodToIsoRange(period);
+    const tz = settings.timezone || await fuseauOrg(sc, auth.orgId);
+    const { debut: fromIso, finExclusive } = bornesPeriode(period.start, period.end, tz);
 
     // Hours from completed timesheet entries in the window.
     const { data: entries, error: tErr } = await sc
@@ -103,7 +105,7 @@ router.get('/payroll/current-period', async (req, res) => {
       .eq('employee_id', effectiveUserId)
       .eq('status', 'completed')
       .gte('punch_in_at', fromIso)
-      .lte('punch_in_at', toIso);
+      .lt('punch_in_at', finExclusive);
     if (tErr) throw new Error(tErr.message);
     const hours = sumEntryHours(entries || []);
 
@@ -178,7 +180,7 @@ function tauxHoraireCents(m: { hourly_rate_cents?: number | null; labour_cost_ho
 // hourly rate (from Membres), gross, commissions and adjustments in the window.
 /** Colonnes sélectionnées sur payroll_adjustments / payroll_payments (voir buildPeriodRows). */
 type PayrollAdjustment = { id: string; user_id: string; amount_cents: number; note: string | null; created_at: string };
-type PayrollPayment = { user_id: string; total_cents: number; paid_at: string; note: string | null };
+type PayrollPayment = { user_id: string; total_cents: number; commission_cents?: number | null; paid_at: string; note: string | null };
 
 /** Ligne de paie calculée par membre pour une période. */
 type PayrollRow = {
@@ -197,12 +199,20 @@ type PayrollRow = {
   /** Mode « commission » ou « horaire + commission » sans plan assigné ni
    *  plan par défaut : le moteur ne créera JAMAIS de commission pour lui. */
   commission_plan_missing: boolean;
+  /** Membre désactivé qui a encore des commissions dans la période. */
+  inactive?: boolean;
+  /** Période déjà payée dont le montant recalculé ne correspond plus à ce
+   *  qui a été versé (remboursement, commission tardive…) : à régulariser. */
+  ecart_depuis_versement_cents?: number;
 };
 
 async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
   const settings = await loadSettings(sc, orgId);
   const period = computePayPeriod(settings, ref);
-  const { fromIso, toIso } = periodToIsoRange(period);
+  // Bornes dans le fuseau de l'entreprise (avant : minuit UTC — un pointage
+  // ou une commission du dernier soir de la période glissait à la suivante).
+  const tz = settings.timezone || await fuseauOrg(sc, orgId);
+  const { debut: fromIso, finExclusive } = bornesPeriode(period.start, period.end, tz);
 
   const { data: members, error: mErr } = await sc
     .from('team_members')
@@ -210,7 +220,17 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
     .eq('org_id', orgId)
     .not('user_id', 'is', null);
   if (mErr) throw new Error(mErr.message);
-  const active = (members || []).filter((m: any) => m.status !== 'inactive');
+  // Commissions GAGNÉES dans la période (date de paiement de la facture),
+  // lues par la même fonction que la page Commissions : ni estimations (jobs
+  // pas encore payés — la paie les versait), ni reprises. Paginé : au-delà
+  // de 1 000 lignes, PostgREST tronquait en silence.
+  const commissions = (await toutesLesEntrees(sc, orgId, 'user_id, invoice_id, status, amount',
+    { dateRange: { from: period.start, to: period.end } })).filter((c: any) => c.invoice_id);
+  const avecCommission = new Set(commissions.filter((c: any) => c.status !== 'reversed').map((c: any) => c.user_id));
+  // Un membre désactivé à qui une commission est due reste visible : avant,
+  // ses commissions disparaissaient de toutes les paies (décision D10 sur le
+  // fond ; ici on ne cache plus l'argent dû).
+  const active = (members || []).filter((m: any) => m.status !== 'inactive' || avecCommission.has(m.user_id));
   const userIds = active.map((m: any) => m.user_id);
 
   const aUnPlan = await resoudrePlansCommission(sc, orgId);
@@ -225,21 +245,10 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
         .eq('status', 'completed')
         .in('employee_id', userIds)
         .gte('punch_in_at', fromIso)
-        .lte('punch_in_at', toIso)
+        .lt('punch_in_at', finExclusive)
     : { data: [] as any[], error: null };
   if (entriesErr) throw new Error(entriesErr.message);
 
-  const { data: commissions, error: commErr } = userIds.length
-    ? await sc
-        .from('fs_commission_entries')
-        .select('user_id, amount, status')
-        .eq('org_id', orgId)
-        .is('deleted_at', null)
-        .in('user_id', userIds)
-        .gte('created_at', fromIso)
-        .lte('created_at', toIso)
-    : { data: [] as any[], error: null };
-  if (commErr) throw new Error(commErr.message);
 
   // Adjustments/payments tables ship behind a migration — degrade gracefully.
   let adjustments: PayrollAdjustment[] = [];
@@ -258,7 +267,7 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
 
     const payRes = await sc
       .from('payroll_payments')
-      .select('user_id, total_cents, paid_at, note')
+      .select('user_id, total_cents, commission_cents, paid_at, note')
       .eq('org_id', orgId)
       .eq('period_start', period.start)
       .eq('period_end', period.end);
@@ -271,8 +280,7 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
     const hours = sumEntryHours(myEntries);
     const rateCents = tauxHoraireCents(m);
     const grossCents = Math.round(hours * rateCents);
-    const myComms = (commissions || []).filter((c: any) => c.user_id === m.user_id && c.status !== 'reversed');
-    const commissionCents = Math.round(myComms.reduce((s: number, c: any) => s + Number(c.amount || 0), 0) * 100);
+    const commissionCents = totauxCommissions(commissions.filter((c: any) => c.user_id === m.user_id)).du_cents;
     const myAdjustments = adjustments.filter((a) => a.user_id === m.user_id);
     const adjustmentsCents = myAdjustments.reduce((s, a) => s + Number(a.amount_cents || 0), 0);
     const payment = payments.find((p) => p.user_id === m.user_id) || null;
@@ -289,6 +297,8 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
       adjustments_cents: adjustmentsCents,
       total_cents: grossCents + commissionCents + adjustmentsCents,
       payment,
+      inactive: m.status === 'inactive' || undefined,
+      ecart_depuis_versement_cents: payment ? (grossCents + commissionCents + adjustmentsCents) - Number(payment.total_cents || 0) : undefined,
       commission_plan_missing: (m.compensation_mode === 'commission' || m.compensation_mode === 'both') && !aUnPlan(m.user_id),
     };
   });

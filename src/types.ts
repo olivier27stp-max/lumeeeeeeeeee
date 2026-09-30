@@ -594,16 +594,40 @@ export interface FsCommissionEntry {
   rep_name?: string;
   rep_avatar?: string | null;
   rule_name?: string;
+  invoice_number?: string | null;
+  job_number?: string | null;
+  job_title?: string | null;
+  client_name?: string | null;
+  /** Estimation projetée à la création du job (aucune facture payée). */
+  is_estimate?: boolean;
+}
+
+/** Totaux d'une période, en cents entiers (server/lib/field-sales/commission-periode.ts). */
+export interface CommissionTotalsCents {
+  du_cents: number;
+  en_attente_cents: number;
+  approuve_cents: number;
+  verse_cents: number;
+  repris_cents: number;
+  estime_cents: number;
+  ventes: number;
 }
 
 export interface CommissionPayrollPreview {
+  /** Gagné et dû (en attente + approuvé + versé), en dollars — ni estimations ni reprises. */
   total: number;
   pending: number;
   approved: number;
   paid: number;
   reversed: number;
+  estimated: number;
   count: number;
-  entries: FsCommissionEntry[];
+  sales: number;
+  timezone: string;
+  totals_cents: CommissionTotalsCents;
+  par_rep: Array<CommissionTotalsCents & { user_id: string; rep_name: string | null; base_cents: number }>;
+  par_jour: Array<{ date: string; du_cents: number }>;
+  flagged_ids: string[];
 }
 
 // ── Field Sessions ──
