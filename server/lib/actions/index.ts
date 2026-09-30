@@ -2580,7 +2580,11 @@ export async function executeWebhook(
       // client et les montants, pas des identifiants à recroiser.
       data: vars,
       sent_at: new Date().toISOString(),
-    });
+    }, ctx.cleIdempotence
+      // La même clé à chaque reprise : le destinataire peut reconnaître un
+      // renvoi (audit V2, C24).
+      ? { entetes: { 'Idempotency-Key': ctx.cleIdempotence } }
+      : {});
     if (!reponse.ok) {
       return { success: false, error: `Le serveur distant a répondu ${reponse.status}.` };
     }

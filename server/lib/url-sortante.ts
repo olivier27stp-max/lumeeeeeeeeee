@@ -115,7 +115,7 @@ export const DELAI_TOTAL_MS = 10_000;
 export async function posterSansSsrf(
   url: string,
   corps: unknown,
-  options: { resoudre?: Resolveur; fetcher?: typeof fetch } = {},
+  options: { resoudre?: Resolveur; fetcher?: typeof fetch; entetes?: Record<string, string> } = {},
 ): Promise<Response> {
   const fetcher = options.fetcher ?? fetch;
   const abandon = AbortSignal.timeout(DELAI_TOTAL_MS);
@@ -128,7 +128,7 @@ export async function posterSansSsrf(
     }
     const reponse = await fetcher(cible, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Lume-Automations/1' },
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Lume-Automations/1', ...(options.entetes ?? {}) },
       body: JSON.stringify(corps),
       redirect: 'manual',
       signal: abandon,

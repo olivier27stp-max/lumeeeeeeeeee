@@ -498,6 +498,32 @@ async function reserverActionImmediate(
   const tranche = Math.floor(maintenant / FENETRE_ANTI_DOUBLON_MS);
   const action = rule.actions[index];
 
+  /*
+   * REJEU par l'outbox (le traitement a été coupé, > 2 min) : la fenêtre de
+   * 2 min ne voit plus la première exécution. Le courriel et le texto ont
+   * leur propre garde « déjà envoyé » ; une TÂCHE, un WEBHOOK, une
+   * étiquette, eux, repartaient (audit V2, D-15 : 2 tâches, 2 POST mesurés).
+   * Toute action réussie — ou encore en cours — depuis l'heure du rejeu
+   * n'est pas refaite.
+   */
+  if (event.rejoueDepuis) {
+    const { data: faite, error: errRejeu } = await supabase
+      .from('automation_execution_logs')
+      .select('id')
+      .eq('org_id', event.orgId)
+      .like('execution_key', `${base}@%`)
+      .gte('created_at', event.rejoueDepuis)
+      .or('result_success.eq.true,result_error.eq."en cours"')
+      .limit(1)
+      .maybeSingle();
+    if (errRejeu) {
+      console.error(`[automationEngine] rejeu : exécution précédente illisible (${base}) — exécution quand même:`, errRejeu.message);
+    } else if (faite) {
+      logger.info(`[automationEngine] rejeu : action déjà exécutée depuis ${event.rejoueDepuis}, pas refaite : ${base}`);
+      return null;
+    }
+  }
+
   const { data: precedente, error: errLecture } = await supabase
     .from('automation_execution_logs')
     .select('id')
@@ -652,11 +678,39 @@ async function executeRuleActions(
       // Délai max, comme la file : l'outbox tient pour orphelin un événement
       // non coché après 3 min et le rejoue. Une action immédiate sans borne
       // pouvait encore tourner à ce moment-là → double envoi (launch M5).
-      const result = await avecDelaiMax(
-        executeAction(action.type, action.config, vars, contextePour(action)),
-        DELAI_MAX_ACTION_MS,
-        `${action.type} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
-      );
+      const execution = executeAction(action.type, action.config, vars, contextePour(action));
+      let result: Awaited<typeof execution>;
+      try {
+        result = await avecDelaiMax(
+          execution,
+          DELAI_MAX_ACTION_MS,
+          `${action.type} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
+        );
+      } catch (e) {
+        if (!estDelaiDepasse(e) || !reservation) throw e;
+        /*
+         * Délai dépassé : l'action CONTINUE et réussit souvent (courriel livré
+         * 11 s plus tard). Elle était journalisée « échec » pour de bon —
+         * statistiques et raisons fausses, 66/150 sous charge (audit V2,
+         * D-08). On l'écrit « en attente », puis on complète la MÊME ligne
+         * avec le vrai résultat dès qu'il arrive.
+         */
+        await journaliserAction(config.supabase, reservation, rule, event, i, {
+          result_success: false,
+          result_data: null,
+          result_error: `${(e as Error).message}${EN_ATTENTE_DU_RESULTAT}`,
+          duration_ms: Date.now() - startTime,
+        });
+        void execution.then(
+          (tardif) => journaliserAction(config.supabase, reservation, rule, event, i, {
+            result_success: tardif.success, result_data: tardif.data || null, result_error: tardif.error || null, duration_ms: Date.now() - startTime,
+          }),
+          (erreur: unknown) => journaliserAction(config.supabase, reservation, rule, event, i, {
+            result_success: false, result_data: null, result_error: erreur instanceof Error ? erreur.message : String(erreur), duration_ms: Date.now() - startTime,
+          }),
+        );
+        continue;
+      }
       const durationMs = Date.now() - startTime;
 
       await journaliserAction(config.supabase, reservation, rule, event, i, {
@@ -1119,13 +1173,19 @@ const DELAI_MAX_ACTION_MS = 5_000;
  * qu'il faut, puisque le but est de libérer le tick, pas de garantir que
  * rien n'est parti (la reprise et l'idempotence s'en chargent).
  */
+/** L'action a dépassé son délai : elle continue peut-être, son résultat est INCONNU. */
+export const estDelaiDepasse = (e: unknown): boolean => (e as { delaiDepasse?: boolean } | null)?.delaiDepasse === true;
+
+/** Le texte provisoire d'une action qui a dépassé son délai. */
+const EN_ATTENTE_DU_RESULTAT = ' — résultat en attente (l’action continue)';
+
 async function avecDelaiMax<T>(promesse: Promise<T>, delaiMs: number, message: string): Promise<T> {
   let minuterie: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
       promesse,
       new Promise<never>((_, rejeter) => {
-        minuterie = setTimeout(() => rejeter(new Error(message)), delaiMs);
+        minuterie = setTimeout(() => rejeter(Object.assign(new Error(message), { delaiDepasse: true })), delaiMs);
       }),
     ]);
   } finally {
@@ -1711,11 +1771,63 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
       }
 
       const startTime = Date.now();
-      const result = await avecDelaiMax(
-        executeAction(actionType, config, vars, ctx),
-        DELAI_MAX_ACTION_MS,
-        `${actionType} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
-      );
+      const execution = executeAction(actionType, config, vars, ctx);
+      let result: Awaited<typeof execution>;
+      try {
+        result = await avecDelaiMax(
+          execution,
+          DELAI_MAX_ACTION_MS,
+          `${actionType} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
+        );
+      } catch (e) {
+        if (!estDelaiDepasse(e)) throw e;
+        /*
+         * Délai dépassé : la tâche part en reprise (on libère le tick), mais
+         * l'action continue. Si elle RÉUSSIT ensuite, la reprise est annulée
+         * et le parcours continue — sinon un webhook lent était envoyé DEUX
+         * fois et une tâche créée deux fois (audit V2, C24 / D-08).
+         */
+        const etatReprise = nextStateAfterFailure(task.attempts, `${(e as Error).message}${EN_ATTENTE_DU_RESULTAT}`);
+        await supabase.from('automation_scheduled_tasks').update(etatReprise).eq('id', task.id);
+        const tacheSuivie = task;
+        void execution.then(async (tardif) => {
+          await supabase.from('automation_execution_logs').insert({
+            org_id: tacheSuivie.org_id,
+            automation_rule_id: tacheSuivie.automation_rule_id,
+            scheduled_task_id: tacheSuivie.id,
+            trigger_event: actionConfig.trigger_event || 'scheduled',
+            entity_type: tacheSuivie.entity_type,
+            entity_id: tacheSuivie.entity_id,
+            action_type: actionType,
+            action_config: config,
+            result_success: tardif.success,
+            result_data: tardif.data || null,
+            result_error: tardif.error || null,
+            duration_ms: Date.now() - startTime,
+          });
+          if (!tardif.success) return; // la reprise prévue suit son cours
+          const { data: close } = await supabase
+            .from('automation_scheduled_tasks')
+            .update({ status: 'completed', completed_at: new Date().toISOString(), last_error: 'Terminée après le délai de 5 s : reprise annulée.' })
+            .eq('id', tacheSuivie.id)
+            .eq('status', 'pending')
+            .select('id');
+          if (close && close.length && tacheSuivie.step_id && Array.isArray(etapesRegle)) {
+            const etape = trouverEtape(etapesRegle, tacheSuivie.step_id);
+            const contexte = (tacheSuivie.sequence_context ?? {}) as Record<string, unknown>;
+            if (etape) {
+              await planifierEtape({
+                supabase, orgId: tacheSuivie.org_id, ruleId: tacheSuivie.automation_rule_id,
+                entityType: tacheSuivie.entity_type, entityId: tacheSuivie.entity_id,
+                contexte, franchies: Number(contexte.franchies ?? 0),
+              }, etapesRegle, etapeSuivante(etape));
+            }
+          }
+        }, (erreur: unknown) => {
+          console.error(`[automationEngine] tâche ${tacheSuivie.id} : échec après le délai —`, erreur instanceof Error ? erreur.message : String(erreur));
+        });
+        continue;
+      }
       const durationMs = Date.now() - startTime;
 
       // Log execution
