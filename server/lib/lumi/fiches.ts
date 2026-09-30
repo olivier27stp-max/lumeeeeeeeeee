@@ -222,22 +222,27 @@ async function apercuEnvoiDocument(genre: 'quote' | 'invoice', args: Record<stri
   if (!estUuid(id)) return null;
   // Deux requêtes explicites : `invoices` n'a pas de colonne title, et avec
   // PostgREST une colonne inexistante fait échouer toute la requête.
-  const d: { numero: string; total_cents: unknown; client_id: unknown } | null = genre === 'quote'
-    ? await ctx.client.from('quotes').select('quote_number, total_cents, client_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
-        .then(({ data }) => (data ? { numero: texte(data.quote_number), total_cents: data.total_cents, client_id: data.client_id } : null))
-    : await ctx.client.from('invoices').select('invoice_number, total_cents, client_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
-        .then(({ data }) => (data ? { numero: texte(data.invoice_number), total_cents: data.total_cents, client_id: data.client_id } : null));
+  // Même destinataire et même montant que les routes d'envoi (audit 2026-09-30) :
+  // devis → courriel du client, sinon du prospect (routes/quotes.ts) ;
+  // facture → le SOLDE, comme le courriel envoyé (pas le total).
+  const d: { numero: string; montant_cents: unknown; client_id: unknown; lead_id: unknown } | null = genre === 'quote'
+    ? await ctx.client.from('quotes').select('quote_number, total_cents, client_id, lead_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
+        .then(({ data }) => (data ? { numero: texte(data.quote_number), montant_cents: data.total_cents, client_id: data.client_id, lead_id: data.lead_id } : null))
+    : await ctx.client.from('invoices').select('invoice_number, balance_cents, client_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
+        .then(({ data }) => (data ? { numero: texte(data.invoice_number), montant_cents: data.balance_cents, client_id: data.client_id, lead_id: null } : null));
   if (!d) return null;
   let to: string | null = null;
-  if (estUuid(d.client_id)) {
-    const { data: c } = await ctx.client.from('clients').select('first_name, last_name, company, email').eq('org_id', ctx.orgId).eq('id', d.client_id).maybeSingle();
-    if (c) {
-      const nom = [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || c.company || '';
-      to = c.email ? `${nom} <${c.email}>` : nom || null;
-    }
-  }
+  const personne = async (pid: unknown) => {
+    if (!estUuid(pid)) return null;
+    const { data: c } = await ctx.client.from('clients').select('first_name, last_name, company, email').eq('org_id', ctx.orgId).eq('id', pid).maybeSingle();
+    return c ? { nom: [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || c.company || '', email: c.email || null } : null;
+  };
+  const client = await personne(d.client_id);
+  const prospect = client?.email ? null : await personne(d.lead_id);
+  const qui = client?.email ? client : prospect?.email ? prospect : client ?? prospect;
+  if (qui) to = qui.email ? `${qui.nom} <${qui.email}>` : `${qui.nom} — aucune adresse courriel : l’envoi sera refusé`;
   const num = d.numero;
-  const montant = cents(d.total_cents);
+  const montant = cents(d.montant_cents);
   const libelle = genre === 'quote' ? `Soumission ${num}` : `Facture ${num}`;
   return {
     genre: 'email',
