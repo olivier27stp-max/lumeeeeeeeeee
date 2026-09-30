@@ -17,6 +17,7 @@ import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../lib/automations-drape
 import { estStop as estStopCanal, estStart as estStartCanal } from '../lib/desabonnement';
 import { appliquerMotCleSms, appliquerMotCleHerite, motCleHerite, orgDuNumeroSms } from '../lib/desabonnement/sms';
 import { repondreAuMembre } from '../lib/sms/fil-lumi';
+import { appliquerStatutTwilio } from '../lib/sms/statut-livraison';
 import { bureauxDeLaBoite, conversationsDesBureaux, membresAssignables } from '../lib/boite-unifiee';
 
 const router = Router();
@@ -692,33 +693,24 @@ router.post('/messages/status', async (req, res) => {
       return res.status(403).json({ error: 'Invalid signature' });
     }
 
-    const { MessageSid, MessageStatus } = req.body || {};
+    const { MessageSid, MessageStatus, ErrorCode, ErrorMessage } = req.body || {};
     if (!MessageSid || !MessageStatus) {
       return res.status(400).json({ error: 'Missing MessageSid or MessageStatus' });
     }
 
-    const serviceClient = getServiceClient();
-
-    // Map Twilio status to our status
-    const statusMap: Record<string, string> = {
-      queued: 'queued',
-      sent: 'sent',
-      delivered: 'delivered',
-      undelivered: 'failed',
-      failed: 'failed',
-    };
-
-    const mappedStatus = statusMap[MessageStatus] || MessageStatus;
-
-    const { error: statusError } = await serviceClient
-      .from('messages')
-      .update({ status: mappedStatus })
-      .eq('provider_message_id', MessageSid);
+    // Audit V2, C13 : le statut ne recule jamais (queued < sent < delivered /
+    // failed), le code d'erreur est gardé, un échec est signalé à l'entreprise
+    // (server/lib/sms/statut-livraison.ts).
+    const r = await appliquerStatutTwilio(getServiceClient(), {
+      sid: String(MessageSid),
+      statutTwilio: String(MessageStatus),
+      codeErreur: ErrorCode != null ? String(ErrorCode) : null,
+      messageErreur: ErrorMessage != null ? String(ErrorMessage) : null,
+    });
 
     // Répondre 200 sur un échec d'écriture ferait perdre l'accusé de réception
     // définitivement ; un 500 laisse Twilio rejouer le callback.
-    if (statusError) {
-      console.error(`[messages/status] Failed to update ${MessageSid} to ${mappedStatus}:`, statusError.message);
+    if (!r.ok) {
       return res.status(500).json({ error: 'Failed to persist status update' });
     }
 
