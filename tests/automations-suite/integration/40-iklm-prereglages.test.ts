@@ -18,7 +18,7 @@
  * est midi-ish maintenant (restauré à la fin).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { demarrerMoteur, marque, traiterFile, envoisSimules } from '../harnais/moteur';
+import { demarrerMoteur, marque, traiterFile, envoisSimules, attendre } from '../harnais/moteur';
 import { NUMERO_A } from '../harnais/bureau-test';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
@@ -60,7 +60,9 @@ async function journal(regles: string[], depuis: string) {
 async function client(m: string): Promise<string> {
   const { data, error } = await b.admin.from('clients').insert({
     org_id: b.orgA, created_by: b.users.proprioA, first_name: 'Préréglage', last_name: m, status: 'lead',
-    phone: '+15555550143', email: 'prereglage@lume-qa.test',
+    // Coordonnées PROPRES à chaque client : le plafond « 3 messages commerciaux
+    // par 24 h » est compté par destinataire.
+    phone: `+1555555${String(102 + Math.floor(Math.random() * 98)).padStart(4, '0')}`, email: `prereglage-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}@lume-qa.test`,
     sms_consent_at: new Date().toISOString(), email_consent_at: new Date().toISOString(),
   }).select('id').single();
   if (error) throw new Error(error.message);
@@ -126,13 +128,28 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     const etat = await etatPresets(b.orgA);
     const regles = cles.map((k) => etat.find((r) => r.preset_key === k)).filter((r): r is NonNullable<typeof r> => !!r);
     expect(regles.map((r) => r.preset_key)).toEqual(cles);
-    await derouler(regles.map((r) => r.id));
-    const lignes = await journal(regles.map((r) => r.id), depuis);
+    const ids = regles.map((r) => r.id);
+    // Un événement écrit par la base peut être pris par UN AUTRE processus qui
+    // lit la file de staging (toutes les 15 s) : on attend que chaque règle ait
+    // agi (journal) ou planifié (tâche) avant de dérouler.
+    await attendre(async () => {
+      const [{ data: t }, l] = await Promise.all([
+        b.admin.from('automation_scheduled_tasks').select('automation_rule_id').eq('org_id', b.orgA).in('automation_rule_id', ids).gte('created_at', depuis),
+        journal(ids, depuis),
+      ]);
+      const vues = new Set([...(t ?? []).map((x) => x.automation_rule_id), ...l.map((x) => x.automation_rule_id)]);
+      return ids.every((id) => vues.has(id));
+    }, (ok) => ok, 40_000, 1000);
+    await derouler(ids);
+    const lignes = await attendre(() => journal(ids, depuis), (l) => l.every((x) => x.result_error !== 'en cours'), 20_000, 500);
     const diag = JSON.stringify(lignes.map((l) => [etat.find((r) => r.id === l.automation_rule_id)?.preset_key, l.action_type, l.result_success, l.result_error, (l.result_data as Record<string, unknown> | null)?.saute ?? null]));
     for (const r of regles) {
       const siennes = lignes.filter((l) => l.automation_rule_id === r.id);
       expect(siennes.length, `${r.preset_key} ne s’est pas exécuté — ${diag}`).toBeGreaterThan(0);
-      const echecs = siennes.filter((l) => !l.result_success && l.result_error !== 'en cours');
+      // Le temps est COMPRESSÉ ici (J+1, J+2, J+5… en une minute) : le plafond
+      // de 3 messages commerciaux par 24 h s'applique à des envois qui, en vrai,
+      // seraient espacés de plusieurs jours. Ce refus-là est un artefact du test.
+      const echecs = siennes.filter((l) => !l.result_success && l.result_error !== 'en cours' && !/Frequency cap reached/.test(String(l.result_error)));
       expect(echecs, `${r.preset_key} en échec — ${diag}`).toEqual([]);
     }
     const messages = lignes.filter((l) => ['send_sms', 'send_email'].includes(l.action_type as string) && l.result_success && !(l.result_data as Record<string, unknown> | null)?.saute);
@@ -152,7 +169,7 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     await verifier(['pack_suivi_prospect'], depuis, true);
   }, 240_000);
 
-  it('[K-011] soumission envoyée → pack_relance_devis + quote_sent_move_deal', async () => {
+  it('[K-011][K-012] soumission envoyée → pack_relance_devis + quote_sent_move_deal ; acceptée → pack_depot + quote_approved_move_deal', async () => {
     const depuis = new Date().toISOString();
     const m = marque('K-011');
     const c = await client(m);
@@ -173,7 +190,7 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     await verifier(['pack_depot', 'quote_approved_move_deal'], depuis2, true);
   }, 300_000);
 
-  it('[K-013] facture envoyée (transition en base) → pack_relance_facture ; payée → payment_confirmation ; dépôt → deposit_received', async () => {
+  it('[K-013][K-016][K-017] facture envoyée (transition en base) → pack_relance_facture ; payée → payment_confirmation seulement ; dépôt → deposit_received seulement', async () => {
     const depuis = new Date().toISOString();
     const c = await client(marque('K-013'));
     const { data: inv, error } = await b.admin.from('invoices').insert({
@@ -189,15 +206,26 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     await new Promise((r) => setTimeout(r, 3000));
     await verifier(['pack_relance_facture'], depuis, true);
 
+    // [K-016] Paiement COMPLET → confirmation de paiement, PAS « dépôt reçu ».
     const depuis2 = new Date().toISOString();
     await b.eventBus.emit('invoice.paid', { orgId: b.orgA, entityType: 'invoice', entityId: inv!.id, actorId: b.users.proprioA, relatedEntityType: 'client', relatedEntityId: c, metadata: { amount_cents: 100000, provider: 'manual', client_id: c, job_id: null, payment_type: 'full' } });
     await new Promise((r) => setTimeout(r, 3000));
     await verifier(['payment_confirmation'], depuis2, true);
+    const idDepot = (await etatPresets(b.orgA)).find((r) => r.preset_key === 'deposit_received')!.id;
+    const idPaiement = (await etatPresets(b.orgA)).find((r) => r.preset_key === 'payment_confirmation')!.id;
+    expect(await journal([idDepot], depuis2), '« dépôt reçu » envoyé pour un paiement complet').toEqual([]);
 
+    // [K-017] DÉPÔT (autre facture) → « dépôt reçu », PAS la confirmation de paiement.
     const depuis3 = new Date().toISOString();
-    await b.eventBus.emit('invoice.paid', { orgId: b.orgA, entityType: 'invoice', entityId: inv!.id, actorId: b.users.proprioA, relatedEntityType: 'client', relatedEntityId: c, metadata: { amount_cents: 25000, provider: 'manual', client_id: c, job_id: null, payment_type: 'deposit' } });
+    const { data: inv2 } = await b.admin.from('invoices').insert({
+      org_id: b.orgA, client_id: c, created_by: b.users.proprioA, invoice_number: `QA-${Date.now().toString(36)}d`, status: 'draft',
+      subtotal_cents: 100000, tax_cents: 0, total_cents: 100000, paid_cents: 0, balance_cents: 100000,
+    }).select('id').single();
+    nettoyer.push(() => b.admin.from('invoices').delete().eq('id', inv2!.id));
+    await b.eventBus.emit('invoice.paid', { orgId: b.orgA, entityType: 'invoice', entityId: inv2!.id, actorId: b.users.proprioA, relatedEntityType: 'client', relatedEntityId: c, metadata: { amount_cents: 25000, provider: 'manual', client_id: c, job_id: null, payment_type: 'deposit' } });
     await new Promise((r) => setTimeout(r, 3000));
     await verifier(['deposit_received'], depuis3, false);
+    expect(await journal([idPaiement], depuis3), '« paiement reçu » envoyé pour un dépôt').toEqual([]);
   }, 300_000);
 
   it('[K-014] visite planifiée (insertion en base) → pack_rendez_vous (confirmation + rappels) ; job terminé → thank_you_after_job ; contrat signé → agreement_signed', async () => {
@@ -219,8 +247,17 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     await evenementsBase();
     await new Promise((r) => setTimeout(r, 3000));
     const { envois } = await verifier(['pack_rendez_vous'], depuis, true);
-    // Confirmation + 3 rappels (7 j, veille, 2 h) : au moins 4 textos.
-    expect(envois.filter((e) => e.canal === 'sms').length).toBeGreaterThanOrEqual(4);
+    // La confirmation part tout de suite (texto + courriel)…
+    expect(envois.filter((e) => e.canal === 'sms').length).toBeGreaterThanOrEqual(1);
+    // …et le rappel « 1 semaine avant » attend SON moment : forcer l'échéance ne
+    // le fait pas partir en avance, le moteur le replanifie (issue « replanifie »).
+    const regleRdv = (await etatPresets(b.orgA)).find((r) => r.preset_key === 'pack_rendez_vous')!;
+    const { data: attente } = await b.admin.from('automation_scheduled_tasks').select('execute_at')
+      .eq('automation_rule_id', regleRdv.id).eq('entity_id', ev!.id).eq('status', 'pending');
+    expect(attente?.length).toBe(1);
+    const ecart = Math.abs(new Date(attente![0].execute_at as string).getTime() - (debut.getTime() - 7 * 86400_000));
+    expect(ecart).toBeLessThan(2 * 3600_000);
+    nettoyer.push(() => b.admin.from('automation_scheduled_tasks').delete().eq('automation_rule_id', regleRdv.id).eq('entity_id', ev!.id));
 
     const depuis2 = new Date().toISOString();
     await b.admin.from('jobs').update({ status: 'completed' }).eq('id', job!.id);
