@@ -234,3 +234,32 @@ describe('L5 — fenêtre d’envoi bornée à 7 h-22 h', () => {
     expect(src).toContain('Array.from({ length: 15 }, (_, i) => i + 8)');
   });
 });
+
+describe('C7 — panne du fournisseur de courriel : motif lisible, toujours repris', () => {
+  it('ECONNREFUSED → message FR / EN, détail gardé', async () => {
+    mailer.sendEmail.mockImplementationOnce(async () => ({ sent: false, error: 'connect ECONNREFUSED 127.0.0.1:2599' }) as any);
+    societe.courante = { company_name: 'Lavage Coquin', company_address: '120 rue Principale, Granby' };
+    const { ctx } = ctxDe({ commercial: false });
+    const r = await executeSendEmail({ subject: 'Rappel', body: 'x' }, { client_email: 'alice@a.test' }, ctx);
+    expect(r.success).toBe(false);
+    expect(r.error).toBe('Service d’envoi de courriels injoignable, nouvel essai automatique / Email service unreachable, retrying automatically (connect ECONNREFUSED 127.0.0.1:2599)');
+  });
+
+  it('une exception réseau levée est traduite aussi', async () => {
+    mailer.sendEmail.mockImplementationOnce(async () => { throw new Error('Connection timeout'); });
+    societe.courante = { company_name: 'Lavage Coquin', company_address: '120 rue Principale, Granby' };
+    const { ctx } = ctxDe({ commercial: false });
+    const r = await executeSendEmail({ subject: 'Rappel', body: 'x' }, { client_email: 'alice@a.test' }, ctx);
+    expect(r.error).toContain('Email service unreachable');
+  });
+
+  it('le motif traduit reste TRANSITOIRE pour le moteur (aucun mot définitif)', async () => {
+    const { messageEchecCourriel } = await import('../../server/lib/actions');
+    const definitifs = ['no recipient', 'not configured', 'opted out', 'plan does not include', 'are disabled', 'frequency cap', 'consentement', 'consent', 'pas encore disponible'];
+    for (const m of [messageEchecCourriel('connect ECONNREFUSED x'), messageEchecCourriel(''), messageEchecCourriel('ETIMEDOUT')]) {
+      expect(definitifs.some((d) => m.toLowerCase().includes(d))).toBe(false);
+    }
+    // Une erreur non réseau est gardée telle quelle.
+    expect(messageEchecCourriel('550 Mailbox full')).toBe('550 Mailbox full');
+  });
+});

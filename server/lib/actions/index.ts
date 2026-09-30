@@ -1099,6 +1099,24 @@ export async function dealLie(
 // ── Action: Send Email ──────────────────────────────────────
 
 /**
+ * Le motif lisible d'un envoi de courriel raté (audit V2, C7).
+ *
+ * Une panne du fournisseur remontait brute dans le journal (« connect
+ * ECONNREFUSED 127.0.0.1:2599 »). Les pannes RÉSEAU sont traduites (FR / EN),
+ * le détail technique est gardé entre parenthèses. Le message reste
+ * TRANSITOIRE pour le moteur (aucun mot de `isTransientFailure` n'y figure) :
+ * la reprise à 5 min, 30 min et 2 h continue de s'appliquer.
+ */
+export function messageEchecCourriel(brut: string | null | undefined): string {
+  const detail = String(brut ?? '').trim();
+  if (!detail) return 'Envoi du courriel refusé par le fournisseur / Email rejected by the provider';
+  if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|ECONNRESET|EAI_AGAIN|EHOSTUNREACH|ESOCKET|timed? ?out|Greeting never received/i.test(detail)) {
+    return `Service d’envoi de courriels injoignable, nouvel essai automatique / Email service unreachable, retrying automatically (${detail.slice(0, 200)})`;
+  }
+  return detail;
+}
+
+/**
  * Ce qui manque à l'entreprise pour envoyer un courriel commercial (LCAP :
  * nom et adresse postale), sous forme de motif de journal — ou `null`.
  */
@@ -1297,7 +1315,7 @@ export async function executeSendEmail(
           }
         : {}),
     });
-    if (!result.sent) return { success: false, error: result.error || 'Send failed' };
+    if (!result.sent) return { success: false, error: messageEchecCourriel(result.error) };
 
     // Trace visible dans l'app : sans cette ligne, un courriel d'automatisation
     // n'existait que chez le fournisseur SMTP (les SMS, eux, sont loggés dans
@@ -1317,7 +1335,7 @@ export async function executeSendEmail(
 
     return { success: true, data: { to, subject } };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: messageEchecCourriel(err?.message) };
   }
 }
 
