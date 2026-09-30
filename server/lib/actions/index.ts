@@ -2013,6 +2013,12 @@ export async function executeLogActivity(
  * Le deal LIÉ à une soumission : celui qui la porte (`deals.quote_id`),
  * sinon le deal ouvert le plus récent de son client. `null` = aucun — pas
  * une erreur : une soumission faite hors pipeline n'a rien à déplacer.
+ *
+ * Un deal ne compte que ce qui arrive APRÈS son entrée dans la pipeline
+ * (Rafba, 2026-09-30) : un devis fait avant le deal appartient à une autre
+ * vente et ne le fait jamais avancer — même accepté, même renvoyé. La base
+ * l'impose déjà au lien direct (`deals_lien_posterieur`) ; le repli par
+ * client doit l'imposer lui-même.
  */
 async function dealDeLaSoumission(ctx: ActionContext): Promise<{ id: string; pipeline_id: string; stage_id: string } | null> {
   const { data: direct } = await ctx.supabase
@@ -2021,14 +2027,15 @@ async function dealDeLaSoumission(ctx: ActionContext): Promise<{ id: string; pip
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (direct) return direct as { id: string; pipeline_id: string; stage_id: string };
 
-  const { data: q } = await ctx.supabase.from('quotes').select('client_id, lead_id')
+  const { data: q } = await ctx.supabase.from('quotes').select('client_id, lead_id, created_at')
     .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
   const client = (q?.client_id as string | null) ?? (q?.lead_id as string | null) ?? null;
-  if (!client) return null;
+  if (!client || !q?.created_at) return null;
   const { data: ouverts } = await ctx.supabase
     .from('deals').select('id, pipeline_id, stage_id, pipeline_stages!deals_stage_same_org!inner(kind)')
     .eq('org_id', ctx.orgId).eq('client_id', client).is('deleted_at', null)
     .eq('pipeline_stages.kind', 'open')
+    .lte('created_at', q.created_at as string)
     .order('created_at', { ascending: false }).limit(1);
   const d = (ouverts ?? [])[0] as { id: string; pipeline_id: string; stage_id: string } | undefined;
   return d ?? null;
