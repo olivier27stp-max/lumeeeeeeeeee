@@ -39,7 +39,7 @@ import { useTranslation } from '../../i18n';
 import {
   creerDealManuel, creerVue, estJobACreer, fetchVues, journaliserLot, nomClient, priorite, supprimerVue,
   rechercherClientsPourDeal,
-  abandonnerDeal, deplacerDeal, fetchStages, majContactDuDeal, marquerPerdu,
+  abandonnerDeal, deplacerDeal, fetchStages, majContactDuDeal, majTitreDeal, marquerPerdu,
   type ClientPourDeal, type DevisPourDeal,
   type Deal, type ModeCouleur, type PipelineStage, type VueSauvegardee,
 } from '../../lib/pipelineVentesApi';
@@ -234,7 +234,11 @@ function CarteDeal({
           <GripVertical size={14} aria-hidden="true" />
         </button>
 
-        <p className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-text-primary">{nom}</p>
+        {/* Titre du deal s'il y en a un (GHL « Opportunity name »), le client dessous. */}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12.5px] font-semibold text-text-primary">{deal.title?.trim() || nom}</p>
+          {deal.title?.trim() && <p className="truncate text-[11px] text-text-tertiary">{nom}</p>}
+        </div>
 
         {jobACreer ? (
           <span
@@ -557,6 +561,8 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
   // Formulaire GHL (« Add new opportunity ») : contact en un seul champ, étape, statut, entreprise.
   const [listeContacts, setListeContacts] = useState(false);
   const [entreprise, setEntreprise] = useState('');
+  const [titre, setTitre] = useState('');
+  const idTitre = useId();
   const [etapeId, setEtapeId] = useState('');
   const [statut, setStatut] = useState<StatutDeal>('ouvert');
   const [raison, setRaison] = useState('');
@@ -619,6 +625,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
     setEtiquettesClient([]);
     setListeContacts(false);
     setEntreprise('');
+    setTitre('');
     setEtapeId('');
     setStatut('ouvert');
     setRaison('');
@@ -707,6 +714,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
             if (champs.telephone.trim() !== (client.telephone ?? '')) contact.phone = champs.telephone.trim() || null;
           }
           if (clientDuDeal && Object.keys(contact).length) await majContactDuDeal(clientDuDeal, contact);
+          if (titre.trim()) await majTitreDeal(r.dealId, titre);
           const gagnee = etapesCible.find((x) => x.kind === 'won' && !x.archived_at);
           const perdue = etapesCible.find((x) => x.kind === 'lost' && !x.archived_at);
           if (statut === 'gagne' && gagnee) await deplacerDeal(r.dealId, gagnee.id);
@@ -886,6 +894,11 @@ function ModalNouveauDeal({ ouvert, fr, membres, pipelines, pipelineActif, onFer
           {champsPerso.section('contact')}
 
           <SectionGhl titre={fr ? 'Détails du deal' : 'Opportunity details'}>
+            <ChampGhl id={idTitre} libelle={fr ? 'Titre du deal' : 'Opportunity name'} pleine>
+              <input id={idTitre} value={titre} maxLength={200} onChange={(e) => setTitre(e.target.value)}
+                placeholder={fr ? 'Ex. : Lavage de vitres — condo 12e étage (facultatif)' : 'e.g. Window cleaning — 12th floor condo (optional)'}
+                className={CLASSE_SAISIE} />
+            </ChampGhl>
             <ChampGhl id={idPipeline} libelle="Pipeline">
               <select id={idPipeline} value={pipelineCible} onChange={(e) => { setPipelineId(e.target.value); setEtapeId(''); }} className={CLASSE_SAISIE}>
                 {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -1560,6 +1573,7 @@ function ListeDeals({ fr, deals, etapes, montants, membres, maintenant, valeurs,
 }) {
   const standard = useMemo<ColonneStandard<Deal>[]>(() => [
     { id: 'client', libelle: 'Client', largeur: 'auto', verrouillee: true, cellule: (d) => nomClient(d) },
+    { id: 'titre', libelle: fr ? 'Titre' : 'Title', largeur: 'auto', parDefaut: true, cellule: (d) => d.title?.trim() || '—' },
     {
       id: 'etape', libelle: fr ? 'Étape' : 'Stage', largeur: 'auto', parDefaut: true,
       cellule: (d) => {
@@ -1957,7 +1971,7 @@ export default function PipelineBoard({
         // Le téléphone est cherché sans sa ponctuation : personne ne tape
         // « (514) 555-0199 » dans une barre de recherche.
         const tel = (c?.phone ?? '').replace(/\D/g, '');
-        const foin = `${nomClient(d)} ${c?.email ?? ''} ${c?.address ?? ''} ${c?.company ?? ''} ${tel}`.toLowerCase();
+        const foin = `${d.title ?? ''} ${nomClient(d)} ${c?.email ?? ''} ${c?.address ?? ''} ${c?.company ?? ''} ${tel}`.toLowerCase();
         const qNum = q.replace(/\D/g, '');
         if (!foin.includes(q) && !(qNum.length >= 3 && tel.includes(qNum))) return false;
       }
