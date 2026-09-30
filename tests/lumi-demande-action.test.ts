@@ -30,3 +30,11 @@ describe('estDemandeDAction', () => {
     expect(garde).toBeLessThan(r.indexOf('reponseFaqPour(message, ctx.language)'));
   });
 });
+
+describe('ordres et caches', () => {
+  it('un ordre n’est jamais servi ni écrit par le cache de réponses', async () => {
+    const { enonceCachable } = await import('../server/lib/lumi/cache-reponses');
+    expect(enonceCachable('Archive la job 44, c’est un vieux test.')).toBe(false);
+    expect(enonceCachable('Combien de jobs j’ai demain ?')).toBe(true);
+  });
+});

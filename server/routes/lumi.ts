@@ -694,7 +694,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         });
         return res.end();
       }
-      const r = routeur.decision === 'action' && routeur.verdict?.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
+      // Raccourci de LECTURE choisi par le routeur : jamais pour un ordre (audit 2026-09-30).
+      const r = routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
       const reponse = r ? await repondreRaccourci(r, ctxRaccourci) : null;
       if (r && reponse) {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
