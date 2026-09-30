@@ -747,6 +747,16 @@ const createTaxConfig: AgentTool = {
       const name = champRequis(args.name, 'Le nom de la taxe').slice(0, 120);
       const rate = Number(args.rate);
       if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw new Error('Le taux doit être un pourcentage entre 0 et 100.');
+      // Audit 2026-09-30 : une taxe active de même nom (ou même taux) existe déjà
+      // → une deuxième TVQ doublait la taxe sur tous les documents.
+      const { data: existantes, error: errEx } = await ctx.client.from('tax_configs')
+        .select('name, rate').eq('org_id', ctx.orgId).eq('is_active', true);
+      if (errEx) throw errEx;
+      const pareille = (existantes || []).find((t: any) => String(t.name).trim().toLowerCase() === name.trim().toLowerCase()
+        || (Number(t.rate) === rate && !args.region));
+      if (pareille) {
+        throw new Error(`Une taxe active « ${pareille.name} » (${String(pareille.rate).replace('.', ',')} %) existe déjà : l’ajouter encore la compterait deux fois. Modifie-la plutôt.`);
+      }
       const corps: Record<string, any> = { name, rate, type: 'percentage', is_compound: args.is_compound === true };
       if (args.region) corps.region = String(args.region).slice(0, 20);
       if (args.country) corps.country = String(args.country).slice(0, 5);

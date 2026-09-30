@@ -1101,13 +1101,19 @@ const compareRevenue: AgentTool = {
     // Mesures réellement renvoyées par rpc_insights_period_comparison (mêmes
     // libellés que l'écran Insights) ; les anciennes clés restent par prudence.
     const LIB: Record<string, string> = {
-      new_leads: 'nouveaux clients', new_jobs: 'nouveaux jobs', invoiced_value: 'valeur facturée',
+      new_leads: 'nouveaux prospects', new_jobs: 'nouveaux jobs', invoiced_value: 'valeur facturée',
       conversions: 'conversions', paid_invoices: 'factures payées',
       revenue: 'revenus', jobs: 'jobs', invoices: 'factures', quotes: 'devis',
       new_clients: 'nouveaux clients', collected: 'encaissé',
     };
+    // La période comparée = même nombre de jours JUSTE AVANT (règle de la RPC,
+    // comme l'écran Insights) — pas forcément le mois civil précédent. On donne
+    // ses dates pour que Lumi ne dise pas « le mois passé » à tort (audit 2026-09-30).
+    const jours = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;
+    const avant = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) - n * 86400000).toISOString().slice(0, 10);
     return {
       periode: { du: from, au: to },
+      periode_precedente: { du: avant(from, jours), au: avant(from, 1), note: 'même nombre de jours juste avant — nomme ces dates, pas « le mois passé » si elles ne correspondent pas à un mois civil' },
       comparaison: (data || []).map((r: any) => ({
         mesure: LIB[r.metric] || String(r.metric).replace(/_/g, ' '),
         // Un montant garde son nom _cents (masquage + affichage $) ; un compte reste brut.
@@ -1576,28 +1582,60 @@ export const handlerUpdateJobStatus = async (args: Record<string, any>, ctx: Too
     return { updated: true, job: data, ...(avert ? { warning: avert } : {}) };
   });
 
+/**
+ * Assigner un job (audit 2026-09-30). L'écran assigne une ÉQUIPE : jobs.team_id
+ * + les visites à venir, qui s'affichent dans sa colonne du calendrier. Avant,
+ * l'outil écrivait seulement jobs.assigned_user_id — que l'écran n'affiche
+ * pas — et répondait « c'est fait » : personne ne voyait le job.
+ * Avec un membre : son équipe. Avec team_id : cette équipe.
+ */
 export const handlerAssignJob = async (args: Record<string, any>, ctx: ToolContext) =>
   executerIdempotent(ctx, 'assign_job', args, async () => {
-    // Le destinataire doit être un membre réel de CETTE org.
-    const { data: membre } = await ctx.client
-      .from('team_members')
-      .select('user_id, first_name, last_name')
-      .eq('org_id', ctx.orgId).eq('user_id', String(args.assignee_user_id))
-      .maybeSingle();
-    if (!membre) throw new Error('Ce user_id n\'est pas membre de l\'équipe — vérifiez le nom du membre de l’équipe.');
+    let membre: { user_id: string; first_name: string | null; last_name: string | null; team_id: string | null } | null = null;
+    if (args.assignee_user_id) {
+      const { data, error: errMembre } = await ctx.client
+        .from('team_members')
+        .select('user_id, first_name, last_name, team_id')
+        .eq('org_id', ctx.orgId).eq('user_id', String(args.assignee_user_id))
+        .maybeSingle();
+      if (errMembre) throw errMembre;
+      if (!data) throw new Error('Ce membre n\'est pas dans l\'équipe de cette entreprise — vérifie son nom.');
+      membre = data as any;
+    }
+    const teamId = args.team_id ? String(args.team_id) : membre?.team_id ?? null;
+    if (!teamId) {
+      throw new Error(`${membre ? `${membre.first_name ?? ''} ${membre.last_name ?? ''}`.trim() || 'Ce membre' : 'Ce job'} n’est rattaché à aucune équipe : dans Lume, un job s’assigne à une équipe. Dis-moi laquelle (ou ajoute d’abord le membre à une équipe).`);
+    }
+    const { data: equipe, error: errEquipe } = await ctx.client
+      .from('teams').select('id, name').eq('org_id', ctx.orgId).eq('id', teamId).maybeSingle();
+    if (errEquipe) throw errEquipe;
+    if (!equipe) throw new Error('Équipe introuvable dans cette entreprise.');
 
+    const maj: Record<string, any> = { team_id: equipe.id };
+    if (membre) maj.assigned_user_id = membre.user_id;
     const { data, error } = await ctx.client
       .from('jobs')
-      .update({ assigned_user_id: membre.user_id })
+      .update(maj)
       .eq('org_id', ctx.orgId).eq('id', String(args.job_id))
       .is('deleted_at', null)
       .select('id, job_number, title')
       .single();
     if (error) throw error;
+    // Les visites À VENIR suivent (le calendrier affiche l'équipe de la visite).
+    const { data: visites, error: errVis } = await ctx.client
+      .from('schedule_events')
+      .update({ team_id: equipe.id })
+      .eq('org_id', ctx.orgId).eq('job_id', String(args.job_id))
+      .is('deleted_at', null)
+      .gte('start_at', new Date().toISOString())
+      .select('id');
     return {
       updated: true,
       job: data,
-      assigned_to: `${membre.first_name || ''} ${membre.last_name || ''}`.trim(),
+      equipe: equipe.name,
+      ...(membre ? { assigned_to: `${membre.first_name || ''} ${membre.last_name || ''}`.trim() } : {}),
+      visites_mises_a_jour: (visites ?? []).length,
+      ...(errVis ? { warning: 'Le job est assigné, mais ses visites à venir n’ont pas pu changer d’équipe : vérifie le calendrier.' } : {}),
     };
   });
 
@@ -1919,14 +1957,15 @@ const assignJobTool: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'assign_job',
-    description: 'Assign a job to a team member. Use the team list for the member, the jobs list for the job.',
+    description: 'Assign a job to a TEAM, like the screen: the job and its upcoming visits move to that team\'s calendar column. Give the member (their team is used) or the team id. Use the team list for ids, the jobs list for the job.',
     parameters: {
       type: 'object',
       properties: {
         job_id: { type: 'string', description: 'Job id.' },
-        assignee_user_id: { type: 'string', description: 'Team member user_id.' },
+        assignee_user_id: { type: 'string', description: 'Team member user_id (their team is used).' },
+        team_id: { type: 'string', description: 'Team id (from list_teams), when assigning to a team directly.' },
       },
-      required: ['job_id', 'assignee_user_id'],
+      required: ['job_id'],
     },
   },
   handler: handlerAssignJob,
@@ -2643,6 +2682,36 @@ const optimizeRouteTool: AgentTool = {
 
 /* ── Gestion : modifier, déplacer, classer ─────────────────────── */
 
+/**
+ * La visite visée par « déplace / annule la visite de ce job » (audit 2026-09-30).
+ * Avant : la prochaine visite, SINON LA DERNIÈRE PASSÉE — même terminée. « Annule
+ * la visite de Marie » sur un job fini supprimait la visite faite.
+ * Maintenant : visit_id si donné (de get_job) ; sinon la prochaine visite à venir
+ * non terminée ; aucune à venir → on demande laquelle, jamais une visite passée.
+ */
+async function visiteCible(ctx: ToolContext, jobId: string, visitId: unknown, verbe: string) {
+  const { data: visites, error } = await ctx.client
+    .from('schedule_events')
+    .select('id, start_at, end_at, status')
+    .eq('org_id', ctx.orgId).eq('job_id', jobId)
+    .is('deleted_at', null)
+    .order('start_at', { ascending: true });
+  if (error) throw error;
+  const toutes = (visites || []) as Array<{ id: string; start_at: string; end_at: string; status: string | null }>;
+  if (visitId) {
+    const v = toutes.find((x) => x.id === String(visitId));
+    if (!v) throw new Error('Cette visite n’appartient pas à ce job (ou a été supprimée).');
+    return { cible: v, toutes, aVenir: toutes.filter((x) => x.id !== v.id && new Date(x.start_at).getTime() >= Date.now()).length };
+  }
+  const maintenant = Date.now();
+  const aVenir = toutes.filter((x) => new Date(x.start_at).getTime() >= maintenant && !['completed', 'cancelled', 'done'].includes(String(x.status ?? '')));
+  if (!aVenir.length) {
+    if (!toutes.length) return { cible: null, toutes, aVenir: 0 };
+    throw new Error(`Ce job n’a aucune visite à venir : je ne ${verbe} pas une visite passée sans que tu me dises laquelle (sa date).`);
+  }
+  return { cible: aVenir[0], toutes, aVenir: aVenir.length - 1 };
+}
+
 const rescheduleJobTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -2650,12 +2719,13 @@ const rescheduleJobTool: AgentTool = {
     name: 'reschedule_job',
     description:
       "Move a job's calendar visit to a new date/time — the same engine as dragging it on the Lume "
-      + 'calendar. If the job has several visits, the NEXT upcoming one moves (or the most recent if all '
-      + 'are past). Get the job id from the jobs list.',
+      + 'calendar. Without visit_id, the NEXT upcoming visit moves; a past visit is never moved unless its '
+      + 'visit_id is given (ask which one). Get the job id from the jobs list.',
     parameters: {
       type: 'object',
       properties: {
         job_id: { type: 'string', description: 'Job id.' },
+        visit_id: { type: 'string', description: 'The visit to move (from get_job visits) when the job has several; default = the next upcoming one.' },
         start_at: { type: 'string', description: 'New ISO start datetime.' },
         end_at: { type: 'string', description: 'New ISO end (default: start + previous duration, else 1 h).' },
       },
@@ -2664,14 +2734,8 @@ const rescheduleJobTool: AgentTool = {
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'reschedule_job', args, async () => {
-      const { data: visites, error } = await ctx.client
-        .from('schedule_events')
-        .select('id, start_at, end_at')
-        .eq('org_id', ctx.orgId).eq('job_id', String(args.job_id))
-        .is('deleted_at', null)
-        .order('start_at', { ascending: true });
-      if (error) throw error;
-      if (!visites?.length) {
+      const { cible: visite, aVenir } = await visiteCible(ctx, String(args.job_id), args.visit_id, 'déplace');
+      if (!visite) {
         // Aucune visite : « déplacer » veut dire « planifier ». Refuser ici
         // forçait une deuxième proposition (add_visit) pour le même résultat.
         const debut0 = new Date(String(args.start_at));
@@ -2684,8 +2748,7 @@ const rescheduleJobTool: AgentTool = {
         const ev: any = (ajout as any)?.event || ajout || {};
         return { added: true, visit: { start_at: ev.start_at || debut0.toISOString(), end_at: ev.end_at || fin0.toISOString() }, note: 'Ce job n' + '\u2019' + 'avait aucune visite : elle vient d' + '\u2019' + 'être créée à cette date.' };
       }
-      const maintenant = Date.now();
-      const cible = visites.find((v: any) => new Date(v.start_at).getTime() >= maintenant) || visites[visites.length - 1];
+      const cible = visite;
 
       const debut = new Date(String(args.start_at));
       if (Number.isNaN(debut.getTime())) throw new Error('start_at invalide (ISO attendu).');
@@ -2709,6 +2772,8 @@ const rescheduleJobTool: AgentTool = {
       return {
         rescheduled: true,
         ...(avertEvt ? { warning: avertEvt } : {}),
+        visite_deplacee: { ancien_debut: cible.start_at },
+        autres_visites_a_venir: aVenir,
         new_start: debut.toISOString(),
         new_end: fin.toISOString(),
         overlaps: chevauchements,
@@ -2723,13 +2788,14 @@ const cancelVisitTool: AgentTool = {
   declaration: {
     name: 'cancel_visit',
     description:
-      "Cancel a job's calendar visit — same as deleting it on the Lume calendar. Removes the NEXT "
-      + 'upcoming visit (or the most recent if all are past). If it was the job\'s only visit, the job '
-      + 'goes back to unscheduled. Get the job id from the jobs list. Confirm with the user first.',
+      "Cancel a job's calendar visit — same as deleting it on the Lume calendar. Without visit_id, removes "
+      + 'the NEXT upcoming visit; a past or completed visit is never removed unless its visit_id is given. '
+      + 'If it was the job\'s only visit, the job goes back to unscheduled. Confirm with the user first.',
     parameters: {
       type: 'object',
       properties: {
         job_id: { type: 'string', description: 'Job id.' },
+        visit_id: { type: 'string', description: 'The visit to cancel (from get_job visits) when the job has several; default = the next upcoming one.' },
       },
       required: ['job_id'],
     },
@@ -2737,16 +2803,8 @@ const cancelVisitTool: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'cancel_visit', args, async () => {
       const jobId = champRequis(args.job_id, 'Le job');
-      const { data: visites, error } = await ctx.client
-        .from('schedule_events')
-        .select('id, start_at')
-        .eq('org_id', ctx.orgId).eq('job_id', jobId)
-        .is('deleted_at', null)
-        .order('start_at', { ascending: true });
-      if (error) throw error;
-      if (!visites?.length) throw new Error('Ce job n’a aucune visite au calendrier à annuler.');
-      const maintenant = Date.now();
-      const cible = visites.find((v: any) => new Date(v.start_at).getTime() >= maintenant) || visites[visites.length - 1];
+      const { cible, toutes: visites } = await visiteCible(ctx, jobId, args.visit_id, 'supprime');
+      if (!cible) throw new Error('Ce job n’a aucune visite au calendrier à annuler.');
 
       // Même RPC que « supprimer la visite » dans l'app : soft-delete de
       // l'event + recompute_job_schedule (repasse le job en brouillon si

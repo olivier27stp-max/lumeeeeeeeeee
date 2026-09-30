@@ -52,8 +52,23 @@ async function toutLire<T>(requete: (de: number, a: number) => PromiseLike<{ dat
     if (!data || data.length < PAGE) return sortie;
   }
 }
+/**
+ * Lots lus AU PLUS `LOTS_SIMULTANES` à la fois : un Promise.all sur toutes les
+ * tranches envoyait des centaines de requêtes d'un coup sur un gros tenant
+ * (16 000 jobs) et saturait le pool PostgREST (« Timed out acquiring
+ * connection » — mesuré par l'audit Statistiques du 2026-09-30).
+ */
+const LOTS_SIMULTANES = 5;
 async function parLots<T>(ids: string[], requete: (lot: string[]) => (de: number, a: number) => PromiseLike<{ data: T[] | null; error: any }>): Promise<T[]> {
-  const res = await Promise.all(lots(ids).map((l) => toutLire(requete(l))));
+  const file = lots(ids);
+  const res: T[][] = new Array(file.length);
+  let prochain = 0;
+  await Promise.all(Array.from({ length: Math.min(LOTS_SIMULTANES, file.length) }, async () => {
+    while (prochain < file.length) {
+      const i = prochain++;
+      res[i] = await toutLire(requete(file[i]));
+    }
+  }));
   return res.flat();
 }
 

@@ -15,7 +15,7 @@
    ═══════════════════════════════════════════════════════════════ */
 import type { AgentTool, ToolContext } from './tools';
 import { TOOLS_BY_NAME } from './tools';
-import { ETIQUETTES_DERIVED } from './tools-etendus';
+import { ETIQUETTES_DERIVED, bornesJourOrg } from './tools-etendus';
 
 export type LangueRapport = 'fr' | 'en';
 
@@ -103,10 +103,18 @@ async function rapportFinancier(args: Record<string, any>, ctx: ToolContext, lan
   ]);
 
   const sections: SectionRapport[] = [];
+  // Audit 2026-09-30 : une lecture ratée ne doit pas devenir un chiffre (« 0 »,
+  // « aucune facture en retard 🎉 »). On dit en tête ce qui manque.
+  const manquantes = [
+    [comp, t('comparaison des périodes', 'period comparison')], [renta, t('rentabilité', 'profitability')],
+    [services, t('services', 'services')], [retards, t('comptes en retard', 'overdue accounts')], [top, t('meilleurs clients', 'best clients')],
+  ].filter(([r]) => !r || (r as any).error).map(([, nom]) => nom as string);
+  if ((serie as any).error) manquantes.push(t('revenus par mois', 'revenue by month'));
+  if (manquantes.length) sections.push({ titre: t('Rapport incomplet', 'Incomplete report'), note: t(`Ces données n’ont pas pu être lues : ${manquantes.join(', ')}. Les sections correspondantes manquent ou sont vides.`, `This data could not be read: ${manquantes.join(', ')}. The matching sections are missing or empty.`) });
 
   // Vue d'ensemble : la période contre la précédente.
   const LIB: Record<string, [string, string]> = {
-    'nouveaux clients': ['Nouveaux clients', 'New clients'], 'nouveaux jobs': ['Nouveaux jobs', 'New jobs'],
+    'nouveaux clients': ['Nouveaux clients', 'New clients'], 'nouveaux prospects': ['Nouveaux prospects', 'New leads'], 'nouveaux jobs': ['Nouveaux jobs', 'New jobs'],
     'valeur facturée': ['Valeur facturée', 'Invoiced value'], conversions: ['Conversions', 'Conversions'],
     'factures payées': ['Factures payées', 'Paid invoices'],
     revenus: ['Revenus facturés', 'Invoiced revenue'], encaissé: ['Encaissé', 'Collected'], jobs: ['Jobs', 'Jobs'],
@@ -188,6 +196,9 @@ function sectionRetards(retards: any, langue: LangueRapport): SectionRapport {
     .sort((a: any, b: any) => (b.days_overdue ?? 0) - (a.days_overdue ?? 0))
     .map((r: any) => [r.invoice_number || '—', r.client_name || '—', fmtDate(r.due_date, langue), String(r.days_overdue ?? '—'), fmtArgent(r.balance_cents, langue)]);
   const total = fmtArgent(retards?.sum_balance_cents, langue);
+  if (!retards || retards.error) {
+    return { titre: t('Comptes à recevoir en retard', 'Overdue receivables'), note: t('Je n’ai pas pu lire les factures en retard : cette section est incomplète (ce n’est PAS « aucune facture en retard »).', 'I could not read the overdue invoices: this section is incomplete (this does NOT mean there are none).') };
+  }
   if (!lignes.length) return { titre: t('Comptes à recevoir en retard', 'Overdue receivables'), note: t('Aucune facture en retard. 🎉', 'No overdue invoices. 🎉') };
   return {
     titre: t('Comptes à recevoir en retard', 'Overdue receivables'),
@@ -239,8 +250,9 @@ async function rapportJobs(args: Record<string, any>, ctx: ToolContext, langue: 
     .from('jobs_active')
     .select('job_number, title, client_name, property_address, scheduled_at, status, derived_status, total_cents')
     .eq('org_id', ctx.orgId)
-    .gte('scheduled_at', `${du}T00:00:00`)
-    .lte('scheduled_at', `${au}T23:59:59`)
+    // Jours de l'entreprise, pas minuit UTC (audit 2026-09-30).
+    .gte('scheduled_at', bornesJourOrg(du).debut)
+    .lte('scheduled_at', bornesJourOrg(au).fin)
     .order('scheduled_at', { ascending: true })
     .limit(300);
   if (error) throw new Error(error.message);

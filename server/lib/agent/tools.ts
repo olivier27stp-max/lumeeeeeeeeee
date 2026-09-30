@@ -373,7 +373,10 @@ const getJob: AgentTool = {
     const { data: visites } = await ctx.client
       .from('schedule_events')
       .select('id, start_at, end_at, status')
+      .eq('org_id', ctx.orgId)
       .eq('job_id', (data as any).id)
+      // Une visite annulée (supprimée) ne ressort plus « planifiée » (audit 2026-09-30).
+      .is('deleted_at', null)
       .order('start_at', { ascending: true })
       .limit(50);
     const { data: items } = await ctx.client

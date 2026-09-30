@@ -301,9 +301,16 @@ describe('écritures par route interne : bon chemin, refus traduits, note en fra
       expect(ctx.orgId).toBe('org');
       expect(cheminAppele).toEqual(chemin);
       expect(estFrancais(r.note), `${nom} : note = ${r.note}`).toBe(true);
-      expect(appels).toEqual([]);
+      // Aucune écriture directe : tout passe par la route (une lecture de contrôle est permise).
+      expect(appels.filter((x: any) => x.ops.some(([m]: [string]) => ['insert', 'update', 'upsert', 'delete'].includes(m)))).toEqual([]);
     });
   }
+
+  it('create_tax_config : une taxe active du même nom existe déjà → refus, rien n’est ajouté (audit 2026-09-30)', async () => {
+    const { r } = await executer('create_tax_config', { name: 'tvq', rate: 9.975 }, { tax_configs: { data: [{ name: 'TVQ', rate: 9.975 }] } });
+    expect(r.error).toMatch(/existe déjà/);
+    expect(vi.mocked(appelInterne)).not.toHaveBeenCalled();
+  });
 
   it('les charges utiles reprennent le contrat des routes (preset en majuscules, courriel normalisé, ids en liste)', async () => {
     await executer('setup_taxes', { preset_key: 'qc' });
