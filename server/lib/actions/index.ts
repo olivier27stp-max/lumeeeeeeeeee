@@ -578,8 +578,12 @@ export function resolveTemplate(
   return template.replace(
     // Une clé commence par une LETTRE (comme `applyTemplate`) : « Rabais [50] % »
     // ou « Étape {0} » perdaient leur nombre, effacé comme une variable inconnue.
-    /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}|\{([A-Za-z]\w*)\}|\[([A-Za-z]\w*)\]/g,
-    (_, objet: string | undefined, cle: string | undefined, accolade: string | undefined, crochet: string | undefined) => {
+    // `{{cle}}` (sans point) = `{cle}` : le format des modèles que Lumi annonce
+    // (« {{client_name}} ») et de la plupart des outils. Lu comme `{` + `{cle}` +
+    // `}`, il partait « {Marie} » chez le client.
+    /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}|\{\{\s*([A-Za-z]\w*)\s*\}\}|\{([A-Za-z]\w*)\}|\[([A-Za-z]\w*)\]/g,
+    (_, objet: string | undefined, cle: string | undefined, double: string | undefined, simple: string | undefined, crochet: string | undefined) => {
+      const accolade = double ?? simple;
       // Variables intégrées pointées ({{client.nom}}, {{soumission.total}}…)
       // AVANT les champs personnalisés : un champ perso nommé « nom » ne doit
       // pas masquer le nom du client.
