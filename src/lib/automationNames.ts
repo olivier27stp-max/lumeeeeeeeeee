@@ -63,6 +63,9 @@ export const AUTOMATION_NAME_FR: Record<string, string> = {
   'Invoice Reminder — 14 Days': 'Rappel de facture — 14 jours',
   'Invoice Final Reminder — 30 Days': 'Dernier rappel de facture — 30 jours',
   'Invoice Final Reminder — 30 Days After Sent': 'Dernier rappel de facture — 30 jours après envoi',
+  // Semé par `seed_automation_presets` (baseline SQL) — absent jusqu'ici :
+  // la liste française affichait l'anglais (audit V2, A-16).
+  'Invoice Reminder — 30 Days': 'Rappel de facture — 30 jours',
   'Invoice Reminder (J+1)': 'Rappel de facture (J+1)',
   'Invoice Reminder (J+3)': 'Rappel de facture (J+3)',
   'Invoice Reminder (J+5)': 'Rappel de facture (J+5)',
@@ -96,7 +99,36 @@ export const AUTOMATION_NAME_FR: Record<string, string> = {
   'Seasonal Reminder — 6 Months After Job': 'Rappel saisonnier — 6 mois après le job',
 };
 
+/*
+ * L'INVERSE : les modèles semés directement en FRANÇAIS (préréglages du
+ * pipeline, sondage d'avis, pack de base) s'affichaient en français à un
+ * utilisateur anglais (audit V2, A-16). Même principe : on traduit à
+ * l'affichage, jamais en base.
+ *
+ * L'éditeur enregistre le nom AFFICHÉ : un modèle ouvert en anglais puis
+ * modifié garde donc son nom anglais en base. Chaque libellé anglais d'ici
+ * est aussi versé dans la table française (boucle ci-dessous) : il revient
+ * en français pour un utilisateur français.
+ */
+export const AUTOMATION_NAME_EN: Record<string, string> = {
+  'Me notifier quand un client ouvre sa soumission': 'Notify me when a client opens their quote',
+  'Avancer le deal quand la soumission est envoyée': 'Move the deal forward when the quote is sent',
+  'Avancer le deal quand le client ouvre sa soumission': 'Move the deal forward when the client opens their quote',
+  'Passer le deal à « Gagné » quand la soumission est acceptée': 'Mark the deal “Won” when the quote is accepted',
+  "Sondage d'avis — dès la fin de la job": 'Review survey — as soon as the job is done',
+  'Rendez-vous — confirmation et rappels': 'Appointments — confirmation and reminders',
+  'Relance de devis — 1, 2, 5, 10 et 30 jours': 'Quote follow-up — 1, 2, 5, 10 and 30 days',
+  'Relance de facture — 3, 7, 14 et 30 jours': 'Invoice follow-up — 3, 7, 14 and 30 days',
+  'Nouveau prospect — bienvenue et suivis': 'New lead — welcome and follow-ups',
+  'Dépôt — demande et rappel': 'Deposit — request and reminder',
+};
+
+// Le chemin retour : un libellé anglais d'ici redevient français.
+for (const [nomFr, nomEn] of Object.entries(AUTOMATION_NAME_EN)) {
+  if (!(nomEn in AUTOMATION_NAME_FR)) AUTOMATION_NAME_FR[nomEn] = nomFr;
+}
+
 export function localizeAutomationName(name: string, lang: string): string {
-  if (lang !== 'fr') return name;
+  if (lang !== 'fr') return AUTOMATION_NAME_EN[name] ?? name;
   return AUTOMATION_NAME_FR[name] ?? name;
 }

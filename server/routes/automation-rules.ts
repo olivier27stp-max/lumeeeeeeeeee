@@ -683,7 +683,8 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
     .from('automation_rules')
     .insert({
       org_id: auth.orgId,
-      name: `${source.name} (copie)`.slice(0, 120),
+      // Suffixe dans la langue de l'interface (audit V2, A-16).
+      name: `${source.name} ${langueDe(req) === 'fr' ? '(copie)' : '(copy)'}`.slice(0, 120),
       description: source.description ?? '',
       trigger_event: source.trigger_event,
       conditions: source.conditions ?? {},

@@ -418,3 +418,20 @@ describe('A-15 — éditeur : textes justes', () => {
     expect(container.textContent).toContain('Étape technique');
   });
 });
+
+// ─── A-16 (éditeur) ─────────────────────────────────────────────
+
+describe('A-16 — « Dupliquer l’action » suffixe dans la langue de l’interface', () => {
+  it('« (copy) » en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    etat.regles = [regle({
+      steps: [{ id: 'e1', type: 'action', nom: 'Alpha', action: { type: 'send_sms', config: { body: 'a' } }, suivant: null }],
+    })];
+    await ouvrirAvecHistorique();
+    cliquer(container.querySelector('button[aria-label^="Options for"]'));
+    cliquer(bouton('Duplicate action'));
+    await attendre();
+    expect(container.textContent).toContain('Alpha (copy)');
+    expect(container.textContent).not.toContain('(copie)');
+  });
+});

@@ -24,14 +24,16 @@ function fauxClient() {
       let filtreId: string | null = null;
       let patch: Ligne | null = null;
       let insertion = false;
+      let inseree: Ligne | null = null;
       const chaine: Record<string, unknown> = {
         // Un dossier au nom déjà pris : l'index unique répond 23505.
-        insert: () => { insertion = true; return chaine; },
+        insert: (ligne: Ligne) => { insertion = true; inseree = ligne; return chaine; },
         select: () => chaine,
         eq: (col: string, v: string) => { if (col === 'id') filtreId = v; return chaine; },
         maybeSingle: async () => ({ data: filtreId ? lignes[filtreId] ?? null : null, error: null }),
         single: async () => {
           if (insertion && table === 'automation_folders') return { data: null, error: { code: '23505', message: 'duplicate' } };
+          if (insertion) return { data: inseree, error: null };
           if (patch && filtreId && lignes[filtreId]) {
             ecritures.push({ id: filtreId, patch });
             lignes[filtreId] = { ...lignes[filtreId], ...patch };
@@ -195,5 +197,17 @@ describe('A-09 — le serveur répond dans la langue de l’interface', () => {
     const enMoins = litteraux.filter((m) => !(m in MESSAGES_EN));
     expect(enMoins).toEqual([]);
     expect(litteraux.length).toBeGreaterThan(30);
+  });
+});
+
+// ─── A-16 (serveur) ─────────────────────────────────────────────
+
+describe('A-16 — dupliquer une automatisation suffixe dans la langue de l’interface', () => {
+  it('« (copy) » en anglais, « (copie) » en français', async () => {
+    const en = await appeler('POST', `/automations/rules/${FACTURE}/duplicate`, {}, { 'Accept-Language': 'en' });
+    expect(en.status).toBe(201);
+    expect(en.json.name).toBe('Envoi facture (copy)');
+    const fr = await appeler('POST', `/automations/rules/${FACTURE}/duplicate`, {});
+    expect(fr.json.name).toBe('Envoi facture (copie)');
   });
 });

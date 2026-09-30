@@ -221,3 +221,14 @@ describe('A-14 — /automations?onglet=verifier ouvre l’onglet « À vérifier
     expect(actif?.textContent).toContain('Toutes');
   });
 });
+
+// ─── A-16 (liste) ───────────────────────────────────────────────
+
+describe('A-16 — un seul nom pour un déclencheur, celui du catalogue (comme l’éditeur)', () => {
+  it('« Nouveau prospect », pas « Lead créé »', async () => {
+    reglesServies = [regle({ trigger_event: 'lead.created', name: 'Bienvenue' })];
+    await rendre();
+    expect(container.textContent).toContain('Nouveau prospect');
+    expect(container.textContent).not.toContain('Lead créé');
+  });
+});

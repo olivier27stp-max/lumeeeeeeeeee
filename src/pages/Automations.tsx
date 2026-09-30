@@ -22,6 +22,7 @@ import {
   Settings, FolderPlus, Filter, Building2, Link2, Eye, Trophy, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { localizeAutomationName } from '../lib/automationNames';
+import { trouverDeclencheur } from '../lib/automationCatalogue';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
@@ -1623,7 +1624,11 @@ export default function Automations() {
                   ) : visibles.map((r) => {
                     const rule = r;
                     const echecs = failureCounts[rule.id] ?? 0;
-                    const decl = TRIGGER_DISPLAY[rule.trigger_event];
+                    // Le libellé du CATALOGUE d'abord — celui de l'éditeur :
+                    // « Lead créé » ici, « Nouveau prospect » là-bas, pour le
+                    // même déclencheur (audit V2, A-16). La table locale ne
+                    // sert plus qu'aux événements hors catalogue.
+                    const decl = trouverDeclencheur(rule.trigger_event) ?? TRIGGER_DISPLAY[rule.trigger_event];
                     const meta = PRESET_META[rule.preset_key || ''];
                     const Icone = meta?.icon ?? Zap;
                     return (

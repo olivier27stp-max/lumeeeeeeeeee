@@ -826,7 +826,8 @@ export default function AutomationBuilderPage() {
       id: nouvelIdEtape(steps),
       // Le nom porte « (copie) » : deux cartes au même nom seraient
       // impossibles à distinguer sur le canevas.
-      nom: source.nom ? `${source.nom} (copie)` : null,
+      // Suffixe dans la langue de l'interface (audit V2, A-16).
+      nom: source.nom ? `${source.nom} ${fr ? '(copie)' : '(copy)'}` : null,
       action: { ...source.action, config: { ...source.action.config } },
       suivant: null,
     };
