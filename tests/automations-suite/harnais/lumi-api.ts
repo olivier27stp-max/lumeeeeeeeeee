@@ -41,10 +41,12 @@ export interface ReponseLumi {
   erreur: unknown;
 }
 
-let serveur: Promise<{ url: string; server: Server }> | null = null;
+type ApiLumi = { url: string; server: Server };
+let serveur: Promise<ApiLumi> | null = null;
 
-export function demarrerApiLumi(): Promise<{ url: string; server: Server }> {
-  serveur ??= (async () => {
+export function demarrerApiLumi(): Promise<ApiLumi> {
+  if (serveur) return serveur;
+  serveur = (async (): Promise<ApiLumi> => {
     const express = (await import('express')).default;
     const { rbacMiddleware } = await import('../../../server/lib/route-permissions');
     const { subscriptionGuard, resoudreUtilisateur } = await import('../../../server/lib/subscription-guard');
@@ -56,7 +58,7 @@ export function demarrerApiLumi(): Promise<{ url: string; server: Server }> {
     app.use(subscriptionGuard());
     app.use(featureGuard({ resoudreOrg: (req) => resoudreUtilisateur(req) }));
     app.use('/api', lumiRouter);
-    return new Promise((resolve) => {
+    return new Promise<ApiLumi>((resolve) => {
       const server = app.listen(0, '127.0.0.1', () => {
         const { port } = server.address() as AddressInfo;
         resolve({ url: `http://127.0.0.1:${port}`, server });
