@@ -1057,7 +1057,11 @@ async function lancerRegle(rule: AutomationRule, event: CRMEvent, config: Engine
           ruleId: rule.id,
           entityType: event.entityType,
           entityId: event.entityId,
-          contexte: event.metadata ?? {},
+          // « Laisser le client repasser » : ce passage a ses propres clés
+          // d'étape, qui le suivent jusqu'au bout (audit V2, D-12).
+          contexte: rule.settings?.reentree === true
+            ? { ...(event.metadata ?? {}), passage: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` }
+            : (event.metadata ?? {}),
           franchies: 0,
         },
         rule.steps,

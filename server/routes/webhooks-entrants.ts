@@ -215,7 +215,7 @@ router.post('/hooks/:cle', raw({ type: '*/*', limit: TAILLE_MAX }), async (req, 
  */
 export const CHAMPS_RESERVES_MOTEUR = new Set([
   'chaine', 'suppress_immediate', 'evenement_base_id', 'origine', 'outboxId', 'reglesTraitees',
-  'rejoueDepuis', 'dejaEnvoyeDepuis', 'corps', 'webhook', 'recu_le', 'webhook_id',
+  'rejoueDepuis', 'dejaEnvoyeDepuis', 'corps', 'webhook', 'recu_le', 'webhook_id', 'passage',
 ]);
 export function champsFiltrables(corps: unknown): Record<string, unknown> {
   if (corps === null || typeof corps !== 'object' || Array.isArray(corps)) return {};
