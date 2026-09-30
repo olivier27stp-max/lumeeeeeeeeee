@@ -69,8 +69,18 @@ export function monde(regle: Regle & { id: string }, surcharges: Record<string, 
     steps: regle.steps ?? null, settings: regle.settings ?? null, is_active: true, deleted_at: null,
     pipeline_id: null, stage_id: null, preset_key: regle.preset_key ?? null,
   };
+  // « Démarrer une automatisation » vise IDS.autreRegle : une vraie AUTRE
+  // règle (publiée, simple) doit répondre à son identifiant. Sinon le client
+  // simulé, qui ne filtre pas, rendait la règle en cours elle-même.
+  const autreRegle = {
+    id: IDS.autreRegle, org_id: ORG, name: 'Suivi équipe', trigger_event: 'task.completed', conditions: {}, delay_seconds: 0,
+    actions: [{ type: 'create_task', config: { title: 'Rappeler le client', body: 'Suivi' } }], steps: null, settings: null,
+    is_active: true, deleted_at: null, pipeline_id: null, stage_id: null, preset_key: null,
+  };
   return {
-    automation_rules: { data: [ligneRegle] },
+    automation_rules: (req: { filtres: Array<[string, string, unknown]> }) => ({
+      data: req.filtres.some(([op, col, val]) => op === 'eq' && col === 'id' && val === IDS.autreRegle) ? [autreRegle] : [ligneRegle],
+    }),
     company_settings: { data: [{ org_id: ORG, company_name: 'Plomberie Tremblay inc.', phone: '+14505550199', email: 'info@plomberie.test', default_language: 'fr', timezone: 'America/Montreal', google_review_url: 'https://g.page/r/plomberie-tremblay/review', facebook_review_url: null, review_enabled: true, automations_paused: false }] },
     clients: { data: [CLIENT] },
     jobs: { data: [{ id: IDS.job, org_id: ORG, title: 'Nettoyage de gouttières', client_id: IDS.client, status: 'completed', deposit_status: 'unpaid', currency: 'CAD', created_at: VEILLE, deleted_at: null, property_address: '412 rue des Érables, Longueuil' }] },

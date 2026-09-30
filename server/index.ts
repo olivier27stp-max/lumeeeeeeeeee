@@ -51,6 +51,8 @@ import communicationsRouter from './routes/communications';
 import automationTestRouter from './routes/automation-test';
 import automationEventsRouter from './routes/automation-events';
 import automationRulesRouter from './routes/automation-rules';
+import automationPublicationRouter from './routes/automation-publication';
+import automationStatsRouter from './routes/automation-stats';
 import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
 import sendingDomainsRouter from './routes/sending-domains';
@@ -687,9 +689,6 @@ if (!useRedis) {
   app.use('/api/portal', portalLimiter);
   app.use('/api/quotes', quoteLimiterStrict);
   app.use('/api/agreements/public', agreementPublicLimiter);
-  app.use('/api/automations/events', automationLimiter);
-  // Plafonds par usage (lecture / écriture / génération) : voir reglesLimiter.
-  app.use('/api/automations/rules', reglesLimiter);
   app.use('/api/agent', agentLimiter);
   app.use('/api/lumi', agentLimiter);
   app.use('/api/dsr', dsrLimiterMem);
@@ -697,6 +696,12 @@ if (!useRedis) {
 }
 // Always applied (no Redis equivalent registered below)
 app.use('/api/leads/create', leadCreateLimiter);
+// Automatisations : TOUJOURS, Redis ou pas (launch 2026-09-28). Ils étaient
+// dans le bloc « sans Redis » sans équivalent Redis plus bas : avec Upstash,
+// /api/automations/* n'avait plus AUCUNE limite (générations Lumi comprises).
+app.use('/api/automations/events', automationLimiter);
+// Plafonds par usage (lecture / écriture / génération) : voir reglesLimiter.
+app.use('/api/automations/rules', reglesLimiter);
 // Per-token limiter — prevents brute-force via IP rotation (not covered by presets)
 app.use('/api/pay', rateLimit({
   windowMs: 60_000,
@@ -840,6 +845,8 @@ app.use('/api', communicationsRouter);
 app.use('/api', automationTestRouter);
 app.use('/api', automationEventsRouter);
 app.use('/api', automationRulesRouter);
+app.use('/api', automationPublicationRouter);
+app.use('/api', automationStatsRouter);
 app.use('/api', portalRouter);
 app.use('/api', connectRouter);
 // Domaine d'envoi propre à l'entreprise (Resend Domains) — owner/admin, sous son propre préfixe.

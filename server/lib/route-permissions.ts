@@ -73,7 +73,9 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/payments/stripe/balance': 'financial.view_payments',
   'POST /api/payments/paypal/create-order': 'financial.view_payments',
   'POST /api/payments/paypal/capture-order': 'financial.view_payments',
-  'POST /api/payments/refund': 'financial.view_payments',
+  // Rembourser = la case « Rembourser des paiements » de la page Rôles (une
+  // répartitrice admin qui ne l'a pas ne rembourse pas). Avant : view_payments.
+  'POST /api/payments/refund': 'payments.refund',
   'POST /api/payment-requests/create': 'financial.view_payments',
   'POST /api/payment-requests/resend': 'financial.view_payments',
 
@@ -112,13 +114,20 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   // lecture, tout le reste écrit des règles qui enverront de vrais textos et
   // courriels aux clients — donc le droit de modification.
   'GET /api/automations/rules': 'automations.read',
+  // Total déclenché, en cours, passages par étape (une route agrégée).
+  'GET /api/automations/rules/stats': 'automations.read',
   // « X clients correspondent aujourd'hui » (déclencheur Client inactif).
   'GET /api/automations/clients-inactifs/apercu': 'automations.read',
+  // Aperçu d'une automatisation : montre un vrai client (launch 2026-09-28).
+  'POST /api/automations/rules/:id/apercu': 'automations.read',
   'POST /api/automations/rules': 'automations.update',
   'PATCH /api/automations/rules/:id': 'automations.update',
   'DELETE /api/automations/rules/:id': 'automations.update',
   'POST /api/automations/rules/:id/duplicate': 'automations.update',
   'POST /api/automations/rules/:id/copier-bureaux': 'automations.update',
+  // Publier / repasser en brouillon, un par un ou en lot (audit M8).
+  'POST /api/automations/rules/:id/publication': 'automations.update',
+  'POST /api/automations/rules/publication': 'automations.update',
   'GET /api/automations/bureaux-cibles': 'automations.update',
   // Générer coûte un appel au modèle : même droit que créer à la main.
   'POST /api/automations/rules/generer': 'automations.update',

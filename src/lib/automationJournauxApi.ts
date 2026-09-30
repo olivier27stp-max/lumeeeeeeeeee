@@ -317,7 +317,14 @@ export function raisonLisible(erreur: string | null, fr: boolean): string | null
   if (!erreur) return null;
   const e = erreur.toLowerCase();
   const paires: Array<[string, string, string]> = [
-    ['no recipient phone', 'ce client n’a pas de numéro de téléphone', 'this client has no phone number'],
+    // Causes de M1 (audit 2026-09-28) encore portées par les anciens journaux.
+    ['no sms number', 'aucun numéro texto n’est configuré pour ce bureau', 'no texting number is set up for this office'],
+    ['no active twilio sms number', 'aucun numéro texto n’est configuré pour ce bureau', 'no texting number is set up for this office'],
+    ['no phone number', 'ce client n’a pas de numéro de téléphone', 'this client has no phone number'],
+    ['no email address', 'ce client n’a pas d’adresse courriel', 'this client has no email address'],
+    ['injoignable', 'l’adresse courriel de ce client est injoignable', 'this client’s email address bounces'],
+    ['review link', 'aucun lien d’avis Google ou Facebook n’est configuré', 'no Google or Facebook review link is set up'],
+    ['no recipient phone','ce client n’a pas de numéro de téléphone', 'this client has no phone number'],
     ['no recipient email', 'ce client n’a pas d’adresse courriel', 'this client has no email address'],
     ['opted out', 'ce client s’est désabonné', 'this client opted out'],
     ['not configured', 'l’envoi n’est pas configuré dans les réglages', 'sending is not configured in settings'],

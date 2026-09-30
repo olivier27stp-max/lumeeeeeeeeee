@@ -1036,12 +1036,7 @@ router.post('/quotes/public/accept', async (req, res) => {
     // changement de statut (migration 20260747000000).
 
     // Emit event
-    eventBus.emit('quote.approved', {
-      orgId: quote.org_id,
-      entityType: 'quote',
-      entityId: quote.id,
-      metadata: { quote_number: quote.quote_number, signer_name, accepted_via: 'electronic_signature' },
-    });
+    // `quote.approved` naît du TRIGGER sur le statut (launch 2026-09-28, bloc 2).
 
     // Automation: move pipeline deal to Closed Won
     if (quote.lead_id) {
@@ -1421,12 +1416,7 @@ router.post('/quotes/public/decline', async (req, res) => {
       }
     }
 
-    eventBus.emit('quote.declined', {
-      orgId: quote.org_id,
-      entityType: 'quote',
-      entityId: quote.id,
-      metadata: { quote_number: quote.quote_number, reason },
-    });
+    // `quote.declined` naît du TRIGGER sur le statut (launch 2026-09-28, bloc 2).
 
     // Automation: move pipeline deal to Closed Lost
     if (quote.lead_id) {

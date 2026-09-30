@@ -680,7 +680,15 @@ const getRevenueSummary: AgentTool = {
       .select('revenue_goal_cents')
       .eq('org_id', ctx.orgId)
       .maybeSingle();
-    const goalCents = Number(settings?.revenue_goal_cents) || 0;
+    // L'objectif est ANNUEL (formulaire de création d'espace, Réglages →
+    // Entreprise) : comparer le revenu d'un mois à l'objectif de l'année
+    // annonçait ~8 % d'atteinte à une entreprise pile dans ses chiffres.
+    const objectifAnnuel = Number(settings?.revenue_goal_cents) || 0;
+    const goalCents = Math.round(
+      period === 'this_year' ? objectifAnnuel
+        : period === 'last_30_days' ? (objectifAnnuel * 30) / 365
+          : objectifAnnuel / 12,
+    );
 
     return {
       period,
@@ -688,6 +696,7 @@ const getRevenueSummary: AgentTool = {
       to: toStr,
       revenue_cents: revenueCents,
       invoiced_cents: invoicedCents,
+      goal_annual_cents: objectifAnnuel,
       goal_cents: goalCents,
       goal_progress_pct: goalCents > 0 ? Math.round((revenueCents / goalCents) * 1000) / 10 : null,
     };

@@ -228,6 +228,137 @@ router.post('/quickbooks/sync/retry', adminOnly, async (req, res) => {
   }
 });
 
+// ── Une facture : où en est-elle dans QuickBooks ? ─────────────
+// Pour la fiche facture : la facture et chacun de ses paiements, avec
+// l'identifiant QuickBooks s'il existe et le dernier état de la file.
+const UUID = /^[0-9a-f-]{36}$/i;
+
+async function invoiceTrace(db: ReturnType<typeof getServiceClient>, orgId: string, invoiceId: string) {
+  const { data: conn } = await db
+    .from('app_connections')
+    .select('status, connected_account_name')
+    .eq('org_id', orgId)
+    .eq('app_id', 'quickbooks')
+    .maybeSingle();
+  const connected = !!conn && ['connected', 'token_expired'].includes(String(conn.status));
+
+  const { data: pays, error: payErr } = await db
+    .from('payments')
+    .select('id, amount_cents, status, provider, method, payment_date')
+    .eq('org_id', orgId)
+    .eq('invoice_id', invoiceId)
+    .is('deleted_at', null)
+    .order('payment_date', { ascending: true });
+  if (payErr) throw payErr;
+
+  const ids = [invoiceId, ...(pays || []).map((p) => p.id)];
+  const [{ data: maps, error: mapErr }, { data: queue, error: qErr }] = await Promise.all([
+    db.from('quickbooks_entity_map')
+      .select('entity_type, lume_id, qbo_id, qbo_doc_number, qbo_state, last_synced_at, realm_id')
+      .eq('org_id', orgId)
+      .in('lume_id', ids),
+    db.from('quickbooks_sync_queue')
+      .select('entity_type, entity_id, status, last_error, attempts, updated_at')
+      .eq('org_id', orgId)
+      .in('entity_id', ids)
+      .neq('status', 'superseded')
+      .order('updated_at', { ascending: false }),
+  ]);
+  if (mapErr) throw mapErr;
+  if (qErr) throw qErr;
+
+  const one = (type: 'invoice' | 'payment', id: string) => {
+    const map = (maps || [])
+      .filter((m) => m.entity_type === type && m.lume_id === id)
+      .sort((a, b) => String(b.last_synced_at).localeCompare(String(a.last_synced_at)))[0] || null;
+    const job = (queue || []).find((q) => q.entity_type === type && q.entity_id === id) || null;
+    return {
+      qbo_id: map?.qbo_id ?? null,
+      qbo_doc_number: map?.qbo_doc_number ?? null,
+      qbo_state: map?.qbo_state ?? null,
+      last_synced_at: map?.last_synced_at ?? null,
+      queue_status: job?.status ?? null,
+      // Erreur, ou note du worker (« Brouillon — envoyée à sa finalisation », etc.).
+      message: job?.last_error ?? null,
+      queued_at: job?.updated_at ?? null,
+    };
+  };
+
+  return {
+    connected,
+    company: conn?.connected_account_name ?? null,
+    invoice: one('invoice', invoiceId),
+    payments: (pays || []).map((p) => ({ ...p, ...one('payment', p.id) })),
+  };
+}
+
+router.get('/quickbooks/sync/invoice/:id', adminOnly, async (req, res) => {
+  try {
+    const orgId = orgOf(req);
+    const invoiceId = String(req.params.id || '');
+    if (!UUID.test(invoiceId)) {
+      res.status(400).json({ error: 'Facture invalide.' });
+      return;
+    }
+    const db = getServiceClient();
+    const { data: inv, error } = await db.from('invoices').select('id').eq('id', invoiceId).eq('org_id', orgId).maybeSingle();
+    if (error) throw error;
+    if (!inv) {
+      res.status(404).json({ error: 'Facture introuvable.' });
+      return;
+    }
+    res.json(await invoiceTrace(db, orgId, invoiceId));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// ── Renvoyer une facture et ses paiements ──────────────────────
+// reason 'history' : passe outre sync_from (facture antérieure au branchement).
+router.post('/quickbooks/sync/invoice/:id/resend', adminOnly, async (req, res) => {
+  try {
+    const orgId = orgOf(req);
+    const invoiceId = String(req.params.id || '');
+    if (!UUID.test(invoiceId)) {
+      res.status(400).json({ error: 'Facture invalide.' });
+      return;
+    }
+    const db = getServiceClient();
+    const { data: inv, error } = await db.from('invoices').select('id').eq('id', invoiceId).eq('org_id', orgId).maybeSingle();
+    if (error) throw error;
+    if (!inv) {
+      res.status(404).json({ error: 'Facture introuvable.' });
+      return;
+    }
+    const before = await invoiceTrace(db, orgId, invoiceId);
+    if (!before.connected) {
+      res.status(409).json({ error: 'QuickBooks n\'est pas connecté pour ce bureau.' });
+      return;
+    }
+    await loadSettings(db, orgId);
+
+    const targets: Array<['invoice' | 'payment', string]> = [
+      ['invoice', invoiceId],
+      ...before.payments.map((p) => ['payment', p.id] as ['payment', string]),
+    ];
+    for (const [type, id] of targets) {
+      // Les anciennes erreurs de cette entité sont remplacées par le nouvel envoi.
+      await db.from('quickbooks_sync_queue')
+        .update({ status: 'superseded', updated_at: new Date().toISOString() })
+        .eq('org_id', orgId).eq('entity_type', type).eq('entity_id', id).eq('status', 'error');
+      const { error: qErr } = await db.rpc('quickbooks_enqueue', {
+        p_org: orgId, p_type: type, p_id: id, p_reason: 'history',
+      });
+      if (qErr) throw qErr;
+    }
+    // Petite passe immédiate pour répondre avec l'état à jour.
+    await runQuickBooksSync(db, 10).catch(() => {});
+    res.json(await invoiceTrace(db, orgId, invoiceId));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
 // ── Synchroniser maintenant ────────────────────────────────────
 router.post('/quickbooks/sync/run', adminOnly, async (_req, res) => {
   try {

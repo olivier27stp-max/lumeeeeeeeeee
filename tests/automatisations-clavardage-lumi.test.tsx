@@ -116,7 +116,8 @@ describe('l’éditeur', () => {
   });
 
   it('envoie l’id de l’automatisation pour que le serveur garde le fil', () => {
-    expect(editeur).toMatch(/ruleId: regle\?\.id \?\? null/);
+    // L'id RÉEL (un brouillon est créé juste avant le 1er envoi à Lumi).
+    expect(editeur).toMatch(/ruleId: idReel\.current/);
     expect(readFileSync(resolve(__dirname, '../server/routes/automation-rules.ts'), 'utf8'))
       .toMatch(/update\(\{ lumi_conversation: conversation \}\)/);
   });

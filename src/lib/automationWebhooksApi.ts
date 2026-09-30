@@ -17,7 +17,10 @@ import { getCurrentOrgId } from './orgApi';
 export interface AdresseDAppel {
   id: string;
   name: string;
-  api_key: string;
+  /** La clé COMPLÈTE — seulement juste après la création ou la régénération (launch 2026-09-28). */
+  api_key?: string | null;
+  /** « ••••a1b2 » : ce que la liste montre. */
+  cle_masquee: string;
   enabled: boolean;
   created_at: string;
 }
@@ -76,6 +79,16 @@ export async function basculerAdresseDAppel(id: string, enabled: boolean): Promi
   return reponse.json();
 }
 
+/** Nouvelle clé : l'ancienne adresse cesse de fonctionner. Rend la clé complète, une seule fois. */
+export async function regenererAdresseDAppel(id: string): Promise<AdresseDAppel> {
+  const reponse = await fetch(`/api/automations/webhooks/${id}/regenerer`, {
+    method: 'POST',
+    headers: await entetes(),
+  });
+  if (!reponse.ok) throw await erreur(reponse);
+  return reponse.json();
+}
+
 export async function supprimerAdresseDAppel(id: string): Promise<void> {
   const reponse = await fetch(`/api/automations/webhooks/${id}`, {
     method: 'DELETE',
@@ -101,11 +114,15 @@ export async function lireEtatPause(): Promise<EtatPause> {
   return reponse.json();
 }
 
-export async function basculerPause(paused: boolean): Promise<void> {
+/** Rend l'état RÉEL relu de la base après la bascule (pas celui demandé). */
+export async function basculerPause(paused: boolean): Promise<EtatPause> {
   const reponse = await fetch('/api/automations/pause', {
     method: 'POST',
     headers: await entetes(),
     body: JSON.stringify({ paused }),
   });
   if (!reponse.ok) throw await erreur(reponse);
+  await reponse.json().catch(() => null);
+  // Relecture : l'écran affiche ce que la base dit, jamais ce qu'on a supposé.
+  return lireEtatPause();
 }

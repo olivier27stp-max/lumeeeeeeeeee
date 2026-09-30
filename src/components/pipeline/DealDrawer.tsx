@@ -1386,6 +1386,10 @@ export default function DealDrawer({
         {/* En-tête : qui, où il en est, combien. */}
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
+            {/* Titre du deal au-dessus du client (GHL « Opportunity name »). */}
+            {deal.title?.trim() && (
+              <p className="text-[13px] font-semibold text-text-secondary">{deal.title}</p>
+            )}
             {deal.client_id ? (
               <Link
                 to={`/clients/${deal.client_id}`}

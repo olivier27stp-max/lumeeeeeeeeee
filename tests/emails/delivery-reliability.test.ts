@@ -190,7 +190,9 @@ describe('confirmation de rendez-vous — le chemin principal émet enfin', () =
       jobsApi.indexOf('async function syncJobSchedule'),
       jobsApi.indexOf('function mapJob'),
     );
-    expect(fn).toContain('emitAppointmentCreated');
+    // Launch 2026-09-28 : la CRÉATION naît d'un trigger en base (plus du
+    // navigateur) ; le déplacement reste émis ici.
+    expect(fn).not.toContain('emitAppointmentCreated');
     expect(fn).toContain('emitAppointmentRescheduled');
   });
 
@@ -206,7 +208,8 @@ describe('confirmation de rendez-vous — le chemin principal émet enfin', () =
     // 31 août.
     expect(jobsApi).toContain('(data as any)?.updated');
     expect(jobsApi).toContain('emitAppointmentRescheduled(params)');
-    expect(jobsApi).toContain('emitAppointmentCreated(params)');
+    // Launch 2026-09-28 : la création n'est plus émise ici (trigger en base).
+    expect(jobsApi).not.toContain('emitAppointmentCreated(params)');
   });
 
   it('n’émet rien si le RPC ne renvoie pas d’événement', () => {
@@ -224,8 +227,11 @@ describe('confirmation de rendez-vous — le chemin principal émet enfin', () =
 
   it('les autres chemins de planification émettent aussi', () => {
     const scheduleApi = read('src/lib/scheduleApi.ts');
-    // Glisser-déposer dans le calendrier + ajout d'une visite.
-    expect(scheduleApi).toContain('emitAppointmentCreated({');
+    // Glisser-déposer dans le calendrier + ajout d'une visite : TOUTE insertion
+    // dans schedule_events déclenche maintenant appointment.created par trigger
+    // (launch 2026-09-28) — plus d'émission du navigateur.
+    expect(scheduleApi).not.toContain('emitAppointmentCreated({');
+    expect(read('supabase/migrations/20261003100000_evenements_automatisations_par_la_base.sql')).toMatch(/after insert or update of status on public\.schedule_events/);
     // Déplacement d'une visite : sans cette émission, les rappels restent
     // calés sur l'ANCIENNE date — un rappel « 2 h avant » est déjà parti 22 h
     // APRÈS la visite en production.
@@ -238,21 +244,21 @@ describe('confirmation de rendez-vous — le chemin principal émet enfin', () =
     // un contrat d'entretien, donc les plus fidèles — ne recevaient NI
     // confirmation NI rappel, alors que les visites planifiées à la main en
     // recevaient. Même panne que celle du modal « Nouveau job ».
+    // Launch 2026-09-28 : l'insertion de la visite suffit — le trigger en base
+    // écrit appointment.created, quel que soit le chemin (récurrent compris).
     const recurring = read('server/lib/recurringJobScheduler.ts');
-    expect(recurring).toContain("eventBus.emit('appointment.created'");
-    expect(recurring).toContain("entityType: 'schedule_event'");
-    // L'id de l'événement créé est nécessaire pour émettre : sans `.select()`,
-    // l'insert ne renvoyait rien.
-    expect(recurring).toContain(".select('id')");
-    expect(recurring).toContain("source: 'recurring'");
+    expect(recurring).toContain("from('schedule_events')");
+    expect(recurring).not.toContain("eventBus.emit('appointment.created'");
+    expect(read('supabase/migrations/20261003100000_evenements_automatisations_par_la_base.sql')).toContain("'appointment.created', 'schedule_event'");
   });
 
   it('une automatisation muette n’interrompt pas la génération des occurrences', () => {
     // Le planificateur tourne en boucle sur plusieurs règles : une erreur
     // d'émission ne doit pas empêcher les suivantes d'être créées.
+    // Plus d'émission dans la boucle (trigger en base, launch 2026-09-28) :
+    // rien à faire échouer ici.
     const recurring = read('server/lib/recurringJobScheduler.ts');
-    expect(recurring).toContain('appointment.created emit failed');
-    expect(recurring).toMatch(/catch \(emitErr: any\)/);
+    expect(recurring).not.toContain('appointment.created emit failed');
   });
 });
 
@@ -797,7 +803,8 @@ describe('désabonnement courriel — le pendant email de STOP', () => {
     // de retrait.
     expect(helpers).toContain('export async function isEmailUnsubscribed');
     expect(actions).toContain('isEmailUnsubscribed(ctx.supabase, ctx.orgId, to)');
-    expect(actions).toContain('has unsubscribed from marketing emails');
+    // Launch M1 : le désabonné est SAUTÉ (motif « Client désabonné (courriel) »), plus un échec.
+    expect(actions).toMatch(/isEmailUnsubscribed\(ctx\.supabase, ctx\.orgId, to\)[\s\S]{0,400}return saute\(motifSaut\('courriel'\)\)/);
   });
 
   it('un porteur de jeton n’est pas traité comme un désabonné', () => {
