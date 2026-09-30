@@ -158,6 +158,8 @@ describe('compteur de crédits Lumi', () => {
 
   it('aucun « $ » ni « budget » sur la page (client)', async () => {
     await rendre();
+    // Le compteur est bien là : c'est LUI qui ne doit pas parler en dollars.
+    expect(barre()).not.toBeNull();
     expect(texte()).not.toContain('$');
     expect(texte()).not.toMatch(/budget/i);
   });
@@ -251,6 +253,8 @@ describe('le flux SSE met les crédits à jour, sans jamais afficher de dollars'
     };
     await rendre('/lumi?c=11111111-1111-1111-1111-111111111111');
     expect(texte()).toContain('Réponse d’hier');
+    // Le compteur est affiché à côté de la conversation rechargée, sans coût.
+    expect(texte()).toContain('742 / 1 000 crédits Lumi');
     expect(texte()).not.toContain('$');
     expect(texte()).not.toMatch(/cette conversation/i);
   });
