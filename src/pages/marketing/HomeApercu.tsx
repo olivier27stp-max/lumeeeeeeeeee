@@ -84,8 +84,8 @@ export default function HomeApercu() {
   }, [reduceMotion]);
 
   const facts = fr
-    ? ['Sans engagement en mensuel', 'Intégration guidée incluse', 'Support FR / EN']
-    : ['No commitment on monthly plans', 'Guided onboarding included', 'Support in FR / EN'];
+    ? ['Support FR / EN']
+    : ['Support in FR / EN'];
 
   const before = fr
     ? [
