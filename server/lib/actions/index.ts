@@ -676,7 +676,13 @@ export async function resolveEntityVariables(
       .format(Number(cents ?? 0) / 100);
 
   if (company) {
-    vars.company_name = company.company_name || '';
+    vars.company_name = String(company.company_name ?? '').trim();
+    // Nom vide dans les réglages : celui de l'organisation. Sinon l'objet
+    // « [company_name] — Paiement reçu » partait en « — Paiement reçu ».
+    if (!vars.company_name) {
+      const { data: org } = await supabase.from('orgs').select('name').eq('id', orgId).maybeSingle();
+      vars.company_name = String((org as { name?: string } | null)?.name ?? '').trim();
+    }
     vars.company_phone = company.phone || '';
     vars.google_review_url = company.google_review_url || '';
     vars.facebook_review_url = company.facebook_review_url || '';

@@ -14,6 +14,7 @@
 // ============================================================
 
 import type Stripe from 'stripe';
+import { urlApplication } from './helpers';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './logger';
 import { rendreCourrielLume, montant } from './courriels/gabarit';
@@ -26,7 +27,7 @@ import { rendreCourrielLume, montant } from './courriels/gabarit';
  *   - `prolongation` : période de facturation prolongée de 30 jours (chemin historique).
  */
 export function courrielMoisGratuit(opts: { mode: 'credit' | 'prolongation'; cents?: number; currency?: string }): { sujet: string; html: string } {
-  const base = (process.env.FRONTEND_URL || 'http://localhost:5173').trim().replace(/\/$/, '');
+  const base = urlApplication();
   const credit = opts.mode === 'credit' && opts.cents ? montant(opts.cents, (opts.currency || 'CAD').toUpperCase(), 'fr') : null;
   return {
     sujet: 'Un mois gratuit : ton filleul vient de s’abonner',

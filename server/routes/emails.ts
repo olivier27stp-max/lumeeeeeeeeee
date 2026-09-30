@@ -61,6 +61,13 @@ function formatDate(dateStr: string | null | undefined, langue: Langue = 'fr') {
 export interface CompanyInfo {
   company_name?: string | null;
   company_email?: string | null;
+  /**
+   * Où vont les réponses quand l'entreprise n'a pas d'adresse courriel : celle
+   * de son propriétaire. JAMAIS affichée dans le courriel (le pied montre
+   * `company_email`) — seulement le Reply-To. Sans elle, la réponse d'un
+   * client partait vers une adresse @lumecrm.net que personne ne lit.
+   */
+  reply_to_repli?: string | null;
   company_phone?: string | null;
   company_address?: string | null;
   company_logo_url?: string | null;
@@ -101,9 +108,35 @@ export async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
         .map((t: any) => `${t.name} No: ${t.registration_number}`);
     } catch { /* registration_number column may not exist yet */ }
 
+    // Nom vide dans les réglages : le nom de l'organisation, jamais un vide
+    // (objet « — Payment Received », expéditeur anonyme).
+    let nom = String(data.company_name ?? '').trim();
+    if (!nom) {
+      const { data: org } = await serviceClient.from('orgs').select('name').eq('id', orgId).maybeSingle();
+      nom = String((org as { name?: string } | null)?.name ?? '').trim();
+    }
+    // Pas d'adresse d'entreprise : les réponses vont au propriétaire.
+    let replyToRepli: string | null = null;
+    if (!data.email) {
+      try {
+        const { data: proprio } = await serviceClient
+          .from('memberships').select('user_id')
+          .eq('org_id', orgId).eq('role', 'owner').eq('status', 'active')
+          .limit(1).maybeSingle();
+        const uid = (proprio as { user_id?: string } | null)?.user_id;
+        if (uid) {
+          const { data: u } = await serviceClient.auth.admin.getUserById(uid);
+          replyToRepli = u?.user?.email ?? null;
+        }
+      } catch (err: any) {
+        logger.warn('[emails/getCompanySettings] courriel du propriétaire illisible', { orgId, error: err?.message || String(err) });
+      }
+    }
+
     return {
-      company_name: data.company_name || null,
+      company_name: nom || null,
       company_email: data.email || null,
+      reply_to_repli: replyToRepli,
       company_phone: data.phone || null,
       company_address: address,
       company_logo_url: data.logo_url || null,
@@ -210,7 +243,7 @@ export function senderFor(company: CompanyInfo): { from: string; replyTo?: strin
   const adresse = prefixe && domaine ? `${prefixe}@${domaine}` : baseAddr;
   return {
     from: `${name} <${adresse}>`,
-    replyTo: company.company_email || undefined,
+    replyTo: company.company_email || company.reply_to_repli || undefined,
   };
 }
 
