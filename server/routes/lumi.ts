@@ -35,6 +35,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 // Lumi répond aussi aux questions de support : le client ne sait pas qu'il y
 // a deux assistants (2026-09-22). Mêmes réponses, mêmes garde-fous, 0 token.
 import { reponseFaqPour } from '../lib/support/faq';
+import { estDemandeDAction } from '../lib/lumi/demande-action';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { reponseAideMulti } from '../lib/support/aide-multi';
 import { peutRepondreHorsScope, reponseHorsScope } from '../lib/lumi/hors-scope';
@@ -492,7 +493,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     //
     // Mêmes garde-fous que dans le support : jamais pour une question sur les
     // DONNÉES du compte, jamais en cours de conversation, jamais sur un repli.
-    if (!enAttente.length && !repli && historique.length === 0) {
+    // Une demande d'ACTION (« configure mes taxes », « remets ses permissions »)
+    // va au modèle, qui a les outils — jamais une réponse d'aide (audit 2026-09-30).
+    if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message)) {
       const aide = reponseFaqPour(message, ctx.language) ?? null;
       const article = aide ? null : reponseAideDirecte(message, ctx.language, { premierMessage: true });
       // Plusieurs questions collées d'un coup : chacune a sa réponse écrite,
