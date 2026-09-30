@@ -1948,9 +1948,10 @@ export async function executeRequestReview(
   }
 
   // 4. Resolve client name: first_name > full name > "Bonjour"
+  const en = ctx.langue === 'en';
   const clientGreeting = vars.client_first_name
     || vars.client_name
-    || 'Bonjour';
+    || (en ? 'there' : 'Bonjour');
 
   // 5. Anti-duplicate: check if review already sent to this client in last 7 days
   if (clientId) {
@@ -1997,8 +1998,8 @@ export async function executeRequestReview(
     ...vars,
     client_first_name: clientGreeting,
     client_name: vars.client_name || clientGreeting,
-    company_name: vars.company_name || 'notre équipe',
-    job_name: vars.job_name || 'votre projet',
+    company_name: vars.company_name || (en ? 'our team' : 'notre équipe'),
+    job_name: vars.job_name || (en ? 'your project' : 'votre projet'),
     survey_url: surveyUrl,
     review_link: surveyUrl,
   };
@@ -2044,7 +2045,7 @@ export async function executeRequestReview(
     ? { success: false, error: 'Client has no phone number.' }
     : await depassePlafondFrequence(ctxPlafond, 'sms', vars.client_phone)
       ? auPlafond('sms', vars.client_phone)
-      : await executeSendSms({ body: reviewSmsBody(cs, messageVars), sollicitation: true }, vars, ctx);
+      : await executeSendSms({ body: reviewSmsBody(cs, messageVars, en ? 'en' : 'fr'), sollicitation: true }, vars, ctx);
 
   // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
   const sent = estEnvoye(emailResult) || estEnvoye(smsResult);

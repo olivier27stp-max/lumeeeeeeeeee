@@ -56,6 +56,13 @@ export const DEFAULT_REVIEW_SMS_BODY_FR =
   "Bonjour [client_first_name], merci d'avoir choisi [company_name] ! "
   + "Comment s'est passé notre service ? Notez-nous en 10 secondes : [survey_url]";
 
+/* Le texto par défaut d'une entreprise ANGLAISE : sans lui, ses clients
+   recevaient la demande d'avis en français (le courriel, lui, suivait la
+   langue). ASCII seulement : il reste en GSM-7 (160 caractères / segment). */
+export const DEFAULT_REVIEW_SMS_BODY_EN =
+  'Hi [client_first_name], thanks for choosing [company_name]! '
+  + 'How did we do? Rate us in 10 seconds: [survey_url]';
+
 /* L'objet ne répète pas le nom de l'entreprise : l'expéditeur l'affiche déjà
    (audit des courriels du 2026-09-29 — et un nom vide donnait « — Comment… »). */
 export const DEFAULT_REVIEW_EMAIL_SUBJECT_FR = "Comment s'est passé notre service ?";
@@ -152,8 +159,8 @@ export function resolveReviewTemplate(template: string, vars: Record<string, str
 }
 
 /** Corps du SMS du sondage, variables résolues. */
-export function reviewSmsBody(settings: ReviewSettingsLike | null | undefined, vars: Record<string, string>): string {
-  const template = customOr(settings?.review_sms_body, DEFAULT_REVIEW_SMS_BODY_FR);
+export function reviewSmsBody(settings: ReviewSettingsLike | null | undefined, vars: Record<string, string>, langue: 'fr' | 'en' = 'fr'): string {
+  const template = customOr(settings?.review_sms_body, langue === 'en' ? DEFAULT_REVIEW_SMS_BODY_EN : DEFAULT_REVIEW_SMS_BODY_FR);
   let body = resolveReviewTemplate(template, vars).trim();
   // Le SMS ne vaut que par son lien : on l'ajoute si l'entreprise l'a oublié.
   if (vars.survey_url && !body.includes(vars.survey_url)) body = `${body} ${vars.survey_url}`.trim();
