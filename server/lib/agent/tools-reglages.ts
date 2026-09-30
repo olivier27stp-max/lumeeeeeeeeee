@@ -457,6 +457,9 @@ const createAutomationFromText: AgentTool = {
       // dormaient en base sans jamais pouvoir partir.
       const verdict = sequenceEtapes.safeParse(resultat.parcours.steps);
       if (!verdict.success) {
+        // Comme la route : le motif exact reste dans les journaux (1 fois sur
+        // ~40 sur la batterie I, invisible sans cette trace).
+        console.error(`[agent-tool:create_automation_from_text] org=${ctx.orgId} parcours invalide`, JSON.stringify(verdict.error.issues.slice(0, 3)));
         throw new Error('Le parcours proposé ne pourrait pas tourner. Reformule ta demande, ou construis-le avec le « + » dans Automatisations.');
       }
       if (!trouverDeclencheur(resultat.parcours.trigger_event)) {
