@@ -336,8 +336,18 @@ export async function executerRelancesPaiement(opts: { publicBase: string; orgId
     // Une facture déjà relancée par une automatisation publiée n'est pas relancée ici.
     const couverteParAutomatisation = await couvertureAutomatisations(svc, orgId);
 
+    // Paliers du plus HAUT au plus bas : une facture n'est relancée qu'au
+    // palier le plus élevé qu'elle a atteint. Avant, la fenêtre de chaque
+    // palier ([J-90 ; J-palier]) contenait aussi les factures plus vieilles :
+    // une facture en retard de 40 jours recevait J+1, J+7, J+14 ET J+30 le
+    // même soir (4 courriels), et l'index unique du journal (1 ligne par
+    // facture, jour et canal) refusait les 3 dernières APRÈS l'envoi — les
+    // paliers non journalisés repartaient le lendemain.
+    const paliers = [...schedule].sort((x, y) => Number(y.days_after_due) - Number(x.days_after_due));
+    const palierAtteint = new Map<string, number>();
+
     // For each schedule entry, find candidate invoices
-    for (const entry of schedule) {
+    for (const entry of paliers) {
       const daysAfter = Number(entry.days_after_due);
       const channel = entry.channel;
       if (!Number.isFinite(daysAfter) || daysAfter < 0) continue;
@@ -362,6 +372,11 @@ export async function executerRelancesPaiement(opts: { publicBase: string; orgId
       }
 
       for (const inv of invoices || []) {
+        // Un palier plus haut a déjà traité cette facture pendant ce passage
+        // (relancée, déjà relancée un autre jour, ou couverte par une automatisation).
+        const dejaAtteint = palierAtteint.get(inv.id);
+        if (dejaAtteint !== undefined && dejaAtteint > daysAfter) continue;
+        palierAtteint.set(inv.id, daysAfter);
         processed++;
         try {
           // Dedupe: check log for (invoice_id, days_after_due, channel)
