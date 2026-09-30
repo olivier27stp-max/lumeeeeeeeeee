@@ -33,6 +33,8 @@ const statsMock = vi.fn(async (): Promise<any> => ({ par_regle: {}, par_etape: n
 const echecsMock = vi.fn(async (): Promise<any[]> => []);
 const naviguer = vi.fn();
 const langueMock = vi.fn(async (_l: 'fr' | 'en') => undefined);
+const dossierMock = vi.fn(async (name: string) => ({ id: 'd1', name, position: 0, created_at: '' }));
+const catalogueMock = vi.fn(async () => ({ rules: [], catalogue: { declencheurs: [], actions: [] } }));
 const toasts = { erreur: [] as string[], succes: [] as string[] };
 
 vi.mock('sonner', () => ({
@@ -59,13 +61,13 @@ vi.mock('../src/lib/automationRulesApi', () => ({
 }));
 
 vi.mock('../src/lib/automationBuilderApi', () => ({
-  chargerAutomatisations: vi.fn(async () => ({ rules: [], catalogue: { declencheurs: [], actions: [] } })),
+  chargerAutomatisations: () => catalogueMock(),
   creerAutomatisation: (b: unknown) => creerMock(b),
   dupliquerAutomatisation: vi.fn(async () => regle()),
   supprimerAutomatisation: vi.fn(async () => undefined),
   restaurerAutomatisation: vi.fn(async () => regle()),
   chargerDossiers: vi.fn(async () => []),
-  creerDossier: vi.fn(async () => ({ id: 'd1', name: 'X', position: 0, created_at: '' })),
+  creerDossier: (name: string) => dossierMock(name),
   supprimerDossier: vi.fn(async () => undefined),
   rangerDansDossier: vi.fn(async () => undefined),
   renommerDossier: vi.fn(async () => undefined),
@@ -105,6 +107,8 @@ beforeEach(() => {
   naviguer.mockClear();
   langueMock.mockReset();
   langueMock.mockImplementation(async () => undefined);
+  dossierMock.mockClear();
+  catalogueMock.mockClear();
   toasts.erreur = [];
   toasts.succes = [];
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -169,5 +173,33 @@ describe('A-07 — « Messages en FR/EN » dit le refus', () => {
     expect(toasts.erreur.join(' | ')).toContain('Seul un administrateur');
     const en = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'EN');
     expect(en?.className).not.toContain('bg-text-primary');
+  });
+});
+
+// ─── A-10 ───────────────────────────────────────────────────────
+
+function saisir(el: Element | null | undefined, v: string) {
+  if (!el) throw new Error('champ introuvable');
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(el, v);
+  act(() => { el.dispatchEvent(new Event('input', { bubbles: true })); });
+}
+
+describe('A-10 — double Entrée sur « Nouveau dossier » : un seul dossier, aucun faux refus', () => {
+  it('la deuxième soumission est ignorée tant que la première est en vol', async () => {
+    reglesServies = [regle()];
+    let finir: () => void = () => {};
+    dossierMock.mockImplementationOnce((name: string) => new Promise((r) => { finir = () => r({ id: 'd1', name, position: 0, created_at: '' }); }));
+    await rendre();
+    cliquer(bouton('Nouveau dossier'));
+    const champ = container.querySelector<HTMLInputElement>('#nouveau-dossier');
+    saisir(champ, 'Relances');
+    act(() => { champ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    act(() => { champ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    cliquer(bouton('Créer'));
+    await act(async () => { finir(); });
+    await attendre();
+    expect(dossierMock).toHaveBeenCalledTimes(1);
+    expect(toasts.erreur).toEqual([]);
+    expect(toasts.succes.join(' | ')).toContain('Relances');
   });
 });

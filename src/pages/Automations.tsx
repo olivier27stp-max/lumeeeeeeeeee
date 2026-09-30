@@ -581,9 +581,17 @@ export default function Automations() {
     }
   }, [fr]);
 
+  /*
+   * Double Entrée / double clic sur « Créer » : la 2e requête arrivait sur un
+   * nom déjà pris et affichait « Un dossier porte déjà ce nom » à côté du
+   * succès (audit V2, A-10). Une création à la fois.
+   */
+  const creationDossierEnVol = useRef(false);
   const validerNouveauDossier = async () => {
     const nom = nomDossier.trim();
     if (!nom) { setSaisieDossier(false); return; }
+    if (creationDossierEnVol.current) return;
+    creationDossierEnVol.current = true;
     try {
       const d = await creerDossier(nom);
       setDossiers((prev) => [...prev, d].sort((a, b) => a.name.localeCompare(b.name)));
@@ -592,6 +600,8 @@ export default function Automations() {
       toast.success(fr ? `Dossier « ${d.name} » créé` : `Folder “${d.name}” created`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      creationDossierEnVol.current = false;
     }
   };
 
