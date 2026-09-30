@@ -19,7 +19,8 @@ import AddVisitModal from '../components/AddVisitModal';
 import DailyDispatchView from '../components/dispatch-daily/DailyDispatchView';
 import WeeklyDispatchView from '../components/dispatch-weekly/WeeklyDispatchView';
 import MonthlyDispatchView from '../components/dispatch-monthly/MonthlyDispatchView';
-import AgendaRoutePanel, { type RouteJob } from '../components/schedule/AgendaRoutePanel';
+import AgendaRoutePanel, { type EquipeAffichee } from '../components/schedule/AgendaRoutePanel';
+import { listerTrajets, type ReponseTrajets } from '../lib/agendaTrajetsApi';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarControllerProvider, CalendarUiView, useCalendarController } from '../contexts/CalendarController';
 import { useJobModalController } from '../contexts/JobModalController';
@@ -37,7 +38,7 @@ import TeamDayRoster from '../components/TeamDayRoster';
 import TaskModal from '../components/tasks/TaskModal';
 import { createTask, updateTask, listScheduledTasksRange, listAssignableMembers } from '../lib/tasksApi';
 import { tasksToBlocks, type ScheduledTaskBlock } from '../lib/scheduledTask';
-import { optimizeRoute, applyOptimizedSchedule } from '../lib/routeOptimizationApi';
+import { useFuseauEntreprise, versMurale, versReel, maintenantMural } from '../lib/fuseauEntreprise';
 import { listTeams, TeamRecord } from '../lib/teamsApi';
 import { supabase } from '../lib/supabase';
 import { cn, formatCurrency } from '../lib/utils';
@@ -119,9 +120,10 @@ const needsAtt = (e: ScheduleEventRecord) => { const s = ns(e.job?.status || e.s
 /* ════════════════════════════════════════════════════════════════
    CUSTOM AGENDA VIEW (unchanged — no drag in agenda view)
    ════════════════════════════════════════════════════════════════ */
-function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventClick, onSlotClick }: {
+function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventClick, onSlotClick, trajets, trajetsChargement, trajetsErreur, onReessayerTrajets, fuseau }: {
   events: ScheduleEventRecord[]; overlaps: Record<string, number>; tcMap: Map<string, string>;
   teams: TeamRecord[]; selectedTeamIds: string[]; onEventClick: (jobId: string) => void; onSlotClick: (s: Date, e: Date) => void;
+  trajets: ReponseTrajets | undefined; trajetsChargement: boolean; trajetsErreur: boolean; onReessayerTrajets: () => void; fuseau: string;
 }) {
   // Show the route panel whenever teams are in play. The panel groups by team
   // (one coloured trip per crew on a shared map) and no-ops if nothing is
@@ -137,6 +139,13 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
     const unique = events.filter((ev) => (seen.has(ev.id) ? false : (seen.add(ev.id), true)));
     return unique.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
   }, [events]);
+  // Trajets : calculés par le serveur (ordre planifié, matrice en cache), une
+  // requête pour la semaine. Couleur stable par équipe (celle de ses réglages).
+  const equipesAffichees = useMemo(
+    () => new Map<string, EquipeAffichee>(teams.map((tm) => [tm.id, { id: tm.id, nom: tm.name, couleur: tcMap.get(tm.id) || FALLBACK_TEAM_COLOR }])),
+    [teams, tcMap],
+  );
+  const revenus = useMemo(() => new Map(events.map((ev) => [ev.id, ev.job?.total_cents ?? 0])), [events]);
   const grouped = useMemo(() => {
     const m = new Map<string, ScheduleEventRecord[]>();
     sorted.forEach((ev) => { const k = format(new Date(ev.start_at), 'yyyy-MM-dd'); if (!m.has(k)) m.set(k, []); m.get(k)!.push(ev); });
@@ -170,29 +179,19 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
               </button>
             </div>
             <div className="space-y-2 px-6 pb-4 lg:px-8">
-              {showRoute && (() => {
-                const routeJobs: RouteJob[] = dayEvs.map((ev) => {
-                  const tid = ev.team_id || ev.job?.team_id || '';
-                  const team = tid ? teams.find((tm) => tm.id === tid) : null;
-                  return {
-                    id: ev.id,
-                    jobId: ev.job_id || null,
-                    title: ev.job?.title || 'Job',
-                    address: ev.job?.property_address || null,
-                    lat: ev.job?.latitude ?? null,
-                    lng: ev.job?.longitude ?? null,
-                    startAt: ev.start_at,
-                    teamId: tid,
-                    teamName: team?.name || (isFr ? 'Sans équipe' : 'No team'),
-                    teamColor: (tid ? tcMap.get(tid) : null) || FALLBACK_TEAM_COLOR,
-                    clientId: ev.job?.client_id ?? null,
-                    clientName: ev.job?.client_name || '',
-                    revenueCents: ev.job?.total_cents ?? 0,
-                    status: ns(ev.job?.status || ev.status || ''),
-                  };
-                });
-                return <AgendaRoutePanel jobs={routeJobs} onJobClick={onEventClick} />;
-              })()}
+              {showRoute && (
+                <AgendaRoutePanel
+                  jour={trajets?.jours?.find((jr) => jr.jour === dk)}
+                  chargement={trajetsChargement}
+                  erreur={trajetsErreur}
+                  onReessayer={onReessayerTrajets}
+                  fuseau={fuseau}
+                  equipes={equipesAffichees}
+                  revenus={revenus}
+                  couleurSansEquipe={FALLBACK_TEAM_COLOR}
+                  onJobClick={onEventClick}
+                />
+              )}
               {/* Liste détaillée des jobs — affichée seulement en repli, quand le
                   panneau Trajet n'est pas montré. Sinon elle ferait doublon avec
                   la liste (déjà à droite dans le panneau). */}
@@ -369,15 +368,20 @@ function ScheduleContent() {
   const noneSel = teams.length > 0 && selectedTeamIds.length === 0;
   const effTeams = useMemo(() => (allSel || noneSel) ? [] : selectedTeamIds, [allSel, noneSel, selectedTeamIds]);
   const tKey = useMemo(() => (allSel || noneSel) ? 'all' : [...selectedTeamIds].sort().join(','), [allSel, noneSel, selectedTeamIds]);
+  // Fuseau de l'ENTREPRISE (audit Agenda C2) : tout l'horaire est affiché et
+  // enregistré à son heure, pas à celle du navigateur. Les vues travaillent en
+  // « heure murale » ; la conversion se fait ici, à la lecture et à l'écriture.
+  const fuseau = useFuseauEntreprise(orgId);
   const range = useMemo(() => buildRange(selectedDate, view), [selectedDate, view]);
+  const plage = useMemo(() => ({ start: versReel(range.start, fuseau), end: versReel(range.end, fuseau) }), [range, fuseau]);
 
   const evQ = useQuery({
-    queryKey: ['calendarEvents', orgId || '-', view, dateKey, tKey, unassignedMode ? 'u' : 't'],
+    queryKey: ['calendarEvents', orgId || '-', view, dateKey, tKey, unassignedMode ? 'u' : 't', fuseau],
     enabled: !!orgId,
     staleTime: 30_000,
     queryFn: () => unassignedMode
-      ? listUnassignedScheduledEvents({ startAt: range.start.toISOString(), endAt: range.end.toISOString() })
-      : listScheduleEventsRange({ startAt: range.start.toISOString(), endAt: range.end.toISOString(), teamIds: effTeams }),
+      ? listUnassignedScheduledEvents({ startAt: plage.start, endAt: plage.end })
+      : listScheduleEventsRange({ startAt: plage.start, endAt: plage.end, teamIds: effTeams }),
   });
   const unschedQ = useQuery({
     queryKey: ['calendarUnscheduledJobs', orgId || '-', tKey, unassignedMode ? 'u' : 't'],
@@ -387,20 +391,46 @@ function ScheduleContent() {
   });
   // Tâches planifiées (avec heure) de la plage affichée → blocs calendrier.
   const tasksQ = useQuery({
-    queryKey: ['calendarTasks', orgId || '-', view, dateKey],
+    queryKey: ['calendarTasks', orgId || '-', view, dateKey, fuseau],
     enabled: !!orgId,
     staleTime: 30_000,
-    queryFn: () => listScheduledTasksRange({ startAt: range.start.toISOString(), endAt: range.end.toISOString() }),
+    queryFn: () => listScheduledTasksRange({ startAt: plage.start, endAt: plage.end }),
   });
 
-  const events = evQ.data || [];
+  // Trajets de l'Agenda (serveur, matrice en cache) : recalculés dès que les
+  // visites changent (déplacement, temps réel) — `dataUpdatedAt` dans la clé.
+  const trajetsQ = useQuery({
+    queryKey: ['agendaTrajets', orgId || '-', plage.start, plage.end, tKey, unassignedMode ? 'u' : 't', evQ.dataUpdatedAt],
+    enabled: !!orgId && view === 'agenda' && evQ.isSuccess,
+    staleTime: 30_000,
+    placeholderData: (precedent) => precedent,
+    queryFn: () => listerTrajets({
+      debut: plage.start, fin: plage.end,
+      equipes: unassignedMode ? [] : effTeams,
+      nonAssigne: unassignedMode || effTeams.length > 0,
+    }),
+  });
+
+  // Heure murale de l'entreprise : ce que les vues affichent et manipulent.
+  const events = useMemo(
+    () => (evQ.data || []).map((e) => ({ ...e, start_at: versMurale(e.start_at, fuseau), end_at: versMurale(e.end_at, fuseau) })),
+    [evQ.data, fuseau],
+  );
   const unscheduledJobs = unschedQ.data || [];
-  const taskBlocks = useMemo(() => tasksToBlocks(tasksQ.data || []), [tasksQ.data]);
+  const taskBlocks = useMemo(
+    () => tasksToBlocks((tasksQ.data || []).map((tk) => ({ ...tk, scheduled_at: versMurale(tk.scheduled_at, fuseau) }))),
+    [tasksQ.data, fuseau],
+  );
 
   /* ── Mutations ── */
   const refresh = useCallback(() => { invalidateScheduleCache(); qc.invalidateQueries({ queryKey: ['calendarEvents'] }); qc.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }); qc.invalidateQueries({ queryKey: ['calendarTasks'] }); }, [qc]);
 
-  const rescheduleMut = useMutation({ mutationFn: rescheduleEvent, onSuccess: refresh });
+  // Toutes les écritures passent ici : heure murale → instant réel, au fuseau de l'entreprise.
+  const rescheduleMut = useMutation({
+    mutationFn: (p: Parameters<typeof rescheduleEvent>[0]) =>
+      rescheduleEvent({ ...p, startAt: versReel(p.startAt, fuseau), endAt: versReel(p.endAt, fuseau), timezone: fuseau }),
+    onSuccess: refresh,
+  });
 
   /**
    * Annonce un déplacement réussi, avec de quoi le défaire.
@@ -440,7 +470,8 @@ function ScheduleContent() {
     else toast.success(message, options);
   }, [rescheduleMut, t, language]);
   const scheduleMut = useMutation({
-    mutationFn: scheduleUnscheduledJob,
+    mutationFn: (p: Parameters<typeof scheduleUnscheduledJob>[0]) =>
+      scheduleUnscheduledJob({ ...p, startAt: versReel(p.startAt, fuseau), endAt: versReel(p.endAt, fuseau), timezone: fuseau }),
     onSuccess: () => { refresh(); toast.success(t.schedule.jobScheduled); },
     onError: (e: any) => toast.error(e?.message || t.schedule.couldNotSchedule),
   });
@@ -541,7 +572,7 @@ function ScheduleContent() {
   /* ── Computed ── */
   // Stable "now" — only refreshed when the underlying events list changes,
   // so derived memos (filtered, overlaps, counts) don't invalidate on every render.
-  const now = useMemo(() => new Date(), [evQ.dataUpdatedAt]);
+  const now = useMemo(() => maintenantMural(fuseau), [evQ.dataUpdatedAt, fuseau]); // eslint-disable-line react-hooks/exhaustive-deps
   const c30 = useMemo(() => events.filter((e) => isEnd30(e, now)).length, [events, now]);
   const cInv = useMemo(() => events.filter(reqInv).length, [events]);
   const cAtt = useMemo(() => events.filter(needsAtt).length, [events]);
@@ -556,7 +587,7 @@ function ScheduleContent() {
 
   /* ── Handlers ── */
   const openCreate = (start: Date, end?: Date) => {
-    openJobModal({ initialValues: { scheduled_at: start.toISOString(), end_at: (end || addHours(start, 2)).toISOString(), team_id: selectedTeamIds.length === 1 ? selectedTeamIds[0] : null, status: 'scheduled' }, sourceContext: { type: 'jobs' }, onCreated: refresh });
+    openJobModal({ initialValues: { scheduled_at: versReel(start, fuseau), end_at: versReel(end || addHours(start, 2), fuseau), team_id: selectedTeamIds.length === 1 ? selectedTeamIds[0] : null, status: 'scheduled' }, sourceContext: { type: 'jobs' }, onCreated: refresh });
   };
   // Créer une tâche depuis le calendrier. `start` fourni (clic sur un créneau)
   // → tâche pré-planifiée à cette heure ; sinon échéance sur le jour affiché,
@@ -567,7 +598,7 @@ function ScheduleContent() {
     const dueDate = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
     if (start) {
       const mins = end ? Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000)) : 60;
-      setTaskDefaults({ due_date: dueDate, scheduled_at: start.toISOString(), duration_minutes: mins });
+      setTaskDefaults({ due_date: dueDate, scheduled_at: versReel(start, fuseau), duration_minutes: mins });
     } else {
       setTaskDefaults({ due_date: dueDate });
     }
@@ -663,10 +694,11 @@ function ScheduleContent() {
         {(() => {
           // « Aujourd'hui » — visible dès que la période affichée (jour,
           // semaine ou mois) ne contient pas la date du jour.
-          const now = new Date();
+          // Aujourd'hui = celui de l'entreprise ; l'Agenda montre une semaine, comme la vue Semaine.
+          const now = maintenantMural(fuseau);
           const showToday =
             view === 'day' ? !isSameDay(selectedDate, now)
-            : view === 'week' ? !isSameDay(startOfWeek(selectedDate, { weekStartsOn: 1 }), startOfWeek(now, { weekStartsOn: 1 }))
+            : view === 'week' || view === 'agenda' ? !isSameDay(startOfWeek(selectedDate, { weekStartsOn: 1 }), startOfWeek(now, { weekStartsOn: 1 }))
             : view === 'month' ? !isSameMonth(selectedDate, now)
             : !isSameDay(selectedDate, now);
           return showToday ? (
@@ -770,85 +802,18 @@ function ScheduleContent() {
 
         {(
           <button
-            onClick={async () => {
-              // Prérequis gérés ici (avec messages clairs) plutôt qu'en cachant
-              // le bouton : l'optimisation travaille sur UNE journée et UNE équipe.
-              if (view !== 'day') {
-                setView('day');
-                toast.info(language === 'fr'
-                  ? 'Passé en vue Jour. Choisissez une équipe puis recliquez sur « Optimiser ».'
-                  : 'Switched to Day view. Pick one team, then click Optimize again.');
-                return;
-              }
-              // Aucune équipe configurée : « sélectionnez une équipe » envoyait
-              // l'utilisateur dans une impasse — il n'y avait rien à choisir
-              // (QA 2026-09-25). On dit quoi faire, et on y mène.
-              if (teams.length === 0) {
-                toast.info(
-                  language === 'fr'
-                    ? 'Aucune équipe n’est configurée. Créez-en une pour optimiser une tournée.'
-                    : 'No team is set up yet. Create one to optimize a route.',
-                  {
-                    action: {
-                      label: language === 'fr' ? 'Créer une équipe' : 'Create a team',
-                      onClick: () => navigate('/settings/team'),
-                    },
-                  },
-                );
-                return;
-              }
-              if (selectedTeamIds.length !== 1) {
-                toast.info(language === 'fr'
-                  ? 'Sélectionnez une seule équipe pour optimiser sa tournée.'
-                  : 'Select a single team to optimize its route.');
-                return;
-              }
-              const dayJobs = filtered
-                .slice()
-                .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
-                .map((e) => e.job?.id)
-                .filter(Boolean) as string[];
-              if (dayJobs.length < 2) {
-                toast.info(language === 'fr'
-                  ? 'Il faut au moins 2 jobs planifiés (avec adresse) cette journée.'
-                  : 'Need at least 2 scheduled jobs (with an address) this day.');
-                return;
-              }
-              const team = teams.find((tm) => tm.id === selectedTeamIds[0]);
-              const proceed = await confirmer({
-                message: (t.routing?.confirmApply || 'This will reschedule {n} jobs for {rep}. Proceed?')
-                  .replace('{n}', String(dayJobs.length))
-                  .replace('{rep}', team?.name || (language === 'fr' ? 'équipe' : 'team')),
-                danger: false,
-              });
-              if (!proceed) return;
-              try {
-                const dayStart = startOfDay(selectedDate);
-                // Anchor depart_at to the earliest currently-scheduled time so we keep the morning start.
-                const earliest = filtered.reduce(
-                  (min, e) => Math.min(min, new Date(e.start_at).getTime()),
-                  Number.POSITIVE_INFINITY,
-                );
-                const departAt = Number.isFinite(earliest) ? new Date(earliest) : dayStart;
-                const result = await optimizeRoute({ job_ids: dayJobs, depart_at: departAt.toISOString() });
-                if (result.skipped.length) {
-                  toast.warning(language === 'fr'
-                    ? `${result.skipped.length} job(s) ignoré(s) (coordonnées manquantes).`
-                    : `${result.skipped.length} job(s) skipped (missing coords).`);
-                }
-                await applyOptimizedSchedule(result.ordered_jobs, departAt);
-                toast.success(
-                  `${t.routing?.optimizedToast || 'Optimized'}: ${result.total_distance_km.toFixed(1)} km · ~${result.total_drive_minutes} min`,
-                );
-                refresh();
-              } catch (e: any) {
-                toast.error(e?.message || (language === 'fr' ? "Échec de l'optimisation." : 'Optimization failed.'));
-              }
+            onClick={() => {
+              // « Optimiser la journée » (audit Agenda 2026-09-30) : ouvre Lumi, qui
+              // PROPOSE (0 LLM) puis attend la carte de confirmation. Plus rien n'est
+              // appliqué directement d'ici : l'ancien bouton réécrivait toutes les
+              // visites de la job, sans proposition ni confirmation.
+              const equipe = selectedTeamIds.length === 1 ? `&equipe=${selectedTeamIds[0]}` : '';
+              navigate(`/lumi?action=optimiser-journee&date=${dateKey}${equipe}`);
             }}
             className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-[5px] text-[13px] font-semibold text-primary hover:bg-primary/10 transition-colors"
-            title={language === 'fr' ? 'Optimiser la tournée de la journée' : 'Optimize the day route'}
+            title={language === 'fr' ? 'Proposer une meilleure tournée pour la journée affichée' : 'Propose a better route for the displayed day'}
           >
-            <MapPin size={13} />{language === 'fr' ? 'Optimiser la tournée' : 'Optimize route'}
+            <MapPin size={13} />{language === 'fr' ? 'Optimiser la journée' : 'Optimize the day'}
           </button>
         )}
         <div className="relative">
@@ -923,6 +888,7 @@ function ScheduleContent() {
               orgId={orgId || null}
               unassignedMode={unassignedMode}
               isError={evQ.isError}
+              fuseau={fuseau}
               onEventClick={openExisting}
               onSlotClick={(s) => openAddVisit(s)}
               onReschedule={handleDailyReschedule}
@@ -932,7 +898,8 @@ function ScheduleContent() {
               onTaskClick={(taskId) => { const b = taskBlocks.find((x) => x.id === taskId); if (b) { setEditingTask(b.raw); setTaskModalOpen(true); } }}
             />
           ) : view === 'agenda' ? (
-            <div className="h-full overflow-y-auto"><AgendaView events={filtered} overlaps={overlaps} tcMap={tcMap} teams={teams} selectedTeamIds={selectedTeamIds} onEventClick={openExisting} onSlotClick={(s, e) => openAddVisit(s, e)} /></div>
+            <div className="h-full overflow-y-auto"><AgendaView events={filtered} overlaps={overlaps} tcMap={tcMap} teams={teams} selectedTeamIds={selectedTeamIds} onEventClick={openExisting} onSlotClick={(s, e) => openAddVisit(s, e)}
+              trajets={trajetsQ.data} trajetsChargement={trajetsQ.isFetching} trajetsErreur={trajetsQ.isError} onReessayerTrajets={() => void trajetsQ.refetch()} fuseau={fuseau} /></div>
           ) : null}
         </div>
 

@@ -33,7 +33,10 @@ describe('outils différés (tool search)', () => {
   });
 
   it('le point de cache est sur le DERNIER outil chargé, jamais sur un différé (400 API)', () => {
-    expect(charges[charges.length - 1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+        // 5 minutes, pas 1 h : 214 des 241 écarts entre appels mesurés en prod
+    // sont sous 5 min, et une lecture rafraîchit le minuteur gratuitement.
+    // L'écriture 1 h coûte 2× l'entrée, la 5 min 1,25×. Voir CACHE_1H.
+    expect(charges[charges.length - 1].cache_control).toEqual({ type: 'ephemeral' });
     expect(charges.slice(0, -1).every((t) => !t.cache_control)).toBe(true);
     expect(differes.every((t) => !t.cache_control)).toBe(true);
   });

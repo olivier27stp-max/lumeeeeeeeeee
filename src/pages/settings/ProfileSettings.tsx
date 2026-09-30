@@ -226,9 +226,12 @@ export default function ProfileSettings() {
             .then((r) => r.data || []),
         ]);
         setStats(real);
+        // Sommes en cents entiers ; une estimation (job pas encore payé, sans
+        // facture) n'est pas un versement à venir.
+        const cents = (l: any[]) => l.reduce((s: number, c: any) => s + Math.round(Number(c.amount || 0) * 100), 0) / 100;
         setCommissions({
-          nextPayout: entries.filter((c: any) => c.status === 'pending' || c.status === 'approved').reduce((s: number, c: any) => s + (c.amount || 0), 0),
-          allTime: entries.filter((c: any) => c.status === 'paid').reduce((s: number, c: any) => s + (c.amount || 0), 0),
+          nextPayout: cents(entries.filter((c: any) => c.invoice_id && (c.status === 'pending' || c.status === 'approved'))),
+          allTime: cents(entries.filter((c: any) => c.status === 'paid')),
         });
         setClosesCount(dealsRes.filter((d: any) => d.stage === 'closed_won').length);
       } catch {

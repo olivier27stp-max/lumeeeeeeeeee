@@ -87,7 +87,8 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   // Catalogue / planification.
   list_services:             { cle: 'jobs.read',          capacite: 'le catalogue de services' },
   find_free_slot:            { cle: 'calendar.read',      capacite: 'la recherche de créneaux' },
-  optimize_route:            { cle: 'jobs.read',          capacite: "l'optimisation de tournée" },
+  propose_day_optimization:  { cle: 'calendar.read',      capacite: "l'optimisation de la journée" },
+  apply_day_optimization:    { cle: 'calendar.update',    capacite: 'la replanification du calendrier' },
   // Courriel libre : envoi au nom de l'entreprise (la route exige owner/admin).
   send_email:                { cle: 'messages.send',      capacite: "l'envoi de courriels" },
   // Item 3 (B6) : retenir ou oublier modifie le prompt de TOUTE l'org (org_knowledge « assistant »),
@@ -194,6 +195,51 @@ function journaliserRefus(d: { userId: string; orgId: string; outil: string; cle
  * Un outil sans clé déclarée est REFUSÉ : la couverture est totale, et un
  * futur outil non déclaré doit échouer fermé.
  */
+/**
+ * Ce que cette personne NE PEUT PAS faire, en mots simples, pour que Lumi le
+ * lui dise clairement au lieu d'improviser.
+ *
+ * ⚠️ Ceci n'est PAS une garde — la sécurité reste entièrement côté serveur
+ * (`outilsPermis` retire les outils, `executerOutilGarde` refuse). Ce texte
+ * ne fait qu'EXPLIQUER le refus. Même si le modèle l'ignorait, rien ne
+ * fuirait : il n'a tout simplement pas les outils.
+ *
+ * Pourquoi : sans ça, un technicien qui demandait son chiffre du mois
+ * s'entendait répondre « je ne trouve pas d'outil… mais je peux te sortir un
+ * rapport financier, tu veux ? » — une porte qui n'existe pas, et il se
+ * cognait dessus. Mesuré en prod le 2026-09-30.
+ *
+ * Rend null quand il n'y a rien à dire (propriétaire, admin) : aucun token de
+ * plus pour ceux qui ont tout.
+ */
+export function restrictionsDe(ctx: UserContext | null, voitLesMontants: boolean, langue: 'fr' | 'en'): string | null {
+  if (!ctx) return null;
+  const fr = langue === 'fr';
+  const manques: string[] = [];
+  if (!voitLesMontants || !hasPermission(ctx, 'financial.view_reports')) {
+    manques.push(fr
+      ? 'les chiffres d’argent : revenus, chiffre d’affaires, marges, rentabilité, valeur des clients, rapports financiers'
+      : 'money figures: revenue, margins, profitability, client value, financial reports');
+  }
+  if (!hasPermission(ctx, 'financial.view_invoices')) manques.push(fr ? 'les factures et les paiements en retard' : 'invoices and overdue payments');
+  if (!hasPermission(ctx, 'financial.view_reports')) manques.push(fr ? 'la paie et les taux horaires' : 'payroll and hourly rates');
+  if (!hasPermission(ctx, 'settings.update')) manques.push(fr ? 'les notes d’entreprise retenues par Lumi' : 'the company notes Lumi remembers');
+  if (!hasPermission(ctx, 'team.read')) manques.push(fr ? 'la liste de l’équipe' : 'the team roster');
+  if (!manques.length) return null;
+
+  return fr
+    ? `# Ce que le rôle de cette personne ne lui donne pas
+Son rôle dans Lume (« ${ctx.role} ») ne lui donne PAS accès à : ${manques.join(' ; ')}.
+`
+      + 'Si elle demande une de ces choses, dis-lui simplement que son rôle ne lui donne pas accès à cette information dans Lume, et qu’elle peut en parler à un administrateur si ça devrait changer. '
+      + 'N’invente aucun contournement, ne propose PAS de rapport ni d’autre chemin pour l’obtenir, et ne donne ni chiffre, ni estimation, ni ordre de grandeur. Passe ensuite à ce que tu peux faire pour elle.'
+    : `# What this person's role does not allow
+Their role in Lume ("${ctx.role}") does NOT give access to: ${manques.join('; ')}.
+`
+      + 'If they ask for any of it, simply say their role does not give them access to that in Lume, and that an administrator can change it if it should. '
+      + 'Do not invent a workaround, do NOT offer a report or another route to get it, and give no figure, estimate or ballpark. Then move on to what you can do for them.';
+}
+
 export function outilsPermis(ctx: UserContext | null, voitLesMontants: boolean): ReadonlySet<string> {
   const permis = new Set<string>();
   if (!ctx) return permis;

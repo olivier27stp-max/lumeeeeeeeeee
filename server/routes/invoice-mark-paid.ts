@@ -13,6 +13,7 @@ import { requireFinancialAccess } from '../lib/rbac';
 import { getServiceClient } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { eventBus } from '../lib/eventBus';
+import { commissionsFacturePayee } from '../lib/field-sales/commission-declencheurs';
 
 const router = Router();
 router.use(maxBodySize());
@@ -112,6 +113,10 @@ router.post('/invoices/:id/mark-paid', requireFinancialAccess('payments.create')
       ...(inv.client_id ? { relatedEntityType: 'client', relatedEntityId: inv.client_id } : {}),
       metadata: { amount_cents: amountCents, provider: 'manual', client_id: inv.client_id ?? null, job_id: inv.job_id ?? null, payment_type: 'full' },
     });
+
+    // Commissions : générées ICI par le serveur. Avant, le navigateur les
+    // demandait après coup — onglet fermé, le rep n'était jamais payé.
+    await commissionsFacturePayee(db, ctx.orgId, invoiceId, 'mark-paid');
 
     res.json({ ok: true, amount_cents: amountCents });
   } catch (err: any) {

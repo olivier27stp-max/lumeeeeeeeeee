@@ -230,7 +230,10 @@ describe('orchestrateur', () => {
     // Cache d'une heure : la reprise d'une conversation après une pause ne
     // réécrit plus le contexte (2,6 ¢ sur les 6 ¢ d'un tour, mesuré en prod).
     const charges = params.tools.filter((t: any) => !t.defer_loading && !t.type);
-    expect(charges[charges.length - 1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+        // 5 minutes, pas 1 h : 214 des 241 écarts entre appels mesurés en prod
+    // sont sous 5 min, et une lecture rafraîchit le minuteur gratuitement.
+    // L'écriture 1 h coûte 2× l'entrée, la 5 min 1,25×. Voir CACHE_1H.
+    expect(charges[charges.length - 1].cache_control).toEqual({ type: 'ephemeral' });
     expect(params.thinking).toEqual({ type: 'adaptive' });
     expect(params.output_config).toEqual({ effort: 'low' }); // effort bas par défaut (règle stricte, regles-cout.ts)
   });
@@ -558,7 +561,10 @@ describe('Lumi parle comme un collègue, pas comme une base de données', () => 
     const { CONSIGNES_COLLEGUE } = await import('../server/lib/agent/consignesCollegue');
     const blocs = promptSystemeLumi({ companyName: 'Coquin lavage', userName: 'Will', language: 'fr', todayIso: '2026-09-10' });
     const stable = blocs[0].text;
-    expect(blocs[0].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+        // 5 minutes, pas 1 h : 214 des 241 écarts entre appels mesurés en prod
+    // sont sous 5 min, et une lecture rafraîchit le minuteur gratuitement.
+    // L'écriture 1 h coûte 2× l'entrée, la 5 min 1,25×. Voir CACHE_1H.
+    expect(blocs[0].cache_control).toEqual({ type: 'ephemeral' });
     expect(stable).toContain(CONSIGNES_COLLEGUE);
     // Les règles qui comptent, nommément — si quelqu'un raccourcit le texte, ce test le dit.
     for (const regle of [
