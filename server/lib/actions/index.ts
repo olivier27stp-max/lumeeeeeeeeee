@@ -560,6 +560,14 @@ export function resolveTemplate(
   vars: Record<string, string | null | undefined>,
   options: { html?: boolean } = {},
 ): string {
+  // Seules les clés PROPRES de `vars` : `[constructor]` ou `{toString}`
+  // remontaient à Object.prototype — le client recevait « function Object()
+  // { [native code] } », et le corps HTML levait (echapperHtml sur une fonction).
+  const lire = (cle: string): string | undefined => {
+    if (!Object.prototype.hasOwnProperty.call(vars, cle)) return undefined;
+    const v: unknown = vars[cle];
+    return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : undefined;
+  };
   const valeur = (cle: string, v: string | null | undefined): string =>
     options.html && v && !cle.endsWith('_html') ? echapperHtml(v) : (v ?? '');
   // Support both {var} and [var] syntax for backward compatibility, normalize to {var}
@@ -573,8 +581,8 @@ export function resolveTemplate(
       // Variables intégrées pointées ({{client.nom}}, {{soumission.total}}…)
       // AVANT les champs personnalisés : un champ perso nommé « nom » ne doit
       // pas masquer le nom du client.
-      if (objet) return valeur(`${objet}.${cle}`, vars[`${objet}.${cle}`] ?? vars[`${objet}_cf_${cle}`]);
-      return valeur((accolade ?? crochet) as string, vars[(accolade ?? crochet) as string]);
+      if (objet) return valeur(`${objet}.${cle}`, lire(`${objet}.${cle}`) ?? lire(`${objet}_cf_${cle}`));
+      return valeur((accolade ?? crochet) as string, lire((accolade ?? crochet) as string));
     },
   );
 }
