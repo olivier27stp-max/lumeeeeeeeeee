@@ -1724,6 +1724,23 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
       const actionType = actionConfig.type as ActionType;
       const config = actionConfig.config || {};
 
+      /*
+       * Le CLIENT de la tâche a été supprimé (corbeille ou pour de bon) entre
+       * l'événement et l'échéance : rien ne part, quelle que soit l'action.
+       * Avant, seul le prospect était vérifié (checkStopConditions) : une
+       * tâche sur un client à la corbeille ajoutait encore sa note, appelait
+       * son webhook, et — désabonnement par canal actif — lui envoyait un
+       * texto transactionnel (tests C-024, C-025, C-028).
+       */
+      if (await clientDeLaTacheSupprime(supabase, task.org_id, task.entity_type, task.entity_id)) {
+        const { error: cancelError } = await supabase
+          .from('automation_scheduled_tasks')
+          .update({ status: 'cancelled', completed_at: new Date().toISOString(), last_error: 'Annulée : le client a été supprimé.' })
+          .eq('id', task.id);
+        if (cancelError) console.error(`[automationEngine] annulation (client supprimé) impossible pour la tâche ${task.id}:`, cancelError.message);
+        continue;
+      }
+
       // Sortie automatique du parcours (drapeau par entreprise) : la
       // vérification connaît le déclencheur, suit la case de la règle et
       // écrit son motif. Elle ne tranche pas pour un prospect : l'ancienne
@@ -2389,6 +2406,31 @@ async function clientARepondu(
     return false;
   }
   return Boolean(courriels && courriels.length > 0);
+}
+
+/**
+ * L'entité de la tâche est-elle un client (ou prospect) supprimé — mis à la
+ * corbeille, ou effacé ? Lecture en erreur : on ne conclut rien (false), la
+ * tâche suit son cours, comme pour `checkStopConditions`.
+ */
+async function clientDeLaTacheSupprime(
+  supabase: SupabaseClient,
+  orgId: string,
+  entityType: string,
+  entityId: string,
+): Promise<boolean> {
+  if (entityType !== 'client' && entityType !== 'lead') return false;
+  const { data, error } = await supabase
+    .from('clients')
+    .select('deleted_at')
+    .eq('id', entityId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (error) {
+    console.error(`[automationEngine] client de la tâche illisible (${entityId}) — tâche conservée:`, error.message);
+    return false;
+  }
+  return !data || Boolean((data as { deleted_at: string | null }).deleted_at);
 }
 
 async function checkStopConditions(
