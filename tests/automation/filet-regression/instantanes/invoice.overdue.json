@@ -726,7 +726,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>",
+     "message_text": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>\nRépondez STOP pour ne plus recevoir.",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -793,7 +793,7 @@
     "moment": "immediat",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>"
+    "texte": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>\nRépondez STOP pour ne plus recevoir."
    },
    {
     "moment": "immediat",
@@ -956,7 +956,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>",
+     "message_text": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>\nRépondez STOP pour ne plus recevoir.",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -1041,7 +1041,7 @@
     "moment": "differe:request_review",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>"
+    "texte": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>\nRépondez STOP pour ne plus recevoir."
    },
    {
     "moment": "differe:request_review",

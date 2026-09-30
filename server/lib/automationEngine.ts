@@ -600,14 +600,14 @@ async function executeRuleActions(
   // Désabonnement par canal : chaque envoi porte son type. Drapeau OFF =
   // contexte inchangé (une action immédiate n'est pas commerciale).
   const parCanal = await drapeauActif(config.supabase, event.orgId, DRAPEAUX_AUTOMATISATIONS.desabonnementCanal);
-  const contextePour = (action: { type: ActionType; config: Record<string, any> }): ActionContext =>
-    parCanal
-      ? {
-          ...ctx,
-          parCanal: true,
-          commercial: typeEnvoi({ actionType: action.type, config: action.config, declencheur: event.type, delaiSecondes: rule.delay_seconds, presetKey: rule.preset_key }) === 'marketing',
-        }
-      : ctx;
+  const contextePour = (action: { type: ActionType; config: Record<string, any> }): ActionContext => {
+    // Le TYPE de l'envoi, drapeau ou pas : il décide de la mention STOP d'un
+    // texto et de l'identification exigée d'un courriel (LCAP, audit V2 L7/L8).
+    const marketing = typeEnvoi({ actionType: action.type, config: action.config, declencheur: event.type, delaiSecondes: rule.delay_seconds, presetKey: rule.preset_key }) === 'marketing';
+    return parCanal
+      ? { ...ctx, parCanal: true, commercial: marketing, marketing }
+      : { ...ctx, marketing };
+  };
 
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
@@ -1689,19 +1689,23 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
           // Règle simple différée : la chaîne est dans les métadonnées de l'événement.
           : Array.isArray(actionConfig.event_metadata?.chaine) ? (actionConfig.event_metadata.chaine as string[]) : undefined,
       };
+      // Le TYPE de l'envoi (transactionnel / marketing), drapeau ou pas : il
+      // décide de la mention STOP d'un texto et de l'identification exigée
+      // d'un courriel (LCAP, audit V2 L7/L8).
+      ctx.marketing = typeEnvoi({
+        actionType,
+        config,
+        declencheur: actionConfig.trigger_event ?? task.automation_rules?.trigger_event,
+        // Une étape de séquence est planifiée : elle compte comme différée.
+        delaiSecondes: task.step_id ? Math.max(1, Number(task.automation_rules?.delay_seconds ?? 0)) : Number(task.automation_rules?.delay_seconds ?? 0),
+        presetKey: task.automation_rules?.preset_key ?? null,
+      }) === 'marketing';
       // Désabonnement par canal : « différé » ne veut plus dire « commercial ».
       // Un rappel de rendez-vous ou de facture est transactionnel même s'il
       // part plus tard ; c'est le TYPE de l'envoi qui décide.
       if (await drapeauActif(supabase, task.org_id, DRAPEAUX_AUTOMATISATIONS.desabonnementCanal)) {
         ctx.parCanal = true;
-        ctx.commercial = typeEnvoi({
-          actionType,
-          config,
-          declencheur: actionConfig.trigger_event ?? task.automation_rules?.trigger_event,
-          // Une étape de séquence est planifiée : elle compte comme différée.
-          delaiSecondes: task.step_id ? Math.max(1, Number(task.automation_rules?.delay_seconds ?? 0)) : Number(task.automation_rules?.delay_seconds ?? 0),
-          presetKey: task.automation_rules?.preset_key ?? null,
-        }) === 'marketing';
+        ctx.commercial = ctx.marketing;
       }
 
       const startTime = Date.now();

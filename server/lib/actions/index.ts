@@ -12,6 +12,7 @@ import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '.
 import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
 import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegale } from '../consentement/base-legale';
 import { motifSaut } from '../desabonnement';
+import { avecMentionCommerciale } from '../desabonnement/mention-sms';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../automations-drapeaux';
 import { raisonLisible } from '../paiement-echoue';
 import { creerLienReservation, demandeLienReservation } from '../client-inactif';
@@ -70,6 +71,19 @@ export interface ActionContext {
    *     continue, le motif est dans le journal. Le transactionnel part.
    */
   parCanal?: boolean;
+  /**
+   * Le TYPE de l'envoi selon `typeEnvoi` (server/lib/desabonnement) :
+   * `true` = marketing. Posé par le moteur, drapeau ou pas. Il décide du
+   * CONTENU exigé par la LCAP : mention STOP et nom sur un texto (L7),
+   * identification de l'entreprise sur un courriel (L8). Absent (appel hors
+   * moteur) = `commercial`.
+   */
+  marketing?: boolean;
+}
+
+/** Envoi commercial au sens de la LCAP (contenu exigé : identification, retrait). */
+function estCommercialLcap(ctx: ActionContext): boolean {
+  return ctx.marketing ?? ctx.commercial === true;
 }
 
 /**
@@ -1286,8 +1300,38 @@ export async function executeSendEmail(
 
 // ── Action: Send SMS ────────────────────────────────────────
 
+/**
+ * Le nom qui identifie l'entreprise auprès du client : celui des réglages,
+ * sinon celui du bureau (toujours présent). Vide seulement si les deux
+ * lectures échouent — la mention STOP part alors quand même.
+ */
+async function nomEntreprise(ctx: ActionContext): Promise<string> {
+  const { data: reglages, error } = await ctx.supabase
+    .from('company_settings')
+    .select('company_name')
+    .eq('org_id', ctx.orgId)
+    .maybeSingle();
+  if (error) console.error(`[actions] nom de l'entreprise illisible (org ${ctx.orgId}):`, error.message);
+  const nom = String((reglages as { company_name?: string | null } | null)?.company_name ?? '').trim();
+  if (nom) return nom;
+  const { data: org, error: errOrg } = await ctx.supabase
+    .from('orgs')
+    .select('name')
+    .eq('id', ctx.orgId)
+    .maybeSingle();
+  if (errOrg) console.error(`[actions] nom du bureau illisible (org ${ctx.orgId}):`, errOrg.message);
+  return String((org as { name?: string | null } | null)?.name ?? '').trim();
+}
+
 export async function executeSendSms(
-  config: { to?: string; body: string },
+  config: {
+    to?: string; body: string;
+    /**
+     * Sollicitation envoyée tout de suite (demande d'avis) : commerciale même
+     * si le moteur ne la marque pas comme telle (L7).
+     */
+    sollicitation?: boolean;
+  },
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
@@ -1332,7 +1376,12 @@ export async function executeSendSms(
   }
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'body', ctx.langue));
-  const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
+  let body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
+  // LCAP (audit V2, L7) : un texto commercial nomme l'entreprise et offre le
+  // retrait. Ajouté ici plutôt qu'exigé à la saisie : personne ne l'oublie.
+  if (estCommercialLcap(ctx) || config.sollicitation === true) {
+    body = avecMentionCommerciale(body, await nomEntreprise(ctx), ctx.langue === 'en' ? 'en' : 'fr');
+  }
 
   // Toujours partir du numero DE L'ORG, jamais du numero partage de la
   // plateforme : sinon les automatisations d'un locataire arrivent chez ses
@@ -1888,7 +1937,7 @@ export async function executeRequestReview(
     ? { success: false, error: 'Client has no phone number.' }
     : await depassePlafondFrequence(ctxPlafond, 'sms', vars.client_phone)
       ? auPlafond('sms', vars.client_phone)
-      : await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx);
+      : await executeSendSms({ body: reviewSmsBody(cs, messageVars), sollicitation: true }, vars, ctx);
 
   // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
   const sent = estEnvoye(emailResult) || estEnvoye(smsResult);
