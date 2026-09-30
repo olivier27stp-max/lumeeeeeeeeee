@@ -826,6 +826,10 @@ const listAutomations: AgentTool = {
       .from('automation_rules')
       .select('id, name, trigger_event, is_active, is_preset')
       .eq('org_id', ctx.orgId)
+      // La corbeille n'est pas une automatisation existante : Lumi la
+      // proposait à l'activation (« active “Relance” » visait la copie jetée).
+      // Une règle supprimée définitivement porte aussi deleted_at.
+      .is('deleted_at', null)
       .order('name', { ascending: true })
       .limit(50);
     if (error) return erreurOutil('automations', error);
