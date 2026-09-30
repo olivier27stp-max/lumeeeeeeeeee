@@ -14,8 +14,30 @@ import type { FunctionDeclaration } from './gemini';
 import {
   OUTILS_LECTURE_ETENDUS, OUTILS_ECRITURE_ETENDUS, ETIQUETTES_DERIVED,
   handlerCreateQuote, handlerCreateInvoice, handlerCreateJob, handlerSendSms,
-  STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, STATUT_CLIENT, traduireStatut, bornesJourOrg,
+  STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, STATUT_CLIENT, traduireStatut, bornesJourOrg, dateOrgAujourdhui,
 } from './tools-etendus';
+
+const PERIODES_REVENUS = ['this_month', 'last_month', 'this_year', 'last_year', 'last_30_days'] as const;
+
+/**
+ * Bornes d'une période de revenus, en jours de l'ENTREPRISE (audit 2026-09-30).
+ * Avant : « le mois passé » n'existait pas (réponse = mois courant) et les
+ * bornes étaient calculées en UTC (le soir du 31, on était déjà le mois suivant).
+ */
+export function bornesPeriodeRevenus(period: string, du?: string, au?: string, aujourdhui: string = dateOrgAujourdhui()): { period: string; from: string; to: string } {
+  const jour = /^\d{4}-\d{2}-\d{2}$/;
+  if (du && au && jour.test(du) && jour.test(au)) return { period: 'custom', from: du <= au ? du : au, to: du <= au ? au : du };
+  const [a, m, j] = aujourdhui.split('-').map(Number);
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  const utc = (an: number, mois: number, jr: number) => new Date(Date.UTC(an, mois, jr));
+  switch (period) {
+    case 'last_month': return { period, from: ymd(utc(a, m - 2, 1)), to: ymd(utc(a, m - 1, 0)) };
+    case 'this_year': return { period, from: `${a}-01-01`, to: `${a}-12-31` };
+    case 'last_year': return { period, from: `${a - 1}-01-01`, to: `${a - 1}-12-31` };
+    case 'last_30_days': return { period, from: ymd(utc(a, m - 1, j - 29)), to: aujourdhui };
+    default: return { period: 'this_month', from: ymd(utc(a, m - 1, 1)), to: ymd(utc(a, m, 0)) };
+  }
+}
 import { OUTILS_RAPPORTS } from './tools-rapports';
 import { searchHelp } from './tools-aide';
 import { OUTILS_DOMAINES } from './outils-domaines';
@@ -649,27 +671,17 @@ const getRevenueSummary: AgentTool = {
     parameters: {
       type: 'object',
       properties: {
-        period: { type: 'string', description: "One of: this_month, this_year, last_30_days. Default this_month." },
+        period: { type: 'string', enum: [...PERIODES_REVENUS], description: 'this_month (default), last_month (« le mois passé »), this_year, last_year, last_30_days. Ignored when from and to are given.' },
+        from: { type: 'string', description: 'Optional start day YYYY-MM-DD (with to) for any other period.' },
+        to: { type: 'string', description: 'Optional end day YYYY-MM-DD, inclusive.' },
       },
     },
   },
   handler: async (args, ctx) => {
-    const now = new Date();
-    let from: Date;
-    let to: Date;
-    const period = String(args.period || 'this_month');
-    if (period === 'this_year') {
-      from = new Date(now.getFullYear(), 0, 1);
-      to = new Date(now.getFullYear(), 11, 31);
-    } else if (period === 'last_30_days') {
-      to = now;
-      from = new Date(now.getTime() - 30 * 86400000);
-    } else {
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
-      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    }
-    const fromStr = from.toISOString().slice(0, 10);
-    const toStr = to.toISOString().slice(0, 10);
+    const bornes = bornesPeriodeRevenus(String(args.period || 'this_month'), args.from ? String(args.from) : undefined, args.to ? String(args.to) : undefined);
+    const period = bornes.period;
+    const fromStr = bornes.from;
+    const toStr = bornes.to;
 
     const { data: series, error } = await ctx.client.rpc('rpc_insights_revenue_series', {
       p_org: ctx.orgId,
@@ -691,10 +703,12 @@ const getRevenueSummary: AgentTool = {
     // Entreprise) : comparer le revenu d'un mois à l'objectif de l'année
     // annonçait ~8 % d'atteinte à une entreprise pile dans ses chiffres.
     const objectifAnnuel = Number(settings?.revenue_goal_cents) || 0;
+    // Objectif au prorata du nombre de jours de la période (année = objectif entier).
+    const jours = Math.round((Date.parse(`${toStr}T00:00:00Z`) - Date.parse(`${fromStr}T00:00:00Z`)) / 86400000) + 1;
     const goalCents = Math.round(
-      period === 'this_year' ? objectifAnnuel
-        : period === 'last_30_days' ? (objectifAnnuel * 30) / 365
-          : objectifAnnuel / 12,
+      period === 'this_year' || period === 'last_year' ? objectifAnnuel
+        : period === 'this_month' || period === 'last_month' ? objectifAnnuel / 12
+          : (objectifAnnuel * jours) / 365,
     );
 
     return {

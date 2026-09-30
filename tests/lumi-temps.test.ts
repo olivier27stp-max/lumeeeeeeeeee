@@ -38,3 +38,16 @@ describe('temps de l’entreprise', () => {
       .toEqual({ start_at: '2026-10-01T13:00:00.000Z', notes: 'x', visites: [{ start_at: '2026-10-02T12:30:00.000Z' }] });
   });
 });
+
+describe('périodes de revenus (get_revenue_summary)', () => {
+  it('« le mois passé » existe, et les bornes sont des jours de l’entreprise', async () => {
+    const { bornesPeriodeRevenus } = await import('../server/lib/agent/tools');
+    expect(bornesPeriodeRevenus('last_month', undefined, undefined, '2026-09-30')).toEqual({ period: 'last_month', from: '2026-08-01', to: '2026-08-31' });
+    expect(bornesPeriodeRevenus('last_month', undefined, undefined, '2026-01-15')).toEqual({ period: 'last_month', from: '2025-12-01', to: '2025-12-31' });
+    expect(bornesPeriodeRevenus('this_month', undefined, undefined, '2026-02-10')).toEqual({ period: 'this_month', from: '2026-02-01', to: '2026-02-28' });
+    expect(bornesPeriodeRevenus('last_year', undefined, undefined, '2026-09-30')).toEqual({ period: 'last_year', from: '2025-01-01', to: '2025-12-31' });
+    expect(bornesPeriodeRevenus('last_30_days', undefined, undefined, '2026-09-30')).toEqual({ period: 'last_30_days', from: '2026-09-01', to: '2026-09-30' });
+    // Dates précises (remises dans l'ordre).
+    expect(bornesPeriodeRevenus('this_month', '2026-07-31', '2026-07-01')).toEqual({ period: 'custom', from: '2026-07-01', to: '2026-07-31' });
+  });
+});

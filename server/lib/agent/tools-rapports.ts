@@ -308,7 +308,7 @@ async function rapportClient(args: Record<string, any>, ctx: ToolContext, langue
       titre: t('En chiffres', 'At a glance'),
       kpis: [
         { label: t('Jobs', 'Jobs'), valeur: String(p.jobs?.total ?? 0) },
-        { label: t('Valeur totale', 'Lifetime value'), valeur: fmtArgent(p.jobs?.lifetime_value_cents, langue) },
+        { label: t('Facturé (total)', 'Invoiced (lifetime)'), valeur: fmtArgent(p.billing?.lifetime_invoiced_cents, langue), detail: `${t('payé', 'paid')} ${fmtArgent(p.billing?.lifetime_paid_cents, langue)}` },
         { label: t('Factures', 'Invoices'), valeur: String(p.billing?.invoices_total ?? 0) },
         { label: t('Impayé', 'Unpaid'), valeur: fmtArgent(p.billing?.unpaid_cents, langue), detail: `${p.billing?.unpaid_count ?? 0} ${t('facture(s)', 'invoice(s)')}` },
         { label: t('En retard', 'Overdue'), valeur: fmtArgent(p.billing?.overdue_cents, langue) },

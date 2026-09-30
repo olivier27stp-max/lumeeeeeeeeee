@@ -31,7 +31,7 @@ import type { AgentTool, ToolContext } from './tools';
 import {
   executerIdempotent, champRequis, appelInterne, AppelInterneIncertain,
   traduireStatut, STATUT_DEVIS, STATUT_FACTURE,
-  enregistrerPaiementViaRoute, commissionsApresPaiement,
+  enregistrerPaiementViaRoute, commissionsApresPaiement, bornesJourOrg,
 } from './tools-etendus';
 
 /* ── Garde-fous locaux ─────────────────────────────────────────── */
@@ -152,6 +152,23 @@ function normaliserLignesDevis(brut: any[]): Array<{
 }
 
 /** Lignes de facture normalisées (mêmes règles que saveInvoiceDraft). */
+/**
+ * Ferme les liens de paiement encore ouverts d'une facture annulée ou
+ * supprimée (audit 2026-09-30) : avant, le client pouvait encore payer une
+ * facture annulée par le lien reçu. La page publique le vérifie aussi.
+ */
+async function fermerLiensDePaiement(ctx: ToolContext, invoiceId: string): Promise<{ fermes: number; avertissement: string | null }> {
+  const { data, error } = await ctx.client.from('payment_requests')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('org_id', ctx.orgId).eq('invoice_id', invoiceId).in('status', ['pending', 'sent'])
+    .select('id');
+  if (error) {
+    console.error('[agent-tool:liens-paiement] fermeture', error.message);
+    return { fermes: 0, avertissement: 'Les liens de paiement déjà envoyés n’ont pas pu être désactivés ici ; la page de paiement refuse quand même une facture annulée.' };
+  }
+  return { fermes: (data ?? []).length, avertissement: null };
+}
+
 function normaliserLignesFacture(brut: any[]): Array<{ description: string; qty: number; unit_price_cents: number }> {
   return (Array.isArray(brut) ? brut : [])
     .map((it) => ({
@@ -1061,8 +1078,10 @@ const voidInvoiceTool: AgentTool = {
         .select('invoice_number, status, paid_cents')
         .single();
       if (error) throw error;
+      const liens = await fermerLiensDePaiement(ctx, invoiceId);
       return {
         voided: true,
+        ...(liens.avertissement ? { warning: liens.avertissement } : {}),
         invoice: { invoice_number: data.invoice_number, statut: traduireStatut(data.status, STATUT_FACTURE) },
         note: Number(inv.paid_cents) > 0
           ? 'Facture annulée. Attention : un paiement partiel y était enregistré — vérifie s’il faut le rembourser.'
@@ -1077,8 +1096,8 @@ const revertInvoiceToDraftTool: AgentTool = {
   declaration: {
     name: 'revert_invoice_to_draft',
     description:
-      'Put a sent (or voided) invoice back to DRAFT so it can be edited, like the app’s « Revert to draft ». '
-      + 'Refused if any payment was recorded on it.',
+      'Only answers whether an invoice can go back to draft. An ISSUED invoice cannot (its number and amounts are '
+      + 'frozen by law and by the database): the way out is void_invoice then duplicate_invoice. Tell the user that.',
     parameters: { type: 'object', properties: { invoice_id: { type: 'string', description: 'Invoice id.' } }, required: ['invoice_id'] },
   },
   handler: async (args, ctx) =>
@@ -1086,20 +1105,10 @@ const revertInvoiceToDraftTool: AgentTool = {
       const invoiceId = champRequis(args.invoice_id, 'La facture');
       const inv = await lireFacture(ctx, invoiceId, 'id, invoice_number, status, paid_cents');
       if (inv.status === 'draft') return { already_draft: true, invoice: { invoice_number: inv.invoice_number }, note: 'Cette facture est déjà en brouillon.' };
-      if (Number(inv.paid_cents) > 0) throw new Error('Un paiement est déjà enregistré sur cette facture — elle ne peut pas revenir en brouillon.');
-      // Miroir de revertToDraft (invoicesApi).
-      const { data, error } = await ctx.client
-        .from('invoices')
-        .update({ status: 'draft', issued_at: null, sent_at: null, updated_at: new Date().toISOString() })
-        .eq('org_id', ctx.orgId).eq('id', invoiceId).is('deleted_at', null)
-        .select('invoice_number, status')
-        .single();
-      if (error) throw error;
-      return {
-        reverted: true,
-        invoice: { invoice_number: data.invoice_number, statut: traduireStatut(data.status, STATUT_FACTURE) },
-        note: 'Facture remise en brouillon — modifiable à nouveau, rappels suspendus. Il faudra la renvoyer au client.',
-      };
+      // Audit 2026-09-30 : le trigger enforce_invoice_immutability fige numéro,
+      // montants et date d'émission d'une facture émise. L'écriture échouait
+      // TOUJOURS, et l'erreur (42501) se lisait « ton rôle ne le permet pas ».
+      throw new Error(`La facture ${inv.invoice_number ?? ''} a déjà été émise : elle ne peut plus revenir en brouillon (numéro et montants figés). Pour la corriger, annule-la puis crée une copie modifiable.`.replace('  ', ' '));
     }),
 };
 
@@ -1184,7 +1193,8 @@ const deleteInvoiceTool: AgentTool = {
         .select('invoice_number')
         .single();
       if (error) throw error;
-      return { deleted: true, invoice: { invoice_number: data.invoice_number }, note: 'Facture supprimée — elle n’apparaît plus dans Lume.' };
+      const liens = await fermerLiensDePaiement(ctx, invoiceId);
+      return { deleted: true, invoice: { invoice_number: data.invoice_number }, ...(liens.avertissement ? { warning: liens.avertissement } : {}), note: 'Facture supprimée — elle n’apparaît plus dans Lume.' };
     }),
 };
 
@@ -2002,7 +2012,8 @@ const listPaymentsTool: AgentTool = {
     name: 'list_payments',
     description:
       'List payments received (manual, Stripe, PayPal): amount, date, method, status, invoice and client. Returns '
-      + 'total_matching (exact) and sum_amount_cents. Source of payment ids for refund_payment.',
+      + 'total_matching (exact), sum_amount_cents (received, ALL matching payments, not just the page), '
+      + 'sum_refunded_cents and sum_net_cents (received minus refunds). Source of payment ids for refund_payment.',
     parameters: {
       type: 'object',
       properties: {
@@ -2017,28 +2028,52 @@ const listPaymentsTool: AgentTool = {
   },
   handler: async (args, ctx) => {
     const limit = clamp(args.limit, 20, 50);
+    // Mêmes filtres pour la page ET pour les sommes. Dates = jours de
+    // l'entreprise (avant : minuit UTC, la veille au soir à Québec).
+    const filtrer = (q: any) => {
+      let r = q.eq('org_id', ctx.orgId).is('deleted_at', null);
+      if (args.invoice_id) r = r.eq('invoice_id', String(args.invoice_id));
+      if (args.client_id) r = r.eq('client_id', String(args.client_id));
+      if (args.status) r = r.eq('status', String(args.status));
+      if (estDateYmd(args.from)) r = r.gte('payment_date', bornesJourOrg(args.from).debut);
+      if (estDateYmd(args.to)) r = r.lte('payment_date', bornesJourOrg(args.to).fin);
+      return r;
+    };
     let q = ctx.client
       .from('payments')
       .select('id, amount_cents, currency, status, method, provider, payment_date, paid_at, invoice_id, client_id, '
-        + 'invoice:invoices!payments_invoice_id_fkey(invoice_number), client:clients!payments_client_id_fkey(first_name, last_name, company)', { count: 'exact' })
-      .eq('org_id', ctx.orgId)
-      .is('deleted_at', null)
-      .order('payment_date', { ascending: false })
-      .limit(limit);
-    if (args.invoice_id) q = q.eq('invoice_id', String(args.invoice_id));
-    if (args.client_id) q = q.eq('client_id', String(args.client_id));
-    if (args.status) q = q.eq('status', String(args.status));
-    if (estDateYmd(args.from)) q = q.gte('payment_date', `${args.from}T00:00:00`);
-    if (estDateYmd(args.to)) q = q.lte('payment_date', `${args.to}T23:59:59`);
+        + 'invoice:invoices!payments_invoice_id_fkey(invoice_number), client:clients!payments_client_id_fkey(first_name, last_name, company)', { count: 'exact' });
+    q = filtrer(q).order('payment_date', { ascending: false }).limit(limit);
     const { data, error, count } = await q;
     if (error) return erreurOutil('list_payments', error);
     const rows = data || [];
     const total = count ?? rows.length;
+
+    // Sommes sur TOUS les paiements correspondants (avant : la page de 20 à 50
+    // seulement, remboursements ignorés), par tranches de 1000.
+    let recu = 0;
+    let rembourse = 0;
+    let lus = 0;
+    for (let debut = 0; debut < 20_000; debut += 1000) {
+      const { data: tranche, error: e } = await filtrer(ctx.client.from('payments').select('amount_cents, refunded_cents, status'))
+        .order('id', { ascending: true }).range(debut, debut + 999);
+      if (e) return erreurOutil('list_payments:sommes', e);
+      for (const p of (tranche || []) as any[]) {
+        if (p.status !== 'succeeded' && p.status !== 'refunded') continue;
+        recu += Number(p.amount_cents) || 0;
+        rembourse += Math.min(Number(p.refunded_cents) || (p.status === 'refunded' ? Number(p.amount_cents) || 0 : 0), Number(p.amount_cents) || 0);
+      }
+      lus += (tranche || []).length;
+      if ((tranche || []).length < 1000) break;
+    }
     return {
       total_matching: total,
       shown: rows.length,
       ...(total > rows.length ? { note: `Seuls ${rows.length} paiements sur ${total} sont listés. Le total exact est ${total}.` } : {}),
-      sum_amount_cents: rows.filter((p: any) => p.status === 'succeeded').reduce((s: number, p: any) => s + (Number(p.amount_cents) || 0), 0),
+      sum_amount_cents: recu,
+      sum_refunded_cents: rembourse,
+      sum_net_cents: recu - rembourse,
+      ...(lus < total ? { sums_partial: true, sums_note: `Sommes calculées sur ${lus} paiements sur ${total} : précise une période.` } : {}),
       payments: rows.map((p: any) => ({
         id: p.id, // interne : pour refund_payment
         amount_cents: p.amount_cents,

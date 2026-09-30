@@ -343,15 +343,19 @@ describe('factures', () => {
     const r = await lancer('void_invoice', { invoice_id: 'i1' }, f.client);
     expect(r).toMatchObject({ voided: true, invoice: { invoice_number: 'INV-0042', statut: 'annulée' } });
     expect(filtreOrg(f.journal[1]) && corps(f.journal[1], 'update').status === 'void').toBe(true);
+    // Les liens de paiement encore ouverts sont fermés (audit 2026-09-30).
+    const liens = f.journal.find((e) => e.table === 'payment_requests')!;
+    expect(corps(liens, 'update').status).toBe('cancelled');
+    expect(filtreOrg(liens) && aFiltre(liens, 'eq', 'invoice_id', 'i1') && aFiltre(liens, 'in', 'status', ['pending', 'sent'])).toBe(true);
   });
 
-  it('revert_invoice_to_draft : refus si un paiement existe ; sinon draft + issued_at/sent_at à null', async () => {
-    expect((await lancer('revert_invoice_to_draft', { invoice_id: 'i1' }, fauxClient(() => ({ data: { ...facture, paid_cents: 500 }, error: null })).client)).error).toMatch(/paiement/);
-    const f = fauxClient((_t, ops) => ({ data: { ...facture, status: ops.some(([m]) => m === 'update') ? 'draft' : 'sent' }, error: null }));
+  it('revert_invoice_to_draft : une facture émise ne revient jamais en brouillon (trigger d immuabilité) — refus honnête, aucune écriture', async () => {
+    const f = fauxClient(() => ({ data: { ...facture, status: 'sent' }, error: null }));
     const r = await lancer('revert_invoice_to_draft', { invoice_id: 'i1' }, f.client);
-    expect(r.reverted).toBe(true);
-    expect(corps(f.journal[1], 'update')).toMatchObject({ status: 'draft', issued_at: null, sent_at: null });
-    expect(filtreOrg(f.journal[1])).toBe(true);
+    expect(r.error).toMatch(/déjà été émise.*annule-la puis crée une copie/);
+    expect(f.journal.some((e) => a(e, 'update').length)).toBe(false);
+    const d = await lancer('revert_invoice_to_draft', { invoice_id: 'i1' }, fauxClient(() => ({ data: { ...facture, status: 'draft' }, error: null })).client);
+    expect(d.already_draft).toBe(true);
   });
 
   it('duplicate_invoice : mêmes RPC que l écran (create_draft puis save_draft avec les articles)', async () => {
@@ -373,6 +377,7 @@ describe('factures', () => {
     expect(r.deleted).toBe(true);
     expect(filtreOrg(f.journal[1]) && !!corps(f.journal[1], 'update').deleted_at && corps(f.journal[1], 'update').deleted_by === 'user-1').toBe(true);
     expect(f.journal.some((e) => a(e, 'delete').length)).toBe(false);
+    expect(corps(f.journal.find((e) => e.table === 'payment_requests')!, 'update').status).toBe('cancelled');
   });
 
   it('record_invoice_payment : refuse au-dessus du solde, renvoie vers mark_invoice_paid au solde exact, refuse un brouillon', async () => {
@@ -563,15 +568,17 @@ describe('paiements', () => {
     expect((await lancer('update_reminder_settings', {}, f.client)).error).toMatch(/Aucun réglage/);
   });
 
-  it('list_payments : org + deleted_at, filtres optionnels, somme des paiements réussis seulement, statuts traduits', async () => {
+  it('list_payments : org + deleted_at, filtres optionnels, bornes locales, sommes nettes sur TOUS les paiements, statuts traduits', async () => {
     const rows = [
       { id: 'p1', amount_cents: 5000, currency: 'CAD', status: 'succeeded', method: 'card', provider: 'stripe', payment_date: '2026-09-10T10:00:00Z', invoice: { invoice_number: 'INV-1' }, client: { first_name: 'Marie', last_name: 'Tremblay' } },
       { id: 'p2', amount_cents: 2000, currency: 'CAD', status: 'refunded', method: null, provider: 'manual', payment_date: '2026-09-09T10:00:00Z', invoice: null, client: { company: 'ACME' } },
     ];
     const f = fauxClient(() => ({ data: rows, error: null, count: 5 }));
     const r = await lancer('list_payments', { status: 'succeeded', from: '2026-09-01', limit: 2 }, f.client);
-    expect(filtreOrg(f.journal[0]) && aFiltre(f.journal[0], 'is', 'deleted_at', null) && aFiltre(f.journal[0], 'eq', 'status', 'succeeded') && aFiltre(f.journal[0], 'gte', 'payment_date', '2026-09-01T00:00:00')).toBe(true);
-    expect(r).toMatchObject({ total_matching: 5, shown: 2, sum_amount_cents: 5000 });
+    expect(filtreOrg(f.journal[0]) && aFiltre(f.journal[0], 'is', 'deleted_at', null) && aFiltre(f.journal[0], 'eq', 'status', 'succeeded') && aFiltre(f.journal[0], 'gte', 'payment_date', '2026-09-01T04:00:00.000Z')).toBe(true); // minuit à Québec, pas minuit UTC
+    // Sommes sur tous les paiements (requête à part, mêmes filtres) : reçu, remboursé, net.
+    expect(filtreOrg(f.journal[1]) && aFiltre(f.journal[1], 'eq', 'status', 'succeeded')).toBe(true);
+    expect(r).toMatchObject({ total_matching: 5, shown: 2, sum_amount_cents: 7000, sum_refunded_cents: 2000, sum_net_cents: 5000 });
     expect(r.note).toMatch(/2 paiements sur 5/);
     expect(r.payments[0]).toMatchObject({ id: 'p1', statut: 'réussi', fournisseur: 'Stripe', invoice_number: 'INV-1', client_name: 'Marie Tremblay' });
     expect(r.payments[1]).toMatchObject({ statut: 'remboursé', fournisseur: 'manuel', client_name: 'ACME' });

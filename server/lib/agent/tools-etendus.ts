@@ -117,7 +117,7 @@ export function champRequis(v: any, nomLisible: string): string {
 const FUSEAU_ORG = 'America/Montreal';
 
 /** Date du jour (YYYY-MM-DD) DANS le fuseau de l'entreprise, pas en UTC. */
-function dateOrgAujourdhui(d: Date = new Date()): string {
+export function dateOrgAujourdhui(d: Date = new Date()): string {
   // en-CA + year/month/day → « 2026-09-03 » directement, en heure locale.
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: FUSEAU_ORG, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -2066,7 +2066,7 @@ const getClientProfile: AgentTool = {
         .eq('org_id', ctx.orgId).eq('client_id', clientId)
         .order('scheduled_at', { ascending: false, nullsFirst: false }).limit(5),
       ctx.client.from('invoices')
-        .select('status, total_cents, due_date', { count: 'exact' })
+        .select('status, total_cents, paid_cents, balance_cents, due_date', { count: 'exact' })
         .eq('org_id', ctx.orgId).eq('client_id', clientId).is('deleted_at', null),
       ctx.client.from('quotes')
         .select('title, status, total_cents, created_at', { count: 'exact' })
@@ -2081,7 +2081,12 @@ const getClientProfile: AgentTool = {
     for (const r of [jobsR, facturesR, devisR]) if (r.error) return erreurOutil('profil', r.error);
 
     const factures = facturesR.data || [];
-    const impayees = factures.filter((f: any) => ['sent', 'partial', 'overdue'].includes(f.status));
+    // Audit 2026-09-30 : ce qui est DÛ, c'est le solde (pas le total d'une
+    // facture à moitié payée), et la valeur du client se lit sur TOUTES ses
+    // factures émises (avant : la somme de ses 5 derniers jobs).
+    const emises = factures.filter((f: any) => !['draft', 'void', 'cancelled'].includes(f.status));
+    const impayees = emises.filter((f: any) => (Number(f.balance_cents) || 0) > 0);
+    const somme = (l: any[], champ: string) => l.reduce((t, f) => t + (Number(f[champ]) || 0), 0);
     const aujourdHui = dateOrgAujourdhui(); // date de Québec, pas UTC
 
     return {
@@ -2092,7 +2097,6 @@ const getClientProfile: AgentTool = {
       },
       jobs: {
         total: jobsR.count ?? 0,
-        lifetime_value_cents: sommeCents(jobsR.data),
         recent: (jobsR.data || []).map((j: any) => ({
           job_number: j.job_number, title: j.title, date: j.scheduled_at,
           display_status: ETIQUETTES_DERIVED[j.derived_status] || j.derived_status || j.status,
@@ -2101,9 +2105,11 @@ const getClientProfile: AgentTool = {
       },
       billing: {
         invoices_total: facturesR.count ?? 0,
+        lifetime_invoiced_cents: somme(emises, 'total_cents'),
+        lifetime_paid_cents: somme(emises, 'paid_cents'),
         unpaid_count: impayees.length,
-        unpaid_cents: sommeCents(impayees),
-        overdue_cents: sommeCents(impayees.filter((f: any) => f.due_date && f.due_date < aujourdHui)),
+        unpaid_cents: somme(impayees, 'balance_cents'),
+        overdue_cents: somme(impayees.filter((f: any) => f.due_date && f.due_date < aujourdHui), 'balance_cents'),
       },
       quotes: {
         total: devisR.count ?? 0,
@@ -2135,7 +2141,7 @@ const getMorningBriefing: AgentTool = {
     const demain = dateOrgAujourdhui(new Date(maintenant.getTime() + 86400000));
     const il48h = new Date(maintenant.getTime() - 48 * 3600_000).toISOString();
 
-    const [impayesR, jobsR, tachesR, demandesR, nonLusR] = await Promise.all([
+    const [impayesR, jobsR, tachesR, demandesR, nonLusR, soldesR] = await Promise.all([
       ctx.client.from('invoices')
         .select('id, client_id, balance_cents, total_cents, due_date, status', { count: 'exact' })
         .eq('org_id', ctx.orgId).is('deleted_at', null)
@@ -2161,6 +2167,13 @@ const getMorningBriefing: AgentTool = {
         .select('client_name, phone_number, last_message_text, unread_count', { count: 'exact' })
         .eq('org_id', ctx.orgId).gt('unread_count', 0)
         .order('last_message_at', { ascending: false }).limit(5),
+      // Le TOTAL en retard porte sur toutes les factures en retard (avant : la
+      // somme des 5 plus vieilles seulement, affichées dans « worst »).
+      ctx.client.from('invoices')
+        .select('balance_cents, total_cents')
+        .eq('org_id', ctx.orgId).is('deleted_at', null)
+        .in('status', ['sent', 'partial', 'overdue']).lt('due_date', aujourdHui)
+        .limit(5000),
     ]);
     for (const r of [impayesR, jobsR, tachesR, demandesR, nonLusR]) {
       if (r.error) return erreurOutil('briefing', r.error);
@@ -2184,8 +2197,9 @@ const getMorningBriefing: AgentTool = {
         // Le SOLDE dû (balance_cents), pas le total facturé : c'est le montant
         // qui reste à collecter, celui qui compte le matin. Repli sur total
         // pour une facture jamais entamée (balance non renseignée).
-        total_cents: (impayesR.data || []).reduce((s2: number, f: any) =>
+        total_cents: (soldesR.error ? (impayesR.data || []) : (soldesR.data || [])).reduce((s2: number, f: any) =>
           s2 + (f.balance_cents != null ? Number(f.balance_cents) : Number(f.total_cents) || 0), 0),
+        ...(soldesR.error ? { total_partiel: true } : {}),
         worst: (impayesR.data || []).map((f: any) => ({
           // L'id sert au lien cliquable du briefing : « Sophie Bouchard »
           // ouvre SA facture, au lieu d'obliger à la chercher.
@@ -2433,6 +2447,12 @@ const sendInvoiceTool: AgentTool = {
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'send_invoice', args, async () => {
+      // Une facture annulée ou supprimée ne repart pas chez le client (audit 2026-09-30).
+      const { data: fac, error: errFac } = await ctx.client.from('invoices')
+        .select('status, deleted_at').eq('org_id', ctx.orgId).eq('id', String(args.invoice_id)).maybeSingle();
+      if (errFac) throw errFac;
+      if (!fac || fac.deleted_at) throw new Error('Facture introuvable — elle a peut-être été supprimée.');
+      if (fac.status === 'void' || fac.status === 'cancelled') throw new Error('Cette facture est annulée : je ne l’envoie pas au client.');
       let res;
       try {
         res = await appelInterne(ctx, '/emails/send-invoice', {
