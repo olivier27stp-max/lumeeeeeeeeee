@@ -16,14 +16,15 @@
  * Unitaire pur : aucune base, aucun réseau.
  */
 import { describe, it, expect } from 'vitest';
+import type { Request, Response } from 'express';
 import {
-  automationRuleCreateSchema, automationRuleUpdateSchema, automationSettingsSchema, sequenceEtapes,
+  automationRuleCreateSchema, automationRuleUpdateSchema, automationSettingsSchema, sequenceEtapes, validate,
 } from '../../../server/lib/validation';
 import { problemesDuGraphe, type Etape } from '../../../server/lib/automationSequences';
 import { verifierCoherence } from '../../../server/routes/automation-rules';
 import { problemesAvantPublication, DELAI_MAX_SECONDES, DELAI_NEGATIF_MAX_SECONDES } from '../../../src/lib/automationCatalogue';
 import { problemesPublication, bloquantsPublication } from '../../../src/lib/publicationAutomatisation';
-import { MESSAGES_EN } from '../../../server/lib/automations-langue';
+import { MESSAGES_EN, repondreDansLaLangue } from '../../../server/lib/automations-langue';
 
 type Schema = { safeParse: (v: unknown) => { success: boolean; data?: unknown; error?: { issues: Array<{ message: string; params?: { en?: string } }> } } };
 
@@ -220,6 +221,20 @@ describe('A-340…A-369 — règles INVALIDES : refusées avec un message clair 
 
   it('[A-363] modification : conditions null acceptées (= aucune condition)', () => {
     expect(accepte(automationRuleUpdateSchema, { conditions: null })).toEqual({ conditions: {} });
+  });
+
+  it('[A-364] la vraie chaîne validate → repondreDansLaLangue : français par défaut, anglais pour une interface anglaise', () => {
+    const corps = { ...OK, name: null, delay_seconds: 'demain' };
+    const passer = (langue: string | undefined) => {
+      let rendu: { error?: string } | undefined;
+      const res = { status() { return res; }, json(c: { error?: string }) { rendu = c; return res; } } as unknown as Response;
+      const req = { body: corps, headers: langue ? { 'accept-language': langue } : {} } as unknown as Request;
+      repondreDansLaLangue(req, res, () => validate(automationRuleCreateSchema as never)(req, res, () => {}));
+      return rendu?.error ?? '';
+    };
+    const fr = passer(undefined);
+    expect(fr).toBe('Nom : obligatoire.; Délai : doit être un nombre.');
+    expect(passer('en-CA,en;q=0.9')).toBe('Name: required.; Delay: must be a number.');
   });
 });
 
