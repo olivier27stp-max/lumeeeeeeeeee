@@ -165,6 +165,7 @@ describe('outil Lumi get_lumi_credits : en crédits seulement', () => {
     vi.doMock('../server/lib/supabase', async (orig) => ({ ...(await orig<object>()), getServiceClient: () => ({}) }));
     const { OUTILS_REGLAGES } = await import('../server/lib/agent/tools-reglages');
     const outil = OUTILS_REGLAGES.find((o) => o.declaration.name === 'get_lumi_credits')!;
+    if (!outil.handler) throw new Error('get_lumi_credits sans handler');
     const r = await outil.handler({}, { orgId: 'org-1' } as never) as Record<string, unknown>;
     expect(r).toMatchObject({ credits_restants: 742, credits_inclus: 1000, renouvellement_le: '2026-11-12' });
     expect(JSON.stringify(r)).not.toMatch(/cents|\$|dollar/i);
