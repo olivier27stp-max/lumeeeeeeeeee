@@ -9,12 +9,18 @@
  * Options :
  *   --unitaires      seulement le projet sans réseau (CI sans secrets staging)
  *   --integration    seulement le projet staging
+ *   --ui             seulement les tests d'interface (Playwright ; le projet
+ *                    démarre lui-même une API sans tâche de fond et un Vite,
+ *                    puis les arrête — tests/automations-suite/harnais/serveurs-ui.ts)
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 
 const args = process.argv.slice(2);
-const projets = args.includes('--unitaires') ? ['unitaires'] : args.includes('--integration') ? ['integration'] : ['unitaires', 'integration'];
+const projets = args.includes('--unitaires') ? ['unitaires']
+  : args.includes('--integration') ? ['integration']
+  : args.includes('--ui') ? ['ui']
+  : ['unitaires', 'integration', 'ui'];
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const envFichier = existsSync('.env.local') ? ['--env-file=.env.local'] : [];
 mkdirSync('rapports/automatisations', { recursive: true });
@@ -24,6 +30,18 @@ if (projets.includes('integration')) {
   if (b.status !== 0) {
     console.error('✗ Bureau de test impossible à préparer : la suite ne tourne pas.');
     process.exit(b.status || 1);
+  }
+}
+
+if (projets.includes('ui')) {
+  // Le navigateur des tests d'interface : installé s'il manque (CI neuve).
+  const { chromium } = await import('@playwright/test');
+  if (!existsSync(chromium.executablePath())) {
+    const i = spawnSync(npx, ['playwright', 'install', ...(process.env.CI ? ['--with-deps'] : []), 'chromium'], { stdio: 'inherit', shell: process.platform === 'win32' });
+    if (i.status !== 0) {
+      console.error('✗ Chromium introuvable et impossible à installer : les tests d’interface ne tournent pas.');
+      process.exit(i.status || 1);
+    }
   }
 }
 

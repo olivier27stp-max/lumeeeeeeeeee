@@ -52,6 +52,26 @@ export default defineConfig({
           bail: 1,
         },
       },
+      {
+        // Interface : un vrai Chromium (Playwright) sur la page
+        // Automatisations, contre une API locale SANS tâche de fond ni
+        // fournisseur réel et un Vite dédiés, démarrés et arrêtés par le
+        // globalSetup (tests/automations-suite/harnais/serveurs-ui.ts).
+        test: {
+          name: 'ui',
+          environment: 'node',
+          globals: true,
+          include: ['tests/automations-suite/ui/**/*.test.ts'],
+          setupFiles: ['./tests/automations-suite/harnais/env-integration.ts'],
+          globalSetup: ['./tests/automations-suite/harnais/serveurs-ui.ts'],
+          fileParallelism: false,
+          sequence: { concurrent: false },
+          testTimeout: 120_000,
+          hookTimeout: 180_000,
+          // Un écran se met à jour après un aller-retour réseau : 1 s (défaut) ne suffit pas.
+          expect: { poll: { timeout: 15_000, interval: 200 } },
+        },
+      },
     ],
   },
 });
