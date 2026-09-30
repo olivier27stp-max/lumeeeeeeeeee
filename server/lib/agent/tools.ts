@@ -176,7 +176,7 @@ const searchClients: AgentTool = {
       const mots = term.replace(/[%,()]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 5);
       for (const mot of mots) {
         q = q.or(
-          `first_name.ilike.%${mot}%,last_name.ilike.%${mot}%,company.ilike.%${mot}%,email.ilike.%${mot}%,phone.ilike.%${mot}%,city.ilike.%${mot}%`,
+          `first_name.ilike.%${mot}%,last_name.ilike.%${mot}%,company.ilike.%${mot}%,email.ilike.%${mot}%,phone.ilike.%${mot}%,city.ilike.%${mot}%,address.ilike.%${mot}%`,
         );
       }
     }
@@ -190,6 +190,10 @@ const searchClients: AgentTool = {
     }>;
     return {
       ...enTeteListe(count, lignes),
+      // Audit 2026-09-30 : 0 résultat ne veut pas dire « n'existe pas » — la recherche
+      // porte sur le bureau actif seulement. Sans cette note, Lumi retirait des mots
+      // (« de Lévis ») et agissait sur un homonyme d'un autre endroit.
+      ...(term && !lignes.length ? { note: 'Aucun client ne correspond dans ce bureau (le bureau actif seulement). N’enlève pas de mots pour trouver quelqu’un d’autre : demande à l’utilisateur (orthographe, autre bureau).' } : {}),
       clients: lignes.map((c) => ({
         id: c.id, // interne : pour create_job / create_quote / get_client_profile…
         name: fullName(c),
@@ -499,6 +503,7 @@ const listQuotes: AgentTool = {
       properties: {
         status: { type: 'string', description: "Optional status filter. One of: 'draft', 'awaiting_response', 'changes_requested', 'approved', 'declined', 'expired', 'converted', 'archived'." },
         query: { type: 'string', description: 'Search text (number or title). Omit it to count ALL quotes.' },
+        client_id: { type: 'string', description: 'Optional: only this client\'s (or lead\'s) quotes (id from a client search).' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
     },
@@ -507,12 +512,18 @@ const listQuotes: AgentTool = {
     const limit = clamp(args.limit, 15, 30);
     let q = ctx.client
       .from('quotes')
-      .select('id, quote_number, title, status, total_cents, currency, valid_until, created_at', { count: 'exact' })
+      .select('id, quote_number, title, status, total_cents, currency, valid_until, created_at, client_id, lead_id', { count: 'exact' })
       .eq('org_id', ctx.orgId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(limit);
     if (args.status) q = q.eq('status', String(args.status));
+    // Audit 2026-09-30 : « la soumission de Marie » — filtre par client et nom du client
+    // dans chaque ligne (avant : ni l'un ni l'autre, Lumi devinait sur le titre).
+    if (args.client_id) {
+      const id = String(args.client_id).replace(/[^0-9a-f-]/gi, '');
+      q = q.or(`client_id.eq.${id},lead_id.eq.${id}`);
+    }
     const term = String(args.query || '').trim();
     if (term) {
       const t = term.replace(/[%,()]/g, ' ');
@@ -520,6 +531,16 @@ const listQuotes: AgentTool = {
     }
     const { data, error, count } = await q;
     if (error) return toolError('db', error);
+    const idsClients = [...new Set((data || []).map((x: any) => x.client_id || x.lead_id).filter(Boolean))];
+    const noms = new Map<string, string>();
+    if (idsClients.length) {
+      const { data: cl } = await ctx.client.from('clients')
+        .select('id, first_name, last_name, company, display_as_company').eq('org_id', ctx.orgId).in('id', idsClients);
+      for (const c of (cl || []) as any[]) {
+        const nom = [c.first_name, c.last_name].filter(Boolean).join(' ').trim();
+        noms.set(c.id, (c.display_as_company && c.company) ? c.company : (nom || c.company || ''));
+      }
+    }
     return {
       ...enTeteListe(count, data),
       sum_total_cents_of_returned: somme(data, 'total_cents'),
@@ -527,6 +548,7 @@ const listQuotes: AgentTool = {
         id: q.id, // interne : pour send_quote / convert_quote_to_job
         quote_number: q.quote_number,
         title: q.title,
+        client_name: noms.get(q.client_id || q.lead_id) || null,
         statut: traduireStatut(q.status, STATUT_DEVIS),
         total_cents: q.total_cents,
         valid_until: q.valid_until,
