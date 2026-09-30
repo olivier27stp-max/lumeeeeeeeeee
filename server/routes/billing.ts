@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { urlApplication } from '../lib/helpers';
 import { z } from 'zod';
 import Stripe from 'stripe';
 import { creerClientStripe } from '../lib/stripe-sdk';
@@ -613,7 +614,7 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
 
     // ── Send receipt email (if paid plan, non-blocking) ──
     if (amountCents > 0 && subscription) {
-      const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').trim();
+      const frontendUrl = urlApplication();
       try {
         const { sendPaymentReceipt } = await import('../lib/billing-email');
         await sendPaymentReceipt({
@@ -1583,7 +1584,7 @@ router.post('/billing/customer-portal', async (req, res) => {
       if (linkErr) console.error('[billing/customer-portal] relink customer failed:', linkErr.message);
     }
 
-    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').trim();
+    const frontendUrl = urlApplication();
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${frontendUrl}/settings?tab=billing`,
@@ -1716,7 +1717,7 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       metadata: { company_name: company_name || '', plan_slug },
     });
 
-    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').trim();
+    const frontendUrl = urlApplication();
 
     // Resolve persistent Stripe Price ID for this plan + interval + currency.
     // En versements : prix dédié « tous les 4 mois » (stripe_installment_price_id_*).

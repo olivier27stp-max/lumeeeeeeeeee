@@ -6,6 +6,9 @@ import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from './migration/g
 import { htmlVersTextePourEnvoi } from './courriels/texte';
 import { planifierPremiereReprise, TABLE_REPRISES } from './courriels/reprises';
 import { reglagesSmtpSes, sesConfigure, messageIdDepuisReponseSes } from './courriels/ses';
+import {
+  adresseSupport, decomposerExpediteur, ecartsObjet, estAdressePlateforme, expediteurComplet, liensNonPublics, nettoyerObjet,
+} from './courriels/garde-envoi';
 
 /**
  * Centralized email sender.
@@ -324,17 +327,51 @@ async function mettreEnFile(params: SendEmailParams, from: string, text: string,
  * Send an email — Resend si configuré, sinon SMTP.
  * Drop-in replacement for Resend's `resend.emails.send()`.
  */
-export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
+export async function sendEmail(entree: SendEmailParams): Promise<SendEmailResult> {
   const defaultFrom = process.env.EMAIL_FROM || `Lume CRM <${process.env.SMTP_USER}>`;
-  const from = params.from || defaultFrom;
+  const adressePlateforme = decomposerExpediteur(defaultFrom).adresse;
+  // Les règles permanentes (server/lib/courriels/garde-envoi.ts) : objet sans
+  // séparateur orphelin, expéditeur jamais anonyme, Reply-To vers le support
+  // pour tout courriel qui part de l'adresse de la plateforme.
+  const fromDemande = entree.from || defaultFrom;
+  const plateforme = estAdressePlateforme(fromDemande, adressePlateforme);
+  const params: SendEmailParams = {
+    ...entree,
+    subject: nettoyerObjet(entree.subject),
+    from: plateforme ? expediteurComplet(fromDemande, adressePlateforme) : fromDemande,
+    replyTo: entree.replyTo || (plateforme ? adresseSupport() : undefined),
+  };
+  const from = params.from as string;
   // Toujours une partie texte : dérivée du HTML si l'appelant n'en fournit pas.
   const text = params.text || htmlVersTextePourEnvoi(params.html);
+
+  for (const ecart of ecartsObjet(params.subject)) {
+    logger.warn('[mailer] objet hors des règles', { ecart, subject: params.subject });
+  }
+  if (!decomposerExpediteur(from).nom) {
+    logger.warn('[mailer] expéditeur sans nom', { from, subject: params.subject });
+  }
 
   // Mode QA : quand QA_REDIRECT_EMAIL est défini, tout courriel part vers cette
   // adresse et le destinataire d'origine passe dans l'objet. Passe-plat sinon.
   const qa = redirigerEmail(params.to, params.subject);
   if (qa.redirige) {
     console.warn(`[qa] courriel redirigé : ${qa.destinataireOrigine} → ${qa.to}`);
+  }
+
+  /* Un lien vers localhost ou un réseau privé ne part JAMAIS chez un vrai
+     destinataire (audit du 2026-09-29 : « http://localhost:5173/… » reçus
+     depuis des instances de test branchées sur SES). En mode QA, le
+     courriel ne va qu'au testeur : on le laisse passer. */
+  const nonPublics = qa.redirige ? [] : liensNonPublics(params.html, text);
+  if (nonPublics.length > 0) {
+    const message = `Envoi refusé : lien non public (${nonPublics[0]}). Vérifier PUBLIC_URL / FRONTEND_URL.`;
+    logger.error('[mailer] envoi refusé — lien non public', { liens: nonPublics.slice(0, 3), subject: params.subject });
+    try {
+      const { captureException } = await import('./sentry');
+      captureException(new Error(message), { kind: 'email_lien_non_public', subject: params.subject, liens: nonPublics.slice(0, 3) });
+    } catch { /* Sentry absent : le journal ci-dessus suffit */ }
+    return { sent: false, error: message };
   }
   const destinataires = Array.isArray(qa.to) ? qa.to : [qa.to];
   // Bureau en cours d'activation après un import : aucun courriel vers ses clients.
@@ -435,7 +472,10 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
  * Check if a mail provider is configured (non-throwing check for optional email features).
  */
 export function isMailerConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY || !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+  // SES compte aussi : une prod « SES seul » répondait « SMTP not configured »
+  // à chaque automatisation alors que `sendEmail` aurait envoyé sans problème.
+  return !!process.env.RESEND_API_KEY || !!(process.env.SMTP_USER && process.env.SMTP_PASS)
+    || fournisseurCourriel() === 'ses';
 }
 
 /**

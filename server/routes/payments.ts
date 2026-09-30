@@ -4,7 +4,7 @@ import Stripe from 'stripe';
 import { creerClientStripe } from '../lib/stripe-sdk';
 import { z } from 'zod';
 import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient, findUserByEmail } from '../lib/supabase';
-import { parseOrgId, clampInt, resolvePublicBaseUrl } from '../lib/helpers';
+import { parseOrgId, clampInt, resolvePublicBaseUrl, urlApplication } from '../lib/helpers';
 import { dispatchWebhook } from '../lib/webhookDispatcher';
 import { generateCommissionsForInvoice, handleInvoiceReversal } from '../lib/field-sales/commission-engine';
 import { seedOrgComplete } from '../lib/seedOrgDefaults';
@@ -2368,7 +2368,7 @@ async function handleCheckoutSessionCompleted(
   }
 
   // ── 11. Send receipt email (async, never blocks) ──
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const frontendUrl = urlApplication();
   try {
     const { sendPaymentReceipt } = await import('../lib/billing-email');
     await sendPaymentReceipt({

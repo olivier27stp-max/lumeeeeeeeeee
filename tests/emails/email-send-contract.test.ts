@@ -86,7 +86,9 @@ describe('invariants — à ne casser sous aucun prétexte', () => {
     // délivrabilité de TOUS les tenants, pas seulement celui-là.
     const fn = routeBody(emails, 'export function senderFor', '// ── POST /api/emails/send-invoice');
     expect(fn).toContain("emailFrom.match(/<([^>]+)>/)?.[1] || process.env.SMTP_USER");
-    expect(fn).toContain('replyTo: company.company_email || undefined');
+    // Reply-To : l'adresse de l'entreprise, sinon celle de son propriétaire
+    // (2026-09-29) — jamais une adresse @lumecrm.net que personne ne lit.
+    expect(fn).toContain('replyTo: company.company_email || company.reply_to_repli || undefined');
     // Le From ne doit jamais être directement l'adresse du tenant.
     expect(fn).not.toMatch(/from:\s*company\.company_email/);
     // Depuis 2026-09-24 la partie locale porte le nom de l'entreprise
