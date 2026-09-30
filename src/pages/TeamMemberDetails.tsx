@@ -24,6 +24,7 @@ import {
 import { motion } from 'motion/react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { fetchRemunerations } from '../lib/teamMembersApi';
 import { forgotPassword } from '../lib/authApi';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { cn } from '../lib/utils';
@@ -114,6 +115,7 @@ export default function TeamMemberDetails() {
   // team_members.compensation_mode ships behind a migration — hide the mode
   // selector until the column exists.
   const [hasCompMode, setHasCompMode] = useState(false);
+  const [peutVoirTaux, setPeutVoirTaux] = useState(false);
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
@@ -122,11 +124,16 @@ export default function TeamMemberDetails() {
     async function fetchMember() {
       if (!memberId) return;
 
-      const { data, error } = await supabase
-        .from('team_members')
-        .select('*')
-        .eq('id', memberId)
-        .maybeSingle();
+      // Colonnes nommées : le taux horaire n'est pas lisible en direct (grants par colonne) —
+      // il vient de membres_remuneration, qui ne le rend qu'à qui gère l'équipe (ou à soi-même).
+      const [{ data, error }, remunerations] = await Promise.all([
+        supabase
+          .from('team_members')
+          .select('id, org_id, user_id, first_name, last_name, email, phone, role, status, avatar_url, street1, street2, city, province, postal_code, country, compensation_mode, working_hours, permissions, communication_preferences, created_at')
+          .eq('id', memberId)
+          .maybeSingle(),
+        fetchRemunerations().catch((err) => { console.error('membres_remuneration failed:', err); return []; }),
+      ]);
 
       if (error) {
         console.error('Fetch member error:', error);
@@ -137,9 +144,12 @@ export default function TeamMemberDetails() {
           ? data.permissions as PermissionsMap
           : getDefaultPermissions(data.role as TeamRole);
 
-        // Supabase returns numeric columns as strings — parse to number
-        const rawCost = data.labour_cost_hourly;
-        const parsedCost = rawCost != null ? Number(rawCost) : null;
+        const remuneration = remunerations.find((r) => r.teamMemberId === data.id) ?? null;
+        setPeutVoirTaux(remuneration !== null);
+        // Le coût saisi ici alimente aussi hourly_rate_cents (repli sur celui-ci s'il est seul renseigné).
+        const parsedCost = remuneration
+          ? (remuneration.labourCostHourly ?? (remuneration.hourlyRateCents > 0 ? remuneration.hourlyRateCents / 100 : null))
+          : null;
 
         setForm({
           id: data.id,
@@ -330,13 +340,16 @@ export default function TeamMemberDetails() {
         province: form.province.trim(),
         postal_code: form.postal_code.trim(),
         country: form.country.trim(),
-        labour_cost_hourly: sanitizedCost,
         ...(hasCompMode ? { compensation_mode: form.compensation_mode } : {}),
         // Keep the P&L column in sync: profitability reads hourly_rate_cents,
         // not labour_cost_hourly — editing here used to have no effect on job
         // costing despite the copy claiming it did.
         // NOT NULL DEFAULT 0 : un coût vide vaut 0, jamais null (23502 sinon).
-        hourly_rate_cents: sanitizedCost !== null ? Math.round(sanitizedCost * 100) : 0,
+        // Jamais écrit par qui ne l'a pas lu : sinon enregistrer la fiche remettrait le taux à 0.
+        ...(peutVoirTaux ? {
+          labour_cost_hourly: sanitizedCost,
+          hourly_rate_cents: sanitizedCost !== null ? Math.round(sanitizedCost * 100) : 0,
+        } : {}),
         working_hours: form.working_hours,
         communication_preferences: form.communication_preferences,
         updated_at: new Date().toISOString(),
@@ -539,7 +552,7 @@ export default function TeamMemberDetails() {
             </div>
           )}
 
-          {(!hasCompMode || form.compensation_mode !== 'commission') && (
+          {peutVoirTaux && (!hasCompMode || form.compensation_mode !== 'commission') && (
             <div className="max-w-xs">
               <label htmlFor={`${id}-labour_cost_hourly`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                 {isFr ? 'Taux horaire' : 'Hourly rate'}

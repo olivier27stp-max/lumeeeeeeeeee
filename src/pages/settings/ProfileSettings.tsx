@@ -29,6 +29,7 @@ import { useTranslation } from '../../i18n';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ROLE_LABELS, normalizeRole, hasPermission, type TeamRole } from '../../lib/permissions';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
+import { fetchRemunerations } from '../../lib/teamMembersApi';
 import SignInMethodsCard from '../../components/settings/SignInMethodsCard';
 import { uploadViaServer } from '../../lib/storage';
 import { getRepRealStats, getTechRealStats, type RepRealStats, type TechRealStats } from '../../lib/repStatsApi';
@@ -139,19 +140,22 @@ export default function ProfileSettings() {
 
         const currentOrgId = await getCurrentOrgIdOrThrow().catch(() => null);
         setOrgId(currentOrgId);
-        const [profileRes, memberRes, birthColRes, companyRes] = await Promise.all([
+        const [profileRes, memberRes, remunerations, companyRes] = await Promise.all([
           supabase.from('profiles').select('full_name, avatar_url').eq('id', user.id).maybeSingle(),
           currentOrgId
-            ? supabase.from('team_members').select('*').eq('user_id', user.id).eq('org_id', currentOrgId).maybeSingle()
+            ? supabase.from('team_members').select('id, first_name, last_name, phone, city, avatar_url, weather_lat, weather_lng, created_at').eq('user_id', user.id).eq('org_id', currentOrgId).maybeSingle()
             : Promise.resolve({ data: null } as any),
-          // Feature-detect the birth_date column (ships behind a migration)
-          // independently of whether this user has a team_members row yet.
-          supabase.from('team_members').select('birth_date').eq('org_id', currentOrgId ?? '').limit(1),
+          // birth_date n'est pas lisible en direct (grants par colonne) : sa propre date vient de
+          // membres_remuneration. En cas d'échec, le champ est masqué plutôt qu'effacé à l'enregistrement.
+          currentOrgId
+            ? fetchRemunerations(currentOrgId).catch((err) => { console.error('membres_remuneration failed:', err); return null; })
+            : Promise.resolve(null),
           currentOrgId
             ? supabase.from('company_settings').select('city').eq('org_id', currentOrgId).limit(1).maybeSingle()
             : Promise.resolve({ data: null } as any),
         ]);
-        setHasBirthCol(!birthColRes.error);
+        setHasBirthCol(remunerations !== null);
+        const maDate = remunerations?.find((r) => r.userId === user.id)?.birthDate ?? '';
         setCompanyCity(String(companyRes?.data?.city || '').trim());
 
         const p = profileRes.data;
@@ -168,7 +172,7 @@ export default function ProfileSettings() {
           lastName: last,
           phone: m?.phone || '',
           city: m?.city || '',
-          birthDate: m?.birth_date || '',
+          birthDate: maDate,
         };
         setFirstName(info.firstName);
         setLastName(info.lastName);

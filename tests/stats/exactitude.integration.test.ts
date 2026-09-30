@@ -1,6 +1,7 @@
 /**
- * EXACTITUDE de la page Statistiques (/insights) : chaque carte, appelée par SON module
- * client réel (src/lib/*Api.ts) à travers PostgREST avec la RLS du propriétaire, contre l'oracle SQL.
+ * EXACTITUDE de la page Statistiques (/insights) : chaque carte, appelée par SON module client
+ * (src/lib/statistiquesApi.ts) à travers PostgREST avec la RLS du propriétaire, contre l'oracle SQL —
+ * sans filtre sur 7 périodes, avec chaque filtre et des combinaisons, et « la somme du détail = le chiffre ».
  *
  *   bash scripts/qa/stats-stack.sh && node scripts/qa/stats-fixture.mjs
  *   STATS_DB_URL=postgres://supabase_admin:lumestats-local-pw@localhost:47432/postgres npx vitest run tests/stats
@@ -23,29 +24,37 @@ vi.mock('../../src/lib/orgApi', async (orig) => ({
   getCurrentOrgId: async () => etat.org,
 }));
 
-import * as insights from '../../src/lib/insightsApi';
-import * as extra from '../../src/lib/statsExtraApi';
-import { fetchQuoteKpis } from '../../src/lib/quotesApi';
+import * as S from '../../src/lib/statistiquesApi';
 import { periodRange } from '../../src/lib/insightsPeriod';
+import { plagePrecedente, variation, type Filtres } from '../../src/lib/statsFiltres';
 
 let db: pg.Client;
 const PERIODES = { aout: P.aout, sept: P.sept, mars: P.mars, nov2025: P.nov2025, dec2025: P.dec2025, ytd: P.ytd, douzeMois: P.douzeMois };
+const pl = (p: { du: string; au: string }) => ({ from: p.du, to: p.au, granularity: 'month' as const });
+/** Les filtres éprouvés (identifiants du jeu seed.sql). */
+const FILTRES: Record<string, Filtres> = {
+  'aucun': {},
+  'équipe A': { equipe: 'a1000000-0000-4000-8000-00000000077a' },
+  'technicienne Tina (équipe B + pointage J-1)': { technicien: U.tina },
+  'vendeur Rémi': { vendeur: U.remi },
+  'client Alice': { client: 'a1000000-0000-4000-8000-0000000c0001' },
+  'service Lavage de vitres': { service: 'a1000000-0000-4000-8000-000000005001' },
+  'équipe A + service vitres': { equipe: 'a1000000-0000-4000-8000-00000000077a', service: 'a1000000-0000-4000-8000-000000005001' },
+  'vendeur Rémi + client Chantal': { vendeur: U.remi, client: 'a1000000-0000-4000-8000-0000000c0003' },
+};
+const PERIODES_FILTRES = { aout: P.aout, sept: P.sept, douzeMois: P.douzeMois };
 
 describe.skipIf(!ACTIF)('Statistiques — exactitude contre l’oracle (T1)', () => {
   beforeAll(async () => {
-    db = base();
-    await db.connect();
-    etat.client = clientComme(U.proprio);
-    etat.org = T1;
-    // Le navigateur de l'entrepreneur est à Toronto : les bornes « locales » du code client le supposent.
-    process.env.TZ = 'America/Toronto';
+    db = base(); await db.connect();
+    etat.client = clientComme(U.proprio); etat.org = T1;
+    process.env.TZ = 'America/Toronto'; // le navigateur de l'entrepreneur est à Toronto
   });
   afterAll(async () => { await db?.end(); });
 
   describe('l’oracle lui-même, vérifié à la main (seed.sql)', () => {
     it('encaissé août 2026 = F-1 1 149,75 $ + F-3 229,95 $ (payée le 31 à 23 h 50)', async () => {
-      const m = await O.encaisseParMois(db, T1, P.aout);
-      expect(m).toEqual([{ mois: '2026-08', cents: 137970 }]);
+      expect(await O.encaisseParMois(db, T1, P.aout)).toEqual([{ mois: '2026-08', cents: 137970 }]);
     });
     it('encaissé septembre = 200,00 + 229,95 + 574,88 (pourboire exclu, paiements supprimé/en attente/échoué exclus)', async () => {
       expect((await O.encaisseParMois(db, T1, P.sept))[0].cents).toBe(100483);
@@ -64,174 +73,139 @@ describe.skipIf(!ACTIF)('Statistiques — exactitude contre l’oracle (T1)', ()
     it('à recevoir = F-2 374,88 + F-4 1 149,75 + F-7 300,00 + F-8 574,88 ; 3 en retard', async () => {
       expect(await O.aRecevoir(db, T1, AUJOURDHUI)).toEqual({ solde: 239951, enRetard: 3 });
     });
+    it('revenu par service sur 12 mois : vitres 800 + 500 (« lavage de VITRES ») + 450 $ ; ligne non facturée exclue', async () => {
+      const s = await O.revenuParService(db, T1, P.douzeMois);
+      expect(s.find((x) => x.nom === 'Lavage de vitres')?.cents).toBe(175000);
+      expect(s.find((x) => x.nom === 'Nettoyage de gouttières')?.cents).toBe(20000); // « gouttieres » sans accent
+      expect(s.some((x) => x.nom === 'Produit anti-mousse')).toBe(false);
+    });
+    it('entonnoir août–septembre : 3 leads, 3 avec soumission, 1 converti', async () => {
+      expect(await O.entonnoir(db, T1, { du: '2026-08-01', au: '2026-09-30' })).toMatchObject({ crees: 3, avecSoumission: 3, convertis: 1 });
+    });
     it('pipeline de septembre sans les deals du classement : 0 gagné, 1 perdu', async () => {
-      expect((await O.pipeline(db, T1, P.sept))).toMatchObject({ gagnes: 0, perdus: 1, tauxPct: 0 });
+      expect(await O.pipeline(db, T1, P.sept)).toMatchObject({ gagnes: 0, perdus: 1, tauxPct: 0 });
     });
   });
 
-  describe('carte Revenu (fetchInsightsRevenueSeries → rpc_insights_revenue_series)', () => {
-    for (const [nom, p] of Object.entries(PERIODES)) {
-      it(`${nom} : encaissé par mois = oracle`, async () => {
-        const serie = await insights.fetchInsightsRevenueSeries({ from: p.du, to: p.au, granularity: 'month' });
-        const attendu = await O.encaisseParMois(db, T1, p);
-        expect(serie.map((x) => [x.bucket_start.slice(0, 7), x.revenue_cents])).toEqual(attendu.map((x) => [x.mois, x.cents]));
+  for (const [nomFiltre, f] of Object.entries(FILTRES)) {
+    const periodes = nomFiltre === 'aucun' ? PERIODES : PERIODES_FILTRES;
+    describe(`filtre : ${nomFiltre}`, () => {
+      for (const [nom, p] of Object.entries(periodes)) {
+        it(`${nom} : revenu (encaissé et facturé par mois)`, async () => {
+          const vue = await S.serieRevenus(pl(p), f);
+          const enc = await O.encaisseParMois(db, T1, p, f);
+          const fac = await O.factureParMois(db, T1, p, f);
+          expect(vue.map((x) => [x.debut.slice(0, 7), x.encaisseCents, x.factureCents])).toEqual(enc.map((x, i) => [x.mois, x.cents, fac[i].cents]));
+        });
+        it(`${nom} : revenu par service, modes de paiement, top clients`, async () => {
+          expect((await S.revenuParService(pl(p), f)).map((x) => [x.cle, x.valeur])).toEqual((await O.revenuParService(db, T1, p, f)).map((x) => [x.nom, x.cents]));
+          expect((await S.modesPaiement(pl(p), f)).map((x) => [x.cle, x.valeur])).toEqual((await O.encaisseParMode(db, T1, p, f)).map((x) => [x.mode, x.cents]));
+          expect((await S.topClients(pl(p), f)).map((x) => [x.nom, x.cents])).toEqual((await O.topClients(db, T1, p, f)).map((x) => [x.nom, x.cents]));
+        });
+        it(`${nom} : jobs complétés (valeur moyenne, mois, part récurrente) et équipes`, async () => {
+          const vue = await S.jobsCompletes(pl(p), f);
+          const o = await O.jobsCompletes(db, T1, p, f);
+          expect([vue.nombre, vue.moyenneCents, vue.partRecurrentePct, vue.mois]).toEqual([o.nombre, o.moyenneCents, o.partRecurrentePct, o.mois]);
+          expect((await S.equipes(pl(p), f)).map((e) => [e.nom, e.jobs, e.completes, e.revenuCents]).sort())
+            .toEqual((await O.equipes(db, T1, p, f)).map((e) => [e.nom, e.jobs, e.completes, e.revenuCents]).sort());
+        });
+        it(`${nom} : entonnoir, pipeline, soumissions`, async () => {
+          expect(await S.entonnoir(pl(p), f)).toEqual(await O.entonnoir(db, T1, p, f));
+          const pip = await S.pipeline(pl(p), f); const op = await O.pipeline(db, T1, p, f);
+          expect([pip.gagnes, pip.perdus, pip.tauxPct]).toEqual([op.gagnes, op.perdus, op.tauxPct]);
+          const sou = await S.soumissions(pl(p), f);
+          expect([sou.nombre, sou.valeurCents, sou.approuvees, sou.valeurApprouveeCents]).toEqual(Object.values(await O.soumissions(db, T1, p, f)));
+        });
+        it(`${nom} : trésorerie et zones`, async () => {
+          const t = await S.tresorerie(pl(p), f);
+          expect([t.aRecevoirCents, t.enRetard]).toEqual(Object.values(await O.aRecevoir(db, T1, AUJOURDHUI, f)));
+          const d = await O.delaiPaiement(db, T1, p, f);
+          if (d == null) expect(t.delaiJours).toBeNull(); else expect(t.delaiJours).toBeCloseTo(d, 3);
+          const z = await S.zones(pl(p), f);
+          const oz = await O.zones(db, T1, p, f);
+          expect([somme(z.map((x) => x.revenuCents)), somme(z.map((x) => x.jobs))]).toEqual([oz.revenu, oz.nb]);
+        });
+      }
+      it('valeur vie moyenne (à vie)', async () => {
+        expect(await S.valeurVieMoyenne(f)).toEqual(await O.valeurVieMoyenne(db, T1, f));
       });
-      it(`${nom} : facturé par mois = oracle`, async () => {
-        const serie = await insights.fetchInsightsRevenueSeries({ from: p.du, to: p.au, granularity: 'month' });
-        const attendu = await O.factureParMois(db, T1, p);
-        expect(serie.map((x) => [x.bucket_start.slice(0, 7), x.invoiced_cents])).toEqual(attendu.map((x) => [x.mois, x.cents]));
-      });
-    }
-    it('« 12 derniers mois » calculé le 30 septembre à 21 h (Toronto) finit bien le 30 septembre', () => {
-      const r = periodRange('12m', new Date('2026-10-01T01:00:00Z'));
-      expect(r).toMatchObject({ from: '2025-09-30', to: '2026-09-30' });
     });
-    it('« Cette année » le 1er janvier à 00 h 30 (Toronto) commence le 1er janvier', () => {
-      const r = periodRange('ytd', new Date('2026-01-01T05:30:00Z'));
-      expect(r).toMatchObject({ from: '2026-01-01', to: '2026-01-01' });
+  }
+
+  describe('« Voir le détail » : la somme des lignes = le chiffre de la carte', () => {
+    for (const [nomFiltre, f] of Object.entries({ aucun: FILTRES.aucun, 'équipe A + service vitres': FILTRES['équipe A + service vitres'], 'client Alice': FILTRES['client Alice'] })) {
+      const p = pl(P.douzeMois);
+      it(`${nomFiltre} : revenu (total et un mois), modes, clients`, async () => {
+        const serie = await S.serieRevenus(p, f);
+        expect(somme((await S.detail(p, f, 'revenu')).map((l) => l.cents))).toBe(somme(serie.map((x) => x.encaisseCents)));
+        const mois = serie.find((x) => x.encaisseCents !== 0);
+        if (mois) expect(somme((await S.detail(p, f, 'revenu', mois.debut.slice(0, 7))).map((l) => l.cents))).toBe(mois.encaisseCents);
+        for (const m of await S.modesPaiement(p, f)) expect(somme((await S.detail(p, f, 'mode', m.cle)).map((l) => l.cents)), m.cle).toBe(m.valeur);
+        for (const c of await S.topClients(p, f)) expect(somme((await S.detail(p, f, 'client', c.id)).map((l) => l.cents)), c.nom).toBe(c.cents);
+      });
+      it(`${nomFiltre} : services, valeur moyenne, équipes, zones`, async () => {
+        for (const s of await S.revenuParService(p, f)) expect(somme((await S.detail(p, f, 'service', s.cle)).map((l) => l.cents)), s.cle).toBe(s.valeur);
+        const jc = await S.jobsCompletes(p, f);
+        const lignes = await S.detail(p, f, 'valeur_moyenne');
+        expect([lignes.length, lignes.length ? Math.round(somme(lignes.map((l) => l.cents)) / lignes.length) : 0]).toEqual([jc.nombre, jc.moyenneCents]);
+        for (const e of await S.equipes(p, f)) expect(somme((await S.detail(p, f, 'equipe', e.id)).map((l) => l.cents)), e.nom).toBe(e.revenuCents);
+        const z = await S.zones(p, f);
+        expect(somme((await S.detail(p, f, 'jobs', JSON.stringify(z.flatMap((x) => x.jobIds)))).map((l) => l.cents))).toBe(somme(z.map((x) => x.revenuCents)));
+      });
+      it(`${nomFiltre} : trésorerie, soumissions, entonnoir, deals`, async () => {
+        const t = await S.tresorerie(p, f);
+        expect(somme((await S.detail(p, f, 'a_recevoir')).map((l) => l.cents))).toBe(t.aRecevoirCents);
+        expect((await S.detail(p, f, 'en_retard')).length).toBe(t.enRetard);
+        const d = await S.detail(p, f, 'delai');
+        if (t.delaiJours != null) expect(somme(d.map((l) => l.cents)) / d.length / 100).toBeCloseTo(t.delaiJours, 1);
+        const s = await S.soumissions(p, f);
+        expect(somme((await S.detail(p, f, 'soumissions')).map((l) => l.cents))).toBe(s.valeurCents);
+        expect(somme((await S.detail(p, f, 'soumissions_approuvees')).map((l) => l.cents))).toBe(s.valeurApprouveeCents);
+        const e = await S.entonnoir(p, f);
+        expect([(await S.detail(p, f, 'leads')).length, (await S.detail(p, f, 'leads_soumission')).length, (await S.detail(p, f, 'leads_convertis')).length])
+          .toEqual([e.crees, e.avecSoumission, e.convertis]);
+        const pip = await S.pipeline(p, f);
+        expect([(await S.detail(p, f, 'deals_gagnes')).length, (await S.detail(p, f, 'deals_perdus')).length]).toEqual([pip.gagnes, pip.perdus]);
+      });
+    }
+  });
+
+  describe('période personnalisée, précédente, variations', () => {
+    it('granularité jour : le paiement de 23 h 50 est bien un 31 août', async () => {
+      const jour = await S.serieRevenus({ from: '2026-08-25', to: '2026-09-05', granularity: 'day' }, {});
+      expect(jour).toHaveLength(12);
+      expect(jour.find((x) => x.debut === '2026-08-31')?.encaisseCents).toBe(22995);
+    });
+    it('période précédente de même durée, juste avant', () => {
+      expect(plagePrecedente({ from: '2026-09-01', to: '2026-09-30', granularity: 'month' })).toMatchObject({ from: '2026-08-02', to: '2026-08-31' });
+      expect(plagePrecedente({ from: '2026-01-01', to: '2026-01-01', granularity: 'day' })).toMatchObject({ from: '2025-12-31', to: '2025-12-31' });
+    });
+    it('variation : jamais ∞ ni NaN', () => {
+      expect(variation(100, 0)?.texte).toBe('nouveau');
+      expect(variation(0, 0)?.texte).toBe('= 0 %');
+      expect(variation(150, 100)?.texte).toBe('↑ 50 %');
+      expect(variation(null, 100)).toBeNull();
+      expect(variation(40, 55, 'points')?.texte).toBe('↓ 15 pt');
+    });
+    it('« 12 derniers mois » calculé le 30 septembre à 21 h (Toronto) finit bien le 30', () => {
+      expect(periodRange('12m', new Date('2026-10-01T01:00:00Z'))).toMatchObject({ from: '2025-09-30', to: '2026-09-30' });
     });
   });
-
-  describe('carte Revenu par service (fetchTopServices)', () => {
-    for (const [nom, p] of Object.entries(PERIODES)) {
-      it(`${nom} : top 3 + Autre = oracle`, async () => {
-        const vue = await insights.fetchTopServices({ from: p.du, to: p.au });
-        const o = await O.valeurParTitreDeJob(db, T1, p);
-        const attendu = o.length <= 3 ? o.map((x) => ({ name: x.titre, value: x.cents }))
-          : [...o.slice(0, 3).map((x) => ({ name: x.titre, value: x.cents })), { name: 'Other', value: somme(o.slice(3).map((x) => x.cents)) }];
-        expect(vue).toEqual(attendu);
-      });
-    }
-  });
-
-  describe('carte Modes de paiement (fetchPaymentMix)', () => {
-    for (const [nom, p] of Object.entries(PERIODES)) {
-      it(`${nom} : par mode, nets des remboursements, bornes locales = oracle`, async () => {
-        const vue = await extra.fetchPaymentMix({ from: p.du, to: p.au });
-        const o = await O.encaissePaiementsParMode(db, T1, p);
-        // La fonction rend les CLÉS de mode (card, e-transfer…) ; la carte les traduit.
-        expect(vue.map((x) => [x.name, x.value])).toEqual(o.map((x) => [x.mode, x.cents]));
-      });
-    }
-  });
-
-  describe('carte Valeur moyenne d’un job (fetchAvgJobValueSeries)', () => {
-    for (const [nom, p] of Object.entries(PERIODES)) {
-      it(`${nom} : moyenne mensuelle des jobs complétés (mois local de complétion) = oracle`, async () => {
-        const vue = await extra.fetchAvgJobValueSeries({ from: p.du, to: p.au, fr: true });
-        const o = await O.valeurMoyenneJob(db, T1, p);
-        expect(vue.vals).toEqual(o.mois.map((x) => x.moyenne));
-        expect((vue as { moyenne?: number }).moyenne).toBe(o.moyenne);
-      });
-    }
-  });
-
-  describe('cartes Équipes (fetchTeamPerformance)', () => {
-    for (const [nom, p] of Object.entries(PERIODES)) {
-      it(`${nom} : revenu, jobs, complétés par équipe = oracle`, async () => {
-        const vue = await insights.fetchTeamPerformance({ from: p.du, to: p.au });
-        const o = await O.equipes(db, T1, p);
-        expect(vue.map((t) => [t.team_name, t.jobs_count, t.jobs_completed, t.revenue_cents]).sort())
-          .toEqual(o.map((t) => [t.nom, t.nb, t.faits, t.revenu]).sort());
-      });
-    }
-  });
-
-  describe('carte Top clients par revenu', () => {
-    it('les 5 premiers = les 5 clients qui ont le plus rapporté (pas les 6 meilleurs « scores CLV »)', async () => {
-      // Ce que fait la page : fetchTopClientsParRevenu(5) (tri par revenu fait par la base).
-      const vue = await insights.fetchTopClientsParRevenu(5);
-      expect((await insights.fetchValeurTousClients()).slice(0, 5).map((c) => c.client_name)).toEqual(vue.map((c) => c.client_name));
-      const o = (await O.valeurClients(db, T1)).slice(0, 5);
-      expect(vue.map((c) => [c.client_name, c.total_revenue_cents])).toEqual(o.map((c) => [c.nom, c.revenu]));
-    });
-  });
-
-  describe('carte Fidélité & valeur client (fetchLoyalty)', () => {
-    for (const [nom, p] of Object.entries(PERIODES)) {
-      it(`${nom} : part récurrente = oracle`, async () => {
-        expect((await extra.fetchLoyalty({ from: p.du, to: p.au })).recurringPct).toBe(await O.partRecurrente(db, T1, p));
-      });
-    }
-    it('valeur vie moyenne = moyenne sur TOUS les clients qui ont eu un job', async () => {
-      // Ce que fait la page : fetchValeurVieMoyenne() (agrégat en base, sinon lecture complète).
-      const o = await O.valeurClients(db, T1);
-      expect(await insights.fetchValeurVieMoyenne())
-        .toBe(Math.round(somme(o.map((c) => c.revenu)) / o.length));
-    });
-  });
-
-  describe('Conversion des leads', () => {
-    for (const [nom, p] of Object.entries(PERIODES)) {
-      it(`${nom} : leads créés / convertis / taux = oracle`, async () => {
-        const vue = await insights.fetchInsightsLeadConversion({ from: p.du, to: p.au });
-        const o = await O.conversionLeads(db, T1, p);
-        expect([vue.leads_created, vue.leads_closed, vue.conversion_rate]).toEqual([o.crees, o.convertis, o.taux]);
-      });
-      it(`${nom} : soumissions (valeur totale, approuvées) = oracle`, async () => {
-        const vue = await fetchQuoteKpis({ from: p.du, to: p.au });
-        const o = await O.soumissions(db, T1, p);
-        expect([vue.total_count, vue.total_value_cents, vue.approved_count, vue.approved_value_cents]).toEqual([o.nb, o.valeur, o.approuvees, o.valeurApprouvee]);
-      });
-      it(`${nom} : taux de réussite et délai (sans les deals du classement) = oracle`, async () => {
-        const vue = await insights.fetchPipelineVelocity({ from: p.du, to: p.au });
-        const o = await O.pipeline(db, T1, p);
-        expect(vue.win_rate).toBe(o.tauxPct ?? 0);
-        if (o.delaiJours != null) expect(vue.avg_days_to_close).toBeCloseTo(o.delaiJours, 1);
-      });
-    }
-  });
-
-  describe('Trésorerie (fetchInsightsInvoicesSummary)', () => {
-    for (const [nom, p] of Object.entries(PERIODES)) {
-      it(`${nom} : à recevoir, en retard, délai de paiement = oracle`, async () => {
-        const vue = await insights.fetchInsightsInvoicesSummary({ from: p.du, to: p.au });
-        const o = await O.aRecevoir(db, T1, AUJOURDHUI);
-        expect([vue.total_outstanding_cents, vue.count_past_due]).toEqual([o.solde, o.enRetard]);
-        const d = await O.delaiPaiement(db, T1, p);
-        if (d == null) expect(vue.avg_payment_time_days).toBeNull();
-        else expect(vue.avg_payment_time_days).toBeCloseTo(d, 3);
-      });
-    }
-  });
-
-  describe('carte Revenu par ville (fetchZonesParAdresse, ce que lit la carte)', () => {
-    for (const [nom, p] of Object.entries(PERIODES)) {
-      it(`${nom} : revenu réalisé et jobs = oracle`, async () => {
-        const lignes = await insights.fetchZonesParAdresse({ from: p.du, to: p.au });
-        expect([lignes.reduce((s, z) => s + z.revenu_cents, 0), lignes.reduce((s, z) => s + z.jobs, 0)]).toEqual(Object.values(await O.zones(db, T1, p)));
-      });
-    }
-  });
-
-  // Rentabilité par job : depuis la PR #781, la carte lit /api/profitability → server/lib/rentabilite
-  // (analyserRentabilite), la même fonction que Lumi — parité vérifiée dans lumi-parite.integration.test.ts,
-  // calcul couvert par tests/rentabilite*.test.ts.
 
   describe('tenant vide (T3)', () => {
     it('toutes les cartes répondent à zéro, sans erreur ni NaN', async () => {
       etat.client = clientComme(U.proprioT3); etat.org = T3;
       try {
-        const [serie, svc, mix, ajv, eq, clv, loy, conv, quotes, velo, inv] = await Promise.all([
-          insights.fetchInsightsRevenueSeries({ from: P.douzeMois.du, to: P.douzeMois.au, granularity: 'month' }),
-          insights.fetchTopServices({ from: P.douzeMois.du, to: P.douzeMois.au }),
-          extra.fetchPaymentMix({ from: P.douzeMois.du, to: P.douzeMois.au }),
-          extra.fetchAvgJobValueSeries({ from: P.douzeMois.du, to: P.douzeMois.au, fr: true }),
-          insights.fetchTeamPerformance({ from: P.douzeMois.du, to: P.douzeMois.au }),
-          insights.fetchTopClientsParRevenu(5),
-          extra.fetchLoyalty({ from: P.douzeMois.du, to: P.douzeMois.au }),
-          insights.fetchInsightsLeadConversion({ from: P.douzeMois.du, to: P.douzeMois.au }),
-          fetchQuoteKpis({ from: P.douzeMois.du, to: P.douzeMois.au }),
-          insights.fetchPipelineVelocity({ from: P.douzeMois.du, to: P.douzeMois.au }),
-          insights.fetchInsightsInvoicesSummary({ from: P.douzeMois.du, to: P.douzeMois.au }),
+        const p = pl(P.douzeMois);
+        const [serie, svc, mix, jc, eq, cli, ltv, ent, pip, sou, tre, z] = await Promise.all([
+          S.serieRevenus(p, {}), S.revenuParService(p, {}), S.modesPaiement(p, {}), S.jobsCompletes(p, {}), S.equipes(p, {}), S.topClients(p, {}),
+          S.valeurVieMoyenne({}), S.entonnoir(p, {}), S.pipeline(p, {}), S.soumissions(p, {}), S.tresorerie(p, {}), S.zones(p, {}),
         ]);
-        expect(somme(serie.map((x) => x.revenue_cents))).toBe(0);
         expect(serie).toHaveLength(13);
-        expect([svc, mix, eq, clv]).toEqual([[], [], [], []]);
-        expect(ajv.vals.every((v) => v === 0)).toBe(true);
-        expect(loy).toEqual({ recurringPct: 0, retentionPct: 0 });
-        expect([conv.leads_created, conv.conversion_rate, quotes.total_count, velo.win_rate, inv.total_outstanding_cents]).toEqual([0, 0, 0, 0, 0]);
-        for (const v of [conv.conversion_rate, velo.win_rate, velo.avg_days_to_close]) expect(Number.isFinite(v)).toBe(true);
+        expect(somme(serie.map((x) => x.encaisseCents))).toBe(0);
+        expect([svc, mix, eq, cli, z]).toEqual([[], [], [], [], []]);
+        expect([jc.nombre, jc.moyenneCents, jc.partRecurrentePct, ltv.moyenneCents, ent.crees, ent.tauxPct, sou.valeurCents, tre.aRecevoirCents]).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+        expect([pip.tauxPct, ent.joursMoyens, tre.delaiJours]).toEqual([null, null, null]);
       } finally {
         etat.client = clientComme(U.proprio); etat.org = T1;
       }

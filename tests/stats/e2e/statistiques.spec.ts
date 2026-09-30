@@ -1,14 +1,21 @@
 /**
- * E2E de /insights sur la stack locale : chiffres à l'écran = oracle SQL, chaque contrôle
- * cliqué, FR/EN, 3 largeurs, états (chargement, vide, erreur, sans permission), cache.
+ * E2E de /insights sur la stack locale : chiffres à l'écran = oracle SQL, chaque contrôle cliqué
+ * (filtres, période personnalisée, comparaison, export, détail, clavier), FR/EN, 3 largeurs,
+ * états (chargement, vide, erreur, sans permission, téléphone), cache.
  */
+import fs from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import pg from 'pg';
 import { STATS_LOCAL } from '../../../scripts/qa/stats-local.mjs';
 import * as O from '../oracle';
+import { variation } from '../../../src/lib/statsFiltres';
 import { COMPTES, capturePleinePage, connecter, fermerFenetres, kc, norm, ouvrirStatistiques } from './aides';
 
 const T1 = 'a1000000-0000-4000-8000-000000000001';
+const EQUIPE_A = 'a1000000-0000-4000-8000-00000000077a';
+const VITRES = 'a1000000-0000-4000-8000-000000005001';
+const ALICE = 'a1000000-0000-4000-8000-0000000c0001';
+const TINA = 'a1000000-0000-4000-8000-0000000000a4';
 const DOUZE_MOIS = { du: '2025-09-30', au: '2026-09-30' };
 const YTD = { du: '2026-01-01', au: '2026-09-30' };
 
@@ -16,115 +23,131 @@ let db: pg.Client;
 test.beforeAll(async () => { db = new pg.Client({ connectionString: STATS_LOCAL.dbUrl }); await db.connect(); });
 test.afterAll(async () => { await db?.end(); });
 
-const somme = (xs: Array<{ cents: number }>) => xs.reduce((a, x) => a + x.cents, 0);
-/** Attend la fin de tous les squelettes de chargement. */
-async function charge(page: Page) {
-  await expect(page.locator('.animate-pulse')).toHaveCount(0, { timeout: 30_000 });
+const total = (xs: Array<{ cents: number }>) => xs.reduce((a, x) => a + x.cents, 0);
+const heros = (page: Page) => page.locator('[data-cents]').first();
+async function charge(page: Page) { await expect(page.locator('.animate-pulse')).toHaveCount(0, { timeout: 30_000 }); }
+async function choisirPastille(page: Page, pastille: RegExp, option: RegExp) {
+  await page.locator('button', { hasText: pastille }).first().click();
+  await page.locator('button', { hasText: option }).last().click();
+  await charge(page);
 }
+const detail = (page: Page) => page.locator('[data-total-cents]');
 
 test.describe('propriétaire, en français', () => {
   test.beforeEach(async ({ page }) => { await connecter(page, COMPTES.proprio, 'fr'); await ouvrirStatistiques(page); await charge(page); });
 
   test('les chiffres affichés sont ceux de l’oracle (12 derniers mois)', async ({ page }, info) => {
     test.skip(info.project.name !== 'bureau', 'valeurs vérifiées une fois ; la mise en page l’est sur les 3 largeurs');
-    // Revenu : total exact au cent (data-cents), libellé compact, et le dernier mois s'appelle septembre.
-    const encaisse = somme(await O.encaisseParMois(db, T1, DOUZE_MOIS));
-    await expect(page.locator('[data-cents]').first()).toHaveAttribute('data-cents', String(encaisse));
-    expect(norm(await page.locator('[data-cents]').first().innerText())).toBe(norm(kc(encaisse, true)));
+    const encaisse = total(await O.encaisseParMois(db, T1, DOUZE_MOIS));
+    await expect(heros(page)).toHaveAttribute('data-cents', String(encaisse));
+    expect(norm(await heros(page).innerText())).toBe(norm(kc(encaisse, true)));
     await expect(page.getByText(/^sept\.$/).first()).toBeVisible();
-
     const main = norm(await page.locator('main').innerText());
-    // Top clients : les 5 qui ont le plus rapporté, dans l'ordre.
-    const top = (await O.valeurClients(db, T1)).slice(0, 5).map((c) => c.nom);
     let pos = 0;
-    for (const nom of top) { const i = main.indexOf(nom, pos); expect(i, nom).toBeGreaterThanOrEqual(0); pos = i; }
-    // Trésorerie.
+    for (const c of await O.topClients(db, T1, DOUZE_MOIS)) { const i = main.indexOf(c.nom, pos); expect(i, c.nom).toBeGreaterThanOrEqual(0); pos = i; }
     const ar = await O.aRecevoir(db, T1, '2026-09-30');
-    expect(main).toContain(`${norm(kc(ar.solde, true))} À recevoir ${ar.enRetard} en retard`);
-    const delai = await O.delaiPaiement(db, T1, DOUZE_MOIS);
-    expect(main).toContain(`${Math.round(delai ?? 0)} j Délai de paiement`);
-    // Conversion.
-    const conv = await O.conversionLeads(db, T1, DOUZE_MOIS);
-    expect(main).toContain(`${Math.round(conv.taux * 100)} % leads convertis / créés`);
-    const pipe = await O.pipeline(db, T1, DOUZE_MOIS);
-    expect(main).toContain(`${pipe.tauxPct == null ? '—' : `${Math.round(pipe.tauxPct)} %`} Taux de réussite`);
-    // Zones.
-    const z = await O.zones(db, T1, DOUZE_MOIS);
-    expect(main).toContain(`${norm(kc(z.revenu, true))} Revenu réalisé`);
-    // Aucun texte cassé.
+    expect(main).toContain(`${norm(kc(ar.solde, true))} À recevoir, à ce jour ${ar.enRetard} en retard`);
+    const ent = await O.entonnoir(db, T1, DOUZE_MOIS);
+    expect(main).toContain(`${ent.tauxPct} % leads convertis / leads créés`);
+    const pip = await O.pipeline(db, T1, DOUZE_MOIS);
+    expect(main).toContain(`${pip.tauxPct == null ? '—' : `${Math.round(pip.tauxPct)} %`} Taux de réussite des deals`);
+    expect(main).toContain(`${norm(kc((await O.zones(db, T1, DOUZE_MOIS)).revenu, true))} Revenu réalisé`);
     expect(main).not.toMatch(/NaN|Infinity|∞|undefined|\bnull\b/);
   });
 
-  test('le filtre de période change TOUTES les cartes, et les chiffres suivent l’oracle', async ({ page }, info) => {
+  test('filtres : équipe, technicien, service, client — combinables, dans l’URL, « non appliqué » affiché', async ({ page }, info) => {
     test.skip(info.project.name !== 'bureau');
-    await page.locator('button', { hasText: /^12 derniers mois$/ }).first().click();
-    await page.locator('button', { hasText: /^Cette année à ce jour$/ }).first().click();
+    await choisirPastille(page, /^Équipe/, /^Équipe A$/);
+    await expect(page).toHaveURL(new RegExp(`equipe=${EQUIPE_A}`));
+    await expect(heros(page)).toHaveAttribute('data-cents', String(total(await O.encaisseParMois(db, T1, DOUZE_MOIS, { equipe: EQUIPE_A }))));
+    await expect(page.getByText(/Filtre non appliqué ici : équipe/).first()).toBeVisible(); // entonnoir, rentabilité…
+    await choisirPastille(page, /^Service/, /^Lavage de vitres$/);
+    await expect(heros(page)).toHaveAttribute('data-cents', String(total(await O.encaisseParMois(db, T1, DOUZE_MOIS, { equipe: EQUIPE_A, service: VITRES }))));
+    await page.getByRole('button', { name: /Retirer les filtres \(2\)/ }).click();
     await charge(page);
-    await expect(page.locator('button', { hasText: /^12 derniers mois$/ })).toHaveCount(0);
-    expect(await page.locator('button', { hasText: /^Cette année à ce jour$/ }).count()).toBeGreaterThanOrEqual(9);
-    await expect(page.locator('[data-cents]').first()).toHaveAttribute('data-cents', String(somme(await O.encaisseParMois(db, T1, YTD))));
-    const main = norm(await page.locator('main').innerText());
-    const conv = await O.conversionLeads(db, T1, YTD);
-    expect(main).toContain(`${Math.round(conv.taux * 100)} % leads convertis / créés`);
-    // Chaque période du menu fonctionne (aucune n'affiche d'erreur).
-    for (const nom of ['2 dernières années', '3 dernières années', '12 dernières semaines', '12 derniers mois']) {
-      await page.locator('button', { hasText: /^(Cette année à ce jour|\d+ derni\S+ \S+)$/ }).first().click();
-      await page.locator('button', { hasText: new RegExp(`^${nom}$`) }).first().click();
-      await charge(page);
+    await expect(heros(page)).toHaveAttribute('data-cents', String(total(await O.encaisseParMois(db, T1, DOUZE_MOIS))));
+    await choisirPastille(page, /^Technicien/, /^Tina Technicienne$/);
+    await expect(heros(page)).toHaveAttribute('data-cents', String(total(await O.encaisseParMois(db, T1, DOUZE_MOIS, { technicien: TINA }))));
+    await page.getByRole('button', { name: /Retirer les filtres/ }).click();
+    await page.getByLabel('Filtrer par client').fill('Alice');
+    await page.getByRole('button', { name: /^Alice Tremblay$/ }).click();
+    await charge(page);
+    await expect(heros(page)).toHaveAttribute('data-cents', String(total(await O.encaisseParMois(db, T1, DOUZE_MOIS, { client: ALICE }))));
+    await expect(page.getByText(/Client : Alice Tremblay/)).toBeVisible();
+  });
+
+  test('période personnalisée (URL partageable) et choix dans le menu', async ({ page }, info) => {
+    test.skip(info.project.name !== 'bureau');
+    await page.goto('/insights?periode=custom&du=2026-08-01&au=2026-08-31');
+    await charge(page);
+    await expect(heros(page)).toHaveAttribute('data-cents', '137970'); // août, le 31 à 23 h 50 compris
+    await expect(page.getByText('2026-08-01 → 2026-08-31').first()).toBeVisible();
+    await page.goto('/insights');
+    await charge(page);
+    await choisirPastille(page, /^Période/, /^Période personnalisée$/);
+    await expect(page).toHaveURL(/periode=custom/);
+    for (const nom of ['Cette année à ce jour', '2 dernières années', '3 dernières années', '12 dernières semaines', '12 derniers mois']) {
+      await choisirPastille(page, /^Période/, new RegExp(`^${nom}$`));
       await expect(page.getByText('Impossible de charger ces chiffres.')).toHaveCount(0);
     }
+    await choisirPastille(page, /^Période/, /^Cette année à ce jour$/);
+    await expect(heros(page)).toHaveAttribute('data-cents', String(total(await O.encaisseParMois(db, T1, YTD))));
   });
 
-  test('au clavier, le sélecteur de période d’une carte s’ouvre sans quitter la page', async ({ page }, info) => {
+  test('comparer à la période précédente : variations justes, jamais ∞', async ({ page }, info) => {
     test.skip(info.project.name !== 'bureau');
-    // Le VRAI <button> du sélecteur de la carte Revenu (la carte elle-même est un role="button" qui le contient).
-    const selecteur = page.locator('button', { hasText: /^12 derniers mois$/ }).nth(1);
-    await selecteur.focus();
+    await page.goto('/insights?periode=custom&du=2026-09-01&au=2026-09-30');
+    await charge(page);
+    await page.getByLabel('Comparer à la période précédente').check();
+    await charge(page);
+    await expect(page).toHaveURL(/comparer=1/);
+    const attendu = variation(total(await O.encaisseParMois(db, T1, { du: '2026-09-01', au: '2026-09-30' })), total(await O.encaisseParMois(db, T1, { du: '2026-08-02', au: '2026-08-31' })), 'pct', true);
+    await expect(page.locator('[data-variation]').first()).toHaveText(attendu!.texte);
+    expect(norm(await page.locator('main').innerText())).not.toMatch(/∞|NaN|Infinity/);
+  });
+
+  test('« Voir le détail » : les lignes, leur total = le chiffre, un clic mène à la fiche', async ({ page }, info) => {
+    test.skip(info.project.name !== 'bureau');
+    const cents = await heros(page).getAttribute('data-cents');
+    await page.getByRole('button', { name: 'Voir le détail' }).first().click();
+    await expect(detail(page)).toHaveAttribute('data-total-cents', cents!);
+    await page.keyboard.press('Escape');
+    // Une part du beignet des services
+    await page.getByRole('button', { name: /Lavage de vitres/ }).first().click();
+    const vitres = (await O.revenuParService(db, T1, DOUZE_MOIS)).find((x) => x.nom === 'Lavage de vitres')!.cents;
+    await expect(detail(page)).toHaveAttribute('data-total-cents', String(vitres));
+    await page.keyboard.press('Escape');
+    // À recevoir
+    await page.getByRole('button', { name: /À recevoir, à ce jour/ }).click();
+    await expect(detail(page)).toHaveAttribute('data-total-cents', String((await O.aRecevoir(db, T1, '2026-09-30')).solde));
+    await detail(page).locator('a').first().click();
+    await expect(page).toHaveURL(/\/invoices\//);
+  });
+
+  test('au clavier : parcourir le graphique et ouvrir le détail d’un mois', async ({ page }, info) => {
+    test.skip(info.project.name !== 'bureau');
+    await page.getByRole('button', { name: /Graphique du revenu/ }).focus();
+    await page.keyboard.press('ArrowLeft'); // dernier point : septembre
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/insights$/);
-    await expect(page.locator('button', { hasText: /^2 dernières années$/ }).first()).toBeVisible();
-  });
-
-  test('chaque carte cliquable mène à sa page', async ({ page }, info) => {
-    test.skip(info.project.name !== 'bureau');
-    const cibles: Array<[RegExp, RegExp]> = [
-      [/^Revenu par service$/i, /\/finances/], [/^Modes de paiement$/i, /\/payments|\/finances\?tab=paiements/], [/^Valeur moyenne d'un job$/i, /\/jobs/],
-      [/^Classement par revenu$/i, /\/leaderboard/], [/^Taux de complétion$/i, /\/leaderboard/], [/^Top clients par revenu$/i, /\/clients/],
-      [/^Fidélité & valeur client$/i, /\/clients/], [/^Entonnoir des leads$/i, /\/pipeline/], [/^À recevoir$/, /\/invoices/],
-    ];
-    for (const [titre, url] of cibles) {
-      await page.getByText(titre).first().click();
-      await expect(page, String(titre)).toHaveURL(url);
-      await ouvrirStatistiques(page); await charge(page);
-    }
-  });
-
-  test('infobulle du graphique de revenu : le mois et le montant au cent près', async ({ page }, info) => {
-    test.skip(info.project.name !== 'bureau');
-    const zone = page.locator('.cursor-crosshair').first();
-    const b = (await zone.boundingBox())!;
-    await page.mouse.move(b.x + b.width - 2, b.y + b.height / 2);
+    await expect(page.getByText(/Encaissé — septembre 2026/)).toBeVisible();
     const sept = (await O.encaisseParMois(db, T1, { du: '2026-09-01', au: '2026-09-30' }))[0].cents;
-    const attendu = new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', minimumFractionDigits: 2 }).format(sept / 100);
-    const bulle = norm(await page.locator('.pointer-events-none.whitespace-nowrap').first().innerText());
-    expect(bulle).toContain('SEPT.');
-    expect(bulle).toContain(norm(attendu));
+    await expect(detail(page)).toHaveAttribute('data-total-cents', String(sept));
   });
 
-  test('survol du beignet : le centre montre le détail du segment', async ({ page }, info) => {
+  test('export CSV : les chiffres de la page, période et filtres en tête', async ({ page }, info) => {
     test.skip(info.project.name !== 'bureau');
-    const ligne = page.locator('text=Lavage de vitres').first();
-    await ligne.hover();
-    await expect(page.getByText(/% du total/).first()).toBeVisible();
+    const [telechargement] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Exporter \(CSV\)/ }).click()]);
+    expect(telechargement.suggestedFilename()).toBe('statistiques_2025-09-30_2026-09-30.csv');
+    const csv = fs.readFileSync((await telechargement.path())!, 'utf8');
+    expect(csv).toContain('"Encaissé ($, taxes incluses)",4384.04'); // libellé avec virgule : entre guillemets (RFC 4180)
+    expect(csv).toContain('À recevoir à ce jour ($),2399.51');
+    expect(csv).toContain('"Revenu par service ($, avant taxes)",Lavage de vitres,1750.00');
   });
 
-  test('mise en page : aucun défilement horizontal, aucun graphique coupé', async ({ page }, info) => {
+  test('mise en page : aucun défilement horizontal, aucun graphique coupé', async ({ page }) => {
     const largeur = page.viewportSize()!.width;
-    const scroll = await page.evaluate(() => document.documentElement.scrollWidth);
-    expect(scroll, 'défilement horizontal de la page').toBeLessThanOrEqual(largeur);
-    const coupes = await page.locator('main svg').evaluateAll((svgs, w) => svgs
-      .map((s) => s.getBoundingClientRect())
-      .filter((r) => r.width > 40 && (r.right > w + 1 || r.left < -1)).length, largeur);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), 'défilement horizontal').toBeLessThanOrEqual(largeur);
+    const coupes = await page.locator('main svg').evaluateAll((svgs, w) => svgs.map((s) => s.getBoundingClientRect()).filter((r) => r.width > 40 && (r.right > w + 1 || r.left < -1)).length, largeur);
     expect(coupes, 'graphiques qui sortent de l’écran').toBe(0);
     await capturePleinePage(page, 'statistiques-fr.png', [page.locator('.leaflet-container')]);
   });
@@ -134,16 +157,11 @@ test.describe('propriétaire, en anglais', () => {
   test('formats en-CA et aucune chaîne française', async ({ page }, info) => {
     await connecter(page, COMPTES.proprio, 'en');
     await ouvrirStatistiques(page); await charge(page);
-    const main = norm(await page.locator('main').innerText());
-    for (const titre of ['Revenue', 'Breakdown', 'Payment methods', 'Teams', 'Lead conversion', 'Cash flow', 'Profitability by job']) {
-      expect(main.toLowerCase()).toContain(titre.toLowerCase()); // les titres sont en majuscules CSS
-    }
-    const encaisse = somme(await O.encaisseParMois(db, T1, DOUZE_MOIS));
-    expect(norm(await page.locator('[data-cents]').first().innerText())).toBe(norm(kc(encaisse, false)));
-    for (const fr of ['Aucune donnée', 'Réessayer', 'moy.', 'Comptant', 'Carte', 'Virement', 'Autre', 'derniers mois', 'en retard', 'Délai']) {
-      expect(main, `« ${fr} » non traduit`).not.toContain(fr);
-    }
-    expect(main).not.toMatch(/NaN|Infinity|∞|undefined/);
+    const main = norm(await page.locator('main').innerText()).toLowerCase();
+    for (const titre of ['revenue', 'breakdown', 'payment methods', 'jobs & teams', 'sales', 'cash flow', 'profitability by job', 'view details', 'export (csv)']) expect(main).toContain(titre);
+    expect(norm(await heros(page).innerText())).toBe(norm(kc(total(await O.encaisseParMois(db, T1, DOUZE_MOIS)), false)));
+    for (const fr of ['aucune donnée', 'réessayer', 'moy.', 'comptant', 'virement', 'derniers mois', 'en retard', 'délai', 'voir le détail', 'période']) expect(main, `« ${fr} » non traduit`).not.toContain(fr);
+    expect(main).not.toMatch(/nan|infinity|∞|undefined/);
     if (info.project.name === 'bureau') await capturePleinePage(page, 'statistiques-en.png', [page.locator('.leaflet-container')]);
   });
 
@@ -152,9 +170,7 @@ test.describe('propriétaire, en anglais', () => {
     await connecter(page, COMPTES.proprio, 'fr');
     await ouvrirStatistiques(page); await charge(page);
     const main = norm(await page.locator('main').innerText());
-    for (const en of ['No data', 'Card', 'Cash', 'Cheque', 'e-Transfer', 'Other', 'Retry', 'avg', 'past due']) {
-      expect(main, `« ${en} » non traduit`).not.toMatch(new RegExp(`\\b${en}\\b`));
-    }
+    for (const en of ['No data', 'Card', 'Cash', 'Cheque', 'e-Transfer', 'Other', 'Retry', 'avg', 'past due', 'View details']) expect(main, `« ${en} » non traduit`).not.toMatch(new RegExp(`\\b${en}\\b`));
   });
 });
 
@@ -176,31 +192,29 @@ test.describe('états', () => {
     await page.route('**/rest/v1/rpc/rpc_insights_revenue_series*', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"message":"panne simulée"}' }));
     await ouvrirStatistiques(page);
     await expect(page.getByText('Impossible de charger ces chiffres.').first()).toBeVisible({ timeout: 30_000 });
-    await expect(page).toHaveScreenshot('statistiques-erreur.png', { clip: { x: 0, y: 0, width: 1440, height: 700 }, animations: 'disabled' });
+    await expect(page).toHaveScreenshot('statistiques-erreur.png', { clip: { x: 0, y: 0, width: 1440, height: 760 }, animations: 'disabled' });
     await page.unroute('**/rest/v1/rpc/rpc_insights_revenue_series*');
     await page.getByRole('button', { name: 'Réessayer' }).first().click();
-    await expect(page.locator('[data-cents]').first()).toBeVisible();
+    await expect(heros(page)).toBeVisible();
   });
 
   test('entreprise vide : des zéros et des « aucune donnée », jamais NaN ni ∞', async ({ page }, info) => {
     await connecter(page, COMPTES.vide, 'en');
     await ouvrirStatistiques(page); await charge(page);
-    const main = norm(await page.locator('main').innerText());
-    expect(main).not.toMatch(/NaN|Infinity|∞|undefined/);
-    await expect(page.locator('[data-cents]').first()).toHaveAttribute('data-cents', '0');
+    expect(norm(await page.locator('main').innerText())).not.toMatch(/NaN|Infinity|∞|undefined/);
+    await expect(heros(page)).toHaveAttribute('data-cents', '0');
     if (info.project.name === 'bureau') await capturePleinePage(page, 'statistiques-vide.png', [page.locator('.leaflet-container')]);
   });
 
   test('technicien : pas de chiffres de l’entreprise, et aucune requête de stats envoyée', async ({ page }, info) => {
     test.skip(info.project.name !== 'bureau');
     const appels: string[] = [];
-    page.on('request', (r) => { if (/rpc_insights_|rentabilite_jobs/.test(r.url())) appels.push(r.url()); });
+    page.on('request', (r) => { if (/rpc_insights_|rentabilite_jobs|\/api\/profitability/.test(r.url())) appels.push(r.url()); });
     await connecter(page, COMPTES.theo);
     await page.goto('/insights');
     await page.waitForTimeout(3000);
     await fermerFenetres(page);
-    const texte = norm(await page.locator('body').innerText());
-    expect(texte).not.toMatch(/À recevoir|Revenu par service|Top clients/);
+    expect(norm(await page.locator('body').innerText())).not.toMatch(/À recevoir|Revenu par service|Top clients/);
     expect(appels).toEqual([]);
     await expect(page).toHaveScreenshot('statistiques-technicien.png', { animations: 'disabled' });
   });
@@ -221,18 +235,19 @@ test.describe('cache', () => {
     test.skip(info.project.name !== 'bureau');
     await connecter(page, COMPTES.proprio);
     await ouvrirStatistiques(page); await charge(page);
-    const avant = Number(await page.locator('[data-cents]').first().getAttribute('data-cents'));
+    const avant = Number(await heros(page).getAttribute('data-cents'));
     const id = 'a1000000-0000-4000-8000-0000000b9999';
     await db.query('delete from public.payments where id = $1', [id]);
     await db.query(`insert into public.payments (id, org_id, client_id, amount_cents, method, status, provider, payment_date, paid_at, created_by)
       values ($1, $2, 'a1000000-0000-4000-8000-0000000c0001', 12345, 'cash', 'succeeded', 'manual', now(), now(), 'a1000000-0000-4000-8000-0000000000a1')`, [id, T1]);
     try {
-      // Navigation INTERNE (pas de rechargement) : la carte mène à /clients, puis Retour.
-      await page.getByText(/^Top clients par revenu$/i).first().click();
-      await expect(page).toHaveURL(/\/clients/);
-      await expect(page.getByRole('heading', { name: /^Statistiques$/ })).toHaveCount(0); // la page est bien démontée
+      // Navigation INTERNE : le détail d'un client mène à sa fiche, puis Retour.
+      await page.getByRole('button', { name: /Alice Tremblay/ }).first().click();
+      await detail(page).locator('a').first().click();
+      await expect(page).toHaveURL(/\/(invoices|finances)/);
+      await expect(page.getByRole('heading', { name: /^Statistiques$/ })).toHaveCount(0);
       await page.goBack();
-      await expect(page.locator('[data-cents]').first()).toHaveAttribute('data-cents', String(avant + 12345), { timeout: 20_000 });
+      await expect(heros(page)).toHaveAttribute('data-cents', String(avant + 12345), { timeout: 20_000 });
     } finally {
       await db.query('delete from public.payments where id = $1', [id]);
     }

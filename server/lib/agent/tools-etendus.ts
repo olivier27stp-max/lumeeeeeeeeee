@@ -36,7 +36,6 @@ import {
 import { analyserRentabilite, pourAgent } from '../rentabilite';
 import { ecrireValeurs } from '../champs/service';
 import type { AgentTool, ToolContext } from './tools';
-import { minuitLocal } from '../dates-locales';
 
 interface TaxLine { code: string; label: string; rate: number; enabled: boolean }
 
@@ -1049,10 +1048,26 @@ const getTopClients: AgentTool = {
       + 'a client, when they were last active. Use for « who are my best clients ».',
     parameters: {
       type: 'object',
-      properties: { limit: { type: 'integer', description: 'How many (default 10, max 25).' } },
+      properties: {
+        limit: { type: 'integer', description: 'How many (default 10, max 25).' },
+        from: { type: 'string', description: 'Optional start YYYY-MM-DD: rank by money PAID in the period (same as the Statistics page) instead of lifetime.' },
+        to: { type: 'string', description: 'Optional end YYYY-MM-DD (default: today when from is given).' },
+      },
     },
   },
   handler: async (args, ctx) => {
+    // Avec une période : la carte « Top clients » de /insights (ce qu'ils ont PAYÉ sur la période).
+    if (args.from) {
+      const au = args.to ? String(args.to) : dateOrgAujourdhui();
+      const { data, error } = await ctx.client.rpc('rpc_insights_top_clients', { p_org: ctx.orgId, p_from: String(args.from), p_to: au, p_limit: clamp(args.limit, 10, 25) });
+      if (error) return erreurOutil('top_clients', error);
+      return {
+        periode: { du: String(args.from), au },
+        definition: 'argent encaissé sur la période',
+        count: (data || []).length,
+        clients: (data || []).map((c: any) => ({ client_id: c.client_id, nom: c.client_name, total_cents: Math.round(Number(c.cents) || 0) })),
+      };
+    }
     // La RPC trie par « score CLV » (récence, fréquence) : ses N premiers ne sont PAS les
     // N clients qui ont le plus dépensé. On lit tous les clients, triés par total dépensé,
     // comme la carte « Top clients par revenu » de /insights.
@@ -1168,8 +1183,9 @@ const getTopServices: AgentTool = {
   declaration: {
     name: 'get_top_services',
     description:
-      'Which kinds of work bring in the most revenue over a period, ranked. Use for « what services make '
-      + 'me the most money ». from/to YYYY-MM-DD; defaults to this month.',
+      'Which services bring in the most revenue over a period, ranked (lines of completed jobs, before taxes — '
+      + 'the same figure as the Statistics page). Use for « what services make me the most money ». '
+      + 'from/to YYYY-MM-DD; defaults to this month.',
     parameters: {
       type: 'object',
       properties: {
@@ -1181,40 +1197,13 @@ const getTopServices: AgentTool = {
   handler: async (args, ctx) => {
     const to = args.to ? String(args.to) : dateOrgAujourdhui();
     const from = args.from ? String(args.from) : `${to.slice(0, 7)}-01`;
-    // Pas de RPC : on agrège les jobs par titre, comme l'écran Insights — bornes au minuit
-    // LOCAL (pas UTC) et TOUTES les lignes (PostgREST en rend 1 000 au plus par réponse).
-    const debut = minuitLocal(from, FUSEAU_ORG);
-    const [ay, am, ad] = to.split('-').map(Number);
-    const fin = minuitLocal(new Date(Date.UTC(ay, am - 1, ad + 1)).toISOString().slice(0, 10), FUSEAU_ORG);
-    const data: Array<{ title: string | null; total_cents: number | null }> = [];
-    for (let de = 0; ; de += 1000) {
-      const { data: lot, error } = await ctx.client
-        .from('jobs')
-        .select('title, total_cents')
-        .eq('org_id', ctx.orgId)
-        .is('deleted_at', null)
-        .not('status', 'in', '(draft,cancelled)')
-        .gte('created_at', debut)
-        .lt('created_at', fin)
-        .order('id')
-        .range(de, de + 999);
-      if (error) return erreurOutil('top_services', error);
-      data.push(...(lot || []));
-      if ((lot || []).length < 1000) break;
-    }
-    const parType = new Map<string, { total: number; count: number }>();
-    for (const j of data) {
-      const cle = String(j.title || 'Autre').trim() || 'Autre';
-      const cur = parType.get(cle) || { total: 0, count: 0 };
-      cur.total += Number(j.total_cents) || 0;
-      cur.count += 1;
-      parType.set(cle, cur);
-    }
-    const services = [...parType.entries()]
-      .map(([nom, s]) => ({ service: nom, total_cents: s.total, nombre_de_jobs: s.count }))
-      .sort((a, b) => b.total_cents - a.total_cents || a.service.localeCompare(b.service))
+    // LA fonction de la carte « Revenu par service » de /insights (fuseau de l'entreprise, en base).
+    const { data, error } = await ctx.client.rpc('rpc_insights_service_mix', { p_org: ctx.orgId, p_from: from, p_to: to });
+    if (error) return erreurOutil('top_services', error);
+    const services = ((data || []) as Array<{ title: string; cents: number }>)
+      .map((r) => ({ service: r.title === '(sans détail)' ? 'Jobs sans lignes de service' : r.title, total_cents: Math.round(Number(r.cents) || 0) }))
       .slice(0, 10);
-    return { periode: { du: from, au: to }, services };
+    return { periode: { du: from, au: to }, definition: 'lignes des jobs complétés, avant taxes', services };
   },
 };
 

@@ -26,6 +26,11 @@ const RPC_FINANCIERES: Array<[string, Record<string, unknown>]> = [
   ['rpc_insights_completed_jobs_monthly', PERIODE],
   ['rpc_insights_valeur_vie_moyenne', {}],
   ['rpc_insights_zones', PERIODE],
+  ['rpc_insights_top_clients', PERIODE],
+  ['rpc_insights_entonnoir', PERIODE],
+  ['rpc_insights_soumissions', PERIODE],
+  ['rpc_insights_detail', { ...PERIODE, p_carte: 'revenu' }],
+  ['rpc_insights_detail', { ...PERIODE, p_carte: 'a_recevoir' }],
 ];
 const RPC_COMMERCIALES: Array<[string, Record<string, unknown>]> = [
   ['rpc_insights_lead_conversion', PERIODE],
@@ -80,13 +85,42 @@ describe.skipIf(!ACTIF)('Statistiques — sécurité', () => {
         expect(r.error, `${nom} a livré au vendeur : ${texte(r.data).slice(0, 160)}`).not.toBeNull();
       });
     }
-    // ÉCART CONNU (STATS_AUDIT.md, bug S-3) : la RLS de team_members laisse tout membre lire
-    // hourly_rate_cents de ses collègues. Correction = migration RLS/colonnes à concevoir avec la
-    // paie (qui lit cette colonne) — pas écrite à l'aveugle. it.fails signalera le jour où c'est réglé.
-    it.fails('technicien : les taux horaires des AUTRES ne lui sont pas lisibles', async () => {
-      const { data } = await theo.from('team_members').select('user_id, hourly_rate_cents').eq('org_id', T1);
-      const autres = (data || []).filter((m: { user_id: string; hourly_rate_cents: number | null }) => m.user_id !== U.theo && (m.hourly_rate_cents || 0) > 0);
-      expect(autres, 'taux des collègues visibles').toEqual([]);
+    // Bug S-3 (STATS_AUDIT.md), corrigé par 20261004300300 : les colonnes de rémunération et la
+    // date de naissance ne sont plus lisibles en direct ; membres_remuneration() filtre par droit.
+    it('technicien : taux horaire et date de naissance illisibles en direct (team_members ET memberships)', async () => {
+      for (const [table, col] of [['team_members', 'hourly_rate_cents'], ['team_members', 'labour_cost_hourly'], ['team_members', 'birth_date'], ['memberships', 'hourly_rate_cents'], ['memberships', 'labour_cost_hourly']]) {
+        const r = await theo.from(table).select(`user_id, ${col}`).eq('org_id', T1);
+        expect(r.error?.code, `${table}.${col} lisible : ${texte(r.data).slice(0, 160)}`).toBe('42501');
+      }
+      // Les autres colonnes restent lisibles (horaire, équipe, noms…).
+      const r = await theo.from('team_members').select('user_id, first_name, team_id, compensation_mode, working_hours').eq('org_id', T1);
+      expect(r.error).toBeNull();
+      expect((r.data || []).length).toBeGreaterThan(1);
+    });
+    it('technicien : membres_remuneration ne rend QUE sa propre fiche', async () => {
+      const r = await appel(theo, 'membres_remuneration', {}, T1);
+      expect(r.error).toBeNull();
+      const lignes = (r.data || []) as Array<{ user_id: string; hourly_rate_cents: number }>;
+      expect(lignes.map((l) => l.user_id)).toEqual([U.theo]);
+      expect(lignes[0].hourly_rate_cents).toBe(2500);
+    });
+    it('vendeur : membres_remuneration ne rend aucune fiche de collègue', async () => {
+      const r = await appel(remi, 'membres_remuneration', {}, T1);
+      expect(r.error).toBeNull();
+      expect(((r.data || []) as Array<{ user_id: string }>).every((l) => l.user_id === U.remi)).toBe(true);
+    });
+    it('propriétaire : membres_remuneration rend toute l’équipe ; rien pour une autre entreprise', async () => {
+      const r = await appel(proprio, 'membres_remuneration', {}, T1);
+      expect(r.error).toBeNull();
+      const parUser = new Map(((r.data || []) as Array<{ user_id: string; hourly_rate_cents: number }>).map((l) => [l.user_id, l.hourly_rate_cents]));
+      expect(parUser.get(U.theo)).toBe(2500);
+      expect(parUser.get(U.tina)).toBe(3250);
+      const autre = await appel(proprio, 'membres_remuneration', {}, T2);
+      expect(autre.data || []).toEqual([]);
+    });
+    it('anonyme : membres_remuneration refusée', async () => {
+      const r = await appel(anon, 'membres_remuneration', {}, T1);
+      expect(r.error).not.toBeNull();
     });
     it('technicien : aucun paiement lisible directement', async () => {
       const { data } = await theo.from('payments').select('id, amount_cents').eq('org_id', T1);

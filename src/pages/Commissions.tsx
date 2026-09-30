@@ -26,6 +26,7 @@ import RepCommissionSummary from '../components/commissions/RepCommissionSummary
 import CommissionFilters, { type CommissionFiltersValue } from '../components/commissions/CommissionFilters';
 import CommissionTable from '../components/commissions/CommissionTable';
 import { supabase } from '../lib/supabase';
+import { fetchRemunerations } from '../lib/teamMembersApi';
 import {
   getCommissionEntries,
   approveCommission,
@@ -443,17 +444,23 @@ function RatesPanel() {
       setDefaultRuleId(reglages?.default_rule_id ?? null);
       setPolitique(reglages?.reversal_policy ?? 'alert');
       setTousLesPlans(rulesData.filter((r) => !r.deleted_at));
-      const { data: tm, error: tmErr } = await supabase
-        .from('team_members')
-        .select('id, user_id, compensation_mode, hourly_rate_cents, labour_cost_hourly')
-        .eq('org_id', orgId)
-        .neq('status', 'inactive')
-        .not('user_id', 'is', null);
+      // Taux horaires : pas lisibles en direct (grants par colonne) ; membres_remuneration rend sa
+      // propre fiche, ou toute l'équipe à qui gère l'équipe / voit les marges.
+      const [{ data: tm, error: tmErr }, remunerations] = await Promise.all([
+        supabase
+          .from('team_members')
+          .select('id, user_id, compensation_mode')
+          .eq('org_id', orgId)
+          .neq('status', 'inactive')
+          .not('user_id', 'is', null),
+        fetchRemunerations(orgId),
+      ]);
       if (tmErr) throw tmErr;
+      const tauxParFiche = new Map(remunerations.map((r) => [r.teamMemberId, r.hourlyRateCents || Math.round((r.labourCostHourly ?? 0) * 100)]));
       const map: typeof paieParUser = {};
-      for (const r of (tm || []) as Array<{ id: string; user_id: string; compensation_mode: string | null; hourly_rate_cents: number | null; labour_cost_hourly: number | null }>) {
+      for (const r of (tm || []) as Array<{ id: string; user_id: string; compensation_mode: string | null }>) {
         const mode = r.compensation_mode === 'commission' || r.compensation_mode === 'both' ? r.compensation_mode : 'hourly';
-        map[r.user_id] = { id: r.id, mode, rate_cents: Number(r.hourly_rate_cents) || Math.round(Number(r.labour_cost_hourly || 0) * 100) || 0 };
+        map[r.user_id] = { id: r.id, mode, rate_cents: tauxParFiche.get(r.id) ?? 0 };
       }
       setPaieParUser(map);
     } catch (err) {

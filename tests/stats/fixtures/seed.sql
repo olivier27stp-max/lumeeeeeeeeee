@@ -125,6 +125,24 @@ select ('a1000000-0000-4000-8000-0000000f00' || lpad((11 + g)::text, 2, '0'))::u
 update public.jobs set updated_at = coalesce(completed_at, created_at)
  where org_id = 'a1000000-0000-4000-8000-000000000001';
 
+-- ── Services du catalogue et lignes de jobs (revenu par service, filtre service) ──
+-- Pièges : casse et accents différents du catalogue, ligne hors catalogue, ligne non facturée.
+insert into public.predefined_services (id, org_id, name, default_price_cents, is_active) values
+  ('a1000000-0000-4000-8000-000000005001', 'a1000000-0000-4000-8000-000000000001', 'Lavage de vitres', 50000, true),
+  ('a1000000-0000-4000-8000-000000005002', 'a1000000-0000-4000-8000-000000000001', 'Nettoyage de gouttières', 20000, true),
+  ('a1000000-0000-4000-8000-000000005003', 'a1000000-0000-4000-8000-000000000001', 'Lavage à pression', 100000, true);
+insert into public.job_line_items (id, org_id, job_id, name, qty, unit_price_cents, included) values
+  ('a1000000-0000-4000-8000-000000006001', 'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-0000000f0001', 'Lavage de vitres', 1, 80000, true),
+  ('a1000000-0000-4000-8000-000000006002', 'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-0000000f0001', 'Déplacement', 1, 20000, true),
+  ('a1000000-0000-4000-8000-000000006003', 'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-0000000f0002', 'lavage de VITRES', 1, 50000, true),
+  ('a1000000-0000-4000-8000-000000006004', 'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-0000000f0003', 'Nettoyage de gouttieres', 1, 20000, true),
+  ('a1000000-0000-4000-8000-000000006005', 'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-0000000f0011', 'Lavage de vitres', 1, 45000, true),
+  ('a1000000-0000-4000-8000-000000006006', 'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-0000000f0011', 'Produit anti-mousse', 1, 5000, false);
+insert into public.quote_line_items (id, org_id, quote_id, source_service_id, name, quantity, unit_price_cents) values
+  ('a1000000-0000-4000-8000-000000006101', 'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-000000009001', 'a1000000-0000-4000-8000-000000005001', 'Lavage de vitres', 1, 100000),
+  ('a1000000-0000-4000-8000-000000006102', 'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-000000009003', 'a1000000-0000-4000-8000-000000005003', 'Lavage à pression', 1, 50000);
+-- Le prix d'un job ne change pas quand on détaille ses lignes : on garde les montants du jeu.
+
 -- ── Visites (schedule_events) ───────────────────────────────────────────────
 insert into public.schedule_events (id, org_id, job_id, title, team_id, status, start_at, end_at, start_time, end_time, timezone) values
   ('a1000000-0000-4000-8000-0000000e0001', 'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-0000000f0001', 'J-1', 'a1000000-0000-4000-8000-00000000077a', 'completed', '2026-08-05 08:00 America/Toronto', '2026-08-05 16:00 America/Toronto', '2026-08-05 08:00 America/Toronto', '2026-08-05 16:00 America/Toronto', 'America/Toronto'),

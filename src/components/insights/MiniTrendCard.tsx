@@ -4,8 +4,9 @@
  * tooltip, borderless header with the shared period selector.
  */
 import { useId, useMemo, useState } from 'react';
-import PeriodSelector from './PeriodSelector';
-import { type InsightsPeriod } from '../../lib/insightsPeriod';
+import EnteteCarte, { PastilleVariation } from './EnteteCarte';
+import ErreurCarte from './ErreurCarte';
+import type { CleFiltre } from '../../lib/statsFiltres';
 
 const W = 1000;
 const H = 320;
@@ -28,18 +29,26 @@ export default function MiniTrendCard({
   title,
   series,
   loading,
-  period,
-  onPeriod,
   derive,
   fmt,
+  definition,
+  variation,
+  onDetail,
+  nonAppliques,
+  erreur,
+  onRetry,
 }: {
   title: string;
   series: MiniSeries;
   loading?: boolean;
-  period: InsightsPeriod;
-  onPeriod: (p: InsightsPeriod) => void;
   derive: (vals: number[]) => { hero: string; delta: string; sub: string };
   fmt: (v: number) => string;
+  definition?: string;
+  variation?: { texte: string; sens: 'hausse' | 'baisse' | 'stable' } | null;
+  onDetail?: () => void;
+  nonAppliques?: CleFiltre[];
+  erreur?: boolean;
+  onRetry?: () => void;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   // Id de dégradé SANS espaces ni apostrophe : « mfill-Valeur moyenne d'un job » rendait
@@ -62,19 +71,17 @@ export default function MiniTrendCard({
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-end justify-between gap-3 px-6 pb-3 border-b border-border">
-        <div>
-          <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{title}</div>
-          <div className="flex items-baseline gap-3 mt-3">
-            <span className="text-[30px] font-bold tracking-tight leading-none tabular-nums text-text-primary">{model.hero}</span>
-            {model.delta && <span className="text-[13px] font-bold text-text-secondary">{model.delta}</span>}
-          </div>
-          <div className="text-[12px] text-text-tertiary font-medium mt-2">{model.sub}</div>
+      <EnteteCarte titre={title} definition={definition} nonAppliques={nonAppliques} onDetail={onDetail} />
+      <div className="px-6 mt-3">
+        <div className="flex items-baseline gap-3">
+          <span className="text-[30px] font-bold tracking-tight leading-none tabular-nums text-text-primary">{erreur ? '—' : model.hero}</span>
+          <PastilleVariation v={variation} />
+          {model.delta && <span className="text-[12px] font-semibold text-text-tertiary">{model.delta}</span>}
         </div>
-        <PeriodSelector value={period} onChange={onPeriod} />
+        <div className="text-[12px] text-text-tertiary font-medium mt-2">{model.sub}</div>
       </div>
 
-      {loading ? (
+      {erreur ? <ErreurCarte hauteur={176} onRetry={onRetry ?? (() => {})} /> : loading ? (
         <div className="h-[176px] mx-6 mt-4 rounded-lg bg-surface-secondary/40 animate-pulse" />
       ) : model.n === 0 ? (
         <div className="h-[176px] mx-6 mt-4 flex items-center justify-center text-[12.5px] text-text-tertiary">—</div>

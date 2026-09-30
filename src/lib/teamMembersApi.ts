@@ -8,21 +8,42 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 
-/** user_id → hourly rate in cents, for the current org. */
+export interface RemunerationMembre {
+  teamMemberId: string;
+  userId: string | null;
+  hourlyRateCents: number;
+  labourCostHourly: number | null;
+  birthDate: string | null;
+}
+
+/**
+ * Taux horaires et date de naissance : ces colonnes ne sont PAS lisibles en direct (grants par
+ * colonne, migration 20261004300300). La base rend sa propre fiche, ou toute l'équipe avec
+ * team.update / financial.view_margins / financial.view_reports (date de naissance d'un autre : team.update seulement).
+ */
+export async function fetchRemunerations(orgId?: string): Promise<RemunerationMembre[]> {
+  const p_org = orgId ?? await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase.rpc('membres_remuneration', { p_org });
+  if (error) throw error;
+  return ((data || []) as Array<{ team_member_id: string; user_id: string | null; hourly_rate_cents: number | null; labour_cost_hourly: number | string | null; birth_date: string | null }>).map((r) => ({
+    teamMemberId: r.team_member_id,
+    userId: r.user_id,
+    hourlyRateCents: Number(r.hourly_rate_cents) || 0,
+    labourCostHourly: r.labour_cost_hourly == null ? null : Number(r.labour_cost_hourly),
+    birthDate: r.birth_date,
+  }));
+}
+
+/** user_id → hourly rate in cents, for the current org (only the rows the caller may see). */
 export async function fetchHourlyRates(): Promise<Record<string, number>> {
   try {
-    const orgId = await getCurrentOrgIdOrThrow();
-    const { data, error } = await supabase
-      .from('team_members')
-      .select('user_id, hourly_rate_cents')
-      .eq('org_id', orgId);
-    if (error) throw error;
     const map: Record<string, number> = {};
-    for (const r of (data || []) as Array<{ user_id: string | null; hourly_rate_cents: number | null }>) {
-      if (r.user_id) map[r.user_id] = Number(r.hourly_rate_cents) || 0;
+    for (const r of await fetchRemunerations()) {
+      if (r.userId) map[r.userId] = r.hourlyRateCents;
     }
     return map;
-  } catch {
+  } catch (err) {
+    console.error('fetchHourlyRates failed:', err);
     return {};
   }
 }
