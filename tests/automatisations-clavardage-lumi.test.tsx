@@ -41,11 +41,13 @@ const touche = (el: Element, key: string, shiftKey = false) =>
   act(() => { el.dispatchEvent(new KeyboardEvent('keydown', { key, shiftKey, bubbles: true })); });
 
 describe('avant le premier message : la carte au centre', () => {
-  it('invite à décrire, sans panneau latéral, et dit que c’est déduit du budget Lumi', () => {
+  it('invite à décrire, sans panneau latéral, et dit que c’est déduit des crédits Lumi', () => {
     const { hote } = rendre();
     expect(hote.textContent).toContain('Décris ton automatisation à Lumi');
     expect(hote.querySelector('aside')).toBeNull();
-    expect(hote.textContent).toContain('Déduit de ton budget Lumi');
+    expect(hote.textContent).toContain('Déduit de tes crédits Lumi');
+    // Crédits Lumi (2026-09-30) : plus de « budget », jamais de dollars.
+    expect(hote.textContent).not.toMatch(/budget|\$/i);
   });
 
   it('Entrée envoie une demande assez longue ; Maj+Entrée non', () => {
