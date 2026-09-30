@@ -82,3 +82,24 @@ describe('A-08 — des journaux illisibles ne deviennent pas « Aucune erreur »
     expect(tuile('Automatisations publiées')).toBe('—');
   });
 });
+
+describe('A-14 — Vue d’ensemble : la corbeille ne compte pas, « à vérifier » mène au bon onglet', () => {
+  it('le total ignore les automatisations à la corbeille', async () => {
+    api.regles.mockImplementation(async () => [
+      { id: 'a', is_active: true, deleted_at: null },
+      { id: 'b', is_active: false, deleted_at: null },
+      { id: 'c', is_active: false, deleted_at: '2026-09-29T00:00:00Z' },
+    ]);
+    await rendre();
+    expect(tuile('Total des automatisations')).toBe('2');
+    expect(tuile('Automatisations publiées')).toBe('1');
+  });
+
+  it('« Voir les automatisations à vérifier » ouvre l’onglet « À vérifier »', async () => {
+    api.echecs.mockImplementation(async () => [{ id: 'x', automation_rule_id: 'a', action_type: 'send_sms', result_error: 'boom', entity_type: null, created_at: '' }]);
+    await rendre();
+    const b = Array.from(container.querySelectorAll('button')).find((x) => x.textContent?.includes('Voir les automatisations à vérifier'));
+    act(() => { b?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(naviguer).toHaveBeenCalledWith('/automations?onglet=verifier');
+  });
+});

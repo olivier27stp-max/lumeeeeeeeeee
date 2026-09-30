@@ -124,10 +124,10 @@ afterEach(() => {
   container.remove();
 });
 
-async function rendre() {
+async function rendre(chemin = '/automations') {
   await act(async () => {
     root.render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[chemin]}>
         <LanguageProvider>
           <Automations />
         </LanguageProvider>
@@ -201,5 +201,23 @@ describe('A-10 — double Entrée sur « Nouveau dossier » : un seul dossier, a
     expect(dossierMock).toHaveBeenCalledTimes(1);
     expect(toasts.erreur).toEqual([]);
     expect(toasts.succes.join(' | ')).toContain('Relances');
+  });
+});
+
+// ─── A-14 (liste) ───────────────────────────────────────────────
+
+describe('A-14 — /automations?onglet=verifier ouvre l’onglet « À vérifier »', () => {
+  it('l’onglet demandé par l’adresse est sélectionné', async () => {
+    reglesServies = [regle()];
+    await rendre('/automations?onglet=verifier');
+    const actif = container.querySelector('[role="tab"][aria-selected="true"]');
+    expect(actif?.textContent).toContain('À vérifier');
+  });
+
+  it('une valeur inconnue retombe sur « Toutes »', async () => {
+    reglesServies = [regle()];
+    await rendre('/automations?onglet=nimporte');
+    const actif = container.querySelector('[role="tab"][aria-selected="true"]');
+    expect(actif?.textContent).toContain('Toutes');
   });
 });

@@ -60,7 +60,12 @@ export default function AutomationsApercu() {
     return () => { vivant = false; };
   }, []);
 
-  const publiees = rules.filter((r) => r.is_active).length;
+  /*
+   * La corbeille ne compte pas (audit V2, A-14) : la tuile affichait 142
+   * pour 141 automatisations vivantes et 1 supprimée.
+   */
+  const vivantes = rules.filter((r) => !r.deleted_at);
+  const publiees = vivantes.filter((r) => r.is_active).length;
 
   /**
    * Les 7 dernières semaines, du lundi au dimanche.
@@ -117,7 +122,7 @@ export default function AutomationsApercu() {
             {/* Les trois tuiles */}
             <div className="grid gap-3 sm:grid-cols-3">
               {[
-                { l: fr ? 'Total des automatisations' : 'Total workflows', v: reglesIllisibles ? '—' : rules.length },
+                { l: fr ? 'Total des automatisations' : 'Total workflows', v: reglesIllisibles ? '—' : vivantes.length },
                 { l: fr ? 'Automatisations publiées' : 'Published workflows', v: reglesIllisibles ? '—' : publiees },
                 { l: fr ? 'Total des déclenchements' : 'Total enrollments', v: activite.total },
               ].map((t) => (
@@ -220,7 +225,7 @@ export default function AutomationsApercu() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => navigate('/automations')}
+                    onClick={() => navigate('/automations?onglet=verifier')}
                     className="glass-button text-[12px]"
                   >
                     {fr ? 'Voir les automatisations à vérifier' : 'See workflows needing review'}

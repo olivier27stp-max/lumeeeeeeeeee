@@ -11,7 +11,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Zap, Clock, Mail, Bell, FileText, CalendarClock, MessageSquare,
   ToggleLeft, ToggleRight, Loader2, Send, UserPlus, AlertTriangle,
@@ -425,8 +425,16 @@ export default function Automations() {
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
   const [savingLang, setSavingLang] = useState(false);
 
-  /** Onglet de la liste — les quatre de GHL. */
-  const [onglet, setOnglet] = useState<'toutes' | 'verifier' | 'corbeille' | 'modeles'>('toutes');
+  /**
+   * Onglet de la liste — les quatre de GHL. `?onglet=verifier` l'ouvre
+   * directement : c'est là que mène « Voir les automatisations à vérifier »
+   * de la Vue d'ensemble, qui atterrissait sur « Toutes » (audit V2, A-14).
+   */
+  const [parametres] = useSearchParams();
+  const [onglet, setOnglet] = useState<'toutes' | 'verifier' | 'corbeille' | 'modeles'>(() => {
+    const demande = parametres.get('onglet');
+    return demande === 'verifier' || demande === 'corbeille' || demande === 'modeles' ? demande : 'toutes';
+  });
   /** Menu « Créer » : les cinq départs de GHL. */
   const [menuCreer, setMenuCreer] = useState(false);
   const [bibliotheque, setBibliotheque] = useState(false);
