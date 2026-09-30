@@ -149,6 +149,7 @@ exclu('delete_deal', 'seule carte du pipeline de l’org QA (irréversible)');
 exclu('process_request_submission', 'aucune demande de formulaire sur staging');
 exclu('delete_request_submission', 'aucune demande de formulaire sur staging');
 exclu('merge_clients', 'déjà exécuté par le seed (fusion Gagnon/Bouchard)');
+exclu('apply_day_optimization', 'exige l’empreinte d’une proposition fraîche (propose_day_optimization) ; couvert de bout en bout par tests/e2e/agenda (accepter, refuser, périmée, double clic)');
 
 // ── Jobs ──
 await ex('create_job', () => S.client && { title: 'Exec job', client_id: S.client, scheduled_at: heure(3, 9), end_at: heure(3, 11), line_items: [{ name: 'Lavage', qty: 1, unit_price_cents: 10000 }] }, (r) => { S.job = trouver(r, null, 'job_id', 'id'); });

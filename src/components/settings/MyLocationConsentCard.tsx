@@ -7,13 +7,13 @@ import { getMyLocationConsent, setMyLocationConsent } from '../../lib/locationCo
 const COPY = {
   fr: {
     title: 'Partager ma position',
-    desc: 'Afficher votre position en temps réel sur les cartes de dispatch et de vente pendant que vous êtes connecté. Vous pouvez changer d’avis à tout moment.',
+    desc: 'Afficher votre position en temps réel sur les cartes de dispatch et de vente pendant vos heures pointées. Vous pouvez changer d’avis à tout moment.',
     saved: 'Réglage enregistré',
     error: 'Échec de l’enregistrement',
   },
   en: {
     title: 'Share my location',
-    desc: 'Show your live position on the dispatch & sales maps while you are signed in. You can change your mind at any time.',
+    desc: 'Show your live position on the dispatch & sales maps while you are clocked in. You can change your mind at any time.',
     saved: 'Setting saved',
     error: 'Failed to save',
   },

@@ -88,6 +88,8 @@ import ClientPinMiniMap, { type ClientMapPin } from '../components/map-d2d/Clien
 import { getPins } from '../lib/fieldSalesApi';
 import { SignedLink } from '../components/ui/SignedMedia';
 import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
+import { useFuseauEntreprise, versMurale, instantDepuisSaisie } from '../lib/fuseauEntreprise';
+import { useCurrentOrgId } from '../contexts/CompanyContext';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface ScheduleEvent {
@@ -143,6 +145,8 @@ interface ClientInfo {
 // ─── Component ───────────────────────────────────────────────────────
 export default function JobDetails() {
   const { t, language } = useTranslation();
+  // Les visites s'affichent et se saisissent à l'heure de l'ENTREPRISE (audit Agenda C2).
+  const fuseau = useFuseauEntreprise(useCurrentOrgId());
   const uid = useId();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -411,11 +415,12 @@ export default function JobDetails() {
         .eq('job_id', id)
         .is('deleted_at', null)
         .order('start_at', { ascending: true });
-      setVisits((data as ScheduleEvent[]) || []);
+      // Heure murale de l'entreprise : même heure que dans le calendrier, peu importe le navigateur.
+      setVisits(((data as ScheduleEvent[]) || []).map((v) => ({ ...v, start_at: versMurale(v.start_at, fuseau), end_at: versMurale(v.end_at, fuseau) })));
     } catch (err: any) {
       console.warn('Failed to load schedule events:', err?.message);
     }
-  }, [id]);
+  }, [id, fuseau]);
 
   useEffect(() => {
     void loadVisits();
@@ -455,8 +460,8 @@ export default function JobDetails() {
       toast.error(language === 'fr' ? 'Date et heures requises.' : 'Date and times are required.');
       return;
     }
-    const start = new Date(`${editVisitDate}T${editVisitAnytime ? ANYTIME_START_TIME : editVisitStart}`);
-    const end = new Date(`${editVisitDate}T${editVisitAnytime ? ANYTIME_END_TIME : editVisitEnd}`);
+    const start = new Date(instantDepuisSaisie(editVisitDate, editVisitAnytime ? ANYTIME_START_TIME : editVisitStart, fuseau));
+    const end = new Date(instantDepuisSaisie(editVisitDate, editVisitAnytime ? ANYTIME_END_TIME : editVisitEnd, fuseau));
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
       toast.error(language === 'fr' ? "L'heure de fin doit être après le début." : 'End time must be after the start.');
       return;
@@ -478,6 +483,7 @@ export default function JobDetails() {
         startAt: start.toISOString(),
         endAt: end.toISOString(),
         teamId: editVisitTeamId || null,
+        timezone: fuseau,
       });
       toast.success(language === 'fr' ? 'Visite mise à jour.' : 'Visit updated.');
       setEditingVisitId(null);

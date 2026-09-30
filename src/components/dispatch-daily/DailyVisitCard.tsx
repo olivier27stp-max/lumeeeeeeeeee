@@ -51,6 +51,7 @@ export default function DailyVisitCard({
       role="button"
       tabIndex={0}
       title={tooltip}
+      data-visite={ev.id}
       className={cn(
         'group/daily-card absolute select-none overflow-hidden rounded-lg border border-border bg-surface text-left',
         'transition-shadow',

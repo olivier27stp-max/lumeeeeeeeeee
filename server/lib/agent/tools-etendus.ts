@@ -1224,18 +1224,35 @@ const getTeamLocations: AgentTool = {
   declaration: {
     name: 'get_team_locations',
     description:
-      'Last known GPS positions of team members currently tracked (fresh within 20 minutes). '
-      + 'Only members who consented to tracking in Lume appear — the same consent rules as the live map.',
+      'Last known GPS positions of team members currently CLOCKED IN (fresh within 20 minutes). '
+      + 'Only members who consented to tracking and are on the clock appear (Loi 25).',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
     const fraicheur = new Date(Date.now() - 20 * 60_000).toISOString();
-    const { data, error } = await ctx.client
+    const { data: brut, error } = await ctx.client
       .from('tracking_live_locations')
-      .select('user_id, latitude, longitude, is_moving, tracking_status, job_id, updated_at')
+      .select('user_id, session_id, latitude, longitude, is_moving, tracking_status, job_id, updated_at')
       .eq('org_id', ctx.orgId)
       .gte('updated_at', fraicheur);
     if (error) return erreurOutil('gps', error);
+
+    // Loi 25 (audit Agenda 2026-09-30) : seulement pendant les heures POINTÉES —
+    // la session de suivi doit être active et liée à un pointage.
+    const sessions = [...new Set((brut || []).map((d) => d.session_id).filter(Boolean))] as string[];
+    const actives = new Set<string>();
+    if (sessions.length) {
+      const { data: s, error: errS } = await ctx.client
+        .from('tracking_sessions')
+        .select('id')
+        .eq('org_id', ctx.orgId)
+        .eq('status', 'active')
+        .not('time_entry_id', 'is', null)
+        .in('id', sessions);
+      if (errS) return erreurOutil('gps', errS);
+      for (const x of s || []) actives.add(String(x.id));
+    }
+    const data = (brut || []).filter((d) => d.session_id && actives.has(String(d.session_id)));
 
     const ids = [...new Set((data || []).map((d) => d.user_id))];
     const noms = new Map<string, string>();
@@ -1255,7 +1272,7 @@ const getTeamLocations: AgentTool = {
         is_moving: d.is_moving, status: d.tracking_status,
         job_id: d.job_id, updated_at: d.updated_at,
       })),
-      note: 'Positions récentes seulement (20 min). Un membre sans consentement de localisation n\'apparaît jamais.',
+      note: 'Positions récentes (20 min) des membres POINTÉS seulement. Sans pointage ou sans consentement, un membre n\'apparaît jamais.',
     };
   },
 };
@@ -2427,48 +2444,109 @@ type ArretOrdonne = {
   eta_minutes_from_prev: number;
 };
 
-const optimizeRouteTool: AgentTool = {
+/**
+ * « Optimiser la journée » (audit Agenda, 2026-09-30) — un seul outil, qui
+ * remplace optimize_route : il PROPOSE (rien ne bouge), 100 % code, zéro LLM,
+ * sur la matrice de route en cache de l'Agenda. L'application passe par
+ * apply_day_optimization, derrière la carte de confirmation.
+ */
+const proposeDayOptimizationTool: AgentTool = {
   kind: 'read',
   needsIdentity: true,
   declaration: {
-    name: 'optimize_route',
+    name: 'propose_day_optimization',
     description:
-      'Propose the best ORDER to visit a set of jobs to drive less, with distance and drive time. It only '
-      + 'PROPOSES — it does not move anything on the calendar. Give the job ids (from the route of the day '
-      + 'or the jobs list). Use for « organize my stops », « best route for these jobs ».',
+      'Propose a better visit ORDER and new times for a day, per team, to drive less. It only PROPOSES — nothing moves. '
+      + 'Never touches completed / in-progress visits, visits already confirmed to the client, or past times; never changes a visit team. '
+      + 'Use for « optimize my day », « optimise ma journée de demain », « best route ». To apply, call apply_day_optimization with the returned `a_appliquer` arguments.',
     parameters: {
       type: 'object',
       properties: {
-        job_ids: { type: 'array', items: { type: 'string' }, description: 'The jobs to order (their ids).' },
+        date: { type: 'string', description: 'Day to optimize, YYYY-MM-DD in the company time zone (default: today).' },
+        team_id: { type: 'string', description: 'Optional: only this team.' },
       },
-      required: ['job_ids'],
     },
   },
   handler: async (args, ctx) => {
-    const ids = Array.isArray(args.job_ids) ? args.job_ids.map(String).filter(Boolean) : [];
-    if (!ids.length) return { error: 'Donne au moins un job à ordonner (ceux de ta journée).' };
-    let res;
-    try {
-      res = await appelInterne(ctx, '/route-optimization/optimize', { job_ids: ids });
-    } catch (e) {
-      if (e instanceof AppelInterneIncertain) return { error: 'Le calcul de tournée n’a pas répondu — réessaie dans un instant.' };
-      throw e;
-    }
-    if (!res.ok) return { error: res.json?.error || `Optimisation impossible (${res.status}).` };
-    const j = res.json || {};
+    const { proposerJournee, fuseauDe } = await import('../trajets/propositionJournee');
+    const { jourDans } = await import('../trajets/journee');
+    const fuseau = await fuseauDe(ctx.client, ctx.orgId);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || '')) ? String(args.date) : jourDans(new Date().toISOString(), fuseau);
+    const p = await proposerJournee(ctx.client, ctx.orgId, date, args.team_id ? String(args.team_id) : null);
     return {
-      ordre_propose: (j.ordered_jobs || []).map((st: ArretOrdonne) => ({
-        position: st.order,
-        job: st.title,
-        adresse: st.address,
-        km_depuis_precedent: st.distance_km_from_prev,
-        minutes_de_route: st.eta_minutes_from_prev,
-      })),
-      distance_totale_km: j.total_distance_km,
-      temps_de_route_minutes: j.total_drive_minutes,
-      note: 'C’est une proposition d’ordre — rien n’a bougé au calendrier. Dis-moi si tu veux que je replanifie les visites dans cet ordre.',
+      ...p,
+      ...(p.changements.length
+        ? { a_appliquer: { date: p.date, team_id: args.team_id ? String(args.team_id) : null, empreinte: p.empreinte, changements: p.changements.map((c) => ({ visit_id: c.visit_id, apres_debut: c.apres_debut, apres_fin: c.apres_fin })) } }
+        : {}),
+      note: p.deja_optimisee ? 'Ta journée est déjà optimisée : rien à proposer.' : 'Proposition seulement — rien n’a bougé. Pour l’appliquer : apply_day_optimization avec a_appliquer.',
     };
   },
+};
+
+const applyDayOptimizationTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'apply_day_optimization',
+    description:
+      'Apply a day optimization EXACTLY as proposed by propose_day_optimization (pass its `a_appliquer` arguments unchanged). '
+      + 'Refused if the schedule changed since the proposal (then propose again). Always confirmed by the user on a card.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date: { type: 'string' },
+        team_id: { type: 'string' },
+        empreinte: { type: 'string' },
+        changements: { type: 'array', items: { type: 'object', properties: { visit_id: { type: 'string' }, apres_debut: { type: 'string' }, apres_fin: { type: 'string' } } } },
+      },
+      required: ['date', 'empreinte', 'changements'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'apply_day_optimization', args, async () => {
+      const { visitesDuJour, fuseauDe, empreinteDe } = await import('../trajets/propositionJournee');
+      const date = String(args.date || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: 'Date invalide.' };
+      const changements = (Array.isArray(args.changements) ? args.changements : []).map((c: any) => ({
+        visit_id: String(c.visit_id), apres_debut: new Date(String(c.apres_debut)).toISOString(), apres_fin: new Date(String(c.apres_fin)).toISOString(),
+      }));
+      if (!changements.length) return { error: 'Rien à appliquer.' };
+      const fuseau = await fuseauDe(ctx.client, ctx.orgId);
+      const teamId = args.team_id ? String(args.team_id) : null;
+      // Ce qui est appliqué = ce qui a été confirmé : l'empreinte lie l'état du
+      // jour ET les changements. Un écart = horaire modifié depuis → périmée.
+      const visites = await visitesDuJour(ctx.client, ctx.orgId, date, fuseau, teamId ? [teamId] : null);
+      if (empreinteDe(date, ctx.orgId, visites, changements) !== String(args.empreinte)) {
+        return { error: 'proposition_perimee : l’horaire a changé depuis la proposition. Relance « Optimiser la journée » pour une proposition à jour.' };
+      }
+      const parId = new Map(visites.map((v) => [v.id, v]));
+      const p = changements.map((c: any) => {
+        const v = parId.get(c.visit_id)!;
+        return { visit_id: c.visit_id, job_id: v.job_id, avant_debut: v.start_at, avant_fin: v.end_at, apres_debut: c.apres_debut, apres_fin: c.apres_fin };
+      });
+      const { data, error } = await ctx.client.rpc('rpc_appliquer_optimisation', {
+        p_changements: p.map((c: any) => ({ visit_id: c.visit_id, avant_debut: c.avant_debut, avant_fin: c.avant_fin, apres_debut: c.apres_debut, apres_fin: c.apres_fin })),
+        p_timezone: fuseau,
+      });
+      if (error) {
+        if (/proposition_perimee/.test(error.message)) return { error: 'proposition_perimee : une visite a bougé depuis la proposition. Relance « Optimiser la journée ».' };
+        throw error;
+      }
+      // Même suite qu'un glisser-déposer : les rappels automatiques suivent la nouvelle heure.
+      const avertissements: string[] = [];
+      for (const c of p) {
+        const a = await signalerEvenement(ctx, '/automations/events/appointment-rescheduled', { eventId: c.visit_id, jobId: c.job_id, startTime: c.apres_debut });
+        if (a) avertissements.push(a);
+      }
+      return {
+        applied: true,
+        date,
+        // Trace d'audit (agent_actions.resultat) : qui, quand (la ligne), avant → après.
+        changements: p.map((c: any) => ({ visit_id: c.visit_id, avant: { debut: c.avant_debut, fin: c.avant_fin }, apres: { debut: c.apres_debut, fin: c.apres_fin } })),
+        chevauchements: Number((data as any)?.chevauchements ?? 0),
+        ...(avertissements.length ? { warning: avertissements[0] } : {}),
+      };
+    }),
 };
 
 
@@ -3500,7 +3578,8 @@ export const OUTILS_LECTURE_ETENDUS: AgentTool[] = [
   getTopServices,
   listServices,
   findFreeSlotTool,
-  optimizeRouteTool,
+  proposeDayOptimizationTool,
+  applyDayOptimizationTool,
 ];
 
 /** Écriture ajoutée par ce module (les 4 historiques restent dans tools.ts). */

@@ -10,6 +10,7 @@ import {
   elevationSchema,
 } from '../lib/validation';
 import { messageTropDeDemandes } from '../lib/message-429';
+import { pointValide } from '../lib/trajets/matrice';
 
 const router = Router();
 
@@ -278,7 +279,7 @@ router.post('/geocode-job', validate(geocodeJobSchema), async (req, res) => {
 
     const { data: jobRow, error: jobError } = await client
       .from('jobs')
-      .select('id,org_id,property_address,address')
+      .select('id,org_id,property_address,address,latitude,longitude,geocode_status,property_id')
       .eq('id', jobId)
       .eq('org_id', orgId)
       .is('deleted_at', null)
@@ -286,6 +287,27 @@ router.post('/geocode-job', validate(geocodeJobSchema), async (req, res) => {
 
     if (jobError) throw jobError;
     if (!jobRow) return res.status(404).json({ error: 'Job not found' });
+
+    // Audit Agenda (2026-09-30) : le navigateur appelle cette route à CHAQUE
+    // enregistrement de job, et chaque appel payait un géocodage (Google en
+    // premier). Une adresse modifiée remet les coordonnées à null
+    // (jobsApi) : des coordonnées présentes = adresse inchangée, rien à refaire.
+    const j = jobRow as { latitude?: unknown; longitude?: unknown; geocode_status?: string | null; property_id?: string | null };
+    if (j.geocode_status === 'ok' && pointValide(j.latitude, j.longitude)) {
+      return res.json({ ok: true, deja: true });
+    }
+    // La propriété du travail est déjà géocodée (saisie d'adresse) : on la reprend, sans appel.
+    if (j.property_id) {
+      const { data: prop } = await client.from('properties').select('latitude,longitude').eq('id', j.property_id).eq('org_id', orgId).maybeSingle();
+      const pt = pointValide((prop as any)?.latitude, (prop as any)?.longitude);
+      if (pt) {
+        const { error: copieErr } = await client.from('jobs')
+          .update({ latitude: pt.lat, longitude: pt.lng, geocode_status: 'ok', geocoded_at: new Date().toISOString() })
+          .eq('id', jobId).eq('org_id', orgId);
+        if (copieErr) throw copieErr;
+        return res.json({ ok: true, source: 'propriete' });
+      }
+    }
 
     const address = normalizeAddress((jobRow as any).property_address || (jobRow as any).address || '');
     if (!address) {
@@ -299,14 +321,16 @@ router.post('/geocode-job', validate(geocodeJobSchema), async (req, res) => {
     }
 
     const geocoded = await geocodeAddress(address);
-    if (!geocoded) {
+    // Un résultat « approximatif » (la ville, pas l'adresse) plaçait la job au
+    // centre de la ville : elle doit plutôt apparaître dans « adresses à corriger ».
+    if (!geocoded || geocoded.precision === 'approximate') {
       const { error: updateError } = await client
         .from('jobs')
-        .update({ geocode_status: 'failed', geocoded_at: new Date().toISOString() })
+        .update({ geocode_status: 'failed', geocoded_at: new Date().toISOString(), latitude: null, longitude: null })
         .eq('id', jobId)
         .eq('org_id', orgId);
       if (updateError) throw updateError;
-      return res.status(422).json({ ok: false, reason: 'geocode_not_found' });
+      return res.status(422).json({ ok: false, reason: geocoded ? 'geocode_approximate' : 'geocode_not_found' });
     }
 
     const { error: updateError } = await client

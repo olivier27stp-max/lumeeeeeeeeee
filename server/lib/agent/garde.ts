@@ -87,7 +87,8 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   // Catalogue / planification.
   list_services:             { cle: 'jobs.read',          capacite: 'le catalogue de services' },
   find_free_slot:            { cle: 'calendar.read',      capacite: 'la recherche de créneaux' },
-  optimize_route:            { cle: 'jobs.read',          capacite: "l'optimisation de tournée" },
+  propose_day_optimization:  { cle: 'calendar.read',      capacite: "l'optimisation de la journée" },
+  apply_day_optimization:    { cle: 'calendar.update',    capacite: 'la replanification du calendrier' },
   // Courriel libre : envoi au nom de l'entreprise (la route exige owner/admin).
   send_email:                { cle: 'messages.send',      capacite: "l'envoi de courriels" },
   // Item 3 (B6) : retenir ou oublier modifie le prompt de TOUTE l'org (org_knowledge « assistant »),

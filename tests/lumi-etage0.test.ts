@@ -95,6 +95,11 @@ describe('les suggestions de Lumi sont des actions', () => {
     const suggestions = lu('src/lib/lumiSuggestions.ts');
     const actions = [...suggestions.matchAll(/action: '([a-z-]+)'/g)].map((m) => m[1]);
     expect(actions.length).toBeGreaterThanOrEqual(4);
+    // « optimiser-journee » n'est pas une suggestion : c'est l'action du bouton
+    // « Optimiser la journée » du Calendrier (lien /lumi?action=…), traitée à part
+    // par /lumi/action (proposition + carte, audit Agenda 2026-09-30).
+    expect(lu('src/pages/Lumi.tsx')).toContain("action: 'optimiser-journee'");
+    expect(lu('server/routes/lumi.ts')).toContain("z.literal('optimiser-journee')");
     for (const a of actions) expect(IDS_RACCOURCIS).toContain(a);
     const permissions = [...suggestions.matchAll(/permission: '([a-z_.]+)'/g)].map((m) => m[1]);
     expect(permissions.length).toBe(actions.length);

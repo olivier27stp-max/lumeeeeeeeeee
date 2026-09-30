@@ -66,7 +66,13 @@ export interface ApercuMessageLumi {
 }
 export interface FicheClientApercuLumi { id: string; name: string; company: string | null; email: string | null; phone: string | null; address: string | null; since: string | null; jobs: number; quotes: number; invoices: number }
 export interface ApercuFusionLumi { genre: 'fusion'; garder: FicheClientApercuLumi | null; absorber: FicheClientApercuLumi | null }
-export type ApercuLumi = ApercuDocumentLumi | ApercuMessageLumi | ApercuFusionLumi;
+/** « Optimiser la journée » : chaque visite avec son ancienne et sa nouvelle heure, et ce que les clients recevront. */
+export interface ApercuOptimisationLumi {
+  genre: 'optimisation'; date: string; fuseau: string; gain_minutes: number;
+  lignes: Array<{ titre: string; equipe: string; avant: string; apres: string }>;
+  clients: { rappels_replanifies: boolean; automatisations_avis: number };
+}
+export type ApercuLumi = ApercuDocumentLumi | ApercuMessageLumi | ApercuFusionLumi | ApercuOptimisationLumi;
 
 export interface PropositionLumi {
   tool_use_id: string;
@@ -199,7 +205,7 @@ export async function envoyerMessageLumi(
 }
 
 /** Action d'interface (étage 0) : une suggestion cliquée part avec son nom et ses paramètres, jamais en texte à interpréter. */
-export type ActionLumi = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing' | 'top-clients' | 'taches' | 'equipe' | 'devis-attente' | 'ou-equipe' | 'job-numero';
+export type ActionLumi = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing' | 'top-clients' | 'taches' | 'equipe' | 'devis-attente' | 'ou-equipe' | 'job-numero' | 'optimiser-journee';
 export interface SuggestionLumi { label: string; action: ActionLumi; params?: Record<string, string | number | boolean> }
 
 /** Renvoie 'indisponible' (422 : rôle sans accès, outil en échec) pour que la page envoie le texte au modèle à la place. */

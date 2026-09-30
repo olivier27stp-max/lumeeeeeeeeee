@@ -167,6 +167,11 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   // tâche), pas celui de modifier les automatisations — un technicien qui
   // déplace SA visite doit replanifier ses rappels.
   'POST /api/automations/events/appointment-rescheduled': ['jobs.update', 'calendar.update'],
+
+  // ── Agenda et tournées ── (audit Agenda 2026-09-30 : l'optimisation n'avait
+  // aucune permission ; les trajets suivent la lecture du calendrier.)
+  'GET /api/agenda/trajets': 'calendar.read',
+  'POST /api/route-optimization/optimize': 'calendar.update',
   'POST /api/automations/events/client-tagged': ['clients.update', 'leads.update'],
   'POST /api/automations/events/client-untagged': ['clients.update', 'leads.update'],
   // Pas de clé « tâches » : ceux qui travaillent des tâches dans chaque rôle

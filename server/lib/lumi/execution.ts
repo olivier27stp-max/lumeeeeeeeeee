@@ -143,11 +143,18 @@ export async function definirMode(admin: SupabaseClient, orgId: string, userId: 
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Jamais d'office, quel que soit le mode ou la case « toujours confirmer » :
+ * replanifier toute une journée de rendez-vous clients ne part qu'après un
+ * clic sur la carte (audit Agenda 2026-09-30, « Optimiser la journée »).
+ */
+export const TOUJOURS_CARTE: ReadonlySet<string> = new Set(['apply_day_optimization']);
+
 /** Outils qu'un mode autorise d'office, parmi les outils d'écriture connus. */
 export function outilsAutorisesParMode(mode: ModeLumi, outilsEcriture: Iterable<string>, sensibles: ReadonlySet<string> = ECRITURES_SENSIBLES): Set<string> {
   const out = new Set<string>();
   if (mode === 'demander') return out;
-  for (const t of outilsEcriture) if (mode === 'tout' || !sensibles.has(t)) out.add(t);
+  for (const t of outilsEcriture) if ((mode === 'tout' || !sensibles.has(t)) && !TOUJOURS_CARTE.has(t)) out.add(t);
   return out;
 }
 
@@ -158,7 +165,7 @@ export function outilsAutorisesParMode(mode: ModeLumi, outilsEcriture: Iterable<
 export async function autorisationsDe(admin: SupabaseClient, orgId: string, userId: string, outilsEcriture?: Iterable<string>): Promise<Set<string>> {
   const { data, error } = await admin.from('lumi_autorisations').select('tool').eq('org_id', orgId).eq('user_id', userId);
   if (error) { logger.error('[lumi] autorisations illisibles', { error: error.message, orgId }); return new Set(); }
-  const out = new Set((data ?? []).map((r: any) => String(r.tool)));
+  const out = new Set((data ?? []).map((r: any) => String(r.tool)).filter((t) => !TOUJOURS_CARTE.has(t)));
   if (outilsEcriture) {
     const [mode, sensibles] = await Promise.all([modeDe(admin, orgId, userId), ecrituresSensiblesPour(admin, orgId)]);
     for (const t of outilsAutorisesParMode(mode, outilsEcriture, sensibles)) out.add(t);
