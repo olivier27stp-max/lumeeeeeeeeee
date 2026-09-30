@@ -356,8 +356,6 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/referrals/me': 'settings.read',
   'GET /api/referrals/history': 'settings.read',
 
-  // ── Workflows ──
-  'POST /api/workflows/execute-action': 'automations.update',
 };
 
 /**
