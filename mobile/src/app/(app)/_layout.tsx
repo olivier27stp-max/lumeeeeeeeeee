@@ -124,6 +124,10 @@ export default function AppLayout() {
         options={{ headerShown: true, headerTitle: t.mobileNav.sendQuote, headerBackTitle: t.mobileNav.backBack }}
       />
       <Stack.Screen
+        name="quotes/[id]"
+        options={{ headerShown: true, headerTitle: t.mobileNav.quote, headerBackTitle: t.mobileNav.backBack }}
+      />
+      <Stack.Screen
         name="invoices/new"
         options={{ headerShown: true, headerTitle: t.mobileNav.newInvoice, headerBackTitle: t.mobileNav.backBack }}
       />

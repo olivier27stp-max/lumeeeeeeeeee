@@ -135,7 +135,7 @@ export default function CourseScreen() {
 
         {/* Text / link content */}
         {active?.content_type === 'text' ? (
-          <View className="rounded-2xl bg-white p-5">
+          <View className="rounded-2xl bg-surface p-5">
             <Text className="text-base leading-7 text-ink">{stripHtml(active.text_content)}</Text>
           </View>
         ) : null}
@@ -147,7 +147,7 @@ export default function CourseScreen() {
         {active ? (
           <Pressable
             onPress={() => markMut.mutate({ lessonId: active.id, completed: !activeDone })}
-            className={`flex-row items-center justify-between rounded-2xl border px-5 py-4 ${activeDone ? 'border-status-completed/30 bg-status-completed/10' : 'border-surface-border bg-white'}`}
+            className={`flex-row items-center justify-between rounded-2xl border px-5 py-4 ${activeDone ? 'border-status-completed/30 bg-status-completed/10' : 'border-surface-border bg-surface'}`}
           >
             <Text className={`text-sm font-semibold ${activeDone ? 'text-status-completed' : 'text-ink'}`}>
               {activeDone ? t.mobileMisc.completed : t.mobileMisc.markAsComplete}
@@ -161,7 +161,7 @@ export default function CourseScreen() {
         ) : null}
 
         {/* Progress */}
-        <View className="rounded-2xl bg-white p-5">
+        <View className="rounded-2xl bg-surface p-5">
           <View className="mb-2 flex-row items-center justify-between">
             <Text className="text-sm font-bold text-ink">{t.mobileMisc.yourProgress}</Text>
             <Text className={`text-sm font-bold ${pct === 100 ? 'text-status-completed' : 'text-ink'}`}>{pct}%</Text>
@@ -181,7 +181,7 @@ export default function CourseScreen() {
             const open = openModules.has(m.id);
             const modDone = m.lessons.every((l) => doneSet.has(l.id)) && m.lessons.length > 0;
             return (
-              <View key={m.id} className="overflow-hidden rounded-2xl bg-white">
+              <View key={m.id} className="overflow-hidden rounded-2xl bg-surface">
                 <Pressable
                   onPress={() =>
                     setOpenModules((s) => {

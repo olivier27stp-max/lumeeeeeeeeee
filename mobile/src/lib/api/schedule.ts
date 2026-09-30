@@ -176,7 +176,7 @@ export async function listUnscheduledJobs(orgId: string, teamIds?: string[]): Pr
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .is('scheduled_at', null)
-    .in('status', ['draft', 'Draft'])
+    .eq('status', 'draft')
     .order('created_at', { ascending: false });
 
   if (teamIds && teamIds.length > 0) {
@@ -205,7 +205,7 @@ export async function listUnassignedUnscheduledJobs(orgId: string): Promise<Unsc
     .is('deleted_at', null)
     .is('scheduled_at', null)
     .is('team_id', null)
-    .in('status', ['draft', 'Draft'])
+    .eq('status', 'draft')
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []).map((row: any) => ({

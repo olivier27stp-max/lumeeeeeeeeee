@@ -64,7 +64,7 @@ export default function CommissionFiltersBar({
   ];
 
   return (
-    <View className="gap-2 rounded-2xl bg-white p-3">
+    <View className="gap-2 rounded-2xl bg-surface p-3">
       {/* Month stepper */}
       <View className="flex-row items-center justify-between">
         <Pressable
@@ -90,7 +90,7 @@ export default function CommissionFiltersBar({
             onPress={() => onChange({ ...value, status: o.value })}
             className={`rounded-xl px-3 py-1.5 ${value.status === o.value ? 'bg-ink' : 'bg-surface-sunken'}`}
           >
-            <Text className={`text-xs font-semibold ${value.status === o.value ? 'text-white' : 'text-ink-muted'}`}>
+            <Text className={`text-xs font-semibold ${value.status === o.value ? 'text-onAction' : 'text-ink-muted'}`}>
               {o.label}
             </Text>
           </Pressable>
@@ -104,7 +104,7 @@ export default function CommissionFiltersBar({
             onPress={() => onChange({ ...value, repId: undefined })}
             className={`rounded-xl px-3 py-1.5 ${!value.repId ? 'bg-ink' : 'bg-surface-sunken'}`}
           >
-            <Text className={`text-xs font-semibold ${!value.repId ? 'text-white' : 'text-ink-muted'}`}>{c.allReps}</Text>
+            <Text className={`text-xs font-semibold ${!value.repId ? 'text-onAction' : 'text-ink-muted'}`}>{c.allReps}</Text>
           </Pressable>
           {reps.map((r) => (
             <Pressable
@@ -112,7 +112,7 @@ export default function CommissionFiltersBar({
               onPress={() => onChange({ ...value, repId: r.id })}
               className={`rounded-xl px-3 py-1.5 ${value.repId === r.id ? 'bg-ink' : 'bg-surface-sunken'}`}
             >
-              <Text className={`text-xs font-semibold ${value.repId === r.id ? 'text-white' : 'text-ink-muted'}`}>
+              <Text className={`text-xs font-semibold ${value.repId === r.id ? 'text-onAction' : 'text-ink-muted'}`}>
                 {r.label}
               </Text>
             </Pressable>

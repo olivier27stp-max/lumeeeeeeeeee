@@ -77,7 +77,7 @@ export default function PersonalCommissionView({ userId, title, subtitle }: Prop
           <Text className="mt-2 text-sm text-ink-muted">{c.loading}</Text>
         </View>
       ) : error ? (
-        <View className="rounded-2xl bg-white p-5" style={CARD}>
+        <View className="rounded-2xl bg-surface p-5" style={CARD}>
           <Text className="text-sm" style={{ color: '#DC2626' }}>
             {error.message || c.loadFailed}
           </Text>
@@ -86,7 +86,7 @@ export default function PersonalCommissionView({ userId, title, subtitle }: Prop
         <>
           <CommissionStatsCards cards={stats} />
 
-          <View className="overflow-hidden rounded-2xl bg-white" style={CARD}>
+          <View className="overflow-hidden rounded-2xl bg-surface" style={CARD}>
             <View className="border-b border-surface-border px-4 py-3">
               <Text className="text-sm font-bold text-ink">{c.recentCloses}</Text>
             </View>

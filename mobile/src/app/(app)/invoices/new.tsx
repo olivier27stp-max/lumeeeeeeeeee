@@ -6,6 +6,7 @@ import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ClientPicker, PickedClient } from '@/components/ClientPicker';
+import { useChampsCreation } from '@/components/champs/useChampsCreation';
 import { LineItemsEditor } from '@/components/LineItemsEditor';
 import { createInvoice, LineItemInput } from '@/lib/api/billing';
 import { resolveTaxes } from '@/lib/api/taxes';
@@ -105,16 +106,22 @@ export default function NewInvoice() {
     return { subtotal, tax, total: subtotal + tax };
   }, [items, taxRate]);
 
+  const champsPerso = useChampsCreation('invoice');
+
   const saveMut = useMutation({
-    mutationFn: () =>
-      createInvoice({
+    mutationFn: async () => {
+      const facture = await createInvoice({
         orgId: orgId ?? '',
         clientId: client!.id,
         subject: subject.trim(),
         dueDate: dueDate.trim() || null,
         items,
         taxRatePct: parseFloat(taxRate) || 0,
-      }),
+      });
+      // Les valeurs ont besoin de l'id de la facture : elles s'écrivent APRÈS.
+      await champsPerso.enregistrer(facture.id);
+      return facture;
+    },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['invoices'] });
       // After creating → the send-confirmation page.
@@ -122,6 +129,16 @@ export default function NewInvoice() {
     },
     onError: (e: Error) => Alert.alert(t.mobileBilling.couldNotCreateInvoice, e.message),
   });
+
+  /** Un champ obligatoire vide bloque AVANT que la facture existe. */
+  const creerFacture = () => {
+    const erreur = champsPerso.valider();
+    if (erreur) {
+      Alert.alert(t.mobileComp.customFields, erreur);
+      return;
+    }
+    saveMut.mutate();
+  };
 
   if (!(can('invoices.create') || canSeePricing)) return <Redirect href="/(app)/(tabs)" />;
 
@@ -142,7 +159,7 @@ export default function NewInvoice() {
           <Pressable
             key={m}
             onPress={() => { setMode(m); setJob(null); setClient(null); }}
-            className={`flex-1 items-center rounded-xl py-2 ${mode === m ? 'bg-white' : ''}`}
+            className={`flex-1 items-center rounded-xl py-2 ${mode === m ? 'bg-surface' : ''}`}
           >
             <Text className={`text-sm font-semibold ${mode === m ? 'text-ink' : 'text-ink-muted'}`}>
               {m === 'client' ? t.mobileBilling.fromClient : t.mobileBilling.fromJob}
@@ -156,7 +173,7 @@ export default function NewInvoice() {
         <View className="gap-2">
           <Input label={t.mobileBilling.searchJob} value={jobSearch} onChangeText={setJobSearch} placeholder={t.mobileBilling.searchJobPlaceholder} />
           {filteredJobs.slice(0, 12).map((j) => (
-            <Pressable key={j.id} onPress={() => pickJob(j)} className="rounded-xl border border-surface-border bg-white px-4 py-3">
+            <Pressable key={j.id} onPress={() => pickJob(j)} className="rounded-xl border border-surface-border bg-surface px-4 py-3">
               <View className="flex-row items-center justify-between gap-2">
                 <Text className="flex-1 text-sm font-semibold text-ink" numberOfLines={1}>{j.title}</Text>
                 {canSeePricing ? (
@@ -179,7 +196,7 @@ export default function NewInvoice() {
           <ClientPicker value={client} onChange={setClient} />
         </>
       ) : job ? (
-        <View className="flex-row items-center justify-between rounded-2xl bg-white p-4">
+        <View className="flex-row items-center justify-between rounded-2xl bg-surface p-4">
           <View>
             <Text className="text-[11px] uppercase text-ink-subtle">{t.mobileBilling.fromJob}</Text>
             <Text className="text-base font-semibold text-ink">{job.title}</Text>
@@ -204,15 +221,17 @@ export default function NewInvoice() {
 
       <Input label={t.mobileBilling.taxRate} value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
 
-      <View className="gap-1 rounded-2xl bg-white p-4">
+      <View className="gap-1 rounded-2xl bg-surface p-4">
         <Row label={t.mobileBilling.subtotal} value={formatCurrencyCents(totals.subtotal, 'CAD')} />
         <Row label={t.mobileBilling.tax} value={formatCurrencyCents(totals.tax, 'CAD')} />
         <Row label={t.mobileBilling.total} value={formatCurrencyCents(totals.total, 'CAD')} bold />
       </View>
 
+      {champsPerso.bloc}
+
       <Button
         title={t.mobileBilling.createInvoice}
-        onPress={() => saveMut.mutate()}
+        onPress={creerFacture}
         loading={saveMut.isPending}
         disabled={!client || items.length === 0 || !orgId}
       />

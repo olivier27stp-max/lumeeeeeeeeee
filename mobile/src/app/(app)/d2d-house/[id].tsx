@@ -174,7 +174,7 @@ export default function HouseDetail() {
                 key={a.type}
                 disabled={logMut.isPending}
                 onPress={() => logAction({ type: a.type, status: a.status })}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2"
+                className="rounded-full border border-slate-300 bg-surface px-4 py-2"
               >
                 <Text className="text-sm text-ink">{d2d[a.labelKey]}</Text>
               </Pressable>

@@ -6,62 +6,129 @@ import { formatCurrencyCents } from '../format';
 
 export interface DashboardStats {
   invoicedCents: number; // total invoiced in the period
-  paidCents: number; // collected in the period (total − remaining balance)
+  paidCents: number; // money actually received in the period (payments table)
   outstandingCents: number; // ALL open balances (not period-bound)
   invoiceCount: number; // invoices in the period
   paidInvoiceCount: number; // fully-paid invoices in the period
-  jobsCompleted: number; // jobs completed in the period
+  jobsToday: number; // jobs on today's schedule
   quotesPending: number; // quotes still awaiting a client decision (all-time)
+}
+
+/** Payment rows in these states mean no money arrived.
+ *
+ * The taxonomy drifted across integrations — Stripe writes 'succeeded', PayPal
+ * maps COMPLETED to 'succeeded', other paths write 'completed'. Listing what to
+ * exclude rather than what to include means a new provider spelling its success
+ * state differently still counts, instead of silently reporting zero. */
+const NOT_RECEIVED = new Set(['pending', 'failed', 'refunded', 'canceled', 'cancelled', 'unknown']);
+
+const PAGE = 1000; // PostgREST returns at most 1000 rows per request
+
+/** Read every row of a filtered table, page by page.
+ *
+ * These totals used to be summed from a single unpaginated request, so past
+ * 1000 invoices the money was added up from a slice of the books — understated,
+ * with no error anywhere. Silent wrong numbers are worse than no numbers.
+ */
+async function fetchAll<T>(
+  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await build(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < PAGE) return out;
+  }
 }
 
 export async function getDashboard(orgId: string, periodStartISO: string): Promise<DashboardStats> {
   // Sans `.is('deleted_at', null)` les chiffres de l'accueil comptent les
   // documents supprimés depuis le bureau.
-  const { data: inv, error } = await supabase
-    .from('invoices')
-    .select('total_cents, balance_cents, issued_at, created_at')
-    .eq('org_id', orgId)
-    .is('deleted_at', null);
-  if (error) throw new Error(error.message);
+  const rows = await fetchAll<any>((from, to) =>
+    supabase
+      .from('invoices')
+      .select('total_cents, balance_cents, issued_at, created_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .range(from, to),
+  );
 
-  const rows = (inv ?? []) as any[];
   let invoicedCents = 0;
-  let paidCents = 0;
   let outstandingCents = 0;
   let invoiceCount = 0;
   let paidInvoiceCount = 0;
+
+  // Compare instants, not strings: PostgREST renders timestamptz as
+  // `...+00:00` while toISOString() ends in `.000Z`, so a row landing on the
+  // exact boundary second sorted the wrong way under `>=` on text.
+  const periodStartMs = Date.parse(periodStartISO);
 
   for (const r of rows) {
     const total = r.total_cents ?? 0;
     const balance = r.balance_cents ?? 0;
     if (balance > 0) outstandingCents += balance; // all-time outstanding
     const when = r.issued_at ?? r.created_at;
-    if (when && when >= periodStartISO) {
+    const whenMs = when ? Date.parse(when) : NaN;
+    if (!Number.isNaN(whenMs) && whenMs >= periodStartMs) {
       invoicedCents += total;
       invoiceCount += 1;
-      paidCents += Math.max(0, total - balance);
       if (balance <= 0) paidInvoiceCount += 1;
     }
   }
 
-  const { data: jobs, error: jobsErr } = await supabase
+  // "Collected" now means money that actually arrived during the period, read
+  // from the payments ledger. It used to be (total − balance) over invoices
+  // ISSUED in the period, so a client settling last month's invoice today was
+  // invisible — the headline under-reported every business that gets paid late.
+  // `payment_date` is the column every writer fills (server/lib/payments.ts);
+  // `paid_at` on this table is legacy and mostly empty.
+  const payments = await fetchAll<any>((from, to) =>
+    supabase
+      .from('payments')
+      .select('amount_cents, status')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .gte('payment_date', periodStartISO)
+      .range(from, to),
+  );
+  let paidCents = 0;
+  for (const p of payments) {
+    if (NOT_RECEIVED.has(String(p.status ?? '').toLowerCase())) continue;
+    paidCents += p.amount_cents ?? 0;
+  }
+
+  // Today's schedule — more useful in the morning than a count of finished work.
+  // A count, not a page of ids: `head: true` ships no rows and is not capped.
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  const a = dayStart.toISOString();
+  const b = dayEnd.toISOString();
+  const { count: jobsToday, error: jobsErr } = await supabase
     .from('jobs')
-    .select('id')
+    .select('id', { count: 'exact', head: true })
     .eq('org_id', orgId)
-    .eq('status', 'completed')
     .is('deleted_at', null)
-    .gte('completed_at', periodStartISO);
+    // Both columns, because the app's own "today" list reads both (api/jobs.ts):
+    // some jobs carry scheduled_at, others only start_at. Filtering on one would
+    // quietly report fewer jobs than the schedule screen shows.
+    .or(`and(scheduled_at.gte.${a},scheduled_at.lt.${b}),and(start_at.gte.${a},start_at.lt.${b})`);
   if (jobsErr) throw new Error(jobsErr.message);
 
   // Quotes still pending a client decision (sent/draft/pending — not closed).
-  const { data: quotes, error: quotesErr } = await supabase
-    .from('quotes')
-    .select('status')
-    .eq('org_id', orgId)
-    .is('deleted_at', null);
-  if (quotesErr) throw new Error(quotesErr.message);
   const closed = ['approved', 'declined', 'converted', 'expired'];
-  const quotesPending = (quotes ?? []).filter((q: any) => !closed.includes(q.status ?? '')).length;
+  const { count: quotesPending, error: quotesErr } = await supabase
+    .from('quotes')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    // `not.in` alone would drop rows with no status, which the previous
+    // client-side filter counted as pending; the or() keeps them.
+    .or(`status.is.null,status.not.in.(${closed.join(',')})`);
+  if (quotesErr) throw new Error(quotesErr.message);
 
   return {
     invoicedCents,
@@ -69,8 +136,8 @@ export async function getDashboard(orgId: string, periodStartISO: string): Promi
     outstandingCents,
     invoiceCount,
     paidInvoiceCount,
-    jobsCompleted: (jobs ?? []).length,
-    quotesPending,
+    jobsToday: jobsToday ?? 0,
+    quotesPending: quotesPending ?? 0,
   };
 }
 

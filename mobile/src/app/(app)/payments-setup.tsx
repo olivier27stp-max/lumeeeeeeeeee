@@ -24,7 +24,7 @@ function Step({ n, title, body }: { n: number; title: string; body: string }) {
   return (
     <View className="flex-row gap-3">
       <View className="h-7 w-7 items-center justify-center rounded-full bg-ink">
-        <Text className="text-sm font-bold text-white">{n}</Text>
+        <Text className="text-sm font-bold text-onAction">{n}</Text>
       </View>
       <View className="flex-1">
         <Text className="text-sm font-semibold text-ink">{title}</Text>
@@ -110,7 +110,7 @@ export default function PaymentsSetup() {
   return (
     <ScreenContainer scroll>
       {/* Status card */}
-      <View className="rounded-3xl bg-white p-5">
+      <View className="rounded-3xl bg-surface p-5">
         <View className="flex-row items-center gap-2">
           <View
             style={{ width: 10, height: 10, borderRadius: 5 }}
@@ -148,7 +148,7 @@ export default function PaymentsSetup() {
       </View>
 
       {/* How it works */}
-      <View className="mt-5 gap-4 rounded-3xl bg-white p-5">
+      <View className="mt-5 gap-4 rounded-3xl bg-surface p-5">
         <Text className="text-sm font-semibold text-ink">{t.mobileTeam.howItWorks}</Text>
         <Step n={1} title={t.mobileTeam.step1Title} body={t.mobileTeam.step1Body} />
         <Step n={2} title={t.mobileTeam.step2Title} body={t.mobileTeam.step2Body} />
@@ -157,7 +157,7 @@ export default function PaymentsSetup() {
       </View>
 
       {fullyConnected && account ? (
-        <View className="mt-5 gap-2 rounded-3xl bg-white p-5">
+        <View className="mt-5 gap-2 rounded-3xl bg-surface p-5">
           <Text className="text-sm font-semibold text-ink">{t.mobileTeam.accountDetails}</Text>
           <View className="flex-row justify-between">
             <Text className="text-sm text-ink-muted">{t.mobileTeam.charges}</Text>

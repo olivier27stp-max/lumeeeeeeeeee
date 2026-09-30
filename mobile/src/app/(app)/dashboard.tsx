@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { SymbolView } from 'expo-symbols';
-import { Redirect, router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Redirect, router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AppState, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
 import { ActionItem, getActionItems, getDashboard } from '@/lib/api/dashboard';
 import { formatCurrencyCents } from '@/lib/format';
@@ -33,7 +33,7 @@ const SHADOW = { shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shad
 
 function Stat({ label, value, icon, tint }: { label: string; value: string; icon: string; tint?: string }) {
   return (
-    <View className="flex-1 gap-1.5 rounded-2xl bg-white p-4" style={SHADOW}>
+    <View className="flex-1 gap-1.5 rounded-2xl bg-surface p-4" style={SHADOW}>
       <View className="flex-row items-center gap-1.5">
         <SymbolView name={icon as any} tintColor={tint ?? '#A3A3A3'} size={13} resizeMode="scaleAspectFit" />
         <Text className="text-[10px] font-bold uppercase tracking-wide text-ink-subtle">{label}</Text>
@@ -51,18 +51,49 @@ export default function Dashboard() {
   const isManager = role === 'owner' || role === 'admin';
   const [period, setPeriod] = useState<Period>('month');
   const [filter, setFilter] = useState<Filter>('all');
-  const start = useMemo(() => periodStart(period), [period]);
 
-  const { data: stats } = useQuery({
-    queryKey: ['dashboard', orgId, period],
-    queryFn: () => getDashboard(orgId ?? '', start.toISOString()),
+  // `tick` re-dates the window. Without it `periodStart` was computed once per
+  // period choice, so a screen left open across midnight — or across the 1st of
+  // the month — kept totalling the window that had just ended.
+  const [tick, setTick] = useState(0);
+  const retick = useCallback(() => setTick((n) => n + 1), []);
+  useFocusEffect(retick);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') retick();
+    });
+    return () => sub.remove();
+  }, [retick]);
+
+  const start = useMemo(() => periodStart(period), [period, tick]);
+  const startISO = start.toISOString();
+
+  const { data: stats, isRefetching, refetch } = useQuery({
+    // startISO belongs in the key: keyed on 'month' alone, React Query served
+    // last month's cached totals under this month's label — and gcTime keeps
+    // them on disk for 24h, so a restart did not clear them either.
+    queryKey: ['dashboard', orgId, period, startISO],
+    queryFn: () => getDashboard(orgId ?? '', startISO),
     enabled: !!orgId && isManager,
   });
-  const { data: actions } = useQuery({
+  const { data: actions, refetch: refetchActions } = useQuery({
     queryKey: ['dashboard', 'actions', orgId],
     queryFn: () => getActionItems(orgId ?? ''),
     enabled: !!orgId && isManager,
   });
+
+  const onRefresh = useCallback(() => {
+    retick();
+    void refetch();
+    void refetchActions();
+  }, [retick, refetch, refetchActions]);
+
+  // Collected as a share of invoiced. Clamped: a month where old invoices get
+  // settled can collect more than it billed, and a bar past 100% reads as a bug.
+  const collectedPct = Math.min(
+    100,
+    stats && stats.invoicedCents > 0 ? Math.round((stats.paidCents / stats.invoicedCents) * 100) : 0,
+  );
 
   if (!isManager) return <Redirect href="/(app)/(tabs)" />;
 
@@ -83,14 +114,20 @@ export default function Dashboard() {
   ];
 
   return (
-    <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: 40 }}>
+    <ScrollView
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
+      className="flex-1 bg-surface-alt"
+      contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: 40 }}
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor="#A3A3A3" />}
+    >
       {/* Period toggle */}
       <View className="flex-row rounded-2xl bg-surface-sunken p-1">
         {(['day', 'week', 'month'] as Period[]).map((p) => (
           <Pressable
             key={p}
             onPress={() => setPeriod(p)}
-            className={`flex-1 items-center rounded-xl py-2 ${period === p ? 'bg-white' : ''}`}
+            className={`flex-1 items-center rounded-xl py-2 ${period === p ? 'bg-surface' : ''}`}
           >
             <Text className={`text-sm font-semibold ${period === p ? 'text-ink' : 'text-ink-muted'}`}>
               {p === 'day' ? t.mobileMisc.periodDay : p === 'week' ? t.mobileMisc.periodWeek : t.mobileMisc.periodMonth}
@@ -102,7 +139,7 @@ export default function Dashboard() {
       {/* Revenue hero */}
       <View className="gap-1 rounded-3xl bg-ink p-5" style={SHADOW}>
         <Text className="text-[11px] font-bold uppercase tracking-widest text-white/60">{t.mobileMisc.collected.replace('{period}', periodLabel)}</Text>
-        <Text className="text-3xl font-bold text-white" style={{ fontVariant: ['tabular-nums'] }}>
+        <Text className="text-3xl font-bold text-onAction" style={{ fontVariant: ['tabular-nums'] }}>
           {formatCurrencyCents(stats?.paidCents ?? 0, 'CAD')}
         </Text>
         <Text className="text-sm text-white/70">
@@ -111,18 +148,18 @@ export default function Dashboard() {
             .replace('{paid}', String(stats?.paidInvoiceCount ?? 0))
             .replace('{total}', String(stats?.invoiceCount ?? 0))}
         </Text>
+        {/* Share of what was invoiced that has come in — the ratio made visible,
+            without spending another number on it. */}
+        <View className="mt-2 h-[3px] overflow-hidden rounded-sm bg-white/20">
+          <View className="h-full rounded-sm bg-surface" style={{ width: `${collectedPct}%` }} />
+        </View>
       </View>
 
-      {/* Stat grid */}
-      <View className="gap-3">
-        <View className="flex-row gap-3">
-          <Stat label={t.mobileMisc.statUnpaid} value={formatCurrencyCents(stats?.outstandingCents ?? 0, 'CAD')} icon="exclamationmark.circle" tint="#DC2626" />
-          <Stat label={t.mobileMisc.statJobsCompleted} value={String(stats?.jobsCompleted ?? 0)} icon="checkmark.circle" tint="#16A34A" />
-        </View>
-        <View className="flex-row gap-3">
-          <Stat label={t.mobileMisc.statQuotesPending} value={String(stats?.quotesPending ?? 0)} icon="doc.text" tint="#CA8A04" />
-          <Stat label={t.mobileMisc.statInvoices} value={String(stats?.invoiceCount ?? 0)} icon="dollarsign.circle" />
-        </View>
+      {/* Stat grid — three tiles, the ones worth acting on */}
+      <View className="flex-row gap-3">
+        <Stat label={t.mobileMisc.statUnpaid} value={formatCurrencyCents(stats?.outstandingCents ?? 0, 'CAD')} icon="exclamationmark.circle" tint="#DC2626" />
+        <Stat label={t.mobileMisc.statJobsToday} value={String(stats?.jobsToday ?? 0)} icon="calendar" tint="#2563EB" />
+        <Stat label={t.mobileMisc.statQuotesPending} value={String(stats?.quotesPending ?? 0)} icon="doc.text" tint="#CA8A04" />
       </View>
 
       {/* Action Required */}
@@ -139,17 +176,17 @@ export default function Dashboard() {
             <Pressable
               key={f.key}
               onPress={() => setFilter(f.key)}
-              className={`rounded-full px-3.5 py-1.5 ${sel ? 'bg-ink' : 'bg-white'}`}
+              className={`rounded-full px-3.5 py-1.5 ${sel ? 'bg-ink' : 'bg-surface'}`}
               style={SHADOW}
             >
-              <Text className={`text-xs font-semibold ${sel ? 'text-white' : 'text-ink'}`}>{f.label}</Text>
+              <Text className={`text-xs font-semibold ${sel ? 'text-onAction' : 'text-ink'}`}>{f.label}</Text>
             </Pressable>
           );
         })}
       </ScrollView>
 
       {filtered.length === 0 ? (
-        <View className="items-center rounded-3xl bg-white p-8" style={SHADOW}>
+        <View className="items-center rounded-3xl bg-surface p-8" style={SHADOW}>
           <SymbolView name="checkmark.seal" tintColor="#16A34A" size={32} resizeMode="scaleAspectFit" />
           <Text className="mt-2 text-sm text-ink-muted">{t.mobileMisc.nothingToHandle}</Text>
         </View>
@@ -159,7 +196,7 @@ export default function Dashboard() {
             <Pressable
               key={a.id}
               onPress={() => a.route && router.push(a.route as any)}
-              className="flex-row items-center gap-3 rounded-2xl bg-white p-4"
+              className="flex-row items-center gap-3 rounded-2xl bg-surface p-4"
               style={SHADOW}
             >
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: a.tint }} />

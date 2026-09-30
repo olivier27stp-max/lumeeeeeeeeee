@@ -44,13 +44,13 @@ export default function Formations() {
 
       <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 14 }}>
         {error ? (
-          <View className="rounded-3xl bg-white p-6">
+          <View className="rounded-3xl bg-surface p-6">
             <Text className="text-sm font-semibold text-status-late">{t.mobileMisc.couldNotLoadCourses}</Text>
             <Text className="mt-1 text-xs text-ink-muted">{(error as Error).message}</Text>
           </View>
         ) : null}
         {!error && !isLoading && courses.length === 0 ? (
-          <View className="items-center rounded-3xl bg-white p-8">
+          <View className="items-center rounded-3xl bg-surface p-8">
             <SymbolView name="graduationcap" tintColor="#A3A3A3" size={40} resizeMode="scaleAspectFit" />
             <Text className="mt-2 text-sm text-ink-muted">{t.mobileMisc.noCoursesYet}</Text>
           </View>
@@ -59,7 +59,7 @@ export default function Formations() {
           <Pressable
             key={c.id}
             onPress={() => router.push(`/(app)/course/${c.id}`)}
-            className="overflow-hidden rounded-3xl bg-white"
+            className="overflow-hidden rounded-3xl bg-surface"
             style={{ shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } }}
           >
             {/* Cover */}

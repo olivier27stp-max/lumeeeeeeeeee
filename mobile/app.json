@@ -10,7 +10,7 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "supportsTablet": true,
-      "bundleIdentifier": "com.wilheb.lumecrm",
+      "bundleIdentifier": "com.wilheb.lume",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Lume se sert du micro pour la dictée : tu parles à Lumi, ton assistant, et le texte apparaît dans la zone de saisie.",
         "NSCameraUsageDescription": "Lume uses the camera to attach before/after photos to your jobs.",
@@ -81,10 +81,11 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.com.wilheb.lumecrm",
+          "merchantIdentifier": "merchant.com.wilheb.lume",
           "enableGooglePay": false
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

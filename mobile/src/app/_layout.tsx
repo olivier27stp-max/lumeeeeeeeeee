@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider } from '@/lib/auth';
+import { ThemeLumiProvider, useThemeLumi } from '@/lib/lumi/theme';
 import { MembershipProvider } from '@/lib/membership-context';
 import { LanguageProvider } from '@/lib/i18n';
 import { asyncPersister, queryClient } from '@/lib/queryClient';
@@ -28,16 +29,29 @@ export default function RootLayout() {
       >
         <AuthProvider>
           <MembershipProvider>
-            <StatusBar style="dark" />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(app)" />
-            </Stack>
+            <ThemeLumiProvider>
+              <Chrome />
+            </ThemeLumiProvider>
           </MembershipProvider>
         </AuthProvider>
       </PersistQueryClientProvider>
       </LanguageProvider>
     </GestureHandlerRootView>
+  );
+}
+
+/** Séparé du fournisseur pour pouvoir LIRE le thème : la barre d'état doit
+ *  s'inverser en sombre, sinon ses icônes noires disparaissent. */
+function Chrome() {
+  const { c } = useThemeLumi();
+  return (
+    <>
+      <StatusBar style={c.sombre ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(app)" />
+      </Stack>
+    </>
   );
 }

@@ -131,7 +131,7 @@ export function AddressAutocomplete({
       />
       {loading ? <ActivityIndicator color="#A3A3A3" style={{ alignSelf: 'flex-start' }} /> : null}
       {open && results.length > 0 ? (
-        <View className="overflow-hidden rounded-xl border border-surface-border bg-white">
+        <View className="overflow-hidden rounded-xl border border-surface-border bg-surface">
           {results.map((s, i) => (
             <Pressable
               key={`${s.lat}-${s.lon}-${i}`}

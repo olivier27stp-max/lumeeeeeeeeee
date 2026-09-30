@@ -76,7 +76,7 @@ function AccessDenied() {
       <Text className="mt-1 text-center text-sm text-ink-muted">{c.accessDeniedBody}</Text>
       <Pressable
         onPress={() => router.back()}
-        className="mt-6 rounded-xl border border-surface-border bg-white px-4 py-2 active:opacity-70"
+        className="mt-6 rounded-xl border border-surface-border bg-surface px-4 py-2 active:opacity-70"
       >
         <Text className="text-sm font-semibold text-ink">{c.backToDashboard}</Text>
       </Pressable>
@@ -137,7 +137,7 @@ function AdminCommissionsLayout() {
               setTab(tb.key);
               setDrilldownRep(null);
             }}
-            className={`flex-1 items-center rounded-xl py-2 ${tab === tb.key ? 'bg-white' : ''}`}
+            className={`flex-1 items-center rounded-xl py-2 ${tab === tb.key ? 'bg-surface' : ''}`}
           >
             <Text className={`text-xs font-semibold ${tab === tb.key ? 'text-ink' : 'text-ink-muted'}`}>{tb.label}</Text>
           </Pressable>
@@ -247,7 +247,7 @@ function RatesPanel() {
   }
 
   return (
-    <View className="overflow-hidden rounded-2xl bg-white" style={CARD}>
+    <View className="overflow-hidden rounded-2xl bg-surface" style={CARD}>
       <View className="border-b border-surface-border px-4 py-3">
         <Text className="text-sm font-bold text-ink">{c.ratesTitle}</Text>
       </View>
@@ -279,7 +279,7 @@ function RatesPanel() {
                     onChangeText={setDraftPct}
                     keyboardType="decimal-pad"
                     autoFocus
-                    className="w-16 rounded-xl border border-surface-border bg-white px-2 py-1.5 text-right text-sm text-ink"
+                    className="w-16 rounded-xl border border-surface-border bg-surface px-2 py-1.5 text-right text-sm text-ink"
                   />
                   <Text className="text-sm text-ink-muted">%</Text>
                   <Pressable
@@ -290,7 +290,7 @@ function RatesPanel() {
                     {isSaving ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
-                      <Text className="text-xs font-semibold text-white">{c.save}</Text>
+                      <Text className="text-xs font-semibold text-onAction">{c.save}</Text>
                     )}
                   </Pressable>
                   <Pressable

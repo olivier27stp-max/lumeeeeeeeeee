@@ -209,7 +209,7 @@ export default function Timesheets() {
 
         {/* Timer card */}
         <View
-          className="items-center rounded-3xl bg-white py-8"
+          className="items-center rounded-3xl bg-surface py-8"
           style={{ shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } }}
         >
           <View className="flex-row items-center gap-2">
@@ -308,7 +308,7 @@ export default function Timesheets() {
               <Text className="text-base font-bold text-ink">{rosterQ.data!.length}</Text>
             </View>
             <View
-              className="gap-3 rounded-3xl bg-white p-4"
+              className="gap-3 rounded-3xl bg-surface p-4"
               style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } }}
             >
               {rosterQ.data!.map((e: TimeEntryRow) => {
@@ -346,7 +346,7 @@ export default function Timesheets() {
             <Pressable
               key={v}
               onPress={() => setView(v)}
-              className={`flex-1 items-center rounded-xl py-2 ${view === v ? 'bg-white' : ''}`}
+              className={`flex-1 items-center rounded-xl py-2 ${view === v ? 'bg-surface' : ''}`}
             >
               <Text className={`text-sm font-semibold ${view === v ? 'text-ink' : 'text-ink-muted'}`}>
                 {v === 'day' ? t.mobileField.today : t.mobileField.thisWeek}
@@ -362,14 +362,14 @@ export default function Timesheets() {
               <Text className="text-base font-bold text-ink">{fmtHM(todayTotal)}</Text>
             </View>
             {todayEntries.length === 0 ? (
-              <View className="items-center rounded-3xl bg-white p-8">
+              <View className="items-center rounded-3xl bg-surface p-8">
                 <Text className="text-sm text-ink-muted">{t.mobileField.noPunchesToday}</Text>
               </View>
             ) : (
               todayEntries.map((e: TimeEntryRow) => (
                 <View
                   key={e.id}
-                  className="flex-row items-center justify-between rounded-3xl bg-white p-4"
+                  className="flex-row items-center justify-between rounded-3xl bg-surface p-4"
                   style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
                 >
                   <View>
@@ -394,7 +394,7 @@ export default function Timesheets() {
               <Text className="text-base font-bold text-ink">{fmtHM(weekTotal)}</Text>
             </View>
             <View
-              className="gap-3 rounded-3xl bg-white p-5"
+              className="gap-3 rounded-3xl bg-surface p-5"
               style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } }}
             >
               {weekDays.map((d) => (

@@ -172,7 +172,14 @@ export function JobBillingCard({
         const sendable = !['approved', 'declined', 'converted', 'expired'].includes(q.status ?? '');
         return (
           <View key={q.id} className="gap-2">
-            <View className="flex-row items-center justify-between">
+            {/* La ligne ouvre la fiche du devis (ses champs personnalisés y
+                vivent) ; le bouton « Envoyer » reste séparé, en dessous. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={c.quoteLabel.replace('{number}', q.quote_number ?? '')}
+              onPress={() => router.push(`/(app)/quotes/${q.id}` as any)}
+              className="flex-row items-center justify-between"
+            >
               <View>
                 <Text className="text-sm font-medium text-ink">{c.quoteLabel.replace('{number}', q.quote_number ?? '')}</Text>
                 <Text className="text-xs text-ink-muted">{q.status ?? '—'}</Text>
@@ -180,7 +187,7 @@ export function JobBillingCard({
               <Text className="text-sm text-ink">
                 {formatCurrencyCents(q.total_cents ?? 0, currency)}
               </Text>
-            </View>
+            </Pressable>
             {sendable ? (
               <Pressable
                 onPress={() => router.push(`/(app)/quotes/send?id=${q.id}` as any)}
@@ -223,7 +230,7 @@ export function JobBillingCard({
                     onPress={() => sendInvoice(inv.id, inv.invoice_number, due > 0 ? due : inv.total_cents ?? 0)}
                     className="rounded-full bg-brand px-4 py-1.5"
                   >
-                    <Text className="text-xs font-medium text-white">
+                    <Text className="text-xs font-medium text-onAction">
                       {clientPhone ? c.sendInvoice : c.shareInvoice}
                     </Text>
                   </Pressable>

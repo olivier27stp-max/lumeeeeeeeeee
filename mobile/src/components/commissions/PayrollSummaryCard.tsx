@@ -33,7 +33,7 @@ export default function PayrollSummaryCard({ userId, metric = 'deals' }: { userI
 
   if (isLoading) {
     return (
-      <View className="items-center rounded-2xl bg-white py-8" style={CARD}>
+      <View className="items-center rounded-2xl bg-surface py-8" style={CARD}>
         <ActivityIndicator color="#171717" />
       </View>
     );
@@ -41,7 +41,7 @@ export default function PayrollSummaryCard({ userId, metric = 'deals' }: { userI
 
   if (error || !data) {
     return (
-      <View className="rounded-2xl bg-white p-5" style={CARD}>
+      <View className="rounded-2xl bg-surface p-5" style={CARD}>
         <Text className="text-sm text-ink-muted">{(error as Error)?.message || c.noPayrollData}</Text>
       </View>
     );
@@ -52,7 +52,7 @@ export default function PayrollSummaryCard({ userId, metric = 'deals' }: { userI
   const upcoming = (commission.pending || 0) + (commission.approved || 0);
 
   return (
-    <View className="gap-4 rounded-2xl bg-white p-5" style={CARD}>
+    <View className="gap-4 rounded-2xl bg-surface p-5" style={CARD}>
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2.5">
           <View className="h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken">

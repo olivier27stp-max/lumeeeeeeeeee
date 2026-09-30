@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session } from '@supabase/supabase-js';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { useAuth } from './auth';
 import { supabase } from './supabase';
@@ -47,14 +48,16 @@ export function MembershipProvider({ children }: { children: ReactNode }) {
   const [current, setCurrent] = useState<CompanyMembership | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!userId) {
       setCompanies([]);
       setCurrent(null);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // A silent reload keeps the current role on screen while it refetches, so a
+    // foreground refresh never flashes the loading state.
+    if (!opts?.silent) setLoading(true);
 
     // Offline-first: hydrate from cache immediately so the UI has a role.
     const cached = await readCachedMemberships();
@@ -96,6 +99,20 @@ export function MembershipProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // A role changed on the desktop has to reach the phone. `load` above only
+  // runs when the session changes — in practice, at launch — and memberships
+  // are cached in AsyncStorage, so an employee whose role was edited mid-shift
+  // kept the old tabs and the old tech/sales mode until the app was force-quit.
+  // Phones are rarely closed, so that could last days. Refetch every time the
+  // app returns to the foreground; the cached role stays on screen meanwhile.
+  useEffect(() => {
+    if (!userId) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load({ silent: true });
+    });
+    return () => sub.remove();
+  }, [load, userId]);
 
   const switchCompany = useCallback(
     async (orgId: string) => {

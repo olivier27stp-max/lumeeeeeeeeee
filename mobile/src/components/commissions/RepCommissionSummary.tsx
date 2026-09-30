@@ -48,7 +48,7 @@ export default function RepCommissionSummary({ entries, profileMap, onSelectRep 
   const rows = Array.from(byRep.values()).sort((a, b) => b.totalEarned - a.totalEarned);
 
   return (
-    <View className="overflow-hidden rounded-2xl bg-white" style={CARD}>
+    <View className="overflow-hidden rounded-2xl bg-surface" style={CARD}>
       <View className="border-b border-surface-border px-4 py-3">
         <Text className="text-sm font-bold text-ink">{c.salesReps}</Text>
       </View>

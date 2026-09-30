@@ -176,7 +176,7 @@ export default function Conversation() {
             <>
               {showDate ? (
                 <View className="my-1 items-center">
-                  <View className="rounded-full border border-surface-border bg-white px-3 py-1">
+                  <View className="rounded-full border border-surface-border bg-surface px-3 py-1">
                     <Text className="text-[11px] font-medium capitalize text-ink-muted">
                       {dateSeparator(item.created_at)}
                     </Text>
@@ -184,11 +184,11 @@ export default function Conversation() {
                 </View>
               ) : null}
               <View className={`max-w-[80%] ${out ? 'self-end' : 'self-start'}`}>
-                <View className={`rounded-2xl px-3.5 py-2.5 ${out ? 'bg-brand' : 'bg-white'}`}>
+                <View className={`rounded-2xl px-3.5 py-2.5 ${out ? 'bg-brand' : 'bg-surface'}`}>
                   <LinkText
                     text={item.message_text}
-                    className={out ? 'text-white' : 'text-ink'}
-                    linkClassName={out ? 'underline text-white' : 'underline text-brand'}
+                    className={out ? 'text-onAction' : 'text-ink'}
+                    linkClassName={out ? 'underline text-onAction' : 'underline text-brand'}
                   />
                 </View>
                 <View className={`mt-0.5 flex-row items-center gap-1 ${out ? 'self-end' : 'self-start'}`}>
@@ -207,7 +207,7 @@ export default function Conversation() {
       />
 
       <View
-        className="flex-row items-end gap-2 border-t border-surface-border bg-white px-3 pt-2"
+        className="flex-row items-end gap-2 border-t border-surface-border bg-surface px-3 pt-2"
         style={{ paddingBottom: insets.bottom + 8 }}
       >
         <View className="flex-1">

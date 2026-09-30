@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
+import { useChampsCreation } from '@/components/champs/useChampsCreation';
 import { Input } from '@/components/ui/Input';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { ClientPicker, PickedClient } from '@/components/ClientPicker';
@@ -62,7 +63,7 @@ function SelectRow<T extends string>({
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable className="flex-1 justify-end bg-black/30" onPress={() => setOpen(false)}>
-          <View className="rounded-t-3xl bg-white px-4 pb-10 pt-3">
+          <View className="rounded-t-3xl bg-surface px-4 pb-10 pt-3">
             <Text className="px-1 pb-2 text-[11px] font-bold uppercase tracking-widest text-ink-subtle">
               {label}
             </Text>
@@ -551,6 +552,8 @@ export default function NewJob() {
     return n;
   };
 
+  const champsPerso = useChampsCreation('job');
+
   const saveMut = useMutation({
     mutationFn: async () => {
       const job = await createJob(orgId ?? '', {
@@ -649,6 +652,9 @@ export default function NewJob() {
           }),
         });
       }
+      // Les valeurs ont besoin de l'id de la job : elles s'écrivent APRÈS.
+      // Un refus n'annule pas la création, la job existe déjà.
+      await champsPerso.enregistrer(job.id);
       return job;
     },
     onSuccess: async (job) => {
@@ -674,6 +680,16 @@ export default function NewJob() {
     },
     onError: (e: Error) => Alert.alert(t.mobileJobs.couldNotCreateJob, e.message),
   });
+
+  /** Un champ obligatoire vide bloque AVANT qu'une job à moitié remplie existe. */
+  const creerJob = () => {
+    const erreur = champsPerso.valider();
+    if (erreur) {
+      Alert.alert(t.mobileComp.customFields, erreur);
+      return;
+    }
+    saveMut.mutate();
+  };
 
   // The auto-filled appointment details appended under the nice message.
   const bookingDetails = () => {
@@ -811,8 +827,8 @@ export default function NewJob() {
           onPress={() => setShowOnLeaderboard((v) => !v)}
           className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
         >
-          <View className={`h-4 w-4 items-center justify-center rounded border ${showOnLeaderboard ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-            {showOnLeaderboard ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+          <View className={`h-4 w-4 items-center justify-center rounded border ${showOnLeaderboard ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+            {showOnLeaderboard ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
           </View>
           <Text className="text-xs text-ink-muted">{t.modals.showOnLeaderboard}</Text>
         </Pressable>
@@ -835,8 +851,8 @@ export default function NewJob() {
           onPress={() => setAskForReview((v) => !v)}
           className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
         >
-          <View className={`h-4 w-4 items-center justify-center rounded border ${askForReview ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-            {askForReview ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+          <View className={`h-4 w-4 items-center justify-center rounded border ${askForReview ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+            {askForReview ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
           </View>
           <Text className="text-xs text-ink-muted">{t.modals.askForReview}</Text>
         </Pressable>
@@ -866,12 +882,12 @@ export default function NewJob() {
                 <Pressable
                   key={t.id}
                   onPress={() => setAssignedTeam(t.id)}
-                  className={`flex-row items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${sel ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                  className={`flex-row items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${sel ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}
                 >
                   {t.color_hex ? (
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.color_hex }} />
                   ) : null}
-                  <Text className={`text-xs font-semibold ${sel ? 'text-white' : 'text-ink'}`}>{t.name}</Text>
+                  <Text className={`text-xs font-semibold ${sel ? 'text-onAction' : 'text-ink'}`}>{t.name}</Text>
                 </Pressable>
               );
             })}
@@ -886,7 +902,7 @@ export default function NewJob() {
         <SectionLabel>{t.mobileJobs.jobType}</SectionLabel>
         <View className="flex-row rounded-2xl bg-surface-sunken p-1">
           {(['one_off', 'recurring'] as const).map((jt) => (
-            <Pressable key={jt} onPress={() => setJobType(jt)} className={`flex-1 items-center rounded-xl py-2 ${jobType === jt ? 'bg-white' : ''}`}>
+            <Pressable key={jt} onPress={() => setJobType(jt)} className={`flex-1 items-center rounded-xl py-2 ${jobType === jt ? 'bg-surface' : ''}`}>
               <Text className={`text-sm font-semibold ${jobType === jt ? 'text-ink' : 'text-ink-muted'}`}>
                 {jt === 'one_off' ? t.mobileJobs.oneOffTab : t.mobilePlan.tab}
               </Text>
@@ -959,8 +975,8 @@ export default function NewJob() {
                 }}
                 className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
               >
-                <View className={`h-4 w-4 items-center justify-center rounded border ${anytime ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                  {anytime ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+                <View className={`h-4 w-4 items-center justify-center rounded border ${anytime ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+                  {anytime ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
                 </View>
                 <Text className="text-xs text-ink-muted">{t.mobilePlan.anytime}</Text>
               </Pressable>
@@ -987,7 +1003,7 @@ export default function NewJob() {
                     onChangeText={(v) => setEndsAfterCount(v.replace(/[^0-9]/g, '').slice(0, 3))}
                     keyboardType="number-pad"
                     placeholder="12"
-                    className="w-14 rounded-lg border border-surface-border bg-white px-2 py-1.5 text-center text-sm font-semibold text-ink"
+                    className="w-14 rounded-lg border border-surface-border bg-surface px-2 py-1.5 text-center text-sm font-semibold text-ink"
                   />
                   <View className="flex-1">
                     <SelectRow
@@ -1068,9 +1084,9 @@ export default function NewJob() {
                         <Pressable
                           key={m}
                           onPress={() => basculerMois(year, m)}
-                          className={`rounded-lg border px-3 py-2 ${actif ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                          className={`rounded-lg border px-3 py-2 ${actif ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}
                         >
-                          <Text className={`text-xs font-semibold capitalize ${actif ? 'text-white' : 'text-ink-muted'}`}>
+                          <Text className={`text-xs font-semibold capitalize ${actif ? 'text-onAction' : 'text-ink-muted'}`}>
                             {nomMois(m, 'short')}{n > 1 ? ` ×${n}` : ''}
                           </Text>
                         </Pressable>
@@ -1101,7 +1117,7 @@ export default function NewJob() {
                               const [hs, ms] = h.start.split(':').map(Number);
                               const [he, me] = h.end.split(':').map(Number);
                               return (
-                                <View key={v.key} className="flex-row flex-wrap items-center gap-2 rounded-lg bg-white px-2 py-2">
+                                <View key={v.key} className="flex-row flex-wrap items-center gap-2 rounded-lg bg-surface px-2 py-2">
                                   <DateTimePicker
                                     value={new Date(vy, vm - 1, vd)}
                                     mode="date"
@@ -1169,8 +1185,8 @@ export default function NewJob() {
               onPress={() => setCreateContract((v) => !v)}
               className="mt-1 flex-row items-start gap-3 rounded-xl border border-surface-border bg-surface-sunken p-3"
             >
-              <View className={`mt-0.5 h-4 w-4 items-center justify-center rounded border ${createContract ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                {createContract ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              <View className={`mt-0.5 h-4 w-4 items-center justify-center rounded border ${createContract ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+                {createContract ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
               </View>
               <View className="flex-1">
                 <Text className="text-sm text-ink">{t.mobilePlan.createContract}</Text>
@@ -1202,7 +1218,7 @@ export default function NewJob() {
               const [hd, md] = v.debut.split(':').map(Number);
               const [hf, mf] = v.fin.split(':').map(Number);
               return (
-                <View key={v.key} className="gap-2 rounded-2xl border border-surface-border bg-white p-3">
+                <View key={v.key} className="gap-2 rounded-2xl border border-surface-border bg-surface p-3">
                   <View className="flex-row items-center justify-between">
                     <Text className="text-xs font-semibold text-ink-muted">
                       {t.modals.visitLabel} {idx + 1}
@@ -1253,8 +1269,8 @@ export default function NewJob() {
                     onPress={() => modifierVisite(v.key, { anytime: !v.anytime })}
                     className="flex-row items-center gap-2"
                   >
-                    <View className={`h-4 w-4 items-center justify-center rounded border ${v.anytime ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                      {v.anytime ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+                    <View className={`h-4 w-4 items-center justify-center rounded border ${v.anytime ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+                      {v.anytime ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
                     </View>
                     <Text className="text-xs text-ink-muted">{t.mobilePlan.anytime}</Text>
                   </Pressable>
@@ -1296,8 +1312,8 @@ export default function NewJob() {
               onPress={() => setRequiresInvoicing((v) => !v)}
               className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
             >
-              <View className={`h-4 w-4 items-center justify-center rounded border ${requiresInvoicing ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                {requiresInvoicing ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              <View className={`h-4 w-4 items-center justify-center rounded border ${requiresInvoicing ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+                {requiresInvoicing ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
               </View>
               <Text className="flex-1 text-xs text-ink">{t.modals.remindInvoice}</Text>
             </Pressable>
@@ -1306,8 +1322,8 @@ export default function NewJob() {
               onPress={() => setDepositRequired((v) => !v)}
               className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
             >
-              <View className={`h-4 w-4 items-center justify-center rounded border ${depositRequired ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                {depositRequired ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              <View className={`h-4 w-4 items-center justify-center rounded border ${depositRequired ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+                {depositRequired ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
               </View>
               <Text className="flex-1 text-xs text-ink">{t.modals.requireDeposit}</Text>
             </Pressable>
@@ -1318,9 +1334,9 @@ export default function NewJob() {
                   <Pressable
                     key={dt}
                     onPress={() => setDepositType(dt)}
-                    className={`rounded-full border px-3 py-1.5 ${depositType === dt ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                    className={`rounded-full border px-3 py-1.5 ${depositType === dt ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}
                   >
-                    <Text className={`text-xs font-semibold ${depositType === dt ? 'text-white' : 'text-ink'}`}>
+                    <Text className={`text-xs font-semibold ${depositType === dt ? 'text-onAction' : 'text-ink'}`}>
                       {dt === 'percentage' ? t.modals.percentageOption : t.modals.fixedAmountOption}
                     </Text>
                   </Pressable>
@@ -1330,7 +1346,7 @@ export default function NewJob() {
                   onChangeText={(v) => setDepositValue(v.replace(/[^0-9.,]/g, '').replace(',', '.'))}
                   keyboardType="decimal-pad"
                   placeholder={depositType === 'percentage' ? '25' : '100'}
-                  className="flex-1 rounded-lg border border-surface-border bg-white px-3 py-2 text-sm font-semibold text-ink"
+                  className="flex-1 rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm font-semibold text-ink"
                 />
               </View>
             ) : null}
@@ -1339,8 +1355,8 @@ export default function NewJob() {
               onPress={() => setRequirePaymentMethod((v) => !v)}
               className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
             >
-              <View className={`h-4 w-4 items-center justify-center rounded border ${requirePaymentMethod ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                {requirePaymentMethod ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              <View className={`h-4 w-4 items-center justify-center rounded border ${requirePaymentMethod ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+                {requirePaymentMethod ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
               </View>
               <Text className="flex-1 text-xs text-ink">{t.modals.requirePaymentMethodOnFile}</Text>
             </Pressable>
@@ -1350,8 +1366,8 @@ export default function NewJob() {
                 onPress={() => setBillingSplit((v) => !v)}
                 className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
               >
-                <View className={`h-4 w-4 items-center justify-center rounded border ${billingSplit ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                  {billingSplit ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+                <View className={`h-4 w-4 items-center justify-center rounded border ${billingSplit ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+                  {billingSplit ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
                 </View>
                 <Text className="flex-1 text-xs text-ink">{t.modals.splitInvoices}</Text>
               </Pressable>
@@ -1393,7 +1409,7 @@ export default function NewJob() {
             <LineItemsEditor onChange={setItems} />
           )}
           <Input label={t.mobileJobs.taxRate} value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
-          <View className="gap-1 rounded-2xl bg-white p-4">
+          <View className="gap-1 rounded-2xl bg-surface p-4">
             <Row label={t.mobileJobs.subtotal} value={formatCurrencyCents(totals.subtotal, 'CAD')} />
             <Row label={t.mobileJobs.tax} value={formatCurrencyCents(totals.tax, 'CAD')} />
             <Row label={t.mobileJobs.total} value={formatCurrencyCents(totals.total, 'CAD')} bold />
@@ -1418,7 +1434,7 @@ export default function NewJob() {
                     <Pressable
                       key={opt.key}
                       onPress={() => setBillingMode(opt.key)}
-                      className={`rounded-xl border px-3 py-2.5 ${actif ? 'border-ink bg-white' : 'border-surface-border bg-white'}`}
+                      className={`rounded-xl border px-3 py-2.5 ${actif ? 'border-ink bg-surface' : 'border-surface-border bg-surface'}`}
                     >
                       <Text className={`text-sm ${actif ? 'font-bold text-ink' : 'font-medium text-ink-muted'}`}>
                         {opt.label}
@@ -1442,7 +1458,7 @@ export default function NewJob() {
                         onChangeText={(v) => setInstallmentsCount(v.replace(/[^0-9]/g, '').slice(0, 2))}
                         keyboardType="number-pad"
                         placeholder="3"
-                        className="rounded-lg border border-surface-border bg-white px-3 py-2 text-sm font-semibold text-ink"
+                        className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm font-semibold text-ink"
                       />
                     </View>
                     <View className="flex-1 gap-1">
@@ -1454,7 +1470,7 @@ export default function NewJob() {
                         onChangeText={(v) => setInstallmentAmount(v.replace(/[^0-9.,]/g, '').replace(',', '.'))}
                         keyboardType="decimal-pad"
                         placeholder="100"
-                        className="rounded-lg border border-surface-border bg-white px-3 py-2 text-sm font-semibold text-ink"
+                        className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm font-semibold text-ink"
                       />
                     </View>
                   </View>
@@ -1487,8 +1503,8 @@ export default function NewJob() {
                 onPress={() => setAutoCharge((v) => !v)}
                 className="flex-row items-start gap-2 border-t border-surface-border py-2.5"
               >
-                <View className={`mt-0.5 h-4 w-4 items-center justify-center rounded border ${autoCharge ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                  {autoCharge ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+                <View className={`mt-0.5 h-4 w-4 items-center justify-center rounded border ${autoCharge ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+                  {autoCharge ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
                 </View>
                 <View className="flex-1">
                   <Text className="text-xs text-ink">{t.mobilePlan.autoCharge}</Text>
@@ -1514,8 +1530,8 @@ export default function NewJob() {
           onPress={() => setCreateAgreement((v) => !v)}
           className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
         >
-          <View className={`h-4 w-4 items-center justify-center rounded border ${createAgreement ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-            {createAgreement ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+          <View className={`h-4 w-4 items-center justify-center rounded border ${createAgreement ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+            {createAgreement ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
           </View>
           <Text className="flex-1 text-xs text-ink">{t.modals.createContractSimple}</Text>
         </Pressable>
@@ -1526,8 +1542,8 @@ export default function NewJob() {
               onPress={() => setAgreementRequireSignature((v) => !v)}
               className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
             >
-              <View className={`h-4 w-4 items-center justify-center rounded border ${agreementRequireSignature ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                {agreementRequireSignature ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              <View className={`h-4 w-4 items-center justify-center rounded border ${agreementRequireSignature ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+                {agreementRequireSignature ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
               </View>
               <Text className="flex-1 text-xs text-ink">{t.modals.signatureRequired}</Text>
             </Pressable>
@@ -1536,8 +1552,8 @@ export default function NewJob() {
               onPress={() => setUseCompanyLogo((v) => !v)}
               className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
             >
-              <View className={`h-4 w-4 items-center justify-center rounded border ${useCompanyLogo ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                {useCompanyLogo ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              <View className={`h-4 w-4 items-center justify-center rounded border ${useCompanyLogo ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}>
+                {useCompanyLogo ? <Text className="text-[10px] font-bold text-onAction">✓</Text> : null}
               </View>
               <Text className="flex-1 text-xs text-ink">{t.modals.companyLogoOnContract}</Text>
             </Pressable>
@@ -1551,7 +1567,7 @@ export default function NewJob() {
                 onChangeText={setAgreementTerms}
                 multiline
                 textAlignVertical="top"
-                className="rounded-xl border border-surface-border bg-white px-3 py-2 text-xs leading-5 text-ink"
+                className="rounded-xl border border-surface-border bg-surface px-3 py-2 text-xs leading-5 text-ink"
                 style={{ height: 150 }}
               />
             </View>
@@ -1559,7 +1575,9 @@ export default function NewJob() {
         ) : null}
       </View>
 
-      <Button title={t.mobileJobs.createJob} onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!title.trim() || !orgId} />
+      {champsPerso.bloc}
+
+      <Button title={t.mobileJobs.createJob} onPress={creerJob} loading={saveMut.isPending} disabled={!title.trim() || !orgId} />
 
       {/* Booking confirmation — pops up after Save: send the client the details. */}
       <Modal visible={showBooking} transparent animationType="fade" onRequestClose={goToJob}>
@@ -1568,7 +1586,7 @@ export default function NewJob() {
           className="flex-1 justify-end bg-black/40"
         >
           <Pressable className="absolute inset-0" onPress={() => Keyboard.dismiss()} />
-          <View className="rounded-t-3xl bg-white p-5 gap-4" style={{ paddingBottom: 28 }}>
+          <View className="rounded-t-3xl bg-surface p-5 gap-4" style={{ paddingBottom: 28 }}>
             {contratEnAttente ? (
               <>
                 <View className="gap-0.5">
@@ -1581,14 +1599,14 @@ export default function NewJob() {
                     disabled={envoiContrat !== null}
                     className="flex-1 items-center rounded-xl bg-ink py-3"
                   >
-                    <Text className="text-sm font-semibold text-white">
+                    <Text className="text-sm font-semibold text-onAction">
                       {envoiContrat === 'sms' ? t.mobileAgreement.saving : t.modals.agreementBySms}
                     </Text>
                   </Pressable>
                   <Pressable
                     onPress={() => envoyerContrat('email')}
                     disabled={envoiContrat !== null}
-                    className="flex-1 items-center rounded-xl border border-surface-border bg-white py-3"
+                    className="flex-1 items-center rounded-xl border border-surface-border bg-surface py-3"
                   >
                     <Text className="text-sm font-semibold text-ink">
                       {envoiContrat === 'email' ? t.mobileAgreement.saving : t.modals.agreementByEmail}

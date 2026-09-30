@@ -54,7 +54,7 @@ export default function MemberDetail() {
         {/* Header */}
         <View className="items-center gap-2">
           <View className="h-20 w-20 items-center justify-center rounded-full bg-ink">
-            <Text className="text-2xl font-bold text-white">{initials}</Text>
+            <Text className="text-2xl font-bold text-onAction">{initials}</Text>
           </View>
           <Text className="text-xl font-bold text-ink">{member.full_name ?? t.mobileTeam.memberFallback}</Text>
           {member.email ? <Text className="text-sm text-ink-muted">{member.email}</Text> : null}
@@ -79,12 +79,12 @@ export default function MemberDetail() {
                     key={r}
                     onPress={() => !selected && roleMut.mutate(r)}
                     disabled={roleMut.isPending}
-                    className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 ${selected ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                    className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 ${selected ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}
                   >
-                    <Text className={`text-base font-semibold ${selected ? 'text-white' : 'text-ink'}`}>
+                    <Text className={`text-base font-semibold ${selected ? 'text-onAction' : 'text-ink'}`}>
                       {ROLE_LABELS[r][language]}
                     </Text>
-                    {selected ? <Text className="text-white">✓</Text> : null}
+                    {selected ? <Text className="text-onAction">✓</Text> : null}
                   </Pressable>
                 );
               })}

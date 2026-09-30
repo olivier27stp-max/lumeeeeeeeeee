@@ -37,7 +37,7 @@ export default function ClientsTab() {
               onPress={() => router.push('/(app)/clients/new')}
               className="h-9 w-9 items-center justify-center rounded-full bg-brand"
             >
-              <Text className="text-xl text-white">+</Text>
+              <Text className="text-xl text-onAction">+</Text>
             </Pressable>
           ) : null}
         </View>

@@ -219,7 +219,7 @@ export function SalesLeaderboardView() {
                 <Pressable
                   key={s}
                   onPress={() => setScope(s)}
-                  className={`flex-1 items-center py-2 ${scope === s ? 'bg-white' : ''}`}
+                  className={`flex-1 items-center py-2 ${scope === s ? 'bg-surface' : ''}`}
                 >
                   <Text className={`text-xs font-medium ${scope === s ? 'text-ink' : 'text-ink-subtle'}`}>
                     {s === 'mine' ? (fr ? 'Mon bureau' : 'My office') : fr ? 'Tous les bureaux' : 'All offices'}
@@ -231,7 +231,7 @@ export function SalesLeaderboardView() {
         </View>
 
         {/* Date / period selector — every stat on this page follows this window */}
-        <View className="flex-row items-center justify-between gap-3 rounded-2xl border border-surface-border bg-white px-4 py-2.5">
+        <View className="flex-row items-center justify-between gap-3 rounded-2xl border border-surface-border bg-surface px-4 py-2.5">
           <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
             <SymbolView name="calendar" tintColor="#A3A3A3" size={16} resizeMode="scaleAspectFit" />
             <Text numberOfLines={1} className="flex-1 text-sm font-semibold text-ink">
@@ -243,7 +243,7 @@ export function SalesLeaderboardView() {
               setDraft(range);
               setPickerOpen(true);
             }}
-            className="shrink-0 rounded-lg border border-surface-border bg-white px-3 py-1.5"
+            className="shrink-0 rounded-lg border border-surface-border bg-surface px-3 py-1.5"
           >
             <Text className="text-xs font-semibold text-ink">{fr ? 'Changer' : 'Change'}</Text>
           </Pressable>
@@ -251,7 +251,7 @@ export function SalesLeaderboardView() {
 
         {/* Category tabs (all / rookie / experienced) + office filter */}
         <View className="gap-2">
-          <View className="flex-row rounded-xl border border-surface-border bg-white p-0.5">
+          <View className="flex-row rounded-xl border border-surface-border bg-surface p-0.5">
             {(
               [
                 ['all', fr ? 'Tous' : 'All'],
@@ -264,7 +264,7 @@ export function SalesLeaderboardView() {
                 onPress={() => setCategory(c)}
                 className={`flex-1 items-center rounded-lg px-3 py-1.5 ${category === c ? 'bg-ink' : ''}`}
               >
-                <Text className={`text-xs font-semibold ${category === c ? 'text-white' : 'text-ink-subtle'}`}>
+                <Text className={`text-xs font-semibold ${category === c ? 'text-onAction' : 'text-ink-subtle'}`}>
                   {label}
                 </Text>
               </Pressable>
@@ -274,7 +274,7 @@ export function SalesLeaderboardView() {
           {offices.length > 1 ? (
             <Pressable
               onPress={() => setOfficePickerOpen(true)}
-              className="flex-row items-center justify-between rounded-lg border border-surface-border bg-white px-3 py-2"
+              className="flex-row items-center justify-between rounded-lg border border-surface-border bg-surface px-3 py-2"
             >
               <Text className="text-xs font-medium text-ink">{officeName}</Text>
               <SymbolView name="chevron.down" tintColor="#A3A3A3" size={12} resizeMode="scaleAspectFit" />
@@ -283,7 +283,7 @@ export function SalesLeaderboardView() {
         </View>
 
         {/* Search */}
-        <View className="flex-row items-center gap-2 rounded-2xl border border-surface-border bg-white px-3.5 py-2.5">
+        <View className="flex-row items-center gap-2 rounded-2xl border border-surface-border bg-surface px-3.5 py-2.5">
           <SymbolView name="magnifyingglass" tintColor="#A3A3A3" size={16} resizeMode="scaleAspectFit" />
           <TextInput
             value={query}
@@ -343,7 +343,7 @@ export function SalesLeaderboardView() {
             ) : null}
 
             {/* Ranking list */}
-            <View className="overflow-hidden rounded-2xl border border-surface-border bg-white">
+            <View className="overflow-hidden rounded-2xl border border-surface-border bg-surface">
               {filtered.map((rep, i) => {
                 const expanded = expandedId === rep.userId;
                 const stats = expandedStats[`${rep.userId}:${range.from}:${range.to}`];
@@ -396,7 +396,7 @@ export function SalesLeaderboardView() {
                           <>
                             {/* Terrain — portes / conversations / ventes de la période (dérivé des pins) */}
                             {pins ? (
-                              <View className="mb-2 rounded-lg border border-surface-border bg-white px-4 py-3">
+                              <View className="mb-2 rounded-lg border border-surface-border bg-surface px-4 py-3">
                                 <Text className="text-[10px] font-medium uppercase tracking-wider text-ink-subtle">
                                   Terrain
                                 </Text>
@@ -436,7 +436,7 @@ export function SalesLeaderboardView() {
                                 <View
                                   key={kpi.label}
                                   style={{ flexBasis: '31%', flexGrow: 1 }}
-                                  className="rounded-lg border border-surface-border bg-white px-3 py-2.5"
+                                  className="rounded-lg border border-surface-border bg-surface px-3 py-2.5"
                                 >
                                   <Text className="text-[10px] font-medium uppercase tracking-wider text-ink-subtle">
                                     {kpi.label}
@@ -448,7 +448,7 @@ export function SalesLeaderboardView() {
 
                             <Pressable
                               onPress={() => openProfile(rep)}
-                              className="mt-3 flex-row items-center justify-center gap-2 rounded-lg border border-surface-border bg-white px-4 py-2"
+                              className="mt-3 flex-row items-center justify-center gap-2 rounded-lg border border-surface-border bg-surface px-4 py-2"
                             >
                               <SymbolView name="person.fill" tintColor="#171717" size={13} resizeMode="scaleAspectFit" />
                               <Text className="text-xs font-semibold text-ink">
@@ -471,7 +471,7 @@ export function SalesLeaderboardView() {
       <Modal visible={pickerOpen} transparent animationType="slide" onRequestClose={() => setPickerOpen(false)}>
         <View className="flex-1 justify-end bg-black/20">
           <Pressable className="flex-1" onPress={() => setPickerOpen(false)} />
-          <View className="rounded-t-3xl bg-white p-5" style={{ paddingBottom: Math.max(insets.bottom, 20) }}>
+          <View className="rounded-t-3xl bg-surface p-5" style={{ paddingBottom: Math.max(insets.bottom, 20) }}>
             <Text className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-ink-subtle">
               {fr ? 'Date ou période' : 'Date or period'}
             </Text>
@@ -515,7 +515,7 @@ export function SalesLeaderboardView() {
                   const t = todayIso();
                   setDraft({ from: t, to: t });
                 }}
-                className="flex-1 items-center rounded-lg border border-surface-border bg-white px-3 py-2.5"
+                className="flex-1 items-center rounded-lg border border-surface-border bg-surface px-3 py-2.5"
               >
                 <Text className="text-xs font-semibold text-ink">{fr ? "Aujourd'hui" : 'Today'}</Text>
               </Pressable>
@@ -526,7 +526,7 @@ export function SalesLeaderboardView() {
                 }}
                 className="flex-1 items-center rounded-lg bg-ink px-3 py-2.5"
               >
-                <Text className="text-xs font-semibold text-white">{fr ? 'Appliquer' : 'Apply'}</Text>
+                <Text className="text-xs font-semibold text-onAction">{fr ? 'Appliquer' : 'Apply'}</Text>
               </Pressable>
             </View>
           </View>
@@ -537,7 +537,7 @@ export function SalesLeaderboardView() {
       <Modal visible={officePickerOpen} transparent animationType="slide" onRequestClose={() => setOfficePickerOpen(false)}>
         <View className="flex-1 justify-end bg-black/20">
           <Pressable className="flex-1" onPress={() => setOfficePickerOpen(false)} />
-          <View className="rounded-t-3xl bg-white p-3" style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
+          <View className="rounded-t-3xl bg-surface p-3" style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
             {[{ id: '', name: fr ? 'Tous les bureaux' : 'All offices' }, ...offices].map((o) => (
               <Pressable
                 key={o.id || 'all'}

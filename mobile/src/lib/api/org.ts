@@ -56,6 +56,24 @@ export async function listTeams(orgId: string): Promise<TeamRow[]> {
   return (data ?? []) as TeamRow[];
 }
 
+export interface TeamAssignmentRow {
+  user_id: string;
+  team_id: string;
+  is_primary: boolean;
+}
+
+/** Appartenances employé ⇄ équipe (N→N) — même table que le web
+ *  (listTeamAssignments dans src/lib/teamsApi.ts). Sert à afficher qui roule
+ *  sur chaque tournée dans l'Horaire. */
+export async function listTeamAssignments(orgId: string): Promise<TeamAssignmentRow[]> {
+  const { data, error } = await supabase
+    .from('team_assignments')
+    .select('user_id, team_id, is_primary')
+    .eq('org_id', orgId);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TeamAssignmentRow[];
+}
+
 export async function listMembers(orgId: string): Promise<Member[]> {
   const { data, error } = await supabase
     .from('memberships')

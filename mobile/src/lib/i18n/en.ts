@@ -3123,6 +3123,7 @@ const en = {
     closed_won: 'Closed Won',
     closed_lost: 'Closed Lost',
     awaiting_response: 'Awaiting Response',
+    changes_requested: 'Changes requested',
     approved: 'Approved',
     declined: 'Declined',
     expired: 'Expired',
@@ -3540,6 +3541,22 @@ const en = {
   },
 
   // Mobile app — screen header titles (Stack.Screen headerTitle)
+  // QuoteDetail
+  mobileQuoteDetail: {
+    quote: 'Quote',
+    number: 'Quote {number}',
+    client: 'Client',
+    items: 'Products / Services',
+    noItems: 'No line items.',
+    subtotal: 'Subtotal',
+    discount: 'Discount',
+    tax: 'Taxes',
+    total: 'Total',
+    send: 'Send quote',
+    loading: 'Loading…',
+    notFound: 'Quote not found.',
+  },
+
   mobileNav: {
     job: 'Job',
     done: 'Done',
@@ -3556,6 +3573,7 @@ const en = {
     salesSettings: 'Sales settings',
     newQuote: 'New quote',
     sendQuote: 'Send quote',
+    quote: 'Quote',
     newInvoice: 'New invoice',
     sendInvoice: 'Send invoice',
     editJob: 'Edit job',
@@ -4480,6 +4498,7 @@ const en = {
     invoicedPaidSummary: '{invoiced} invoiced · {paid}/{total} invoices paid',
     statUnpaid: 'Unpaid',
     statJobsCompleted: 'Completed jobs',
+    statJobsToday: 'Jobs today',
     statQuotesPending: 'Pending quotes',
     statInvoices: 'Invoices',
     actionRequired: 'Action Required',
@@ -4501,6 +4520,19 @@ const en = {
     groupTeam: 'Team',
     noResultForQuery: 'No result for “{query}”.',
     searchPrompt: 'Search for a client, a job or a technician.',
+    // Full search — same coverage as the desktop (server route /api/search)
+    searchAllPlaceholder: 'Search: client, job, quote, invoice…',
+    searchAllHint: 'Searches everything: clients, properties, jobs, agreements, payments, leads, invoices, quotes, requests, teams, calendar.',
+    groupProperties: 'Properties',
+    groupAgreements: 'Agreements',
+    groupPayments: 'Payments',
+    groupLeads: 'Leads',
+    groupInvoices: 'Invoices',
+    groupQuotes: 'Quotes',
+    groupRequests: 'Requests',
+    groupTeams: 'Teams',
+    groupEvents: 'Calendar',
+    searchFallbackNotice: 'Full search unavailable — searching clients only.',
     // Referrals
     referTitle: 'Refer a friend',
     referSubtitle: 'Share Lume with another business — you both earn a reward.',
@@ -4675,6 +4707,13 @@ const en = {
     field: 'Field',
     save: 'Save',
     datePlaceholder: 'YYYY-MM-DD',
+    loading: 'Loading…',
+    retry: 'Try again',
+    cfErreurChargement: 'Could not load custom fields.',
+    cfConflit: 'Someone just changed this field. The value shown has been refreshed.',
+    cfRefus: 'Value rejected.',
+    cfFichierBureau: 'File — attach from the desktop app',
+    cfObligatoire: '“{champ}” is required.',
 
     // ClientPicker
     change: 'Change',

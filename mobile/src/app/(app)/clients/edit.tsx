@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
+import { CustomFieldsCard } from '@/components/CustomFieldsCard';
 import { Input } from '@/components/ui/Input';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { ClientInput, getClient, updateClient } from '@/lib/api/clients';
@@ -97,6 +98,9 @@ export default function EditClient() {
           numberOfLines={3}
           style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }}
         />
+
+        {/* La fiche existe : la carte enregistre chaque champ elle-même. */}
+        {id ? <CustomFieldsCard objet="client" recordId={String(id)} /> : null}
 
         <Button title={t.mobileClients.saveChanges} onPress={() => saveMut.mutate()} loading={saveMut.isPending} />
       </View>

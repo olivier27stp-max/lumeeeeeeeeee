@@ -62,7 +62,7 @@ export function JobChecklistsCard({
   };
 
   return (
-    <View className="gap-2 rounded-2xl bg-white p-4">
+    <View className="gap-2 rounded-2xl bg-surface p-4">
       <View className="flex-row items-center justify-between">
         <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.checklists}</Text>
         <Pressable onPress={() => setPickerOpen(true)} className="flex-row items-center gap-1 active:opacity-60">
@@ -92,7 +92,7 @@ export function JobChecklistsCard({
 
       <Modal visible={pickerOpen} transparent animationType="slide" onRequestClose={() => setPickerOpen(false)}>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setPickerOpen(false)}>
-          <Pressable className="gap-2 rounded-t-3xl bg-white p-5" onPress={(e) => e.stopPropagation()}>
+          <Pressable className="gap-2 rounded-t-3xl bg-surface p-5" onPress={(e) => e.stopPropagation()}>
             <Text className="text-lg font-bold text-ink">{c.chooseTemplate}</Text>
             {(templates ?? []).length === 0 ? (
               <Text className="py-4 text-sm text-ink-muted">

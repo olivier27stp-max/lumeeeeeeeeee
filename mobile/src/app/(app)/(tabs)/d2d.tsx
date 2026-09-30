@@ -16,8 +16,8 @@ import {
   FieldHouse,
   HouseStatus,
   listFieldReps,
-  listHousesInBounds,
   listLastNotes,
+  listOrgPins,
   listTerritories,
   logHouseEvent,
   Territory,
@@ -34,36 +34,39 @@ const DEFAULT = { lat: 45.5019, lng: -73.5674 };
 const ZONE_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#64748b', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#78716c'];
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 
-// Exactly the web's 7 pin statuses (lead-pin.ts PIN_STATUS_CONFIG on current
-// main): same order, labels and colours, each mapped to the stored HouseStatus
-// via the web's REVERSE_STATUS_MAP. Keep in sync with D2DWebMap.tsx.
+// The web's pin statuses, verbatim: src/components/map-d2d/lead-pin.ts declares
+// `PinStatus` with SIX values — closed_won, follow_up, appointment, no_answer,
+// rejected, other. Same order, same colours here.
+//
+// There is deliberately no `lead` bucket. Mobile used to carry a seventh, purple
+// one, so a house stored as `lead` drew purple here and cyan (follow_up) on the
+// desktop. The desktop's D2DMap.tsx folds `lead` into `follow_up` on read and
+// writes `lead` back for it (REVERSE_STATUS_MAP), which is what `house` does
+// below. Keep in sync with D2DWebMap.tsx.
 const PIN_STATUSES: { bucket: string; labelKey: keyof TranslationKeys['mobileField']; color: string; house: HouseStatus }[] = [
   { bucket: 'closed_won', labelKey: 'pinClosed', color: '#22C55E', house: 'sale' },
-  { bucket: 'lead', labelKey: 'pinLead', color: '#A855F7', house: 'lead' },
-  { bucket: 'follow_up', labelKey: 'pinFollowUp', color: '#06B6D4', house: 'callback' },
+  { bucket: 'follow_up', labelKey: 'pinFollowUp', color: '#06B6D4', house: 'lead' },
   { bucket: 'appointment', labelKey: 'pinAppointment', color: '#6B7280', house: 'quote_sent' },
   { bucket: 'no_answer', labelKey: 'pinNoAnswer', color: '#EAB308', house: 'no_answer' },
   { bucket: 'rejected', labelKey: 'pinDeclined', color: '#EF4444', house: 'not_interested' },
   { bucket: 'other', labelKey: 'pinOther', color: '#F97316', house: 'unknown' },
 ];
 const ALL_BUCKETS = PIN_STATUSES.map((s) => s.bucket);
-// The web's action modal offers these 5 outcomes only (map-container 2549-2703)
-const OUTCOME_BUCKETS = ['no_answer', 'rejected', 'follow_up', 'lead', 'closed_won'];
+// Outcomes offered by the knock action sheet.
+const OUTCOME_BUCKETS = ['no_answer', 'rejected', 'follow_up', 'closed_won'];
 // DB status -> bucket (mirror of STATUS_MAP in src/pages/D2DMap.tsx, current main)
 const STATUS_TO_BUCKET: Record<string, string> = {
   sale: 'closed_won', sold: 'closed_won', closed_won: 'closed_won',
-  lead: 'lead',
-  follow_up: 'follow_up', callback: 'follow_up',
+  lead: 'follow_up', follow_up: 'follow_up', callback: 'follow_up',
   no_answer: 'no_answer',
   not_interested: 'rejected', do_not_knock: 'rejected', rejected: 'rejected',
   quote_sent: 'appointment', appointment: 'appointment',
 };
-// Web zone-stats breakdown order (map-container zone panel)
-const ZONE_BREAKDOWN_ORDER = ['closed_won', 'lead', 'appointment', 'follow_up', 'no_answer', 'rejected', 'other'];
+// Zone-stats breakdown order (mobile-only panel; the desktop has no equivalent)
+const ZONE_BREAKDOWN_ORDER = ['closed_won', 'appointment', 'follow_up', 'no_answer', 'rejected', 'other'];
 // SF Symbols closest to the web pin glyphs (placement toolbar replicas)
 const BUCKET_SF_ICON: Record<string, string> = {
   closed_won: 'checkmark',
-  lead: 'scope',
   follow_up: 'clock',
   appointment: 'calendar',
   no_answer: 'questionmark',
@@ -89,7 +92,7 @@ function ToolBtn({ onPress, active, round, children }: { onPress: () => void; ac
   return (
     <Pressable
       onPress={onPress}
-      className={`h-11 w-11 items-center justify-center ${round ? 'rounded-full' : 'rounded-xl'} ${active ? 'bg-red-600' : 'bg-white'}`}
+      className={`h-11 w-11 items-center justify-center ${round ? 'rounded-full' : 'rounded-xl'} ${active ? 'bg-red-600' : 'bg-surface'}`}
       style={{ shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
     >
       {children}
@@ -253,15 +256,13 @@ export default function D2DMap() {
     };
   }, []);
 
+  // Org-wide, like the desktop. This used to be a ±0.1° box around the GPS fix,
+  // keyed on the centre — so it showed only the pins within ~11 km of wherever
+  // the app happened to open, and panning never loaded any more (the map's own
+  // centre, `mapCenter`, only feeds search and sorting). Hence "5 pins".
   const { data: houses, refetch } = useQuery({
-    queryKey: ['d2d', 'houses', orgId, center.lat.toFixed(2), center.lng.toFixed(2)],
-    queryFn: () =>
-      listHousesInBounds({
-        minLat: center.lat - 0.1,
-        maxLat: center.lat + 0.1,
-        minLng: center.lng - 0.1,
-        maxLng: center.lng + 0.1,
-      }),
+    queryKey: ['d2d', 'houses', orgId],
+    queryFn: () => listOrgPins(orgId ?? ''),
     enabled: !!orgId && ready,
   });
   const { data: zones, refetch: refetchZones } = useQuery({
@@ -342,7 +343,8 @@ export default function D2DMap() {
       if (h.assigned_user_id) repIds.add(h.assigned_user_id);
     });
     const sales = byStatus.closed_won ?? 0;
-    const leads = byStatus.lead ?? 0;
+    // Houses stored as `lead` now land in follow_up, as on the desktop.
+    const leads = byStatus.follow_up ?? 0;
     const appointments = byStatus.appointment ?? 0;
     const noAnswer = byStatus.no_answer ?? 0;
     const contacted = total - noAnswer;
@@ -428,17 +430,14 @@ export default function D2DMap() {
     return q.toString();
   };
   const crmFor = (house: HouseStatus, h: Partial<FieldHouse>) => {
-    // Web flows (pin-crm-actions.ts): closed_won opens the job flow; a lead
-    // opens a choice (the web offers contract/quote/skip — mobile: quote/skip).
+    // Web flows (PIN_STATUS_CRM_MAP in pin-crm-actions.ts): closed_won opens the
+    // job form, appointment opens the quote form, and every other status —
+    // follow_up included — has `action: 'none'`. Mobile used to pop a quote
+    // choice for `lead`, which the desktop never does.
     const qs = crmQuery(h);
     const quoteUrl = `/(app)/quotes/new?title=${encodeURIComponent(h.address ? `Estimation — ${h.address}` : '')}&${qs}`;
     if (house === 'sale') {
       router.push(`/(app)/jobs/new?${qs}` as any);
-    } else if (house === 'lead') {
-      Alert.alert(t.mobileField.pinLead, undefined, [
-        { text: t.mobileField.createQuote, onPress: () => router.push(quoteUrl as any) },
-        { text: t.mobileField.skipForNow, style: 'cancel' },
-      ]);
     } else if (house === 'quote_sent') {
       router.push(quoteUrl as any);
     }
@@ -511,8 +510,8 @@ export default function D2DMap() {
         setPinCard(created);
       } else {
         // Status already chosen in the placement strip — don't re-ask, just
-        // chain into the CRM flow when it applies (sale → job, lead → choice)
-        if (house === 'sale' || house === 'lead' || house === 'quote_sent') {
+        // chain into the CRM flow when it applies (sale → job, quote_sent → quote)
+        if (house === 'sale' || house === 'quote_sent') {
           crmFor(house, created);
         }
       }
@@ -666,7 +665,7 @@ export default function D2DMap() {
       closePinCard();
       refetch();
       if (status === 'sale' && !h.job_id) crmFor('sale', h);
-      else if (status === 'lead' && !h.quote_id) crmFor('lead', h);
+      else if (status === 'quote_sent' && !h.quote_id) crmFor('quote_sent', h);
     } catch (e) {
       Alert.alert(t.mobileField.pin, (e as Error).message);
     }
@@ -840,7 +839,7 @@ export default function D2DMap() {
                 <Pressable
                   key={s.house}
                   onPress={() => setSelectedStatus(s.house)}
-                  className="items-center rounded-xl bg-white px-3 py-2"
+                  className="items-center rounded-xl bg-surface px-3 py-2"
                   style={{ minWidth: 82, opacity: on ? 1 : 0.55, borderWidth: 2, borderColor: on ? s.color : 'transparent' }}
                 >
                   <View
@@ -1232,7 +1231,7 @@ export default function D2DMap() {
         <Pressable className="flex-1 justify-end bg-black/40" onPress={closePinCard}>
           {pinCard ? (
             <Pressable
-              className="gap-3 rounded-t-3xl bg-white p-5"
+              className="gap-3 rounded-t-3xl bg-surface p-5"
               style={{ paddingBottom: insets.bottom + 16 }}
               onPress={(e) => e.stopPropagation()}
             >
@@ -1336,7 +1335,7 @@ export default function D2DMap() {
                       setPinCardNew(false);
                       router.push(`/(app)/clients/${cid}` as any);
                     }}
-                    className="flex-1 items-center rounded-xl border border-neutral-300 bg-white py-3"
+                    className="flex-1 items-center rounded-xl border border-neutral-300 bg-surface py-3"
                   >
                     <Text className="text-[13px] font-semibold text-neutral-700">👤 {t.mobileField.viewClient}</Text>
                   </Pressable>
@@ -1348,7 +1347,7 @@ export default function D2DMap() {
                       setPinCardNew(false);
                       router.push(`/(app)/d2d-house/${id}` as any);
                     }}
-                    className="flex-1 items-center rounded-xl border border-neutral-300 bg-white py-3"
+                    className="flex-1 items-center rounded-xl border border-neutral-300 bg-surface py-3"
                   >
                     <Text className="text-[13px] font-semibold text-neutral-700">{t.mobileField.fullRecord}</Text>
                   </Pressable>
@@ -1383,7 +1382,7 @@ export default function D2DMap() {
         <Pressable className="flex-1 justify-end bg-black/50" onPress={() => setEditPin(null)}>
           {editPin ? (
             <Pressable
-              className="gap-3 rounded-t-3xl bg-white p-5"
+              className="gap-3 rounded-t-3xl bg-surface p-5"
               style={{ paddingBottom: insets.bottom + 16 }}
               onPress={(e) => e.stopPropagation()}
             >

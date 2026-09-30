@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
+import { CustomFieldsCard } from '@/components/CustomFieldsCard';
 import { Input } from '@/components/ui/Input';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { getJob, updateJob } from '@/lib/api/jobs';
@@ -70,6 +71,10 @@ export default function EditJob() {
           numberOfLines={3}
           style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }}
         />
+        {/* La fiche existe : la carte enregistre chaque champ elle-même, donc
+            elle n'a pas besoin du bouton « Enregistrer » du formulaire. */}
+        {id ? <CustomFieldsCard objet="job" recordId={String(id)} /> : null}
+
         <Button
           title={t.mobileJobs.saveChanges}
           onPress={() => saveMut.mutate()}

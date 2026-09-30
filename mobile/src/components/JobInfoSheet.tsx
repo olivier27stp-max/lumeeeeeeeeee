@@ -87,7 +87,7 @@ export function JobInfoSheet({ job, onClose }: { job: Job | null; onClose: () =>
             </View>
 
             {/* When + where */}
-            <View className="gap-3 rounded-2xl border border-surface-border bg-white p-4">
+            <View className="gap-3 rounded-2xl border border-surface-border bg-surface p-4">
               <Field label="Scheduled" value={formatDateTime(when)} />
               {address ? (
                 <Field
@@ -103,7 +103,7 @@ export function JobInfoSheet({ job, onClose }: { job: Job | null; onClose: () =>
 
             {/* Services */}
             {lineItems && lineItems.length > 0 ? (
-              <View className="gap-2 rounded-2xl border border-surface-border bg-white p-4">
+              <View className="gap-2 rounded-2xl border border-surface-border bg-surface p-4">
                 <Text className="text-xs text-ink-muted uppercase">Services</Text>
                 {lineItems.map((li) => (
                   <View key={li.id} className="flex-row items-center justify-between border-t border-surface-border pt-2.5">
@@ -123,7 +123,7 @@ export function JobInfoSheet({ job, onClose }: { job: Job | null; onClose: () =>
 
             {/* Client */}
             {client || job.client_name ? (
-              <View className="gap-3 rounded-2xl border border-surface-border bg-white p-4">
+              <View className="gap-3 rounded-2xl border border-surface-border bg-surface p-4">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-xs text-ink-muted uppercase">Client</Text>
                   {client && can('clients.update') ? (
@@ -158,7 +158,7 @@ export function JobInfoSheet({ job, onClose }: { job: Job | null; onClose: () =>
 
             {/* Description / notes */}
             {job.description ? (
-              <View className="gap-1 rounded-2xl border border-surface-border bg-white p-4">
+              <View className="gap-1 rounded-2xl border border-surface-border bg-surface p-4">
                 <Text className="text-xs text-ink-muted uppercase">Description</Text>
                 <Text className="text-base text-ink leading-6">{job.description}</Text>
               </View>

@@ -80,7 +80,7 @@ export default function Notifications() {
           return (
             <Pressable
               onPress={() => onPress(item)}
-              className={`gap-1 rounded-2xl p-4 ${unread ? 'bg-white' : 'bg-surface-sunken'}`}
+              className={`gap-1 rounded-2xl p-4 ${unread ? 'bg-surface' : 'bg-surface-sunken'}`}
               style={{ shadowColor: '#000', shadowOpacity: unread ? 0.04 : 0, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
             >
               <View className="flex-row items-center justify-between">

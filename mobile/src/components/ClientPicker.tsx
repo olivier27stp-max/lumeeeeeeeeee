@@ -107,7 +107,7 @@ export function ClientPicker({
             onChange({ id: c.id, name: clientFullName(c) });
             setSearch('');
           }}
-          className="rounded-xl border border-surface-border bg-white px-4 py-3"
+          className="rounded-xl border border-surface-border bg-surface px-4 py-3"
         >
           <Text className="text-sm text-ink">{clientFullName(c)}</Text>
         </Pressable>

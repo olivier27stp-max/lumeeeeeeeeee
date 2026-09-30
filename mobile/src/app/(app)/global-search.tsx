@@ -87,7 +87,7 @@ export default function GlobalSearch() {
     }
   }
 
-  const card = 'flex-row items-center gap-3 rounded-2xl bg-white p-3';
+  const card = 'flex-row items-center gap-3 rounded-2xl bg-surface p-3';
 
   const renderItem = ({ item }: { item: Row }) => {
     if (item.type === 'header') {

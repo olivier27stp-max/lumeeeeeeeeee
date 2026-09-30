@@ -287,7 +287,7 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
   return (
     <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 110 }}>
       {/* Bar: title + start-from + totals */}
-      <View className="mx-4 rounded-2xl border border-surface-border bg-white px-4 pb-3 pt-3">
+      <View className="mx-4 rounded-2xl border border-surface-border bg-surface px-4 pb-3 pt-3">
         <View className="flex-row items-center gap-2">
           <SymbolView name="point.topleft.down.curvedto.point.bottomright.up" tintColor="#525252" size={14} resizeMode="scaleAspectFit" />
           <Text className="text-sm font-bold text-ink">
@@ -309,8 +309,8 @@ export function ScheduleRouteView({ jobs, onJobOpen }: { jobs: RouteJob[]; onJob
               <Text className="text-[11px] font-medium text-ink-subtle">{fr ? 'Départ' : 'Start'}</Text>
               <View className="flex-row overflow-hidden rounded-lg border border-surface-border">
                 {(['first', 'me'] as StartMode[]).map((m) => (
-                  <Pressable key={m} onPress={() => chooseStart(m)} disabled={locating} className={`px-2.5 py-1 ${startMode === m ? 'bg-ink' : 'bg-white'}`}>
-                    <Text className={`text-[11px] font-semibold ${startMode === m ? 'text-white' : 'text-ink-muted'}`}>
+                  <Pressable key={m} onPress={() => chooseStart(m)} disabled={locating} className={`px-2.5 py-1 ${startMode === m ? 'bg-ink' : 'bg-surface'}`}>
+                    <Text className={`text-[11px] font-semibold ${startMode === m ? 'text-onAction' : 'text-ink-muted'}`}>
                       {m === 'first' ? (fr ? '1er arrêt' : 'First stop') : locating ? (fr ? 'Localisation…' : 'Locating…') : fr ? 'Ma position' : 'My location'}
                     </Text>
                   </Pressable>
@@ -391,7 +391,7 @@ function TeamTrip({
   );
 
   return (
-    <View className="mx-4 mt-3 overflow-hidden rounded-2xl border border-surface-border bg-white pb-2" style={{ borderTopWidth: 3, borderTopColor: r.color }}>
+    <View className="mx-4 mt-3 overflow-hidden rounded-2xl border border-surface-border bg-surface pb-2" style={{ borderTopWidth: 3, borderTopColor: r.color }}>
       {/* team header */}
       <View className="px-4 pb-2 pt-3">
                 <View className="flex-row items-center gap-2">
@@ -486,7 +486,7 @@ function TeamTrip({
                         <View className="relative">
                           <UnifiedAvatar id={j.clientId || j.id} name={j.clientName || j.title} size={32} />
                           {done ? (
-                            <View className="absolute -bottom-0.5 -right-0.5 rounded-full bg-white">
+                            <View className="absolute -bottom-0.5 -right-0.5 rounded-full bg-surface">
                               <SymbolView name="checkmark.circle.fill" tintColor="#059669" size={13} resizeMode="scaleAspectFit" />
                             </View>
                           ) : null}

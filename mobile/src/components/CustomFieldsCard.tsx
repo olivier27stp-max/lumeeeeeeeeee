@@ -1,125 +1,185 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Text, View } from 'react-native';
 
+import { SaisieChamp } from '@/components/champs/SaisieChamp';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import {
-  CustomColumn,
-  CustomValue,
-  getCustomValues,
-  listCustomColumns,
-  saveCustomValue,
+  ChampPerso,
+  FicheChamps,
+  ObjetChamp,
+  ValeurChamp,
+  champsVisibles,
+  lireChampsEtValeurs,
 } from '@/lib/api/customFields';
+import type { ResultatEcriture } from '@/lib/api/customFields';
+import type { EcritureChampPerso } from '@/lib/offline/registerMutationDefaults';
+import { MK } from '@/lib/offline/mutationKeys';
 import { useTranslation } from '@/lib/i18n';
 
-/** Renders an org's custom fields for one record (job/client) and saves edits. */
-export function CustomFieldsCard({
-  orgId,
-  entity,
-  recordId,
-}: {
-  orgId: string;
-  entity: CustomColumn['entity'];
-  recordId: string;
-}) {
+/**
+ * Champs personnalisés d'une fiche (client, job, devis…) : lecture, édition,
+ * enregistrement. Les définitions sont gérées au bureau ; le mobile les affiche
+ * et écrit les valeurs par la route serveur, qui garde la validation, l'unicité
+ * et les permissions.
+ */
+export function CustomFieldsCard({ objet, recordId }: { objet: ObjetChamp; recordId: string }) {
   const { t } = useTranslation();
   const c = t.mobileComp;
   const qc = useQueryClient();
-  const { data: columns } = useQuery({
-    queryKey: ['custom-columns', orgId, entity],
-    queryFn: () => listCustomColumns(orgId, entity),
-    enabled: !!orgId,
-  });
-  const { data: values } = useQuery({
-    queryKey: ['custom-values', orgId, recordId],
-    queryFn: () => getCustomValues(orgId, recordId),
-    enabled: !!orgId && !!recordId,
+  const cle = ['champs-perso', objet, recordId];
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: cle,
+    queryFn: () => lireChampsEtValeurs(objet, recordId),
+    enabled: !!recordId,
   });
 
-  const [draft, setDraft] = useState<Record<string, CustomValue>>({});
-  useEffect(() => {
-    if (values) setDraft(values);
-  }, [values]);
+  const champs = useMemo(() => (data ? champsVisibles(data) : []), [data]);
 
-  const save = useMutation({
-    mutationFn: async (col: CustomColumn) => {
-      await saveCustomValue({
-        orgId,
-        columnId: col.id,
-        recordId,
-        colType: col.col_type,
-        value: draft[col.id] ?? null,
+  // Les saisies en cours se SUPERPOSENT à l'instantané du serveur au lieu d'en
+  // être une copie : un rafraîchissement (invalidation, retour au premier plan)
+  // ne peut donc pas écraser ce que l'utilisateur est en train de taper.
+  const [saisies, setSaisies] = useState<Record<string, ValeurChamp>>({});
+  const [refus, setRefus] = useState<Record<string, string>>({});
+
+  // Changement de fiche → on repart à zéro (motif React « ajuster un état quand
+  // une prop change », pendant le rendu ; pas d'effet, pas de rendu en cascade).
+  const [ancre, setAncre] = useState(recordId);
+  if (ancre !== recordId) {
+    setAncre(recordId);
+    setSaisies({});
+    setRefus({});
+  }
+
+  const valeurDe = (champ: ChampPerso): ValeurChamp =>
+    champ.id in saisies ? saisies[champ.id] : (data?.values[champ.id]?.value ?? null);
+
+  // Pas de mutationFn ici : la clé MK.champsPersoEcrire porte celle du registre
+  // hors ligne (lib/offline). Conséquence voulue — sans réseau l'écriture est
+  // MISE EN FILE au lieu d'échouer, et repart au retour du réseau, même après un
+  // redémarrage de l'app. Le rejeu est sûr : la `version` envoyée fait répondre
+  // « conflit » plutôt que d'écrire deux fois.
+  //
+  // La valeur est passée EXPLICITEMENT plutôt que relue dans l'état : sinon il
+  // faudrait différer chaque enregistrement d'un tour de rendu pour que la
+  // mutation voie la saisie qui vient d'avoir lieu.
+  const enregistrer = useMutation<ResultatEcriture[], Error, EcritureChampPerso>({
+    // Aucune mutationFn ici : elle vient du registre hors ligne, attachée à
+    // cette clé. C'est CE qui rend l'écriture rejouable après un redémarrage —
+    // la file ne garde que la clé et les variables, jamais la fonction.
+    mutationKey: MK.champsPersoEcrire,
+    onSuccess: (resultats, vars) => {
+      const resultat = resultats?.[0];
+      if (!resultat) return;
+      const id = vars.fieldId;
+      const oublierSaisie = () =>
+        setSaisies((s) => {
+          const { [id]: _ignore, ...reste } = s;
+          return reste;
+        });
+
+      if (resultat.conflict) {
+        // Quelqu'un a touché le même champ entre-temps : on reprend la version
+        // du serveur plutôt que d'écraser son travail en silence.
+        setRefus((r) => ({ ...r, [id]: c.cfConflit }));
+        oublierSaisie();
+        void qc.invalidateQueries({ queryKey: cle });
+        return;
+      }
+      if (!resultat.ok) {
+        // La saisie reste à l'écran : l'utilisateur doit pouvoir la corriger.
+        setRefus((r) => ({ ...r, [id]: resultat.erreur ?? c.cfRefus }));
+        return;
+      }
+      setRefus((r) => {
+        const { [id]: _ignore, ...reste } = r;
+        return reste;
       });
+      oublierSaisie();
+      void qc.invalidateQueries({ queryKey: cle });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['custom-values', orgId, recordId] }),
-    onError: (e: Error) => Alert.alert(c.field, e.message),
+    onError: (e: Error, vars) => setRefus((r) => ({ ...r, [vars.fieldId]: e.message })),
   });
 
-  if (!columns || columns.length === 0) return null;
+  /** Met une écriture en route (ou en file, si le téléphone est hors ligne). */
+  const envoyer = (champ: ChampPerso, valeur: ValeurChamp) =>
+    enregistrer.mutate({
+      objet,
+      recordId,
+      fieldId: champ.id,
+      valeur,
+      version: data?.values[champ.id]?.version ?? null,
+    });
+
+  if (isLoading) {
+    return (
+      <View className="gap-3 rounded-2xl bg-surface p-4">
+        <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.customFields}</Text>
+        <Text className="text-sm text-ink-muted">{c.loading}</Text>
+      </View>
+    );
+  }
+
+  // Un échec de chargement ne doit JAMAIS faire disparaître la carte sans rien
+  // dire : c'est comme ça que la mort des champs est passée inaperçue.
+  if (isError) {
+    return (
+      <View className="gap-3 rounded-2xl bg-surface p-4">
+        <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.customFields}</Text>
+        <Text className="text-sm text-status-late">{c.cfErreurChargement}</Text>
+        <Button title={c.retry} variant="secondary" onPress={() => void refetch()} />
+      </View>
+    );
+  }
+
+  if (champs.length === 0) return null;
+
+  const dossiers = new Map((data as FicheChamps).folders.map((d) => [d.id, d]));
+  const groupes = new Map<string, ChampPerso[]>();
+  for (const champ of champs) {
+    const k = champ.folder_id ?? '';
+    if (!groupes.has(k)) groupes.set(k, []);
+    groupes.get(k)!.push(champ);
+  }
+  const ordre = [...groupes.keys()].sort(
+    (a, b) => (dossiers.get(a)?.position ?? -1) - (dossiers.get(b)?.position ?? -1),
+  );
+
+  const majSaisie = (id: string, v: ValeurChamp) => setSaisies((s) => ({ ...s, [id]: v }));
 
   return (
-    <View className="gap-3 rounded-2xl bg-white p-4">
+    <View className="gap-4 rounded-2xl bg-surface p-4">
       <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.customFields}</Text>
-      {columns.map((col) => {
-        const v = draft[col.id];
-        return (
-          <View key={col.id} className="gap-1.5">
-            <Text className="text-sm font-semibold text-ink">
-              {col.name}
-              {col.required ? <Text className="text-status-late"> *</Text> : null}
+
+      {ordre.map((idDossier) => (
+        <View key={idDossier || 'sans-dossier'} className="gap-3">
+          {dossiers.get(idDossier) ? (
+            <Text className="text-xs font-bold uppercase tracking-wide text-ink-muted">
+              {dossiers.get(idDossier)!.name}
             </Text>
+          ) : null}
 
-            {col.col_type === 'checkbox' ? (
-              <Pressable
-                onPress={() => {
-                  setDraft((d) => ({ ...d, [col.id]: !v }));
-                }}
-                className="flex-row items-center gap-2"
-              >
-                <View className={`h-6 w-6 items-center justify-center rounded-md border ${v ? 'border-brand bg-brand' : 'border-surface-border'}`}>
-                  {v ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={13} /> : null}
-                </View>
-                <Text className="text-ink-muted">{v ? c.yes : c.no}</Text>
-              </Pressable>
-            ) : col.col_type === 'dropdown' || col.col_type === 'status' ? (
-              <View className="flex-row flex-wrap gap-2">
-                {(col.config.options ?? []).map((opt) => (
-                  <Pressable
-                    key={opt}
-                    onPress={() => setDraft((d) => ({ ...d, [col.id]: opt }))}
-                    className={`rounded-full border px-3 py-1.5 ${v === opt ? 'border-ink bg-ink' : 'border-surface-border'}`}
-                  >
-                    <Text className={`text-xs font-semibold ${v === opt ? 'text-white' : 'text-ink'}`}>{opt}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : (
-              <Input
-                value={v != null ? String(v) : ''}
-                onChangeText={(txt) => setDraft((d) => ({ ...d, [col.id]: txt }))}
-                placeholder={col.col_type === 'date' ? c.datePlaceholder : '…'}
-                keyboardType={
-                  ['number', 'currency', 'rating'].includes(col.col_type)
-                    ? 'numeric'
-                    : col.col_type === 'phone'
-                      ? 'phone-pad'
-                      : col.col_type === 'email'
-                        ? 'email-address'
-                        : 'default'
-                }
-                autoCapitalize={['email', 'url'].includes(col.col_type) ? 'none' : 'sentences'}
-                onBlur={() => save.mutate(col)}
+          {groupes.get(idDossier)!.map((champ) => (
+            <View key={champ.id} className="gap-1.5">
+              <Text className="text-sm font-semibold text-ink">
+                {champ.label}
+                {champ.is_required ? <Text className="text-status-late"> *</Text> : null}
+              </Text>
+              {champ.help_text ? <Text className="text-xs text-ink-subtle">{champ.help_text}</Text> : null}
+
+              <SaisieChamp
+                champ={champ}
+                valeur={valeurDe(champ)}
+                onChange={(v) => majSaisie(champ.id, v)}
+                onValider={(v) => envoyer(champ, v)}
               />
-            )}
 
-            {(col.col_type === 'checkbox' || col.col_type === 'dropdown' || col.col_type === 'status') ? (
-              <Button title={c.save} variant="secondary" onPress={() => save.mutate(col)} />
-            ) : null}
-          </View>
-        );
-      })}
+              {refus[champ.id] ? <Text className="text-xs text-status-late">{refus[champ.id]}</Text> : null}
+            </View>
+          ))}
+        </View>
+      ))}
     </View>
   );
 }

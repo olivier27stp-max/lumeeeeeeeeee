@@ -256,7 +256,7 @@ export default function ClientDetail() {
             {(quotes ?? []).map((q) => (
               <Pressable
                 key={q.id}
-                onPress={() => router.push(`/(app)/quotes/send?id=${q.id}` as any)}
+                onPress={() => router.push(`/(app)/quotes/${q.id}` as any)}
                 className="flex-row items-center justify-between border-t border-surface-border pt-2.5"
               >
                 <View className="flex-1 pr-3">
@@ -422,7 +422,7 @@ export default function ClientDetail() {
           </Card>
         ) : null}
 
-        {orgId ? <CustomFieldsCard orgId={orgId} entity="clients" recordId={client.id} /> : null}
+        {orgId ? <CustomFieldsCard objet="client" recordId={client.id} /> : null}
 
         {can('clients.update') ? (
           <Button

@@ -483,12 +483,12 @@ export default function JobDetail() {
                     key={t.id}
                     onPress={() => assignTeamMut.mutate(t.id)}
                     disabled={assignTeamMut.isPending}
-                    className={`flex-row items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${sel ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                    className={`flex-row items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${sel ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}
                   >
                     {t.color_hex ? (
                       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.color_hex }} />
                     ) : null}
-                    <Text className={`text-xs font-semibold ${sel ? 'text-white' : 'text-ink'}`}>{t.name}</Text>
+                    <Text className={`text-xs font-semibold ${sel ? 'text-onAction' : 'text-ink'}`}>{t.name}</Text>
                   </Pressable>
                 );
               })}
@@ -571,7 +571,7 @@ export default function JobDetail() {
 
         {orgId ? <JobMaterialsCard jobId={job.id} orgId={orgId} canSeePricing={canSeePricing} /> : null}
 
-        {orgId ? <CustomFieldsCard orgId={orgId} entity="jobs" recordId={job.id} /> : null}
+        {orgId ? <CustomFieldsCard objet="job" recordId={job.id} /> : null}
 
         {orgId ? (
           <Card>
@@ -642,7 +642,7 @@ export default function JobDetail() {
           className="flex-1 justify-end bg-black/40"
         >
           <Pressable className="absolute inset-0" onPress={() => Keyboard.dismiss()} />
-          <View className="rounded-t-3xl bg-white p-5 gap-4" style={{ paddingBottom: 28 }}>
+          <View className="rounded-t-3xl bg-surface p-5 gap-4" style={{ paddingBottom: 28 }}>
             <Text className="text-lg font-bold text-ink">{t.mobileJobs.onTheWayBtn}</Text>
 
             <View className="gap-1.5">
@@ -654,7 +654,7 @@ export default function JobDetail() {
                     onPress={() => pickEta(m)}
                     className={`flex-1 items-center rounded-xl py-2.5 ${etaMin === m ? 'bg-ink' : 'bg-surface-sunken'}`}
                   >
-                    <Text className={`text-sm font-semibold ${etaMin === m ? 'text-white' : 'text-ink-muted'}`}>
+                    <Text className={`text-sm font-semibold ${etaMin === m ? 'text-onAction' : 'text-ink-muted'}`}>
                       {t.mobileJobs.minutes.replace('{n}', String(m))}
                     </Text>
                   </Pressable>

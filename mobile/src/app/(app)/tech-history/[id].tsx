@@ -56,7 +56,7 @@ function rangeFor(p: Period): { start: Date; end: Date } {
 
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
-    <View className="flex-1 rounded-2xl bg-white p-4">
+    <View className="flex-1 rounded-2xl bg-surface p-4">
       <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{label}</Text>
       <Text className="mt-1 text-xl font-bold text-ink">{value}</Text>
     </View>
@@ -154,7 +154,7 @@ export default function TechDetail() {
             <Pressable
               key={p.key}
               onPress={() => setPeriod(p.key)}
-              className={`flex-1 items-center rounded-xl py-2 ${sel ? 'bg-white' : ''}`}
+              className={`flex-1 items-center rounded-xl py-2 ${sel ? 'bg-surface' : ''}`}
             >
               <Text className={`text-xs font-semibold ${sel ? 'text-ink' : 'text-ink-muted'}`}>{t.mobileField[p.labelKey]}</Text>
             </Pressable>
@@ -185,7 +185,7 @@ export default function TechDetail() {
           </MapView>
         </View>
       ) : (
-        <View className="items-center rounded-3xl bg-white p-8">
+        <View className="items-center rounded-3xl bg-surface p-8">
           <SymbolView name="map" tintColor="#A3A3A3" size={32} resizeMode="scaleAspectFit" />
           <Text className="mt-2 text-sm text-ink-muted">{t.mobileField.noPositionForPeriod}</Text>
         </View>
@@ -197,7 +197,7 @@ export default function TechDetail() {
         <Text className="px-1 text-sm text-ink-muted">{t.mobileField.noPunchesForPeriod}</Text>
       ) : (
         (entries ?? []).map((e: TimeEntryRow) => (
-          <View key={e.id} className="rounded-2xl bg-white p-4">
+          <View key={e.id} className="rounded-2xl bg-surface p-4">
             <View className="flex-row items-center justify-between">
               <Text className="text-base font-semibold text-ink">
                 {fmtClock(e.punch_in_at)} → {e.punch_out_at ? fmtClock(e.punch_out_at) : t.mobileField.entryInProgress}

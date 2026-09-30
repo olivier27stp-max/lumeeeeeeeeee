@@ -95,7 +95,7 @@ export default function Leads() {
         {isManager ? (
           <View className="flex-row self-start rounded-2xl bg-surface-sunken p-1">
             {(['mine', 'all'] as const).map((s) => (
-              <Pressable key={s} onPress={() => setScope(s)} className={`rounded-xl px-4 py-1.5 ${scope === s ? 'bg-white' : ''}`}>
+              <Pressable key={s} onPress={() => setScope(s)} className={`rounded-xl px-4 py-1.5 ${scope === s ? 'bg-surface' : ''}`}>
                 <Text className={`text-sm font-semibold ${scope === s ? 'text-ink' : 'text-ink-muted'}`}>
                   {s === 'mine' ? t.mobileD2D.scopeMine : t.mobileD2D.scopeAll}
                 </Text>
@@ -118,7 +118,7 @@ export default function Leads() {
                 <Pressable
                   key={l.id}
                   onPress={() => setEditLead(l)}
-                  className="flex-row items-center justify-between rounded-2xl bg-white p-4 active:opacity-70"
+                  className="flex-row items-center justify-between rounded-2xl bg-surface p-4 active:opacity-70"
                 >
                   <View className="flex-1">
                     <Text className="text-base font-semibold text-ink">
@@ -146,7 +146,7 @@ export default function Leads() {
       {/* Create */}
       <Modal visible={creating} transparent animationType="slide" onRequestClose={() => setCreating(false)}>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setCreating(false)}>
-          <Pressable className="gap-3 rounded-t-3xl bg-white p-5" onPress={(e) => e.stopPropagation()}>
+          <Pressable className="gap-3 rounded-t-3xl bg-surface p-5" onPress={(e) => e.stopPropagation()}>
             <Text className="text-lg font-bold text-ink">{t.mobileD2D.newLead}</Text>
             <Input label={t.mobileD2D.firstNameLabel} value={first} onChangeText={setFirst} placeholder={t.mobileD2D.firstNamePlaceholder} />
             <Input label={t.mobileD2D.lastNameLabel} value={last} onChangeText={setLast} placeholder={t.mobileD2D.lastNamePlaceholder} />
@@ -160,7 +160,7 @@ export default function Leads() {
       {/* Move stage */}
       <Modal visible={!!editLead} transparent animationType="slide" onRequestClose={() => setEditLead(null)}>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setEditLead(null)}>
-          <Pressable className="gap-2 rounded-t-3xl bg-white p-5" onPress={(e) => e.stopPropagation()}>
+          <Pressable className="gap-2 rounded-t-3xl bg-surface p-5" onPress={(e) => e.stopPropagation()}>
             <Text className="text-lg font-bold text-ink">
               {editLead ? [editLead.first_name, editLead.last_name].filter(Boolean).join(' ') : ''}
             </Text>
@@ -173,7 +173,7 @@ export default function Leads() {
                   onPress={() => editLead && move.mutate({ id: editLead.id, status: s.key })}
                   className={`flex-row items-center justify-between rounded-xl border p-3 ${sel ? 'border-ink bg-ink' : 'border-surface-border'}`}
                 >
-                  <Text className={`text-base font-semibold ${sel ? 'text-white' : 'text-ink'}`}>{stageLabel(s.key)}</Text>
+                  <Text className={`text-base font-semibold ${sel ? 'text-onAction' : 'text-ink'}`}>{stageLabel(s.key)}</Text>
                   {sel ? <SymbolView name="checkmark" tintColor="#FFFFFF" size={14} /> : null}
                 </Pressable>
               );
@@ -195,7 +195,7 @@ export default function Leads() {
               }}
               className="mt-2 items-center rounded-xl bg-ink py-3"
             >
-              <Text className="text-base font-semibold text-white">{t.modals.convertToJob}</Text>
+              <Text className="text-base font-semibold text-onAction">{t.modals.convertToJob}</Text>
             </Pressable>
           </Pressable>
         </Pressable>

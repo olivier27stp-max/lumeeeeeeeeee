@@ -6,6 +6,7 @@ import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, Scro
 import { WebView } from 'react-native-webview';
 
 import { Button } from '@/components/ui/Button';
+import { useChampsCreation } from '@/components/champs/useChampsCreation';
 import { Input } from '@/components/ui/Input';
 import { ClientPicker, PickedClient } from '@/components/ClientPicker';
 import { LineItemsEditor } from '@/components/LineItemsEditor';
@@ -101,9 +102,11 @@ export default function NewQuote() {
     return { subtotal, discount, tax, total: subtotal - discount + tax };
   }, [items, taxRate, discountOn, discountType, discountValue]);
 
+  const champsPerso = useChampsCreation('quote');
+
   const saveMut = useMutation({
-    mutationFn: () =>
-      createQuote({
+    mutationFn: async () => {
+      const devis = await createQuote({
         orgId: orgId ?? '',
         clientId: client!.id,
         userId: session?.user.id ?? '',
@@ -117,7 +120,11 @@ export default function NewQuote() {
         depositRequired: depositOn,
         depositType: depositOn ? depositType : null,
         depositValue: depositOn ? parseFloat(depositValue) || 0 : 0,
-      }),
+      });
+      // Les valeurs ont besoin de l'id du devis : elles s'écrivent APRÈS.
+      await champsPerso.enregistrer(devis.id);
+      return devis;
+    },
     onSuccess: async (quote) => {
       qc.invalidateQueries({ queryKey: ['quotes'] });
       setSentQuote(quote);
@@ -130,6 +137,16 @@ export default function NewQuote() {
     },
     onError: (e: Error) => Alert.alert(t.mobileBilling.couldNotCreateQuote, e.message),
   });
+
+  /** Un champ obligatoire vide bloque AVANT que le devis existe. */
+  const creerDevis = () => {
+    const erreur = champsPerso.valider();
+    if (erreur) {
+      Alert.alert(t.mobileComp.customFields, erreur);
+      return;
+    }
+    saveMut.mutate();
+  };
 
   // Deposit amount (cents) from the form, for the message note.
   const depositCents = depositOn
@@ -284,7 +301,7 @@ export default function NewQuote() {
       <LineItemsEditor onChange={setItems} />
 
       {/* Discount */}
-      <Pressable onPress={() => setDiscountOn((d) => !d)} className="flex-row items-center justify-between rounded-2xl bg-white px-4 py-3">
+      <Pressable onPress={() => setDiscountOn((d) => !d)} className="flex-row items-center justify-between rounded-2xl bg-surface px-4 py-3">
         <Text className="text-sm text-ink">{t.mobileBilling.addDiscount}</Text>
         <Text className="text-lg">{discountOn ? '☑️' : '⬜️'}</Text>
       </Pressable>
@@ -292,7 +309,7 @@ export default function NewQuote() {
         <View className="flex-row gap-2">
           <View className="flex-row rounded-2xl bg-surface-sunken p-1">
             {(['percentage', 'fixed'] as const).map((t) => (
-              <Pressable key={t} onPress={() => setDiscountType(t)} className={`items-center rounded-xl px-4 py-2 ${discountType === t ? 'bg-white' : ''}`}>
+              <Pressable key={t} onPress={() => setDiscountType(t)} className={`items-center rounded-xl px-4 py-2 ${discountType === t ? 'bg-surface' : ''}`}>
                 <Text className={`text-sm font-semibold ${discountType === t ? 'text-ink' : 'text-ink-muted'}`}>{t === 'percentage' ? '%' : '$'}</Text>
               </Pressable>
             ))}
@@ -304,7 +321,7 @@ export default function NewQuote() {
       <Input label={t.mobileBilling.taxRate} value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
 
       {/* Deposit */}
-      <Pressable onPress={() => setDepositOn((d) => !d)} className="flex-row items-center justify-between rounded-2xl bg-white px-4 py-3">
+      <Pressable onPress={() => setDepositOn((d) => !d)} className="flex-row items-center justify-between rounded-2xl bg-surface px-4 py-3">
         <Text className="text-sm text-ink">{t.mobileBilling.requireDeposit}</Text>
         <Text className="text-lg">{depositOn ? '☑️' : '⬜️'}</Text>
       </Pressable>
@@ -312,7 +329,7 @@ export default function NewQuote() {
         <View className="flex-row gap-2">
           <View className="flex-row rounded-2xl bg-surface-sunken p-1">
             {(['percentage', 'fixed'] as const).map((t) => (
-              <Pressable key={t} onPress={() => setDepositType(t)} className={`items-center rounded-xl px-4 py-2 ${depositType === t ? 'bg-white' : ''}`}>
+              <Pressable key={t} onPress={() => setDepositType(t)} className={`items-center rounded-xl px-4 py-2 ${depositType === t ? 'bg-surface' : ''}`}>
                 <Text className={`text-sm font-semibold ${depositType === t ? 'text-ink' : 'text-ink-muted'}`}>{t === 'percentage' ? '%' : '$'}</Text>
               </Pressable>
             ))}
@@ -324,7 +341,7 @@ export default function NewQuote() {
       <Input label={t.mobileBilling.clientVisibleNotes} value={notes} onChangeText={setNotes} multiline numberOfLines={3} style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }} />
 
       {/* Totals */}
-      <View className="gap-1 rounded-2xl bg-white p-4">
+      <View className="gap-1 rounded-2xl bg-surface p-4">
         <Row label={t.mobileBilling.subtotal} value={formatCurrencyCents(totals.subtotal, 'CAD')} />
         {totals.discount > 0 ? <Row label={t.mobileBilling.discount} value={`- ${formatCurrencyCents(totals.discount, 'CAD')}`} /> : null}
         <Row label={t.mobileBilling.tax} value={formatCurrencyCents(totals.tax, 'CAD')} />
@@ -337,12 +354,14 @@ export default function NewQuote() {
         onPress={() => setShowPreview(true)}
         disabled={items.length === 0}
       />
-      <Button title={t.mobileBilling.createQuote} onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!client || items.length === 0 || !orgId} />
+      {champsPerso.bloc}
+
+      <Button title={t.mobileBilling.createQuote} onPress={creerDevis} loading={saveMut.isPending} disabled={!client || items.length === 0 || !orgId} />
 
       {/* Full-screen in-app preview of the quote (logo + name + items + totals). */}
       <Modal visible={showPreview} animationType="slide" onRequestClose={() => setShowPreview(false)}>
         <View className="flex-1 bg-surface-alt">
-          <View className="flex-row items-center justify-between border-b border-surface-border bg-white px-4 py-3">
+          <View className="flex-row items-center justify-between border-b border-surface-border bg-surface px-4 py-3">
             <Text className="text-base font-bold text-ink">{t.mobileBilling.quotePreviewTitle}</Text>
             <Pressable onPress={() => setShowPreview(false)} hitSlop={10}>
               <Text className="text-sm font-semibold text-brand">{t.mobileBilling.close}</Text>
@@ -364,7 +383,7 @@ export default function NewQuote() {
           className="flex-1 justify-end bg-black/40"
         >
           <Pressable className="absolute inset-0" onPress={() => Keyboard.dismiss()} />
-          <View className="rounded-t-3xl bg-white p-5 gap-4" style={{ paddingBottom: 28 }}>
+          <View className="rounded-t-3xl bg-surface p-5 gap-4" style={{ paddingBottom: 28 }}>
             <View className="gap-0.5">
               <Text className="text-lg font-bold text-ink">{t.mobileBilling.sendQuoteTitle}</Text>
               <Text className="text-xs text-ink-muted">

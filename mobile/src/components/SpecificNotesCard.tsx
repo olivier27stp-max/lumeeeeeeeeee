@@ -70,7 +70,7 @@ export function SpecificNotesCard({ jobId, orgId }: { jobId: string; orgId: stri
   });
 
   return (
-    <View className="gap-3 rounded-2xl bg-white p-4">
+    <View className="gap-3 rounded-2xl bg-surface p-4">
       <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.internalNotes}</Text>
 
       {/* Composer (text only) */}

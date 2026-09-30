@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
 import { CircleButton } from '@/components/CircleButton';
+import { CreateMenuFab } from '@/components/CreateMenuFab';
 import UnifiedAvatar from '@/components/ui/UnifiedAvatar';
 import { listClientPhones } from '@/lib/api/clients';
 import { listConversations } from '@/lib/api/messaging';
@@ -63,7 +64,7 @@ function Carousel({
 }) {
   if (jobs.length === 0) {
     return (
-      <View className="mx-5 items-center rounded-3xl bg-white p-8" style={CARD_SHADOW}>
+      <View className="mx-5 items-center rounded-3xl bg-surface p-8" style={CARD_SHADOW}>
         <SymbolView name="checkmark.circle" tintColor="#A3A3A3" size={36} resizeMode="scaleAspectFit" />
         <Text className="mt-2 text-sm text-ink-muted">{empty}</Text>
       </View>
@@ -96,7 +97,7 @@ function dayRange(offsetDays: number): { startISO: string; endISO: string } {
 export default function Home() {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
-  const { orgId, teamId, scope, permissions, role, can, canSeePricing } = usePermissions();
+  const { orgId, teamId, scope, permissions, role, can } = usePermissions();
   const { t } = useTranslation();
   const { session } = useAuth();
   const { current: membership } = useMembership();
@@ -107,19 +108,6 @@ export default function Home() {
   const [now, setNow] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
   const [bgFailed, setBgFailed] = useState(false);
-
-  const [menuOpen, setMenuOpen] = useState(false);
-  const createOptions: { label: string; icon: string; route: string }[] = [];
-  if (can('jobs.create')) createOptions.push({ label: t.mobileHome.newJob, icon: 'wrench.and.screwdriver', route: '/(app)/jobs/new' });
-  if (can('clients.create')) createOptions.push({ label: t.mobileHome.newClient, icon: 'person.badge.plus', route: '/(app)/clients/new' });
-  if (can('quotes.create') || canSeePricing) createOptions.push({ label: t.mobileHome.newQuote, icon: 'doc.text', route: '/(app)/quotes/new' });
-  if (can('invoices.create') || canSeePricing) createOptions.push({ label: t.mobileHome.newInvoice, icon: 'dollarsign.circle', route: '/(app)/invoices/new' });
-  const canCreateAny = createOptions.length > 0;
-
-  const goCreate = (route: string) => {
-    setMenuOpen(false);
-    router.push(route as any);
-  };
 
   // Today + tomorrow jobs, scoped to the user's team (owner/company sees all).
   const tomorrow = useMemo(() => dayRange(1), []);
@@ -316,7 +304,7 @@ export default function Home() {
         key={j.id}
         onPress={() => openJob(j)}
         style={{ width: CARD_W, ...CARD_SHADOW, borderLeftWidth: 4, borderLeftColor: statusStyle(j.status).solid }}
-        className="overflow-hidden rounded-3xl bg-white p-5"
+        className="overflow-hidden rounded-3xl bg-surface p-5"
       >
         <View className="flex-row items-start gap-3">
           <UnifiedAvatar id={j.client_id || j.id} name={j.client_name || j.title} size={42} />
@@ -387,7 +375,7 @@ export default function Home() {
           <View className="flex-row items-center gap-3">
           <Pressable
             onPress={() => router.push('/(app)/messages')}
-            className="relative h-10 w-10 items-center justify-center rounded-full bg-white"
+            className="relative h-10 w-10 items-center justify-center rounded-full bg-surface"
             style={{ shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } }}
           >
             <SymbolView name="bubble.left.and.bubble.right.fill" tintColor="#171717" size={18} resizeMode="scaleAspectFit" />
@@ -399,7 +387,7 @@ export default function Home() {
           </Pressable>
           <Pressable
             onPress={() => router.push('/(app)/notifications')}
-            className="relative h-10 w-10 items-center justify-center rounded-full bg-white"
+            className="relative h-10 w-10 items-center justify-center rounded-full bg-surface"
             style={{ shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } }}
           >
             <SymbolView name="bell.fill" tintColor="#171717" size={18} resizeMode="scaleAspectFit" />
@@ -415,7 +403,7 @@ export default function Home() {
         {/* Search bar → client search */}
         <Pressable
           onPress={() => router.push('/(app)/search')}
-          className="mx-5 mt-3 flex-row items-center gap-2 rounded-2xl bg-white px-4 py-3"
+          className="mx-5 mt-3 flex-row items-center gap-2 rounded-2xl bg-surface px-4 py-3"
           style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
         >
           <SymbolView name="magnifyingglass" tintColor="#A3A3A3" size={16} resizeMode="scaleAspectFit" />
@@ -445,7 +433,7 @@ export default function Home() {
                 style={{ shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } }}
               >
                 <SymbolView name={onBreak ? 'pause.circle.fill' : 'clock.badge.checkmark'} tintColor="#FFFFFF" size={16} resizeMode="scaleAspectFit" />
-                <Text className="text-base font-semibold text-white">
+                <Text className="text-base font-semibold text-onAction">
                   {onBreak ? `${t.mobileHome.onBreak} · ${clockedLabel}` : `${t.mobileHome.atWork} · ${clockedLabel}`}
                 </Text>
               </View>
@@ -453,7 +441,7 @@ export default function Home() {
                 <Pressable
                   onPress={toggleBreak}
                   disabled={clockBusy}
-                  className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-white py-3"
+                  className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-surface py-3"
                   style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
                 >
                   <SymbolView name={onBreak ? 'play.fill' : 'pause.fill'} tintColor="#171717" size={14} resizeMode="scaleAspectFit" />
@@ -473,7 +461,7 @@ export default function Home() {
             <Pressable
               onPress={toggleClock}
               disabled={clockBusy}
-              className="mx-5 mt-4 flex-row items-center justify-center gap-2 rounded-3xl bg-white py-4"
+              className="mx-5 mt-4 flex-row items-center justify-center gap-2 rounded-3xl bg-surface py-4"
               style={{ shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } }}
             >
               <SymbolView name="clock" tintColor="#171717" size={16} resizeMode="scaleAspectFit" />
@@ -493,37 +481,8 @@ export default function Home() {
         <Carousel jobs={todays} renderCard={renderJobCard} empty={t.mobileHome.noJobsToday} />
       </ScrollView>
 
-      {/* Tap-outside catcher */}
-      {menuOpen ? <Pressable className="absolute inset-0" onPress={() => setMenuOpen(false)} /> : null}
-
-      {/* Create menu (popover) */}
-      {canCreateAny && menuOpen ? (
-        <View
-          className="absolute bottom-24 right-6 w-52 overflow-hidden rounded-2xl bg-white"
-          style={{ shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } }}
-        >
-          {createOptions.map((o) => (
-            <Pressable
-              key={o.route}
-              onPress={() => goCreate(o.route)}
-              className="flex-row items-center gap-3 border-b border-surface-border px-4 py-3.5 active:bg-surface-sunken"
-            >
-              <SymbolView name={o.icon as any} tintColor="#171717" size={18} resizeMode="scaleAspectFit" />
-              <Text className="text-base text-ink">{o.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-
-      {canCreateAny ? (
-        <Pressable
-          onPress={() => setMenuOpen((o) => !o)}
-          className="absolute bottom-6 right-6 h-14 w-14 items-center justify-center rounded-full bg-ink"
-          style={{ shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }}
-        >
-          <SymbolView name={menuOpen ? 'xmark' : 'plus'} tintColor="#FFFFFF" size={24} resizeMode="scaleAspectFit" />
-        </Pressable>
-      ) : null}
+      {/* Quick-create overlay — same four actions, same routes */}
+      <CreateMenuFab />
     </View>
   );
 }

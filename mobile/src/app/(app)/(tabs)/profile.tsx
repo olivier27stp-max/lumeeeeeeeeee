@@ -73,7 +73,7 @@ export default function More() {
         <Text className="text-2xl font-bold text-ink">{t.mobileProfile.more}</Text>
 
         {/* Profile header */}
-        <View className="flex-row items-center gap-3 rounded-3xl bg-white p-4">
+        <View className="flex-row items-center gap-3 rounded-3xl bg-surface p-4">
           <UnifiedAvatar id={session?.user.id ?? 'me'} name={current?.fullName ?? session?.user.email ?? 'Me'} size={56} url={meMember?.avatar_url} />
           <View className="flex-1">
             <Text className="text-base font-bold text-ink">{current?.fullName ?? session?.user.email}</Text>
@@ -90,7 +90,7 @@ export default function More() {
         {/* Global search bar */}
         <Pressable
           onPress={() => router.push('/(app)/global-search' as any)}
-          className="flex-row items-center gap-2 rounded-2xl bg-white px-4 py-3"
+          className="flex-row items-center gap-2 rounded-2xl bg-surface px-4 py-3"
         >
           <SymbolView name="magnifyingglass" tintColor="#A3A3A3" size={18} resizeMode="scaleAspectFit" />
           <Text className="text-base text-ink-subtle">{t.mobileProfile.searchPlaceholder}</Text>
@@ -105,7 +105,7 @@ export default function More() {
                 <Pressable
                   key={m}
                   onPress={() => setMode(m)}
-                  className={`flex-1 items-center rounded-xl py-2.5 ${mode === m ? 'bg-white' : ''}`}
+                  className={`flex-1 items-center rounded-xl py-2.5 ${mode === m ? 'bg-surface' : ''}`}
                 >
                   <Text className={`text-sm font-semibold ${mode === m ? 'text-ink' : 'text-ink-muted'}`}>
                     {m === 'tech' ? t.mobileProfile.technician : t.mobileProfile.salesReps}
@@ -119,7 +119,7 @@ export default function More() {
         {/* Gestion — tech persona drops Réglages vente; sales persona keeps it.
             Dashboard/team/company stay manager-gated in both personas. */}
         {isManager || salesPersona ? (
-          <View className="overflow-hidden rounded-3xl bg-white">
+          <View className="overflow-hidden rounded-3xl bg-surface">
             <Row icon="chart.bar.xaxis" label={t.mobileProfile.dashboard} onPress={() => router.push('/(app)/dashboard' as any)} />
             {isManager ? (
               <>
@@ -136,14 +136,14 @@ export default function More() {
 
         {/* Paie & commissions — sales persona only (techs don't see them) */}
         {salesPersona ? (
-          <View className="overflow-hidden rounded-3xl bg-white">
+          <View className="overflow-hidden rounded-3xl bg-surface">
             <Row icon="dollarsign.circle" label={t.mobileProfile.commissions} onPress={() => router.push('/(app)/commissions' as any)} />
             <Row icon="banknote" label={t.mobileProfile.myPay} onPress={() => router.push('/(app)/payroll' as any)} />
           </View>
         ) : null}
 
         {/* General — everyone */}
-        <View className="overflow-hidden rounded-3xl bg-white">
+        <View className="overflow-hidden rounded-3xl bg-surface">
           {can('clients.read') ? (
             <Row icon="folder" label={t.mobileProfile.clientRecords} onPress={() => router.push('/(app)/clients' as any)} />
           ) : null}
@@ -156,14 +156,14 @@ export default function More() {
         </View>
 
         {/* Langue / Language */}
-        <View className="rounded-3xl bg-white p-4 gap-2">
+        <View className="rounded-3xl bg-surface p-4 gap-2">
           <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">Langue · Language</Text>
           <View className="flex-row rounded-2xl bg-surface-sunken p-1">
             {(['fr', 'en'] as const).map((l) => (
               <Pressable
                 key={l}
                 onPress={() => setLanguage(l)}
-                className={`flex-1 items-center rounded-xl py-2 ${language === l ? 'bg-white' : ''}`}
+                className={`flex-1 items-center rounded-xl py-2 ${language === l ? 'bg-surface' : ''}`}
               >
                 <Text className={`text-sm font-semibold ${language === l ? 'text-ink' : 'text-ink-muted'}`}>
                   {l === 'fr' ? 'Français' : 'English'}
@@ -174,7 +174,7 @@ export default function More() {
         </View>
 
         {/* Session — auto sign-out after chosen inactivity ('forever' = never) */}
-        <View className="rounded-3xl bg-white p-4 gap-2">
+        <View className="rounded-3xl bg-surface p-4 gap-2">
           <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileProfile.stayLoggedIn}</Text>
           <Text className="text-xs text-ink-muted">{t.mobileProfile.stayLoggedInHint}</Text>
           <View className="flex-row flex-wrap gap-1 rounded-2xl bg-surface-sunken p-1">
@@ -182,7 +182,7 @@ export default function More() {
               <Pressable
                 key={opt}
                 onPress={() => setIdleLimit(opt)}
-                className={`min-w-[31%] flex-1 items-center rounded-xl py-2 ${idleLimit === opt ? 'bg-white' : ''}`}
+                className={`min-w-[31%] flex-1 items-center rounded-xl py-2 ${idleLimit === opt ? 'bg-surface' : ''}`}
               >
                 <Text className={`text-sm font-semibold ${idleLimit === opt ? 'text-ink' : 'text-ink-muted'}`}>
                   {
@@ -201,7 +201,7 @@ export default function More() {
           </View>
         </View>
 
-        <View className="overflow-hidden rounded-3xl bg-white">
+        <View className="overflow-hidden rounded-3xl bg-surface">
           <Row icon="rectangle.portrait.and.arrow.right" label={t.mobileProfile.logOut} onPress={onSignOut} danger />
         </View>
 

@@ -132,7 +132,7 @@ export default function Messages() {
           return (
             <Pressable
               onPress={() => open(item)}
-              className="flex-row items-center gap-3 rounded-2xl bg-white p-3"
+              className="flex-row items-center gap-3 rounded-2xl bg-surface p-3"
               style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
             >
               <UnifiedAvatar id={item.client_id || item.id} name={name} size={44} />
@@ -259,7 +259,7 @@ function NewMessageModal({ visible, onClose }: { visible: boolean; onClose: () =
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
       <KeyboardAvoidingView className="flex-1 bg-surface-alt" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {/* Header */}
-        <View className="flex-row items-center justify-between border-b border-surface-border bg-white px-5 py-4">
+        <View className="flex-row items-center justify-between border-b border-surface-border bg-surface px-5 py-4">
           <Text className="text-base font-bold text-ink">{t.mobileMisc.newMessage}</Text>
           <Pressable onPress={close} className="h-8 w-8 items-center justify-center rounded-full bg-surface-sunken active:opacity-70">
             <SymbolView name="xmark" tintColor="#525252" size={13} resizeMode="scaleAspectFit" />
@@ -280,7 +280,7 @@ function NewMessageModal({ visible, onClose }: { visible: boolean; onClose: () =
               autoCapitalize="words"
             />
             {searchQ.data && searchQ.data.length > 0 && !selected ? (
-              <View className="overflow-hidden rounded-2xl bg-white">
+              <View className="overflow-hidden rounded-2xl bg-surface">
                 {searchQ.data.map((c: any, i: number) => {
                   const name = `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim() || c.company || '—';
                   return (

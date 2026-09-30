@@ -91,7 +91,7 @@ export function LineItemsEditor({
       <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.items}</Text>
 
       {rows.map((r) => (
-        <View key={r.id} className="gap-2 rounded-2xl border border-surface-border bg-white p-3">
+        <View key={r.id} className="gap-2 rounded-2xl border border-surface-border bg-surface p-3">
           <View className="flex-row items-center gap-2">
             <TextInput
               value={r.name}
@@ -135,7 +135,7 @@ export function LineItemsEditor({
       </View>
 
       {catalogOpen ? (
-        <View className="gap-2 rounded-2xl border border-surface-border bg-white p-3">
+        <View className="gap-2 rounded-2xl border border-surface-border bg-surface p-3">
           <Input label={c.searchService} value={catalogSearch} onChangeText={setCatalogSearch} placeholder={c.serviceNamePlaceholder} />
           {(services ?? []).map((s) => (
             <Pressable

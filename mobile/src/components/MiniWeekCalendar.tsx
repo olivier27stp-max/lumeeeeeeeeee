@@ -35,7 +35,7 @@ export function MiniWeekCalendar({
   const monthLabel = weekStart.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   return (
-    <View className="rounded-2xl bg-white p-3">
+    <View className="rounded-2xl bg-surface p-3">
       <View className="mb-2 flex-row items-center justify-between">
         <Pressable onPress={() => setWeekStart((w) => addDays(w, -7))} className="h-7 w-7 items-center justify-center rounded-full bg-surface-sunken">
           <SymbolView name="chevron.left" tintColor="#171717" size={12} resizeMode="scaleAspectFit" />
@@ -52,9 +52,9 @@ export function MiniWeekCalendar({
           const n = counts ? counts(d) : 0;
           return (
             <Pressable key={d.toISOString()} onPress={() => onSelect(d)} className={`w-9 items-center rounded-xl py-1.5 ${isSel ? 'bg-ink' : ''}`}>
-              <Text className={`text-[10px] font-medium ${isSel ? 'text-white' : 'text-ink-subtle'}`}>{DAY_ABBR[i]}</Text>
-              <Text className={`mt-0.5 text-sm font-bold ${isSel ? 'text-white' : 'text-ink'}`}>{d.getDate()}</Text>
-              <View style={{ width: 4, height: 4, borderRadius: 2, marginTop: 2 }} className={n > 0 ? (isSel ? 'bg-white' : 'bg-ink') : 'bg-transparent'} />
+              <Text className={`text-[10px] font-medium ${isSel ? 'text-onAction' : 'text-ink-subtle'}`}>{DAY_ABBR[i]}</Text>
+              <Text className={`mt-0.5 text-sm font-bold ${isSel ? 'text-onAction' : 'text-ink'}`}>{d.getDate()}</Text>
+              <View style={{ width: 4, height: 4, borderRadius: 2, marginTop: 2 }} className={n > 0 ? (isSel ? 'bg-surface' : 'bg-ink') : 'bg-transparent'} />
               {isToday && !isSel ? <View className="absolute bottom-0.5 h-0.5 w-3 rounded-full bg-ink" /> : null}
             </Pressable>
           );

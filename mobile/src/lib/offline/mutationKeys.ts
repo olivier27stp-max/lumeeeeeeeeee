@@ -13,4 +13,10 @@ export const MK = {
   endBreak: ['timesheet', 'endBreak'] as const,
   d2dLogEvent: ['d2d', 'logEvent'] as const,
   d2dCreateHouse: ['d2d', 'createHouse'] as const,
+  // Champs personnalisés : rejouable SANS RISQUE DE DOUBLON, parce que la route
+  // porte la `version` lue. Si la valeur a déjà été écrite (ou modifiée par
+  // quelqu'un d'autre pendant que l'écriture dormait en file), le serveur
+  // répond « conflit » au lieu d'écrire une seconde fois. C'est ce qui rend
+  // cette écriture-là sûre à mettre en file, contrairement à une création.
+  champsPersoEcrire: ['champs-perso', 'ecrire'] as const,
 };

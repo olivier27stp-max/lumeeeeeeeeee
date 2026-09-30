@@ -61,7 +61,7 @@ export default function Gamification() {
         ) : (
           <View className="flex-row flex-wrap gap-3">
             {badges.data!.map((b) => (
-              <View key={b.id} className="w-[30%] items-center gap-1 rounded-2xl bg-white p-3">
+              <View key={b.id} className="w-[30%] items-center gap-1 rounded-2xl bg-surface p-3">
                 <View
                   className="h-12 w-12 items-center justify-center rounded-full"
                   style={{ backgroundColor: (b.color ?? '#2563EB') + '22' }}
@@ -87,7 +87,7 @@ export default function Gamification() {
             const joined = c.my_value != null;
             const pct = c.target_value ? Math.min(100, Math.round(((c.my_value ?? 0) / c.target_value) * 100)) : 0;
             return (
-              <View key={c.id} className="gap-2 rounded-2xl bg-white p-4">
+              <View key={c.id} className="gap-2 rounded-2xl bg-surface p-4">
                 <View className="flex-row items-center justify-between">
                   <Text className="flex-1 text-base font-semibold text-ink">{c.name}</Text>
                   <Text className="text-xs font-semibold uppercase text-ink-subtle">{c.type === 'daily' ? t.mobileD2D.challengeDaily : t.mobileD2D.challengeWeekly}</Text>
@@ -119,7 +119,7 @@ export default function Gamification() {
           <Text className="text-sm text-ink-muted">{t.mobileD2D.noActiveBattles}</Text>
         ) : (
           battles.data!.map((b) => (
-            <View key={b.id} className="gap-2 rounded-2xl bg-white p-4">
+            <View key={b.id} className="gap-2 rounded-2xl bg-surface p-4">
               <Text className="text-base font-semibold text-ink">{b.name}</Text>
               <View className="flex-row items-center justify-center gap-4">
                 <Text className="text-2xl font-bold text-brand">{b.challenger_score}</Text>

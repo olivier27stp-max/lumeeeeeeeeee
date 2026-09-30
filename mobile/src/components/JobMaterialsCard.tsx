@@ -67,7 +67,7 @@ export function JobMaterialsCard({
   });
 
   return (
-    <View className="gap-3 rounded-2xl bg-white p-4">
+    <View className="gap-3 rounded-2xl bg-surface p-4">
       <View className="flex-row items-center justify-between">
         <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{c.materialsUsed}</Text>
         <Pressable onPress={() => setAdding((v) => !v)} className="flex-row items-center gap-1">

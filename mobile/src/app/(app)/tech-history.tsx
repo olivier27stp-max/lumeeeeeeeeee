@@ -47,7 +47,7 @@ export default function TechHistory() {
                 `/(app)/tech-history/${m.user_id}?name=${encodeURIComponent(m.full_name ?? '')}&role=${encodeURIComponent(m.role ?? '')}` as any,
               )
             }
-            className="flex-row items-center gap-3 rounded-2xl bg-white p-4"
+            className="flex-row items-center gap-3 rounded-2xl bg-surface p-4"
           >
             <UnifiedAvatar id={m.user_id} name={m.full_name ?? '—'} url={m.avatar_url} size={44} />
             <View className="flex-1">

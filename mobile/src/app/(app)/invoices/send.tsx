@@ -216,7 +216,7 @@ export default function SendInvoice() {
   return (
     <View className="flex-1 bg-surface-alt">
       {/* Header — like the web invoice modal: title + invoice no. + status. */}
-      <View className="flex-row items-center justify-between border-b border-surface-border bg-white px-4 py-3">
+      <View className="flex-row items-center justify-between border-b border-surface-border bg-surface px-4 py-3">
         <View className="flex-1 pr-3">
           <Text className="text-base font-bold text-ink">{t.mobileBilling.invoicePreviewTitle}</Text>
           <Text className="text-xs text-ink-muted" numberOfLines={1}>
@@ -252,7 +252,7 @@ export default function SendInvoice() {
       </View>
 
       {/* Options d'envoi — clean panel at the bottom (the web modal's sidebar). */}
-      <View className="gap-2 border-t border-surface-border bg-white px-4 pb-7 pt-3">
+      <View className="gap-2 border-t border-surface-border bg-surface px-4 pb-7 pt-3">
         {!sent ? (
           <>
             <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">

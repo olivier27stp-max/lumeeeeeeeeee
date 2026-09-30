@@ -118,7 +118,7 @@ export default function ChecklistFill() {
       {(checklist.items ?? []).map((item) => {
         const val = responses[item.id];
         return (
-          <View key={item.id} className="gap-2 rounded-2xl bg-white p-4">
+          <View key={item.id} className="gap-2 rounded-2xl bg-surface p-4">
             <Text className="text-sm font-semibold text-ink">
               {item.label}
               {item.required ? <Text className="text-status-late"> *</Text> : null}

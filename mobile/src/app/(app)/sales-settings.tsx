@@ -36,7 +36,7 @@ export default function SalesSettings() {
     <View className="flex-1 bg-surface-alt">
       <View className="gap-3 p-4">
         <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileTeam.leaderboardCommissions}</Text>
-        <View className="rounded-2xl bg-white p-4">
+        <View className="rounded-2xl bg-surface p-4">
           <View className="flex-row items-center gap-3">
             <View className="flex-1">
               <Text className="text-base font-semibold text-ink">{t.mobileTeam.peerCommissionsVisible}</Text>

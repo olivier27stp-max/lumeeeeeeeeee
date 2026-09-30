@@ -168,6 +168,67 @@ export async function listHousesInBounds(b: Bounds, limit = 500): Promise<FieldH
   return (data ?? []) as FieldHouse[];
 }
 
+/** Every pin in the org — the exact set the desktop map draws.
+ *
+ * The desktop calls `/api/field-sales/pins` (server/routes/field-sales.ts),
+ * which reads `field_pins` joined to the house profile, org-wide and with no
+ * bounding box. Mobile used to query `field_house_profiles` inside a ±0.1° box
+ * around the GPS fix, which is why it showed a handful of pins and never
+ * reloaded when you panned. Same table, same scope, same status column here, so
+ * both screens draw the same pins.
+ *
+ * `current_status` comes from `field_pins.status` — that is what the desktop
+ * colours by. The profile's own `current_status` is kept in sync by every
+ * writer, but it is not the desktop's source of truth.
+ */
+export async function listOrgPins(orgId: string): Promise<FieldHouse[]> {
+  const PAGE = 1000; // PostgREST returns at most 1000 rows per request
+  const out: FieldHouse[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('field_pins')
+      // The FK name is REQUIRED, not decoration: two relationships join these
+      // tables (field_pins_house_id_fkey and the composite, tenant-scoped
+      // field_pins_house_id_same_org), so a bare `field_house_profiles!inner`
+      // fails with PGRST201 "more than one relationship was found" — HTTP 300,
+      // no rows, and supabase-js raises nothing. Same hint the desktop's /pins
+      // route uses, so both screens resolve the join identically.
+      .select(
+        'status, field_house_profiles!field_pins_house_id_fkey!inner(id, org_id, address, lat, lng, current_status, house_score, visit_count, last_activity_at, created_at, metadata, client_id, lead_id, job_id, quote_id, assigned_user_id, deleted_at)',
+      )
+      .eq('org_id', orgId)
+      .is('field_house_profiles.deleted_at', null)
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    for (const row of rows) {
+      const h = (row as any).field_house_profiles;
+      // The server drops coordinate-less pins the same way; they cannot be drawn.
+      if (!h || h.lat == null || h.lng == null) continue;
+      out.push({
+        id: h.id,
+        org_id: h.org_id,
+        address: h.address,
+        lat: h.lat,
+        lng: h.lng,
+        current_status: (row as any).status ?? h.current_status,
+        house_score: h.house_score,
+        visit_count: h.visit_count,
+        last_activity_at: h.last_activity_at,
+        created_at: h.created_at,
+        metadata: h.metadata,
+        client_id: h.client_id,
+        lead_id: h.lead_id,
+        job_id: h.job_id,
+        quote_id: h.quote_id,
+        assigned_user_id: h.assigned_user_id,
+      });
+    }
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 export async function getHouse(id: string): Promise<FieldHouse | null> {
   const { data, error } = await supabase
     .from('field_house_profiles')

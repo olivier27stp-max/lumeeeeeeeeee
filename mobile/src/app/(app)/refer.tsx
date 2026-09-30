@@ -15,7 +15,7 @@ function Step({ n, title, body }: { n: number; title: string; body: string }) {
   return (
     <View className="flex-row gap-3">
       <View className="h-7 w-7 items-center justify-center rounded-full bg-ink">
-        <Text className="text-sm font-bold text-white">{n}</Text>
+        <Text className="text-sm font-bold text-onAction">{n}</Text>
       </View>
       <View className="flex-1">
         <Text className="text-sm font-semibold text-ink">{title}</Text>

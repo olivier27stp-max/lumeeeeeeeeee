@@ -27,6 +27,10 @@ async function orgHeader(): Promise<Record<string, string>> {
 export class ServerError extends Error {
   status: number;
   code?: string;
+  /** Corps JSON de la réponse en échec. Certaines routes mettent le détail du
+   *  refus DANS le corps d'un 4xx (PUT /custom-values renvoie 409/422 avec
+   *  `results`, un verdict par champ) : sans ça on perdrait la raison. */
+  data?: unknown;
   constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = 'ServerError';
@@ -125,7 +129,11 @@ export async function serverPut<T = any>(path: string, body: unknown): Promise<T
   } catch {
     /* empty */
   }
-  if (!res.ok) throw new ServerError(json?.error ?? `Request failed (${res.status}).`, res.status, json?.code);
+  if (!res.ok) {
+    const err = new ServerError(json?.error ?? `Request failed (${res.status}).`, res.status, json?.code);
+    err.data = json;
+    throw err;
+  }
   return json as T;
 }
 

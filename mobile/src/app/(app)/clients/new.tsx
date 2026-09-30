@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+import { useChampsCreation } from '@/components/champs/useChampsCreation';
 import { ClientInput, createClient } from '@/lib/api/clients';
 import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
@@ -21,15 +22,32 @@ export default function NewClient() {
   const [showAddress, setShowAddress] = useState(false);
 
   const set = (k: keyof ClientInput) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const champsPerso = useChampsCreation('client');
 
   const saveMut = useMutation({
-    mutationFn: () => createClient(orgId ?? '', form),
+    mutationFn: async () => {
+      const client = await createClient(orgId ?? '', form);
+      // Les valeurs ont besoin de l'id de la fiche : elles s'écrivent APRÈS.
+      // Un refus n'annule pas la création, la fiche existe déjà.
+      await champsPerso.enregistrer(client.id);
+      return client;
+    },
     onSuccess: (client) => {
       qc.invalidateQueries({ queryKey: ['clients'] });
       router.replace(`/(app)/clients/${client.id}`);
     },
     onError: (e: Error) => Alert.alert(t.mobileClients.couldNotCreateClient, e.message),
   });
+
+  /** Un champ obligatoire vide bloque AVANT qu'une fiche à moitié remplie existe. */
+  const creer = () => {
+    const erreur = champsPerso.valider();
+    if (erreur) {
+      Alert.alert(t.mobileComp.customFields, erreur);
+      return;
+    }
+    saveMut.mutate();
+  };
 
   if (!canCreateClients) return <Redirect href="/(app)/(tabs)/clients" />;
 
@@ -95,7 +113,9 @@ export default function NewClient() {
           </View>
         )}
 
-        <Button title={t.mobileClients.createClient} onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!valid || !orgId} />
+        {champsPerso.bloc}
+
+        <Button title={t.mobileClients.createClient} onPress={creer} loading={saveMut.isPending} disabled={!valid || !orgId} />
       </View>
     </ScreenContainer>
   );

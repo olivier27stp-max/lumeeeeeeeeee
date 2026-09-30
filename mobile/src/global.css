@@ -1,3 +1,62 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/**
+ * Jetons de couleur, clair et sombre.
+ *
+ * Les valeurs sombres ne sont pas inventées : ce sont celles que le projet a
+ * déjà choisies pour l'écran Lumi (src/lib/lumi/theme.tsx, palette SOMBRE).
+ * Une seule palette pour toute l'app, donc plus de « Lumi noir au milieu d'une
+ * app blanche ».
+ *
+ * Format « R G B » sans fonction : c'est ce que Tailwind attend pour pouvoir
+ * appliquer une opacité (bg-surface/50) via rgb(var(--x) / <alpha-value>).
+ *
+ * Les TEINTES (rouge, bleu, vert, ambre…) ne changent PAS d'un thème à l'autre —
+ * un statut « en retard » reste rouge. Ce qui change, c'est leur fond teinté.
+ */
+
+:root {
+  /* Surfaces */
+  --c-surface: 255 255 255;        /* cartes */
+  --c-surface-alt: 250 250 250;    /* fond d'app */
+  --c-surface-sunken: 245 245 245;
+  --c-surface-border: 229 229 229;
+  --c-surface-border-strong: 212 212 212;
+
+  /* Encre */
+  --c-ink: 23 23 23;
+  --c-ink-muted: 82 82 82;
+  --c-ink-subtle: 163 163 163;
+
+  /* Action (noir en clair, blanc en sombre) et son texte */
+  --c-action: 23 23 23;
+  --c-on-action: 255 255 255;
+
+  /* Fonds teintés des états */
+  --c-danger-bg: 254 242 242;
+  --c-success-bg: 236 253 245;
+  --c-warning-bg: 255 251 235;
+  --c-info-bg: 239 246 255;
+}
+
+.dark:root {
+  --c-surface: 22 22 24;
+  --c-surface-alt: 11 11 12;
+  --c-surface-sunken: 33 33 36;
+  --c-surface-border: 42 42 46;
+  --c-surface-border-strong: 58 58 63;
+
+  --c-ink: 245 245 245;
+  --c-ink-muted: 161 161 166;
+  --c-ink-subtle: 110 110 115;
+
+  --c-action: 245 245 245;
+  --c-on-action: 11 11 12;
+
+  --c-danger-bg: 42 20 22;
+  --c-success-bg: 14 38 32;
+  --c-warning-bg: 42 34 19;
+  --c-info-bg: 15 26 45;
+}

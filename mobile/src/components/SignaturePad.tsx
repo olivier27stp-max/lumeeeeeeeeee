@@ -24,7 +24,7 @@ export function SignaturePad({ visible, onClose, onSave }: Props) {
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 bg-white">
+      <View className="flex-1 bg-surface">
         <View className="px-5 pt-14 pb-2">
           <Text className="text-xl font-bold text-ink">{t.mobileUi.clientSignature}</Text>
           <Text className="text-sm text-ink-muted">{t.mobileUi.signatureHint}</Text>

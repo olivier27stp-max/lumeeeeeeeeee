@@ -149,7 +149,7 @@ export default function Tasks() {
                 <Pressable
                   key={s}
                   onPress={() => setScope(s)}
-                  className={`rounded-xl px-4 py-1.5 ${scope === s ? 'bg-white' : ''}`}
+                  className={`rounded-xl px-4 py-1.5 ${scope === s ? 'bg-surface' : ''}`}
                 >
                   <Text className={`text-sm font-semibold ${scope === s ? 'text-ink' : 'text-ink-muted'}`}>
                     {s === 'mine' ? tr.mobileMisc.myTasks : tr.mobileMisc.allTasks}
@@ -174,7 +174,7 @@ export default function Tasks() {
           </View>
         ) : (
           visible.map((t) => (
-            <View key={t.id} className="flex-row items-start gap-3 rounded-2xl bg-white p-4">
+            <View key={t.id} className="flex-row items-start gap-3 rounded-2xl bg-surface p-4">
               <Pressable onPress={() => toggle.mutate(t)} className="pt-0.5">
                 <View
                   className={`h-6 w-6 items-center justify-center rounded-full border-2 ${t.status === 'done' ? 'border-status-completed bg-status-completed' : 'border-surface-border'}`}
@@ -218,7 +218,7 @@ export default function Tasks() {
       {/* Create modal */}
       <Modal visible={creating} transparent animationType="slide" onRequestClose={() => setCreating(false)}>
         <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setCreating(false)}>
-          <Pressable className="gap-3 rounded-t-3xl bg-white p-5" onPress={(e) => e.stopPropagation()}>
+          <Pressable className="gap-3 rounded-t-3xl bg-surface p-5" onPress={(e) => e.stopPropagation()}>
             <Text className="text-lg font-bold text-ink">{tr.mobileMisc.newTask}</Text>
             <Input label={tr.mobileMisc.taskTitleLabel} value={title} onChangeText={setTitle} placeholder={tr.mobileMisc.taskTitlePlaceholder} />
             <Input label={tr.mobileMisc.descriptionLabel} value={desc} onChangeText={setDesc} placeholder={tr.mobileMisc.optional} multiline />
@@ -231,7 +231,7 @@ export default function Tasks() {
                   onPress={() => setPriority(p)}
                   className={`flex-1 items-center rounded-xl border py-2 ${priority === p ? 'border-ink bg-ink' : 'border-surface-border'}`}
                 >
-                  <Text className={`text-sm font-semibold ${priority === p ? 'text-white' : 'text-ink'}`}>{priorityLabel[p]}</Text>
+                  <Text className={`text-sm font-semibold ${priority === p ? 'text-onAction' : 'text-ink'}`}>{priorityLabel[p]}</Text>
                 </Pressable>
               ))}
             </View>
@@ -244,7 +244,7 @@ export default function Tasks() {
                   onPress={() => setDue(k)}
                   className={`rounded-full border px-3.5 py-1.5 ${due === k ? 'border-ink bg-ink' : 'border-surface-border'}`}
                 >
-                  <Text className={`text-xs font-semibold ${due === k ? 'text-white' : 'text-ink'}`}>{dueLabel[k]}</Text>
+                  <Text className={`text-xs font-semibold ${due === k ? 'text-onAction' : 'text-ink'}`}>{dueLabel[k]}</Text>
                 </Pressable>
               ))}
             </View>
@@ -257,7 +257,7 @@ export default function Tasks() {
                     onPress={() => setAssignee(userId)}
                     className={`rounded-full border px-3.5 py-1.5 ${assignee === userId ? 'border-ink bg-ink' : 'border-surface-border'}`}
                   >
-                    <Text className={`text-xs font-semibold ${assignee === userId ? 'text-white' : 'text-ink'}`}>{tr.mobileMisc.assignMe}</Text>
+                    <Text className={`text-xs font-semibold ${assignee === userId ? 'text-onAction' : 'text-ink'}`}>{tr.mobileMisc.assignMe}</Text>
                   </Pressable>
                   {(members ?? [])
                     .filter((m) => m.user_id !== userId)
@@ -267,7 +267,7 @@ export default function Tasks() {
                         onPress={() => setAssignee(m.user_id)}
                         className={`rounded-full border px-3.5 py-1.5 ${assignee === m.user_id ? 'border-ink bg-ink' : 'border-surface-border'}`}
                       >
-                        <Text className={`text-xs font-semibold ${assignee === m.user_id ? 'text-white' : 'text-ink'}`}>
+                        <Text className={`text-xs font-semibold ${assignee === m.user_id ? 'text-onAction' : 'text-ink'}`}>
                           {m.full_name ?? tr.mobileMisc.memberFallback}
                         </Text>
                       </Pressable>

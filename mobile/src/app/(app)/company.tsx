@@ -33,7 +33,7 @@ function newLogoPath(orgId: string): string {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <View className="gap-3 rounded-2xl border border-surface-border bg-white p-4">
+    <View className="gap-3 rounded-2xl border border-surface-border bg-surface p-4">
       <Text className="text-[11px] font-semibold uppercase tracking-widest text-ink-subtle">{title}</Text>
       {children}
     </View>
@@ -416,9 +416,9 @@ export default function Company() {
                 <Pressable
                   key={code}
                   onPress={() => setForm((f) => ({ ...f, currency: code }))}
-                  className={`flex-1 items-center rounded-xl border px-3 py-2.5 ${on ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                  className={`flex-1 items-center rounded-xl border px-3 py-2.5 ${on ? 'border-ink bg-ink' : 'border-surface-border bg-surface'}`}
                 >
-                  <Text className={`text-sm font-semibold ${on ? 'text-white' : 'text-ink'}`}>{code}</Text>
+                  <Text className={`text-sm font-semibold ${on ? 'text-onAction' : 'text-ink'}`}>{code}</Text>
                   <Text className={`text-[10px] ${on ? 'text-white/80' : 'text-ink-subtle'}`}>{label}</Text>
                 </Pressable>
               );

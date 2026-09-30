@@ -93,7 +93,7 @@ export function JobAgreementCard({
             disabled={creer.isPending}
             className="items-center rounded-xl bg-ink py-2.5"
           >
-            <Text className="text-sm font-semibold text-white">
+            <Text className="text-sm font-semibold text-onAction">
               {creer.isPending ? a.saving : a.create}
             </Text>
           </Pressable>
@@ -152,14 +152,14 @@ export function JobAgreementCard({
                 disabled={envoyer.isPending}
                 className="flex-1 items-center rounded-xl bg-ink py-2.5"
               >
-                <Text className="text-sm font-semibold text-white">
+                <Text className="text-sm font-semibold text-onAction">
                   {envoyer.isPending ? a.saving : a.sendEmail}
                 </Text>
               </Pressable>
               <Pressable
                 onPress={() => envoyer.mutate('sms')}
                 disabled={envoyer.isPending}
-                className="flex-1 items-center rounded-xl border border-surface-border bg-white py-2.5"
+                className="flex-1 items-center rounded-xl border border-surface-border bg-surface py-2.5"
               >
                 <Text className="text-sm font-semibold text-ink">{a.sendSms}</Text>
               </Pressable>

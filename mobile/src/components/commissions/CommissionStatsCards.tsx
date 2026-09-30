@@ -15,7 +15,7 @@ export default function CommissionStatsCards({ cards }: { cards: CommissionStat[
   return (
     <View className="flex-row flex-wrap gap-3">
       {cards.map((card) => (
-        <View key={card.label} className="min-w-[45%] flex-1 gap-0.5 rounded-2xl bg-white p-4" style={CARD}>
+        <View key={card.label} className="min-w-[45%] flex-1 gap-0.5 rounded-2xl bg-surface p-4" style={CARD}>
           <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{card.label}</Text>
           <Text className="text-xl font-bold text-ink" numberOfLines={1}>
             {card.value}

@@ -4,12 +4,17 @@
 module.exports = {
   content: ['./src/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
+  // Le thème sombre est piloté par une CLASSE (`dark`) et non par l'apparence
+  // du téléphone : c'est ce que react-native-css-interop exige pour permuter les
+  // variables de src/global.css, et ça laisse le choix à l'utilisateur.
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Primary = near-black (web --color-primary #171717)
+        // Primary = l'encre en clair, sa contrepartie claire en sombre : les
+        // jetons vivent dans src/global.css (:root / .dark:root).
         brand: {
-          DEFAULT: '#171717',
+          DEFAULT: 'rgb(var(--c-action) / <alpha-value>)',
           50: '#F5F5F5',
           100: '#E5E5E5',
           200: '#D4D4D4',
@@ -27,15 +32,36 @@ module.exports = {
           hover: '#EE5A5A',
         },
         ink: {
-          DEFAULT: '#171717', // text-primary
-          muted: '#525252', // text-secondary
-          subtle: '#A3A3A3', // text-tertiary
+          DEFAULT: 'rgb(var(--c-ink) / <alpha-value>)',
+          muted: 'rgb(var(--c-ink-muted) / <alpha-value>)',
+          subtle: 'rgb(var(--c-ink-subtle) / <alpha-value>)',
         },
         surface: {
-          DEFAULT: '#FFFFFF', // cards
-          alt: '#FAFAFA', // app background
-          sunken: '#F5F5F5',
-          border: '#E5E5E5',
+          DEFAULT: 'rgb(var(--c-surface) / <alpha-value>)', // cartes
+          alt: 'rgb(var(--c-surface-alt) / <alpha-value>)', // fond d'app
+          sunken: 'rgb(var(--c-surface-sunken) / <alpha-value>)',
+          border: 'rgb(var(--c-surface-border) / <alpha-value>)',
+          borderStrong: 'rgb(var(--c-surface-border-strong) / <alpha-value>)',
+        },
+        // Texte posé SUR la couleur d'action (blanc en clair, presque noir en
+        // sombre). Remplace les `text-white` des boutons pleins : en sombre, un
+        // bouton devient clair, donc son texte doit foncer.
+        onAction: 'rgb(var(--c-on-action) / <alpha-value>)',
+        // Fonds teintés des états. La TEINTE ne change pas d'un thème à
+        // l'autre ; son fond, oui.
+        tint: {
+          danger: 'rgb(var(--c-danger-bg) / <alpha-value>)',
+          success: 'rgb(var(--c-success-bg) / <alpha-value>)',
+          warning: 'rgb(var(--c-warning-bg) / <alpha-value>)',
+          info: 'rgb(var(--c-info-bg) / <alpha-value>)',
+        },
+        // Entity identity — one solid color per CRM section, copied from the
+        // web (src/index.css @theme --color-entity-*). See src/lib/entityColors.ts.
+        entity: {
+          request: '#D97706', // amber
+          quote: '#9F1239', // bordeaux
+          job: '#15803D', // green
+          invoice: '#1E3A8A', // navy
         },
         // Job/D2D status colors (web semantic tokens)
         status: {

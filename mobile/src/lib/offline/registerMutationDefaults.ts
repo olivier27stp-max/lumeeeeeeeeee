@@ -6,6 +6,11 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { markJobCompleted, markJobInProgress } from '../api/jobs';
+import {
+  ecrireValeurs as ecrireValeursChamps,
+  type ObjetChamp,
+  type ValeurChamp,
+} from '../api/customFields';
 import { createHouseAt, logHouseEvent } from '../api/fieldSales';
 import { endBreak, punchIn, punchOut, startBreak } from '../api/timesheets';
 import { Job } from '@/types/db';
@@ -52,6 +57,29 @@ export function registerMutationDefaults(qc: QueryClient) {
     mutationFn: (vars: Parameters<typeof createHouseAt>[0]) => createHouseAt(vars),
     onSettled: () => qc.invalidateQueries({ queryKey: ['d2d'] }),
   });
+
+  // ── Champs personnalisés ──────────────────────────────────────────
+  // Les variables sont volontairement PLATES (pas la définition du champ) :
+  // elles sont sérialisées dans AsyncStorage pour survivre à un redémarrage.
+  qc.setMutationDefaults(MK.champsPersoEcrire, {
+    mutationFn: (vars: EcritureChampPerso) =>
+      ecrireValeursChamps(vars.objet, vars.recordId, [
+        { field_id: vars.fieldId, value: vars.valeur, version: vars.version },
+      ]),
+    onSettled: (_d, _e, vars) => {
+      const v = vars as EcritureChampPerso;
+      return qc.invalidateQueries({ queryKey: ['champs-perso', v.objet, v.recordId] });
+    },
+  });
+}
+
+/** Ce qu'une écriture de champ personnalisé met en file, et rien de plus. */
+export interface EcritureChampPerso {
+  objet: ObjetChamp;
+  recordId: string;
+  fieldId: string;
+  valeur: ValeurChamp;
+  version: number | null;
 }
 
 /** Optimistically reflect a job status change so the UI updates while offline. */

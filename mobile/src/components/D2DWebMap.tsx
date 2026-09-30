@@ -81,11 +81,12 @@ const TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 // STATUS_MAP as src/pages/D2DMap.tsx, then rendered with the SAME gradient,
 // icon, colour, border and glow. Keep these two files in sync.
 const COLOR_JS = `
-// PinStatus -> web PIN_STATUS_CONFIG (lead-pin.ts on current main): 7 statuses,
+// PinStatus -> web PIN_STATUS_CONFIG (lead-pin.ts on current main): 6 statuses,
 // recentered 14px-in-28px glyphs (kept at the same 50% ratio in our 34px pins).
+// No 'lead' entry — lead-pin.ts has none; a house stored as 'lead' renders as
+// follow_up, exactly as the desktop does.
 var CFG={
   closed_won:{color:'#22C55E',from:'#4ADE80',to:'#16A34A',icon:'<polyline points="20 6.5 9 17.5 4 12.5"/>'},
-  lead:{color:'#A855F7',from:'#C084FC',to:'#9333EA',icon:'<circle cx="12" cy="12" r="7"/><line x1="12" y1="2" x2="12" y2="5.5"/><line x1="12" y1="18.5" x2="12" y2="22"/><line x1="2" y1="12" x2="5.5" y2="12"/><line x1="18.5" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="1" fill="#fff" stroke="none"/>'},
   follow_up:{color:'#06B6D4',from:'#22D3EE',to:'#0891B2',icon:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'},
   appointment:{color:'#6B7280',from:'#9CA3AF',to:'#4B5563',icon:'<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'},
   no_answer:{color:'#EAB308',from:'#FDE047',to:'#CA8A04',icon:'<path d="M8.32 7.78a3.9 3.9 0 0 1 7.58 1.3c0 2.6-3.9 3.9-3.9 3.9"/><circle cx="12.1" cy="18.2" r=".5"/>'},
@@ -95,14 +96,13 @@ var CFG={
 // DB status -> PinStatus (mirror of STATUS_MAP in src/pages/D2DMap.tsx, current main)
 var SMAP={
   sale:'closed_won',sold:'closed_won',closed_won:'closed_won',
-  lead:'lead',
-  follow_up:'follow_up',callback:'follow_up',
+  lead:'follow_up',follow_up:'follow_up',callback:'follow_up',
   no_answer:'no_answer',
   not_interested:'rejected',do_not_knock:'rejected',rejected:'rejected',
   quote_sent:'appointment',appointment:'appointment',
   unknown:'other',new:'other',knocked:'other',note:'other',revisit:'other',other:'other'
 };
-var ALLB=['closed_won','lead','follow_up','appointment','no_answer','rejected','other'];
+var ALLB=['closed_won','follow_up','appointment','no_answer','rejected','other'];
 function bucketFor(s){return SMAP[s]||'other';}
 function cfgFor(s){return CFG[bucketFor(s)]||CFG.other;}
 // Phone-sized: the web's 28px pin reads tiny on a phone screen — 34px circle
@@ -481,7 +481,7 @@ map.on('rotateend',function(){post({type:'bearing',deg:map.getBearing()});});
   }, [webReady, showZones]);
   useEffect(() => {
     if (!webReady) return;
-    inject(visibleStatuses ? `window._setFilters(${JSON.stringify(visibleStatuses)})` : 'window._setFilters(["closed_won","lead","follow_up","appointment","no_answer","rejected","other"])');
+    inject(visibleStatuses ? `window._setFilters(${JSON.stringify(visibleStatuses)})` : 'window._setFilters(["closed_won","follow_up","appointment","no_answer","rejected","other"])');
   }, [webReady, visibleStatuses]);
   useEffect(() => {
     if (!webReady) return;

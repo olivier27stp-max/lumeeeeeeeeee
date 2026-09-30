@@ -34,7 +34,7 @@ const STATUS_KEY: Record<string, keyof ReturnType<typeof useTranslation>['t']['m
 
 function Tile({ label: l, value, tint }: { label: string; value: string; tint?: string }) {
   return (
-    <View className="flex-1 rounded-2xl bg-white p-4" style={SHADOW}>
+    <View className="flex-1 rounded-2xl bg-surface p-4" style={SHADOW}>
       <Text className="text-[10px] font-bold uppercase tracking-wide text-ink-subtle">{l}</Text>
       <Text className="mt-1 text-xl font-bold" style={{ color: tint ?? '#171717' }}>
         {value}
@@ -60,7 +60,7 @@ function NavTile({
   return (
     <Pressable
       onPress={() => router.push(href as any)}
-      className="flex-1 gap-2 rounded-2xl bg-white p-4 active:opacity-70"
+      className="flex-1 gap-2 rounded-2xl bg-surface p-4 active:opacity-70"
       style={SHADOW}
     >
       <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: tint + '18' }}>
@@ -108,7 +108,7 @@ export default function SalesHome() {
 
       <View className="rounded-2xl bg-ink p-4" style={SHADOW}>
         <Text className="text-[11px] font-bold uppercase tracking-widest text-white/60">{t.mobileSales.conversionRate}</Text>
-        <Text className="text-3xl font-bold text-white">{conv}%</Text>
+        <Text className="text-3xl font-bold text-onAction">{conv}%</Text>
         <Text className="text-sm text-white/70">
           {t.mobileSales.salesOverDoors.replace('{sales}', String(d.sales)).replace('{doors}', String(d.knocks))}
         </Text>
@@ -117,7 +117,7 @@ export default function SalesHome() {
       {/* Primary action — the map */}
       <Pressable
         onPress={() => router.push('/(app)/(tabs)/d2d' as any)}
-        className="flex-row items-center gap-3 rounded-2xl bg-white p-4"
+        className="flex-row items-center gap-3 rounded-2xl bg-surface p-4"
         style={SHADOW}
       >
         <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand/10">
@@ -143,7 +143,7 @@ export default function SalesHome() {
       {me ? (
         <Pressable
           onPress={() => router.push(`/(app)/rep/${me}` as any)}
-          className="flex-row items-center gap-3 rounded-2xl bg-white p-4"
+          className="flex-row items-center gap-3 rounded-2xl bg-surface p-4"
           style={SHADOW}
         >
           <View className="h-10 w-10 items-center justify-center rounded-xl bg-ink/10">
@@ -165,11 +165,11 @@ export default function SalesHome() {
         </Pressable>
       </View>
       {pipe.length === 0 ? (
-        <View className="items-center rounded-2xl bg-white p-6" style={SHADOW}>
+        <View className="items-center rounded-2xl bg-surface p-6" style={SHADOW}>
           <Text className="text-sm text-ink-muted">{t.mobileSales.noLeads}</Text>
         </View>
       ) : (
-        <View className="rounded-2xl bg-white px-3 py-1" style={SHADOW}>
+        <View className="rounded-2xl bg-surface px-3 py-1" style={SHADOW}>
           {pipe.map((b, i) => (
             <View
               key={b.status}

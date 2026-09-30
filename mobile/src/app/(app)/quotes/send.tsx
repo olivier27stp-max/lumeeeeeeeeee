@@ -278,7 +278,7 @@ export default function SendQuote() {
         )}
       </View>
 
-      <View className="flex-1 border-t border-surface-border bg-white">
+      <View className="flex-1 border-t border-surface-border bg-surface">
         <Text className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
           {t.mobileBilling.quotePreviewTitle}
         </Text>

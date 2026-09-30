@@ -3115,6 +3115,7 @@ const fr: TranslationKeys = {
     closed_won: 'Gagné',
     closed_lost: 'Perdu',
     awaiting_response: 'En attente de réponse',
+    changes_requested: 'Modifications demandées',
     approved: 'Approuvé',
     declined: 'Refusé',
     expired: 'Expiré',
@@ -3532,6 +3533,22 @@ const fr: TranslationKeys = {
   },
 
   // Mobile app — screen header titles (Stack.Screen headerTitle)
+  // QuoteDetail (fiche d'une soumission)
+  mobileQuoteDetail: {
+    quote: 'Soumission',
+    number: 'Soumission {number}',
+    client: 'Client',
+    items: 'Produits / Services',
+    noItems: 'Aucune ligne.',
+    subtotal: 'Sous-total',
+    discount: 'Rabais',
+    tax: 'Taxes',
+    total: 'Total',
+    send: 'Envoyer la soumission',
+    loading: 'Chargement…',
+    notFound: 'Soumission introuvable.',
+  },
+
   mobileNav: {
     job: 'Job',
     done: 'Terminé',
@@ -3548,6 +3565,7 @@ const fr: TranslationKeys = {
     salesSettings: 'Réglages vente',
     newQuote: 'Nouvelle soumission',
     sendQuote: 'Envoyer la soumission',
+    quote: 'Soumission',
     newInvoice: 'Nouvelle facture',
     sendInvoice: 'Envoyer la facture',
     editJob: 'Modifier la job',
@@ -4472,6 +4490,7 @@ const fr: TranslationKeys = {
     invoicedPaidSummary: '{invoiced} facturé · {paid}/{total} factures payées',
     statUnpaid: 'Impayés',
     statJobsCompleted: 'Jobs complétés',
+    statJobsToday: "Jobs aujourd'hui",
     statQuotesPending: 'Soumissions en attente',
     statInvoices: 'Factures',
     actionRequired: 'Action requise',
@@ -4493,6 +4512,19 @@ const fr: TranslationKeys = {
     groupTeam: 'Équipe',
     noResultForQuery: 'Aucun résultat pour « {query} ».',
     searchPrompt: 'Cherche un client, une job ou un technicien.',
+    // Recherche complète — même couverture que le bureau (route serveur /api/search)
+    searchAllPlaceholder: 'Rechercher : client, job, devis, facture…',
+    searchAllHint: 'Cherche partout : clients, propriétés, jobs, contrats, paiements, prospects, factures, devis, demandes, équipes, agenda.',
+    groupProperties: 'Propriétés',
+    groupAgreements: 'Contrats',
+    groupPayments: 'Paiements',
+    groupLeads: 'Prospects',
+    groupInvoices: 'Factures',
+    groupQuotes: 'Devis',
+    groupRequests: 'Demandes',
+    groupTeams: 'Équipes',
+    groupEvents: 'Agenda',
+    searchFallbackNotice: 'Recherche complète indisponible — seuls les clients sont cherchés.',
     // Referrals
     referTitle: 'Parrainer un ami',
     referSubtitle: 'Partage Lume avec une autre entreprise — vous gagnez tous les deux une récompense.',
@@ -4667,6 +4699,13 @@ const fr: TranslationKeys = {
     field: 'Champ',
     save: 'Enregistrer',
     datePlaceholder: 'AAAA-MM-JJ',
+    loading: 'Chargement…',
+    retry: 'Réessayer',
+    cfErreurChargement: 'Impossible de charger les champs personnalisés.',
+    cfConflit: 'Ce champ vient d’être modifié ailleurs. La valeur affichée a été rafraîchie.',
+    cfRefus: 'Valeur refusée.',
+    cfFichierBureau: 'Fichier — à joindre depuis le bureau',
+    cfObligatoire: '« {champ} » est obligatoire.',
 
     // ClientPicker
     change: 'Changer',

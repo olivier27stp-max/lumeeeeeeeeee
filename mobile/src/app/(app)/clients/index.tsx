@@ -38,7 +38,7 @@ export default function ClientsIndex() {
             onPress={() => router.push('/(app)/clients/new')}
             className="h-11 w-11 items-center justify-center rounded-full bg-brand"
           >
-            <Text className="text-2xl text-white">+</Text>
+            <Text className="text-2xl text-onAction">+</Text>
           </Pressable>
         ) : null}
       </View>

@@ -8,7 +8,7 @@ type Props = {
 };
 
 export function Card({ children, onPress, className }: Props) {
-  const base = `bg-white rounded-2xl border border-surface-border p-4 ${className ?? ''}`;
+  const base = `bg-surface rounded-2xl border border-surface-border p-4 ${className ?? ''}`;
   if (onPress) {
     return (
       <Pressable onPress={onPress} className={`${base} active:bg-surface-alt`}>

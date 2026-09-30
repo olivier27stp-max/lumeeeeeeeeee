@@ -38,7 +38,7 @@ export default function Payroll() {
 
   return (
     <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 16, gap: 14 }}>
-      <View className="gap-1 rounded-2xl bg-white p-4">
+      <View className="gap-1 rounded-2xl bg-surface p-4">
         <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileD2D.currentPeriod}</Text>
         <Text className="text-base font-semibold text-ink">
           {fmtDate(data.period?.start)} → {fmtDate(data.period?.end)}
@@ -49,17 +49,17 @@ export default function Payroll() {
       </View>
 
       <View className="flex-row gap-3">
-        <View className="flex-1 gap-1 rounded-2xl bg-white p-4">
+        <View className="flex-1 gap-1 rounded-2xl bg-surface p-4">
           <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileD2D.hours}</Text>
           <Text className="text-2xl font-bold text-ink">{(data.hours ?? 0).toFixed(1)} h</Text>
         </View>
-        <View className="flex-1 gap-1 rounded-2xl bg-white p-4">
+        <View className="flex-1 gap-1 rounded-2xl bg-surface p-4">
           <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileD2D.commissions}</Text>
           <Text className="text-2xl font-bold text-status-completed">{money(c.total)}</Text>
         </View>
       </View>
 
-      <View className="gap-2 rounded-2xl bg-white p-4">
+      <View className="gap-2 rounded-2xl bg-surface p-4">
         <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{t.mobileD2D.commissionDetail}</Text>
         <Row label={t.mobileD2D.payrollPending} value={money(c.pending)} />
         <Row label={t.mobileD2D.payrollApproved} value={money(c.approved)} />
