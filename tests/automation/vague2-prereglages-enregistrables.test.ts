@@ -67,3 +67,22 @@ describe('« Demander un avis » envoie le texte écrit dans l’action', () => 
     expect(envois.sms[0]).toMatch(/\/survey\//);
   });
 });
+
+describe('D-10 — un texto sauté n’est pas journalisé « envoyé »', () => {
+  it('sans numéro texto configuré : smsSent = false, emailSent = true', async () => {
+    const ORG = '11111111-1111-4111-8111-111111111111';
+    const { client, journal } = clientEnregistreur({
+      company_settings: { data: { review_enabled: true, google_review_url: 'https://g.page/x', company_name: 'A inc.' } },
+      satisfaction_surveys: { data: { id: 'sondage-1' } },
+      review_requests: { data: null },
+      clients: { data: [{ id: 'c1', email: 'marie@example.test', phone: '+15145550142', email_consent_at: '2026-01-01T00:00:00Z', sms_consent_at: null, email_opt_out_at: null }] },
+    });
+    // twilio: null = aucun numéro texto → le texto est SAUTÉ (M1), pas envoyé.
+    const r = await executeRequestReview({}, { client_first_name: 'Marie', client_phone: '+15145550142', client_email: 'marie@example.test' },
+      { supabase: client, orgId: ORG, entityType: 'client', entityId: 'c1', twilio: null, baseUrl: 'https://app.lume.test' } as never);
+    expect((r.data as any)?.smsSent).toBe(false);
+    expect((r.data as any)?.emailSent).toBe(true);
+    const activite = journal.find((q) => q.table === 'activity_log' && q.op === 'insert' && (q.valeur as any)?.event_type === 'review_requested')?.valeur as any;
+    expect(activite?.metadata?.sms_sent).toBe(false);
+  });
+});

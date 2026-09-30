@@ -1928,7 +1928,7 @@ export async function executeRequestReview(
     return {
       success: false,
       error: `Demande d'avis envoyée mais son suivi n'a pas été enregistré (${trackError.message}) — l'anti-doublon ne la verra pas`,
-      data: { token, surveyUrl, emailSent: emailResult.success, smsSent: smsResult.success },
+      data: { token, surveyUrl, emailSent: estEnvoye(emailResult), smsSent: estEnvoye(smsResult) },
     };
   }
 
@@ -1943,8 +1943,9 @@ export async function executeRequestReview(
     metadata: {
       client_name: clientGreeting,
       survey_token: token,
-      email_sent: emailResult.success,
-      sms_sent: smsResult.success,
+      // Un canal SAUTÉ n'est pas « envoyé » (audit V2, D-10).
+      email_sent: estEnvoye(emailResult),
+      sms_sent: estEnvoye(smsResult),
     },
   });
   if (activityError) {
@@ -1968,7 +1969,7 @@ export async function executeRequestReview(
 
   return {
     success: true,
-    data: { token, surveyUrl, emailSent: emailResult.success, smsSent: smsResult.success },
+    data: { token, surveyUrl, emailSent: estEnvoye(emailResult), smsSent: estEnvoye(smsResult) },
   };
 }
 
