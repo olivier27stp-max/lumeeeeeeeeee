@@ -2750,7 +2750,65 @@ async function envoyerDocument(
       ? `Bonjour [client_first_name],\n\nVoici votre facture ${numero || ''}.\n\n${lien}`
       : `Bonjour [client_first_name],\n\nVoici votre soumission ${numero || ''}.\n\n${lien}`);
 
-  return executeSendEmail({ subject: objet, body: corps }, vars, ctx);
+  const resultat = await executeSendEmail({ subject: objet, body: corps }, vars, ctx);
+  // Parti pour de vrai (ni échec, ni étape sautée) : le document est ENVOYÉ.
+  if (resultat.success && !(resultat.data as { saute?: string } | undefined)?.saute) {
+    await marquerDocumentEnvoye(type, ctx);
+  }
+  return resultat;
+}
+
+/**
+ * Même effet que l'envoi manuel (`/emails/send-invoice`, `/quotes/:id/send-email`) :
+ * sans lui, « Envoyer la facture » laissait le document en BROUILLON — absent
+ * des impayés, sans `invoice.sent`, relances jamais lancées (audit V2, D-06).
+ *
+ * Facture : brouillon → envoyée (le trigger en base émet alors `invoice.sent`,
+ * une seule fois). Soumission : avant réponse → « en attente de réponse », et
+ * `quote.sent` n'est émis QUE si elle sortait du brouillon — un renvoi ne
+ * relance pas la séquence, et une règle « quote.sent → envoyer la soumission »
+ * ne peut pas boucler. Ne lève jamais : le courriel est déjà parti.
+ */
+async function marquerDocumentEnvoye(type: 'invoice' | 'quote', ctx: ActionContext): Promise<void> {
+  const maintenant = new Date().toISOString();
+  try {
+    if (type === 'invoice') {
+      const { data: facture, error } = await ctx.supabase.from('invoices').select('status')
+        .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!facture) return;
+      const { error: eMaj } = await ctx.supabase.from('invoices').update({
+        ...(facture.status === 'draft' ? { status: 'sent', issued_at: maintenant } : {}),
+        sent_at: maintenant,
+      }).eq('id', ctx.entityId).eq('org_id', ctx.orgId);
+      if (eMaj) throw new Error(eMaj.message);
+      return;
+    }
+    const { data: devis, error } = await ctx.supabase.from('quotes').select('status, quote_number, lead_id')
+      .eq('id', ctx.entityId).eq('org_id', ctx.orgId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!devis) return;
+    const avance = ['draft', 'awaiting_response', 'changes_requested'].includes(String(devis.status));
+    const { error: eMaj } = await ctx.supabase.from('quotes').update({
+      sent_via_email_at: maintenant,
+      last_sent_channel: 'email',
+      ...(avance ? { status: 'awaiting_response' } : {}),
+      updated_at: maintenant,
+    }).eq('id', ctx.entityId).eq('org_id', ctx.orgId);
+    if (eMaj) throw new Error(eMaj.message);
+    if (devis.status === 'draft') {
+      const { eventBus } = await import('../eventBus');
+      await eventBus.emit('quote.sent', {
+        orgId: ctx.orgId,
+        entityType: 'quote',
+        entityId: ctx.entityId,
+        metadata: { lead_id: devis.lead_id ?? null, channel: 'email', quote_number: devis.quote_number ?? '', origine: 'automatisation' },
+      });
+    }
+  } catch (e) {
+    console.error(`[actions/envoyer_document] courriel parti, statut du ${type} ${ctx.entityId} non mis à jour (org ${ctx.orgId}):`,
+      e instanceof Error ? e.message : String(e));
+  }
 }
 
 export async function executeEnvoyerFacture(

@@ -2461,6 +2461,26 @@
    },
    {
     "moment": "immediat",
+    "table": "invoices",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "aaaaaaaa-0000-4000-8000-000000000005"
+     ],
+     [
+      "eq",
+      "org_id",
+      "11111111-1111-4111-8111-111111111111"
+     ]
+    ],
+    "valeur": {
+     "sent_at": "2026-09-13T15:00:00.000Z"
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "automation_execution_logs",
     "op": "insert",
     "valeur": {
@@ -2605,6 +2625,26 @@
       "subject": "Facture INV-000042",
       "source": "automation"
      }
+    }
+   },
+   {
+    "moment": "differe:envoyer_facture",
+    "table": "invoices",
+    "op": "update",
+    "filtres": [
+     [
+      "eq",
+      "id",
+      "aaaaaaaa-0000-4000-8000-000000000005"
+     ],
+     [
+      "eq",
+      "org_id",
+      "11111111-1111-4111-8111-111111111111"
+     ]
+    ],
+    "valeur": {
+     "sent_at": "2026-09-14T15:00:00.000Z"
     }
    },
    {
