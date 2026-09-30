@@ -347,3 +347,25 @@ describe('A-12 — un échec de l’enregistrement automatique est DIT, et les r
     expect(container.textContent).toContain('Enregistré');
   });
 });
+
+// ─── A-13 ───────────────────────────────────────────────────────
+
+describe('A-13 — le menu d’une condition ne propose pas « Dupliquer l’action »', () => {
+  it('pas d’entrée qui ne fait rien ; une action, elle, se duplique toujours', async () => {
+    etat.regles = [regle({
+      steps: [
+        { id: 'e1', type: 'action', nom: 'Alpha', action: { type: 'send_sms', config: { body: 'a' } }, suivant: 'e2' },
+        { id: 'e2', type: 'si', conditions: { total_cents: { gt: 5000 } }, alors: null, sinon: null },
+      ],
+    })];
+    await ouvrir(`/automations/${ID}`);
+    const options = Array.from(container.querySelectorAll('button[aria-label^="Options de l’étape"]'));
+    expect(options).toHaveLength(2);
+    cliquer(options[1]);
+    expect(bouton('Dupliquer')).toBeUndefined();
+    expect(bouton('Supprimer à partir d’ici')).toBeDefined();
+    cliquer(container.querySelector('button[aria-label="Fermer le menu"]'));
+    cliquer(options[0]);
+    expect(bouton('Dupliquer l’action')).toBeDefined();
+  });
+});

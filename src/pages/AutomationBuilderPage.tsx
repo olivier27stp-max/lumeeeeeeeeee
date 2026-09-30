@@ -2019,12 +2019,18 @@ export default function AutomationBuilderPage() {
                   className="absolute inset-0 z-20 cursor-default focus:outline-none"
                 />
                 <div className="absolute left-1/2 top-24 z-30 w-[260px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-surface-card py-1 shadow-lg">
-                  {([
-                    ['dupliquer', fr ? 'Dupliquer l’action' : 'Duplicate action'],
-                    ['modifier', fr ? 'Modifier l’action' : 'Edit action'],
-                    ['supprimer', fr ? 'Supprimer l’action' : 'Delete action'],
-                    ['depuis', fr ? 'Supprimer à partir d’ici' : 'Delete from here'],
-                  ] as const).map(([cle, libelle]) => (
+                  {/* Seule une ACTION se duplique : « Dupliquer » proposé sur une
+                      condition ne faisait rien et laissait le menu ouvert
+                      (audit V2, A-13). Les autres étapes disent « l'étape ». */}
+                  {(() => {
+                    const estAction = steps.find((e) => e.id === menuEtape)?.type === 'action';
+                    return ([
+                      ['dupliquer', fr ? 'Dupliquer l’action' : 'Duplicate action'],
+                      ['modifier', estAction ? (fr ? 'Modifier l’action' : 'Edit action') : (fr ? 'Modifier l’étape' : 'Edit step')],
+                      ['supprimer', estAction ? (fr ? 'Supprimer l’action' : 'Delete action') : (fr ? 'Supprimer l’étape' : 'Delete step')],
+                      ['depuis', fr ? 'Supprimer à partir d’ici' : 'Delete from here'],
+                    ] as const).filter(([cle]) => cle !== 'dupliquer' || estAction);
+                  })().map(([cle, libelle]) => (
                     <button
                       key={cle}
                       type="button"
