@@ -502,10 +502,25 @@ export type ActionType =
 
 // ── Template variable resolution ─────────────────────────────
 
+/** Échappe une valeur insérée dans du HTML. */
+export function echapperHtml(v: string): string {
+  return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * @param options.html — le gabarit est du HTML (corps d'un courriel) : chaque
+ *   valeur est ÉCHAPPÉE (launch 2026-09-28). Un nom venu d'un formulaire
+ *   public (« <a href=…>Cliquez</a> ») s'affichait tel quel dans le courriel
+ *   envoyé au client. Les variables qui PORTENT du HTML par conception (nom
+ *   en `_html`, ex. [contract_html]) ne sont pas échappées.
+ */
 export function resolveTemplate(
   template: string,
   vars: Record<string, string | null | undefined>,
+  options: { html?: boolean } = {},
 ): string {
+  const valeur = (cle: string, v: string | null | undefined): string =>
+    options.html && v && !cle.endsWith('_html') ? echapperHtml(v) : (v ?? '');
   // Support both {var} and [var] syntax for backward compatibility, normalize to {var}
   // Champs personnalisés : {{client.cle}} (format GoHighLevel) = {client_cf_cle}.
   // UNE seule passe : une valeur insérée n'est jamais relue. En trois passes, un
@@ -517,8 +532,8 @@ export function resolveTemplate(
       // Variables intégrées pointées ({{client.nom}}, {{soumission.total}}…)
       // AVANT les champs personnalisés : un champ perso nommé « nom » ne doit
       // pas masquer le nom du client.
-      if (objet) return vars[`${objet}.${cle}`] ?? vars[`${objet}_cf_${cle}`] ?? '';
-      return vars[(accolade ?? crochet) as string] ?? '';
+      if (objet) return valeur(`${objet}.${cle}`, vars[`${objet}.${cle}`] ?? vars[`${objet}_cf_${cle}`]);
+      return valeur((accolade ?? crochet) as string, vars[(accolade ?? crochet) as string]);
     },
   );
 }
@@ -1078,7 +1093,7 @@ export async function executeSendEmail(
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'subject', ctx.langue), champLocalise(config, 'body', ctx.langue));
   const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
-  const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
+  const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars, { html: true });
 
   try {
     const { sendEmail, isMailerConfigured, adresseInjoignable } = await import('../mailer');
@@ -1842,7 +1857,7 @@ export async function executeRequestReview(
       // presets du produit utilisent [var], et un second résolveur maison ne
       // comprenait que {var}.
       subject = resolveTemplate(emailTemplate.subject, messageVars);
-      body = resolveTemplate(emailTemplate.body, messageVars);
+      body = resolveTemplate(emailTemplate.body, messageVars, { html: true });
     }
   }
 
@@ -2539,60 +2554,25 @@ export async function executeEnvoyerSlack(
 
 // ── Action : webhook ────────────────────────────────────────
 
-/**
- * Une adresse est-elle sûre à appeler ?
- *
- * Même garde que la validation à l'enregistrement — mais refaite ICI, au
- * moment de l'appel. Une règle peut avoir été écrite avant que la garde
- * existe, ou modifiée en base hors du serveur : vérifier deux fois coûte une
- * expression régulière et ferme un SSRF.
- */
-function adresseSure(url: string): boolean {
-  if (!/^https:\/\//i.test(url)) return false;
-  try {
-    const hote = new URL(url).hostname.toLowerCase();
-    return !(
-      hote === 'localhost'
-      || hote === '169.254.169.254'
-      || /^127\./.test(hote)
-      || /^10\./.test(hote)
-      || /^192\.168\./.test(hote)
-      || /^172\.(1[6-9]|2\d|3[01])\./.test(hote)
-      || hote.endsWith('.local')
-      || hote.endsWith('.internal')
-    );
-  } catch {
-    return false;
-  }
-}
-
 export async function executeWebhook(
   config: { url?: string },
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
   const url = (config.url || '').trim();
-  if (!adresseSure(url)) {
-    return { success: false, error: 'Adresse refusée : https:// et publique seulement.' };
-  }
-
-  // Un délai borné : sans lui, un serveur distant qui ne répond jamais
-  // immobiliserait le worker des tâches différées.
-  const abandon = AbortSignal.timeout(10_000);
+  // Garde anti-SSRF refaite AU MOMENT de l'appel (résolution DNS, IP
+  // revérifiée à la connexion, redirections revérifiées, délai) — voir
+  // server/lib/url-sortante.ts (launch 2026-09-28).
   try {
-    const reponse = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Lume-Automations/1' },
-      body: JSON.stringify({
-        org_id: ctx.orgId,
-        entity_type: ctx.entityType,
-        entity_id: ctx.entityId,
-        // Les variables déjà résolues : le destinataire reçoit le nom du
-        // client et les montants, pas des identifiants à recroiser.
-        data: vars,
-        sent_at: new Date().toISOString(),
-      }),
-      signal: abandon,
+    const { posterSansSsrf } = await import('../url-sortante');
+    const reponse = await posterSansSsrf(url, {
+      org_id: ctx.orgId,
+      entity_type: ctx.entityType,
+      entity_id: ctx.entityId,
+      // Les variables déjà résolues : le destinataire reçoit le nom du
+      // client et les montants, pas des identifiants à recroiser.
+      data: vars,
+      sent_at: new Date().toISOString(),
     });
     if (!reponse.ok) {
       return { success: false, error: `Le serveur distant a répondu ${reponse.status}.` };
@@ -2600,7 +2580,7 @@ export async function executeWebhook(
     return { success: true, data: { status: reponse.status } };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
-    return { success: false, error: `Appel impossible : ${message}` };
+    return { success: false, error: message.startsWith('Adresse refusée') ? message : `Appel impossible : ${message}` };
   }
 }
 

@@ -23,6 +23,14 @@ const etat = vi.hoisted(() => ({
   client: { current: null as any },
 }));
 
+// Launch 2026-09-28 : l'action webhook RÉSOUT maintenant le nom (anti-SSRF).
+// Le domaine du banc (hooks.example.test) ne se résout pas : on le fait
+// pointer vers une IP publique pour que le filet reste identique.
+vi.mock('node:dns', async (orig) => {
+  const reel = await orig<typeof import('node:dns') & { default: typeof import('node:dns') }>();
+  const lookup = async () => [{ address: '93.184.216.34', family: 4 }];
+  return { ...reel, default: { ...reel.default, promises: { ...reel.default.promises, lookup } }, promises: { ...reel.promises, lookup } };
+});
 vi.mock('../../server/lib/supabase', async (orig) => ({
   ...(await orig<any>()),
   getServiceClient: () => etat.client.current,

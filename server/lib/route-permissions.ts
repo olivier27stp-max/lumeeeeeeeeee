@@ -116,6 +116,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/automations/rules': 'automations.read',
   // « X clients correspondent aujourd'hui » (déclencheur Client inactif).
   'GET /api/automations/clients-inactifs/apercu': 'automations.read',
+  // Aperçu d'une automatisation : montre un vrai client (launch 2026-09-28).
+  'POST /api/automations/rules/:id/apercu': 'automations.read',
   'POST /api/automations/rules': 'automations.update',
   'PATCH /api/automations/rules/:id': 'automations.update',
   'DELETE /api/automations/rules/:id': 'automations.update',

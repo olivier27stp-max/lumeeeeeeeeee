@@ -687,9 +687,6 @@ if (!useRedis) {
   app.use('/api/portal', portalLimiter);
   app.use('/api/quotes', quoteLimiterStrict);
   app.use('/api/agreements/public', agreementPublicLimiter);
-  app.use('/api/automations/events', automationLimiter);
-  // Plafonds par usage (lecture / écriture / génération) : voir reglesLimiter.
-  app.use('/api/automations/rules', reglesLimiter);
   app.use('/api/agent', agentLimiter);
   app.use('/api/lumi', agentLimiter);
   app.use('/api/dsr', dsrLimiterMem);
@@ -697,6 +694,12 @@ if (!useRedis) {
 }
 // Always applied (no Redis equivalent registered below)
 app.use('/api/leads/create', leadCreateLimiter);
+// Automatisations : TOUJOURS, Redis ou pas (launch 2026-09-28). Ils étaient
+// dans le bloc « sans Redis » sans équivalent Redis plus bas : avec Upstash,
+// /api/automations/* n'avait plus AUCUNE limite (générations Lumi comprises).
+app.use('/api/automations/events', automationLimiter);
+// Plafonds par usage (lecture / écriture / génération) : voir reglesLimiter.
+app.use('/api/automations/rules', reglesLimiter);
 // Per-token limiter — prevents brute-force via IP rotation (not covered by presets)
 app.use('/api/pay', rateLimit({
   windowMs: 60_000,
