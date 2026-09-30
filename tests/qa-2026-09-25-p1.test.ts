@@ -128,7 +128,9 @@ describe('P1-6 / P1-7 — Lumi doit MODIFIER, pas tout refaire', () => {
      * devenus 1, nom renommé. Reproduit 2 fois au QA.
      */
     expect(gen, 'les messages doivent être construits, pas figés à un seul')
-      .toMatch(/messages: construireMessages\(demande, echanges, parcoursActuel\)/);
+      .toMatch(/const messages = construireMessages\(demande, echanges, parcoursActuel\)/);
+    // Ces messages construits sont ceux envoyés au modèle (et comptés dans la réservation).
+    expect(gen).toMatch(/max_tokens: MAX_TOKENS,[\s\S]{0,200}\n\s+messages,\n/);
     expect(gen).toMatch(/function construireMessages\(/);
   });
 
