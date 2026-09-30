@@ -32,6 +32,7 @@ import type express from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getServiceClient } from '../lib/supabase';
 import { logger } from '../lib/logger';
+import { notifierCourrielNonLivre } from '../lib/courriels/non-livre';
 
 const TOLERANCE_S = 5 * 60;
 
@@ -191,20 +192,8 @@ export async function emailWebhookHandler(req: express.Request, res: express.Res
         statut, email: ligne.to_email, entity_type: ligne.entity_type, entity_id: ligne.entity_id, orgId: ligne.org_id,
       });
       // Notification dans le CRM : le propriétaire doit corriger l'adresse.
-      if (ligne.org_id) {
-        const lien = ligne.entity_type === 'invoice' && ligne.entity_id ? `/invoices/${ligne.entity_id}`
-          : ligne.entity_type === 'quote' && ligne.entity_id ? `/quotes/${ligne.entity_id}` : null;
-        const { error: notifErr } = await admin.from('notifications').insert({
-          org_id: ligne.org_id,
-          type: 'email_bounced',
-          title: statut === 'bounced' ? `Courriel non livré à ${ligne.to_email}` : `Plainte pourriel de ${ligne.to_email}`,
-          body: detail ? String(detail).slice(0, 300) : 'Vérifiez l’adresse du client et renvoyez le document.',
-          icon: 'alert-triangle',
-          ...(lien ? { link: lien } : {}),
-          ...(ligne.entity_id ? { reference_id: ligne.entity_id } : {}),
-        });
-        if (notifErr) logger.error('[webhooks/email] notification non créée', { error: notifErr.message });
-      }
+      // Même notification que pour SES (server/lib/courriels/non-livre.ts).
+      await notifierCourrielNonLivre(admin, ligne, statut, detail ? String(detail) : null);
     }
   }
 

@@ -33,6 +33,7 @@ import type express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { getServiceClient } from '../lib/supabase';
 import { logger } from '../lib/logger';
+import { notifierCourrielNonLivre } from '../lib/courriels/non-livre';
 import { deplierMessageSns, evenementDepuisSns, urlDeConfirmationSns, type EvenementSes } from '../lib/courriels/ses';
 import { ENTITES_SANS_SUIVI } from './webhooks-email';
 
@@ -141,9 +142,18 @@ export async function sesWebhookHandler(req: express.Request, res: express.Respo
           .from('email_deliveries')
           .update({ status: statut, error: evenement.detail, updated_at: new Date().toISOString() })
           .eq('message_id', evenement.messageId)
-          .select('id');
+          .select('id, org_id, to_email, entity_type, entity_id');
         if (error) throw new Error(error.message);
         touchees = data?.length ?? 0;
+        // Audit V2, C4 : l'entreprise est prévenue, comme avec Resend. SES
+        // est le fournisseur de la prod : sans ça, personne n'apprenait qu'une
+        // facture n'était pas arrivée.
+        if (statut === 'bounced' || statut === 'complained') {
+          for (const ligne of data ?? []) {
+            logger.warn('[webhooks/ses] courriel non livré', { statut, entity_type: ligne.entity_type, entity_id: ligne.entity_id, orgId: ligne.org_id });
+            await notifierCourrielNonLivre(admin, ligne, statut, evenement.detail ?? null);
+          }
+        }
       }
     }
   } catch (err: any) {
