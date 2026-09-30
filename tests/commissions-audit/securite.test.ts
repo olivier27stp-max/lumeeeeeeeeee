@@ -34,9 +34,10 @@ describe.skipIf(!disponible)('commissions — RLS (Loi 25, isolation, écritures
     expect(data ?? []).toEqual([]);
   });
 
-  it('S-01 (latent) [exige M2] … même quand l’entreprise a enregistré ses réglages terrain (show_peer_payouts vrai par défaut)', async () => {
-    // En prod au 2026-09-30, aucune org n'a encore de ligne field_settings :
-    // la fuite s'ouvre dès la première sauvegarde des réglages terrain.
+  it('S-01 (base écrite HORS de l’app) [exige M2] … ligne field_settings à show_peer_payouts = vrai', async () => {
+    // L'app n'écrit plus jamais `true` (cloture.test.ts « Loi 25 ») : ce cas
+    // n'arrive que si quelqu'un écrit la base directement. Seule la politique
+    // RLS (M2) le fermerait aussi.
     const admin = createClient(API, SERVICE_KEY, { auth: { persistSession: false } });
     await admin.from('field_settings').upsert({ org_id: ORG.A }, { onConflict: 'org_id' });
     try {
