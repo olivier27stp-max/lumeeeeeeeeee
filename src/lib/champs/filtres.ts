@@ -190,6 +190,11 @@ export function evaluerCondition(type: TypeChamp, valeur: unknown, c: Condition,
     const norme = (x: unknown) => (type === 'phone' ? normaliserTelephone(String(x ?? '')) ?? normaliserTexte(x) : normaliserTexte(x));
     const v = estVide(valeur) ? null : norme(valeur);
     const cible = norme(c.value);
+    // « contient (rien) » était vrai pour tout champ rempli : une condition
+    // laissée vide faisait partir l'automatisation pour tout le monde. Comme
+    // pour un nombre ou une liste, une cible manquante se refuse (« est vide »
+    // existe pour tester le vide).
+    if (cible === '') throw new Error(`Valeur manquante pour « ${c.op} ».`);
     switch (c.op) {
       case 'is': return v === cible;
       case 'is_not': return v !== cible;
