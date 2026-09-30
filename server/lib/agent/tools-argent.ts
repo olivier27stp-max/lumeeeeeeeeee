@@ -1681,6 +1681,23 @@ const deleteInvoiceTemplateTool: AgentTool = {
 const CANAUX_DEMANDE = ['email', 'sms', 'both', 'link_only'];
 const CANAL_FR: Record<string, string> = { email: 'par courriel', sms: 'par texto', both: 'par courriel et texto', link_only: 'lien seulement (rien envoyé)' };
 
+/**
+ * Canaux demandés qui ne sont PAS partis (audit 2026-09-30) : la route répond
+ * 200 même quand le client n'a pas de courriel, que Twilio refuse ou que le
+ * client a répondu STOP — et Lumi disait « envoyé ».
+ */
+export function canauxNonPartis(sendVia: string, n: any): { demandes: number; rates: string[] } {
+  const voulus = sendVia === 'both' ? ['email', 'sms'] : sendVia === 'email' || sendVia === 'sms' ? [sendVia] : [];
+  const rates: string[] = [];
+  for (const canal of voulus) {
+    const r = n?.[canal];
+    const nom = canal === 'email' ? 'courriel' : 'texto';
+    if (!r) rates.push(`${nom} : ${canal === 'email' ? 'aucune adresse courriel' : 'aucun numéro de téléphone'} sur la fiche du client`);
+    else if (!r.sent) rates.push(`${nom} : ${r.reason || 'refusé'}`);
+  }
+  return { demandes: voulus.length, rates };
+}
+
 function resumeNotifications(n: any): Record<string, any> {
   const out: Record<string, any> = {};
   if (n?.email) out.email = n.email.sent ? 'envoyé' : `non envoyé (${n.email.reason || 'raison inconnue'})`;
@@ -1719,11 +1736,20 @@ const createPaymentRequestTool: AgentTool = {
       }
       if (!res.ok) throw new Error(res.json?.error || `Demande refusée (${res.status}).`);
       const pr = res.json?.payment_request || {};
+      const nonPartis = canauxNonPartis(sendVia, res.json?.notifications);
+      if (nonPartis.demandes > 0 && nonPartis.rates.length === nonPartis.demandes) {
+        // Le lien EXISTE, mais rien n'est parti : ni « envoyé », ni une erreur qui ferait recréer un lien.
+        return {
+          created: true, incomplet: true, payment_url: pr.payment_url || null, amount_cents: pr.amount_cents ?? null,
+          note: `Lien de paiement créé, mais il n’est PAS parti chez le client (${nonPartis.rates.join(' ; ')}). Donne le lien à l’utilisateur pour qu’il l’envoie lui-même.`,
+        };
+      }
       return {
         created: true,
         payment_url: pr.payment_url || null,
         amount_cents: pr.amount_cents ?? null,
         sent_via: CANAL_FR[sendVia],
+        ...(nonPartis.rates.length ? { warning: `Pas parti par ${nonPartis.rates.join(' ; ')}.` } : {}),
         notifications: resumeNotifications(res.json?.notifications),
         note: sendVia === 'link_only'
           ? 'Lien de paiement créé — rien n’a été envoyé. Donne le lien à l’utilisateur ou renvoie-le au client avec resend_payment_request.'
@@ -1762,8 +1788,13 @@ const resendPaymentRequestTool: AgentTool = {
       }
       if (!res.ok) throw new Error(res.json?.error || `Renvoi refusé (${res.status}).`);
       const pr = res.json?.payment_request || {};
+      const nonPartis = canauxNonPartis(sendVia, res.json?.notifications);
+      if (nonPartis.rates.length === nonPartis.demandes) {
+        throw new Error(`Le lien de paiement n’est pas reparti (${nonPartis.rates.join(' ; ')}).`);
+      }
       return {
         sent: true, payment_url: pr.payment_url || null, sent_via: CANAL_FR[sendVia],
+        ...(nonPartis.rates.length ? { warning: `Pas parti par ${nonPartis.rates.join(' ; ')}.` } : {}),
         notifications: resumeNotifications(res.json?.notifications),
         note: `Lien de paiement renvoyé ${CANAL_FR[sendVia]} par le moteur de Lume.`,
       };

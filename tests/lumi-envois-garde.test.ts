@@ -131,3 +131,13 @@ describe('send_payment_reminders : aux vrais retards, une fois, et pas de faux �
     expect(r.error).toMatch(/déjà dans la liste/);
   });
 });
+
+describe('demandes de paiement : un canal demandé qui ne part pas est dit', () => {
+  it('canauxNonPartis : absent de la fiche, refusé, ou parti', async () => {
+    const { canauxNonPartis } = await import('../server/lib/agent/tools-argent');
+    expect(canauxNonPartis('link_only', {})).toEqual({ demandes: 0, rates: [] });
+    expect(canauxNonPartis('email', {})).toEqual({ demandes: 1, rates: ['courriel : aucune adresse courriel sur la fiche du client'] });
+    expect(canauxNonPartis('both', { email: { sent: true }, sms: { sent: false, reason: 'Recipient has opted out of SMS (STOP)' } }))
+      .toEqual({ demandes: 2, rates: ['texto : Recipient has opted out of SMS (STOP)'] });
+  });
+});
