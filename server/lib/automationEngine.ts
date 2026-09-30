@@ -1136,7 +1136,7 @@ async function avecDelaiMax<T>(promesse: Promise<T>, delaiMs: number, message: s
  * client sans adresse courriel n'en méritera jamais — le réessayer trois fois
  * ne ferait que retarder l'inévitable et polluer les journaux.
  */
-function isTransientFailure(error?: string | null): boolean {
+export function isTransientFailure(error?: string | null): boolean {
   if (!error) return true; // cause inconnue → on laisse sa chance à la reprise
   const definitifs = [
     'no recipient',           // pas d'adresse / pas de téléphone
@@ -1154,6 +1154,9 @@ function isTransientFailure(error?: string | null): boolean {
     // Action pas encore disponible (catalogue : `indisponible`) : la
     // réessayer ne la rendra pas disponible.
     'pas encore disponible',
+    // Webhook vers une adresse interne ou non publique (garde SSRF) : la
+    // même adresse sera refusée à chaque essai (audit V2, C25).
+    'adresse refusée',
   ];
   const lower = error.toLowerCase();
   return !definitifs.some((d) => lower.includes(d));

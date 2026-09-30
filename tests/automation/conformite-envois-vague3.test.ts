@@ -255,11 +255,20 @@ describe('C7 — panne du fournisseur de courriel : motif lisible, toujours repr
 
   it('le motif traduit reste TRANSITOIRE pour le moteur (aucun mot définitif)', async () => {
     const { messageEchecCourriel } = await import('../../server/lib/actions');
-    const definitifs = ['no recipient', 'not configured', 'opted out', 'plan does not include', 'are disabled', 'frequency cap', 'consentement', 'consent', 'pas encore disponible'];
+    const { isTransientFailure } = await import('../../server/lib/automationEngine');
     for (const m of [messageEchecCourriel('connect ECONNREFUSED x'), messageEchecCourriel(''), messageEchecCourriel('ETIMEDOUT')]) {
-      expect(definitifs.some((d) => m.toLowerCase().includes(d))).toBe(false);
+      expect(isTransientFailure(m), m).toBe(true);
     }
     // Une erreur non réseau est gardée telle quelle.
     expect(messageEchecCourriel('550 Mailbox full')).toBe('550 Mailbox full');
+  });
+});
+
+describe('C25 — « Adresse refusée » (garde SSRF) est un échec définitif', () => {
+  it('aucune reprise pour une adresse refusée ; une panne réseau reste reprise', async () => {
+    const { isTransientFailure } = await import('../../server/lib/automationEngine');
+    expect(isTransientFailure('Adresse refusée : elle ne pointe pas vers une adresse publique.')).toBe(false);
+    expect(isTransientFailure('Adresse refusée : plus de 3 redirections.')).toBe(false);
+    expect(isTransientFailure('Appel impossible : fetch failed')).toBe(true);
   });
 });
