@@ -111,7 +111,7 @@ Ces handlers contournent la RLS, donc aussi les policies « portee_membre ». Un
 | 3 | Outils non filtrés par rôle avant exposition au modèle | ✅ **CORRIGÉE** — `outilsPermis()` |
 | 4 | Permissions gelées 60 s | ✅ **CORRIGÉE** — les agents lisent sans cache |
 | 5 | 4 outils sans clé déclarée | ✅ **CORRIGÉE** — couverture 243/243, figée par un test |
-| 6 | 13 `getServiceClient()` hors portée | 🟡 **EN ATTENTE** — inventoriés, voir ci-dessous |
+| 6 | 13 `getServiceClient()` hors portée | ✅ **ARBITRÉE** — comportement voulu, voir ci-dessous |
 | — | Refus non journalisés | ✅ **CORRIGÉE** — `lumi_traces`, `resultat: 'refus'` |
 | — | Questions de départ financières pour tous | ✅ **CORRIGÉE** — par rôle, web **et** mobile |
 
@@ -127,8 +127,11 @@ Suite complète : **4547 tests passent**. Les 3 échecs restants sont **étrange
 
 ### Ce qui reste, et qui demande ton arbitrage
 
-**Les 13 `getServiceClient()`.** Ils contournent la RLS, donc aussi la portée (`self`/`assigned`/`team`). Le plus discutable est **`get_team_locations`** : un technicien à portée `assigned` qui a `gps.read` voit la position de **toute** l'équipe, pas seulement la sienne. C'est peut-être voulu (on se repère entre collègues sur la carte) — mais ça ne vient d'aucune décision explicite. Les autres sont des écritures ou des résolutions d'org, légitimes a priori.
-→ **Dis-moi si un technicien doit voir toute l'équipe sur la carte.** Je n'ai rien changé là.
+**Les 13 `getServiceClient()`** — ✅ **tranché par William le 2026-09-30 : c'est correct ainsi.**
+
+Ils contournent la RLS, donc aussi la portée (`self`/`assigned`/`team`). Le cas visible est **`get_team_locations`** : un technicien à portée `assigned` qui a `gps.read` voit la position de **toute** l'équipe, pas seulement la sienne. **C'est le comportement voulu** — on se repère entre collègues sur la carte, exactement comme dans l'app. Les autres appels sont des écritures ou des résolutions d'org, légitimes.
+
+⚠️ **Ne pas rouvrir ceci comme une fuite** : c'est une décision produit, pas un oubli. `gps.read` reste la garde — un rôle sans cette clé ne voit toujours rien.
 
 **Le modèle de mémoire.** Option (a) retenue : filtrage à la lecture, aucune migration. L'option (b) — visibilité par note — reste ouverte et exigerait une migration.
 
