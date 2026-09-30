@@ -120,6 +120,18 @@ function memeValeur(a: unknown, b: unknown): boolean {
   if (Array.isArray(a)) return a.some((x) => memeValeur(x, b));
   if (a === null || a === undefined || b === null || b === undefined) return false;
   if (typeof a === 'object' || typeof b === 'object') return false;
+  /*
+   * Un NOMBRE d'un côté : on compare des nombres. `montant` vaut
+   * total_cents / 100 (1250.5) ; la condition écrite « 1250.50 » ne le
+   * reconnaissait pas (« 1250.5 » ≠ « 1250.50 » en texte). Deux TEXTES
+   * restent comparés en texte : un code « 007 » n'est pas 7.
+   */
+  if (typeof a === 'number' || typeof b === 'number') {
+    const nombre = (x: unknown) => (typeof x === 'number' ? x
+      : typeof x === 'string' && /^\s*-?\d+(\.\d+)?\s*$/.test(x) ? Number(x) : Number.NaN);
+    const [x, y] = [nombre(a), nombre(b)];
+    if (Number.isFinite(x) && Number.isFinite(y)) return x === y;
+  }
   return String(a) === String(b);
 }
 
