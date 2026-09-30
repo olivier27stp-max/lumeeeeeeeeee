@@ -148,6 +148,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   // (liste vide, 404), mais un membre sans droit recevait 200 / 404 au lieu
   // d'un 403 explicite, et tout membre pouvait signaler un événement.
   'POST /api/automations/rules/:id/restaurer': 'automations.update',
+  // Vider une ligne de la corbeille (l'historique d'envois reste).
+  'DELETE /api/automations/rules/:id/definitivement': 'automations.update',
   'GET /api/automations/folders': 'automations.read',
   'POST /api/automations/folders': 'automations.update',
   'PATCH /api/automations/folders/:id': 'automations.update',

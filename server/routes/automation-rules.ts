@@ -126,7 +126,8 @@ router.get('/automations/rules', async (req, res) => {
     // Les règles à la corbeille sont renvoyées AVEC les autres : l'onglet
     // « Corbeille » en a besoin, et `deleted_at` suffit à les séparer côté
     // interface. Deux requêtes pour une liste de 40 lignes n'apporteraient
-    // rien.
+    // rien. Une règle supprimée DÉFINITIVEMENT n'apparaît plus nulle part.
+    .is('purged_at', null)
     .order('name');
 
   if (error) {
@@ -174,7 +175,7 @@ router.get('/automations/editeur', async (req, res) => {
 
   const [regle, autres] = await Promise.all([
     ruleId
-      ? auth.client.from('automation_rules').select(COLONNES).eq('id', ruleId).eq('org_id', auth.orgId).maybeSingle()
+      ? auth.client.from('automation_rules').select(COLONNES).eq('id', ruleId).eq('org_id', auth.orgId).is('purged_at', null).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     auth.client
       .from('automation_rules')
@@ -861,6 +862,8 @@ router.post('/automations/rules/:id/restaurer', async (req, res) => {
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .not('deleted_at', 'is', null)
+    // Supprimée définitivement : elle ne revient plus.
+    .is('purged_at', null)
     .select(COLONNES)
     .maybeSingle();
 
@@ -873,6 +876,42 @@ router.post('/automations/rules/:id/restaurer', async (req, res) => {
   }
   if (!data) return res.status(404).json({ error: 'Automatisation introuvable dans la corbeille.' });
   return res.json(data);
+});
+
+/*
+ * DELETE /automations/rules/:id/definitivement — vider une ligne de la
+ * corbeille (demande de Rafba, 2026-09-30).
+ *
+ * Pas un vrai DELETE : les journaux d'exécution pointent vers la règle
+ * (clé étrangère NO ACTION) et gardent la preuve de ce qui a été envoyé aux
+ * clients. La règle sort de la corbeille pour de bon — plus listée, plus
+ * restaurable — et son historique reste. Seule une règle DÉJÀ à la
+ * corbeille est concernée : on ne supprime pas définitivement en un clic
+ * une automatisation qui tourne.
+ */
+router.delete('/automations/rules/:id/definitivement', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const { data, error } = await auth.client
+    .from('automation_rules')
+    .update({ purged_at: new Date().toISOString(), is_active: false })
+    .eq('id', req.params.id)
+    .eq('org_id', auth.orgId)
+    .not('deleted_at', 'is', null)
+    .is('purged_at', null)
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === '42501') {
+      return res.status(403).json({ error: 'Votre rôle ne permet pas de supprimer une automatisation.' });
+    }
+    logger.error('[automation-rules] suppression définitive échouée', { message: error.message, code: error.code });
+    return res.status(500).json({ error: 'Impossible de supprimer définitivement l’automatisation.' });
+  }
+  if (!data) return res.status(404).json({ error: 'Automatisation introuvable dans la corbeille.' });
+  return res.json({ ok: true });
 });
 
 // ── Dossiers ────────────────────────────────────────────────
