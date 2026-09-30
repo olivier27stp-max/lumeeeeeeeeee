@@ -25,6 +25,7 @@ import { useTranslation } from '../i18n';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { supabase } from '../lib/supabase';
 import ActivityTimeline from '../components/ActivityTimeline';
+import QuickBooksInvoiceTrace from '../components/integrations/QuickBooksInvoiceTrace';
 import RequestPaymentModal from '../components/RequestPaymentModal';
 import InvoiceRenderer from '../components/invoice/InvoiceRenderer';
 import { buildRenderData } from '../components/invoice/buildRenderData';
@@ -117,6 +118,7 @@ export default function InvoiceDetails() {
     queryClient.invalidateQueries({ queryKey: ['invoicesKpis30d'] });
     queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
     queryClient.invalidateQueries({ queryKey: [CLE_REQUETE_ENVOIS, 'invoice', invoiceId] });
+    queryClient.invalidateQueries({ queryKey: ['qboInvoiceTrace', invoiceId] });
   }
 
   async function handleSendInvoice() {
@@ -659,6 +661,8 @@ export default function InvoiceDetails() {
           </div>
         </section>
       )}
+
+      <QuickBooksInvoiceTrace invoiceId={invoice.id} currency={invoice.currency || 'CAD'} fr={language === 'fr'} />
 
       <ActivityTimeline entityType="invoice" entityId={invoiceId} />
 
