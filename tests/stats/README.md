@@ -13,7 +13,7 @@ node --env-file=.env.local scripts/qa/stats-acl-prod.mjs
 node scripts/qa/stats-fixture.mjs --volume
 # 4. (facultatif) migration proposée, appliquée EN LOCAL pour la valider
 docker exec -i -u postgres lumestats-db psql -U supabase_admin -d postgres \
-  < supabase/migrations/proposed/20261004300000_statistiques_fuseau_encaisse_roles.sql
+  < supabase/migrations/20261004300000_statistiques_fuseau_encaisse_roles.sql
 
 export STATS_DB_URL=postgres://supabase_admin:lumestats-local-pw@localhost:47432/postgres
 npx vitest run tests/stats                       # exactitude, sécurité, parité Lumi

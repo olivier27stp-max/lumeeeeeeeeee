@@ -1,5 +1,5 @@
 -- ============================================================================
--- PROPOSÉE — NE PAS APPLIQUER SANS L'ACCORD DE RAFBA (audit Statistiques, STATS_AUDIT.md §7)
+-- APPLIQUÉE staging + prod le 2026-09-30, avec l accord de Rafba (audit Statistiques, STATS_AUDIT.md §7)
 -- Validée sur la stack locale (scripts/qa/stats-stack.sh) : tests/stats/*.integration.test.ts
 --
 -- Corrige, dans les RPC de /insights, de Lumi, des rapports programmés, de Réglages → Rapports

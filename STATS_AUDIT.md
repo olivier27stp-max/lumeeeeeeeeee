@@ -10,8 +10,7 @@ clients :
 S'y ajoutent une fuite par rôle (un technicien pouvait lire le revenu et les meilleurs clients par appel direct) et un
 « Taux de réussite » de 100 % en prod, fait uniquement de copies du classement.
 
-Ce qui est corrigé dans le code est livré (branche `audit/statistiques`). Ce qui vit dans les fonctions SQL attend ton
-accord : **deux migrations écrites, testées sur une base locale, jamais appliquées** (§7).
+Tout est livré : le code (PR #803) et les deux migrations, appliquées sur staging puis en prod le 2026-09-30 avec ton accord (§7).
 
 Méthode : une stack Supabase **locale et jetable** (Postgres 17 + GoTrue + PostgREST avec `max_rows = 1000` comme la
 prod, schéma = prod, droits recopiés de la prod) et un jeu de données déterministe. Chaque chiffre est comparé à un
@@ -271,15 +270,14 @@ Par ordre d'utilité pour un entrepreneur en services :
 
 ---
 
-## 7. Migrations en attente d'approbation (rien n'est appliqué, ni staging ni prod)
+## 7. Migrations — APPLIQUÉES le 2026-09-30 (staging puis prod, avec ton accord)
 
 | Fichier | Contenu | Validé comment |
 |---|---|---|
-| **A** `supabase/migrations/proposed/20261004300000_statistiques_fuseau_encaisse_roles.sql` | 5 fonctions d'agrégat pour les cartes calculées dans le navigateur (le code les utilise si elles existent, sinon lecture paginée) ; fuseau du tenant dans les 13 RPC de stats ; encaissé net des remboursements + factures importées (`stats_encaissements`) ; exclusion des deals du classement, délai sur `won_at` ; garde de permission de la page Rôles (`stats_lecture_permise`, service_role explicite) ; « aujourd'hui » local ; dernière activité = date du job. **Signatures et types de retour inchangés.** Effet aussi sur Réglages → Rapports et l'aperçu multi-bureaux (mêmes fonctions : ils deviennent cohérents). | Appliquée sur la base locale uniquement : exactitude 104/104, sécurité et parité Lumi vertes (hors 2 écarts connus), chargement 230 ms p50 sur 50 000 jobs. |
-| **B** `supabase/migrations/proposed/20261004300100_statistiques_index.sql` | 6 index partiels (aucun changement de données). | Appliquée en local avec A pour les mesures du §5. Utile surtout à la lecture de repli et à `rentabilite_jobs` ; secondaire une fois les agrégats en place. |
+| **A** `supabase/migrations/20261004300000_statistiques_fuseau_encaisse_roles.sql` | 5 fonctions d'agrégat pour les cartes calculées dans le navigateur (le code les utilise si elles existent, sinon lecture paginée) ; fuseau du tenant dans les 13 RPC de stats ; encaissé net des remboursements + factures importées (`stats_encaissements`) ; exclusion des deals du classement, délai sur `won_at` ; garde de permission de la page Rôles (`stats_lecture_permise`, service_role explicite) ; « aujourd'hui » local ; dernière activité = date du job. **Signatures et types de retour inchangés.** Effet aussi sur Réglages → Rapports et l'aperçu multi-bureaux (mêmes fonctions : ils deviennent cohérents). | Appliquée sur la base locale uniquement : exactitude 104/104, sécurité et parité Lumi vertes (hors 2 écarts connus), chargement 230 ms p50 sur 50 000 jobs. |
+| **B** `supabase/migrations/20261004300100_statistiques_index.sql` | 6 index partiels (aucun changement de données). | Appliquée en local avec A pour les mesures du §5. Utile surtout à la lecture de repli et à `rentabilite_jobs` ; secondaire une fois les agrégats en place. |
 
-Pour appliquer (pipeline habituel) : déplacer le fichier dans `supabase/migrations/`, lancer `npm run db:apply --` sur
-staging, puis `npm run check:broken-objects`, `check:db-coherence` et `check:schema-refs`, et enfin `db:apply:prod`.
+Appliquées par `db:apply` sur staging, puis contrôlées : `check:broken-objects` (aucun objet cassé), `check:schema-refs` (aucun écart), `check:db-coherence` (3 écarts QuickBooks **préexistants**, sans lien avec ces migrations). Ensuite `db:apply:prod`. Vérifié : prod = staging = local validé (empreintes des fonctions), `anon` sans aucun droit, 6 index présents. Effet en prod : l'entreprise principale affiche 279 261,15 $ encaissés (au lieu de 0 $), et le taux de réussite n'est plus un faux 100 %.
 
 Non écrites, à décider ensemble :
 - E-9, taux horaires lisibles par les techniciens : RLS ou privilèges par colonne sur `team_members`, à concevoir avec la paie.

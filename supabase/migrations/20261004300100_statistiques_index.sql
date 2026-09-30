@@ -1,5 +1,5 @@
 -- ============================================================================
--- PROPOSÉE — NE PAS APPLIQUER SANS L'ACCORD DE RAFBA (audit Statistiques, STATS_AUDIT.md §5 et §7)
+-- APPLIQUÉE staging + prod le 2026-09-30, avec l accord de Rafba (audit Statistiques, STATS_AUDIT.md §5 et §7)
 -- Index des motifs de lecture de /insights, mesurés sur le tenant volumineux local
 -- (50 000 jobs, 100 000 factures, 100 000 paiements) : tests/stats/performance.integration.test.ts
 --
