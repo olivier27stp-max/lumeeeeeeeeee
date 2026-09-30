@@ -2465,6 +2465,13 @@ const sendQuoteTool: AgentTool = {
     }),
 };
 
+/** Texte brut → HTML sûr : caractères échappés, paragraphes et sauts de ligne gardés. */
+export function texteVersHtml(texte: string): string {
+  return texte.split(/\n{2,}/).map((par) =>
+    `<p>${par.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\n/g, '<br>')}</p>`,
+  ).join('');
+}
+
 const sendInvoiceTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -2497,7 +2504,10 @@ const sendInvoiceTool: AgentTool = {
         res = await appelInterne(ctx, '/emails/send-invoice', {
           invoiceId: String(args.invoice_id),
           ...(args.subject ? { subject: String(args.subject) } : {}),
-          ...(args.message ? { body: String(args.message) } : {}),
+          // Texte BRUT, échappé (audit 2026-09-30) : la route insère le corps en
+          // HTML ; un texte rédigé par le modèle (ou glissé par un client) pouvait
+          // y mettre un lien d'hameçonnage. Les sauts de ligne sont gardés.
+          ...(args.message ? { body: texteVersHtml(String(args.message)) } : {}),
         });
       } catch (e) {
         if (e instanceof AppelInterneIncertain) throw envoiIncertain('la facture');

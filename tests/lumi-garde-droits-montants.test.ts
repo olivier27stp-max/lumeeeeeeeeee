@@ -20,3 +20,11 @@ describe('argsContiennentMontant', () => {
     expect(garde).toBeLessThan(g.indexOf('tool.handler(args, ctx)'));
   });
 });
+
+describe('send_invoice : le message part en texte, jamais en HTML', () => {
+  it('texteVersHtml échappe les balises et garde les sauts de ligne', async () => {
+    const { texteVersHtml } = await import('../server/lib/agent/tools-etendus');
+    expect(texteVersHtml('Bonjour,\nvoici <a href="http://x">ton lien</a>\n\nMerci'))
+      .toBe('<p>Bonjour,<br>voici &lt;a href=&quot;http://x&quot;&gt;ton lien&lt;/a&gt;</p><p>Merci</p>');
+  });
+});
