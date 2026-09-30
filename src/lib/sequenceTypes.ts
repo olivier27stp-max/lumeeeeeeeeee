@@ -187,7 +187,7 @@ export function retirerEtape(steps: Etape[], id: string): Etape[] {
     : cible.type === 'arreter' ? null
     : (cible.suivant ?? null);
 
-  return steps
+  const recousues = steps
     .filter((e) => e.id !== id)
     .map((e) => {
       if (e.type === 'si') {
@@ -200,6 +200,25 @@ export function retirerEtape(steps: Etape[], id: string): Etape[] {
       if (e.type === 'arreter') return e;
       return { ...e, suivant: e.suivant === id ? suite : e.suivant };
     });
+
+  /*
+   * LA TÊTE DU PARCOURS, C'EST `steps[0]` (moteur et canevas).
+   *
+   * Retirer la première étape laissait en tête le premier élément RESTANT du
+   * tableau — pas sa suite. Quand l'ordre du tableau diffère de celui du
+   * parcours (une condition insérée après coup est rangée en fin de
+   * tableau), tout le reste devenait orphelin : le canevas n'affichait plus
+   * qu'une carte, et le moteur partait de là (audit V2, A-01). Sa suite
+   * — ou, à défaut, sa première branche — prend donc la tête.
+   */
+  if (steps[0]?.id !== id) return recousues;
+  const nouvelleTete = suite ?? (
+    cible.type === 'si' ? (cible.sinon ?? null)
+      : cible.type === 'attendre' ? (cible.si_reponse ?? cible.si_depasse ?? null)
+      : null
+  );
+  const tete = recousues.find((e) => e.id === nouvelleTete);
+  return tete ? [tete, ...recousues.filter((e) => e !== tete)] : recousues;
 }
 
 // ── Le format D'ORIGINE (`actions`) ─────────────────────────
