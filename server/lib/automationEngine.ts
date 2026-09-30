@@ -1962,12 +1962,18 @@ async function metadonneesFraiches(
   const base: Record<string, any> = { ...contexte };
 
   /** Table et colonnes à relire selon le type d'entité. */
+  // `created_at` partout : l'éditeur propose « created_at >= … » en exemple,
+  // et la clé n'était relue nulle part — condition toujours fausse (audit
+  // V2, D-11). Un prospect vit dans `clients` : la vue `leads_active`
+  // n'existe plus, la lecture échouait et chaque branche était jugée sur
+  // l'état d'ORIGINE.
   const source: Record<string, { table: string; colonnes: string }> = {
-    quote: { table: 'quotes', colonnes: 'status, total_cents' },
-    invoice: { table: 'invoices', colonnes: 'status, total_cents, balance_cents' },
-    job: { table: 'jobs', colonnes: 'status' },
-    lead: { table: 'leads_active', colonnes: 'status, lead_status' },
-    appointment: { table: 'schedule_events', colonnes: 'status' },
+    quote: { table: 'quotes', colonnes: 'status, total_cents, created_at' },
+    invoice: { table: 'invoices', colonnes: 'status, total_cents, balance_cents, created_at' },
+    job: { table: 'jobs', colonnes: 'status, created_at' },
+    lead: { table: 'clients', colonnes: 'status, lead_status, source, created_at' },
+    client: { table: 'clients', colonnes: 'status, lead_status, source, created_at' },
+    appointment: { table: 'schedule_events', colonnes: 'status, created_at' },
   };
 
   const cible = source[task.entity_type];
@@ -1992,8 +1998,11 @@ async function metadonneesFraiches(
 
   // `data` est typé `unknown` par PostgREST quand les colonnes sont choisies
   // dynamiquement : la forme est garantie par `source` juste au-dessus.
-  const frais = { ...(data as unknown as Record<string, unknown>) };
+  const frais: Record<string, unknown> = { ...(data as unknown as Record<string, unknown>) };
   if (typeof frais.status === 'string') frais.status = statutAvecAlias(task.entity_type, frais.status);
+  // Les noms français des exemples de l'éditeur (« statut = », « montant > »).
+  if (frais.status !== undefined) frais.statut = frais.status;
+  if (typeof frais.total_cents === 'number') frais.montant = frais.total_cents / 100;
   return { ...base, ...frais };
 }
 
