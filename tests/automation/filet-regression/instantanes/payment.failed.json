@@ -1120,22 +1120,14 @@
      "action_config": {
       "body": "[client_name] — suivi a faire"
      },
-     "result_success": true,
-     "result_data": {
-      "longueur": 30
-     },
-     "result_error": null,
+     "result_success": false,
+     "result_data": null,
+     "result_error": "Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié.",
      "duration_ms": "<ms>"
     }
    }
   ],
-  "envois": [
-   {
-    "moment": "immediat",
-    "canal": "slack",
-    "texte": "{\"canal\":{\"channel\":\"C_FILET\",\"text\":\"Marie Tremblay — suivi a faire\"}}"
-   }
-  ],
+  "envois": [],
   "annulees": []
  },
  "envoyer_slack@86400": {
@@ -1234,11 +1226,9 @@
      "action_config": {
       "body": "[client_name] — suivi a faire"
      },
-     "result_success": true,
-     "result_data": {
-      "longueur": 30
-     },
-     "result_error": null,
+     "result_success": false,
+     "result_data": null,
+     "result_error": "Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié.",
      "duration_ms": "<ms>"
     }
    },
@@ -1254,19 +1244,25 @@
      ]
     ],
     "valeur": {
-     "status": "completed",
+     "status": "failed",
      "completed_at": "2026-09-14T15:00:00.000Z",
-     "last_error": null
+     "last_error": "Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié."
+    }
+   },
+   {
+    "moment": "differe:envoyer_slack",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation_failed",
+     "title": "Échec d'envoi — regle-payment.failed-envoyer_slack-86400",
+     "body": "Le message n'est pas parti et ne partira pas : Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié..",
+     "reference_id": "tache-1"
     }
    }
   ],
-  "envois": [
-   {
-    "moment": "differe:envoyer_slack",
-    "canal": "slack",
-    "texte": "{\"canal\":{\"channel\":\"C_FILET\",\"text\":\"Marie Tremblay — suivi a faire\"}}"
-   }
-  ],
+  "envois": [],
   "annulees": []
  },
  "ajouter_etiquette@0": {

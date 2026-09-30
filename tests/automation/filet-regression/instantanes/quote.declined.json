@@ -778,22 +778,14 @@
      "action_config": {
       "body": "[client_name] — suivi a faire"
      },
-     "result_success": true,
-     "result_data": {
-      "longueur": 30
-     },
-     "result_error": null,
+     "result_success": false,
+     "result_data": null,
+     "result_error": "Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié.",
      "duration_ms": "<ms>"
     }
    }
   ],
-  "envois": [
-   {
-    "moment": "immediat",
-    "canal": "slack",
-    "texte": "{\"canal\":{\"channel\":\"C_FILET\",\"text\":\"Marie Tremblay — suivi a faire\"}}"
-   }
-  ],
+  "envois": [],
   "annulees": []
  },
  "envoyer_slack@86400": {
