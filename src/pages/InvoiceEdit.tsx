@@ -23,6 +23,7 @@ import {
   type InvoiceItemInput,
 } from '../lib/invoicesApi';
 import { calculateInvoiceTotals, lineTotal } from '../lib/invoiceCalc';
+import { getClientById } from '../lib/clientsApi';
 import InvoiceRenderer from '../components/invoice/InvoiceRenderer';
 import { buildRenderData } from '../components/invoice/buildRenderData';
 import { useTranslation } from '../i18n';
@@ -162,6 +163,26 @@ export default function InvoiceEdit() {
     queryFn: () => searchActiveClients({ q: debouncedSearch, page: 1, pageSize: 20 }),
     enabled: isNew && !clientId,
   });
+
+  /*
+   * Client déjà choisi par l'adresse (`?clientId=` — « Facturer » depuis un
+   * deal, « Nouvelle facture » depuis la fiche client) : on charge son nom,
+   * son courriel et son téléphone. Avant (2026-09-30), seul un choix dans la
+   * liste les remplissait : la facture affichait « Nom du client » et
+   * s'enregistrait sous ce nom-là.
+   */
+  const clientPrerempliQuery = useQuery({
+    queryKey: ['invoicePrefillClient', prefillClientId],
+    queryFn: () => getClientById(prefillClientId as string),
+    enabled: isNew && !!prefillClientId,
+  });
+  useEffect(() => {
+    const c = clientPrerempliQuery.data;
+    if (!c || clientId !== c.id || clientName) return;
+    setClientName(`${c.first_name || ''} ${c.last_name || ''}`.trim() || c.company || '');
+    setClientEmail(c.email || '');
+    setClientPhone(c.phone || '');
+  }, [clientPrerempliQuery.data, clientId, clientName]);
 
   // Job line items prefill
   const jobItemsQuery = useQuery({
