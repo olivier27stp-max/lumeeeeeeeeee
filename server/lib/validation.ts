@@ -867,6 +867,21 @@ function valeurValide(champ: ChampAction, brut: unknown): string | null {
  * champ retire cesse d'etre accepte le jour meme. C'est le second raffinement
  * qui verifie ensuite que la cle appartient bien a CETTE action-la.
  */
+/**
+ * Clés que le MOTEUR lit et que les préréglages portent, sans champ dans le
+ * panneau de l'éditeur (audit V2, D-14 : 36 préréglages sur 38 étaient
+ * refusés par la route — impossible de les réenregistrer depuis l'éditeur).
+ * Acceptées pour CETTE action seulement ; toute autre clé reste refusée.
+ */
+export const CLES_INTERNES_PAR_ACTION: Readonly<Record<string, readonly string[]>> = {
+  create_task: ['description'],           // ancien nom de `body`, lu en repli
+  create_notification: ['lien'],          // lien interne ouvert par la notification
+  move_deal_stage: ['depuis_role', 'vers_role'],
+  log_activity: ['event_type', 'metadata'],
+};
+/** Actions exécutées par le moteur mais jamais proposées dans l'éditeur. */
+export const ACTIONS_INTERNES: readonly string[] = ['log_activity'];
+
 const configAction = z.object(
   Object.fromEntries(
     CLES_CHAMPS_ACTION.flatMap((cle) => [
@@ -879,18 +894,35 @@ const configAction = z.object(
       [`${cle}_en`, z.string().trim().max(10000).optional()],
     ]),
   ) as Record<string, z.ZodOptional<z.ZodString>>,
-);
+).extend({
+  description: z.string().trim().max(10000).optional(),
+  lien: z.string().trim().max(2000).optional(),
+  depuis_role: z.string().trim().max(60).optional(),
+  vers_role: z.string().trim().max(60).optional(),
+  event_type: z.string().trim().max(100).optional(),
+  // Seule valeur non textuelle : les métadonnées d'un journal d'activité.
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
 
 const actionAutomatisation = z
   .object({
-    type: z.enum(CLES_ACTIONS as [string, ...string[]], { message: 'Unknown action.' }),
+    type: z.enum([...CLES_ACTIONS, ...ACTIONS_INTERNES] as [string, ...string[]], { message: 'Unknown action.' }),
     // `strict` : une cle inconnue est refusee, pas ignoree.
     config: configAction.strict(),
   })
   .superRefine((action, ctx) => {
     const modele = trouverAction(action.type);
-    if (!modele) return;
+    const internes = new Set(CLES_INTERNES_PAR_ACTION[action.type] ?? []);
     const config = action.config as Record<string, unknown>;
+    if (!modele) {
+      // Action interne : seules ses clés internes sont admises.
+      for (const cle of Object.keys(config)) {
+        if (!internes.has(cle)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['config', cle], message: `« ${action.type} » n'utilise pas le champ « ${cle} ».` });
+        }
+      }
+      return;
+    }
 
     for (const champ of modele.champs) {
       const valeur = config[champ.cle];
@@ -958,7 +990,7 @@ const actionAutomatisation = z
     // Un champ rempli qui n'appartient pas a cette action : refuse plutot
     // qu'ignore, sinon l'utilisateur croit avoir ecrit un objet de courriel
     // sur un texto et ne comprend pas pourquoi il disparait.
-    const attendus = new Set(modele.champs.flatMap((c) => [c.cle, `${c.cle}_en`]));
+    const attendus = new Set([...modele.champs.flatMap((c) => [c.cle, `${c.cle}_en`]), ...internes]);
     for (const cle of Object.keys(config)) {
       if (!attendus.has(cle)) {
         ctx.addIssue({

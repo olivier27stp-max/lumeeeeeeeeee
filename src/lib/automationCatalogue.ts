@@ -778,7 +778,9 @@ export const ACTIONS: ActionCatalogue[] = [
     famille: 'communication', vers_client: true,
     champs: [
       {
-        cle: 'body', fr: 'Texte du message', en: 'Message text', obligatoire: true, type: 'zone', max: 1600,
+        cle: 'body', fr: 'Texte du message', en: 'Message text', obligatoire: false, type: 'zone', max: 1600,
+        aide_fr: 'Vide = le texte de Réglages → Avis clients. Le lien vers l’avis est ajouté automatiquement.',
+        aide_en: 'Empty = the text from Settings → Customer reviews. The review link is added automatically.',
         defaut_fr: 'Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?',
         defaut_en: 'Hi [client_name], thanks for choosing [company_name]! Would you leave a review?',
       },

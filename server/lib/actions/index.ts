@@ -1738,7 +1738,7 @@ export async function executeUpdateStatus(
 // Google/Facebook, 1-3 → commentaires internes) se joue sur /survey/:token.
 
 export async function executeRequestReview(
-  _config: Record<string, any>,
+  config: Record<string, any>,
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
@@ -1841,9 +1841,18 @@ export async function executeRequestReview(
     review_link: surveyUrl,
   };
 
-  let { subject, html: body } = reviewEmail(cs, messageVars);
+  /*
+   * Le texte écrit DANS l'action passe avant celui des réglages. L'éditeur
+   * le demandait (champ obligatoire) et le moteur l'ignorait : ce que
+   * l'entreprise tapait ne partait jamais (audit V2, 2026-09-30). Vide = le
+   * texte de Réglages → Avis clients, comme avant.
+   */
+  const texteAction = champLocalise(config ?? {}, 'body', ctx.langue).trim();
+  const reglagesAvis = texteAction ? { ...cs, review_sms_body: texteAction, review_email_body: texteAction } : cs;
 
-  if (!String(cs?.review_email_body || '').trim()) {
+  let { subject, html: body } = reviewEmail(reglagesAvis, messageVars);
+
+  if (!String(reglagesAvis?.review_email_body || '').trim()) {
     const { data: emailTemplate } = await ctx.supabase
       .from('email_templates')
       .select('subject, body')
@@ -1882,7 +1891,7 @@ export async function executeRequestReview(
     ? { success: false, error: 'Client has no phone number.' }
     : await depassePlafondFrequence(ctxPlafond, 'sms', vars.client_phone)
       ? auPlafond('sms', vars.client_phone)
-      : await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx);
+      : await executeSendSms({ body: reviewSmsBody(reglagesAvis, messageVars) }, vars, ctx);
 
   // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
   const sent = estEnvoye(emailResult) || estEnvoye(smsResult);
