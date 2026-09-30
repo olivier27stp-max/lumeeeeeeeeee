@@ -78,7 +78,10 @@ describe('le balayage', () => {
     expect(await balayerEntreprise(client, ORG, JOURNEE)).toBe(2);
     expect(emis).toHaveLength(2);
     expect(emis[0]).toMatchObject({ type: 'client.inactive', orgId: ORG, entityType: 'client', entityId: candidat(1).client_id });
-    expect(emis[0].metadata).toMatchObject({ mois: 6, max_par_heure: 25, periode: 'job-1' });
+    // Les réglages voyagent en LISTE (toutes les règles du seuil) : chaque règle s'y reconnaît.
+    expect(emis[0].metadata).toMatchObject({ mois: [6], max_par_heure: [25], periode: 'job-1' });
+    const { evaluateConditions } = await import('../../server/lib/automationEngine');
+    expect(evaluateConditions({ mois: 6, max_par_heure: 25 }, emis[0] as never)).toBe(true);
   });
 
   it('la nuit (heure locale de l\'entreprise) : rien', async () => {
