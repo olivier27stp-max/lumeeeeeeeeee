@@ -7,14 +7,19 @@
   "sensible": false,
   "categorie": null,
   "registre": null,
-  "permission": null,
+  "permission": "settings.read",
   "financier": false,
   "identite_requise": false,
   "idempotent": false,
   "routes_app": [],
   "rpc": [],
   "tables_ecrites": [],
-  "presets": null,
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
   "tests": [
    "lumi-items8-14.test.ts",
    "support\\support-ia.test.ts",
@@ -46,6 +51,7 @@
    "lumi-fiches.test.ts",
    "lumi-items8-14.test.ts",
    "lumi-raccourcis.test.ts",
+   "lumi-rbac-couverture.test.ts",
    "lumi-registre.test.ts"
   ]
  },
@@ -102,7 +108,8 @@
    "lumi-etages12.test.ts",
    "lumi-fiches.test.ts",
    "lumi-items8-14.test.ts",
-   "lumi-raccourcis.test.ts"
+   "lumi-raccourcis.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -126,7 +133,9 @@
    "sales_rep": true,
    "technician": true
   },
-  "tests": []
+  "tests": [
+   "lumi-rbac-couverture.test.ts"
+  ]
  },
  {
   "nom": "find_dates_in_location",
@@ -174,6 +183,7 @@
   },
   "tests": [
    "lumi-raccourcis.test.ts",
+   "lumi-rbac-couverture.test.ts",
    "lumi-sous-agents.test.ts"
   ]
  },
@@ -202,7 +212,8 @@
    "lumi-actions-directes.test.ts",
    "lumi-etages12.test.ts",
    "lumi-fiches.test.ts",
-   "lumi-items8-14.test.ts"
+   "lumi-items8-14.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -229,7 +240,8 @@
   "tests": [
    "agent-office-isolation.test.tsx",
    "lumi-actions-directes.test.ts",
-   "lumi-agent.test.ts"
+   "lumi-agent.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -240,14 +252,19 @@
   "sensible": false,
   "categorie": null,
   "registre": null,
-  "permission": null,
+  "permission": "settings.read",
   "financier": false,
   "identite_requise": false,
   "idempotent": false,
   "routes_app": [],
   "rpc": [],
   "tables_ecrites": [],
-  "presets": null,
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
   "tests": [
    "lumi-fiches.test.ts"
   ]
@@ -275,6 +292,7 @@
   },
   "tests": [
    "lumi-raccourcis.test.ts",
+   "lumi-rbac-couverture.test.ts",
    "lumi-sous-agents.test.ts",
    "lumi-traces.test.ts"
   ]
@@ -302,7 +320,9 @@
   },
   "tests": [
    "lumi-etage0.test.ts",
-   "lumi-raccourcis.test.ts"
+   "lumi-raccourcis.test.ts",
+   "lumi-rbac-couverture.test.ts",
+   "stats\\lumi-parite.integration.test.ts"
   ]
  },
  {
@@ -336,14 +356,19 @@
   "sensible": false,
   "categorie": null,
   "registre": null,
-  "permission": null,
+  "permission": "settings.read",
   "financier": false,
   "identite_requise": false,
   "idempotent": false,
   "routes_app": [],
   "rpc": [],
   "tables_ecrites": [],
-  "presets": null,
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
   "tests": [
    "lumi-meteo.test.ts"
   ]
@@ -378,7 +403,8 @@
    "lumi-agent.test.ts",
    "lumi-documents-taxes.test.ts",
    "lumi-etage0.test.ts",
-   "lumi-fiches.test.ts"
+   "lumi-fiches.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -409,7 +435,8 @@
   },
   "tests": [
    "lumi-documents-taxes.test.ts",
-   "lumi-fiches.test.ts"
+   "lumi-fiches.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -481,6 +508,7 @@
    "automatisations-coherence-declencheur-action.test.ts",
    "automatisations-editeur-launch.test.tsx",
    "automatisations-format-origine.test.ts",
+   "automatisations-journaux-prospects.test.ts",
    "automatisations-liste-launch.test.tsx",
    "automatisations-panneau-brouillon.test.tsx",
    "automatisations-personnalisees.test.ts",
@@ -502,6 +530,7 @@
    "lumi-garde-fous.test.ts",
    "lumi-outils-reglages.test.ts",
    "lumi-parcours-audit-v2.test.ts",
+   "lumi-parcours-montre-les-textes.test.ts",
    "lumi-registre.test.ts",
    "qa-2026-09-25-p0.test.ts",
    "qa-2026-09-25-p2-fin.test.ts",
@@ -519,11 +548,15 @@
    "automation\\launch-texto-impossible.test.ts",
    "automation\\paiement-echoue.test.ts",
    "automation\\sortie-parcours.test.ts",
+   "automation\\vague2-attente-reponse.test.ts",
+   "automation\\vague2-etalement-textos.test.ts",
+   "automation\\vague2-prereglages-enregistrables.test.ts",
    "emails\\automation-editeur.test.ts",
    "emails\\automation-presets.test.ts",
    "emails\\delivery-reliability.test.ts",
    "migration\\activer-compte-automatisations.test.ts",
    "automation\\golden\\golden.test.ts",
+   "automations-suite\\integration\\00-canari.test.ts",
    "quarantaine\\automation\\cout-volume.unit.test.ts",
    "quarantaine\\automation\\declenchement-conditions.unit.test.ts",
    "quarantaine\\automation\\erreurs.unit.test.ts",
@@ -633,7 +666,8 @@
    "technician": true
   },
   "tests": [
-   "lumi-actions-directes.test.ts"
+   "lumi-actions-directes.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -717,14 +751,19 @@
   "sensible": false,
   "categorie": null,
   "registre": null,
-  "permission": null,
+  "permission": "team.read",
   "financier": false,
   "identite_requise": false,
   "idempotent": false,
   "routes_app": [],
   "rpc": [],
   "tables_ecrites": [],
-  "presets": null,
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
   "tests": [
    "lumi-outils-d2d-formations.test.ts"
   ]
@@ -797,7 +836,8 @@
    "technician": false
   },
   "tests": [
-   "lumi-agent.test.ts"
+   "lumi-agent.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -821,7 +861,10 @@
    "sales_rep": false,
    "technician": false
   },
-  "tests": []
+  "tests": [
+   "lumi-rbac-couverture.test.ts",
+   "stats\\lumi-parite.integration.test.ts"
+  ]
  },
  {
   "nom": "get_team_locations",
@@ -907,15 +950,22 @@
   "sensible": false,
   "categorie": null,
   "registre": null,
-  "permission": null,
+  "permission": "settings.update",
   "financier": false,
   "identite_requise": true,
   "idempotent": false,
   "routes_app": [],
   "rpc": [],
   "tables_ecrites": [],
-  "presets": null,
-  "tests": []
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": false,
+   "technician": false
+  },
+  "tests": [
+   "lumi-rbac-couverture.test.ts"
+  ]
  },
  {
   "nom": "forget_note",
@@ -989,7 +1039,10 @@
    "sales_rep": false,
    "technician": false
   },
-  "tests": []
+  "tests": [
+   "lumi-rbac-couverture.test.ts",
+   "stats\\lumi-parite.integration.test.ts"
+  ]
  },
  {
   "nom": "get_top_clients",
@@ -1013,7 +1066,9 @@
    "technician": false
   },
   "tests": [
-   "lumi-etage0.test.ts"
+   "lumi-etage0.test.ts",
+   "lumi-rbac-couverture.test.ts",
+   "stats\\lumi-parite.integration.test.ts"
   ]
  },
  {
@@ -1061,7 +1116,9 @@
    "technician": false
   },
   "tests": [
-   "rentabilite.test.ts"
+   "lumi-rbac-couverture.test.ts",
+   "rentabilite.test.ts",
+   "stats\\lumi-parite.integration.test.ts"
   ]
  },
  {
@@ -1085,7 +1142,9 @@
    "sales_rep": false,
    "technician": false
   },
-  "tests": []
+  "tests": [
+   "stats\\lumi-parite.integration.test.ts"
+  ]
  },
  {
   "nom": "list_services",
@@ -1134,14 +1193,14 @@
   "tests": []
  },
  {
-  "nom": "optimize_route",
+  "nom": "propose_day_optimization",
   "module": "tools-etendus.ts",
   "topic": "planification",
   "genre": "lecture",
   "sensible": false,
   "categorie": null,
   "registre": null,
-  "permission": "jobs.read",
+  "permission": "calendar.read",
   "financier": false,
   "identite_requise": true,
   "idempotent": false,
@@ -1155,6 +1214,36 @@
    "technician": true
   },
   "tests": []
+ },
+ {
+  "nom": "apply_day_optimization",
+  "module": "tools-etendus.ts",
+  "topic": "planification",
+  "genre": "action",
+  "sensible": true,
+  "categorie": "autre sensible",
+  "registre": {
+   "sensible": true,
+   "reversible": true,
+   "vers_client": false,
+   "anodine": false
+  },
+  "permission": "calendar.update",
+  "financier": false,
+  "identite_requise": true,
+  "idempotent": true,
+  "routes_app": [],
+  "rpc": [],
+  "tables_ecrites": [],
+  "presets": {
+   "owner": true,
+   "admin": true,
+   "sales_rep": true,
+   "technician": true
+  },
+  "tests": [
+   "agenda\\lumi-optimisation.test.ts"
+  ]
  },
  {
   "nom": "create_client",
@@ -1228,8 +1317,13 @@
    "lumi-outils-differes.test.ts",
    "lumi-outils-reglages.test.ts",
    "lumi-parcours-audit-v2.test.ts",
+   "agenda\\lumi-optimisation.test.ts",
    "automation\\filet-regression.test.ts",
    "automation\\launch-evenements-base.test.ts",
+   "automation\\vague2-reentree-parcours.test.ts",
+   "automation\\vague2-reponse-courriel.test.ts",
+   "automation\\vague2-si-etat-actuel.test.ts",
+   "automation\\vague2-webhook-entrant-occurrences.test.ts",
    "emails\\automation-variables.test.ts",
    "quarantaine\\automation\\perf.unit.test.ts",
    "quarantaine\\automation\\permissions.unit.test.ts"
@@ -1388,7 +1482,8 @@
   },
   "tests": [
    "lumi-actions-directes.test.ts",
-   "lumi-confirmation-sms.test.ts"
+   "lumi-confirmation-sms.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -1405,7 +1500,7 @@
    "anodine": false
   },
   "permission": "messages.send",
-  "financier": false,
+  "financier": true,
   "identite_requise": true,
   "idempotent": true,
   "routes_app": [],
@@ -1923,7 +2018,9 @@
    "sales_rep": false,
    "technician": false
   },
-  "tests": []
+  "tests": [
+   "lumi-rbac-couverture.test.ts"
+  ]
  },
  {
   "nom": "send_email",
@@ -1966,18 +2063,24 @@
    "lumi-actions-directes-2.test.ts",
    "lumi-agent.test.ts",
    "lumi-outils-reglages.test.ts",
+   "lumi-parcours-montre-les-textes.test.ts",
    "qa-2026-09-25-p0.test.ts",
    "automation\\desabonnement-canal.test.ts",
    "automation\\filet-regression.test.ts",
    "automation\\launch-f18-f7.test.ts",
    "automation\\launch-rebonds.test.ts",
    "automation\\launch-texto-impossible.test.ts",
+   "automation\\vague2-etalement-textos.test.ts",
+   "automation\\vague2-fenetre-envoi.test.ts",
+   "automation\\vague2-reponse-courriel.test.ts",
+   "automation\\vague2-une-relance-par-jour.test.ts",
    "courriels\\prereglages-courriels.test.ts",
    "emails\\automation-editeur.test.ts",
    "emails\\automation-presets.test.ts",
    "emails\\delivery-reliability.test.ts",
    "emails\\email-body-text.test.ts",
    "automation\\golden\\golden.test.ts",
+   "automations-suite\\integration\\00-canari.test.ts",
    "quarantaine\\automation\\cout-volume.unit.test.ts",
    "quarantaine\\automation\\erreurs.unit.test.ts",
    "quarantaine\\automation\\front-automations.unit.test.tsx",
@@ -2008,7 +2111,8 @@
   },
   "tests": [
    "lumi-agent.test.ts",
-   "lumi-rapports.test.ts"
+   "lumi-rapports.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -3169,7 +3273,8 @@
   },
   "tests": [
    "lumi-actions-directes.test.ts",
-   "lumi-outils-argent.test.ts"
+   "lumi-outils-argent.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -3260,7 +3365,8 @@
    "technician": false
   },
   "tests": [
-   "lumi-outils-argent.test.ts"
+   "lumi-outils-argent.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -3290,7 +3396,8 @@
    "technician": false
   },
   "tests": [
-   "lumi-outils-argent.test.ts"
+   "lumi-outils-argent.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -3642,7 +3749,8 @@
   "tests": [
    "lumi-confirmation-sms.test.ts",
    "lumi-fiches.test.ts",
-   "lumi-outils-argent.test.ts"
+   "lumi-outils-argent.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -3673,7 +3781,8 @@
   },
   "tests": [
    "lumi-doublon.test.ts",
-   "lumi-outils-argent.test.ts"
+   "lumi-outils-argent.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -5113,7 +5222,8 @@
    "technician": false
   },
   "tests": [
-   "lumi-outils-equipe.test.ts"
+   "lumi-outils-equipe.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -5311,7 +5421,8 @@
    "technician": false
   },
   "tests": [
-   "lumi-outils-equipe.test.ts"
+   "lumi-outils-equipe.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {
@@ -5343,7 +5454,8 @@
    "technician": false
   },
   "tests": [
-   "lumi-outils-equipe.test.ts"
+   "lumi-outils-equipe.test.ts",
+   "lumi-rbac-couverture.test.ts"
   ]
  },
  {

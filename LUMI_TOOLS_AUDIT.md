@@ -2,7 +2,7 @@
 
 Généré le 2026-09-30 par `scripts/audit/rapport-outils-lumi.mts` depuis le code de la branche `feat/audit-outils-lumi`. Les parties rédigées viennent de `docs/audits/outils-lumi/rapport-*.md`.
 
-**246 outils** : 180 actions (dont 105 sensibles) et 66 lectures. **80 constats** : 20 critique, 49 élevé, 8 moyen, 3 bas. Statut : ✅ 68 corrigé · 🟡 8 partiel · ❌ 1 ouvert · ❓ 3 décision.
+**247 outils** : 181 actions (dont 106 sensibles) et 66 lectures. **80 constats** : 20 critique, 49 élevé, 8 moyen, 3 bas. Statut : ✅ 68 corrigé · 🟡 8 partiel · ❌ 1 ouvert · ❓ 3 décision.
 
 ### En bref
 
@@ -60,8 +60,8 @@ Légende. **Carte** : `toujours` = jamais exécutée sans carte, quel que soit l
 | `delete_email_template` | communications | action | oui (envoi client) | `settings.update` (PA) | toujours | non | oui | — | 1 |  |
 | `duplicate_email_template` | communications | action | oui (envoi client) | `settings.update` (PA) | mode | oui | oui | — | 1 |  |
 | `mark_conversation_read` | communications | action | non | `messages.read` (PAVT) | mode | oui | oui | — | 2 |  |
-| `send_email` | communications | action | oui (envoi client) | `messages.send` (PAVT) | toujours | non | oui | — | 36 | 🟡C ❓B |
-| `send_sms` | communications | action | oui (envoi client) | `messages.send` (PAVT) | toujours | non | oui | — | 69 | ✅C ✅C ❓M ✅B |
+| `send_email` | communications | action | oui (envoi client) | `messages.send` (PAVT) | toujours | non | oui | — | 37 | 🟡C ❓B |
+| `send_sms` | communications | action | oui (envoi client) | `messages.send` (PAVT) | toujours | non | oui | — | 70 | ✅C ✅C ❓M ✅B |
 | `set_default_email_template` | communications | action | oui (envoi client) | `settings.update` (PA) | toujours | oui | oui | — | 1 | ✅É |
 | `update_email_template` | communications | action | oui (envoi client) | `settings.update` (PA) | toujours | oui | oui | — | 1 |  |
 | `get_conversation_messages` | communications | lecture | — | `messages.read` (PAVT) | — | — | — | lecture | 0 |  |
@@ -92,7 +92,7 @@ Légende. **Carte** : `toujours` = jamais exécutée sans carte, quel que soit l
 | `approve_timesheet` | equipe | action | oui (paie) | `timesheets.update` (PAT) | toujours | oui | oui | — | 1 | ✅É |
 | `bulk_delete_tasks` | equipe | action | oui (autre sensible) | `jobs.read` (PAVT) | toujours | non | oui | — | 1 | ✅É |
 | `bulk_update_task_status` | equipe | action | non | `jobs.read` (PAVT) | mode | oui | oui | — | 1 |  |
-| `create_task` | equipe | action | non | `jobs.read` (PAVT) | mode | oui | oui | — | 23 |  |
+| `create_task` | equipe | action | non | `jobs.read` (PAVT) | mode | oui | oui | — | 24 |  |
 | `create_team` | equipe | action | non | `team.update` (PA) | mode | oui | oui | — | 2 |  |
 | `delete_task` | equipe | action | non | `jobs.read` (PAVT) | mode | oui | oui | — | 1 |  |
 | `delete_team` | equipe | action | oui (autre sensible) | `team.update` (PA) | toujours | non | oui | — | 1 | ✅É |
@@ -173,6 +173,7 @@ Légende. **Carte** : `toujours` = jamais exécutée sans carte, quel que soit l
 | `get_recent_agent_actions` | memoire | lecture | — | `reports.read` (PA) | — | — | — | lecture | 0 |  |
 | `recall_notes` | memoire | lecture | — | `settings.update` (PA) | — | — | — | lecture | 1 | ✅É |
 | `add_visit` | planification | action | non | `calendar.update` (PAVT) | mode | oui | oui | — | 1 |  |
+| `apply_day_optimization` | planification | action | oui (autre sensible) | `calendar.update` (PAVT) | mode | oui | oui | — | 1 |  |
 | `archive_job` | planification | action | oui (autre sensible) | `jobs.update` (PAT) | mode | oui | oui | — | 2 | 🟡É ✅É |
 | `assign_job` | planification | action | non | `jobs.assign` (PA) | mode | oui | oui | — | 2 | ✅É |
 | `cancel_visit` | planification | action | oui (autre sensible) | `calendar.update` (PAVT) | toujours | non | oui | — | 0 | ✅É ✅É |
@@ -217,7 +218,7 @@ Légende. **Carte** : `toujours` = jamais exécutée sans carte, quel que soit l
 | `list_job_tags` | planification | lecture | — | `jobs.read` (PAVT) | — | — | — | lecture | 1 |  |
 | `list_jobs` | planification | lecture | — | `jobs.read` (PAVT) | — | — | — | lecture | 7 |  |
 | `list_recurrence_rules` | planification | lecture | — | `jobs.read` (PAVT) | — | — | — | lecture | 1 |  |
-| `optimize_route` | planification | lecture | — | `jobs.read` (PAVT) | — | — | — | lecture | 0 |  |
+| `propose_day_optimization` | planification | lecture | — | `calendar.read` (PAVT) | — | — | — | lecture | 0 |  |
 | `query_schedule` | planification | lecture | — | `jobs.read` (PAVT) | — | — | — | lecture | 3 | ✅C |
 | `create_automation_from_text` | rapports | action | oui (autre sensible) | `automations.update` (PA) | toujours | oui | oui | — | 1 | 🟡M 🟡É |
 | `create_scheduled_report` | rapports | action | non | `financial.view_reports` (PA) | toujours | oui | oui | — | 1 | ✅C |
@@ -431,7 +432,7 @@ Pour chaque outil, la colonne « Garde (préréglages) » de la matrice donne la
 
 ## 4. Évaluation avant / après
 
-Jeu : `evals/lumi-tools/cas/` (456 cas : 3 par action sensible — français, anglais, désambiguïsation ou clarification —, 1 par autre action, 1 par lecture). Runner : `evals/lumi-tools/run.mts` (mode « demander » : aucune écriture ne s'exécute ; serveurs d'éval sans aucun identifiant d'envoi). « Avant » = `origin/main` au moment de l'audit ; « après » = cette branche.
+Jeu : `evals/lumi-tools/cas/` (456 cas : 3 par action sensible — français, anglais, désambiguïsation ou clarification —, 1 par autre action, 1 par lecture). Runner : `evals/lumi-tools/run.mts` (mode « demander » : aucune écriture ne s'exécute ; serveurs d'éval sans aucun identifiant d'envoi). « Avant » = `origin/main` au moment de l'audit ; « après » = cette branche fusionnée avec `origin/main` (passe finale). Une passe intermédiaire, avant les dernières corrections, donnait 82,0 % / 96,4 % / 89,7 %.
 
 | Portée | Cas | Outil exact | Paramètres + cible sur la carte | Clarification | Faux « c'est fait » | Outil interdit proposé |
 |---|---|---|---|---|---|---|
