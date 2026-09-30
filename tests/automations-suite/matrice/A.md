@@ -201,7 +201,7 @@ Statut : toutes les cellules avec un test PASSENT ; « NON COUVERT » / « NON C
 | A-302 | echeanceAvantDate | moment dépassé de plus de 30 min | si_depasse |  |
 | A-303 | echeanceAvantDate | moment atteint | suite |  |
 | A-304 | echeanceAvantDate | rdv annulé | arrêt |  |
-| A-305 | rappels-dates (balayage) | fuseau figé America/Toronto | — | NON CORRIGÉ, décision requise : lire fuseauOrg par entreprise dans le balayage (lit la base, hors unitaire) — inv-1 §9-6 |
+| A-305 | rappels-dates (balayage) | fuseau figé America/Toronto | — | CORRIGÉ : fuseauOrg lu par entreprise dans le balayage (A-rappels-fuseau-entreprise.test.ts) |
 | A-310 | jourLocal (rappels-dates, dates-locales) | 23 h 59, minuit, 1er nov. | jour local |  |
 | A-311 | jourDecale | ±1, 0 | jour civil |  |
 | A-312 | jourDecale | 30, 365, −365, 29 février 2028 | jour civil |  |
