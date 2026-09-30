@@ -406,7 +406,7 @@ const resendInvitationTool: AgentTool = {
   declaration: {
     name: 'resend_invitation',
     description:
-      'Resend a pending or expired invitation email with a fresh 48 h link. Get the invitation id from list_invitations.',
+      'Resend a pending or expired invitation email with a fresh 48 h link (not an accepted or revoked one — send a new invitation instead). Get the invitation id from list_invitations.',
     parameters: {
       type: 'object',
       properties: { invitation_id: { type: 'string', description: 'Invitation id.' } },
@@ -442,7 +442,7 @@ const revokeInvitationTool: AgentTool = {
       const contexte = "la révocation de l'invitation";
       const r = await viaRoute(ctx, '/invitations/revoke', { invitationId }, contexte);
       if (!r.ok) return resultatIncertain(contexte);
-      return { revoked: true, invitation_id: invitationId, note: 'Invitation révoquée : le lien est mort et le siège est libéré. resend_invitation la remet en attente au besoin.' };
+      return { revoked: true, invitation_id: invitationId, note: 'Invitation révoquée : le lien est mort et le siège est libéré. Pour réinviter la personne, envoie une nouvelle invitation.' };
     }),
 };
 

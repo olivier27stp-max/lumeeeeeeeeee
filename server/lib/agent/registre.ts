@@ -88,6 +88,11 @@ const ARGENT_ET_DROITS = [
   'update_member_role', 'set_member_permissions', 'reset_member_permissions', 'update_role_preset',
   'invite_member', 'remove_member', 'reactivate_member', 'revoke_invitation', 'resend_invitation',
   'create_scheduled_report', 'update_scheduled_report', 'send_scheduled_report_now',
+  // Ce qui PARLERA au client plus tard, sans autre confirmation : modèles de
+  // courriel, textes et interrupteurs des automatisations, conditions d'un contrat.
+  'create_email_template', 'update_email_template', 'set_default_email_template',
+  'create_automation_from_text', 'toggle_automation_rule', 'update_automation_message', 'update_automation_sms_body',
+  'create_job_agreement',
 ];
 export const JAMAIS_D_OFFICE: ReadonlySet<string> = new Set([
   ...Object.entries(REGISTRE_ECRITURES).filter(([, a]) => a.vers_client || !a.reversible).map(([n]) => n),

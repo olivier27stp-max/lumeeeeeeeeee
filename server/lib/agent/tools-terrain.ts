@@ -1831,8 +1831,8 @@ const A = (a: Partial<{ sensible: boolean; reversible: boolean; vers_client: boo
 
 export const REGISTRE_TERRAIN: Record<string, { sensible: boolean; reversible: boolean; vers_client: boolean }> = {
   delete_job:                   A({ sensible: true, reversible: false }),
-  create_recurrence_rule:       A({}),
-  deactivate_recurrence_rule:   A({}),
+  create_recurrence_rule:       A({ sensible: true }),                      // crée des visites à répétition (audit 2026-09-30)
+  deactivate_recurrence_rule:   A({ sensible: true }),                      // plus aucune visite future ne se crée
   create_job_template:          A({}),
   schedule_job:                 A({}),
   unschedule_job:               A({ sensible: true, reversible: false }),   // retire des rendez-vous convenus avec le client
@@ -1847,7 +1847,7 @@ export const REGISTRE_TERRAIN: Record<string, { sensible: boolean; reversible: b
   save_job_billing_milestones:  A({ sensible: true }),                      // de l'argent (échéancier)
   create_invoice_for_visit:     A({ sensible: true }),
   create_invoice_for_milestone: A({ sensible: true }),
-  create_job_agreement:         A({}),
+  create_job_agreement:         A({ sensible: true }),                      // conditions d'un contrat envoyé au client
   send_agreement_email:         A({ sensible: true, reversible: false, vers_client: true }),
   send_agreement_sms:           A({ sensible: true, reversible: false, vers_client: true }),
   create_availability:          A({}),

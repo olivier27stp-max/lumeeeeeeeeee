@@ -1131,13 +1131,31 @@ const deleteDeal: AgentTool = {
       const dealId = champRequis(args.deal_id, 'La carte de pipeline');
       const { data: deal, error: errDeal } = await ctx.client
         .from('pipeline_deals')
-        .select('id, title')
+        .select('id, title, lead_id')
         .eq('org_id', ctx.orgId).eq('id', dealId)
         .is('deleted_at', null)
         .maybeSingle();
       if (errDeal) echecEcriture('retrouver la carte de pipeline', errDeal);
       if (!deal) throw new Error('Carte de pipeline introuvable — elle a peut-être déjà été supprimée.');
       const aussiLeLead = Boolean(args.also_delete_lead);
+      if (aussiLeLead && deal.lead_id) {
+        // Audit 2026-09-30 : la fiche liée est peut-être devenue un CLIENT
+        // (jobs, factures) — la supprimer avec la carte laisserait tout son
+        // historique orphelin. On ne supprime qu'un prospect sans historique.
+        const { data: fiche, error: errFiche } = await ctx.client
+          .from('clients').select('id, status').eq('org_id', ctx.orgId).eq('id', deal.lead_id).is('deleted_at', null).maybeSingle();
+        if (errFiche) echecEcriture('vérifier la fiche liée', errFiche);
+        if (fiche) {
+          if (fiche.status !== 'lead') throw new Error('La fiche liée à cette carte est un client actif : je retire seulement la carte, sans supprimer le client. Redemande sans supprimer la fiche.');
+          const compte = async (table: 'jobs' | 'invoices' | 'quotes') => {
+            const { count, error } = await ctx.client.from(table).select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', fiche.id).is('deleted_at', null);
+            if (error) echecEcriture('vérifier la fiche liée', error);
+            return count ?? 0;
+          };
+          const historique = (await compte('jobs')) + (await compte('invoices')) + (await compte('quotes'));
+          if (historique > 0) throw new Error('Ce prospect a déjà des jobs, devis ou factures : je ne supprime pas sa fiche avec la carte. Redemande sans supprimer la fiche.');
+        }
+      }
       const r = await routeOuIncertain(ctx, '/deals/soft-delete', { dealId: deal.id, alsoDeleteLead: aussiLeLead }, 'la carte a été supprimée');
       if ('incertain' in r) return r.incertain;
       if (!r.ok) echecRoute('supprimer la carte de pipeline', r.status, r.json);

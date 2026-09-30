@@ -208,6 +208,26 @@ describe('écritures directes : filtrées par org_id = ctx.orgId, note en franç
     expect(sans.r.error).toMatch(/n’envoie pas de courriel/);
   });
 
+  it('parcours (steps) : réécrit l ÉTAPE que le moteur exécute, pas actions ; plusieurs textos → demande lequel', async () => {
+    const steps = [
+      { id: 'e1', type: 'action', nom: 'Confirmation', action: { type: 'send_sms', config: { body: 'Confirmé !' } }, suivant: 'e2' },
+      { id: 'e2', type: 'attendre', delai_secondes: 86400, suivant: 'e3' },
+      { id: 'e3', type: 'action', nom: 'Rappel', action: { type: 'send_sms', config: { body: 'C’est demain' } } },
+    ];
+    const regle = { id: 'r1', name: 'Rendez-vous', actions: [{ type: 'send_sms', config: { body: 'vieux' } }], steps };
+    const ambigu = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_sms', body: 'Nouveau' }, { automation_rules: { data: [regle] } });
+    expect(ambigu.r.error).toMatch(/envoie 2 textos\. Lequel réécrire \? 1\. Confirmation .* 2\. Rappel/);
+    expect(ambigu.appels.some((a) => a.ops.some(([m]) => m === 'update'))).toBe(false);
+
+    const { r, appels } = await executer('update_automation_message', { rule_id: 'r1', action_type: 'send_sms', body: 'À demain 9 h', message_number: 2 }, { automation_rules: { data: [regle] } });
+    expect(r).toMatchObject({ updated: true, ancien_texte: 'C’est demain' });
+    const maj = appels[1].ops.find(([m]) => m === 'update')![1];
+    expect(maj.actions).toBeUndefined();
+    expect(maj.steps[0].action.config.body).toBe('Confirmé !');
+    expect(maj.steps[2].action.config.body).toBe('À demain 9 h');
+    expect(maj.steps[1]).toEqual(steps[1]);
+  });
+
   it('delete_goal : visibilité prouvée à l identité (org_id) AVANT la suppression service filtrée par org_id ; introuvable = rien', async () => {
     const service = clientEnregistreur({ goals: { data: null } });
     vi.mocked(getServiceClient).mockReturnValue(service.client);

@@ -682,6 +682,22 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
     if (error || !invitation) {
       return res.status(404).json({ error: 'Invitation not found.' });
     }
+    // Audit 2026-09-30 : une invitation acceptée ou révoquée ne revit pas par
+    // un renvoi (avant : remise « pending » avec un lien neuf). Et renvoyer,
+    // c'est redonner l'accès : même garde qu'à l'envoi (inviter un admin, ou
+    // avec des permissions que l'appelant n'a pas → propriétaire seulement).
+    if (invitation.status === 'accepted' || invitation.status === 'revoked') {
+      return res.status(409).json({
+        error: invitation.status === 'accepted' ? 'Cette invitation a déjà été acceptée.' : 'Cette invitation a été révoquée : envoie une nouvelle invitation.',
+        code: `invitation_${invitation.status}`,
+      });
+    }
+    {
+      const refus = await refusEscalade(admin, auth.user.id, auth.orgId, {
+        cibleRoleNouveau: invitation.role, permissionsNouvelles: invitation.custom_permissions ?? null, permissionsActuelles: {},
+      });
+      if (refus) return res.status(403).json({ error: refus, code: 'escalade_refusee' });
+    }
 
     // Generate new token and extend expiry. Store only the hash.
     const newToken = crypto.randomBytes(32).toString('hex');
@@ -710,6 +726,7 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
 
     const baseUrl = getBaseUrl();
     const inviteLink = `${baseUrl}/invite/${newToken}`;
+    let courrielParti = true;
     try {
       const { sendEmail, isMailerConfigured } = await import('../lib/mailer');
       if (isMailerConfigured()) {
@@ -722,14 +739,22 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
           inviterName: inviter?.full_name || null,
           branding,
         });
-        await sendEmail({
+        const envoi = await sendEmail({
           to: invitation.email,
           subject: `Rappel : ${rendered.subject}`,
           html: rendered.html,
         });
+        if (envoi && envoi.sent === false) courrielParti = false;
+      } else {
+        courrielParti = false;
       }
-    } catch (err) { console.error('[invitations] resend email failed:', err); }
+    } catch (err) { console.error('[invitations] resend email failed:', err); courrielParti = false; }
 
+    // Le lien est renouvelé ; si le courriel n'est pas parti, on le DIT (avant :
+    // « renvoyée » dans tous les cas). Le lien reste utilisable à la main.
+    if (!courrielParti) {
+      return res.status(502).json({ error: 'Le lien a été renouvelé, mais le courriel n’est pas parti. Copie le lien et envoie-le toi-même.', code: 'courriel_non_parti', invite_link: inviteLink });
+    }
     return res.json({ message: 'Invitation resent.', invite_link: inviteLink });
   } catch (err: any) {
     console.error('[invitations/resend]', err.message);

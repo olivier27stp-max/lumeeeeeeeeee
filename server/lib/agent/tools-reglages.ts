@@ -481,9 +481,14 @@ const createAutomationFromText: AgentTool = {
 };
 
 /**
- * Réécrit le corps (et l'objet, pour un courriel) de l'action d'envoi d'une
- * règle — lecture-modification-écriture, les autres actions sont intactes
- * (même logique que updateRuleMessage dans automationRulesApi.ts).
+ * Réécrit le corps (et l'objet, pour un courriel) d'UN message d'envoi d'une
+ * règle — lecture-modification-écriture, le reste est intact.
+ *
+ * Audit 2026-09-30 : un parcours (`steps` non vide) est ce que le moteur
+ * exécute ; `actions` n'y sert plus. Avant, l'outil réécrivait `actions` :
+ * « c'est fait », et les clients recevaient l'ANCIEN texte. Il réécrivait aussi
+ * TOUS les messages du même type avec le même texte. Maintenant : la bonne
+ * liste, un seul message, et s'il y en a plusieurs, on demande lequel.
  */
 async function reecrireMessageAutomation(
   ctx: ToolContext,
@@ -491,28 +496,43 @@ async function reecrireMessageAutomation(
   actionType: 'send_sms' | 'send_email',
   body: string,
   subject?: string,
+  numero?: number,
 ): Promise<Record<string, any>> {
   const { data: regle, error: lireErr } = await ctx.client
     .from('automation_rules')
-    .select('id, name, actions')
+    .select('id, name, actions, steps')
     .eq('id', ruleId)
     .eq('org_id', ctx.orgId)
     .maybeSingle();
   if (lireErr) throw lireErr;
   if (!regle) throw new Error('Automatisation introuvable.');
-  const actions: Array<{ type: string; config?: Record<string, any> }> = Array.isArray(regle.actions) ? regle.actions : [];
   const quoi = actionType === 'send_sms' ? 'texto' : 'courriel';
-  if (!actions.some((a) => a?.type === actionType)) {
-    throw new Error(`Cette automatisation n’envoie pas de ${quoi} : rien à réécrire.`);
+  const nouvelleConfig = (config: Record<string, any> | undefined) => ({
+    ...(config || {}), body, ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}),
+  });
+
+  const etapes: any[] = Array.isArray(regle.steps) ? regle.steps : [];
+  const parcours = etapes.length > 0;
+  // Les messages de ce type, dans l'ordre du parcours (ou de la liste d'actions).
+  const cibles: Array<{ index: number; texte: string; nom: string | null }> = parcours
+    ? etapes.flatMap((e, index) => (e?.type === 'action' && e.action?.type === actionType
+      ? [{ index, texte: String(e.action?.config?.body ?? ''), nom: e.nom ?? null }] : []))
+    : (Array.isArray(regle.actions) ? regle.actions : []).flatMap((a: any, index: number) => (a?.type === actionType
+      ? [{ index, texte: String(a?.config?.body ?? ''), nom: null }] : []));
+  if (!cibles.length) throw new Error(`Cette automatisation n’envoie pas de ${quoi} : rien à réécrire.`);
+  if (cibles.length > 1 && !numero) {
+    const liste = cibles.map((c, i) => `${i + 1}. ${c.nom ? `${c.nom} — ` : ''}« ${c.texte.slice(0, 60)}${c.texte.length > 60 ? '…' : ''} »`).join(' ; ');
+    throw new Error(`Cette automatisation envoie ${cibles.length} ${quoi}s. Lequel réécrire ? ${liste}`);
   }
-  const nouvelles = actions.map((a) =>
-    a?.type === actionType
-      ? { ...a, config: { ...(a.config || {}), body, ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}) } }
-      : a,
-  );
+  const cible = cibles[(numero ?? 1) - 1];
+  if (!cible) throw new Error(`Il n’y a que ${cibles.length} ${quoi}(s) dans cette automatisation.`);
+
+  const maj = parcours
+    ? { steps: etapes.map((e, i) => (i === cible.index ? { ...e, action: { ...e.action, config: nouvelleConfig(e.action?.config) } } : e)) }
+    : { actions: (regle.actions as any[]).map((a, i) => (i === cible.index ? { ...a, config: nouvelleConfig(a.config) } : a)) };
   const { data, error } = await ctx.client
     .from('automation_rules')
-    .update({ actions: nouvelles, updated_at: new Date().toISOString() })
+    .update({ ...maj, updated_at: new Date().toISOString() })
     .eq('id', ruleId)
     .eq('org_id', ctx.orgId)
     .select('id');
@@ -523,6 +543,7 @@ async function reecrireMessageAutomation(
     rule_id: regle.id,
     name: regle.name,
     action_type: actionType,
+    ancien_texte: cible.texte,
     note: actionType === 'send_sms' ? 'Texte du texto de l’automatisation mis à jour.' : 'Texte du courriel de l’automatisation mis à jour.',
   };
 }
@@ -540,6 +561,7 @@ const updateAutomationMessage: AgentTool = {
         action_type: { type: 'string', enum: ['send_sms', 'send_email'], description: 'Which message to rewrite.' },
         body: { type: 'string', description: 'New message text.' },
         subject: { type: 'string', description: 'New subject (emails only).' },
+        message_number: { type: 'integer', description: 'When the rule sends several messages of this type: which one (1 = first in the flow). Ask the user if unsure.' },
       },
       required: ['rule_id', 'action_type', 'body'],
     },
@@ -550,7 +572,8 @@ const updateAutomationMessage: AgentTool = {
       const type = args.action_type === 'send_email' ? 'send_email' : 'send_sms';
       const body = champRequis(args.body, 'Le texte du message').slice(0, 5000);
       const subject = args.subject === undefined || args.subject === null ? undefined : String(args.subject).slice(0, 300);
-      return reecrireMessageAutomation(ctx, id, type, body, subject);
+      const numero = Number.isInteger(args.message_number) && Number(args.message_number) > 0 ? Number(args.message_number) : undefined;
+      return reecrireMessageAutomation(ctx, id, type, body, subject, numero);
     }),
 };
 
@@ -565,6 +588,7 @@ const updateAutomationSmsBody: AgentTool = {
       properties: {
         rule_id: { type: 'string', description: 'Automation rule id.' },
         body: { type: 'string', description: 'New SMS text.' },
+        message_number: { type: 'integer', description: 'When the rule sends several SMS: which one (1 = first in the flow).' },
       },
       required: ['rule_id', 'body'],
     },
@@ -573,7 +597,8 @@ const updateAutomationSmsBody: AgentTool = {
     executerIdempotent(ctx, 'update_automation_sms_body', args, async () => {
       const id = champRequis(args.rule_id, 'L’automatisation');
       const body = champRequis(args.body, 'Le texte du texto').slice(0, 1600);
-      return reecrireMessageAutomation(ctx, id, 'send_sms', body);
+      const numero = Number.isInteger(args.message_number) && Number(args.message_number) > 0 ? Number(args.message_number) : undefined;
+      return reecrireMessageAutomation(ctx, id, 'send_sms', body, undefined, numero);
     }),
 };
 
@@ -1425,9 +1450,9 @@ export const OUTILS_REGLAGES: AgentTool[] = [
  */
 export const REGISTRE_REGLAGES: Record<string, { sensible: boolean; reversible: boolean; vers_client: boolean }> = {
   mark_conversation_read:      { sensible: false, reversible: true,  vers_client: false },
-  create_email_template:       { sensible: false, reversible: true,  vers_client: false },
-  update_email_template:       { sensible: false, reversible: true,  vers_client: false },
-  set_default_email_template:  { sensible: false, reversible: true,  vers_client: false },
+  create_email_template:       { sensible: true,  reversible: true,  vers_client: false }, // ce que les clients recevront (audit 2026-09-30)
+  update_email_template:       { sensible: true,  reversible: true,  vers_client: false },
+  set_default_email_template:  { sensible: true,  reversible: true,  vers_client: false },
   delete_email_template:       { sensible: true,  reversible: false, vers_client: false },
   duplicate_email_template:    { sensible: false, reversible: true,  vers_client: false },
   // Créée en pause : rien n'atteint un client tant qu'elle n'est pas activée,

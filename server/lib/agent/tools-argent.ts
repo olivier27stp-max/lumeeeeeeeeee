@@ -2105,7 +2105,7 @@ export const REGISTRE_ARGENT: Record<string, { sensible: boolean; reversible: bo
   // Factures récurrentes
   create_recurring_invoice:  A({ sensible: true }),
   update_recurring_invoice:  A({ sensible: true }),
-  delete_recurring_invoice:  A({}),                                        // désactivation (is_active)
+  delete_recurring_invoice:  A({ sensible: true }),                        // désactivation (is_active) : la facturation s'arrête
   run_recurring_invoice_now: A({ sensible: true, reversible: false }),
   // Modèles de facture
   create_invoice_template:   A({}),
