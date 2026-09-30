@@ -2235,7 +2235,32 @@ async function clientARepondu(
     console.error('[automationEngine] arrêt sur réponse indéterminable — tâche conservée:', error.message);
     return false;
   }
-  return Boolean(data && data.length > 0);
+  if (data && data.length > 0) return true;
+
+  /*
+   * La réponse par COURRIEL compte aussi (audit V2, C12) : un courriel
+   * entrant de l'adresse du client, reçu dans une boîte connectée du bureau
+   * depuis la mise en attente. Même prudence : illisible = pas de réponse.
+   */
+  const { data: fiche } = await supabase.from('clients').select('email')
+    .eq('id', clientId).eq('org_id', orgId).maybeSingle();
+  const adresse = String((fiche as { email?: string | null } | null)?.email ?? '').trim();
+  if (!adresse) return false;
+  const { data: boites, error: eBoites } = await supabase.from('email_accounts').select('id').eq('org_id', orgId);
+  if (eBoites || !boites?.length) return false;
+  const { data: courriels, error: eCourriels } = await supabase
+    .from('email_messages')
+    .select('id')
+    .in('account_id', (boites as Array<{ id: string }>).map((b) => b.id))
+    .eq('direction', 'inbound')
+    .ilike('from_email', adresse.replace(/[%_\\]/g, (c) => `\\${c}`))
+    .gte('created_at', depuis)
+    .limit(1);
+  if (eCourriels) {
+    console.error('[automationEngine] réponse par courriel indéterminable — tâche conservée:', eCourriels.message);
+    return false;
+  }
+  return Boolean(courriels && courriels.length > 0);
 }
 
 async function checkStopConditions(

@@ -283,8 +283,8 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
   },
   {
     cle: 'client.replied', fr: 'Le client répond', en: 'Client replies',
-    aide_fr: 'Quand un client répond par texto à un message de l’entreprise.',
-    aide_en: 'When a client texts back after a message from the company.',
+    aide_fr: 'Quand un client répond par texto, ou par courriel dans une boîte connectée à Lume.',
+    aide_en: 'When a client texts back, or replies by email to a mailbox connected to Lume.',
     famille: 'client', entite: 'lead',
   },
   {

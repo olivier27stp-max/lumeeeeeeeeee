@@ -6,6 +6,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { getServiceClient } from '../../supabase';
+import { eventBus } from '../../eventBus';
 import { getValidAccessToken } from '../accountService';
 
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
@@ -196,6 +197,10 @@ async function syncFolder(
       continue;
     }
 
+    // Nouveau ? (la synchro repasse sur les mêmes messages à chaque tour.)
+    const { data: dejaVu } = await db.from('email_messages').select('id')
+      .eq('account_id', account.id).eq('provider_message_id', msg.id).maybeSingle();
+
     const { error: msgErr } = await db
       .from('email_messages')
       .upsert({
@@ -226,7 +231,41 @@ async function syncFolder(
       );
     } else {
       upserted++;
+      if (!dejaVu && direction === 'inbound' && folder === 'inbox' && from.email) {
+        await signalerReponseClient(db, account.org_id, from.email, msg.snippet || '', msg.id);
+      }
     }
   }
   return upserted;
+}
+
+/**
+ * Un CLIENT connu vient d'écrire : c'est une réponse, comme un texto.
+ *
+ * Seul le texto émettait `client.replied` : un client qui répondait « oui »
+ * par courriel à une relance continuait de la recevoir (audit V2, C12). On ne
+ * signale qu'un NOUVEAU courriel entrant, d'une adresse du carnet de clients
+ * du bureau. Ne lève jamais : la synchro de la boîte continue.
+ */
+async function signalerReponseClient(
+  db: ReturnType<typeof getServiceClient>,
+  orgId: string,
+  adresse: string,
+  apercu: string,
+  messageId: string,
+): Promise<void> {
+  try {
+    const { data: client, error } = await db.from('clients').select('id')
+      .eq('org_id', orgId).ilike('email', adresse.trim().replace(/[%_\\]/g, (c) => `\\${c}`)).is('deleted_at', null).limit(1).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!client) return;
+    await eventBus.emit('client.replied', {
+      orgId,
+      entityType: 'client',
+      entityId: (client as { id: string }).id,
+      metadata: { canal: 'courriel', texte: apercu.slice(0, 500), email_message_id: messageId },
+    });
+  } catch (e) {
+    console.error(`[gmail-sync] réponse du client non signalée (org ${orgId}):`, e instanceof Error ? e.message : String(e));
+  }
 }
