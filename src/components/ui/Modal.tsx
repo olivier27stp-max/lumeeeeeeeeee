@@ -39,8 +39,12 @@ export default function Modal({ open, onClose, title, description, children, siz
     if (!open) return;
     // Save and restore focus
     previousFocusRef.current = document.activeElement;
-    // Focus the dialog after render
-    requestAnimationFrame(() => dialogRef.current?.focus());
+    // Focus sur la fenêtre après le rendu — sauf si un champ à l'intérieur l'a déjà
+    // (autoFocus) : le lui reprendre le faisait « blur » et refermait sa liste.
+    requestAnimationFrame(() => {
+      const d = dialogRef.current;
+      if (d && !d.contains(document.activeElement)) d.focus();
+    });
 
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { onCloseRef.current(); return; }
