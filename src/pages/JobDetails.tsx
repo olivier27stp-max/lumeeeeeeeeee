@@ -51,6 +51,7 @@ import {
 } from '../lib/jobBillingApi';
 import { fetchReminderSettings, fetchReminderLog, type ReminderSettings, type ReminderLogEntry } from '../lib/remindersApi';
 import { formatCents, type TaxLine } from '../lib/jobCalc';
+import { fetchJobPnLForJob, type JobPnLRow } from '../lib/profitabilityApi';
 import { Job } from '../types';
 import StatusBadge from '../components/ui/StatusBadge';
 import { useJobModalController } from '../contexts/JobModalController';
@@ -210,6 +211,16 @@ export default function JobDetails() {
   const [isClosing, setIsClosing] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [showProfitability, setShowProfitability] = useState(false);
+  const [rentabilite, setRentabilite] = useState<JobPnLRow | null>(null);
+  // Chargée à l'ouverture du volet seulement (permission des marges vérifiée en base aussi).
+  useEffect(() => {
+    if (!showProfitability || !canSeeMargins || !id) return;
+    let annule = false;
+    fetchJobPnLForJob(id)
+      .then((r) => { if (!annule) setRentabilite(r); })
+      .catch((err) => console.error('[JobDetails] rentabilité du job :', err));
+    return () => { annule = true; };
+  }, [showProfitability, canSeeMargins, id]);
   const [invoiceTab, setInvoiceTab] = useState<'billing' | 'reminders'>('billing');
 
   // Billing split — payment schedule
@@ -898,10 +909,15 @@ export default function JobDetails() {
   const displayTaxCents = subtotalCents > 0 ? taxCents : enabledTaxes.reduce((sum, tx) => sum + Math.round(computedSubtotalCents * (tx.rate / 100)), 0);
   const displayTotalCents = subtotalCents > 0 ? totalCents : displaySubtotalCents + displayTaxCents;
 
-  // Profitability — cost_cents on line items if available, otherwise 0 (not revenue)
-  const lineItemCostCents = lineItems.reduce((sum, item) => sum + Math.round(item.qty * ((item as any).cost_cents || 0)), 0);
-  const profitCents = displayTotalCents - lineItemCostCents;
-  const profitMargin = displayTotalCents > 0 ? Math.round((profitCents / displayTotalCents) * 100) : 0;
+  // Rentabilité : calculée en base (rentabilite_jobs), même définition que les
+  // Statistiques et Lumi — revenu AVANT taxes − main-d'œuvre pointée sur le job
+  // − dépenses. Avant, main-d'œuvre et dépenses étaient « 0,00 $ » écrits en
+  // dur et le revenu comptait les taxes : marge toujours 100 %.
+  const revenuHtCents = rentabilite?.revenue_cents ?? displaySubtotalCents;
+  const mainOeuvreCents = rentabilite?.labour_cents ?? 0;
+  const depensesCents = rentabilite?.expenses_cents ?? 0;
+  const profitCents = rentabilite?.profit_cents ?? revenuHtCents;
+  const profitMargin = revenuHtCents > 0 ? Math.round((profitCents / revenuHtCents) * 100) : 0;
 
   // Status helpers
   const isToday = job?.scheduled_at && new Date(job.scheduled_at).toDateString() === new Date().toDateString();
@@ -1395,13 +1411,11 @@ export default function JobDetails() {
 
                     {/* Breakdown */}
                     <div className="flex flex-wrap items-center gap-3 text-[13px]">
-                      <ProfitBlock label={language === 'fr' ? 'Prix total' : 'Total price'} value={formatCents(displayTotalCents)} />
+                      <ProfitBlock label={language === 'fr' ? 'Prix avant taxes' : 'Price before tax'} value={formatCents(revenuHtCents)} />
                       <span className="text-text-tertiary font-medium">−</span>
-                      <ProfitBlock label={language === 'fr' ? 'Coût des articles' : 'Line Item Cost'} value={formatCents(lineItemCostCents)} color="text-text-secondary" />
+                      <ProfitBlock label={language === 'fr' ? `Main-d'œuvre (${(rentabilite?.hours ?? 0).toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA')} h)` : `Labour (${rentabilite?.hours ?? 0} h)`} value={formatCents(mainOeuvreCents)} color="text-text-secondary" />
                       <span className="text-text-tertiary font-medium">−</span>
-                      <ProfitBlock label={language === 'fr' ? "Main-d'œuvre" : 'Labour'} value="$0.00" color="text-text-secondary" />
-                      <span className="text-text-tertiary font-medium">−</span>
-                      <ProfitBlock label={language === 'fr' ? 'Dépenses' : 'Expenses'} value="$0.00" color="text-text-tertiary" />
+                      <ProfitBlock label={language === 'fr' ? 'Dépenses' : 'Expenses'} value={formatCents(depensesCents)} color="text-text-secondary" />
                       <span className="text-text-tertiary font-medium">=</span>
                       <ProfitBlock label={language === 'fr' ? 'Profit' : 'Profit'} value={formatCents(profitCents)} color="text-text-primary" />
                     </div>
