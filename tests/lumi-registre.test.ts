@@ -92,7 +92,12 @@ describe('mode à blanc (R12) et validation branchée (R2)', () => {
   });
   it('la garde valide les arguments avant le handler et lui passe la version normalisée', () => {
     const g = lu('server/lib/agent/garde.ts');
-    expect(g.indexOf('validerArgs(tool.declaration.parameters, opts.args)')).toBeLessThan(g.indexOf('tool.handler(validation.args, ctx)'));
+    // Validation, PUIS heures locales de l'entreprise (audit 2026-09-30), PUIS le handler.
+    const valide = g.indexOf('validerArgs(tool.declaration.parameters, opts.args)');
+    const heures = g.indexOf('normaliserDatesHeures(validation.args');
+    expect(valide).toBeGreaterThan(-1);
+    expect(valide).toBeLessThan(heures);
+    expect(heures).toBeLessThan(g.indexOf('tool.handler(args, ctx)'));
     expect(g).toContain('Paramètres invalides');
   });
   it('POST /lumi/execute accepte decision=dry_run et ne sauve ni n exécute rien', () => {

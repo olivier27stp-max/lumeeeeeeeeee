@@ -17,6 +17,7 @@
  * La règle d'or ne change pas : **une écriture n'est jamais exécutée sans
  * confirmation**. En SMS, la confirmation est le message suivant.
  */
+import { maintenantPourLumi } from '../lumi/temps';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Anthropic from '@anthropic-ai/sdk';
 import { tourLumi, promptSystemeLumi, isLumiConfigured } from '../lumi/orchestrateur';
@@ -122,16 +123,18 @@ export async function repondreParSms(
   const reglages = reglagesPourPalier(budget.palier, modeleLumi());
 
   let companyName: string | null = null;
+  let fuseau = 'America/Toronto';
   try {
-    const { data } = await ctx.admin.from('company_settings').select('company_name').eq('org_id', ctx.orgId).maybeSingle();
+    const { data } = await ctx.admin.from('company_settings').select('company_name, timezone').eq('org_id', ctx.orgId).maybeSingle();
     companyName = (data as any)?.company_name ?? null;
+    if ((data as any)?.timezone) fuseau = String((data as any).timezone);
   } catch { /* non-fatal : le prompt tient sans */ }
 
   const systeme = promptSystemeLumi({
     companyName,
     userName: ctx.prenom || null,
     language: ctx.langue,
-    todayIso: new Date().toISOString().slice(0, 10),
+    todayIso: maintenantPourLumi(fuseau, ctx.langue),
     // Les consignes du canal vont dans `focus` : c'est le bloc VARIABLE du
     // prompt, après le point de cache. Les mettre ailleurs casserait le
     // préfixe partagé et ferait repayer le prompt entier à chaque texto.

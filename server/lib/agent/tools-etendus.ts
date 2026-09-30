@@ -140,7 +140,7 @@ function offsetOrgMinutes(d: Date): number {
  * ISO — pour filtrer une colonne timestamptz sur « la journée d'aujourd'hui à
  * Québec » et non « la journée UTC ». jourYmd optionnel = un autre jour local.
  */
-function bornesJourOrg(jourYmd?: string): { debut: string; fin: string; jour: string } {
+export function bornesJourOrg(jourYmd?: string): { debut: string; fin: string; jour: string } {
   const jour = jourYmd || dateOrgAujourdhui();
   // Minuit local = minuit UTC de ce jour, moins l'offset local.
   const minuitUtcNaif = new Date(`${jour}T00:00:00Z`);
@@ -576,6 +576,29 @@ const getTeam: AgentTool = {
   },
 };
 
+/**
+ * Pointages terminés d'une plage, TOUTES les pages (audit 2026-09-30). Avant, la
+ * requête ne lisait pas punch_in_at / punch_out_at — les colonnes qu'utilise
+ * computeEntryHours — et chaque entrée valait 0 h ; elle incluait les pointages
+ * en cours et s'arrêtait à 1 000 lignes (plafond PostgREST) sans le dire.
+ */
+async function entreesDeTemps(ctx: ToolContext, from: string, to: string): Promise<{ data: any[]; error: any }> {
+  const toutes: any[] = [];
+  for (let de = 0; toutes.length < 20_000; de += 1000) {
+    const { data, error } = await ctx.client
+      .from('time_entries')
+      .select('id, employee_id, employee_name, date, punch_in_at, punch_out_at, breaks')
+      .eq('org_id', ctx.orgId).eq('status', 'completed')
+      .gte('date', from).lte('date', to)
+      .order('date', { ascending: true }).order('id', { ascending: true })
+      .range(de, de + 999);
+    if (error) return { data: toutes, error };
+    toutes.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  return { data: toutes, error: null };
+}
+
 const getTimesheets: AgentTool = {
   kind: 'read',
   declaration: {
@@ -594,13 +617,7 @@ const getTimesheets: AgentTool = {
   },
   handler: async (args, ctx) => {
     const { from, to, tronquee } = plageBornee(args.from, args.to, 366);
-    const { data, error } = await ctx.client
-      .from('time_entries')
-      .select('employee_id, employee_name, date, punch_in, punch_out, breaks')
-      .eq('org_id', ctx.orgId)
-      .gte('date', from).lte('date', to)
-      .order('date', { ascending: true })
-      .limit(20000); // borne dure — au-delà, la plage est de toute façon trop large
+    const { data, error } = await entreesDeTemps(ctx, from, to);
     if (error) return erreurOutil('timesheets', error);
 
     const parEmploye = new Map<string, { name: string; hours: number; entries: number }>();
@@ -940,11 +957,7 @@ const getPayrollSummary: AgentTool = {
     const periode = computePayPeriod(settings);
     const { fromIso, toIso } = periodToIsoRange(periode);
 
-    const { data: entrees, error: e2 } = await ctx.client
-      .from('time_entries')
-      .select('employee_id, employee_name, date, punch_in, punch_out, breaks')
-      .eq('org_id', ctx.orgId)
-      .gte('date', fromIso.slice(0, 10)).lte('date', toIso.slice(0, 10));
+    const { data: entrees, error: e2 } = await entreesDeTemps(ctx, fromIso.slice(0, 10), toIso.slice(0, 10));
     if (e2) return erreurOutil('payroll', e2);
 
     const parEmploye = new Map<string, { name: string; hours: number }>();

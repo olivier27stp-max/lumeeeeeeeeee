@@ -53,6 +53,7 @@ import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORI
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
+import { maintenantPourLumi } from '../lib/lumi/temps';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
@@ -247,7 +248,8 @@ async function contexteTour(req: Request, res: Response) {
     const { data } = await admin.from('org_knowledge').select('key, value').eq('org_id', auth.orgId).eq('category', 'assistant').eq('is_active', true).order('updated_at', { ascending: false }).limit(30);
     souvenirs = (data ?? []).map((n: any) => ({ key: String(n.key), value: String(n.value ?? '') }));
   } catch { /* non-fatal : Lumi peut encore les relire avec recall_notes */ }
-  const promptCtx = { companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs };
+  // Jour ET heure dans le fuseau de l'entreprise, avec le décalage à écrire dans les dates d'outils (audit 2026-09-30).
+  const promptCtx = { companyName, userName, language, todayIso: maintenantPourLumi(fuseau, language), souvenirs };
   const systeme = promptSystemeLumi(promptCtx);
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
   return { auth, admin, budget, systeme, promptCtx, language, accessToken, fuseau, userName };

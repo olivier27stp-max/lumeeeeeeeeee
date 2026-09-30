@@ -10,6 +10,21 @@ import type { PermissionKey } from '../../../src/lib/permissions';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
 import { validerArgs } from './validation-args';
+import { normaliserDatesHeures } from '../lumi/temps';
+
+/** Fuseau de l'entreprise (company_settings.timezone), gardé 10 min en mémoire. */
+const fuseaux = new Map<string, { fuseau: string; expire: number }>();
+async function fuseauDeLOrg(orgId: string): Promise<string> {
+  const c = fuseaux.get(orgId);
+  if (c && c.expire > Date.now()) return c.fuseau;
+  let fuseau = 'America/Toronto';
+  try {
+    const { data } = await getServiceClient().from('company_settings').select('timezone').eq('org_id', orgId).maybeSingle();
+    if ((data as any)?.timezone) fuseau = String((data as any).timezone);
+  } catch { /* défaut : l'Est */ }
+  fuseaux.set(orgId, { fuseau, expire: Date.now() + 600_000 });
+  return fuseau;
+}
 import { getUserContext, hasPermission } from '../rbac';
 import { PERMISSIONS_DOMAINES, OUTILS_FINANCIERS_DOMAINES } from './outils-domaines';
 import { TOOLS_BY_NAME, type ToolContext } from './tools';
@@ -196,7 +211,9 @@ export async function executerOutilGarde(opts: {
   if (validation.ignores.length) console.warn(`[agent-garde:${opts.name}] champs inconnus ignorés : ${validation.ignores.join(', ')}`);
 
   const ctx: ToolContext = { client: opts.client, orgId: opts.orgId, userId: opts.userId, accessToken: opts.accessToken, ...(opts.dryRun ? { dryRun: true } : {}) };
-  const result = await tool.handler(validation.args, ctx);
+  // Une date-heure sans décalage (« 2026-10-01T09:00 ») est une heure de L'ENTREPRISE, pas d'UTC (audit 2026-09-30).
+  const args = normaliserDatesHeures(validation.args, await fuseauDeLOrg(opts.orgId));
+  const result = await tool.handler(args, ctx);
   return {
     result: voitLesMontants
       ? result

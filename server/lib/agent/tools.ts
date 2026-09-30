@@ -14,7 +14,7 @@ import type { FunctionDeclaration } from './gemini';
 import {
   OUTILS_LECTURE_ETENDUS, OUTILS_ECRITURE_ETENDUS, ETIQUETTES_DERIVED,
   handlerCreateQuote, handlerCreateInvoice, handlerCreateJob, handlerSendSms,
-  STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, STATUT_CLIENT, traduireStatut,
+  STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, STATUT_CLIENT, traduireStatut, bornesJourOrg,
 } from './tools-etendus';
 import { OUTILS_RAPPORTS } from './tools-rapports';
 import { searchHelp } from './tools-aide';
@@ -368,10 +368,17 @@ async function fetchScheduleEvents(
   ctx: ToolContext,
   opts: { startDate?: string; endDate?: string; location?: string },
 ) {
-  const start = opts.startDate ? new Date(opts.startDate) : new Date();
-  const end = opts.endDate ? new Date(opts.endDate) : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
-  const startIso = isNaN(start.getTime()) ? new Date().toISOString() : start.toISOString();
-  const endIso = isNaN(end.getTime()) ? new Date(Date.now() + 90 * 86400000).toISOString() : end.toISOString();
+  // Une DATE (« 2026-10-02 ») est un jour de l'entreprise, bornes incluses (audit 2026-09-30) :
+  // avant, minuit UTC = 20 h la veille à Québec, et « demain » ramenait la veille au soir.
+  const JOUR = /^\d{4}-\d{2}-\d{2}$/;
+  const borne = (v: string | undefined, cote: 'debut' | 'fin', defaut: string) => {
+    if (!v) return defaut;
+    if (JOUR.test(v)) return bornesJourOrg(v)[cote];
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? defaut : d.toISOString();
+  };
+  const startIso = borne(opts.startDate, 'debut', bornesJourOrg().debut);
+  const endIso = borne(opts.endDate, 'fin', new Date(Date.now() + 90 * 86400000).toISOString());
 
   const { data: events, error: evErr } = await ctx.client
     .from('schedule_events')
@@ -718,10 +725,12 @@ const getDayRoute: AgentTool = {
     },
   },
   handler: async (args, ctx) => {
-    const base = args.date ? new Date(String(args.date)) : new Date();
-    if (isNaN(base.getTime())) return { error: 'Invalid date.' };
-    const dayStart = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 0, 0, 0);
-    const dayEnd = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
+    // Le jour de l'ENTREPRISE (audit 2026-09-30) : avant, les bornes étaient celles du serveur (UTC).
+    const jourDemande = args.date ? String(args.date).slice(0, 10) : undefined;
+    if (jourDemande && !/^\d{4}-\d{2}-\d{2}$/.test(jourDemande)) return { error: 'Invalid date.' };
+    const bornes = bornesJourOrg(jourDemande);
+    const dayStart = new Date(bornes.debut);
+    const dayEnd = new Date(bornes.fin);
 
     const { data: events, error } = await ctx.client
       .from('schedule_events')
@@ -735,7 +744,7 @@ const getDayRoute: AgentTool = {
     if (error) return toolError('db', error);
 
     const jobIds = Array.from(new Set((events || []).map((e) => e.job_id).filter(Boolean)));
-    if (jobIds.length === 0) return { date: dayStart.toISOString().slice(0, 10), count: 0, stops: [] };
+    if (jobIds.length === 0) return { date: bornes.jour, count: 0, stops: [] };
 
     let jobsQ = ctx.client
       .from('jobs')
