@@ -1119,17 +1119,20 @@ router.get('/lumi/credits/historique', async (req, res) => {
     const depuis = new Date(Date.now() - jours * 86_400_000).toISOString();
     const orgIds = await companyOrgIds(admin, auth.orgId);
     const { data: lignes, error } = await admin.from('ai_usage')
-      .select('user_id, credits_micro, created_at')
+      .select('org_id, user_id, credits_micro, created_at')
       .in('org_id', orgIds).neq('source', 'support').gte('created_at', depuis)
       .order('created_at', { ascending: true }).limit(20_000);
     if (error) throw error;
     const parJour = new Map<string, number>();
     const parUser = new Map<string, number>();
-    for (const l of (lignes ?? []) as Array<{ user_id: string | null; credits_micro: number | null; created_at: string }>) {
+    for (const l of (lignes ?? []) as Array<{ org_id: string; user_id: string | null; credits_micro: number | null; created_at: string }>) {
       const micro = Number(l.credits_micro ?? 0);
       const jour = dateLocale(l.created_at, fuseau);
+      // Par jour : le pool du GROUPE (un total, aucune identité).
       parJour.set(jour, (parJour.get(jour) ?? 0) + micro);
-      if (l.user_id) parUser.set(l.user_id, (parUser.get(l.user_id) ?? 0) + micro);
+      // Par utilisateur : le bureau de la SESSION seulement — jamais les
+      // employés d'un autre bureau du groupe (isolation multi-bureaux).
+      if (l.user_id && l.org_id === auth.orgId) parUser.set(l.user_id, (parUser.get(l.user_id) ?? 0) + micro);
     }
     const enCredits = (micro: number) => Math.round(micro / 100_000) / 10; // 1 décimale
     const uctx = await getUserContext(admin, auth.user.id, auth.orgId, true).catch(() => null);
@@ -1138,7 +1141,7 @@ router.get('/lumi/credits/historique', async (req, res) => {
     if (detail) {
       const ids = [...parUser.keys()];
       const { data: membres } = ids.length
-        ? await admin.from('memberships').select('user_id, full_name').in('org_id', orgIds).in('user_id', ids)
+        ? await admin.from('memberships').select('user_id, full_name').eq('org_id', auth.orgId).in('user_id', ids)
         : { data: [] as Array<{ user_id: string; full_name: string | null }> };
       const noms = new Map(((membres ?? []) as Array<{ user_id: string; full_name: string | null }>).map((m) => [m.user_id, String(m.full_name || '').trim()]));
       parUtilisateur = ids

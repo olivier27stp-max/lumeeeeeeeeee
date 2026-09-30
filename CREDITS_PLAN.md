@@ -1,7 +1,38 @@
 # Crédits Lumi : plan (phase 1)
 
 Date : 2026-09-30. Préparé à partir du code sur `origin/main` (e5aebbd0) et de la prod, en **lecture seule**.
-**Rien n'est appliqué.** La migration est dans `supabase/migrations/proposed/20261005100000_lumi_credits.sql` et attend ton accord.
+## Statut (2026-09-30, soir) : approuvé et livré
+
+**Décisions de Rafba** : go en prod, app mobile aussi, Scale à 347 $, D7 oui (« unlimited » devient les crédits), D8 oui, D9 corrigé.
+Pour D1 à D6, non tranchées explicitement, j'ai appliqué ce que le brief demandait déjà :
+- **D1** : 1 000 crédits à 3 ¢ ;
+- **D2** : période anniversaire mensuelle ;
+- **D3** : support hors crédits ;
+- **D4** : voix débitée ;
+- **D5** : avertissements dans le panneau Lumi ;
+- **D6** : aucun $ côté client.
+
+**Migrations** :
+- `20261005200000_lumi_credits.sql` : crédits, grand livre et période ;
+- `20261005200100_autopilot_fonctionnalite_credits.sql` : fonctionnalité « unlimited » (D7).
+
+Toutes deux sont appliquées **sur staging**. La prod suit, appliquée avant le déploiement du code.
+
+**Sauvegarde** : le dump complet est impossible, car le mot de passe de la base prod est refusé depuis le 2026-09-26. Une sauvegarde ciblée des objets touchés a été faite dans `lume-backups/credits-avant-migration-20260930T195858Z`.
+
+**Preuves** :
+- base sur staging, `scripts/qa/eprouver-credits-lumi.mts` : 15/15 ;
+- concordance du journal avec l'usage du fournisseur, sur 200 lignes de prod : 200/200 ;
+- tests serveur `lumi-credits-serveur` : 22, dont 9 rouges sur l'ancien code ;
+- tests d'écran : 51, rouges sur l'ancien code.
+
+**App mobile** : elle n'est dans aucun dépôt accessible. Le serveur ne lui renvoie plus aucun $. Contrat à lui brancher :
+- `GET /api/lumi/credits` → `{ inclus, total, utilises, restants, pourcentage, renouvellement_le, palier, avertissement }` ;
+- l'événement SSE `done` porte `credits`.
+
+---
+
+*Ci-dessous : l'inventaire et la spécification de la phase 1, tels qu'approuvés.*
 
 ---
 
