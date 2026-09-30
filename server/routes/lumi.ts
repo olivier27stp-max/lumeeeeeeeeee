@@ -18,6 +18,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient, companyOrgIds } from '../lib/supabase';
 import { dateLocale, fuseauDuBureau } from '../lib/lumi/credits';
+import { avertirSiSeuilCredits } from '../lib/lumi/avis-credits';
 import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
@@ -322,6 +323,8 @@ async function contexteTour(req: Request, res: Response) {
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
   // Ce que le client voit : des crédits (jamais de $) — calculé une fois par requête.
   const credits = await etatCredits(admin, auth.orgId, budget);
+  // 80 % / 100 % : courriel + notification au propriétaire, une fois par seuil et par période.
+  void avertirSiSeuilCredits(admin, auth.orgId, credits);
   return { auth, admin, budget, credits, systeme, promptCtx, language, accessToken, fuseau, userName };
 }
 
@@ -466,7 +469,9 @@ async function executerTourSse(opts: {
     }
     await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages, cleRefs);
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
-    if (!ferme) emettreSse('done', { conversation_id: conversationId, credits: await etatCredits(ctx.admin, ctx.auth.orgId, budget), proposal: resultat.proposition, etage: ETAGE.agent });
+    const creditsApres = await etatCredits(ctx.admin, ctx.auth.orgId, budget);
+    void avertirSiSeuilCredits(ctx.admin, ctx.auth.orgId, creditsApres);
+    if (!ferme) emettreSse('done', { conversation_id: conversationId, credits: creditsApres, proposal: resultat.proposition, etage: ETAGE.agent });
     // Montants cités sans source dans les résultats d'outils : on le dit
     // FORT. Le prompt exige que chaque chiffre vienne d'un outil ; sans
     // cette ligne, une hallucination de montant passerait inaperçue jusqu'à
