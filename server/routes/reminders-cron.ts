@@ -32,6 +32,8 @@ import { twilioClient, twilioPhoneNumber } from '../lib/config';
 import { resolvePublicBaseUrl, normalizeE164 } from '../lib/helpers';
 import { createPaymentRequest } from '../lib/stripe-connect';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
+import { evaluateConditions } from '../lib/automationEngine';
+import type { CRMEvent } from '../lib/eventBus';
 
 const router = Router();
 
@@ -161,6 +163,67 @@ const DEFAUTS = {
  * nettoyage le client lirait « Vous pouvez la régler ici : » suivi de rien,
  * et le SMS « Régler : ». La ligne n'a plus de raison d'être.
  */
+/**
+ * Une facture = UNE source de relances (launch 2026-09-28).
+ *
+ * Trois systèmes relançaient la même facture sans se parler : ce cron
+ * (réglages « Rappels de paiement »), le parcours « Relance de facture » du
+ * pack et toute automatisation « Facture en retard ». Le client recevait la
+ * même relance deux ou trois fois. Quand une automatisation PUBLIÉE couvre
+ * la facture, ce cron la laisse à l'automatisation :
+ *   · une règle « Facture en retard » dont les conditions acceptent la facture ;
+ *   · le parcours « Relance de facture » déjà engagé pour CETTE facture.
+ * Lecture ratée = on ne sait pas : le cron relance comme avant (un doublon
+ * possible vaut mieux qu'une facture jamais relancée).
+ *
+ * Retourne un prédicat par facture ; aucune requête de plus si l'entreprise
+ * n'a aucune automatisation de relance.
+ */
+export async function couvertureAutomatisations(
+  svc: { from: (t: string) => any },
+  orgId: string,
+): Promise<(inv: { id: string; status?: string | null; total_cents?: number | null; balance_cents?: number | null; invoice_number?: string | null; client_id?: string | null }) => Promise<boolean>> {
+  const { data: regles, error } = await svc
+    .from('automation_rules')
+    .select('id, trigger_event, preset_key, conditions')
+    .eq('org_id', orgId)
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .in('trigger_event', ['invoice.overdue', 'invoice.sent']);
+  if (error) {
+    logger.error('[cron/reminders] automatisations de relance illisibles — relance faite par le cron', { orgId, error: error.message });
+    return async () => false;
+  }
+  type Regle = { id: string; trigger_event: string; preset_key: string | null; conditions: Record<string, unknown> | null };
+  const enRetard = ((regles ?? []) as Regle[]).filter((r) => r.trigger_event === 'invoice.overdue');
+  const pack = ((regles ?? []) as Regle[]).filter((r) => r.preset_key === 'pack_relance_facture').map((r) => r.id);
+  if (!enRetard.length && !pack.length) return async () => false;
+
+  return async (inv) => {
+    const metadata = {
+      status: inv.status ?? null, total_cents: inv.total_cents ?? null, balance_cents: inv.balance_cents ?? null,
+      montant: Number(inv.balance_cents ?? 0) / 100, invoice_number: inv.invoice_number ?? null, client_id: inv.client_id ?? null,
+    };
+    const evenement = { type: 'invoice.overdue', orgId, entityType: 'invoice', entityId: inv.id, metadata } as CRMEvent;
+    if (enRetard.some((r) => evaluateConditions((r.conditions ?? {}) as Record<string, any>, evenement))) return true;
+    if (pack.length) {
+      const { data, error: errTaches } = await svc
+        .from('automation_scheduled_tasks')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('entity_id', inv.id)
+        .in('automation_rule_id', pack)
+        .limit(1);
+      if (errTaches) {
+        logger.error('[cron/reminders] parcours de relance illisible — relance faite par le cron', { orgId, invoiceId: inv.id, error: errTaches.message });
+        return false;
+      }
+      if ((data?.length ?? 0) > 0) return true;
+    }
+    return false;
+  };
+}
+
 export function nettoyerLiensMorts(texte: string): string {
   return texte
     .split('\n')
@@ -268,6 +331,8 @@ router.post('/cron/payment-reminders', async (req, res) => {
       // Plus de repli « Your service provider » : une org francophone sans nom
       // signait son rappel en anglais. Sans nom, on n'en invente pas.
       const companyName = orgSettings?.company_name || '';
+      // Une facture déjà relancée par une automatisation publiée n'est pas relancée ici.
+      const couverteParAutomatisation = await couvertureAutomatisations(svc, orgId);
 
       // For each schedule entry, find candidate invoices
       for (const entry of schedule) {
@@ -306,6 +371,10 @@ router.post('/cron/payment-reminders', async (req, res) => {
               .eq('channel', channel)
               .maybeSingle();
             if (logged) continue;
+            if (await couverteParAutomatisation(inv)) {
+              logger.info('[cron/reminders] facture relancée par une automatisation publiée — cron sauté', { orgId, invoiceId: inv.id, daysAfter });
+              continue;
+            }
 
             // Fetch client contact
             const { data: client } = await svc

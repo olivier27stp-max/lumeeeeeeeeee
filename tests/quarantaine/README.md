@@ -103,6 +103,10 @@ Le jour où le dossier est vide, le supprimer avec l'exclusion dans
 
 - `automation/` — tests unitaires (moteur, conditions, idempotence, temps,
   permissions, conformité, coût/volume, erreurs, perf, isolation entre
-  entreprises) + `golden/` (instantanés de référence)
+  entreprises). Le golden set des presets en est SORTI le 2026-09-29 :
+  `tests/automation/golden/` (en CI).
+- `_simulations.ts` — les modules simulés (courriel, gabarit, expéditeur)
+  communs à tous les bancs : un export ajouté au module réel se déclare ICI,
+  une fois, au lieu de périmer dix copies
 - `automation-integration/` — les mêmes thèmes contre une vraie base
 - `_enregistreur.ts`, `_fixtures.ts` — utilitaires partagés

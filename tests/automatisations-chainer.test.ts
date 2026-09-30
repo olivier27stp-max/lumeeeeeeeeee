@@ -16,8 +16,17 @@
  * qu'elle n'existait pas. Ce fichier est ce qui rend l'annonce vraie.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Launch 2026-09-28 : l'action passe par le MÊME point d'entrée que les
+// déclencheurs (`demarrerRegle` du moteur). On vérifie ici ce qu'elle lui
+// transmet et ce qu'elle refuse ; le moteur réel est joué dans
+// tests/automation/launch-demarrer.test.ts.
+const moteur = vi.hoisted(() => ({ demarrerRegle: vi.fn(async (..._a: unknown[]) => ({ ok: true, nom: 'Parcours d’accueil' }) as { ok: true; nom: string } | { ok: false; erreur: string }) }));
+vi.mock('../server/lib/automationEngine', () => ({ demarrerRegle: moteur.demarrerRegle }));
+
 import { executeDemarrerAutomatisation } from '../server/lib/actions/index';
+beforeEach(() => { moteur.demarrerRegle.mockClear(); });
 
 const ORG = '11111111-1111-1111-1111-111111111111';
 const AUTRE_ORG = '22222222-2222-2222-2222-222222222222';
@@ -141,51 +150,45 @@ describe('ce que « démarrer une automatisation » refuse', () => {
 });
 
 describe('ce qu’elle fait quand tout va bien', () => {
-  it('inscrit l’entité sur CHAQUE action de la règle visée', async () => {
+  it('démarre la règle VISÉE par le point d’entrée du moteur, sur la même entité', async () => {
     const sb = faireSupabase(REGLE_OK);
     const r = await executeDemarrerAutomatisation({ rule_id: CIBLE }, {}, ctx(sb));
     expect(r.success).toBe(true);
-    expect(sb.inserts, 'une tâche par action').toHaveLength(2);
-
-    for (const t of sb.inserts) {
-      expect(t.org_id).toBe(ORG);
-      expect(t.automation_rule_id, 'la règle VISÉE, pas la courante').toBe(CIBLE);
-      expect(t.entity_id, 'la même entité que le parcours en cours').toBe(CLIENT);
-      expect(t.entity_type).toBe('client');
-      expect(t.status).toBe('pending');
-    }
+    expect(moteur.demarrerRegle).toHaveBeenCalledTimes(1);
+    expect(moteur.demarrerRegle).toHaveBeenCalledWith(CIBLE, { orgId: ORG, entityType: 'client', entityId: CLIENT, chaine: [COURANTE] });
+    expect(sb.inserts, 'plus aucune tâche écrite à la main : le moteur s’en charge').toHaveLength(0);
   });
 
-  it('la clé d’exécution suit le format du moteur — c’est l’anti-doublon', async () => {
-    /*
-     * `règle:entité:index`, exactement comme `buildExecutionKey` dans
-     * automationEngine.ts. L'index unique de `automation_scheduled_tasks`
-     * fait alors le travail : deux parcours qui démarrent le même
-     * troisième sur le même client ne l'inscrivent qu'une fois.
-     */
-    const sb = faireSupabase(REGLE_OK);
-    await executeDemarrerAutomatisation({ rule_id: CIBLE }, {}, ctx(sb));
-    expect(sb.inserts.map((t) => t.execution_key)).toEqual([
-      `${CIBLE}:${CLIENT}:0`,
-      `${CIBLE}:${CLIENT}:1`,
-    ]);
-  });
-
-  it('un DOUBLON n’est pas une erreur — c’est la garde qui fonctionne', async () => {
-    // 23505 = violation de l'index unique. Le client est déjà inscrit :
-    // signaler un échec ferait paraître le parcours cassé alors qu'il est
-    // exactement dans l'état voulu.
-    const sb = faireSupabase(REGLE_OK, { code: '23505', message: 'duplicate key' });
+  it('un PARCOURS sans `actions` (seulement des étapes) se démarre aussi', async () => {
+    const sb = faireSupabase({ ...REGLE_OK, actions: [], steps: [{ id: 'e1', type: 'attendre', mode: 'duree', delai_secondes: 3600, suivant: null }] });
     const r = await executeDemarrerAutomatisation({ rule_id: CIBLE }, {}, ctx(sb));
     expect(r.success).toBe(true);
-    expect((r.data as { inscrites: number }).inscrites, 'aucune nouvelle inscription').toBe(0);
+    expect(moteur.demarrerRegle).toHaveBeenCalledTimes(1);
   });
 
-  it('une VRAIE erreur de base remonte, elle', async () => {
-    const sb = faireSupabase(REGLE_OK, { code: '42501', message: 'permission denied' });
+  it('une erreur du moteur remonte', async () => {
+    moteur.demarrerRegle.mockResolvedValueOnce({ ok: false, erreur: 'permission denied' });
+    const sb = faireSupabase(REGLE_OK);
     const r = await executeDemarrerAutomatisation({ rule_id: CIBLE }, {}, ctx(sb));
     expect(r.success).toBe(false);
     expect(r.error).toMatch(/permission denied/);
+  });
+});
+
+describe('anti-boucle ENTRE parcours', () => {
+  it('A → B → A : la règle déjà dans la chaîne n’est PAS redémarrée (saut journalisé)', async () => {
+    const sb = faireSupabase(REGLE_OK);
+    const r = await executeDemarrerAutomatisation({ rule_id: CIBLE }, {}, { ...(ctx(sb) as object), chaine: [CIBLE] } as never);
+    expect(r.success).toBe(true);
+    expect(r.data).toMatchObject({ saute_code: 'boucle' });
+    expect(moteur.demarrerRegle).not.toHaveBeenCalled();
+  });
+
+  it('plus de 3 automatisations enchaînées : arrêt', async () => {
+    const sb = faireSupabase(REGLE_OK);
+    const r = await executeDemarrerAutomatisation({ rule_id: CIBLE }, {}, { ...(ctx(sb) as object), chaine: ['a', 'b'] } as never);
+    expect(r.data).toMatchObject({ saute_code: 'boucle' });
+    expect(moteur.demarrerRegle).not.toHaveBeenCalled();
   });
 });
 

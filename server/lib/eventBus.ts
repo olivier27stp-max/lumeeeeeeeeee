@@ -125,6 +125,12 @@ export interface CRMEvent {
    * orphelin, complété par le moteur au fil des règles (voir outbox.ts).
    */
   reglesTraitees?: string[];
+  /**
+   * Rejeu d'un orphelin de l'outbox : l'heure où l'événement a été consigné.
+   * Le traitement coupé a pu envoyer avant de mourir ; les envois vérifient
+   * « déjà parti depuis cette heure-là ? » avant de repartir (launch M5).
+   */
+  rejoueDepuis?: string;
 }
 
 // Map event types to activity_log event_type values
@@ -353,11 +359,16 @@ class CRMEventBus extends EventEmitter {
    */
   private async cocher(outboxId: number, erreurs: string[]): Promise<void> {
     if (!this.supabase) return;
+    // Un écouteur qui n'a PAS PU traiter l'événement (ex. règles illisibles)
+    // le demande : la ligne reste non cochée, l'outbox la rejouera après son
+    // délai de grâce (launch 2026-09-28). Avant, elle était cochée « traitée »
+    // avec l'erreur en note — et l'événement était perdu.
+    const aRejouer = erreurs.some((e) => e.startsWith(PREFIXE_A_REJOUER));
     try {
       const { error } = await this.supabase
         .from('domain_events')
         .update({
-          processed_at: new Date().toISOString(),
+          ...(aRejouer ? {} : { processed_at: new Date().toISOString() }),
           last_error: erreurs.length ? erreurs.join(' | ').slice(0, 500) : null,
         })
         .eq('id', outboxId);
@@ -380,6 +391,13 @@ class CRMEventBus extends EventEmitter {
     }
   }
 }
+
+/**
+ * Préfixe du message d'une erreur qui doit faire REJOUER l'événement : un
+ * écouteur qui lève avec ce préfixe n'a rien pu faire (lecture impossible),
+ * et l'outbox doit le lui redonner.
+ */
+export const PREFIXE_A_REJOUER = '[à rejouer] ';
 
 export const eventBus = new CRMEventBus();
 eventBus.setMaxListeners(50);

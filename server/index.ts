@@ -51,6 +51,8 @@ import communicationsRouter from './routes/communications';
 import automationTestRouter from './routes/automation-test';
 import automationEventsRouter from './routes/automation-events';
 import automationRulesRouter from './routes/automation-rules';
+import automationPublicationRouter from './routes/automation-publication';
+import automationStatsRouter from './routes/automation-stats';
 import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
 import sendingDomainsRouter from './routes/sending-domains';
@@ -671,7 +673,6 @@ const reglesLimiter: express.RequestHandler = (req, res, next) => {
 // the JWT `sub` (userKey), so they're immune to X-Forwarded-For spoofing. These
 // also act as the in-memory fallback for dsr/incidents when Redis is absent.
 const agentLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `agent:${userKey(req)}` });
-const workflowActionLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `wfaction:${userKey(req)}` });
 const dsrLimiterMem = rateLimit({ windowMs: 60_000, max: 20, keyFn: (req) => `dsr:${userKey(req)}` });
 const incidentsLimiterMem = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `inc:${userKey(req)}` });
 
@@ -687,9 +688,6 @@ if (!useRedis) {
   app.use('/api/portal', portalLimiter);
   app.use('/api/quotes', quoteLimiterStrict);
   app.use('/api/agreements/public', agreementPublicLimiter);
-  app.use('/api/automations/events', automationLimiter);
-  // Plafonds par usage (lecture / écriture / génération) : voir reglesLimiter.
-  app.use('/api/automations/rules', reglesLimiter);
   app.use('/api/agent', agentLimiter);
   app.use('/api/lumi', agentLimiter);
   app.use('/api/dsr', dsrLimiterMem);
@@ -697,6 +695,12 @@ if (!useRedis) {
 }
 // Always applied (no Redis equivalent registered below)
 app.use('/api/leads/create', leadCreateLimiter);
+// Automatisations : TOUJOURS, Redis ou pas (launch 2026-09-28). Ils étaient
+// dans le bloc « sans Redis » sans équivalent Redis plus bas : avec Upstash,
+// /api/automations/* n'avait plus AUCUNE limite (générations Lumi comprises).
+app.use('/api/automations/events', automationLimiter);
+// Plafonds par usage (lecture / écriture / génération) : voir reglesLimiter.
+app.use('/api/automations/rules', reglesLimiter);
 // Per-token limiter — prevents brute-force via IP rotation (not covered by presets)
 app.use('/api/pay', rateLimit({
   windowMs: 60_000,
@@ -840,6 +844,8 @@ app.use('/api', communicationsRouter);
 app.use('/api', automationTestRouter);
 app.use('/api', automationEventsRouter);
 app.use('/api', automationRulesRouter);
+app.use('/api', automationPublicationRouter);
+app.use('/api', automationStatsRouter);
 app.use('/api', portalRouter);
 app.use('/api', connectRouter);
 // Domaine d'envoi propre à l'entreprise (Resend Domains) — owner/admin, sous son propre préfixe.
@@ -999,57 +1005,6 @@ app.use(express.static(distPath, {
     }
   },
 }));
-
-// ── Workflow action bridge — routes visual workflow actions to the real engine ──
-app.post('/api/workflows/execute-action', workflowActionLimiter, async (req, res) => {
-  try {
-    const { requireAuthedClient, getServiceClient } = await import('./lib/supabase.js');
-    const auth = await requireAuthedClient(req, res);
-    if (!auth) return;
-
-    const { action_type, config, context } = req.body;
-    if (!action_type) return res.status(400).json({ error: 'action_type is required' });
-
-    const { executeAction, resolveEntityVariables } = await import('./lib/actions/index.js');
-    const admin = getServiceClient();
-
-    const actionCtx = {
-      supabase: admin,
-      orgId: auth.orgId,
-      entityType: context?.entityType || 'workflow',
-      entityId: context?.entityId || '',
-      twilio: null as any,
-      baseUrl: getBaseUrl(),
-    };
-
-    // Try to init twilio if available
-    try {
-      const { twilioClient: tc, twilioPhoneNumber: tp } = await import('./lib/config.js');
-      if (tc && tp) actionCtx.twilio = { client: tc, phoneNumber: tp };
-    } catch (err) { console.error('[automation] twilio init failed:', err); }
-
-    // Resolve template variables from entity context
-    let vars: Record<string, string> = {};
-    if (context?.entityType && context?.entityId) {
-      try {
-        vars = await resolveEntityVariables(admin, auth.orgId, context.entityType, context.entityId);
-      } catch (err) { console.error('[automation] resolveEntityVariables failed:', err); }
-    }
-    // Merge any extra context vars
-    if (context) {
-      for (const [k, v] of Object.entries(context)) {
-        if (typeof v === 'string' && !vars[k]) vars[k] = v;
-      }
-    }
-
-    const result = await executeAction(action_type, config || {}, vars, actionCtx);
-
-    return res.json({ ok: true, result });
-  } catch (error: any) {
-    console.error('[workflows/execute-action]', error.message);
-    return res.status(500).json({ error: error?.message || 'Action execution failed' });
-  }
-});
 
 /* ── Résumé initial par route ──
    index.html porte un résumé de la page d'accueil dans #root, remplacé par

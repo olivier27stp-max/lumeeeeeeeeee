@@ -222,6 +222,11 @@ export const VARIABLES_CONNUES: readonly string[] = [
   // Contrats : ajoutées par resolveContractVars / resolveSignedContractVars.
   'contract_link', 'contract_line', 'contract_html',
   'signed_contract_link', 'deposit_amount', 'deposit_line',
+  // Liens et pipeline, fournis par resolveEntityVariables mais absents d'ici :
+  // l'éditeur signalait [invoice_link] comme inconnue alors qu'elle marche
+  // (audit V2 ; test variables-connues-serveur).
+  'invoice_link', 'quote_link', 'review_link', 'survey_url',
+  'deal_stage', 'deal_stage_en', 'deal_source', 'deal_jours_dans_etape',
 ];
 
 /**

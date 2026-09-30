@@ -652,6 +652,13 @@ export interface ActionCatalogue {
    * publie, et découvre l'échec dans un journal, trois essais plus tard.
    */
   entites?: string[];
+  /**
+   * Action affichée mais PAS ENCORE utilisable, avec la raison. Grisée dans
+   * l'éditeur, refusée à la publication, jamais proposée par Lumi — et le
+   * serveur ne l'exécute pas. Mieux qu'une action qui fait autre chose que
+   * ce qu'elle annonce.
+   */
+  indisponible?: { fr: string; en: string };
   champs: ChampAction[];
 }
 
@@ -782,6 +789,12 @@ export const ACTIONS: ActionCatalogue[] = [
     aide_fr: 'Publie dans le canal Slack de votre entreprise.',
     aide_en: 'Posts to your company’s Slack channel.',
     famille: 'communication', vers_client: false,
+    // Aucune connexion Slack PAR ENTREPRISE n'existe encore : le serveur
+    // publiait dans le canal de support interne de Lume (audit V2, 2026-09-29).
+    indisponible: {
+      fr: 'Bientôt : la connexion à votre Slack n’existe pas encore.',
+      en: 'Coming soon: connecting your Slack is not available yet.',
+    },
     champs: [
       {
         cle: 'body', fr: 'Message', en: 'Message', obligatoire: true, type: 'zone', max: 3000,
@@ -1390,6 +1403,11 @@ export function problemesAvantPublication(regle: {
         `A step uses an unknown action${ou}.`,
         'bloquant', etapeId,
       );
+      return;
+    }
+
+    if (modele.indisponible) {
+      dire(`« ${modele.fr} » : ${modele.indisponible.fr}${ou}`, `“${modele.en}”: ${modele.indisponible.en}${ou}`, 'bloquant', etapeId);
       return;
     }
 

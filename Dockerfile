@@ -56,10 +56,16 @@ COPY src/lib/permissions.ts ./src/lib/permissions.ts
 # client verra plutôt que « Bonjour [client_name] ». Sans cette ligne, l'image
 # démarre et la route plante au premier aperçu.
 COPY src/lib/variablesCourriel.ts ./src/lib/variablesCourriel.ts
+# Lumi (construire un parcours) vérifie les variables : VARIABLES_CONNUES.
+COPY src/lib/emailBodyText.ts ./src/lib/emailBodyText.ts
 # Le catalogue des automatisations personnalisables : la validation Zod et les
 # routes d'écriture en dérivent les clés acceptées. Sans cette ligne, le
 # serveur ne démarre pas — `validation.ts` l'importe au chargement.
 COPY src/lib/automationCatalogue.ts ./src/lib/automationCatalogue.ts
+# La garde de publication (audit M8) : la route serveur et l'éditeur
+# partagent la même vérification. Elle lit aussi `sequenceTypes.ts`.
+COPY src/lib/publicationAutomatisation.ts ./src/lib/publicationAutomatisation.ts
+COPY src/lib/sequenceTypes.ts ./src/lib/sequenceTypes.ts
 # `src/lib/supabaseAdmin.ts` is now a stub that throws if imported from
 # client code (real impl lives at `server/lib/supabaseAdmin.ts` for security
 # — commit c12b767). The stub exists so Railway/BuildKit cache layers that

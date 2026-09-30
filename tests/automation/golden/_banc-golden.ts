@@ -13,8 +13,8 @@
  * produisent enfin une sortie observable.
  */
 import { vi } from 'vitest';
-import type { AutomationPresetDef } from '../../../../server/lib/automationPresets.data';
-import { clientEnregistreur, requetes } from '../_enregistreur';
+import type { AutomationPresetDef } from '../../../server/lib/automationPresets.data';
+import { clientEnregistreur, requetes } from '../../quarantaine/automation/_enregistreur';
 
 export const HORLOGE = '2026-09-13T15:00:00Z'; // 11:00 EDT
 /** La veille de l'horloge : donne au client une relation d'affaires en cours (LCAP). */
@@ -29,6 +29,25 @@ export const IDS = {
   owner: 'aaaaaaaa-0000-4000-8000-000000000006',
 };
 
+/**
+ * Pipeline fixe des presets de ventes : le deal lié au devis part de
+ * « Nouveau », sauf pour « avancer quand le client ouvre » qui n'agit QUE
+ * depuis « Soumission envoyée » (jamais en arrière).
+ */
+const PIPELINE = 'bbbbbbbb-0000-4000-8000-000000000001';
+const ETAPES = [
+  { id: 'bbbbbbbb-0000-4000-8000-000000000011', pipeline_id: PIPELINE, role_systeme: 'nouveau', position: 1, kind: 'open', archived_at: null, name_fr: 'Nouveau' },
+  { id: 'bbbbbbbb-0000-4000-8000-000000000012', pipeline_id: PIPELINE, role_systeme: 'soumission_envoyee', position: 2, kind: 'open', archived_at: null, name_fr: 'Soumission envoyée' },
+  { id: 'bbbbbbbb-0000-4000-8000-000000000013', pipeline_id: PIPELINE, role_systeme: 'soumission_ouverte', position: 3, kind: 'open', archived_at: null, name_fr: 'Soumission ouverte' },
+];
+export const nomEtape = (id: string) => ETAPES.find((e) => e.id === id)?.name_fr ?? id;
+
+/** Filtres `eq`/`in` notés par l'enregistreur, appliqués aux colonnes présentes dans la ligne. */
+function filtrer<T extends Record<string, unknown>>(lignes: T[], filtres: Array<[string, string, unknown]>): T[] {
+  return lignes.filter((l) => filtres.every(([op, col, val]) => !(col in l)
+    || (op === 'eq' ? l[col] === val : op === 'in' ? (val as unknown[]).includes(l[col]) : true)));
+}
+
 const CLIENT = { first_name: 'Marie', last_name: 'Tremblay', email: 'marie.tremblay@example.test', phone: '+15145550142', company: null };
 
 /** Réponses du client enregistreur : le monde fixe vu par le moteur. */
@@ -36,7 +55,11 @@ export function monde(preset: AutomationPresetDef) {
   return {
     automation_rules: { data: [{ id: `regle-${preset.preset_key}`, org_id: ORG, name: preset.name, trigger_event: preset.trigger_event, conditions: preset.conditions, delay_seconds: preset.delay_seconds, actions: preset.actions, is_active: true }] },
     company_settings: { data: { company_name: 'Plomberie Tremblay inc.', phone: '+14505550199', default_language: 'fr', google_review_url: 'https://g.page/r/plomberie-tremblay/review', facebook_review_url: null, review_enabled: true } },
-    clients: { data: { ...CLIENT, status: 'lead', lead_status: preset.preset_key === 'lost_lead_reengagement' ? 'lost' : 'new', deleted_at: null } },
+    // Un TABLEAU d'une fiche : `maybeSingle()` en rend la première, et la
+    // recherche du consentement SMS (préfiltre sur les 4 derniers chiffres,
+    // `.limit(50)`) attend une liste. Un objet seul faisait lever `.find`, lu
+    // par le moteur comme « lecture du carnet impossible ».
+    clients: { data: [{ id: IDS.client, ...CLIENT, status: 'lead', lead_status: preset.preset_key === 'lost_lead_reengagement' ? 'lost' : 'new', email_consent_at: null, sms_consent_at: null, email_opt_out_at: null, deleted_at: null }] },
     // `created_at` la veille de l'horloge : ces presets se déclenchent APRÈS un
     // job ou une facture, donc le client a une relation d'affaires en cours.
     // Sans cette date, le calcul du consentement tacite (LCAP, 2 ans après un
@@ -44,10 +67,18 @@ export function monde(preset: AutomationPresetDef) {
     // à 59 presets cassés alors que c'est le banc qui était incomplet.
     jobs: { data: { title: 'Nettoyage de gouttières', client_id: IDS.client, deposit_status: 'unpaid', currency: 'CAD', created_at: VEILLE, deleted_at: null } },
     schedule_events: { data: { id: IDS.visite, job_id: IDS.job, start_at: '2026-09-25T13:00:00Z', end_at: '2026-09-25T14:00:00Z', status: 'scheduled', deleted_at: null, job: { id: IDS.job, title: 'Nettoyage de gouttières', property_address: '412 rue des Érables, Longueuil', client_id: IDS.client, client_name: 'Marie Tremblay', clients: CLIENT } } },
-    quotes: { data: { quote_number: 'Q-2026-042', total_cents: 162690, currency: 'CAD', valid_until: '2026-09-30', client_id: IDS.client, lead_id: null, job_id: IDS.job, status: 'sent', deleted_at: null, created_at: VEILLE } },
+    quotes: { data: { quote_number: 'Q-2026-042', total_cents: 162690, currency: 'CAD', valid_until: '2026-09-30', client_id: IDS.client, lead_id: null, job_id: IDS.job, status: 'sent', deleted_at: null, created_at: VEILLE,
+      // Ouverture enregistrée AVANT l'émission de quote.viewed (vuesSoumission.ts) : la notification la cite.
+      ...(preset.trigger_event === 'quote.viewed' ? { viewed_at: '2026-09-13T14:58:00Z', view_count: 1 } : {}) } },
     invoices: { data: { invoice_number: 'INV-000042', due_date: '2026-09-01', total_cents: 162690, client_id: IDS.client, job_id: IDS.job, status: 'sent', created_at: VEILLE, deleted_at: null } },
     job_agreements: { data: null },
-    memberships: { data: { user_id: IDS.owner } },
+    // Liste : la notification « équipe du deal » parcourt les membres actifs.
+    memberships: { data: [{ user_id: IDS.owner, role: 'owner', status: 'active', language: 'fr' }] },
+    deals: (req: any) => (req.op === 'update'
+      ? { data: [{ id: 'deal-golden' }] }
+      : { data: [{ id: 'deal-golden', pipeline_id: PIPELINE, stage_id: ETAPES[preset.preset_key === 'quote_opened_move_deal' ? 1 : 0].id, quote_id: IDS.devis, job_id: null, client_id: IDS.client, assigned_user_id: null, pipeline_stages: { kind: 'open' } }] }),
+    pipeline_stages: (req: any) => ({ data: filtrer(ETAPES, req.filtres) }),
+    'rpc:peut_voir_pipeline': { data: true },
     sms_opt_outs: { data: null },
     conversations: { data: { id: 'conv-1', client_id: IDS.client } },
     messages: { data: null, count: 0 },
@@ -72,6 +103,8 @@ export function evenementPour(preset: AutomationPresetDef) {
     'agreement.signed': { entityType: 'job', entityId: IDS.job, metadata: { signer_name: 'Marie Tremblay' } },
     'quote.sent': { entityType: 'quote', entityId: IDS.devis, metadata: { quote_number: 'Q-2026-042', channel: 'email' } },
     'quote.approved': { entityType: 'quote', entityId: IDS.devis, metadata: { quote_number: 'Q-2026-042' } },
+    // Même forme que l'émission réelle (vuesSoumission.ts) : première ouverture.
+    'quote.viewed': { entityType: 'quote', entityId: IDS.devis, metadata: { quote_id: IDS.devis, quote_number: 'Q-2026-042', client_id: IDS.client, is_first_view: true, view_count: 1, ouverture: ['premiere', 'chaque'], total_cents: 162690, montant: 1626.9, pipeline_id: null, stage_id: null, etiquette: [], service_id: [] } },
     'estimate.sent': { entityType: 'invoice', entityId: IDS.facture, metadata: { invoice_number: 'INV-000042' } },
     'invoice.sent': { entityType: 'invoice', entityId: IDS.facture, metadata: { invoice_number: 'INV-000042', client_id: IDS.client } },
     'invoice.paid': { entityType: 'invoice', entityId: IDS.facture, metadata: { invoice_number: 'INV-000042', amount_cents: 162690, payment_type: preset.preset_key === 'deposit_received' ? 'deposit' : 'full' } },
@@ -83,6 +116,9 @@ export function evenementPour(preset: AutomationPresetDef) {
   return { ...base, ...e };
 }
 
+/** Ligne de réservation du moteur (`reserverExecution`), complétée ensuite par le résultat. */
+const estReservation = (v: any) => v?.result_success === false && v?.result_error === 'en cours';
+
 export interface Sortie {
   preset_key: string;
   trigger_event: string;
@@ -90,7 +126,7 @@ export interface Sortie {
   /** Tâches différées créées par l'événement (avant dépilage). */
   planifie: Array<{ action: string; execute_at: string; execution_key: string }>;
   /** Tout ce qui est parti ou a été écrit, immédiat puis différé, dans l'ordre. */
-  messages: Array<{ canal: 'sms' | 'courriel' | 'notification' | 'tache' | 'activite' | 'avis'; to?: string; subject?: string; body: string; moment: 'immediat' | 'differe' }>;
+  messages: Array<{ canal: 'sms' | 'courriel' | 'notification' | 'tache' | 'activite' | 'avis' | 'deal'; to?: string; subject?: string; body: string; moment: 'immediat' | 'differe' }>;
   erreurs: string[];
   /** Tâches différées annulées par la condition d'arrêt au dépilage (jamais exécutées). */
   annulees: string[];
@@ -106,8 +142,8 @@ export async function jouer(preset: AutomationPresetDef, enregistreurs: { sms: a
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(HORLOGE));
 
-  const { initAutomationEngine, processScheduledTasks } = await import('../../../../server/lib/automationEngine');
-  const { eventBus } = await import('../../../../server/lib/eventBus');
+  const { initAutomationEngine, processScheduledTasks } = await import('../../../server/lib/automationEngine');
+  const { eventBus } = await import('../../../server/lib/eventBus');
   const twilio = { messages: { create: vi.fn(async (p: any) => { enregistreurs.sms.push({ to: p.to, body: p.body, moment: 'immediat' }); return { sid: 'SM_golden' }; }) } };
 
   const { client, journal } = clientEnregistreur(monde(preset));
@@ -123,7 +159,9 @@ export async function jouer(preset: AutomationPresetDef, enregistreurs: { sms: a
   // ait laissé sa trace (log d'exécution pour l'immédiat, insertion de tâche
   // pour le différé), avec une borne réelle de 5 s.
   const nbActions = preset.actions.length;
-  const traces = () => requetes(journal, 'automation_execution_logs', 'insert').length + requetes(journal, 'automation_scheduled_tasks', 'insert').length;
+  // La RÉSERVATION anti-doublon (F3) insère d'abord une ligne « en cours » :
+  // ce n'est pas encore le résultat de l'action, on attend la ligne finale.
+  const traces = () => requetes(journal, 'automation_execution_logs', 'insert').filter((r) => !estReservation(r.valeur)).length + requetes(journal, 'automation_scheduled_tasks', 'insert').length;
   const limite = performance.now() + 5000;
   while (traces() < nbActions && performance.now() < limite) await new Promise((r) => setTimeout(r, 10));
   for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
@@ -135,12 +173,14 @@ export async function jouer(preset: AutomationPresetDef, enregistreurs: { sms: a
     for (const c of enregistreurs.courriels.slice(depuisMails)) messages.push({ canal: 'courriel', to: c.to, subject: c.subject, body: c.html, moment });
     for (const r of journal.slice(journalDepuis)) {
       const v = r.valeur as any;
+      if (r.table === 'deals' && r.op === 'update' && v?.stage_id) messages.push({ canal: 'deal', body: `étape → ${nomEtape(v.stage_id)}`, moment });
       if (r.op !== 'insert' || !v) continue;
-      if (r.table === 'notifications') messages.push({ canal: 'notification', body: `${v.title}\n${v.body}`, moment });
+      // Une notification ciblée insère une ligne PAR destinataire, en un seul appel.
+      if (r.table === 'notifications') for (const n of [v].flat()) messages.push({ canal: 'notification', to: n.user_id ?? undefined, body: `${n.title}\n${n.body}`, moment });
       if (r.table === 'tasks') messages.push({ canal: 'tache', body: `${v.title}${v.description ? `\n${v.description}` : ''}`, moment });
       if (r.table === 'activity_log' && v.metadata?.source !== 'automation' && v.event_type !== 'review_requested') messages.push({ canal: 'activite', body: String(v.event_type), moment });
       if (r.table === 'review_requests') messages.push({ canal: 'avis', body: `${v.status}: ${v.subject_sent}`, moment });
-      if (r.table === 'automation_execution_logs' && v.result_success === false) erreurs.push(`${v.action_type}: ${v.result_error}`);
+      if (r.table === 'automation_execution_logs' && v.result_success === false && !estReservation(v)) erreurs.push(`${v.action_type}: ${v.result_error}`);
     }
   };
   // L'insert activity_log du bus lui-même (émission) précède tout : on l'ignore.
@@ -174,12 +214,14 @@ export async function jouer(preset: AutomationPresetDef, enregistreurs: { sms: a
     for (const c of enregistreurs.courriels.slice(m0)) messages.push({ canal: 'courriel', to: c.to, subject: c.subject, body: c.html, moment: 'differe' });
     for (const r of j2) {
       const v = r.valeur as any;
+      if (r.table === 'deals' && r.op === 'update' && v?.stage_id) messages.push({ canal: 'deal', body: `étape → ${nomEtape(v.stage_id)}`, moment: 'differe' });
       if (r.op !== 'insert' || !v) continue;
-      if (r.table === 'notifications') messages.push({ canal: 'notification', body: `${v.title}\n${v.body}`, moment: 'differe' });
+      // Une notification ciblée insère une ligne PAR destinataire, en un seul appel.
+      if (r.table === 'notifications') for (const n of [v].flat()) messages.push({ canal: 'notification', to: n.user_id ?? undefined, body: `${n.title}\n${n.body}`, moment: 'differe' });
       if (r.table === 'tasks') messages.push({ canal: 'tache', body: `${v.title}${v.description ? `\n${v.description}` : ''}`, moment: 'differe' });
       if (r.table === 'activity_log' && v.metadata?.source !== 'automation' && v.event_type !== 'review_requested') messages.push({ canal: 'activite', body: String(v.event_type), moment: 'differe' });
       if (r.table === 'review_requests') messages.push({ canal: 'avis', body: `${v.status}: ${v.subject_sent}`, moment: 'differe' });
-      if (r.table === 'automation_execution_logs' && v.result_success === false) erreurs.push(`${v.action_type}: ${v.result_error}`);
+      if (r.table === 'automation_execution_logs' && v.result_success === false && !estReservation(v)) erreurs.push(`${v.action_type}: ${v.result_error}`);
     }
     break;
     }

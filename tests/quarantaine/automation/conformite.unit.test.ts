@@ -20,8 +20,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Le paramètre est accepté et ignoré : le test inspecte les APPELS (mailer.sendEmail.mock.calls), pas le retour.
 const mailer = { sendEmail: vi.fn(async (_p?: unknown) => ({ sent: true, messageId: 'x' })) };
-vi.mock('../../../server/lib/mailer', () => ({ isMailerConfigured: () => true, sendEmail: (p: any) => mailer.sendEmail(p) }));
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }), langueEntreprise: () => 'fr' }));
+vi.mock('../../../server/lib/mailer', async () => (await import('../_simulations')).mailerSimule((p: any) => mailer.sendEmail(p)));
+vi.mock('../../../server/routes/emails', async () => (await import('../_simulations')).emailsSimules());
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 // Le gel des communications lit la base par `getServiceClient()` — le VRAI
 // client, pas le faux du test : la lecture échouait et aucun envoi ne partait.
@@ -81,36 +81,7 @@ async function moteur(reponses: Record<string, any>) {
 }
 const laisserTravailler = async () => { for (let i = 0; i < 30; i++) await new Promise((r) => setImmediate(r)); };
 
-describe('T11.1 — relance commerciale à un client sans consentement', () => {
-  it('ROUGE ATTENDU (F7) : cross_sell_30d (courriel, 30 jours après la job) ne part pas sans consentement', async () => {
-    const t = tacheDe('cross_sell_30d', 0, 'job', JOB);
-    const { processScheduledTasks, client, journal } = await moteur({ ...monde(), automation_scheduled_tasks: { data: [t] } });
-    await processScheduledTasks(client);
-    const fin = requetes(journal, 'automation_scheduled_tasks', 'update').map((r) => r.valeur as any).at(-1);
-    expect(mailer.sendEmail, `courriel commercial envoyé à un client sans consentement (statut : ${fin?.status})`).not.toHaveBeenCalled();
-    expect(fin?.status).toBe('failed');
-    expect(String(fin?.last_error)).toMatch(/consent/i);
-  });
 
-  it('ROUGE ATTENDU (F7) : seasonal_reminder_6m (SMS, 6 mois après) ne part pas non plus', async () => {
-    const r = preset('seasonal_reminder_6m');
-    const i = r.actions.findIndex((a) => a.type === 'send_sms');
-    const t = tacheDe('seasonal_reminder_6m', i, 'job', JOB);
-    const { processScheduledTasks, client } = await moteur({ ...monde(), automation_scheduled_tasks: { data: [t] } });
-    await processScheduledTasks(client);
-    expect(twilio.messages.create, 'SMS commercial envoyé à un client sans consentement').not.toHaveBeenCalled();
-  });
-});
-
-describe('T11.2 — témoin : un message transactionnel part même sans consentement commercial', () => {
-  it('appointment_confirmation (immédiat) → SMS et courriel envoyés', async () => {
-    const { eventBus } = await moteur({ ...monde(), automation_rules: { data: [preset('appointment_confirmation')] } });
-    await eventBus.emit('appointment.created', { orgId: ORG, entityType: 'schedule_event', entityId: VISITE, metadata: {} });
-    await laisserTravailler();
-    expect(twilio.messages.create).toHaveBeenCalledTimes(1);
-    expect(mailer.sendEmail).toHaveBeenCalledTimes(1);
-  });
-});
 
 describe('T11.5 — réengagement d’un lead perdu, jamais client', () => {
   it('ROUGE ATTENDU (F7) : le seeder ne doit pas activer lost_lead_reengagement d’office', async () => {
@@ -124,19 +95,5 @@ describe('T11.5 — réengagement d’un lead perdu, jamais client', () => {
   });
 });
 
-describe('T11.6 — la demande d’avis compte dans le plafond commercial', () => {
-  it('ROUGE ATTENDU (F7) : client déjà à 3 messages commerciaux / 24 h → la demande d’avis (courriel + SMS) est retenue', async () => {
-    const r = { ...preset('google_review'), delay_seconds: 0 }; // en prod le seeder ramène le délai à 0 : envoi immédiat
-    const { eventBus, journal } = await moteur({
-      ...monde(),
-      automation_rules: { data: [r] },
-      messages: { data: null, count: 3 },      // 3 SMS d'automatisation déjà partis à ce numéro
-      activity_log: { data: null, count: 3 },  // 3 courriels d'automatisation déjà partis à cette adresse
-    });
-    await eventBus.emit('job.completed', { orgId: ORG, entityType: 'job', entityId: JOB, metadata: {} });
-    await laisserTravailler();
-    const partis = twilio.messages.create.mock.calls.length + mailer.sendEmail.mock.calls.length;
-    const logs = requetes(journal, 'automation_execution_logs', 'insert').map((r) => r.valeur as any);
-    expect(partis, `${partis} message(s) d'avis partis à un client déjà au plafond (résultat : ${JSON.stringify(logs.map((l) => l.result_error))})`).toBe(0);
-  });
-});
+// T11.1, T11.2 et T11.6 (F7) sortis de quarantaine au launch 2026-09-28 :
+// tests/automation/launch-f18-f7.test.ts.

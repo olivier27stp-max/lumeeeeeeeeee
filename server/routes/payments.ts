@@ -8,6 +8,7 @@ import { parseOrgId, clampInt, resolvePublicBaseUrl } from '../lib/helpers';
 import { dispatchWebhook } from '../lib/webhookDispatcher';
 import { generateCommissionsForInvoice, handleInvoiceReversal } from '../lib/field-sales/commission-engine';
 import { seedOrgComplete } from '../lib/seedOrgDefaults';
+import { montantRembourse } from '../lib/remboursements';
 
 // Refund input validation
 const refundSchema = z.object({
@@ -248,18 +249,25 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             }
           }
 
-          // Update invoice paid_cents and status — la part facture seulement,
-          // le pourboire ne réduit pas le solde dû.
+          // La facture est DÉJÀ à jour : l'insertion du paiement déclenche
+          // `trg_payments_recalculate_invoice`, qui recalcule paid_cents, le
+          // solde et le statut depuis la somme des paiements réussis. On la
+          // relit. L'ancien appel à `apply_invoice_payment` AJOUTAIT le montant
+          // une seconde fois : 40 $ payés sur 100 $ donnaient paid_cents = 80 $,
+          // 60 $ marquaient la facture payée — et le même PaymentIntent reçu
+          // sous un 2e événement (plateforme puis Connect) l'ajoutait encore
+          // (audit automatisations V2, 2026-09-29, C16/C17).
+          // Le pourboire n'entre pas dans la facture (amount_cents = factureCents).
           const admin = getServiceClient();
           const amountPaid = factureCents;
 
-          const { data: applied, error: applyErr } = await admin.rpc('apply_invoice_payment', {
-            p_invoice_id: metadata.invoiceId,
-            p_org_id: metadata.orgId,
-            p_amount_cents: amountPaid,
-          });
-          if (applyErr) throw new Error('apply_invoice_payment failed: ' + applyErr.message);
-          const invoiceRow = Array.isArray(applied) ? applied[0] : applied;
+          const { data: invoiceRow, error: lectureErr } = await admin
+            .from('invoices')
+            .select('id, paid_cents, balance_cents, status, total_cents')
+            .eq('id', metadata.invoiceId)
+            .eq('org_id', metadata.orgId)
+            .maybeSingle();
+          if (lectureErr) throw new Error('invoice re-read failed: ' + lectureErr.message);
 
           if (invoiceRow) {
             const newPaidCents = Number(invoiceRow.paid_cents || 0);
@@ -852,15 +860,30 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         if (paymentIntentId) {
           const admin = getServiceClient();
           // Cross-validate: only update the matching payment row; org_id stays as-is.
-          const fullyRefunded = charge.amount_refunded >= charge.amount;
-          await admin
+          // Le statut 'partially_refunded' qu'on écrivait ici est refusé par
+          // payments_status_check : chaque remboursement partiel fait dans Stripe
+          // échouait en silence. Le montant rendu vit dans refunded_cents
+          // (absolu, donc rejouable) ; le trigger recalcule la facture.
+          const { data: paiement, error: lectureErr } = await admin
             .from('payments')
-            .update({
-              status: fullyRefunded ? 'refunded' : 'partially_refunded',
-              updated_at: new Date().toISOString(),
-            })
+            .select('id, amount_cents')
             .eq('provider', 'stripe')
-            .eq('provider_payment_id', paymentIntentId);
+            .eq('provider_payment_id', paymentIntentId)
+            .maybeSingle();
+          if (lectureErr) {
+            console.error('[webhook/stripe] charge.refunded : paiement illisible', lectureErr.message);
+          } else if (paiement) {
+            const rembourse = montantRembourse(charge.amount_refunded, paiement.amount_cents);
+            const { error: majErr } = await admin
+              .from('payments')
+              .update({
+                refunded_cents: rembourse,
+                status: rembourse >= paiement.amount_cents ? 'refunded' : 'succeeded',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', paiement.id);
+            if (majErr) console.error('[webhook/stripe] charge.refunded : mise à jour refusée', majErr.message);
+          }
         }
       }
 
@@ -1881,33 +1904,46 @@ router.post('/payments/refund', async (req, res) => {
     const refundIdemKey = `refund-${payment.id}-${refundAmountCents ?? 'full'}`;
     const refund = await stripe.refunds.create(refundParams, { idempotencyKey: refundIdemKey });
 
-    // Update payment record
-    const isFullRefund = !refundAmountCents || refundAmountCents >= payment.amount_cents;
+    // Montant rendu au client, ABSOLU : relu sur la charge Stripe (un 2e
+    // remboursement partiel s'ajoute au 1er ; un rejeu idempotent ne compte
+    // pas deux fois). À défaut, on cumule ce qu'on sait déjà.
+    let rembourseStripe: number | null = null;
+    try {
+      const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId, { expand: ['latest_charge'] });
+      const charge = pi.latest_charge as Stripe.Charge | null;
+      if (charge && typeof charge === 'object') rembourseStripe = charge.amount_refunded;
+    } catch (lectureErr: any) {
+      console.error('[payments/refund] lecture de la charge Stripe impossible :', lectureErr?.message);
+    }
+    const rembourse = montantRembourse(
+      rembourseStripe ?? (Number(payment.refunded_cents) || 0) + (refund.amount || 0),
+      payment.amount_cents,
+    );
+    const isFullRefund = rembourse >= payment.amount_cents;
+
+    // Le trigger de paiements recalcule la facture sur « montant − remboursé ».
+    // (reverse_invoice_payment, appelé ici avant, retranchait le montant UNE
+    // DEUXIÈME FOIS après ce recalcul : le versement restant d'une facture
+    // payée en deux fois disparaissait.)
     const { error: updateError } = await admin
       .from('payments')
       .update({
-        status: isFullRefund ? 'refunded' : 'succeeded', // partial refund keeps succeeded
-        failure_reason: `Refunded: ${refund.id} (${isFullRefund ? 'full' : 'partial: ' + refundAmountCents + ' cents'})`,
+        refunded_cents: rembourse,
+        status: isFullRefund ? 'refunded' : 'succeeded',
+        failure_reason: `Refunded: ${refund.id} (${isFullRefund ? 'full' : 'partial: ' + rembourse + ' cents'})`,
       })
       .eq('id', paymentId);
 
-    if (updateError) throw updateError;
-
-    // If full refund, atomically reverse paid_cents
-    if (isFullRefund && payment.invoice_id) {
-      const { error: reverseErr } = await admin.rpc('reverse_invoice_payment', {
-        p_invoice_id: payment.invoice_id,
-        p_org_id: orgId,
-        p_amount_cents: payment.amount_cents,
+    if (updateError) {
+      console.error('[payments/refund] remboursement fait chez Stripe mais non inscrit :', updateError.message);
+      return res.status(500).json({
+        error: 'Refund issued but DB sync failed — manual reconciliation required.',
+        refund_id: refund.id,
+        code: 'DB_SYNC_FAILED',
       });
-      if (reverseErr) {
-        console.error('[payments/refund] reverse_invoice_payment failed:', reverseErr.message);
-        return res.status(500).json({
-          error: 'Refund issued but DB sync failed — manual reconciliation required.',
-          refund_id: refund.id,
-          code: 'DB_SYNC_FAILED',
-        });
-      }
+    }
+
+    if (isFullRefund && payment.invoice_id) {
       // Apply commission reversal policy
       handleInvoiceReversal(admin, orgId, payment.invoice_id, `Refund: ${refund.id}`)
         .catch((err) => console.error('[commissions] reversal failed:', err?.message));

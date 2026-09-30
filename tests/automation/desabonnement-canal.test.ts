@@ -172,7 +172,7 @@ describe('moteur — drapeau ON', () => {
     expect(s.envois.filter((e: any) => e.canal === 'sms')).toHaveLength(0);
     const [log] = journalDe(s, 'send_sms');
     expect(log.result_success).toBe(true);
-    expect(log.result_data).toEqual({ saute: motifSaut('texto') });
+    expect(log.result_data).toMatchObject({ saute_code: 'desabonne', saute: motifSaut('texto') });
     expect(log.result_data.saute).toBe('Client désabonné (texto)');
     // La tâche est terminée (pas en échec, pas de reprise).
     expect(s.ecritures.some((w: any) => w.table === 'automation_scheduled_tasks' && w.valeur?.status === 'completed')).toBe(true);
@@ -201,7 +201,7 @@ describe('moteur — drapeau ON', () => {
       evenementPour('quote.sent'), etat.e, { ...DRAPEAU_ON, ...STOP_COURRIEL },
     );
     expect(s.envois.filter((e: any) => e.canal === 'courriel')).toHaveLength(0);
-    expect(journalDe(s, 'send_email')[0].result_data).toEqual({ saute: 'Client désabonné (courriel)' });
+    expect(journalDe(s, 'send_email')[0].result_data).toMatchObject({ saute_code: 'desabonne', saute: 'Client désabonné (courriel)' });
     // L'étape d'après a bien été planifiée puis exécutée.
     expect(s.planifie.map((p: any) => p.step_id)).toEqual(['e2', 'e3']);
     expect(journalDe(s, 'create_notification')[0].result_success).toBe(true);
@@ -223,7 +223,7 @@ describe('moteur — drapeau ON', () => {
       evenementPour('appointment.created'), etat.e, { ...DRAPEAU_ON, ...STOP_TEXTO },
     );
     expect(s.envois.filter((e: any) => e.canal === 'sms')).toHaveLength(0);
-    expect(journalDe(s, 'send_sms')[0].result_data).toEqual({ saute: 'Client désabonné (texto)' });
+    expect(journalDe(s, 'send_sms')[0].result_data).toMatchObject({ saute_code: 'desabonne', saute: 'Client désabonné (texto)' });
   });
 
   it('demande d\'avis vers un client désabonné des deux canaux : sautée, pas un échec', async () => {
@@ -239,14 +239,17 @@ describe('moteur — drapeau ON', () => {
 });
 
 describe('moteur — drapeau OFF : comportement d\'avant', () => {
-  it('relance vers un désabonné du texto : échec comme avant (pas de saut)', async () => {
+  it('relance vers un désabonné du texto : rien ne part (launch M1 : sautée au lieu d’échouer)', async () => {
     const s: any = await jouer(
       { id: 'r-off', trigger_event: 'quote.sent', delay_seconds: 86400, actions: [{ type: 'send_sms', config: { body: 'Relance' } }] },
       evenementPour('quote.sent'), etat.e, { ...STOP_TEXTO },
     );
     const [log] = journalDe(s, 'send_sms');
-    expect(log.result_success).toBe(false);
-    expect(log.result_error).toMatch(/opted out of SMS/);
+    // Drapeau OFF : le STOP bloque TOUT texto, comme avant. Depuis le launch
+    // (M1), ce blocage est un SAUT journalisé — le parcours continue.
+    expect(s.envois.filter((e: any) => e.canal === 'sms')).toHaveLength(0);
+    expect(log.result_success).toBe(true);
+    expect(log.result_data).toMatchObject({ saute: 'Client désabonné (texto)', saute_code: 'desabonne' });
   });
 
   it('rappel de rendez-vous vers un désabonné du texto : bloqué comme avant', async () => {

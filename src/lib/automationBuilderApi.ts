@@ -121,6 +121,73 @@ export async function modifierAutomatisation(
   return reponse.json();
 }
 
+/**
+ * Publier (`true`) ou repasser en brouillon (`false`) — par le serveur, qui
+ * refuse un parcours cassé et NOMME les problèmes dans le message d'erreur
+ * (audit M8). Plus aucune écriture directe du statut depuis le navigateur.
+ */
+export async function changerPublication(id: string, actif: boolean): Promise<void> {
+  const reponse = await fetch(`/api/automations/rules/${id}/publication`, {
+    method: 'POST',
+    headers: await entetes(),
+    body: JSON.stringify({ actif }),
+  });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de changer le statut de l’automatisation.');
+}
+
+export interface ResultatPublicationLot {
+  id: string;
+  ok: boolean;
+  erreur?: string;
+}
+
+/** Le même contrôle, pour plusieurs automatisations d'un coup (barre de lot). */
+export async function changerPublicationEnLot(ids: string[], actif: boolean): Promise<ResultatPublicationLot[]> {
+  const reponse = await fetch('/api/automations/rules/publication', {
+    method: 'POST',
+    headers: await entetes(),
+    body: JSON.stringify({ ids, actif }),
+  });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de changer le statut des automatisations.');
+  const corps = await reponse.json() as { resultats?: ResultatPublicationLot[] };
+  return corps.resultats ?? [];
+}
+
+/** Chiffres d'une automatisation sur 60 jours — voir server/routes/automation-stats.ts. */
+export interface StatsRegle {
+  declenches: number;
+  en_cours: number;
+  envoyes: number;
+  /** Étapes sautées (pas de numéro, pas de courriel…) : ni envoi ni échec. */
+  sautes: number;
+  echecs: number;
+  /** Motif en français de la dernière étape sautée (affiché tel quel). */
+  dernier_saut: string | null;
+}
+
+export interface StatsEtape {
+  envoyes: number;
+  sautes: number;
+  echecs: number;
+  en_attente: number;
+}
+
+/**
+ * Les statistiques, par UNE route agrégée : par automatisation, et par
+ * étape quand `ruleId` est donné.
+ */
+export async function chargerStatistiques(ruleId?: string | null): Promise<{
+  par_regle: Record<string, StatsRegle>;
+  par_etape: Record<string, StatsEtape> | null;
+  /** Le bureau a-t-il un numéro texto ? `null` = inconnu. */
+  texto_configure?: boolean | null;
+}> {
+  const url = ruleId ? `/api/automations/rules/stats?rule_id=${encodeURIComponent(ruleId)}` : '/api/automations/rules/stats';
+  const reponse = await fetch(url, { headers: await entetes() });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de lire les statistiques.');
+  return reponse.json();
+}
+
 export async function dupliquerAutomatisation(id: string): Promise<AutomationRule> {
   const reponse = await fetch(`/api/automations/rules/${id}/duplicate`, {
     method: 'POST',
@@ -264,7 +331,13 @@ export async function genererParcoursAvecLumi(
       rule_id: contexte?.ruleId ?? null,
     }),
   });
-  if (!reponse.ok) throw await erreurDe(reponse, 'Lumi n’a pas pu construire ce parcours.');
+  if (!reponse.ok) {
+    // `brouillon_retire` : le serveur a retiré le brouillon vide né de cet envoi.
+    const corps = await reponse.clone().json().catch(() => null) as { brouillon_retire?: boolean } | null;
+    const erreur = await erreurDe(reponse, 'Lumi n’a pas pu construire ce parcours.');
+    if (corps?.brouillon_retire) (erreur as Error & { brouillonRetire?: boolean }).brouillonRetire = true;
+    throw erreur;
+  }
   return reponse.json();
 }
 

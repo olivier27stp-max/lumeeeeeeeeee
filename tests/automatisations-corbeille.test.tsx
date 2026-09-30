@@ -76,6 +76,9 @@ vi.mock('../src/lib/automationBuilderApi', () => ({
   supprimerDossier: vi.fn(async () => undefined),
   rangerDansDossier: vi.fn(async () => undefined),
   chargerBureauxCibles: vi.fn(async () => []),
+  // La publication passe par la route serveur (audit M8).
+  changerPublication: (...a: any[]) => toggleMock(a[0], a[1]),
+  changerPublicationEnLot: vi.fn(async (ids: string[]) => ids.map((id) => ({ id, ok: true }))),
 }));
 
 // La confirmation de suppression : on répond « oui » sans boîte de dialogue.
