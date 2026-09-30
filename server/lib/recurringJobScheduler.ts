@@ -199,7 +199,10 @@ export async function processRecurringJobs(supabase: SupabaseClient, options: { 
           nextDate,
           rule.frequency,
           rule.interval_days || 7,
-          rule.timezone,
+          // Série sans fuseau = celui de l'ENTREPRISE (colonne documentée « NULL =
+          // hériter de company_settings.timezone »). Le repli 'America/Toronto'
+          // passé en dur plaçait la visite de 9 h d'une entreprise de Vancouver à 6 h.
+          rule.timezone || await fuseauEntreprise(supabase, job.org_id),
           rule.local_time,
         );
 
@@ -246,6 +249,13 @@ export async function processRecurringJobs(supabase: SupabaseClient, options: { 
  * 'America/Toronto' (identifiant IANA canonique de l'Est canadien) ne sert que
  * si le tenant n'a rien configuré.
  */
+/** Fuseau de l'entreprise (company_settings.timezone), repli America/Toronto. */
+async function fuseauEntreprise(supabase: SupabaseClient, orgId: string): Promise<string> {
+  const { data, error } = await supabase.from('company_settings').select('timezone').eq('org_id', orgId).maybeSingle();
+  if (error) console.error('[recurring-jobs] fuseau de l’entreprise illisible, repli America/Toronto:', error.message);
+  return (data as { timezone?: string | null } | null)?.timezone || 'America/Toronto';
+}
+
 async function calculateNextRunTz(
   supabase: SupabaseClient,
   from: Date,
