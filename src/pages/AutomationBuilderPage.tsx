@@ -1190,22 +1190,39 @@ export default function AutomationBuilderPage() {
   );
   const [conversionEnCours, setConversionEnCours] = useState(false);
 
-  /** Convertir : un seul écrit, confirmé, jamais automatique. */
-  const convertirParcours = useCallback(async () => {
-    if (!regle || !conversion?.possible) return;
-    const ok = await confirmer({
-      title: fr ? 'Convertir ce parcours ?' : 'Convert this journey?',
-      message: fr
-        ? `Les ${conversion.etapes.length} étapes affichées deviendront modifiables dans le canevas. L'automatisation continue de fonctionner pendant et après : les envois ne changent pas.`
-        : `The ${conversion.etapes.length} steps shown will become editable on the canvas. The automation keeps running during and after: what it sends does not change.`,
-      confirmLabel: fr ? 'Convertir' : 'Convert',
-    });
-    if (!ok) return;
+  /**
+   * Convertir : un seul écrit, jamais en silence sur une règle PUBLIÉE.
+   *
+   * Rafba (2026-09-30) : « je ne suis pas capable de jouer avec les
+   * paramètres des autres bulles » — un clic sur une étape d'un parcours au
+   * format d'origine ne faisait rien. Désormais ce clic convertit puis ouvre
+   * l'étape : sans question pour un BROUILLON (il n'envoie rien), après
+   * confirmation pour une automatisation publiée (décision de Will).
+   */
+  const convertirParcours = useCallback(async (ouvrir?: string) => {
+    if (!regle) return;
+    if (!conversion?.possible) {
+      toast.info(fr
+        ? 'Ce parcours contient une étape d’un ancien format qui ne se convertit pas : il reste en lecture seule.'
+        : 'This journey contains an old-format step that cannot be converted: it stays read-only.');
+      return;
+    }
+    if (regle.is_active) {
+      const ok = await confirmer({
+        title: fr ? 'Convertir ce parcours ?' : 'Convert this journey?',
+        message: fr
+          ? `Les ${conversion.etapes.length} étapes affichées deviendront modifiables dans le canevas. L'automatisation continue de fonctionner pendant et après : les envois ne changent pas.`
+          : `The ${conversion.etapes.length} steps shown will become editable on the canvas. The automation keeps running during and after: what it sends does not change.`,
+        confirmLabel: fr ? 'Convertir' : 'Convert',
+      });
+      if (!ok) return;
+    }
     setConversionEnCours(true);
     try {
       const maj = await modifierAutomatisation(regle.id, { steps: conversion.etapes });
       setRegle(maj);
       setSteps((maj.steps as Etape[] | undefined) ?? []);
+      if (ouvrir) setEtapeChoisie(ouvrir);
       toast.success(fr ? 'Parcours converti — il est modifiable' : 'Journey converted — it is editable');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -1804,8 +1821,8 @@ export default function AutomationBuilderPage() {
                       </p>
                       <p className="mt-1 text-[12px] text-text-secondary">
                         {fr
-                          ? 'Cette automatisation fonctionne normalement — elle s’affiche ici en lecture seule.'
-                          : 'This automation works normally — it is shown here read-only.'}
+                          ? 'Cette automatisation fonctionne normalement. Cliquez sur une étape pour la modifier : le parcours sera converti, les envois ne changent pas.'
+                          : 'This automation works normally. Click a step to edit it: the journey will be converted, what it sends does not change.'}
                       </p>
 
                       {/*
@@ -1908,7 +1925,8 @@ export default function AutomationBuilderPage() {
                       fr={fr}
                       lectureSeule={formatOrigine}
                       selectionId={etapeChoisie}
-                      onSelection={(idEtape) => void ouvrirEtape(idEtape)}
+                      // Format d'origine : le clic convertit, puis ouvre l'étape.
+                      onSelection={(idEtape) => (formatOrigine ? void convertirParcours(idEtape) : void ouvrirEtape(idEtape))}
                       onAjouter={ouvrirAjout}
                       onMenu={setMenuEtape}
                       /*

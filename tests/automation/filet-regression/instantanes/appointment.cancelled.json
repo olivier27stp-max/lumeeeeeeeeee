@@ -514,9 +514,7 @@
      "entity_type": "schedule_event",
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
      "action_type": "request_review",
-     "action_config": {
-      "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
-     },
+     "action_config": {},
      "result_success": false,
      "result_error": "en cours",
      "execution_key": "regle-appointment.cancelled-request_review-0:aaaaaaaa-0000-4000-8000-000000000003:0@14910930"
@@ -608,9 +606,7 @@
      "entity_type": "schedule_event",
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
      "action_type": "request_review",
-     "action_config": {
-      "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
-     },
+     "action_config": {},
      "result_success": true,
      "result_data": {
       "token": "<jeton>",
@@ -660,7 +656,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000003",
      "action_config": {
       "type": "request_review",
-      "config": "#7da2d3b10aed",
+      "config": "#44136fa355b3",
       "trigger_event": "appointment.cancelled",
       "event_metadata": {
        "job_id": "aaaaaaaa-0000-4000-8000-000000000002",

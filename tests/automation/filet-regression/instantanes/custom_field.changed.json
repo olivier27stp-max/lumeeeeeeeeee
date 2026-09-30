@@ -689,9 +689,7 @@
      "entity_type": "client",
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "request_review",
-     "action_config": {
-      "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
-     },
+     "action_config": {},
      "result_success": false,
      "result_error": "en cours",
      "execution_key": "regle-custom_field.changed-request_review-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
@@ -783,9 +781,7 @@
      "entity_type": "client",
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "request_review",
-     "action_config": {
-      "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
-     },
+     "action_config": {},
      "result_success": true,
      "result_data": {
       "token": "<jeton>",
@@ -835,7 +831,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_config": {
       "type": "request_review",
-      "config": "#7da2d3b10aed",
+      "config": "#44136fa355b3",
       "trigger_event": "custom_field.changed",
       "event_metadata": {
        "field_id": "aaaaaaaa-0000-4000-8000-00000000000c",
@@ -1018,9 +1014,7 @@
      "entity_type": "client",
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "action_type": "request_review",
-     "action_config": {
-      "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
-     },
+     "action_config": {},
      "result_success": true,
      "result_data": {
       "token": "<jeton>",

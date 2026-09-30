@@ -773,16 +773,15 @@ export const ACTIONS: ActionCatalogue[] = [
   },
   {
     cle: 'request_review', fr: 'Demander un avis', en: 'Ask for a review',
-    aide_fr: 'Envoie au client le lien pour laisser un avis.',
-    aide_en: 'Sends the client a link to leave a review.',
+    aide_fr: 'Envoie au client le sondage d’avis. Les textes (texto et courriel) et le lien Google ou Facebook se règlent dans Paramètres › Avis clients.',
+    aide_en: 'Sends the client the review survey. The texts (text and email) and the Google or Facebook link are set in Settings › Customer reviews.',
     famille: 'communication', vers_client: true,
-    champs: [
-      {
-        cle: 'body', fr: 'Texte du message', en: 'Message text', obligatoire: true, type: 'zone', max: 1600,
-        defaut_fr: 'Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?',
-        defaut_en: 'Hi [client_name], thanks for choosing [company_name]! Would you leave a review?',
-      },
-    ],
+    // Aucun champ : le moteur (executeRequestReview) ignore la config de
+    // l'action et lit les textes des réglages d'avis. L'ancien champ « Texte
+    // du message » était obligatoire et sans effet (2026-09-30) — il bloquait
+    // aussi la conversion du préréglage google_review. 0 étape réelle n'en
+    // portait un (vérifié prod et staging).
+    champs: [],
   },
   {
     cle: 'envoyer_slack', fr: 'Envoyer dans Slack', en: 'Send to Slack',
@@ -1397,6 +1396,9 @@ export function problemesAvantPublication(regle: {
     rang?: number,
   ) => {
     const ou = etapeId ? '' : fr ? ` (action ${(rang ?? 0) + 1})` : ` (action ${(rang ?? 0) + 1})`;
+    // La note dans l'historique (`log_activity`) : technique, hors
+    // catalogue, acceptée par le serveur — rien à vérifier.
+    if (action?.type === 'log_activity') return;
     const modele = action?.type ? trouverAction(action.type) : undefined;
     if (!modele) {
       dire(

@@ -104,6 +104,14 @@ describe('POST /automations/templates/utiliser', () => {
     expect(JSON.stringify(modele)).toBe(avant);
   });
 
+  it('un modèle d’une seule vague devient un parcours modifiable, rappel « la veille » compris', async () => {
+    await utiliser({ templateId: 'job_reminder_1d' }, 'k-veille');
+    const v = etat.ops[0].valeur;
+    expect(v.delay_seconds).toBe(0);
+    expect(v.steps[0]).toMatchObject({ id: 'e1', type: 'attendre', mode: 'avant_date', secondes_avant: 86_400, suivant: 'e2' });
+    expect(v.steps.slice(1).every((e: { type: string }) => e.type === 'action')).toBe(true);
+  });
+
   it('l’entreprise vient de la session : un org_id glissé dans le corps est refusé', async () => {
     const r = await utiliser({ templateId: 'pack_depot', org_id: '99999999-9999-4999-8999-999999999999' });
     expect(r.status).toBe(400);

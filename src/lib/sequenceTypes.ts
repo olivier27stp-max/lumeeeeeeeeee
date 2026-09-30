@@ -278,6 +278,18 @@ export function projeterFormatOrigine(regle: {
       delai_secondes: delai,
       suivant: 'origine-0',
     });
+  } else if (delai < 0) {
+    // Délai NÉGATIF = « X avant le rendez-vous » (rappels la veille, 2 h
+    // avant). Un parcours ignore `delay_seconds` : sans cette attente, le
+    // rappel converti partirait dès la prise du rendez-vous.
+    etapes.push({
+      id: 'origine-attente',
+      type: 'attendre',
+      mode: 'avant_date',
+      secondes_avant: -delai,
+      delai_secondes: 0,
+      suivant: 'origine-0',
+    });
   }
 
   actions.forEach((brut, i) => {
@@ -316,8 +328,15 @@ export interface ApercuConversion {
   bloquants: string[];
 }
 
-/** Les types que le catalogue ne connaît pas et que le serveur refusera. */
-const TYPES_HORS_CATALOGUE = ['log_activity', 'send_notification', 'update_status'];
+/**
+ * Les types que le catalogue ne connaît pas et que le serveur refusera.
+ * `log_activity` n'y est plus (2026-09-30) : le serveur l'accepte désormais
+ * dans un parcours, la conversion le garde tel quel.
+ */
+const TYPES_HORS_CATALOGUE = ['send_notification', 'update_status'];
+
+/** L'étape technique « note dans l'historique » : gardée, jamais proposée. */
+export const ACTION_JOURNAL = 'log_activity';
 
 export function apercuConversion(regle: {
   actions?: unknown;

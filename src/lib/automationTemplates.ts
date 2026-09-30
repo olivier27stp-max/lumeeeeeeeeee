@@ -136,6 +136,22 @@ export function canauxDe(m: Pick<ModeleAutomatisation, 'steps' | 'actions' | 'de
   return ordre.filter((c) => vus.has(c));
 }
 
+/**
+ * Le texte d'un courriel HTML, lisible, sans jamais injecter de HTML. Sert à
+ * l'aperçu des modèles ET au résumé d'une carte du canevas, qui affichait
+ * « <div style="font-family:sans-serif… » (Rafba, 2026-09-30).
+ */
+export function texteSansHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 /** Minuscules sans accents : « Relancé » trouve « relance ». */
 export function normaliser(texte: string): string {
   return texte.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
