@@ -308,6 +308,9 @@ export async function smsEntrant(api: Api, de: string, vers: string, texte: stri
 
 /** Le numéro doit désigner UNE seule fiche (et conversation) du bureau : on libère celles d'avant. */
 export async function reserverTelephone(b: Bureau, telephone: string) {
+  // Les textos des passages précédents comptent dans le plafond commercial de
+  // 24 h du numéro (3 par défaut) : on les retire aussi.
+  await b.admin.from('messages').delete().eq('org_id', b.orgA).eq('phone_number', telephone);
   await b.admin.from('clients').update({ phone: null }).eq('org_id', b.orgA).eq('phone', telephone);
   await b.admin.from('conversations').delete().eq('org_id', b.orgA).eq('phone_number', telephone);
 }

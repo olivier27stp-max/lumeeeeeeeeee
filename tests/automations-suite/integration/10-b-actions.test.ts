@@ -20,7 +20,7 @@ import { marque, attendre, envoisSimules, appelsTwilio, appelsHttpBloques } from
 import {
   preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux, tachesPlanifiees,
   traiterBase, traiterPipeline, creerClient, creerJob, creerDevis, creerFacture, creerDeal, pipelineParDefaut,
-  creerChamp, ecrireChamps, ok, type Api, type Bureau,
+  creerChamp, ecrireChamps, ok, reserverTelephone, type Api, type Bureau,
 } from './10-b-outils';
 
 let b: Bureau & { fuseau: string };
@@ -303,6 +303,8 @@ describe('[B] actions sur la fiche client', () => {
     const m = marque('B-118');
     const depuis = new Date().toISOString();
     await ok(b.admin.from('company_settings').update({ review_enabled: true, google_review_url: 'https://g.page/r/qa-lume-test' }).eq('org_id', b.orgA), 'réglages avis');
+    // Demande d'avis = commercial : plafond de 3 textos / 24 h par numéro (voir reserverTelephone).
+    await reserverTelephone(b, '+15555550149');
     const client = await creerClient(b, m, { phone: '+15555550149' });
     const job = await creerJob(b, m, client.id);
     const id = await regle(m, 'job.completed', [{ type: 'request_review', config: {} }]);
@@ -323,6 +325,7 @@ describe('[B] actions sur la fiche client', () => {
   it('[B-119] request_review sur un déclencheur CLIENT : la demande est rattachée au client et l’anti-doublon 7 jours s’applique', async () => {
     const m = marque('B-119');
     await ok(b.admin.from('company_settings').update({ review_enabled: true, google_review_url: 'https://g.page/r/qa-lume-test' }).eq('org_id', b.orgA), 'réglages avis');
+    await reserverTelephone(b, '+15555550151');
     const client = await creerClient(b, m, { phone: '+15555550151' });
     const id = await regle(m, 'note.added', [{ type: 'request_review', config: {} }]);
     await noter(client.id, 'Première note');
