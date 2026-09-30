@@ -41,8 +41,18 @@ import { VARIABLES_CONNUES, variablesInconnues, htmlVersTexte } from '../../../s
  */
 const MODELE = 'claude-sonnet-5';
 
-/** Plafond de sortie : un parcours réaliste tient largement dedans. */
-const MAX_TOKENS = 1_500;
+/**
+ * Plafond de sortie.
+ *
+ * 1 500 suffisait à Haiku. Sonnet écrit du JSON INDENTÉ et des courriels
+ * plus riches : mesuré le 2026-09-30, 2 réponses sur 3 à « rends juste le
+ * texto plus chaleureux » s'arrêtaient à 1 500 tokens (`max_tokens`) — JSON
+ * coupé, illisible, et l'utilisateur lisait « Lumi n'a pas compris ». On
+ * laisse de la marge ; on ne paie que ce qui est écrit, la réservation est
+ * réglée au coût réel. PAS de « JSON compact » : essayé, Sonnet y ajoutait
+ * une accolade de trop 2 fois sur 10 (JSON illisible) ; indenté, 0.
+ */
+const MAX_TOKENS = 4_000;
 
 export interface ParcoursPropose {
   /** Le nom suggéré — l'utilisateur peut le changer. */
@@ -149,7 +159,7 @@ function messagesDuParcours(steps: unknown): Map<string, { type: string; objet: 
  * on compare avant/après et on montre le nouveau texte, ou on dit
  * franchement que rien n'a bougé.
  */
-export function ceQuiAChange(avant: unknown, apres: unknown, fr: boolean): string {
+export function ceQuiAChange(avant: unknown, apres: unknown, fr: boolean, voulaitModifier = true): string {
   const a = messagesDuParcours(avant);
   const b = messagesDuParcours(apres);
   const lignes: string[] = [];
@@ -163,7 +173,9 @@ export function ceQuiAChange(avant: unknown, apres: unknown, fr: boolean): strin
   }
   if (lignes.length) return `\n\n${fr ? 'Nouveau texte :' : 'New wording:'}\n${lignes.join('\n')}`;
   const avaitUnParcours = Array.isArray(avant) && avant.length > 0;
-  if (avaitUnParcours && JSON.stringify(avant) === JSON.stringify(apres)) {
+  // Une question ou un refus ne change rien EXPRÈS (`modifie: false`) : la
+  // phrase de Lumi suffit, « je n'ai rien changé » y sonnerait faux.
+  if (voulaitModifier && avaitUnParcours && JSON.stringify(avant) === JSON.stringify(apres)) {
     return fr
       ? '\n\nJe n’ai rien changé au parcours. Dis-moi quel message modifier (le texto ou le courriel) et comment.'
       : '\n\nI did not change anything. Tell me which message to change (the text or the email) and how.';
@@ -204,7 +216,8 @@ FORME DE LA RÉPONSE — un objet JSON, rien autour :
 {
   "nom": "nom court de l'automatisation",
   "trigger_event": "une clé de la liste ci-dessus",
-  "resume": "une phrase, au tutoiement, qui dit CE QUE TU AS FAIT à cette demande",
+  "resume": "${fr ? 'une phrase, au tutoiement, qui dit CE QUE TU AS FAIT à cette demande' : 'one sentence IN ENGLISH saying WHAT YOU DID for this request'}",
+  "modifie": true,
   "steps": [
     { "id": "e1", "type": "action", "action": { "type": "send_sms", "config": { "body": "..." } }, "suivant": "e2" },
     { "id": "e2", "type": "attendre", "delai_secondes": 259200, "suivant": "e3" },
@@ -284,13 +297,22 @@ RÈGLES ABSOLUES :
 - « Trop long », « plus court », « plus punché », « change le message »,
   « t'as rien changé » visent les MESSAGES envoyés au client, pas ta phrase.
   Réécris-les vraiment et visiblement : un texto court tient en une ou deux
-  phrases (160 caractères au plus), garde « Bonjour [client_first_name], »
+  phrases, garde l'ouverture ${fr ? '« Bonjour [client_first_name], »' : '"Hi [client_first_name],"'}
   et la signature [company_name], et ajoute le lien utile ([quote_link],
   [invoice_link]) quand il y en a un. Ne prétends jamais avoir changé ce que
   tu n'as pas changé, et n'invente pas que rien n'avait changé : si
   l'utilisateur dit « t'as rien changé » alors que le texte a changé (il est
   cité dans ta réponse précédente), ne t'excuse pas — écris une version
   NETTEMENT différente et dis-le simplement (« Voici une autre version. »).
+- Un texto tient TOUJOURS en 160 caractères au plus, variables comprises :
+  au-delà il est facturé double.
+- "modifie" : false quand tu n'as RIEN changé au parcours (question,
+  refus, demande incomprise), true sinon.
+- Une QUESTION sur le parcours (« explique-moi ce que ça fait », « ça part
+  quand ? ») : renvoie le parcours ACTUEL inchangé, "modifie": false, et
+  réponds dans "resume" en deux ou trois phrases simples.
+- Un REFUS sur un parcours qui existe : renvoie le parcours ACTUEL inchangé,
+  "modifie": false, et explique le refus dans "resume".
 - [quote_valid_until] est VIDE quand la soumission n'a pas de date limite
   (« valide jusqu'au . ») : ne l'utilise que si l'utilisateur parle
   d'échéance.
@@ -303,7 +325,11 @@ RÈGLES ABSOLUES :
   à 3 jours. Tu veux plutôt viser les factures impayées ? ». Une question,
   pas trois — et jamais un questionnaire avant de construire.
 
-Réponds UNIQUEMENT par le JSON.`;
+${fr ? '' : `LANGUE : l'entreprise travaille en ANGLAIS. "resume" ET chaque message au
+client sont en anglais (ouverture "Hi [client_first_name],"), même si le
+parcours actuel est en français — traduis-le quand tu le modifies.
+
+`}Réponds UNIQUEMENT par le JSON.`;
 }
 
 /**
@@ -512,37 +538,72 @@ async function genererParcoursUneFois(params: {
     };
   }
   try {
-    const reponse = await clientAnthropic().messages.create({
-      model: MODELE,
-      max_tokens: MAX_TOKENS,
-      system: [{ type: 'text', text: systeme, cache_control: { type: 'ephemeral' } }],
-      messages,
-    });
+    /** Un appel au modèle, journalisé (compté au budget du client). */
+    const appeler = async (msgs: typeof messages) => {
+      const rep = await clientAnthropic().messages.create({
+        model: MODELE,
+        max_tokens: MAX_TOKENS,
+        system: [{ type: 'text', text: systeme, cache_control: { type: 'ephemeral' } }],
+        messages: msgs,
+      });
+      const u = rep.usage;
+      // `coutEnCents` prend l'usage BRUT de l'API : il sait lire un id daté et
+      // distinguer les écritures de cache 5 min / 1 h.
+      const modeleRendu = rep.model ?? MODELE;
+      const cout = coutEnCents(modeleRendu, u ?? { input_tokens: 0, output_tokens: 0 });
+      await journaliserUsage(admin, {
+        orgId,
+        userId,
+        conversationId: null,
+        model: modeleRendu,
+        input_tokens: u?.input_tokens ?? 0,
+        output_tokens: u?.output_tokens ?? 0,
+        cache_creation_input_tokens: u?.cache_creation_input_tokens ?? 0,
+        cache_read_input_tokens: u?.cache_read_input_tokens ?? 0,
+        cost_cents: cout,
+        // Source distincte pour mesurer ce poste, mais COMPTÉE dans le budget
+        // du client (20260929230300).
+        source: 'automatisations',
+      });
+      return { rep, cout, texte: rep.content.map((b) => (b.type === 'text' ? b.text : '')).join('') };
+    };
+    const lisible = (t: string) => { try { extraireJson(t); return true; } catch { return false; } };
 
-    const u = reponse.usage;
-    // `coutEnCents` prend l'usage BRUT de l'API : il sait lire un id daté et
-    // distinguer les écritures de cache 5 min / 1 h.
-    const modeleRendu = reponse.model ?? MODELE;
-    const coutGeneration = coutEnCents(modeleRendu, u ?? { input_tokens: 0, output_tokens: 0 });
-    await journaliserUsage(admin, {
-      orgId,
-      userId,
-      conversationId: null,
-      model: modeleRendu,
-      input_tokens: u?.input_tokens ?? 0,
-      output_tokens: u?.output_tokens ?? 0,
-      cache_creation_input_tokens: u?.cache_creation_input_tokens ?? 0,
-      cache_read_input_tokens: u?.cache_read_input_tokens ?? 0,
-      cost_cents: coutGeneration,
-      // Source distincte pour mesurer ce poste, mais COMPTÉE dans le budget
-      // du client (20260929230300).
-      source: 'automatisations',
-    });
+    let essai = await appeler(messages);
+    let coutGeneration = essai.cout;
+    /*
+     * UN deuxième essai quand la réponse, complète, n'est pas un JSON
+     * lisible. Mesuré le 2026-09-30 sur la batterie `qa:construire-lumi` :
+     * environ 1 tour sur 25 (une accolade de trop, ou du texte seul), que
+     * l'utilisateur lisait « Lumi n'a pas compris cette modification ». Le
+     * coût supplémentaire ne tombe que dans ce cas-là.
+     */
+    if (essai.rep.stop_reason !== 'max_tokens' && !lisible(essai.texte)) {
+      logger.warn('[lumi/parcours] réponse illisible — second essai', { org_id: orgId });
+      const relance = essai.texte.trim()
+        ? [...messages, { role: 'assistant' as const, content: essai.texte.slice(0, 8_000) }, { role: 'user' as const, content: 'Ta réponse n’est pas un objet JSON valide. Renvoie UNIQUEMENT l’objet JSON demandé, complet, rien autour.' }]
+        : messages;
+      essai = await appeler(relance);
+      coutGeneration += essai.cout;
+    }
     await reglerBudget(admin, reservation.id, coutGeneration);
 
-    const texte = reponse.content
-      .map((b) => (b.type === 'text' ? b.text : ''))
-      .join('');
+    const reponse = essai.rep;
+    const texte = essai.texte;
+
+    // Réponse COUPÉE au plafond : le JSON est illisible. On le dit tel quel
+    // (« réessaie ») et on le consigne — déguisé en « Lumi n'a pas compris »,
+    // ce défaut est resté invisible (mesuré le 2026-09-30).
+    if (reponse.stop_reason === 'max_tokens') {
+      logger.error('[lumi/parcours] réponse coupée au plafond de sortie', { org_id: orgId, max_tokens: MAX_TOKENS });
+      return {
+        parcours: null,
+        coutCents: coutGeneration,
+        erreur: fr
+          ? 'La réponse de Lumi a été coupée (parcours trop long). Réessaie, ou demande une modification plus ciblée.'
+          : 'Lumi’s answer was cut off (path too long). Try again, or ask for a more targeted change.',
+      };
+    }
 
     /*
      * Le modèle peut répondre en TEXTE au lieu du JSON — typiquement quand
@@ -651,7 +712,8 @@ async function genererParcoursUneFois(params: {
         trigger_event: String(brut.trigger_event),
         // La phrase de Lumi, PUIS le nouveau texte (après la coupe à 300 :
         // c'est la partie que l'utilisateur doit voir en entier).
-        resume: String(brut.resume ?? '').slice(0, 300) + ceQuiAChange(parcoursActuel?.steps, brut.steps, fr),
+        resume: String(brut.resume ?? '').slice(0, 300)
+          + ceQuiAChange(parcoursActuel?.steps, brut.steps, fr, (brut as { modifie?: unknown }).modifie !== false),
         steps: brut.steps as Array<Record<string, unknown>>,
         autre,
       },

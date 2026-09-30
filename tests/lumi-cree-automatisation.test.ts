@@ -99,8 +99,11 @@ describe('le coût reste celui du chemin bon marché', () => {
     expect(GEN).toMatch(/reglerBudget\(admin, reservation\.id, coutGeneration\)/);
   });
 
-  it('la sortie est plafonnée', () => {
-    expect(GEN).toMatch(/MAX_TOKENS\s*=\s*1_500/);
+  it('la sortie est plafonnée — assez haut pour Sonnet, et une réponse coupée est dite, pas déguisée', () => {
+    // 1 500 coupait 2 réponses sur 3 de Sonnet (JSON illisible → « Lumi n'a pas compris »), mesuré le 2026-09-30.
+    expect(GEN).toMatch(/MAX_TOKENS\s*=\s*4_000/);
+    expect(GEN).toMatch(/stop_reason === 'max_tokens'/);
+    expect(GEN, 'le JSON compact faisait 2/10 JSON illisibles').not.toMatch(/JSON, COMPACT/);
   });
 
   it('l’usage est journalisé, donc mesurable', () => {
