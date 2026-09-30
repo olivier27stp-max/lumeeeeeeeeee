@@ -35,7 +35,8 @@ const FEATURES_FR: Record<string, string> = {
   'Custom request forms': 'Formulaires de demande personnalisés',
   // ── Autopilot ──
   'Everything in Scale': 'Tout du plan Scale',
-  'Lume AI Agent (voice + unlimited)': 'Agent IA Lume (voix + illimité)',
+  // Lumi en crédits (2026-09-30) : le libellé en base devient celui-ci.
+  'Lume AI Agent (voice) — 1,000 Lumi credits / month': 'Agent IA Lume (voix) — 1 000 crédits Lumi / mois',
   'Door-to-door sales suite (map, pipeline, leaderboard, commissions)': 'Suite porte-à-porte (carte, pipeline, classement, commissions)',
   'Courses / LMS for team training': "Formations / LMS pour l'équipe",
   'Multi-team management': 'Gestion multi-équipes',
@@ -47,8 +48,18 @@ const FEATURES_FR: Record<string, string> = {
   'Dedicated onboarding specialist': "Spécialiste d'intégration dédié",
 };
 
+/**
+ * Anciens libellés encore en base le temps de la migration de données :
+ * affichés sous leur NOUVEAU libellé, dans les deux langues. L'ancien
+ * promettait un agent « illimité » — faux depuis les crédits Lumi.
+ */
+const ANCIENS_LIBELLES: Record<string, string> = {
+  'Lume AI Agent (voice + unlimited)': 'Lume AI Agent (voice) — 1,000 Lumi credits / month',
+};
+
 /** Rend une feature de plan dans la langue demandée (fallback : texte d'origine). */
 export function translatePlanFeature(feature: string, isFr: boolean): string {
-  if (!isFr) return feature;
-  return FEATURES_FR[feature.trim()] ?? feature;
+  const actuel = ANCIENS_LIBELLES[feature.trim()] ?? feature;
+  if (!isFr) return actuel;
+  return FEATURES_FR[actuel.trim()] ?? actuel;
 }

@@ -249,7 +249,7 @@ async function servirOptimisation(
   emettreSse('tool', { type: 'tool', name: 'propose_day_optimization', statut: 'fin' });
   emettreSse('text', { type: 'text', delta: rep.texte });
   if (rep.carte) emettreSse('proposal', { type: 'proposal', ...rep.carte });
-  emettreSse('done', { conversation_id: o.conversationId, cost_cents: 0, budget: ctx.budget, proposal: rep.carte ? { tool_use_id: rep.carte.tool_use_id, tool: rep.carte.tool, args: rep.carte.args } : null, raccourci: o.action, etage: o.etage });
+  emettreSse('done', { conversation_id: o.conversationId, credits: ctx.credits, proposal: rep.carte ? { tool_use_id: rep.carte.tool_use_id, tool: rep.carte.tool, args: rep.carte.args } : null, raccourci: o.action, etage: o.etage });
   void journaliserTrace(ctx.admin, {
     orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: o.conversationId, canal: 'lumi', origine: o.origine,
     enonce: o.enonce, etage: o.etage, action: o.action, params: o.params, outils: ['propose_day_optimization'], resultat: rep.carte ? 'proposition' : 'ok',
