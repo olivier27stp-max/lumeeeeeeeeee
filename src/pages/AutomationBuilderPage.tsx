@@ -2089,7 +2089,13 @@ export default function AutomationBuilderPage() {
 
             {/* Ajouter — en haut à droite, comme chez GHL.
                 Il ouvrait un simple message : il ajoute maintenant une étape
-                à la FIN du parcours, ce que son libellé promettait. */}
+                à la FIN du parcours, ce que son libellé promettait.
+                PAS sur une règle au format d'origine (lecture seule) : une
+                étape ajoutée enregistrait `steps`, et le moteur, qui suit
+                `steps` dès qu'il y en a, abandonnait en silence le texto et
+                la tâche d'origine (audit V2, A-02). On passe par
+                « Convertir », qui montre ce qui change. */}
+            {!formatOrigine && (
             <button
               type="button"
               onClick={() => {
@@ -2104,6 +2110,7 @@ export default function AutomationBuilderPage() {
               <Plus className="h-4 w-4" aria-hidden="true" />
               {fr ? 'Ajouter' : 'Add'}
             </button>
+            )}
 
             {/* Zoom et déplacement — en bas à gauche, comme chez GHL. */}
             <div className="absolute bottom-4 left-4 flex flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
