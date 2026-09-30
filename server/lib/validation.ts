@@ -1181,6 +1181,12 @@ export const sequenceEtapes = z
  * que ça marche — c'est justement ce qui distingue Lume de GoHighLevel, où
  * ces réglages dorment dans un onglet que personne n'ouvre.
  */
+/** Fenêtre d'envoi : jamais avant 7 h ni après 22 h, heure de l'entreprise (L5). */
+export const FENETRE_PLANCHER = 7;
+export const FENETRE_PLAFOND = 22;
+const MSG_FENETRE_BORNES =
+  'Fenêtre d’envoi : entre 7 h et 22 h seulement — aucun texto ne part la nuit. / Send window: between 7 AM and 10 PM only — no text goes out at night.';
+
 export const automationSettingsSchema = z
   .object({
     /** Le même client peut-il repasser dans le parcours ? */
@@ -1189,15 +1195,18 @@ export const automationSettingsSchema = z
     arret_sur_reponse: z.boolean().optional(),
     /**
      * Heures pendant lesquelles un message peut partir, en heure locale.
-     * Bornées à 0-23 et `debut < fin` : une fenêtre inversée ne laisserait
-     * jamais rien passer, et le moteur attendrait pour toujours.
+     * `debut < fin` : une fenêtre inversée ne laisserait jamais rien passer,
+     * et le moteur attendrait pour toujours.
+     *
+     * Bornée à 7 h-22 h (audit V2, L5) : la fenêtre s'applique aux textos, et
+     * 0-24 était accepté — une automatisation pouvait texter à 3 h du matin.
      */
     fenetre: z
       .object({
-        debut: z.number().int().min(0).max(23),
-        fin: z.number().int().min(1).max(24),
+        debut: z.number().int().min(FENETRE_PLANCHER, MSG_FENETRE_BORNES).max(FENETRE_PLAFOND - 1, MSG_FENETRE_BORNES),
+        fin: z.number().int().min(FENETRE_PLANCHER + 1, MSG_FENETRE_BORNES).max(FENETRE_PLAFOND, MSG_FENETRE_BORNES),
       })
-      .refine((f) => f.debut < f.fin, 'The window must start before it ends.')
+      .refine((f) => f.debut < f.fin, 'La fenêtre doit commencer avant de finir. / The window must start before it ends.')
       .optional(),
     /** Lundi au vendredi seulement. */
     jours_ouvrables: z.boolean().optional(),

@@ -15,8 +15,9 @@ import { estNoteVocale, mediasAudio, transcrireMediaTwilio, messageEchecVocal } 
 import { membreParTelephone } from '../lib/sms/identifier-membre';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../lib/automations-drapeaux';
 import { estStop as estStopCanal, estStart as estStartCanal } from '../lib/desabonnement';
-import { appliquerMotCleSms, orgDuNumeroSms } from '../lib/desabonnement/sms';
+import { appliquerMotCleSms, appliquerMotCleHerite, motCleHerite, orgDuNumeroSms } from '../lib/desabonnement/sms';
 import { repondreAuMembre } from '../lib/sms/fil-lumi';
+import { appliquerStatutTwilio } from '../lib/sms/statut-livraison';
 import { bureauxDeLaBoite, conversationsDesBureaux, membresAssignables } from '../lib/boite-unifiee';
 
 const router = Router();
@@ -292,17 +293,16 @@ router.post('/messages/inbound', (req, res) => {
   sendTwiml();
 
   const normalizedPhone = normalizeE164(From);
+  const toNormalise = req.body?.To ? normalizeE164(String(req.body.To)) : null;
   const serviceClient = getServiceClient();
 
   // ── CASL STOP/START opt-out handling ──
   // Must run before saving message so outbound sends are blocked immediately.
   const bodyTrim = (Body || '').trim();
-  const stopRegex = /^(stop|arret|arrêt|unsubscribe|cancel|end|quit|désabonner|desabonner)$/i;
-  // « oui » vaut consentement pour un CLIENT. Pour un membre de l'équipe, c'est
-  // la confirmation d'une action proposée par Lumi : la traiter comme un opt-in
-  // lèverait un refus que la personne a peut-être posé exprès.
-  const startRegex = /^(start|unstop|reprendre|resume)$/i;
-  const consentementRegex = /^(yes|oui)$/i;
+  // Traitement d'origine (drapeau OFF) : voir `motCleHerite`. « oui » / « yes »
+  // n'y sont plus des mots-clés (audit V2, L3) : une réponse à « Confirmez-vous
+  // jeudi ? » ne doit jamais lever un STOP.
+  const genreHerite = motCleHerite(bodyTrim);
 
   // Désabonnement par canal (drapeau par entreprise) : seule l'entreprise du
   // numéro qui a REÇU le mot-clé est concernée, le choix est journalisé et
@@ -312,11 +312,11 @@ router.post('/messages/inbound', (req, res) => {
   // Le drapeau se lit en base : seul un message qui RESSEMBLE à un mot-clé
   // attend cette lecture, puis reprend exactement le chemin d'avant. Tout
   // autre message part tout de suite, comme avant.
-  if (estStopCanal(bodyTrim) || estStartCanal(bodyTrim) || consentementRegex.test(bodyTrim)) {
+  if (estStopCanal(bodyTrim) || estStartCanal(bodyTrim) || genreHerite) {
     void (async () => {
       let modeCanal = false;
       try {
-        const orgDuNumero = await orgDuNumeroSms(serviceClient, req.body?.To ? normalizeE164(String(req.body.To)) : null);
+        const orgDuNumero = await orgDuNumeroSms(serviceClient, toNormalise);
         modeCanal = !!orgDuNumero && await drapeauActif(serviceClient, orgDuNumero, DRAPEAUX_AUTOMATISATIONS.desabonnementCanal);
         if (modeCanal && orgDuNumero) {
           const envoyer = async (orgId: string, telephone: string, texte: string) => {
@@ -343,98 +343,12 @@ router.post('/messages/inbound', (req, res) => {
   poursuivre(false);
 
   function poursuivre(modeCanal: boolean) {
-  if (!modeCanal && stopRegex.test(bodyTrim)) {
-    (async () => {
-      try {
-        // Find any org this phone has texted with — best-effort: all orgs with a conversation
-        const { data: convos, error: convosError } = await serviceClient
-          .from('conversations')
-          .select('org_id')
-          .eq('phone_number', normalizedPhone);
-        if (convosError) {
-          console.error('[SMS Inbound] Failed to list orgs for opt-out:', convosError.message);
-        }
-        const orgIds = Array.from(new Set((convos || []).map((c: any) => c.org_id).filter(Boolean)));
-        let optedOut = 0;
-        for (const oid of orgIds) {
-          // CASL : une opposition non enregistrée = on continue de texter
-          // quelqu'un qui a répondu STOP. L'échec doit être bruyant.
-          const { error: optOutError } = await serviceClient
-            .from('sms_opt_outs')
-            .upsert({ org_id: oid, phone: normalizedPhone, reason: 'client_stop' }, { onConflict: 'org_id,phone' });
-          if (optOutError) {
-            console.error(`[SMS Inbound] STOP not recorded for org ${oid}:`, optOutError.message);
-          } else {
-            optedOut++;
-          }
-        }
-        logger.info(`[SMS Inbound] Opted-out from ${optedOut}/${orgIds.length} org(s)`, { phone: normalizedPhone });
-      } catch (e: any) {
-        console.error('[SMS Inbound] Opt-out handling failed:', e?.message);
-      }
-    })();
+  if (!modeCanal && genreHerite === 'stop') {
+    void appliquerMotCleHerite(serviceClient, { telephone: normalizedPhone, to: toNormalise, genre: 'stop' });
     return;
   }
-  if (!modeCanal && (startRegex.test(bodyTrim) || consentementRegex.test(bodyTrim))) {
-    (async () => {
-      try {
-        if (consentementRegex.test(bodyTrim)) {
-          const To = req.body?.To;
-          const { data: canal } = To ? await serviceClient
-            .from('communication_channels')
-            .select('org_id')
-            .eq('phone_number', normalizeE164(To))
-            .eq('channel_type', 'sms')
-            .eq('status', 'active')
-            .maybeSingle() : { data: null } as any;
-          if (canal?.org_id) {
-            const membre = await membreParTelephone(serviceClient, { telephone: normalizedPhone, orgId: canal.org_id });
-            // C'est l'équipe : Lumi s'en occupe plus bas, pas la LCAP.
-            if (membre) return;
-          }
-        }
-        // CASL : un START ne réautorise QUE l'org concernée. Un delete global
-        // redonnait le consentement à des entreprises auxquelles la personne
-        // n'avait jamais répondu START.
-        let optInOrgIds: string[] = [];
-        const startTo = req.body?.To;
-        if (startTo) {
-          const { data: channel } = await serviceClient
-            .from('communication_channels')
-            .select('org_id')
-            .eq('phone_number', normalizeE164(startTo))
-            .eq('channel_type', 'sms')
-            .eq('status', 'active')
-            .maybeSingle();
-          if (channel?.org_id) optInOrgIds = [channel.org_id];
-        }
-        if (optInOrgIds.length === 0) {
-          // Numéro plateforme partagé : on se limite aux orgs avec qui la
-          // personne a effectivement une conversation (symétrique du STOP).
-          const { data: convos } = await serviceClient
-            .from('conversations')
-            .select('org_id')
-            .eq('phone_number', normalizedPhone);
-          optInOrgIds = Array.from(new Set((convos || []).map((c: any) => c.org_id).filter(Boolean)));
-        }
-        let optedIn = 0;
-        for (const oid of optInOrgIds) {
-          const { error: optInError } = await serviceClient
-            .from('sms_opt_outs')
-            .delete()
-            .eq('org_id', oid)
-            .eq('phone', normalizedPhone);
-          if (optInError) {
-            console.error(`[SMS Inbound] START not applied for org ${oid}:`, optInError.message);
-          } else {
-            optedIn++;
-          }
-        }
-        logger.info(`[SMS Inbound] Opt-out removed in ${optedIn}/${optInOrgIds.length} org(s)`, { phone: normalizedPhone });
-      } catch (e: any) {
-        console.error('[SMS Inbound] Opt-in handling failed:', e?.message);
-      }
-    })();
+  if (!modeCanal && genreHerite === 'start') {
+    void appliquerMotCleHerite(serviceClient, { telephone: normalizedPhone, to: toNormalise, genre: 'start' });
     // Fall through — saving the "START" as a regular message is fine
   }
 
@@ -779,33 +693,24 @@ router.post('/messages/status', async (req, res) => {
       return res.status(403).json({ error: 'Invalid signature' });
     }
 
-    const { MessageSid, MessageStatus } = req.body || {};
+    const { MessageSid, MessageStatus, ErrorCode, ErrorMessage } = req.body || {};
     if (!MessageSid || !MessageStatus) {
       return res.status(400).json({ error: 'Missing MessageSid or MessageStatus' });
     }
 
-    const serviceClient = getServiceClient();
-
-    // Map Twilio status to our status
-    const statusMap: Record<string, string> = {
-      queued: 'queued',
-      sent: 'sent',
-      delivered: 'delivered',
-      undelivered: 'failed',
-      failed: 'failed',
-    };
-
-    const mappedStatus = statusMap[MessageStatus] || MessageStatus;
-
-    const { error: statusError } = await serviceClient
-      .from('messages')
-      .update({ status: mappedStatus })
-      .eq('provider_message_id', MessageSid);
+    // Audit V2, C13 : le statut ne recule jamais (queued < sent < delivered /
+    // failed), le code d'erreur est gardé, un échec est signalé à l'entreprise
+    // (server/lib/sms/statut-livraison.ts).
+    const r = await appliquerStatutTwilio(getServiceClient(), {
+      sid: String(MessageSid),
+      statutTwilio: String(MessageStatus),
+      codeErreur: ErrorCode != null ? String(ErrorCode) : null,
+      messageErreur: ErrorMessage != null ? String(ErrorMessage) : null,
+    });
 
     // Répondre 200 sur un échec d'écriture ferait perdre l'accusé de réception
     // définitivement ; un 500 laisse Twilio rejouer le callback.
-    if (statusError) {
-      console.error(`[messages/status] Failed to update ${MessageSid} to ${mappedStatus}:`, statusError.message);
+    if (!r.ok) {
       return res.status(500).json({ error: 'Failed to persist status update' });
     }
 

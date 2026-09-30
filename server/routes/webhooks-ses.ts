@@ -33,6 +33,7 @@ import type express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { getServiceClient } from '../lib/supabase';
 import { logger } from '../lib/logger';
+import { notifierCourrielNonLivre } from '../lib/courriels/non-livre';
 import { deplierMessageSns, evenementDepuisSns, urlDeConfirmationSns, type EvenementSes } from '../lib/courriels/ses';
 import { ENTITES_SANS_SUIVI } from './webhooks-email';
 
@@ -141,14 +142,27 @@ export async function sesWebhookHandler(req: express.Request, res: express.Respo
           .from('email_deliveries')
           .update({ status: statut, error: evenement.detail, updated_at: new Date().toISOString() })
           .eq('message_id', evenement.messageId)
-          .select('id');
+          .select('id, org_id, to_email, entity_type, entity_id');
         if (error) throw new Error(error.message);
         touchees = data?.length ?? 0;
+        // Audit V2, C4 : l'entreprise est prévenue, comme avec Resend. SES
+        // est le fournisseur de la prod : sans ça, personne n'apprenait qu'une
+        // facture n'était pas arrivée.
+        if (statut === 'bounced' || statut === 'complained') {
+          for (const ligne of data ?? []) {
+            logger.warn('[webhooks/ses] courriel non livré', { statut, entity_type: ligne.entity_type, entity_id: ligne.entity_id, orgId: ligne.org_id });
+            await notifierCourrielNonLivre(admin, ligne, statut, evenement.detail ?? null);
+          }
+        }
       }
     }
   } catch (err: any) {
     logger.error('[webhooks/ses] évènement non enregistré', { error: err?.message || String(err), type: evenement.type, messageId: evenement.messageId });
-    // 200 quand même : SNS rejouerait sans fin, et la ligne est déjà journalisée.
+    // Audit V2, C5 : répondre 200 ici perdait le rebond pour de bon (SNS ne
+    // rejoue que sur un échec). 500 = SNS rejoue, selon sa politique de
+    // livraison HTTP (nombre d'essais BORNÉ, pas « sans fin ») ; aucun accusé
+    // `counted` n'est écrit, le rejeu sera donc traité.
+    return res.status(500).json({ error: 'Event not recorded.' });
   }
 
   if (reference) {

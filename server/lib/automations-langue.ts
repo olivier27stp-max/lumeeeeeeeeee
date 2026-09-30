@@ -88,6 +88,7 @@ export const MESSAGES_EN: Record<string, string> = {
   'Impossible de modifier l’adresse d’appel.': 'Could not edit the incoming address.',
   'Adresse d’appel introuvable.': 'Incoming address not found.',
   'Impossible de supprimer l’adresse d’appel.': 'Could not delete the incoming address.',
+  'Votre rôle ne permet pas de supprimer cette adresse.': 'Your role does not allow deleting this address.',
   'Cette automatisation est à la corbeille : restaurez-la avant de la publier.':
     'This automation is in the bin: restore it before publishing it.',
   'Votre rôle ne permet pas de publier une automatisation.': 'Your role does not allow publishing an automation.',

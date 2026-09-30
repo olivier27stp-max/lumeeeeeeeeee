@@ -231,7 +231,8 @@ export default function OngletReglages({ ruleId, reglages, fr, onChange }: Props
               onChange={(e) => appliquer({ fenetre: { ...fenetre, debut: Number(e.target.value) } })}
               className="glass-input py-1 text-[12px]"
             >
-              {Array.from({ length: 24 }, (_, h) => (
+              {/* 7 h à 21 h : le serveur refuse une fenêtre hors 7 h-22 h (LCAP, pas de texto la nuit). */}
+              {Array.from({ length: 15 }, (_, i) => i + 7).map((h) => (
                 <option key={h} value={h} disabled={h >= fenetre.fin}>{`${h} h`}</option>
               ))}
             </select>
@@ -244,7 +245,7 @@ export default function OngletReglages({ ruleId, reglages, fr, onChange }: Props
               onChange={(e) => appliquer({ fenetre: { ...fenetre, fin: Number(e.target.value) } })}
               className="glass-input py-1 text-[12px]"
             >
-              {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => (
+              {Array.from({ length: 15 }, (_, i) => i + 8).map((h) => (
                 <option key={h} value={h} disabled={h <= fenetre.debut}>{`${h} h`}</option>
               ))}
             </select>
@@ -260,8 +261,8 @@ export default function OngletReglages({ ruleId, reglages, fr, onChange }: Props
           </div>
           <p className="mt-1.5 text-[11px] text-text-tertiary">
             {fr
-              ? 'Par défaut : 8 h – 20 h, heure du Québec. C’est la loi du bon sens, pas une obligation légale — mais un texto à 22 h fait perdre des clients.'
-              : 'Default: 8 – 20, Québec time.'}
+              ? 'Par défaut : 8 h – 20 h, heure du Québec. Jamais avant 7 h ni après 22 h : un texto la nuit fait perdre des clients.'
+              : 'Default: 8 – 20, Québec time. Never before 7 AM or after 10 PM: a text at night loses customers.'}
           </p>
         </div>
 

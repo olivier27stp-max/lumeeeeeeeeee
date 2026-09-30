@@ -32,6 +32,7 @@ import type express from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getServiceClient } from '../lib/supabase';
 import { logger } from '../lib/logger';
+import { notifierCourrielNonLivre } from '../lib/courriels/non-livre';
 
 const TOLERANCE_S = 5 * 60;
 
@@ -173,6 +174,21 @@ export async function emailWebhookHandler(req: express.Request, res: express.Res
     || null;
 
   const admin = getServiceClient();
+  // Audit V2, C2 : un rebond REJOUÉ (même svix-id) recréait la notification
+  // « Courriel non livré ». Même garde que pour les ouvertures.
+  const svixId = req.header('svix-id');
+  if (svixId) {
+    const { data: deja, error: e0 } = await admin
+      .from('webhook_receipts')
+      .select('id')
+      .eq('provider', 'resend')
+      .eq('reference', svixId)
+      .eq('outcome', 'counted')
+      .limit(1);
+    if (e0) logger.error('[webhooks/email] lecture webhook_receipts échouée', { error: e0.message });
+    else if (deja?.length) return res.json({ received: true, duplicate: true });
+  }
+
   const { data, error } = await admin
     .from('email_deliveries')
     .update({ status: statut, ...(detail ? { error: String(detail).slice(0, 500) } : {}) })
@@ -191,22 +207,17 @@ export async function emailWebhookHandler(req: express.Request, res: express.Res
         statut, email: ligne.to_email, entity_type: ligne.entity_type, entity_id: ligne.entity_id, orgId: ligne.org_id,
       });
       // Notification dans le CRM : le propriétaire doit corriger l'adresse.
-      if (ligne.org_id) {
-        const lien = ligne.entity_type === 'invoice' && ligne.entity_id ? `/invoices/${ligne.entity_id}`
-          : ligne.entity_type === 'quote' && ligne.entity_id ? `/quotes/${ligne.entity_id}` : null;
-        const { error: notifErr } = await admin.from('notifications').insert({
-          org_id: ligne.org_id,
-          type: 'email_bounced',
-          title: statut === 'bounced' ? `Courriel non livré à ${ligne.to_email}` : `Plainte pourriel de ${ligne.to_email}`,
-          body: detail ? String(detail).slice(0, 300) : 'Vérifiez l’adresse du client et renvoyez le document.',
-          icon: 'alert-triangle',
-          ...(lien ? { link: lien } : {}),
-          ...(ligne.entity_id ? { reference_id: ligne.entity_id } : {}),
-        });
-        if (notifErr) logger.error('[webhooks/email] notification non créée', { error: notifErr.message });
-      }
+      // Même notification que pour SES (server/lib/courriels/non-livre.ts).
+      await notifierCourrielNonLivre(admin, ligne, statut, detail ? String(detail) : null);
     }
   }
 
+  if (svixId) {
+    const { error: e1 } = await admin.from('webhook_receipts').insert({
+      provider: 'resend', signature_ok: true, event_type: String(evenement.type), reference: svixId,
+      outcome: 'counted', summary: { email_id: emailId, statut, updated: data?.length ?? 0 },
+    });
+    if (e1) logger.error('[webhooks/email] webhook_receipts non journalisé', { error: e1.message });
+  }
   return res.json({ received: true, updated: data?.length ?? 0 });
 }

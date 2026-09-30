@@ -340,8 +340,11 @@ describe('statusCallback — les SMS ne restent plus figés à « envoyé »', (
     // Non-régression : ce webhook devient enfin utile, il ne doit pas s'ouvrir.
     const messages = read('server/routes/messages.ts');
     expect(messages).toContain('Twilio.validateRequest');
-    expect(messages).toContain("delivered: 'delivered'");
-    expect(messages).toContain("undelivered: 'failed'");
+    // Correspondance des statuts : server/lib/sms/statut-livraison.ts (C13).
+    const statuts = read('server/lib/sms/statut-livraison.ts');
+    expect(messages).toContain('appliquerStatutTwilio(');
+    expect(statuts).toContain("case 'delivered': case 'read': return 'delivered';");
+    expect(statuts).toContain("case 'undelivered': case 'failed': case 'canceled': return 'failed';");
     // Un 500 sur échec d'écriture force Twilio à rejouer plutôt que de perdre
     // l'accusé de réception.
     expect(messages).toContain("return res.status(500).json({ error: 'Failed to persist status update' })");

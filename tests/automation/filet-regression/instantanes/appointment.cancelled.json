@@ -69,8 +69,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Un message de Plomberie Tremblay inc.",
-    "texte": "Plomberie Tremblay inc. Merci de faire affaire avec Plomberie Tremblay inc. Au plaisir, Plomberie Tremblay inc.&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "4dc441fd748a9457"
+    "texte": "Plomberie Tremblay inc. Merci de faire affaire avec Plomberie Tremblay inc. Au plaisir, Plomberie Tremblay inc.&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie Tremblay, Merci de faire affaire avec Plomberie Tremblay inc. Au plaisir, Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "55ae798b3d8f84c4"
    }
   ],
   "annulees": []
@@ -557,7 +557,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>",
+     "message_text": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>\nRépondez STOP pour ne plus recevoir.",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -624,15 +624,15 @@
     "moment": "immediat",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>"
+    "texte": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>\nRépondez STOP pour ne plus recevoir."
    },
    {
     "moment": "immediat",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Comment s'est passé notre service ?",
-    "texte": "Plomberie Tremblay inc. Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Le bouton ne fonctionne pas ? Ouvrir le lien Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc.",
-    "empreinte": "aa299ac281ecedf2"
+    "texte": "Plomberie Tremblay inc. Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous. Notez votre expérience en 10 secondes : Noter mon expérience Le bouton ne fonctionne pas ? Ouvrir le lien Merci d'avoir choisi Plomberie Tremblay inc. ! +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "41e5d277e4674fda"
    }
   ],
   "annulees": []
