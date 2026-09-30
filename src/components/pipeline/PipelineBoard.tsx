@@ -37,7 +37,7 @@ import { CLASSE_SAISIE, CadreGhl, ChampGhl, ChampRaison, OPTIONS_SOURCE, OPTIONS
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
-  creerDealManuel, creerVue, estJobACreer, fetchVues, journaliserLot, nomClient, pastilles, priorite, supprimerVue,
+  creerDealManuel, creerVue, estJobACreer, fetchVues, journaliserLot, nomClient, priorite, supprimerVue,
   rechercherClientsPourDeal,
   abandonnerDeal, deplacerDeal, fetchStages, majContactDuDeal, marquerPerdu,
   type ClientPourDeal, type DevisPourDeal,
@@ -173,7 +173,6 @@ function CarteDeal({
   // ré-affichée après un déplacement doit montrer « aujourd'hui », pas
   // l'ancienneté d'avant le mouvement.
   const joursEtape = joursDepuis(deal.stage_entered_at, Date.now());
-  const lesPastilles = pastilles(deal, etapes, montantCents ?? undefined);
   const liseré = jobACreer
     ? 'var(--color-warning)'
     : prio ? TEINTE_PRIORITE[prio.niveau] : 'var(--color-outline)';
@@ -260,28 +259,12 @@ function CarteDeal({
       </div>
 
       {/*
-        Les pastilles calculées. Elles remplacent l'ancien badge « Urgent /
-        À relancer / Récent », qui ne disait qu'une chose : l'âge. « Jamais
-        contacté » et « Non assigné » nomment un PROBLÈME et ce qu'il faut
-        faire — c'est la différence entre décrire et servir.
-        Deux au plus : une carte couverte de pastilles ne hiérarchise plus.
+        Plus de pastilles calculées (« Jamais contacté », « Dort », « À relancer »,
+        « Gros job ») : Rafba, 2026-09-29 — « de base y'est censé avoir rien ».
+        Elles ressemblaient à des étiquettes posées d'office. La carte ne montre
+        que ce que l'utilisateur a mis ; les vues « Non assignés » / « À relancer »
+        et le liseré de couleur gardent le signal.
       */}
-      {lesPastilles.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {lesPastilles.map((p) => (
-            <span
-              key={p.cle}
-              className="whitespace-nowrap rounded-[5px] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider"
-              style={{
-                color: `var(--color-${p.ton})`,
-                background: `color-mix(in srgb, var(--color-${p.ton}) 13%, transparent)`,
-              }}
-            >
-              {fr ? p.fr : p.en}
-            </span>
-          ))}
-        </div>
-      )}
 
       {/* Milieu : le montant, ou l'aveu qu'il n'y en a pas encore */}
       <div className="mt-1.5 flex items-baseline gap-2.5">
@@ -330,11 +313,7 @@ function CarteDeal({
             </span>
             <span className="truncate text-[11px] text-text-tertiary">{nomAssigne}</span>
           </>
-        ) : (
-          <span className="text-[11px] font-semibold" style={{ color: 'var(--color-warning)' }}>
-            {fr ? 'Non assigné' : 'Unassigned'}
-          </span>
-        )}
+        ) : null}
         <span className="ml-auto shrink-0 whitespace-nowrap rounded-[5px] bg-surface-tertiary px-1.5 py-0.5 text-[10px] text-text-tertiary">
           {libelleSource(deal.source, fr)}
         </span>
@@ -1597,11 +1576,8 @@ function ListeDeals({ fr, deals, etapes, montants, membres, maintenant, valeurs,
       id: 'assigne', libelle: fr ? 'Assigné' : 'Assignee', largeur: 'auto', parDefaut: true,
       cellule: (d) => {
         const assigne = d.assigned_user_id ? membres.find((x) => x.id === d.assigned_user_id)?.name ?? null : null;
-        return assigne ?? (
-          <span className="font-semibold" style={{ color: 'var(--color-warning)' }}>
-            {fr ? 'Non assigné' : 'Unassigned'}
-          </span>
-        );
+        // Neutre : pas d'« Non assigné » en orange qui se lit comme une étiquette d'office.
+        return assigne ?? <span className="text-text-tertiary">—</span>;
       },
     },
     {
