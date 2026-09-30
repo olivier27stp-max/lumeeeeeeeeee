@@ -17,7 +17,7 @@ import {
 } from '../harnais/moteur';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
-const nettoyer: Array<() => Promise<unknown>> = [];
+const nettoyer: Array<() => PromiseLike<unknown>> = [];
 
 beforeAll(async () => { b = await demarrerMoteur(); });
 afterAll(async () => { for (const f of nettoyer.reverse()) await f(); });
@@ -64,8 +64,8 @@ describe('canari — le bureau de test n’envoie rien de réel', () => {
     const twilioAvant = appelsTwilio.length;
     const httpAvant = appelsHttpBloques().length;
 
-    const sms = await contexteEnvoi.run({ orgId: b.orgA }, () =>
-      envelopperBacASable(clientTwilioPiege)!.messages.create({ to: '+15145551234', body: 'canari direct' }));
+    const sms = (await contexteEnvoi.run({ orgId: b.orgA }, () =>
+      envelopperBacASable(clientTwilioPiege)!.messages.create({ to: '+15145551234', body: 'canari direct' }))) as unknown as { sid: string };
     expect(sms.sid).toMatch(/^SM_SIMULE_/);
     const courriel = await sendEmail({ to: 'canari-qa@lumecrm-canari.com', subject: 'Canari direct', html: '<p>canari</p>', suivi: { orgId: b.orgA, entityType: 'client', entityId: randomUUID() } });
     expect(courriel.sent).toBe(true);
