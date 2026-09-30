@@ -21,7 +21,6 @@ import {
   CalendarClock,
   Sun,
   Moon,
-  Store,
   ChevronLeft,
   ChevronRight,
   Search,
@@ -1144,7 +1143,6 @@ function AuthenticatedApp({
     { id: 'insights', label: language === 'fr' ? 'Statistiques' : 'Statistics', icon: TrendingUp, path: '/insights', tileColor: 'blue' as const, requiredPermission: 'financial.view_analytics' as PermissionKey },
     { id: 'tasks', label: language === 'fr' ? 'Tâches' : 'Tasks', icon: ClipboardList, path: '/tasks', tileColor: 'blue' as const, requiredPermission: 'leads.read' as PermissionKey },
     { id: 'automations', label: t.workflows?.title || 'Automations', icon: Zap, path: '/automations', tileColor: 'blue' as const, requiredPermission: 'automations.read' as PermissionKey, requiredPlanFlag: 'includes_automations' },
-    { id: 'marketplace', label: 'Marketplace', icon: Store, path: '/settings/marketplace', tileColor: 'blue' as const, requiredPermission: 'integrations.read' as PermissionKey, requiredRoles: OWNER_ADMIN, requiredPlanFlag: 'includes_marketplace' },
   ] as NavItem[]).filter(canSee);
 
   // Auto-expand "More" if the user is on a "more" page
