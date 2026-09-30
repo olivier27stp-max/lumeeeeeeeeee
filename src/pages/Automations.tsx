@@ -379,6 +379,12 @@ export default function Automations() {
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState(true);
   /*
+   * Échec de chargement ≠ liste vide. L'échec ne laissait qu'un toast
+   * éphémère, puis le tableau affichait « Aucune automatisation » : on
+   * croyait ses automatisations supprimées alors qu'elles tournaient.
+   */
+  const [echecChargement, setEchecChargement] = useState(false);
+  /*
    * Interrupteur Brouillon / Publiée martelé (Rafba, 2026-09-28) : l'écran
    * suit le dernier clic, le serveur reçoit les changements un à la fois
    * (voir fileBascule.ts). `restentAffichees` : une ligne basculée RESTE à
@@ -546,6 +552,7 @@ export default function Automations() {
     try {
       const data = await getAutomationRules();
       if (perime()) return;
+      setEchecChargement(false);
       /*
        * Dédoublonnage par `preset_key` : d'anciennes migrations ont semé le
        * même préréglage plusieurs fois.
@@ -595,6 +602,7 @@ export default function Automations() {
     } catch (e: any) {
       if (perime()) return;
       console.error('Failed to load rules:', e.message);
+      setEchecChargement(true);
       toast.error(fr ? 'Impossible de charger les automatisations' : 'Failed to load automations');
     } finally {
       if (!perime()) setLoading(false);
@@ -1664,6 +1672,19 @@ export default function Automations() {
         {loading ? (
           <div className="section-card flex items-center justify-center py-16">
             <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" aria-hidden="true" />
+          </div>
+        ) : echecChargement ? (
+          <div role="alert" className="section-card flex flex-col items-center justify-center gap-3 py-14 text-center">
+            <AlertTriangle className="h-6 w-6 text-danger" aria-hidden="true" />
+            <p className="text-[13px] font-medium text-text-primary">
+              {fr ? 'Impossible de charger les automatisations pour le moment.' : 'Could not load the automations right now.'}
+            </p>
+            <p className="text-[12px] text-text-secondary">
+              {fr ? 'Rien n’a été supprimé : c’est la lecture qui a échoué.' : 'Nothing was deleted: only loading failed.'}
+            </p>
+            <button type="button" onClick={() => void load()} className="glass-button">
+              {fr ? 'Réessayer' : 'Try again'}
+            </button>
           </div>
         ) : (
           <div className="section-card overflow-hidden">
