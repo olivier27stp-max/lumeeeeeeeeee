@@ -353,7 +353,7 @@ describe('[B] réglages : ré-entrée, arrêt sur réponse, sortie de parcours, 
     const [t] = await file(id);
     await new Promise((r) => setTimeout(r, 1100));
     expect((await smsEntrant(api, tel, NUMERO_BUREAU, 'Je vous rappelle')).status).toBe(200);
-    await attendre(() => b.admin.from('messages').select('id').eq('org_id', b.orgA).eq('direction', 'inbound').eq('client_id', client.id).then((r) => r.data ?? []), (x) => x.length > 0);
+    await attendre(async () => (await b.admin.from('messages').select('id').eq('org_id', b.orgA).eq('direction', 'inbound').eq('client_id', client.id)).data ?? [], (x) => x.length > 0);
     await avancer(t.id);
     const [fin] = await tachesPlanifiees(b.admin, id);
     expect(fin).toMatchObject({ status: 'cancelled', last_error: 'Annulée : le client a répondu.' });
