@@ -209,7 +209,7 @@ Un seul outil : il remplace `optimize_route`, renommé et étendu (Lumi, MCP, bo
 **Application** : `apply_day_optimization`
 1. **Carte toujours exigée**, quel que soit le mode ou « toujours confirmer ».
 2. **Empreinte recalculée** : un écart veut dire que la proposition est périmée ; elle est refusée.
-3. **Une transaction** : `rpc_appliquer_optimisation` (migration `20261004310000`, en attente), qui appelle `rpc_reschedule_event`, le même service que `reschedule_job`.
+3. **Une transaction** : `rpc_appliquer_optimisation` (migration `20261005320000`, en attente), qui appelle `rpc_reschedule_event`, le même service que `reschedule_job`.
 4. **Idempotence** : `agent_actions`, plus la carte qui n'est plus « en attente » (un double clic donne un 409).
 5. **Événement « rendez-vous déplacé »**, pour que les rappels suivent la nouvelle heure.
 6. **Trace d'audit** : qui, quand, avant → après, dans `agent_actions.resultat`.
@@ -288,7 +288,7 @@ Mesures sur le jeu de données local : 5 équipes × 8 visites × 5 jours. API d
   - `server/lib/lumi/optimiserJournee.ts`
   - `server/routes/agenda-trajets.ts`
 - Navigateur : `src/lib/fuseauEntreprise.ts`, `src/lib/agendaTrajetsApi.ts`
-- Migrations : `supabase/migrations/20261004300000_agenda_replanification.sql`, `20261004310000_appliquer_optimisation_journee.sql`
+- Migrations : `supabase/migrations/20261005310000_agenda_replanification.sql`, `20261005320000_appliquer_optimisation_journee.sql`
 - Tests :
   - `tests/agenda/trajets-journee.test.ts`, `optimisation-journee.test.ts`, `lumi-optimisation.test.ts`
   - `tests/e2e/agenda/` (Playwright : config, préparation, session, carte simulée, outils, `agenda.spec.ts`, captures de référence)
@@ -311,11 +311,11 @@ Mesures sur le jeu de données local : 5 équipes × 8 visites × 5 jours. API d
 
 ### Migrations écrites, appliquées **en local seulement**, testées
 
-1. `20261004300000_agenda_replanification.sql`
+1. `20261005310000_agenda_replanification.sql`
    - **Contenu** : C3 (statut conservé), E8 (filtre `org_id`), E9 (permission).
    - **Fonctions touchées** : `rpc_reschedule_event`, `rpc_schedule_job`, `rpc_add_visit`.
    - **Méthode** : corps repris de la prod, seules les lignes visées changent.
-2. `20261004310000_appliquer_optimisation_journee.sql`
+2. `20261005320000_appliquer_optimisation_journee.sql`
    - **Contenu** : `rpc_appliquer_optimisation`, l'application transactionnelle de l'étape 2.
    - **Dépendance** : le code de l'étape 2 en a besoin. **Ne pas déployer le code avant cette migration**, sinon « Confirmer » échoue.
 
