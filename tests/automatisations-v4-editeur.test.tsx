@@ -285,3 +285,37 @@ describe('A-04 — le bouton « retour » du navigateur ne perd pas le travail',
     expect(toasts.erreur.join('\n')).toContain('n’ont pas pu être enregistrées');
   });
 });
+
+// ─── A-05 ───────────────────────────────────────────────────────
+
+describe('A-05 — « Ajouter » (haut à droite) ajoute à la FIN du parcours', () => {
+  it('pas au milieu, même quand l’ordre du tableau diffère de celui du parcours', async () => {
+    // Parcours : Alpha → Alpha (copie) → si ; si oui → Delta → Bravo ; si non → Charlie.
+    // La copie, créée après coup, est rangée en DERNIER dans le tableau.
+    const sms = (body: string) => ({ type: 'send_sms', config: { body } });
+    etat.regles = [regle({
+      steps: [
+        { id: 'e1', type: 'action', nom: 'Alpha', action: sms('a'), suivant: 'e6' },
+        { id: 'e2', type: 'action', nom: 'Bravo', action: sms('b'), suivant: null },
+        { id: 'e4', type: 'action', nom: 'Charlie', action: sms('c'), suivant: null },
+        { id: 'e5', type: 'action', nom: 'Delta', action: sms('d'), suivant: 'e2' },
+        { id: 'e3', type: 'si', conditions: { total_cents: { gt: 5000 } }, alors: 'e5', sinon: 'e4' },
+        { id: 'e6', type: 'action', nom: 'Alpha (copie)', action: sms('a2'), suivant: 'e3' },
+      ],
+    })];
+    await ouvrirAvecHistorique();
+    cliquer(boutonExact('Ajouter'));
+    cliquer(bouton('Créer une tâche'));
+    await attendre();
+    // Le départ enregistre ce qui attend (A-04) : on lit ce qui part au serveur.
+    cliquer(container.querySelector('[data-testid="retour-navigateur"]'));
+    await attendre();
+    const envoye = api.modifier.mock.calls.at(-1)?.[1] as { steps: Array<Record<string, unknown>> };
+    const par = new Map(envoye.steps.map((e) => [e.id as string, e]));
+    const neuve = envoye.steps.find((e) => (e.action as { type?: string } | undefined)?.type === 'create_task');
+    expect(neuve).toBeDefined();
+    // La nouvelle étape suit Bravo (fin du chemin « si oui »), la copie pointe toujours vers la condition.
+    expect(par.get('e2')?.suivant).toBe(neuve?.id);
+    expect(par.get('e6')?.suivant).toBe('e3');
+  });
+});

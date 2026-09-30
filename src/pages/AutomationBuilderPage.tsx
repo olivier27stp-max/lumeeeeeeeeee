@@ -56,6 +56,7 @@ import {
   etapeVierge,
   insererEtape,
   retirerEtape,
+  finDuParcours,
   estFormatOrigine,
   projeterFormatOrigine,
   apercuConversion,
@@ -2142,11 +2143,10 @@ export default function AutomationBuilderPage() {
             <button
               type="button"
               onClick={() => {
-                // La dernière étape du fil principal : la nouvelle s'y accroche.
-                const dernier = steps.length
-                  ? [...steps].reverse().find((e) => e.type !== 'si' && e.type !== 'arreter')
-                  : null;
-                ouvrirAjout(dernier?.id ?? null);
+                // La vraie fin du chemin principal, parcourue depuis la tête —
+                // pas le dernier élément du tableau (A-05).
+                const fin = finDuParcours(steps);
+                ouvrirAjout(fin.apresId, fin.branche);
               }}
               className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-text-primary shadow-sm transition-colors hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >

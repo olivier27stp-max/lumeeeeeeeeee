@@ -3,7 +3,7 @@
 // Chaque bloc `describe` porte un défaut de l'audit V2 (11-interface.md §9).
 
 import { describe, it, expect } from 'vitest';
-import { retirerEtape, type Etape } from '../src/lib/sequenceTypes';
+import { retirerEtape, finDuParcours, type Etape } from '../src/lib/sequenceTypes';
 
 /** Les étapes atteignables depuis la tête (`steps[0]`), comme le moteur les parcourt. */
 function atteignables(steps: Etape[]): Set<string> {
@@ -58,5 +58,24 @@ describe('A-01 — supprimer la PREMIÈRE étape ne rend pas la suite orpheline'
     const apres = retirerEtape(s, 'e1');
     expect(apres[0].id).toBe('e3');
     expect([...atteignables(apres)].sort()).toEqual(['e2', 'e3']);
+  });
+});
+
+describe('A-05 — la fin du parcours se lit sur le graphe, pas sur le tableau', () => {
+  const sms = (id: string, suivant: string | null): Etape => ({ id, type: 'action', action: { type: 'send_sms', config: { body: id } }, suivant });
+  it('suit la branche « si oui » jusqu’au bout', () => {
+    const s: Etape[] = [sms('e1', 'e3'), sms('e2', null), { id: 'e3', type: 'si', conditions: {}, alors: 'e2', sinon: null }];
+    expect(finDuParcours(s)).toEqual({ apresId: 'e2' });
+  });
+  it('une condition sans « si oui » : on s’accroche à sa branche « alors »', () => {
+    const s: Etape[] = [sms('e1', 'e2'), { id: 'e2', type: 'si', conditions: {}, alors: null, sinon: null }];
+    expect(finDuParcours(s)).toEqual({ apresId: 'e2', branche: 'alors' });
+  });
+  it('avant un « Arrêter ici », jamais après', () => {
+    const s: Etape[] = [sms('e1', 'e2'), { id: 'e2', type: 'arreter' }];
+    expect(finDuParcours(s)).toEqual({ apresId: 'e1' });
+  });
+  it('parcours vide : en tête', () => {
+    expect(finDuParcours([])).toEqual({ apresId: null });
   });
 });

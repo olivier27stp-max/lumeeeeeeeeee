@@ -221,6 +221,34 @@ export function retirerEtape(steps: Etape[], id: string): Etape[] {
   return tete ? [tete, ...recousues.filter((e) => e !== tete)] : recousues;
 }
 
+/**
+ * Où accrocher une étape ajoutée « à la FIN du parcours ».
+ *
+ * On marche le chemin principal depuis la tête (`steps[0]`) : `suivant`,
+ * et la branche « si oui » d'une condition. Prendre le dernier élément du
+ * TABLEAU insérait au milieu dès que l'ordre du tableau différait de celui
+ * du parcours (audit V2, A-05). Un « Arrêter ici » termine le chemin : la
+ * nouvelle étape s'accroche juste avant lui.
+ */
+export function finDuParcours(steps: Etape[]): { apresId: string | null; branche?: 'alors' | 'sinon' } {
+  let courante = steps[0] ?? null;
+  let precedente: { apresId: string | null; branche?: 'alors' | 'sinon' } = { apresId: null };
+  const vues = new Set<string>();
+  while (courante && !vues.has(courante.id)) {
+    vues.add(courante.id);
+    if (courante.type === 'arreter') return precedente;
+    const suite: string | null = courante.type === 'si' ? (courante.alors ?? null) : (courante.suivant ?? null);
+    const ici: { apresId: string; branche?: 'alors' } = courante.type === 'si'
+      ? { apresId: courante.id, branche: 'alors' }
+      : { apresId: courante.id };
+    const prochaine = suite ? steps.find((e) => e.id === suite) ?? null : null;
+    if (!prochaine) return ici;
+    precedente = ici;
+    courante = prochaine;
+  }
+  return precedente;
+}
+
 // ── Le format D'ORIGINE (`actions`) ─────────────────────────
 //
 // Avant le builder visuel, une règle portait une LISTE PLATE d'actions et un
