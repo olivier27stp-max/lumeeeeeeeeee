@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { redirigerEmail } from './qa-redirect';
+import { verdictBacASable, consignerEnvoiSimule } from './bac-a-sable';
 import { logger } from './logger';
 import { getServiceClient } from './supabase';
 import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from './migration/gel-communications';
@@ -281,7 +282,7 @@ async function envoyerViaResend(p: { from: string; to: string[]; replyTo?: strin
  * information (la table peut manquer sur un environnement pas encore migré).
  */
 async function journaliserEnvoi(entree: {
-  provider: FournisseurCourriel; messageId: string; to: string; subject: string; suivi?: SuiviCourriel;
+  provider: FournisseurCourriel | 'simule'; messageId: string; to: string; subject: string; suivi?: SuiviCourriel;
 }): Promise<void> {
   try {
     const { error } = await getServiceClient().from('email_deliveries').insert({
@@ -368,11 +369,17 @@ export async function sendEmail(entree: SendEmailParams): Promise<SendEmailResul
     console.warn(`[qa] courriel redirigé : ${qa.destinataireOrigine} → ${qa.to}`);
   }
 
+  /* Bac à sable (server/lib/bac-a-sable.ts) : entreprise de test ou adresse
+     fictive → rien ne part, le courriel est consigné mot pour mot. Décidé
+     AVANT tout le reste : même la redirection QA n'envoie pas. */
+  const bac = await verdictBacASable(params.suivi?.orgId ?? null, params.to);
+
   /* Un lien vers localhost ou un réseau privé ne part JAMAIS chez un vrai
      destinataire (audit du 2026-09-29 : « http://localhost:5173/… » reçus
      depuis des instances de test branchées sur SES). En mode QA, le
-     courriel ne va qu'au testeur : on le laisse passer. */
-  const nonPublics = qa.redirige ? [] : liensNonPublics(params.html, text);
+     courriel ne va qu'au testeur : on le laisse passer. En bac à sable, il
+     ne va nulle part. */
+  const nonPublics = qa.redirige || bac.simule ? [] : liensNonPublics(params.html, text);
   if (nonPublics.length > 0) {
     const message = `Envoi refusé : lien non public (${nonPublics[0]}). Vérifier PUBLIC_URL / FRONTEND_URL.`;
     logger.error('[mailer] envoi refusé — lien non public', { liens: nonPublics.slice(0, 3), subject: params.subject });
@@ -395,7 +402,15 @@ export async function sendEmail(entree: SendEmailParams): Promise<SendEmailResul
 
   try {
     let messageId: string;
-    if (provider === 'resend') {
+    if (bac.simule) {
+      messageId = `simule-${await consignerEnvoiSimule(bac, {
+        canal: 'courriel',
+        destinataire: (Array.isArray(params.to) ? params.to : [params.to]).join(', '),
+        sujet: params.subject,
+        corps: params.html,
+        meta: { from, replyTo: params.replyTo ?? null, headers: params.headers ?? {}, text, suivi: params.suivi ?? null },
+      })}`;
+    } else if (provider === 'resend') {
       const { id } = await envoyerViaResend({
         from,
         to: destinataires,
@@ -448,7 +463,7 @@ export async function sendEmail(entree: SendEmailParams): Promise<SendEmailResul
     // Une ligne par destinataire réel (pas l'adresse de redirection QA).
     const originaux = Array.isArray(params.to) ? params.to : [params.to];
     await Promise.all(originaux.map((to, i) => journaliserEnvoi({
-      provider,
+      provider: bac.simule ? 'simule' : provider,
       messageId: originaux.length > 1 ? `${messageId}#${i}` : messageId,
       to,
       subject: params.subject,
