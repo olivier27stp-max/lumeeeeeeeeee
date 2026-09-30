@@ -14,12 +14,16 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 
-const etat = { reponse: '{}' };
+const etat: { reponse: string; file: Array<{ texte: string; stop?: string }>; appels: number } = { reponse: '{}', file: [], appels: 0 };
 vi.mock('../server/lib/lumi/llm', () => ({
   isLumiConfigured: () => true,
   clientAnthropic: () => ({
     messages: {
-      create: async () => ({ model: 'claude-sonnet-5', usage: { input_tokens: 1000, output_tokens: 200 }, content: [{ type: 'text', text: etat.reponse }] }),
+      create: async () => {
+        etat.appels++;
+        const suivant = etat.file.shift();
+        return { model: 'claude-sonnet-5', stop_reason: suivant?.stop ?? 'end_turn', usage: { input_tokens: 1000, output_tokens: 200 }, content: [{ type: 'text', text: suivant ? suivant.texte : etat.reponse }] };
+      },
     },
   }),
 }));
@@ -70,6 +74,14 @@ describe('la réponse de Lumi cite le texte envoyé au client', () => {
     expect(r.parcours?.resume).toMatch(/Je n’ai rien changé au parcours\. Dis-moi quel message modifier/);
   });
 
+  it('question ou refus (modifie: false) : la phrase de Lumi seule, sans « je n’ai rien changé » plaqué derrière', async () => {
+    // Batterie du 2026-09-30 : un refus de menace, juste, suivi de « Dis-moi quel message modifier ».
+    const refus = 'Je ne peux pas ajouter cette menace : c’est de l’intimidation. Je garde ton parcours inchangé.';
+    etat.reponse = JSON.stringify({ nom: 'Relance', trigger_event: 'quote.sent', resume: refus, modifie: false, steps: DEPART.steps, autre: null });
+    const r = await genererParcours({ ...base, langue: 'fr', demande: 'dis-lui qu’on le poursuit', parcoursActuel: DEPART });
+    expect(r.parcours?.resume).toBe(refus);
+  });
+
   it('seul un délai change : pas de liste de textes, pas de faux « rien changé »', () => {
     const apres = DEPART.steps.map((e) => (e.id === 'e1' ? { ...e, delai_secondes: 172800 } : e));
     expect(ceQuiAChange(DEPART.steps, apres, true)).toBe('');
@@ -94,8 +106,17 @@ describe('le prompt : « trop long » vise les messages, et la phrase dit ce qui
   it('« trop long », « t’as rien changé » visent les MESSAGES au client', () => {
     expect(p).toMatch(/« Trop long », « plus court », « plus punché », « change le message »,\s+« t'as rien changé » visent les MESSAGES envoyés au client/);
   });
-  it('un texto court garde l’ouverture et la signature', () => {
-    expect(p).toMatch(/garde « Bonjour \[client_first_name\], »\s+et la signature \[company_name\]/);
+  it('un texto court garde l’ouverture DE SA LANGUE et la signature (régression anglaise du #799)', () => {
+    expect(p).toMatch(/garde l'ouverture « Bonjour \[client_first_name\], »\s+et la signature \[company_name\]/);
+    const en = consignes(false);
+    expect(en).toMatch(/garde l'ouverture "Hi \[client_first_name\],"\s+et la signature/);
+    expect(en).not.toMatch(/garde l'ouverture « Bonjour/);
+    expect(en).toMatch(/LANGUE : l'entreprise travaille en ANGLAIS/);
+    expect(p).not.toMatch(/LANGUE : l'entreprise travaille en ANGLAIS/);
+  });
+  it('un texto tient en 160 caractères ; une question se répond sans rien modifier', () => {
+    expect(p).toMatch(/Un texto tient TOUJOURS en 160 caractères au plus/);
+    expect(p).toMatch(/Une QUESTION sur le parcours[\s\S]*?"modifie": false/);
   });
   it('« resume » = ce qui vient d’être fait, pas une redescription', () => {
     expect(p).toMatch(/"resume" répond à la DERNIÈRE demande/);
@@ -106,5 +127,35 @@ describe('le modèle', () => {
   it('Sonnet, pas Haiku (textes plats et phrase répétée mesurés sur Haiku)', () => {
     const src = readFileSync('server/lib/lumi/generer-parcours.ts', 'utf8');
     expect(src).toMatch(/const MODELE = 'claude-sonnet-5';/);
+  });
+});
+
+describe('réponse illisible ou coupée (batterie qa:construire-lumi, 2026-09-30)', () => {
+  const valide = JSON.stringify({ nom: 'R', trigger_event: 'quote.sent', resume: 'J’ai raccourci le texto.', modifie: true, steps: etapes('Bonjour [client_first_name], une question? — [company_name]', 'Objet', 'Texte'), autre: null });
+
+  it('JSON illisible (accolade de trop) : UN second essai, et le client reçoit la bonne réponse', async () => {
+    etat.appels = 0;
+    etat.file = [{ texte: valide.replace('"suivant":"e3"}', '"suivant":"e3"}}') }, { texte: valide }];
+    const r = await genererParcours({ ...base, langue: 'fr', demande: 'raccourcis le texto', parcoursActuel: DEPART });
+    expect(etat.appels).toBe(2);
+    expect(r.parcours?.resume).toContain('• Texto');
+    expect(r.coutCents).toBeGreaterThan(0);
+  });
+
+  it('illisible deux fois : message clair, pas de troisième appel', async () => {
+    etat.appels = 0;
+    etat.file = [{ texte: 'Voici ce que je propose : …' }, { texte: 'Toujours du texte.' }];
+    const r = await genererParcours({ ...base, langue: 'fr', demande: 'raccourcis le texto', parcoursActuel: DEPART });
+    expect(etat.appels).toBe(2);
+    expect(r.parcours).toBeNull();
+    expect(r.erreur).toMatch(/n’a pas compris cette modification/);
+  });
+
+  it('réponse COUPÉE au plafond : dite comme telle, sans second essai', async () => {
+    etat.appels = 0;
+    etat.file = [{ texte: valide.slice(0, 120), stop: 'max_tokens' }];
+    const r = await genererParcours({ ...base, langue: 'fr', demande: 'raccourcis le texto', parcoursActuel: DEPART });
+    expect(etat.appels).toBe(1);
+    expect(r.erreur).toMatch(/a été coupée/);
   });
 });
