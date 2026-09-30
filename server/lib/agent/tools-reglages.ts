@@ -494,7 +494,7 @@ async function reecrireMessageAutomation(
 ): Promise<Record<string, any>> {
   const { data: regle, error: lireErr } = await ctx.client
     .from('automation_rules')
-    .select('id, name, actions')
+    .select('id, name, actions, steps')
     .eq('id', ruleId)
     .eq('org_id', ctx.orgId)
     .maybeSingle();
@@ -502,17 +502,33 @@ async function reecrireMessageAutomation(
   if (!regle) throw new Error('Automatisation introuvable.');
   const actions: Array<{ type: string; config?: Record<string, any> }> = Array.isArray(regle.actions) ? regle.actions : [];
   const quoi = actionType === 'send_sms' ? 'texto' : 'courriel';
-  if (!actions.some((a) => a?.type === actionType)) {
+  const reecrire = (config: Record<string, any> | undefined) =>
+    ({ ...(config || {}), body, ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}) });
+
+  /*
+   * Une automatisation à ÉTAPES (faite dans l'éditeur, par « Construire avec
+   * Lumi », ou un préréglage converti) : le moteur exécute `steps` et ignore
+   * `actions`, qui n'en est qu'un reflet. Réécrire `actions` seul répondait
+   * « mis à jour » pendant que le client recevait l'ancien texte (constaté
+   * en prod le 2026-09-30 : « Relance devis à 1 jour », texte court dans les
+   * étapes, texte long resté dans `actions`).
+   */
+  const etapes: Array<Record<string, any>> = Array.isArray(regle.steps) ? regle.steps : [];
+  let nouvellesEtapes: Array<Record<string, any>> | null = null;
+  if (etapes.length > 0) {
+    const cibles = etapes.filter((e) => e?.type === 'action' && e?.action?.type === actionType);
+    if (cibles.length === 0) throw new Error(`Cette automatisation n’envoie pas de ${quoi} : rien à réécrire.`);
+    if (cibles.length > 1) {
+      throw new Error(`Cette automatisation envoie ${cibles.length} ${quoi}s à des moments différents : ouvre-la dans Automatisations et modifie celui que tu veux changer.`);
+    }
+    nouvellesEtapes = etapes.map((e) => (e === cibles[0] ? { ...e, action: { ...e.action, config: reecrire(e.action?.config) } } : e));
+  } else if (!actions.some((a) => a?.type === actionType)) {
     throw new Error(`Cette automatisation n’envoie pas de ${quoi} : rien à réécrire.`);
   }
-  const nouvelles = actions.map((a) =>
-    a?.type === actionType
-      ? { ...a, config: { ...(a.config || {}), body, ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}) } }
-      : a,
-  );
+  const nouvelles = actions.map((a) => (a?.type === actionType ? { ...a, config: reecrire(a.config) } : a));
   const { data, error } = await ctx.client
     .from('automation_rules')
-    .update({ actions: nouvelles, updated_at: new Date().toISOString() })
+    .update({ actions: nouvelles, ...(nouvellesEtapes ? { steps: nouvellesEtapes } : {}), updated_at: new Date().toISOString() })
     .eq('id', ruleId)
     .eq('org_id', ctx.orgId)
     .select('id');
