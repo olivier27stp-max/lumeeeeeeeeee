@@ -155,7 +155,8 @@ export async function sendScheduledReport(reportId: string, opts: { immediat?: b
     html,
     // Envoi de fond (cron) : last_sent_at est posé juste après, un échec
     // transitoire ne doit donc pas perdre le rapport — il part dans la file de reprise.
-    reessayer: !opts.immediat,
+    // … sauf l'envoi immédiat (bouton, Lumi) : un échec y est dit, pas remis à plus tard.
+    ...(opts.immediat ? { reessayer: false } : { reessayer: true }),
   });
   if (opts.immediat && envoi && envoi.sent === false) {
     throw new Error(`Report email not sent: ${envoi.error || 'unknown error'}`);

@@ -61,8 +61,8 @@ import { TOOLS_BY_NAME } from '../server/lib/agent/tools';
 
 const ORG = 'org-1';
 const ctx = { client: db as any, orgId: ORG, userId: 'u1' };
-const envoyerCourriel = (args: Record<string, unknown>) => TOOLS_BY_NAME.send_email.handler(args, ctx as any);
-const relancer = (args: Record<string, unknown>) => TOOLS_BY_NAME.send_payment_reminders.handler(args, ctx as any);
+const envoyerCourriel = (args: Record<string, unknown>) => TOOLS_BY_NAME.send_email.handler!(args, ctx as any);
+const relancer = (args: Record<string, unknown>) => TOOLS_BY_NAME.send_payment_reminders.handler!(args, ctx as any);
 
 beforeEach(() => {
   for (const k of Object.keys(tables)) delete tables[k];

@@ -39,7 +39,7 @@ beforeEach(() => { rpc.length = 0; });
 describe('ciblage de la visite', () => {
   it('annuler sans visit_id sur un job dont toutes les visites sont passées : refus, rien n’est supprimé', async () => {
     visites = [{ id: 'v1', start_at: jour(-10), end_at: jour(-10), status: 'completed' }];
-    const r: any = await TOOLS_BY_NAME.cancel_visit.handler({ job_id: 'J1' }, ctx as any);
+    const r: any = await TOOLS_BY_NAME.cancel_visit.handler!({ job_id: 'J1' }, ctx as any);
     expect(r.error).toMatch(/aucune visite à venir/);
     expect(rpc).toEqual([]);
   });
@@ -50,16 +50,16 @@ describe('ciblage de la visite', () => {
       { id: 'prochaine', start_at: jour(2), end_at: jour(2), status: 'scheduled' },
       { id: 'suivante', start_at: jour(9), end_at: jour(9), status: 'scheduled' },
     ];
-    const r: any = await TOOLS_BY_NAME.reschedule_job.handler({ job_id: 'J2', start_at: jour(4) }, ctx as any);
+    const r: any = await TOOLS_BY_NAME.reschedule_job.handler!({ job_id: 'J2', start_at: jour(4) }, ctx as any);
     expect(rpc.find(([fn]) => fn === 'rpc_reschedule_event')![1].p_event_id).toBe('prochaine');
     expect(r).toMatchObject({ rescheduled: true, autres_visites_a_venir: 1 });
   });
 
   it('avec visit_id : exactement celle-là, même passée ; une visite d’un autre job est refusée', async () => {
-    const r: any = await TOOLS_BY_NAME.cancel_visit.handler({ job_id: 'J3', visit_id: 'passee' }, ctx as any);
+    const r: any = await TOOLS_BY_NAME.cancel_visit.handler!({ job_id: 'J3', visit_id: 'passee' }, ctx as any);
     expect(r.cancelled).toBe(true);
     expect(rpc.find(([fn]) => fn === 'rpc_unschedule_job')![1].p_event_id).toBe('passee');
-    const e: any = await TOOLS_BY_NAME.cancel_visit.handler({ job_id: 'J4', visit_id: 'autre-job' }, ctx as any);
+    const e: any = await TOOLS_BY_NAME.cancel_visit.handler!({ job_id: 'J4', visit_id: 'autre-job' }, ctx as any);
     expect(e.error).toMatch(/n’appartient pas à ce job/);
   });
 });

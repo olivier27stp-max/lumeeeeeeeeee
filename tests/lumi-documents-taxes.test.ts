@@ -91,7 +91,7 @@ describe('create_invoice : les taxes de la carte sont celles de la facture', () 
 
   it('carte 114,98 $ = facture 114,98 $ (TPS 5,00 $ + TVQ 9,98 $), ventilation enregistrée', async () => {
     const carte: any = await apercuProposition('create_invoice', args, ctx);
-    const r: any = await TOOLS_BY_NAME.create_invoice.handler(args, ctx as any);
+    const r: any = await TOOLS_BY_NAME.create_invoice.handler!(args, ctx as any);
     expect(carte.total_cents).toBe(11498);
     expect(r).toMatchObject({ created: true, subtotal_cents: 10000, tax_cents: 1498, total_cents: 11498 });
     const save = etat.rpc.find(([fn]) => fn === 'rpc_save_invoice_draft')![1];
@@ -101,12 +101,12 @@ describe('create_invoice : les taxes de la carte sont celles de la facture', () 
   });
 
   it('un tax_cents inventé par le modèle est ignoré ; no_taxes et client exempté = 0', async () => {
-    const r: any = await TOOLS_BY_NAME.create_invoice.handler({ ...args, tax_cents: 99999 }, ctx as any);
+    const r: any = await TOOLS_BY_NAME.create_invoice.handler!({ ...args, tax_cents: 99999 }, ctx as any);
     expect(r.tax_cents).toBe(1498);
-    const sans: any = await TOOLS_BY_NAME.create_invoice.handler({ ...args, no_taxes: true, client_id: '22222222-2222-4222-8222-222222222222' }, ctx as any);
+    const sans: any = await TOOLS_BY_NAME.create_invoice.handler!({ ...args, no_taxes: true, client_id: '22222222-2222-4222-8222-222222222222' }, ctx as any);
     expect(sans).toMatchObject({ tax_cents: 0, total_cents: 10000 });
     etat.taxes = []; etat.exempt = true;
-    const ex: any = await TOOLS_BY_NAME.create_invoice.handler({ ...args, client_id: '33333333-3333-4333-8333-333333333333' }, ctx as any);
+    const ex: any = await TOOLS_BY_NAME.create_invoice.handler!({ ...args, client_id: '33333333-3333-4333-8333-333333333333' }, ctx as any);
     expect(ex).toMatchObject({ tax_cents: 0, total_cents: 10000 });
   });
 });
@@ -116,14 +116,14 @@ describe('create_quote : taux du client, total annoncé = total enregistré', ()
     etat.taxes = [{ id: 'h', name: 'TVH', rate: 13, is_active: true }];
     const args = { client_id: C1, title: 'Vitres', line_items: [{ name: 'Vitres', quantity: 2, unit_price_cents: 10000 }] };
     const carte: any = await apercuProposition('create_quote', args, ctx);
-    const r: any = await TOOLS_BY_NAME.create_quote.handler(args, ctx as any);
+    const r: any = await TOOLS_BY_NAME.create_quote.handler!(args, ctx as any);
     expect(etat.devis.tax_rate).toBe(13);
     expect(r).toMatchObject({ subtotal_cents: 20000, tax_cents: 2600, total_cents: 22600, quote_number: 'Q-0001' });
     expect(carte.total_cents).toBe(r.total_cents);
   });
 
   it('Québec : TPS + TVQ, ventilation égale à la taxe enregistrée', async () => {
-    const r: any = await TOOLS_BY_NAME.create_quote.handler({ client_id: C1, title: 'X', line_items: [{ name: 'X', quantity: 1, unit_price_cents: 43000 }] }, ctx as any);
+    const r: any = await TOOLS_BY_NAME.create_quote.handler!({ client_id: C1, title: 'X', line_items: [{ name: 'X', quantity: 1, unit_price_cents: 43000 }] }, ctx as any);
     expect(r.tax_cents).toBe(6439);
     expect(r.taxes.reduce((s: number, t: any) => s + t.montant_cents, 0)).toBe(r.tax_cents);
   });
@@ -131,14 +131,14 @@ describe('create_quote : taux du client, total annoncé = total enregistré', ()
 
 describe('create_invoice_from_job : la facture du job porte les taxes du client', () => {
   it('la RPC crée la facture à 0 $ de taxes : l’outil pose TPS + TVQ sur le brouillon', async () => {
-    const r: any = await TOOLS_BY_NAME.create_invoice_from_job.handler({ job_id: 'J1' }, ctx as any);
+    const r: any = await TOOLS_BY_NAME.create_invoice_from_job.handler!({ job_id: 'J1' }, ctx as any);
     const maj = etat.ecritures.find(([t, op]) => t === 'invoices' && op === 'update')![2];
     expect(maj).toEqual({ tax_cents: 2995 });
     expect(r).toMatchObject({ created: true, subtotal_cents: 20000, tax_cents: 2995, total_cents: 22995 });
   });
   it('une facture existait déjà : désignée, jamais retaxée ni présentée comme créée', async () => {
     etat.dejaExistante = true;
-    const r: any = await TOOLS_BY_NAME.create_invoice_from_job.handler({ job_id: 'J2' }, ctx as any);
+    const r: any = await TOOLS_BY_NAME.create_invoice_from_job.handler!({ job_id: 'J2' }, ctx as any);
     expect(r).toMatchObject({ created: false, deja_existante: true });
     expect(etat.ecritures.some(([t, op]) => t === 'invoices' && op === 'update')).toBe(false);
   });
