@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.wilheb.lumecrm",
       "infoPlist": {
+        "NSMicrophoneUsageDescription": "Lume se sert du micro pour la dictée : tu parles à Lumi, ton assistant, et le texte apparaît dans la zone de saisie.",
         "NSCameraUsageDescription": "Lume uses the camera to attach before/after photos to your jobs.",
         "NSPhotoLibraryUsageDescription": "Lume lets you attach photos from your library to your jobs.",
         "NSLocationWhenInUseUsageDescription": "Lume uses your location to show nearby jobs and houses on the map and to get directions.",
@@ -65,6 +66,12 @@
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 76
           }
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Lume se sert du micro pour la dictée : tu parles à Lumi, ton assistant, et le texte apparaît dans la zone de saisie."
         }
       ],
       "expo-web-browser",

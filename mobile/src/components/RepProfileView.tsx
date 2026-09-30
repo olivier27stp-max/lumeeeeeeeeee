@@ -6,13 +6,14 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SymbolView } from 'expo-symbols';
+import { Image } from 'expo-image';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 
 import PayrollSummaryCard from '@/components/commissions/PayrollSummaryCard';
 import PersonalCommissionView from '@/components/commissions/PersonalCommissionView';
 import UnifiedAvatar from '@/components/ui/UnifiedAvatar';
-import { captureAvatar, clearMyAvatar, pickAvatar, uploadMyAvatar } from '@/lib/api/avatars';
+import { captureAvatar, clearMyAvatar, pickAvatar, uploadMyAvatar, bannerUrl } from '@/lib/api/avatars';
 import { listCommissions } from '@/lib/api/commissions';
 import { EMPTY_PERFORMANCE, getRealtimeStats, getRepPerformance } from '@/lib/api/leaderboard';
 import { getMember } from '@/lib/api/org';
@@ -81,6 +82,9 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
   const roleLabel = (r?: string) => (r && ROLE_KEY[r] ? (s9n[ROLE_KEY[r]] as string) : undefined);
   const qc = useQueryClient();
   const { orgId, role } = usePermissions();
+  // Bannière : aucune colonne en base, c'est un fichier à un chemin convenu.
+  const [bannerCasse, setBannerCasse] = useState(false);
+  const banniere = bannerUrl(orgId ?? null, userId);
   const { session } = useAuth();
   const me = session?.user.id ?? '';
   const isManager = role === 'owner' || role === 'admin';
@@ -184,7 +188,7 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
   const doUpload = async (uri: string) => {
     setUploading(true);
     try {
-      await uploadMyAvatar(me, uri);
+      await uploadMyAvatar(me, uri, String(orgId ?? ''));
       qc.invalidateQueries({ queryKey: ['member'] });
       qc.invalidateQueries({ queryKey: ['members'] });
     } catch (e) {
@@ -214,10 +218,26 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
 
   return (
     <ScrollView className="flex-1 bg-surface-alt" contentContainerStyle={{ paddingBottom: 36 }}>
-      {/* ── Cover banner (dark, like the web profile) ── */}
+      {/* ── Bannière : la vraie image si la personne en a mis une sur le web
+             (avatars/{orgId}/banners/{userId}, même convention), sinon le fond
+             uni. Le fichier peut ne pas exister : `onError` remet le fond. ── */}
       <View className="h-28 overflow-hidden bg-ink">
-        <View className="absolute -right-6 -top-8 h-32 w-32 rounded-full" style={{ backgroundColor: '#FFFFFF', opacity: 0.08 }} />
-        <View className="absolute -left-4 top-6 h-20 w-20 rounded-full" style={{ backgroundColor: '#FFFFFF', opacity: 0.06 }} />
+        {banniere && !bannerCasse ? (
+          <Image
+            source={{ uri: banniere }}
+            style={{ width: '100%', height: '100%' }}
+            contentFit="cover"
+            transition={150}
+            onError={() => setBannerCasse(true)}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
+        ) : (
+          <>
+            <View className="absolute -right-6 -top-8 h-32 w-32 rounded-full" style={{ backgroundColor: '#FFFFFF', opacity: 0.08 }} />
+            <View className="absolute -left-4 top-6 h-20 w-20 rounded-full" style={{ backgroundColor: '#FFFFFF', opacity: 0.06 }} />
+          </>
+        )}
       </View>
 
       {/* ── Avatar overlapping the cover ── */}
@@ -255,7 +275,7 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
           <Pressable
             key={tabId}
             onPress={() => setTab(tabId)}
-            className={`flex-1 items-center rounded-xl py-2 ${tab === tabId ? 'bg-white' : ''}`}
+            className={`flex-1 items-center rounded-xl py-2 ${tab === tabId ? 'bg-surface' : ''}`}
           >
             <Text className={`text-sm font-semibold ${tab === tabId ? 'text-ink' : 'text-ink-muted'}`}>
               {tabId === 'stats' ? s9n.stats : s9n.commissionsTab}
@@ -286,7 +306,7 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
 
             {/* ── Sales by Quarter ── */}
             {quarterSales.length > 0 ? (
-              <View className="gap-4 rounded-2xl bg-white p-5" style={CARD}>
+              <View className="gap-4 rounded-2xl bg-surface p-5" style={CARD}>
                 <SectionLabel>{s9n.salesByQuarter}</SectionLabel>
                 {quarterSales.map((q) => (
                   <View key={q.label}>
@@ -306,7 +326,7 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
             ) : null}
 
             {/* ── Details (web left column) ── */}
-            <View className="gap-4 rounded-2xl bg-white p-5" style={CARD}>
+            <View className="gap-4 rounded-2xl bg-surface p-5" style={CARD}>
               <SectionLabel>{s9n.detailsTitle}</SectionLabel>
               <InfoRow icon="mappin.and.ellipse" label={s9n.locationLabel} value={location || '—'} />
               <InfoRow icon="briefcase" label={s9n.departmentLabel} value="Sales" />
@@ -320,14 +340,14 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
             </View>
 
             {/* ── Contact ── */}
-            <View className="gap-3 rounded-2xl bg-white p-5" style={CARD}>
+            <View className="gap-3 rounded-2xl bg-surface p-5" style={CARD}>
               <SectionLabel>{s9n.contactTitle}</SectionLabel>
               <ContactItem label={s9n.phoneLabel} value={details?.phone || '—'} />
               <ContactItem label={s9n.emailLabel} value={details?.email || member?.email || '—'} />
             </View>
 
             {/* ── Closes (auto-linked via pipeline_deals.rep_id) ── */}
-            <View className="overflow-hidden rounded-2xl bg-white" style={CARD}>
+            <View className="overflow-hidden rounded-2xl bg-surface" style={CARD}>
               <View className="border-b border-surface-border px-5 py-3">
                 <Text className="text-sm font-bold text-ink">{s9n.closesTitle.replace('{count}', String(deals.length))}</Text>
               </View>
@@ -368,7 +388,7 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
                 <PersonalCommissionView userId={userId} />
               </>
             ) : (
-              <View className="items-center rounded-2xl bg-white py-10" style={CARD}>
+              <View className="items-center rounded-2xl bg-surface py-10" style={CARD}>
                 <SymbolView name="lock" tintColor="#D4D4D4" size={32} resizeMode="scaleAspectFit" />
                 <Text className="mt-2 px-8 text-center text-sm text-ink-muted">{s9n.payoutsHidden}</Text>
               </View>
@@ -385,7 +405,7 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
 function KpiCard({ icon, label, value, hidden }: { icon: string; label: string; value: string; hidden?: boolean }) {
   if (hidden) return null;
   return (
-    <View className="min-w-[45%] flex-1 rounded-2xl bg-white px-4 py-4" style={CARD}>
+    <View className="min-w-[45%] flex-1 rounded-2xl bg-surface px-4 py-4" style={CARD}>
       <View className="mb-3 h-8 w-8 items-center justify-center rounded-lg bg-surface-sunken">
         <SymbolView name={icon as any} tintColor="#525252" size={15} resizeMode="scaleAspectFit" />
       </View>
