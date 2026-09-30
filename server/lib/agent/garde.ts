@@ -118,6 +118,8 @@ export const OUTILS_FINANCIERS = new Set([
   'list_invoices', 'create_invoice', 'create_invoice_from_job',
   'send_invoice', 'create_quote', 'send_quote', 'list_quotes',
   'mark_invoice_paid', 'cancel_quote',
+  // Relancer un impayé révèle qui doit combien (audit 2026-09-30).
+  'send_payment_reminders',
   'compare_revenue', 'get_top_clients', 'get_churn_risk',
   'analyze_profitability', 'get_top_services',
   'build_report',

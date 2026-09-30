@@ -1356,7 +1356,12 @@ const createJobAgreementTool: AgentTool = {
         .limit(1).maybeSingle();
       if (eDevis) throw eDevis;
       if (devis) throw new Error('Cette job possède déjà une soumission associée : la soumission sert de document contractuel, on ne peut pas ajouter de contrat.');
-      const clientId = args.client_id ? String(args.client_id) : (job.client_id || null);
+      // Le contrat est celui du CLIENT DU JOB (audit 2026-09-30) : avant, un autre
+      // client_id était accepté — le lien de signature partait chez quelqu'un d'autre.
+      if (args.client_id && job.client_id && String(args.client_id) !== String(job.client_id)) {
+        throw new Error('Ce client n’est pas celui du job : un contrat se fait avec le client du job.');
+      }
+      const clientId = job.client_id || (args.client_id ? String(args.client_id) : null);
       if (!clientId) throw new Error('Ce job n’a pas de client : associe-lui un client avant de créer un contrat.');
       const { data, error } = await ctx.client
         .from('job_agreements')
