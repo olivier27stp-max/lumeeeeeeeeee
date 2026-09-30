@@ -87,3 +87,56 @@ Pointages sans job (8/9), techniciens sans taux (1/1), visites sans technicien (
 - Profit = revenus − coûts ; marge % seulement si revenus > 0 ; avec des coûts manquants, la marge est un **maximum**.
 - Période : un job compte s'il est terminé dans la période, ou, s'il a plusieurs visites, au prorata de ses visites dans la période (pointages : exacts à la date).
 - Par technicien : revenu au prorata des heures ; son salaire + sa part des dépenses et commissions au prorata des heures.
+
+## 9. Livré (branche feat/analyse-rentabilite)
+
+### Spécification de l'action `analyze_profitability`
+
+| Paramètre | Type | Défaut |
+|---|---|---|
+| `job_ids` / `job_numbers` | liste | — (toute la vie du job si aucune date) |
+| `technician_id`, `rep_id`, `client_id`, `service_id` | uuid | — |
+| `date_from`, `date_to` | AAAA-MM-JJ | 1er janvier → aujourd'hui (fuseau de l'entreprise) |
+| `group_by` | job · technicien · rep · client · service · mois | job |
+| `sort` | revenus_desc · profit_desc · profit_asc · marge_desc · marge_asc | revenus_desc |
+| `limit` | 1–500 | 5 (modèle) / 10 (écran) |
+| `detail` (modèle seulement) | booléen | false : groupes réduits (nom, revenus, profit, marge, drapeaux) |
+
+Sortie : `nb_jobs`, `completude` (complete · partielle · insuffisante), `marge_est_un_maximum`, `contient_estimations`, `totaux` (revenus, main-d'œuvre, commissions, dépenses, coûts, profit, marge %, heures), `inclus[]`, `manquant[]` (code, nb de jobs, noms, heures), `groupes[]`, `action` (UNE : facturer · pointer_heures · saisir_taux · verifier_commissions · cout_materiel), `resume_fr`, `resume_en`. Jamais de taux horaire. Refus sans chiffre si la permission `financial.view_margins` manque (technicien : toujours refusé).
+
+Portes d'entrée : outil Lumi + MCP (`server/lib/agent/tools-etendus.ts`), routeur avant le modèle (`server/lib/lumi/actions-directes.ts`), `GET /api/profitability` (fiche de job, carte des Statistiques), rapport PDF financier.
+
+### Coût API — mesuré le 2026-09-30 (staging, API locale, même compte propriétaire)
+
+Les 5 questions de la mission (avant = `origin/main`, après = cette branche ; deux passes avant, dont la moyenne) :
+
+| Question | Avant : outils · appels modèle · coût | Après |
+|---|---|---|
+| « Ma job #106 était-tu rentable? » | 1–2 lectures · 3–4 appels · 2,15 ¢ / 3,78 ¢ — ne trouvait pas le job | 1 action · 0 appel · **0 ¢** (−9,00 $, marge −2,2 %) |
+| « Rentabilité de mes gars ce mois-ci » | 0 outil · 2 appels · 1,59 ¢ / 1,67 ¢ — « pas de suivi par employé » | 1 action · 0 appel · **0 ¢** (par technicien) |
+| « Quel rep me rapporte le plus? » | 1 lecture (porte-à-porte) · 3 appels · 0,95 ¢ / 0,81 ¢ — hors sujet | 1 action · 0 appel · **0 ¢** |
+| « Mon service le plus rentable? » | 1 lecture · 3 appels · 1,11 ¢ / 0,98 ¢ — revenus, pas profit | 1 action · 0 appel · **0 ¢** (profit par service) |
+| « Marge du client Y cette année » | 0–2 lectures · 2–4 appels · 3,76 ¢ / 2,05 ¢ — « pas d'outil » | 1 action · 0 appel · **0 ¢** |
+| **Total** | **≈ 10 ¢ à 12 ¢, réponses fausses ou incomplètes** | **0 ¢, réponses chiffrées** |
+
+Questions que le routeur ne prend pas (le modèle appelle l'action) — 3 questions, cache chaud :
+avant 1,35 ¢ · 1,39 ¢ · 1,34 ¢ (moy. 1,36 ¢) ; après 1,63 ¢ · 1,68 ¢ · 1,36 ¢ (moy. 1,55 ¢), **+0,2 ¢** : le résultat
+porte ce qui est inclus et ce qui manque (≈ 800 tokens de plus, après réduction du payload de ≈ 1 200). En échange,
+l'ancien outil affirmait « 100 % de marge en septembre » (coûts absents) ; l'action répond 76,5 % en le disant estimé.
+Premier appel après un changement des déclarations d'outils : écriture du cache (8 ¢, une fois).
+
+Cache : `(org, utilisateur, filtres, empreinte)` — l'empreinte (dernières modifications + volumes de 14 tables, lue avant le calcul) coûte ≈ 0,7 s ; un calcul complet ≈ 0,9–3 s.
+
+### Migrations — ÉCRITES, NON APPLIQUÉES (approbation requise)
+
+1. `20261003470000_dossier_depenses.sql` — dossier système `depenses` (renommable, non supprimable), 10 champs montant (fr/en selon `company_settings.default_language`), nouvelles entreprises via le trigger existant, garde modifiée.
+2. `20261003470001_dossier_depenses_backfill.sql` — entreprises existantes + copie de `jobs.expenses_cents` vers « Autres dépenses » (sans rien effacer).
+
+Validées sur staging dans une transaction TOUJOURS annulée (exception finale) : 1 dossier, 10 champs montant, libellés fr et en, renommer = ok, supprimer = refusé, renommer une section = refusé, backfill 12,34 $ recopié, 22/22 entreprises couvertes, nouvelle entreprise = 10 champs ; vérifié ensuite : rien de persistant.
+
+### Constats hors de ce lot (à décider)
+
+1. **Loi 25 — taux horaires lisibles par tous les membres** : `team_members.hourly_rate_cents` / `labour_cost_hourly` ont le privilège SELECT pour `authenticated` et la policy `team_members_select_org` laisse chaque membre lire toute son entreprise. Un technicien peut lire le taux des autres par l'API REST, même si aucun écran ne le montre. Correctif = révoquer ces colonnes et passer par une RPC gardée (migration + revue des écrans Équipe/Paie).
+2. Projection de commission calculée sur le total **taxes comprises** (`projectCommissionForJob`).
+3. `rentabilite_jobs` et `rpc_insights_job_profitability` (SQL) ne sont plus appelées par l'app ; `insightsApi.fetchJobProfitability` est du code mort. Suppression = migration à part.
+4. Données (prod) : 0 visite assignée, 0 technicien actif avec taux, 1 pointage sur 9 rattaché à un job — voir §5.
