@@ -4,7 +4,7 @@
  *   npx tsx --env-file=.env.local scripts/qa/tester-types-champs.mts --courriel <compte> --org <bureau>
  *
  * Avec la session de l'utilisateur (RLS et permissions réelles) :
- *   1. les 31 champs de base (CHAMPS_DE_BASE) existent, du bon type, dans le bon dossier système ;
+ *   1. les champs de base (CHAMPS_DE_BASE) existent, du bon type, dans le bon dossier système ;
  *   2. chaque type accepte une valeur valide et la relit à l'identique ;
  *   3. chaque type REFUSE une valeur invalide avec un message lisible ;
  *   4. fichier : dépôt dans le bucket privé, chemin relu ;
@@ -12,6 +12,10 @@
  *   6. show_on_documents : le champ est imprimé sur la facture remise au client ;
  *   7. variables d'automatisation : la valeur se résout dans un modèle.
  * Les fiches créées pour le test sont supprimées (douce) à la fin. Refuse la prod.
+ *
+ * Depuis le ménage des champs de base (20261005400000, 31 → 8), plusieurs types ne sont plus
+ * portés que par des champs ARCHIVÉS : le script les réactive dans le bureau de QA le temps du
+ * test, puis les archive de nouveau. Le bureau doit être antérieur au ménage (ses champs existent).
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
@@ -43,6 +47,14 @@ const userId = sess.session.user.id;
 
 const resultats: Array<{ ok: boolean; quoi: string; detail?: string }> = [];
 const verifier = (ok: boolean, quoi: string, detail?: string) => { resultats.push({ ok, quoi, detail }); console.log(`${ok ? 'OK  ' : 'ÉCHEC'} ${quoi}${detail ? ` — ${detail}` : ''}`); };
+
+// ── 0. Champs de test archivés par le ménage : réactivés le temps du test ─
+const CLES_TEST = ['telephone_secondaire', 'budget_estime', 'date_souhaitee', 'type_batiment', 'disponibilites', 'urgence',
+  'numero_bon_commande', 'duree_estimee_h', 'plage_arrivee', 'nb_techniciens', 'lien_photos', 'photo_travaux', 'inspection_finale'];
+const { data: reactives, error: er } = await admin.from('custom_fields').update({ archived_at: null })
+  .eq('org_id', org).in('key', CLES_TEST).not('archived_at', 'is', null).select('id');
+if (er) throw er;
+const idsReactives = (reactives ?? []).map((r) => r.id as string);
 
 // ── 1. Les champs de base, rangés ────────────────────────────────────────
 const parObjet = new Map<ObjetChamp, { champs: ChampPerso[]; dossiers: Array<{ id: string; cle_systeme?: string | null }> }>();
@@ -190,6 +202,10 @@ await db.from('jobs').update({ deleted_at: maintenant }).eq('id', jobId);
 await db.from('quotes').update({ deleted_at: maintenant }).eq('id', quoteId);
 if (dealId) await db.from('deals').update({ deleted_at: maintenant }).eq('id', dealId);
 await db.from('clients').update({ deleted_at: maintenant }).eq('id', clientId);
+if (idsReactives.length) {
+  const { error: ea } = await admin.from('custom_fields').update({ archived_at: maintenant }).in('id', idsReactives);
+  if (ea) console.error('Réarchivage des champs de test :', ea.message);
+}
 await db.storage.from('custom-field-files').remove([cheminFichier]);
 
 const echecs = resultats.filter((r) => !r.ok);
