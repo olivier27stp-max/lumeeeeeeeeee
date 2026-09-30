@@ -21,7 +21,9 @@ vi.mock('react-router-dom', async (orig) => ({
 vi.mock('../src/lib/automationRulesApi', () => ({
   getAutomationRules: () => api.regles(),
   getRecentAutomationFailures: () => api.echecs(),
+  getAutomationLanguage: vi.fn(async () => 'fr'),
 }));
+vi.mock('../src/components/automations/AdressesDAppel', () => ({ default: () => null }));
 vi.mock('../src/lib/automationJournauxApi', () => ({
   activiteParSemaine: vi.fn(async () => ({ total: 0, parSemaine: [] })),
 }));
@@ -30,6 +32,7 @@ vi.mock('../src/components/PermissionGate', () => ({
 }));
 
 import AutomationsApercu from '../src/pages/AutomationsApercu';
+import AutomationsReglages from '../src/pages/AutomationsReglages';
 import { LanguageProvider } from '../src/i18n';
 
 let container: HTMLDivElement;
@@ -101,5 +104,21 @@ describe('A-14 — Vue d’ensemble : la corbeille ne compte pas, « à vérifie
     const b = Array.from(container.querySelectorAll('button')).find((x) => x.textContent?.includes('Voir les automatisations à vérifier'));
     act(() => { b?.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(naviguer).toHaveBeenCalledWith('/automations?onglet=verifier');
+  });
+});
+
+// ─── A-15 (Réglages globaux) ────────────────────────────────────
+
+describe('A-15 — Réglages globaux : les textes disent le vrai', () => {
+  it('trois secondes (pas « une seconde ») ; la fenêtre d’envoi se règle par automatisation', async () => {
+    await act(async () => {
+      root.render(<MemoryRouter><LanguageProvider><AutomationsReglages /></LanguageProvider></MemoryRouter>);
+    });
+    for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve(); });
+    const texte = container.textContent ?? '';
+    expect(texte).not.toContain('une seconde après');
+    expect(texte).toContain('trois secondes après');
+    expect(texte).not.toContain('Ce n’est pas encore réglable');
+    expect(texte).toContain('onglet Réglages');
   });
 });

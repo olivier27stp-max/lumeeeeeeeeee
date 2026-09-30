@@ -369,3 +369,52 @@ describe('A-13 — le menu d’une condition ne propose pas « Dupliquer l’act
     expect(bouton('Dupliquer l’action')).toBeDefined();
   });
 });
+
+// ─── A-15 (éditeur) ─────────────────────────────────────────────
+
+describe('A-15 — éditeur : textes justes', () => {
+  it('la confirmation de publication ne promet pas « de vrais messages » à une automatisation interne', async () => {
+    etat.regles = [regle({
+      steps: [{ id: 'e1', type: 'action', nom: null, action: { type: 'create_notification', config: { title: 'Nouveau devis' } }, suivant: null }],
+    })];
+    await ouvrir(`/automations/${ID}`);
+    cliquer(container.querySelector('button[role="switch"]'));
+    await attendre();
+    expect(confirmerMock).toHaveBeenCalled();
+    const message = String((confirmerMock.mock.calls[0][0] as { message: string }).message);
+    expect(message).not.toContain('vrais messages à vos clients');
+    expect(message).toContain('travail interne');
+  });
+
+  it('… mais le dit quand un message part au client', async () => {
+    await ouvrir(`/automations/${ID}`);
+    cliquer(container.querySelector('button[role="switch"]'));
+    await attendre();
+    const message = String((confirmerMock.mock.calls[0][0] as { message: string }).message);
+    expect(message).toContain('vrais messages à vos clients');
+  });
+
+  it('l’aperçu nomme le destinataire (« Le propriétaire »), jamais la valeur brute', async () => {
+    api.apercu.mockImplementationOnce(async () => ({
+      client: null, message: 'x',
+      apercu: [{ action: 'create_notification', nom: null, rendu: { title: 'Nouveau devis', destinataire: 'proprietaire' } }],
+    }));
+    await ouvrir(`/automations/${ID}`);
+    cliquer(bouton('Aperçu'));
+    await attendre();
+    expect(container.textContent).toContain('Le propriétaire');
+    expect(container.textContent).not.toMatch(/Pour qui\s*proprietaire/);
+  });
+
+  it('une étape technique (log_activity) est nommée, pas « Action »', async () => {
+    etat.regles = [regle({
+      steps: [],
+      actions: [
+        { type: 'send_sms', config: { body: 'Bonjour' } },
+        { type: 'log_activity', config: { event_type: 'x' } },
+      ],
+    })];
+    await ouvrir(`/automations/${ID}`);
+    expect(container.textContent).toContain('Étape technique');
+  });
+});

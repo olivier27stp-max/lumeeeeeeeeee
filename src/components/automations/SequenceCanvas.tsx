@@ -105,7 +105,9 @@ function titreEtape(etape: Etape, fr: boolean): string {
       if (etape.action?.type === 'log_activity') return fr ? 'Note dans l’historique' : 'History note';
       const modele = trouverAction(etape.action?.type ?? '');
       if (modele) return fr ? modele.fr : modele.en;
-      return 'Action';
+      // Une écriture interne du moteur (`log_activity`…), hors catalogue :
+      // « Action » ne disait rien (audit V2, A-15).
+      return fr ? 'Étape technique' : 'Technical step';
     }
     case 'attendre':
       return fr ? 'Attendre' : 'Wait';

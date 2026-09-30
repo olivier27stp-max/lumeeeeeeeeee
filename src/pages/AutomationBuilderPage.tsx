@@ -1114,13 +1114,26 @@ export default function AutomationBuilderPage() {
           console.error('[AutomationBuilderPage] aperçu clients inactifs', e);
         }
       }
+      /*
+       * « de vrais messages à vos clients » SEULEMENT s'il en part : sinon la
+       * confirmation se contredisait avec l'avertissement « aucun message ne
+       * part au client » juste en dessous (audit V2, A-15).
+       */
+      const actionsPubliees = (steps.length > 0
+        ? steps.flatMap((e) => (e.type === 'action' ? [e.action] : []))
+        : (regle.actions ?? [])) as Array<{ type?: string }>;
+      const ecritAuClient = actionsPubliees.some((a) => trouverAction(String(a?.type ?? ''))?.vers_client);
       confirmationPublication.current = true;
       const ok = await confirmer({
         title: fr ? 'Publier cette automatisation ?' : 'Publish this automation?',
         message: [
-          fr
-            ? 'Elle commencera à envoyer de vrais messages à vos clients dès le prochain déclenchement.'
-            : 'It will start sending real messages to your clients at the next trigger.',
+          ecritAuClient
+            ? (fr
+              ? 'Elle commencera à envoyer de vrais messages à vos clients dès le prochain déclenchement.'
+              : 'It will start sending real messages to your clients at the next trigger.')
+            : (fr
+              ? 'Elle se déclenchera dès le prochain événement — pour du travail interne seulement.'
+              : 'It will run at the next event — internal work only.'),
           ...(visesAujourdhui ? [visesAujourdhui] : []),
           ...avertissements.map((a) => `⚠ ${a.message}`),
         ].join('\n\n'),
@@ -2116,13 +2129,16 @@ export default function AutomationBuilderPage() {
                             ) : (
                               Object.entries(e.rendu).map(([cle, valeur]) => {
                                 const champ = modele?.champs?.find((c) => c.cle === cle);
+                                // Un CHOIX se lit par son libellé (« Le propriétaire »),
+                                // jamais par sa clé brute (audit V2, A-15).
+                                const option = champ?.type === 'choix' ? champ.options?.find((o) => o.cle === valeur) : undefined;
                                 return (
                                   <div key={cle} className="mt-1.5">
                                     <span className="block text-[10px] uppercase text-text-tertiary">
                                       {champ ? (fr ? champ.fr : champ.en) : cle}
                                     </span>
                                     <span className="block whitespace-pre-wrap text-[13px] text-text-primary">
-                                      {valeur}
+                                      {option ? (fr ? option.fr : option.en) : valeur}
                                     </span>
                                   </div>
                                 );
