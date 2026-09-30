@@ -1,6 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════
--- PROPOSÉE — NE PAS APPLIQUER sans l'accord écrit de Rafba.
--- Mission « crédits Lumi », phase 1 (2026-09-30). Voir CREDITS_PLAN.md.
+-- Crédits Lumi — approuvé par Rafba le 2026-09-30 (D1-D9, voir CREDITS_PLAN.md).
+-- Sauvegarde ciblée avant application : lume-backups/credits-avant-migration-20260930T195858Z
+-- (le dump complet est impossible : mot de passe de la base prod refusé depuis le 2026-09-26).
 --
 -- Ce que ça fait :
 --   1. plans.lumi_credits_mensuels (Autopilot 1 000 ; Scale et Minimum 0).
@@ -53,7 +54,7 @@ alter table public.ai_usage
   add column if not exists taux_version  text;
 -- Un même appel au fournisseur (id de réponse) n'est débité qu'une fois.
 create unique index if not exists ai_usage_requete_unique
-  on public.ai_usage (org_id, request_id) where request_id is not null;
+  on public.ai_usage (org_id, request_id);
 
 -- Rattrapage des lignes existantes (242 en prod au 2026-09-30), AVANT le verrou d'ajout seul.
 update public.ai_usage
@@ -77,6 +78,13 @@ create trigger ai_usage_credits before insert on public.ai_usage
 create or replace function public.ai_usage_ajout_seul()
 returns trigger language plpgsql as $$
 begin
+  -- Une suppression EN CASCADE (fermeture d'un bureau, effacement Loi 25 :
+  -- ai_usage.org_id → orgs ON DELETE CASCADE) passe par un trigger
+  -- d'intégrité : pg_trigger_depth() > 1. Elle reste permise ; toute
+  -- modification ou suppression DIRECTE du grand livre est refusée.
+  if tg_op = 'DELETE' and pg_trigger_depth() > 1 then
+    return old;
+  end if;
   raise exception 'ai_usage est un grand livre : ajout seulement (% refusé)', tg_op;
 end $$;
 drop trigger if exists ai_usage_ajout_seul on public.ai_usage;
@@ -93,31 +101,21 @@ drop policy if exists ai_usage_monthly_admin on public.ai_usage_monthly;
 revoke select on public.ai_usage, public.ai_usage_monthly from anon, authenticated;
 
 -- 4. Période anniversaire ────────────────────────────────────────────
-create or replace function public.lumi_periode_debut(p_org uuid, p_a timestamptz default now())
-returns timestamptz language plpgsql stable security definer set search_path to 'public', 'pg_temp' as $$
+create or replace function public.lumi_periode_debut_pour(p_ancre timestamptz, p_fuseau text, p_a timestamptz)
+returns timestamptz language plpgsql immutable set search_path to 'public', 'pg_temp' as $$
 declare
-  v_ancre  timestamptz;
-  v_fuseau text;
-  v_local  timestamp;
+  v_fuseau text := coalesce(nullif(btrim(p_fuseau), ''), 'America/Montreal');
+  v_local  timestamp := p_a at time zone v_fuseau;
   v_jour   int;
-  v_debut  date;
   v_mois   date;
+  v_debut  date;
 begin
-  select s.current_period_start into v_ancre
-    from public.subscriptions s
-   where s.org_id in (select public.lumi_groupe_orgs(p_org))
-     and s.status in ('active', 'trialing', 'past_due')
-   order by s.created_at desc limit 1;
-  select coalesce(nullif(btrim(timezone), ''), 'America/Montreal') into v_fuseau
-    from public.company_settings where org_id = p_org;
-  v_fuseau := coalesce(v_fuseau, 'America/Montreal');
-  v_local := p_a at time zone v_fuseau;
-  if v_ancre is null then
+  if p_ancre is null then
     return date_trunc('month', v_local) at time zone v_fuseau;   -- repli : mois civil
   end if;
-  v_jour := extract(day from v_ancre at time zone v_fuseau)::int;
+  v_jour := extract(day from p_ancre at time zone v_fuseau)::int;
   -- Ce mois-ci au jour d'ancrage (borné au dernier jour du mois : ancre 31 → 30 avril) ;
-  -- si pas encore atteint, le même jour du mois précédent.
+  -- pas encore atteint → le même jour du mois précédent.
   v_mois := date_trunc('month', v_local)::date;
   v_debut := v_mois + (least(v_jour, extract(day from (v_mois + interval '1 month - 1 day'))::int) - 1);
   if v_debut > v_local::date then
@@ -126,6 +124,25 @@ begin
   end if;
   return v_debut::timestamp at time zone v_fuseau;
 end $$;
+
+create or replace function public.lumi_periode_debut(p_org uuid, p_a timestamptz default now())
+returns timestamptz language sql stable security definer set search_path to 'public', 'pg_temp' as $$
+  select public.lumi_periode_debut_pour(
+    (select s.current_period_start
+       from public.subscriptions s
+      where s.org_id in (select public.lumi_groupe_orgs(p_org))
+        and s.status in ('active', 'trialing', 'past_due')
+      order by s.created_at desc limit 1),
+    (select cs.timezone from public.company_settings cs where cs.org_id = p_org),
+    p_a)
+$$;
+
+-- Le prochain renouvellement : le début de la période qui contient « début + 32 jours »
+-- (une période dure 28 à 31 jours : +32 tombe toujours dans la suivante).
+create or replace function public.lumi_prochain_renouvellement(p_org uuid)
+returns timestamptz language sql stable security definer set search_path to 'public', 'pg_temp' as $$
+  select public.lumi_periode_debut(p_org, public.lumi_periode_debut(p_org) + interval '32 days')
+$$;
 
 create or replace function public.lumi_periode_courante(p_org uuid)
 returns text language sql stable security definer set search_path to 'public', 'pg_temp' as $$
@@ -234,6 +251,8 @@ end;
 $function$;
 
 revoke all on function public.lumi_periode_debut(uuid, timestamptz) from public, anon, authenticated;
+revoke all on function public.lumi_periode_debut_pour(timestamptz, text, timestamptz) from public, anon, authenticated;
+revoke all on function public.lumi_prochain_renouvellement(uuid) from public, anon, authenticated;
 revoke all on function public.lumi_periode_courante(uuid) from public, anon, authenticated;
 revoke all on function public.lumi_credits_utilises(uuid) from public, anon, authenticated;
 revoke all on function public.lumi_depense_du_mois(uuid) from public, anon, authenticated;
@@ -246,10 +265,11 @@ commit;
 --   drop trigger if exists ai_usage_ajout_seul on public.ai_usage;
 --   drop trigger if exists ai_usage_credits on public.ai_usage;
 --   drop function if exists public.ai_usage_ajout_seul(), public.ai_usage_credits_avant_insert(),
---     public.lumi_credits_utilises(uuid), public.lumi_periode_courante(uuid),
---     public.lumi_periode_debut(uuid, timestamptz), public.lumi_cents_par_credit();
+--     public.lumi_credits_utilises(uuid), public.lumi_periode_courante(uuid), public.lumi_prochain_renouvellement(uuid),
+--     public.lumi_periode_debut(uuid, timestamptz), public.lumi_periode_debut_pour(timestamptz, text, timestamptz),
+--     public.lumi_cents_par_credit();
 --   -- recréer reserve_ai_budget et lumi_depense_du_mois tels qu'en prod au 2026-09-30
---   -- (définitions sauvegardées dans CREDITS_PLAN.md, annexe A)
+--   -- (définitions : supabase/migrations/proposed/20261005100000_lumi_credits.down-reference.sql)
 --   create policy ai_usage_admin on public.ai_usage for select to authenticated using (has_org_admin_role((select auth.uid()), org_id));
 --   create policy ai_usage_monthly_admin on public.ai_usage_monthly for select to authenticated using (has_org_admin_role((select auth.uid()), org_id));
 --   grant select on public.ai_usage, public.ai_usage_monthly to authenticated;

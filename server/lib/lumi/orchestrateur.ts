@@ -268,7 +268,7 @@ export type EvenementLumi =
   /** Fiches (client, job, devis, facture…) touchées par un outil de lecture : l'interface en fait des liens. */
   | { type: 'fiches'; fiches: Fiche[] }
   | { type: 'report'; tool_use_id: string; rapport: Rapport }
-  | { type: 'usage'; model: string; usage: UsageTokens; cost_cents: number }
+  | { type: 'usage'; model: string; usage: UsageTokens }
   | { type: 'error'; message: string };
 
 export interface ResultatTour {
@@ -298,7 +298,8 @@ export async function tourLumi(opts: {
   systeme: Anthropic.Messages.TextBlockParam[];
   historique: Anthropic.Messages.MessageParam[];
   emettre: (e: EvenementLumi) => void;
-  journaliser: (u: UsageTokens, model: string, cost_cents: number) => Promise<void>;
+  /** `requestId` = id de la réponse du fournisseur : un même appel n'est débité qu'une fois. */
+  journaliser: (u: UsageTokens, model: string, cost_cents: number, requestId?: string) => Promise<void>;
   /** Réglages imposés par le palier de budget (économe : Haiku, effort bas ; restreint : 2 étapes ; épuisé : 0). */
   reglages?: { model: string; effort: 'low' | 'medium'; max_etapes?: number };
   /**
@@ -388,9 +389,10 @@ export async function tourLumi(opts: {
     const usageAppel = reponse.usage;
     const ecrit1h = usageAppel.cache_creation ? usageAppel.cache_creation.ephemeral_1h_input_tokens : 0;
     coutHorsCacheFroid += coutEnCents(model, { ...usageAppel, cache_creation_input_tokens: Math.max(0, (usageAppel.cache_creation_input_tokens ?? 0) - ecrit1h), cache_creation: usageAppel.cache_creation ? { ...usageAppel.cache_creation, ephemeral_1h_input_tokens: 0 } : undefined });
-    await opts.journaliser(reponse.usage, model, cout);
+    await opts.journaliser(reponse.usage, model, cout, reponse.id);
     if (reservation && opts.budget) await opts.budget.regler(reservation.id, cout);
-    opts.emettre({ type: 'usage', model, usage: reponse.usage, cost_cents: cout });
+    // Tokens seulement : aucun montant en $ ne part vers le navigateur (crédits Lumi, 2026-09-30).
+    opts.emettre({ type: 'usage', model, usage: reponse.usage });
 
     const assistant: Anthropic.Messages.MessageParam = { role: 'assistant', content: reponse.content };
     messages.push(assistant);

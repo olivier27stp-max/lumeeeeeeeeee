@@ -25,7 +25,7 @@ export const REPONSES_FIXES: readonly ReponseFixe[] = [
   {
     id: 'prix',
     enonces: ['Combien ça coûte, Lume ?', 'Combien ça coûte ?', 'C’est quoi les prix ?', 'Vos prix ?'],
-    reponse: 'Trois forfaits, en dollars canadiens, sans engagement (annuel = −15 %) : « Minimum » à 150 $/mois (3 utilisateurs, 1 bureau), « Scale » à 340 $/mois (10 utilisateurs, 2 bureaux, avec l’assistant IA vocal, les textos, le porte-à-porte et les relances automatiques), « Autopilot » à 495 $/mois (20 utilisateurs, 5 bureaux, multi-équipes et soutien prioritaire). Pour un chiffre exact selon ton équipe, le mieux c’est une courte démo — tu veux que je t’aide à en réserver une ?',
+    reponse: 'Trois forfaits, en dollars canadiens, sans engagement (annuel = −15 %) : « Minimum » à 150 $/mois (3 utilisateurs, 1 bureau), « Scale » à 347 $/mois (10 utilisateurs, 2 bureaux, avec les textos, le porte-à-porte et les relances automatiques), « Autopilot » à 495 $/mois (20 utilisateurs, 5 bureaux, avec Lumi, l’assistant IA texte et voix — 1 000 crédits Lumi par mois —, multi-équipes et soutien prioritaire). Pour un chiffre exact selon ton équipe, le mieux c’est une courte démo — tu veux que je t’aide à en réserver une ?',
   },
   {
     id: 'factures-devis',

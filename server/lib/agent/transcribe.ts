@@ -46,7 +46,7 @@ export async function transcribeAudioAvecUsage(opts: {
   base64: string;
   mimeType: TranscribeMimeType;
   language: 'fr' | 'en';
-}): Promise<{ text: string; usage: GeminiUsage | null; model: string }> {
+}): Promise<{ text: string; usage: GeminiUsage | null; model: string; requestId: string | null }> {
   if (!geminiApiKey) {
     throw new Error('GEMINI_API_KEY is not configured.');
   }
@@ -82,11 +82,12 @@ export async function transcribeAudioAvecUsage(opts: {
     err.status = res.status;
     throw err;
   }
-  const json = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; usageMetadata?: unknown };
+  const json = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; usageMetadata?: unknown; responseId?: string };
   const text = (json.candidates?.[0]?.content?.parts ?? [])
     .filter((p) => !(p as { thought?: boolean }).thought)
     .map((p) => p.text ?? '')
     .join('')
     .trim();
-  return { text, usage: usageDeReponseGemini(json), model: TRANSCRIBE_MODEL };
+  // `responseId` : un même appel n'est débité qu'une fois (grand livre des crédits Lumi).
+  return { text, usage: usageDeReponseGemini(json), model: TRANSCRIBE_MODEL, requestId: typeof json.responseId === 'string' ? json.responseId : null };
 }

@@ -24,6 +24,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { companyOrgIds } from '../supabase';
 import { coutEnCents } from './tarifs';
 import { reglesCout } from './regles-cout';
+import { creditsEnCents, etatDepuis, fuseauDuBureau, microCreditsUtilises, renouvellementLe, dateLocale, type EtatCredits } from './credits';
 
 export type Palier = 'normal' | 'econome' | 'restreint' | 'epuise';
 
@@ -41,6 +42,10 @@ export interface EtatBudget {
   plafond_jour_cents: number;
   /** Palier de consommation du mois (voir l'en-tête). Le plafond en dollars est un garde-fou interne. */
   palier: Palier;
+  /** Crédits Lumi inclus par période (le plafond interne en ¢ en découle). */
+  credits_mensuels: number;
+  /** Prochain renouvellement, 'YYYY-MM-DD' dans le fuseau du bureau ('' si inconnu). */
+  renouvellement_le: string;
 }
 
 /** Parts du plafond où la pente change (mandat §5.5 : 70 / 90 / 100 %). */
@@ -85,11 +90,26 @@ export function dateRemiseAZero(langue: 'fr' | 'en', maintenant = new Date()): s
     : new Intl.DateTimeFormat('en-CA', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(premier);
 }
 
-/** Message gabarit servi au palier epuise quand aucun étage déterministe n'a répondu (0 token). */
-export function messagePause(langue: 'fr' | 'en', maintenant = new Date()): string {
+/** 'YYYY-MM-DD' → « 12 novembre » / « 1er novembre » / « November 12 ». */
+export function dateRenouvellement(langue: 'fr' | 'en', jour: string): string {
+  const [an, mois, j] = jour.split('-').map(Number);
+  const d = new Date(Date.UTC(an, mois - 1, j, 12));
+  if (langue === 'en') return new Intl.DateTimeFormat('en-CA', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(d);
+  return `${j === 1 ? '1er' : j} ${new Intl.DateTimeFormat('fr-CA', { month: 'long', timeZone: 'UTC' }).format(d)}`;
+}
+
+/**
+ * Message gabarit servi au palier epuise quand aucun étage déterministe n'a
+ * répondu (0 token). Avec `renouvellement` ('YYYY-MM-DD', crédits Lumi), la
+ * vraie date de renouvellement de l'entreprise ; sans, l'ancien « 1er ».
+ */
+export function messagePause(langue: 'fr' | 'en', maintenant: Date | string = new Date()): string {
+  const quand = typeof maintenant === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(maintenant)
+    ? dateRenouvellement(langue, maintenant)
+    : dateRemiseAZero(langue, typeof maintenant === 'string' ? new Date(maintenant) : maintenant);
   return langue === 'fr'
-    ? `Ton assistant IA avancé est en pause jusqu'au ${dateRemiseAZero('fr', maintenant)}. Les actions rapides marchent toujours.`
-    : `Your advanced AI assistant is paused until ${dateRemiseAZero('en', maintenant)}. Quick actions still work.`;
+    ? `Tes crédits Lumi sont épuisés jusqu'au ${quand}. Les actions rapides et le reste de Lume marchent toujours.`
+    : `Your Lumi credits are used up until ${quand}. Quick actions and the rest of Lume still work.`;
 }
 
 /**
@@ -136,15 +156,18 @@ export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<
   const orgIds = await companyOrgIds(admin, orgId);
   const { data: sub } = await admin
     .from('subscriptions')
-    .select('status, plans:plan_id (slug, includes_ai, ai_monthly_budget_cents)')
+    .select('status, plans:plan_id (slug, includes_ai, lumi_credits_mensuels)')
     .in('org_id', orgIds)
     .in('status', ['active', 'trialing', 'past_due'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  const plan = (sub as any)?.plans as { slug?: string; includes_ai?: boolean; ai_monthly_budget_cents?: number } | null;
-  const budget = Math.max(0, Number(plan?.ai_monthly_budget_cents ?? 0));
+  const plan = (sub as any)?.plans as { slug?: string; includes_ai?: boolean; lumi_credits_mensuels?: number } | null;
+  // Crédits Lumi (2026-09-30) : le plafond interne en ¢ US découle des crédits
+  // inclus (1 crédit = 3 ¢). Le client ne voit que des crédits.
+  const creditsMensuels = Math.max(0, Number(plan?.lumi_credits_mensuels ?? 0));
+  const budget = creditsEnCents(creditsMensuels);
   const includes = !!plan?.includes_ai && budget > 0;
 
   let depense = 0;
@@ -162,8 +185,9 @@ export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<
   let reserve = 0;
   if (includes) {
     try {
-      const periode = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Montreal', year: 'numeric', month: '2-digit' }).format(new Date());
-      const { data } = await admin.from('ai_usage_monthly').select('reserved_cents').in('org_id', orgIds).eq('period', periode);
+      // Même clé de période que reserve_ai_budget (anniversaire du bureau).
+      const { data: periode } = await admin.rpc('lumi_periode_courante', { p_org: orgId });
+      const { data } = await admin.from('ai_usage_monthly').select('reserved_cents').in('org_id', orgIds).eq('period', String(periode ?? ''));
       for (const l of (data ?? []) as Array<{ reserved_cents: number | string }>) reserve += Number(l.reserved_cents ?? 0);
     } catch { reserve = 0; }
   }
@@ -176,7 +200,7 @@ export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<
     try {
       const jour = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Montreal', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
       const minuit = new Date(`${jour}T00:00:00-04:00`); // heure avancée ; l'écart d'une heure l'hiver est sans conséquence (borne, pas facture)
-      const { data } = await admin.from('ai_usage').select('cost_cents').in('org_id', orgIds).gte('created_at', minuit.toISOString());
+      const { data } = await admin.from('ai_usage').select('cost_cents').in('org_id', orgIds).neq('source', 'support').gte('created_at', minuit.toISOString());
       for (const l of (data ?? []) as Array<{ cost_cents: number | string }>) depenseJour += Number(l.cost_cents ?? 0);
     } catch { depenseJour = 0; }
   }
@@ -184,7 +208,13 @@ export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<
   const reste = Math.max(0, budget - engage);
   const palierMois: Palier = includes ? palierBudget(budget, engage) : 'normal';
   const palier: Palier = palierMois === 'epuise' ? 'epuise' : (plafondJour > 0 && depenseJour >= plafondJour ? 'restreint' : palierMois);
+  let renouvellement = '';
+  if (includes) {
+    try { renouvellement = await renouvellementLe(admin, orgId); } catch { renouvellement = ''; }
+  }
   return {
+    credits_mensuels: creditsMensuels,
+    renouvellement_le: renouvellement,
     plan_slug: plan?.slug ?? null,
     includes_ai: includes,
     budget_cents: budget,
@@ -229,16 +259,37 @@ export async function alerterSiSeuilFranchi(admin: SupabaseClient, orgId: string
   ).catch((e: any) => console.error('[lumi] alerte budget non envoyée :', e?.message || e));
 }
 
+/**
+ * Ce que le CLIENT voit : des crédits, jamais de $. Consommation lue en
+ * micro-crédits dans le grand livre (support exclu), palier et réservations
+ * repris de `etatBudget`.
+ */
+export async function etatCredits(admin: SupabaseClient, orgId: string, budget?: EtatBudget): Promise<EtatCredits> {
+  const b = budget ?? await etatBudget(admin, orgId);
+  if (!b.includes_ai) {
+    return etatDepuis({ inclus: false, totalCredits: 0, utilisesMicro: 0, renouvellement_le: b.renouvellement_le, palier: 'normal' });
+  }
+  const utilises = await microCreditsUtilises(admin, orgId);
+  const renouvellement = b.renouvellement_le || dateLocale(new Date(), await fuseauDuBureau(admin, orgId));
+  return etatDepuis({ inclus: true, totalCredits: b.credits_mensuels, utilisesMicro: utilises, renouvellement_le: renouvellement, palier: b.palier });
+}
+
 /** D'où vient la dépense — la colonne `source` de `ai_usage`. */
-export type SourceUsage = 'lumi' | 'support' | 'migration' | 'briefing' | 'routeur' | 'cache' | 'automatisations';
+export type SourceUsage = 'lumi' | 'support' | 'migration' | 'briefing' | 'routeur' | 'cache' | 'automatisations' | 'voix';
 
 export async function journaliserUsage(admin: SupabaseClient, ligne: {
   orgId: string; userId: string | null; conversationId: string | null; model: string;
   input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number; cost_cents: number;
   /** Absent = `lumi` : c'était le seul écrivain avant que le support soit branché. */
   source?: SourceUsage;
+  /**
+   * Identifiant de la réponse du fournisseur (`msg_…`, `responseId`) : un
+   * même appel n'est débité qu'UNE fois, même si le journal est rejoué
+   * (index unique org_id + request_id).
+   */
+  requestId?: string | null;
 }): Promise<void> {
-  const { error } = await admin.from('ai_usage').insert({
+  const ligneUsage = {
     org_id: ligne.orgId,
     user_id: ligne.userId,
     conversation_id: ligne.conversationId,
@@ -249,7 +300,11 @@ export async function journaliserUsage(admin: SupabaseClient, ligne: {
     cache_creation_input_tokens: ligne.cache_creation_input_tokens,
     cache_read_input_tokens: ligne.cache_read_input_tokens,
     cost_cents: ligne.cost_cents,
-  });
+    request_id: ligne.requestId ?? null,
+  };
+  const { error } = ligne.requestId
+    ? await admin.from('ai_usage').upsert(ligneUsage, { onConflict: 'org_id,request_id', ignoreDuplicates: true })
+    : await admin.from('ai_usage').insert(ligneUsage);
   // Un journal qui saute = un budget qui ne compte plus : on le dit fort.
   if (error) console.error('[lumi] ai_usage non journalisé :', error.message);
 }

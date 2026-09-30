@@ -51,14 +51,21 @@ describe('réservation / règlement', () => {
 });
 
 describe('message gabarit au palier épuisé', () => {
-  it('nomme le 1er du mois suivant, en fr et en en', () => {
+  it('sans date de renouvellement : le 1er du mois suivant, en fr et en en (repli)', () => {
     const t = new Date('2026-09-16T15:00:00Z');
     expect(dateRemiseAZero('fr', t)).toBe('1er octobre');
     expect(dateRemiseAZero('en', t)).toBe('October 1');
-    expect(messagePause('fr', t)).toBe("Ton assistant IA avancé est en pause jusqu'au 1er octobre. Les actions rapides marchent toujours.");
-    expect(messagePause('en', t)).toContain('paused until October 1');
+    expect(messagePause('fr', t)).toBe("Tes crédits Lumi sont épuisés jusqu'au 1er octobre. Les actions rapides et le reste de Lume marchent toujours.");
+    expect(messagePause('en', t)).toContain('Lumi credits are used up until October 1');
     // Décembre → 1er janvier de l'année suivante.
     expect(dateRemiseAZero('fr', new Date('2026-12-20T15:00:00Z'))).toBe('1er janvier');
+  });
+
+  it('crédits Lumi : la VRAIE date de renouvellement de l’entreprise, jamais un montant', () => {
+    expect(messagePause('fr', '2026-11-12')).toBe("Tes crédits Lumi sont épuisés jusqu'au 12 novembre. Les actions rapides et le reste de Lume marchent toujours.");
+    expect(messagePause('en', '2026-11-12')).toBe('Your Lumi credits are used up until November 12. Quick actions and the rest of Lume still work.');
+    expect(messagePause('fr', '2026-12-01')).toContain('jusqu\'au 1er décembre');
+    expect(messagePause('fr', '2026-11-12')).not.toMatch(/\$/);
   });
   it('seuils du mandat : 70 % et 90 %', () => {
     expect(SEUIL_ECONOME).toBe(0.7);
