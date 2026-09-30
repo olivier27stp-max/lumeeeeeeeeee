@@ -693,9 +693,21 @@
      ]
     ],
     "valeur": {
-     "status": "pending",
-     "execute_at": "2026-09-14T15:05:00.000Z",
-     "last_error": "Client has no email address or phone number. — reprise 1/4 dans 5 min"
+     "status": "failed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": "Client has no email address or phone number."
+    }
+   },
+   {
+    "moment": "differe:request_review",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation_failed",
+     "title": "Échec d'envoi — regle-webhook.received-request_review-86400",
+     "body": "Le message n'est pas parti et ne partira pas : Client has no email address or phone number.",
+     "reference_id": "tache-1"
     }
    }
   ],
@@ -871,7 +883,7 @@
      "org_id": "11111111-1111-4111-8111-111111111111",
      "type": "automation_failed",
      "title": "Échec d'envoi — regle-webhook.received-envoyer_slack-86400",
-     "body": "Le message n'est pas parti et ne partira pas : Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié..",
+     "body": "Le message n'est pas parti et ne partira pas : Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié.",
      "reference_id": "tache-1"
     }
    }
@@ -1035,9 +1047,21 @@
      ]
     ],
     "valeur": {
-     "status": "pending",
-     "execute_at": "2026-09-14T15:05:00.000Z",
-     "last_error": "Aucun client rattaché à cette entité. — reprise 1/4 dans 5 min"
+     "status": "failed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": "Aucun client rattaché à cette entité."
+    }
+   },
+   {
+    "moment": "differe:ajouter_etiquette",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation_failed",
+     "title": "Échec d'envoi — regle-webhook.received-ajouter_etiquette-86400",
+     "body": "Le message n'est pas parti et ne partira pas : Aucun client rattaché à cette entité.",
+     "reference_id": "tache-1"
     }
    }
   ],
@@ -1200,9 +1224,21 @@
      ]
     ],
     "valeur": {
-     "status": "pending",
-     "execute_at": "2026-09-14T15:05:00.000Z",
-     "last_error": "Aucun client rattaché à cette entité. — reprise 1/4 dans 5 min"
+     "status": "failed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": "Aucun client rattaché à cette entité."
+    }
+   },
+   {
+    "moment": "differe:retirer_etiquette",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation_failed",
+     "title": "Échec d'envoi — regle-webhook.received-retirer_etiquette-86400",
+     "body": "Le message n'est pas parti et ne partira pas : Aucun client rattaché à cette entité.",
+     "reference_id": "tache-1"
     }
    }
   ],
@@ -1368,9 +1404,21 @@
      ]
     ],
     "valeur": {
-     "status": "pending",
-     "execute_at": "2026-09-14T15:05:00.000Z",
-     "last_error": "Aucun client rattaché à cette entité. — reprise 1/4 dans 5 min"
+     "status": "failed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": "Aucun client rattaché à cette entité."
+    }
+   },
+   {
+    "moment": "differe:modifier_client",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation_failed",
+     "title": "Échec d'envoi — regle-webhook.received-modifier_client-86400",
+     "body": "Le message n'est pas parti et ne partira pas : Aucun client rattaché à cette entité.",
+     "reference_id": "tache-1"
     }
    }
   ],
@@ -1533,9 +1581,21 @@
      ]
     ],
     "valeur": {
-     "status": "pending",
-     "execute_at": "2026-09-14T15:05:00.000Z",
-     "last_error": "Aucun client rattaché à cette entité. — reprise 1/4 dans 5 min"
+     "status": "failed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": "Aucun client rattaché à cette entité."
+    }
+   },
+   {
+    "moment": "differe:assigner_responsable",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation_failed",
+     "title": "Échec d'envoi — regle-webhook.received-assigner_responsable-86400",
+     "body": "Le message n'est pas parti et ne partira pas : Aucun client rattaché à cette entité.",
+     "reference_id": "tache-1"
     }
    }
   ],
@@ -2257,9 +2317,21 @@
      ]
     ],
     "valeur": {
-     "status": "pending",
-     "execute_at": "2026-09-14T15:05:00.000Z",
-     "last_error": "move_deal_stage s'applique à un deal ou à une soumission (reçu : automation_webhook). — reprise 1/4 dans 5 min"
+     "status": "failed",
+     "completed_at": "2026-09-14T15:00:00.000Z",
+     "last_error": "move_deal_stage s'applique à un deal ou à une soumission (reçu : automation_webhook)."
+    }
+   },
+   {
+    "moment": "differe:move_deal_stage",
+    "table": "notifications",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "type": "automation_failed",
+     "title": "Échec d'envoi — regle-webhook.received-move_deal_stage-86400",
+     "body": "Le message n'est pas parti et ne partira pas : move_deal_stage s'applique à un deal ou à une soumission (reçu : automation_webhook).",
+     "reference_id": "tache-1"
     }
    }
   ],
