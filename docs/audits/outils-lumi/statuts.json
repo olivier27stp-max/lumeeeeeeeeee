@@ -55,9 +55,9 @@
   "note": "Taxes posées ; facture existante désignée"
  },
  "argent.md:23": {
-  "statut": "ouvert",
-  "vague": "",
-  "note": "Jalons sans id : à traiter (lecture des jalons + refus de recréer un jalon facturé)"
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Jalon facturé ni retiré ni modifié ; get_job donne les jalons et leur facture"
  },
  "argent.md:24": {
   "statut": "corrigé",
@@ -72,7 +72,7 @@
  "argent.md:26": {
   "statut": "ouvert",
   "vague": "",
-  "note": "Route de l'écran (préfixe public) : hors outils de Lumi"
+  "note": "Route de l'écran (préfixe public /api/payment-requests) : hors outils de Lumi, à corriger dans route-permissions.ts"
  },
  "clients-devis.md:8": {
   "statut": "corrigé",
@@ -175,29 +175,29 @@
   "note": "Message échappé"
  },
  "envois.md:19": {
-  "statut": "ouvert",
-  "vague": "",
-  "note": "Carte send_invoice/send_quote : modèle de courriel et objet réels"
+  "statut": "partiel",
+  "vague": "9",
+  "note": "Carte : même destinataire et même montant (solde) que le courriel ; modèle de courriel de l'org pas encore montré"
  },
  "envois.md:20": {
-  "statut": "ouvert",
-  "vague": "",
-  "note": "Destinataire de la carte = règle de la route (lead.email)"
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Destinataire = client, sinon prospect (règle de la route)"
  },
  "envois.md:21": {
-  "statut": "ouvert",
+  "statut": "décision",
   "vague": "",
-  "note": "Limiteur SMS de la route non appliqué aux textos de Lumi"
+  "note": "Limiteur de la route non appliqué : chaque texto de Lumi exige déjà une carte (jamais d'office) — risque accepté, à confirmer"
  },
  "envois.md:22": {
-  "statut": "partiel",
-  "vague": "2",
-  "note": "Dédoublonnage + impayé vérifié ; permission messages.send inchangée"
+  "statut": "corrigé",
+  "vague": "2+9",
+  "note": "Dédoublonnage, impayé vérifié, outil financier (qui ne voit pas les montants ne relance pas)"
  },
  "envois.md:23": {
-  "statut": "partiel",
-  "vague": "3",
-  "note": "Toujours une carte ; client ≠ client du job non vérifié"
+  "statut": "corrigé",
+  "vague": "3+9",
+  "note": "Carte toujours ; contrat toujours au client du job"
  },
  "envois.md:24": {
   "statut": "corrigé",
@@ -210,19 +210,19 @@
   "note": "Jamais d'office ; textes générés non montrés sur la carte"
  },
  "envois.md:26": {
-  "statut": "ouvert",
+  "statut": "décision",
   "vague": "",
-  "note": "send_email : garde messages.send vs route owner/admin"
+  "note": "send_email : route owner/admin vs garde messages.send — aligner l'un ou l'autre (décision produit)"
  },
  "envois.md:27": {
-  "statut": "ouvert",
-  "vague": "",
-  "note": "Codes Twilio non traduits"
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Codes Twilio 21211/21610/21614/21408/21612 dits en clair"
  },
  "envois.md:28": {
-  "statut": "ouvert",
-  "vague": "",
-  "note": "Renvois entre outils d'envoi dans les descriptions"
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "send_sms renvoie vers les autres outils d'envoi"
  },
  "equipe-paie.md:8": {
   "statut": "corrigé",
@@ -285,9 +285,9 @@
   "note": "Assigne l'équipe + visites à venir"
  },
  "jobs-horaire.md:16": {
-  "statut": "ouvert",
-  "vague": "",
-  "note": "create_job : équipe à la création"
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "create_job accepte team_id (vérifié dans l'org)"
  },
  "jobs-horaire.md:17": {
   "statut": "corrigé",
@@ -307,7 +307,7 @@
  "jobs-horaire.md:20": {
   "statut": "ouvert",
   "vague": "",
-  "note": "schedule_job : non planifié, ≥ 2 visites, équipe (RPC modifiée par la session agenda)"
+  "note": "schedule_job : laissé à la session agenda (elle modifie rpc_schedule_job) — coordination faite"
  },
  "jobs-horaire.md:21": {
   "statut": "corrigé",
@@ -371,8 +371,8 @@
  },
  "reglages-rapports.md:17": {
   "statut": "partiel",
-  "vague": "1",
-  "note": "Carte générique + jamais d'office ; ancien taux non montré"
+  "vague": "1+9",
+  "note": "Carte : taux ACTUEL de la taxe (avant → après) ; textes d'automatisation générés pas encore montrés"
  },
  "reglages-rapports.md:18": {
   "statut": "corrigé",
@@ -385,14 +385,14 @@
   "note": "Refus doublon"
  },
  "reglages-rapports.md:20": {
-  "statut": "ouvert",
-  "vague": "",
-  "note": "update_d2d_pipeline_item : écriture directe (vendeur → deal d'un collègue)"
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Réattribuer un deal = propriétaire/admin ; « ses deals » déjà bornés par la RLS quand l'org le restreint"
  },
  "reglages-rapports.md:21": {
-  "statut": "ouvert",
-  "vague": "",
-  "note": "update_house : pin et pipeline"
+  "statut": "corrigé",
+  "vague": "9",
+  "note": "Passe par la route « Modifier le pin » (pin + pipeline + cache)"
  },
  "reglages-rapports.md:22": {
   "statut": "corrigé",
