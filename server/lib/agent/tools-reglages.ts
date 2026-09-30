@@ -432,12 +432,19 @@ const createAutomationFromText: AgentTool = {
       const { refAutomatisationInventee } = await import('../automations-publication');
       const admin = getServiceClient();
 
+      // Les messages partent aux clients dans la langue des automatisations
+      // de l'entreprise (celle que règle set_automation_language). Elle était
+      // forcée à 'fr' : une entreprise anglophone recevait des textes français.
+      const { data: reglages } = await ctx.client
+        .from('company_settings').select('default_language').eq('org_id', ctx.orgId).maybeSingle();
+      const langue: 'fr' | 'en' = reglages?.default_language === 'en' ? 'en' : 'fr';
+
       const resultat = await genererParcours({
         admin,
         orgId: ctx.orgId,
         userId: ctx.userId ?? null,
         demande: demande.trim(),
-        langue: 'fr',
+        langue,
       });
       if (!resultat.parcours) {
         throw new Error(resultat.erreur ?? 'Je n\'ai pas réussi à construire ce parcours. Reformule-le.');
