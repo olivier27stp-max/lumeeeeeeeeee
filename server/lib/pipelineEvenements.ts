@@ -56,14 +56,22 @@ interface EvenementPipeline {
  *
  * @returns le nombre d'événements traités avec succès.
  */
-export async function traiterEvenementsPipeline(supabase: SupabaseClient): Promise<number> {
+export async function traiterEvenementsPipeline(
+  supabase: SupabaseClient,
+  // `orgId` : ne traiter que la file d'UNE entreprise (suite de tests
+  // npm run test:automations, comme processScheduledTasks). Le serveur
+  // appelle toujours sans filtre.
+  options: { orgId?: string } = {},
+): Promise<number> {
   let traites = 0;
 
-  const { data, error } = await supabase
+  let requete = supabase
     .from('pipeline_events')
     .select('id, org_id, deal_id, type, payload, attempts')
     .is('processed_at', null)
-    .lt('attempts', MAX_TENTATIVES)
+    .lt('attempts', MAX_TENTATIVES);
+  if (options.orgId) requete = requete.eq('org_id', options.orgId);
+  const { data, error } = await requete
     .order('created_at')
     .limit(TAILLE_LOT);
 
