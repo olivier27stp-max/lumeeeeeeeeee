@@ -212,7 +212,7 @@ def main():
         for e in json.load(open(allow_path)).get('allow', []):
             allow.add((e['file'], e['table'], e['ref']))
 
-    read_f, write_f, value_f, rpc_f = [], [], [], []
+    read_f, write_f, value_f, rpc_f, table_f = [], [], [], [], []
     seen = set()
     scanned = 0
     skipped = 0
@@ -246,6 +246,18 @@ def main():
             for m in FROM_RE.finditer(text):
                 table = m.group(1)
                 if table not in cols:
+                    # Une table ABSENTE du catalogue etait ignoree en silence :
+                    # c'est ce trou qui a laisse les champs personnalises du
+                    # mobile morts 4 jours (custom_columns deplacee dans
+                    # `archive`, PostgREST en 404, supabase-js muet).
+                    # Deux cas qui ne visent PAS une table de `public` :
+                    #   .storage.from('bucket')      → un seau de stockage
+                    #   .schema('auth').from('users') → un autre schema, absent
+                    #                                   du catalogue
+                    amont = text[max(0, m.start() - 80):m.start()]
+                    if 'storage' not in amont and '.schema(' not in amont:
+                        add(table_f, (rel, table, 'table'),
+                            (rel, line_at(m.start()), table))
                     continue
                 nxt = FROM_RE.search(text, m.end())
                 end = min(nxt.start() if nxt else len(text), m.end() + 1500)
@@ -309,11 +321,16 @@ def main():
                         add(rpc_f, (rel, fn, km.group(1), 'a'),
                             (rel, line_at(rm.start()), fn, km.group(1), sorted(rpc_args[fn])))
 
-    total = len(read_f) + len(write_f) + len(value_f) + len(rpc_f)
+    total = len(read_f) + len(write_f) + len(value_f) + len(rpc_f) + len(table_f)
     print(f"Catalogue : {ref} — {len(cols)} relations, {len(checks)} contraintes CHECK, "
           f"{len(rpc_args)} fonctions. {scanned} fichiers analysés"
           + (f", {skipped} faux positif(s) connu(s) ignoré(s).\n" if skipped else ".\n"))
 
+    if table_f:
+        print(f'✗ TABLES INEXISTANTES ({len(table_f)})')
+        for f, l, t in sorted(table_f):
+            print(f'    {f}:{l}  {t}')
+        print()
     if read_f:
         print(f'✗ COLONNES LUES INEXISTANTES ({len(read_f)})')
         for f, l, t, c in sorted(read_f):
@@ -332,7 +349,7 @@ def main():
             print(f'    {f}:{l}  {fn}(… {k} …)  → attendus : {allowed}')
 
     if total == 0:
-        print('✅ Aucun écart : toute colonne, valeur et argument cité par le code existe en base.')
+        print('✅ Aucun écart : toute table, colonne, valeur et argument cité par le code existe en base.')
         return 0
 
     print(f'\n{total} écart(s). Rappel : une seule colonne inexistante fait échouer '
