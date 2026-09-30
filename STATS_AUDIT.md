@@ -11,6 +11,8 @@ S'y ajoutent une fuite par rôle (un technicien pouvait lire le revenu et les me
 « Taux de réussite » de 100 % en prod, fait uniquement de copies du classement.
 
 Tout est livré : le code (PR #803) et les deux migrations, appliquées sur staging puis en prod le 2026-09-30 avec ton accord (§7).
+Puis, à ta demande (« corrige tout »), un deuxième lot : filtres, période personnalisée, comparaison, export, libellés
+honnêtes, entonnoir cohérent, détail derrière chaque chiffre, et confidentialité des taux horaires (§8).
 
 Méthode : une stack Supabase **locale et jetable** (Postgres 17 + GoTrue + PostgREST avec `max_rows = 1000` comme la
 prod, schéma = prod, droits recopiés de la prod) et un jeu de données déterministe. Chaque chiffre est comparé à un
@@ -101,7 +103,7 @@ Légende : ✅ corrigé dans le code (branche) · 🟡 corrigé par une migratio
 | E-6 | **Lumi « ce mois-ci » = le mois suivant après 20 h** (serveur en UTC). | 30 sept. 21 h : Lumi répondait « octobre : 0 $ ». | ✅ `get_revenue_summary` au fuseau de l'entreprise. |
 | E-7 | **Erreurs avalées → faux zéros.** Équipes, vélocité, clients, cohortes, modes, valeur moyenne, fidélité renvoyaient `[]`/0 sur panne : « Aucune donnée » indiscernable d'une panne. | Test E2E « erreur API ». | ✅ les erreurs remontent ; chaque carte affiche « Impossible de charger ces chiffres. — Réessayer ». Rentabilité 🔵 #781. |
 | E-8 | **Rapports programmés** : « Revenus encaissés » comptait les paiements **échoués et en attente** ; « Solde impayé » toujours **0 $** (la RPC refuse le service_role). | Tests `rapport programmé` et `service_role`. Latent : 0 rapport programmé en prod. | 🟡 |
-| E-9 | **Un technicien lit le taux horaire de ses collègues** (`team_members`, RLS par entreprise). | Test sécurité (`it.fails`). | ⬜ Demande une migration RLS/colonnes conçue avec la paie, qui lit cette colonne. Je ne l'ai pas écrite à l'aveugle. |
+| E-9 | **Un technicien lit le taux horaire de ses collègues** (`team_members`, RLS par entreprise) — et leur date de naissance. | Test sécurité (`it.fails`). | ✅ §8 : grants par colonne + `membres_remuneration()`. |
 
 ### Moyen
 
@@ -280,7 +282,7 @@ Par ordre d'utilité pour un entrepreneur en services :
 Appliquées par `db:apply` sur staging, puis contrôlées : `check:broken-objects` (aucun objet cassé), `check:schema-refs` (aucun écart), `check:db-coherence` (3 écarts QuickBooks **préexistants**, sans lien avec ces migrations). Ensuite `db:apply:prod`. Vérifié : prod = staging = local validé (empreintes des fonctions), `anon` sans aucun droit, 6 index présents. Effet en prod : l'entreprise principale affiche 279 261,15 $ encaissés (au lieu de 0 $), et le taux de réussite n'est plus un faux 100 %.
 
 Non écrites, à décider ensemble :
-- E-9, taux horaires lisibles par les techniciens : RLS ou privilèges par colonne sur `team_members`, à concevoir avec la paie.
+- ~~E-9~~ : fait au §8.
 - Perf RLS (§5.1) : réécriture des politiques de `jobs`, `invoices`, etc.
 - M-11 : suppression de `rpc_insights_budget_vs_actual` (fonction morte).
 
@@ -291,3 +293,46 @@ Non écrites, à décider ensemble :
 - **Les sauvegardes prod ne tournent plus depuis le 26 septembre** : le dernier fichier de `../lume-backups/` date du 26/09. Le mot de passe prod de `.env.local` (`SUPABASE_DB_PASSWORD`) est refusé par la prod, tout comme celui de staging dans `SUPABASE_DB_URL` : ils ont probablement été changés sans mise à jour de `.env.local`.
 - **Staging ≠ prod** : 592 fonctions `public` en staging, 474 en prod (travail d'autres sessions posé sur staging seulement). `crm_is_org_member` et `crm_is_org_admin` diffèrent aussi en prod de leur définition dans le dépôt.
 - **Incident de ma part** : pendant l'audit, un appel en lecture à l'API Management (`/postgrest`, pour lire `max_rows`) a aussi renvoyé le **secret JWT de la prod**, qui s'est affiché dans la sortie de cette session (locale). Je ne l'ai ni réutilisé ni recopié. Une rotation est prudente si les transcriptions de session sont conservées.
+
+---
+
+## 8. Deuxième lot (2026-09-30) — « corrige tout »
+
+### Ce qui change à l'écran
+
+| Avant | Maintenant |
+|---|---|
+| Un sélecteur de période **par carte** (10, liés sans le dire — B-2), aucun filtre, aucune comparaison, aucun export | **Une barre** en tête : période (dont **personnalisée**), **Comparer à la période précédente**, filtres **Équipe / Technicien / Vendeur / Service / Client**, **Exporter (CSV)**. Tout est dans l'URL : un lien partagé rouvre la même vue. |
+| Une carte ignorait le filtre sans le dire | « Filtre non appliqué ici : … » sur la carte concernée (ex. l'entonnoir n'a pas d'équipe). |
+| Variation impossible à lire (∞ sur un mois à 0 $) | Pastille ↑↓ : %, points (taux) ou jours (délais) ; « nouveau » quand la période précédente est à 0 — jamais ∞. |
+| Cliquer « À recevoir » ouvrait toutes les factures (B-3) | **« Voir le détail »** sur chaque chiffre : les lignes exactes (paiements, factures, jobs, soumissions, leads, deals), **leur somme = le chiffre** (vérifié par les tests), chaque ligne mène à sa fiche. |
+| « Revenu » partout, sans dire lequel | Chaque carte dit ce qu'elle mesure : encaissé **taxes incluses** net des remboursements, lignes de jobs **avant taxes**, etc. |
+| Revenu par service = titre des jobs créés | Lignes des **jobs complétés**, rattachées au **service du catalogue** (nom normalisé) ; « (jobs sans lignes) » visible au lieu d'être perdu. |
+| Entonnoir mêlant leads et soumissions (% > 100 possible) | **Cohorte** : leads créés dans la période → ceux qui ont eu une soumission → ceux devenus un job ; % toujours sur les leads créés, + délai moyen de conversion. |
+| Top clients par valeur des jobs, à vie | Par argent **encaissé dans la période** (même définition que la courbe Revenu). |
+| Équipes : deux cartes qui se recoupaient | Une seule : revenu des jobs complétés, jobs complétés / créés, taux. |
+| Contrôles imbriqués dans des cartes-boutons (B-1) | Plus de carte cliquable : titre, définition et bouton « Voir le détail » séparés ; le graphique se parcourt au clavier (flèches, Entrée = détail du mois). |
+| « Aucun compte connecté » sur panne de l'API (B-4) | « lecture impossible — réessaie plus tard ». |
+
+Lumi suit les mêmes fonctions : `get_top_services` = `rpc_insights_service_mix`, `get_top_clients` sur une période = `rpc_insights_top_clients` (parité testée).
+
+### Base de données (migrations C et D)
+
+- **C** `20261004300200_statistiques_filtres.sql` : paramètre `p_filtres` sur les agrégats de la page ; nouvelles fonctions `rpc_insights_top_clients`, `rpc_insights_entonnoir`, `rpc_insights_soumissions`, `rpc_insights_detail` (les lignes derrière chaque chiffre). Même garde de permission que le lot A.
+- **D** `20261004300300_membres_remuneration_privee.sql` (E-9) : `authenticated`/`anon` ne lisent plus `hourly_rate_cents`, `labour_cost_hourly` ni `birth_date` sur `team_members` et `memberships` (grants **par colonne**). `membres_remuneration(p_org)` rend sa propre fiche, ou toute l'équipe à qui a `team.update`, `financial.view_margins` ou `financial.view_reports` (date de naissance d'un autre : `team.update`). Écrans adaptés : Gestion d'équipe (la cellule Taux/h n'existe que pour qui gère l'équipe), fiche membre (le taux n'est jamais réécrit par qui ne l'a pas lu), Commissions, Profil ; serveur : rentabilité (client service, permission déjà vérifiée), outil Lumi `set_hourly_rate`. La paie passait déjà par le client service. La vue `v_org_members` (lue par aucun code) projetait ces colonnes : elles y valent désormais NULL, sinon toute lecture de la vue échouait.
+  **Règle durable** : une colonne ajoutée à ces deux tables doit recevoir `grant select (col) … to anon, authenticated` ; `check:db-coherence` le signale.
+
+### Tests
+
+Exactitude (oracle SQL, filtres compris) 171/171 · sécurité 104/104 (E-9 inversé : le test passe) · parité Lumi 17/17 · rendu 8/8 · E2E : filtres, période personnalisée par l'URL, comparaison, détail = chiffre, clavier, export CSV, états, cache, 3 largeurs.
+
+### Performance (T4 : 50 000 jobs)
+
+Chargement complet 230 / 304 ms (p50 / p95) ; changement de filtre 405 / 470 ms. M-15 : pagination par curseur de `toutLire` toujours ouverte (rentabilité sur très gros volume).
+
+### Encore ouvert
+
+- M-11 : suppression de `rpc_insights_budget_vs_actual` (fonction morte).
+- Perf RLS (§5.1).
+- Hors page : la politique d'UPDATE de `memberships` laisse un membre modifier SA propre ligne, y compris `memberships.hourly_rate_cents` (colonne que la paie ne lit pas — elle lit `team_members` — mais que la copie vers un nouveau bureau reprend, `office-access.ts`). À verrouiller avec l'équipe multi-bureaux.
+

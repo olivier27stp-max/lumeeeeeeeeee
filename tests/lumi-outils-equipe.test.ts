@@ -63,12 +63,18 @@ function clientFactice(repondre: Repondeur) {
     }).then(ok, ko);
     return chaine;
   };
-  return { client: { from } as any, appels };
+  // rpc(nom, args) : enregistré comme la table « rpc:nom », verbe « rpc ».
+  const rpc = (nom: string, args: Record<string, unknown>) => {
+    const appel: Appel = { table: `rpc:${nom}`, ops: [['rpc', [args]]] };
+    appels.push(appel);
+    return Promise.resolve().then(() => ({ data: repondre(appel.table, appel.ops) ?? null, error: null }));
+  };
+  return { client: { from, rpc } as any, appels };
 }
 
 const verbe = (a: Appel) => a.ops[0]?.[0];
 const eqDe = (ops: Op[], col: string) => ops.find(([m, a]) => m === 'eq' && a[0] === col)?.[1][1];
-const filtreOrg = (a: Appel) => a.ops.some(([m, args]) => m === 'eq' && args[0] === 'org_id' && args[1] === ORG);
+const filtreOrg = (a: Appel) => a.ops.some(([m, args]) => (m === 'eq' && args[0] === 'org_id' && args[1] === ORG) || (m === 'rpc' && (args[0] as any)?.p_org === ORG));
 const ecritures = (appels: Appel[]) => appels.filter((a) => ['insert', 'update', 'delete', 'upsert'].includes(String(verbe(a))));
 
 interface Etat {
@@ -110,8 +116,10 @@ function repondeur(etat: Etat = {}): Repondeur {
           return 'entreeActive' in etat ? etat.entreeActive : { id: E1, date: '2026-09-16', punch_in: '08:00:00', breaks: [] };
         }
         return etat.entrees ?? [];
+      case 'rpc:membres_remuneration':
+        return [{ team_member_id: 'tm-1', user_id: U1, hourly_rate_cents: 2000 }];
       case 'team_members':
-        if (v === 'select') return 'teamMembers' in etat ? etat.teamMembers : [{ id: 'tm-1', hourly_rate_cents: 2000 }];
+        if (v === 'select') return 'teamMembers' in etat ? etat.teamMembers : [{ id: 'tm-1' }];
         return { data: null, error: null };
       case 'invitations':
         return [{ id: I1, email: 'marc@exemple.ca', role: 'technician', status: 'pending', expires_at: '2099-01-01T00:00:00Z', created_at: '2026-09-16T00:00:00Z' }];
@@ -375,10 +383,12 @@ describe('écritures directes en base : org_id sur chaque requête', () => {
 
   it('set_hourly_rate : membre vérifié dans l org, update de team_members filtré org_id, ancien taux rapporté', async () => {
     const { resultat, appels } = await executer('set_hourly_rate', { user_id: U1, hourly_rate_cents: 2500 });
-    expect(appels.map((a) => `${a.table}:${verbe(a)}`)).toEqual(['memberships:select', 'team_members:select', 'team_members:update']);
+    expect(appels.map((a) => `${a.table}:${verbe(a)}`)).toEqual(['memberships:select', 'team_members:select', 'rpc:membres_remuneration:rpc', 'team_members:update']);
     for (const a of appels) expect(filtreOrg(a), a.table).toBe(true);
     expect(appels[0].ops).toContainEqual(['eq', ['user_id', U1]]);
-    expect((appels[2].ops[0][1][0] as any).hourly_rate_cents).toBe(2500);
+    // Le taux n'est plus lu en direct (grants par colonne) : seulement l'id.
+    expect(appels[1].ops[0]).toEqual(['select', ['id']]);
+    expect((appels[3].ops[0][1][0] as any).hourly_rate_cents).toBe(2500);
     expect(resultat).toMatchObject({ hourly_rate_cents: 2500, previous_hourly_rate_cents: 2000, name: 'Marc Roy' });
     expect(resultat.note).toMatch(/25,00/);
     expect(resultat.note).toMatch(/20,00/);
@@ -386,7 +396,7 @@ describe('écritures directes en base : org_id sur chaque requête', () => {
 
   it('set_hourly_rate : fiche team_members absente → création avec org_id et le nom de la membership ; bornes', async () => {
     const { appels } = await executer('set_hourly_rate', { user_id: U1, hourly_rate_cents: 3000 }, { teamMembers: [] });
-    const insertion = appels[2];
+    const insertion = appels[3];
     expect(insertion.table).toBe('team_members');
     expect(insertion.ops[0]).toEqual(['insert', [{ org_id: ORG, user_id: U1, email: '', first_name: 'Marc', last_name: 'Roy', phone: '', hourly_rate_cents: 3000 }]]);
     await expect(executer('set_hourly_rate', { user_id: U1, hourly_rate_cents: -1 })).rejects.toThrow(/entre 0 et/);

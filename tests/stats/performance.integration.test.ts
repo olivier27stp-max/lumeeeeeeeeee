@@ -35,9 +35,7 @@ vi.mock('../../src/lib/orgApi', async (orig) => ({
   getCurrentOrgId: async () => etat.org,
 }));
 
-import * as insights from '../../src/lib/insightsApi';
-import * as extra from '../../src/lib/statsExtraApi';
-import { fetchQuoteKpis } from '../../src/lib/quotesApi';
+import * as S from '../../src/lib/statistiquesApi';
 import { analyserRentabilite, viderCacheRentabilite } from '../../server/lib/rentabilite';
 
 const REPETITIONS = 12;
@@ -47,23 +45,25 @@ const AUTRE = { from: '2023-09-30', to: '2026-09-30', granularity: 'month' as co
 /** Les appels que fait /insights au chargement (Statistiques.tsx + ses cartes), dans l'ordre. */
 function appelsDeLaPage(p: typeof PERIODE) {
   return {
-    'revenu (série)': () => insights.fetchInsightsRevenueSeries(p),
-    'revenu par service': () => insights.fetchTopServices(p),
-    'modes de paiement': () => extra.fetchPaymentMix(p),
-    'valeur moyenne job': () => extra.fetchAvgJobValueSeries({ ...p, fr: true }),
-    'équipes': () => insights.fetchTeamPerformance(p),
-    'top clients (5, tri en base)': () => insights.fetchTopClientsParRevenu(5),
-    'valeur vie moyenne': () => insights.fetchValeurVieMoyenne(),
-    'fidélité (jobs + cohortes)': () => extra.fetchLoyalty(p),
-    'conversion leads': () => insights.fetchInsightsLeadConversion(p),
-    'vélocité pipeline': () => insights.fetchPipelineVelocity(p),
-    'soumissions': () => fetchQuoteKpis(p),
-    'trésorerie': () => insights.fetchInsightsInvoicesSummary(p),
-    'zones (par adresse)': () => insights.fetchZonesParAdresse(p),
+    'revenu (série)': () => S.serieRevenus(p, {}),
+    'revenu par service': () => S.revenuParService(p, {}),
+    'modes de paiement': () => S.modesPaiement(p, {}),
+    'jobs complétés (valeur moyenne, fidélité)': () => S.jobsCompletes(p, {}),
+    'équipes': () => S.equipes(p, {}),
+    'top clients (période)': () => S.topClients(p, {}),
+    'valeur vie moyenne': () => S.valeurVieMoyenne({}),
+    'rétention': () => S.retentionPct(),
+    'entonnoir': () => S.entonnoir(p, {}),
+    'vélocité pipeline': () => S.pipeline(p, {}),
+    'soumissions': () => S.soumissions(p, {}),
+    'trésorerie': () => S.tresorerie(p, {}),
+    'zones (par adresse)': () => S.zones(p, {}),
+    // Un filtre combiné (le plus coûteux : technicien + service passent par les visites et les lignes).
+    'revenu filtré (technicien + service)': () => S.serieRevenus(p, { technicien: U.proprioT4, service: '00000000-0000-4000-8000-000000000000' }),
   } as Record<string, () => Promise<unknown>>;
 }
 /** Les cartes qui ne dépendent PAS de la période (pas relancées au changement de filtre). */
-const HORS_PERIODE = new Set(['top clients (5, tri en base)', 'valeur vie moyenne']);
+const HORS_PERIODE = new Set(['valeur vie moyenne', 'rétention']);
 
 const pct = (xs: number[], q: number) => { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.ceil(q * s.length) - 1)]; };
 const rapport: Record<string, unknown> = {};
@@ -94,7 +94,7 @@ describe.skipIf(!ACTIF || !process.env.STATS_PERF)('Statistiques — performance
     const table = Object.fromEntries(Object.entries(mesures).map(([k, v]) => [k, { p50: Math.round(pct(v, 0.5)), p95: Math.round(pct(v, 0.95)) }]));
     rapport.appels = table;
     console.table(table);
-    expect(Object.keys(table).length).toBe(13);
+    expect(Object.keys(table).length).toBe(14);
   }, 600_000);
 
   it('chargement initial (tous les appels en parallèle, comme React Query) et changement de période', async () => {
@@ -126,22 +126,19 @@ describe.skipIf(!ACTIF || !process.env.STATS_PERF)('Statistiques — performance
   }, 600_000);
 
   it('troncatures silencieuses à 1000 / 5000 lignes (max_rows PostgREST = 1000, comme la prod)', async () => {
-    const [svc, mix, loy] = await Promise.all([
-      insights.fetchTopServices(AUTRE), extra.fetchPaymentMix(AUTRE), extra.fetchLoyalty(AUTRE),
-    ]);
+    const [svc, mix] = await Promise.all([S.revenuParService(AUTRE, {}), S.modesPaiement(AUTRE, {})]);
     const vrai = await db.query(`
-      select (select coalesce(sum(total_cents),0) from jobs where org_id=$1 and deleted_at is null and status not in ('draft','cancelled')
-               and created_at >= '2023-09-30 00:00 America/Toronto' and created_at < '2026-10-01 00:00 America/Toronto')::bigint svc,
-             (select coalesce(sum(amount_cents),0) from payments where org_id=$1 and deleted_at is null and status='succeeded'
+      select (select coalesce(sum(subtotal_cents),0) from jobs where org_id=$1 and deleted_at is null and status = 'completed'
+               and completed_at >= '2023-09-30 00:00 America/Toronto' and completed_at < '2026-10-01 00:00 America/Toronto')::bigint svc,
+             (select coalesce(sum(amount_cents - coalesce(refunded_cents, 0)),0) from payments where org_id=$1 and deleted_at is null and status in ('succeeded', 'refunded')
                and payment_date >= '2023-09-30 00:00 America/Toronto' and payment_date < '2026-10-01 00:00 America/Toronto')::bigint mix`, [T4]);
     rapport.troncatures = {
-      'revenu par service : affiché / réel': [svc.reduce((a, s) => a + s.value, 0), Number(vrai.rows[0].svc)],
-      'modes de paiement : affiché / réel': [mix.reduce((a, s) => a + s.value, 0), Number(vrai.rows[0].mix)],
-      'fidélité (part récurrente)': loy.recurringPct,
+      'revenu par service (jobs sans lignes = sous-total) : affiché / réel': [svc.reduce((a, s) => a + s.valeur, 0), Number(vrai.rows[0].svc)],
+      'modes de paiement : affiché / réel': [mix.reduce((a, s) => a + s.valeur, 0), Number(vrai.rows[0].mix)],
     };
     console.table(rapport.troncatures);
-    expect(svc.reduce((a, s) => a + s.value, 0)).toBe(Number(vrai.rows[0].svc));
-    expect(mix.reduce((a, s) => a + s.value, 0)).toBe(Number(vrai.rows[0].mix));
+    expect(svc.reduce((a, s) => a + s.valeur, 0)).toBe(Number(vrai.rows[0].svc));
+    expect(mix.reduce((a, s) => a + s.valeur, 0)).toBe(Number(vrai.rows[0].mix));
   }, 600_000);
 
   it('EXPLAIN ANALYZE de chaque requête (rôle authenticated, RLS active ; RPC via auto_explain)', async () => {

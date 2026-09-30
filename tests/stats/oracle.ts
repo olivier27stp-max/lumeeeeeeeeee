@@ -1,205 +1,278 @@
 /**
- * ORACLE de l'audit Statistiques — la valeur JUSTE de chaque chiffre de /insights,
- * calculée en SQL, indépendamment des RPC et du code de la page.
- *
- * Règles communes (voir STATS_AUDIT.md §2) :
- *  - une période [du, au] est en DATES LOCALES du tenant (company_settings.timezone) :
- *    ts >= du 00:00 local  et  ts < (au + 1) 00:00 local ;
- *  - lignes supprimées (deleted_at) exclues partout ;
- *  - l'argent en cents entiers ; aucun arrondi avant la somme.
+ * ORACLE de l'audit Statistiques — la valeur JUSTE de chaque chiffre de /insights, calculée
+ * INDÉPENDAMMENT des fonctions testées : les lignes brutes sont lues en SQL (bornes au minuit du
+ * fuseau du tenant), les filtres sont appliqués ici, en TypeScript, d'après leur définition écrite :
+ *   équipe      jobs.team_id, ou une visite de cette équipe
+ *   technicien  il a pointé sur le job, ou une visite lui est assignée, ou est assignée à une de ses équipes
+ *   vendeur     salesperson du job/de la facture/de la soumission, rep du deal, assigned_to du lead
+ *   client      client_id (ou lead_id)
+ *   service     une ligne de job (incluse) porte le nom du service du catalogue (casse et accents ignorés)
+ * Argent en cents entiers ; lignes supprimées (deleted_at) exclues partout.
  */
 import type { Client } from 'pg';
 
 export interface Periode { du: string; au: string }
+export type Filtres = Partial<Record<'equipe' | 'technicien' | 'vendeur' | 'client' | 'service', string>>;
 
-const BORNES = `
-  with tz as (select coalesce((select timezone from public.company_settings where org_id = $1), 'America/Toronto') as z),
-  b as (select ($2::date)::timestamp at time zone (select z from tz) as debut,
-               (($3::date) + 1)::timestamp at time zone (select z from tz) as fin,
-               (select z from tz) as z)`;
-
-async function un<T = any>(db: Client, sql: string, params: unknown[]): Promise<T> {
-  const r = await db.query(sql, params);
-  return r.rows[0] as T;
-}
-async function plusieurs<T = any>(db: Client, sql: string, params: unknown[]): Promise<T[]> {
-  return (await db.query(sql, params)).rows as T[];
-}
 const n = (v: unknown) => Number(v ?? 0);
+const TZ = `coalesce((select timezone from public.company_settings where org_id = $1), 'America/Toronto')`;
+const DEBUT = `($2::date)::timestamp at time zone ${TZ}`;
+const FIN = `(($3::date) + 1)::timestamp at time zone ${TZ}`;
+const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+const filtreJobActif = (f: Filtres) => !!(f.equipe || f.technicien || f.service);
 
-/**
- * ENCAISSÉ (carte « Revenu », Lumi get_revenue_summary, rapports) :
- *   paiements réussis NETS des remboursements (amount − refunded ; un paiement 'refunded' vaut 0),
- *   pourboires exclus (tip_cents vit à part), taxes incluses, à la date de paiement locale
- * + factures payées SANS AUCUNE ligne de paiement (importées de Jobber) : paid_cents à paid_at.
- */
-export async function encaisseParMois(db: Client, org: string, p: Periode): Promise<Array<{ mois: string; cents: number }>> {
-  return (await plusieurs(db, `${BORNES},
-    mois as (select generate_series(date_trunc('month', $2::date), date_trunc('month', $3::date), interval '1 month')::date m),
-    flux as (
-      select (p.payment_date at time zone (select z from b)) as t, (p.amount_cents - coalesce(p.refunded_cents, 0)) as c
-        from public.payments p, b
-       where p.org_id = $1 and p.deleted_at is null and p.status in ('succeeded', 'refunded')
-         and p.payment_date >= b.debut and p.payment_date < b.fin
-      union all
-      select (coalesce(i.paid_at, i.issued_at) at time zone (select z from b)), i.paid_cents
-        from public.invoices i, b
-       where i.org_id = $1 and i.deleted_at is null and i.status in ('paid', 'partial') and i.paid_cents > 0
-         and not exists (select 1 from public.payments p where p.invoice_id = i.id and p.deleted_at is null)
-         and coalesce(i.paid_at, i.issued_at) >= b.debut and coalesce(i.paid_at, i.issued_at) < b.fin)
-    select to_char(m.m, 'YYYY-MM') mois, coalesce(sum(f.c), 0)::bigint cents
-      from mois m left join flux f on date_trunc('month', f.t)::date = m.m
-     group by m.m order by m.m`, [org, p.du, p.au])).map((r) => ({ mois: r.mois, cents: n(r.cents) }));
+/* ── Qui passe les filtres « job » ─────────────────────────────────────────── */
+interface InfoJob { id: string; team: string | null; client: string | null; vendeur: string | null; equipesVisites: Set<string>; techs: Set<string>; lignes: string[] }
+
+async function infosJobs(db: Client, org: string): Promise<Map<string, InfoJob>> {
+  const jobs = await db.query(`select id, team_id, client_id, salesperson_id from public.jobs where org_id = $1 and deleted_at is null`, [org]);
+  const m = new Map<string, InfoJob>();
+  for (const j of jobs.rows) m.set(j.id, { id: j.id, team: j.team_id, client: j.client_id, vendeur: j.salesperson_id, equipesVisites: new Set(), techs: new Set(), lignes: [] });
+  const ev = await db.query(`select job_id, team_id, assigned_user from public.schedule_events where org_id = $1 and deleted_at is null and job_id is not null`, [org]);
+  const equipesDe = await db.query(`
+    select user_id, team_id from public.team_assignments where org_id = $1
+    union select user_id, team_id from public.memberships where org_id = $1 and team_id is not null
+    union select user_id, team_id from public.team_members where org_id = $1 and team_id is not null`, [org]);
+  const membresEquipe = new Map<string, Set<string>>();
+  for (const r of equipesDe.rows) { if (!membresEquipe.has(r.team_id)) membresEquipe.set(r.team_id, new Set()); membresEquipe.get(r.team_id)!.add(r.user_id); }
+  for (const e of ev.rows) {
+    const j = m.get(e.job_id); if (!j) continue;
+    if (e.team_id) { j.equipesVisites.add(e.team_id); for (const u of membresEquipe.get(e.team_id) ?? []) j.techs.add(u); }
+    if (e.assigned_user) j.techs.add(e.assigned_user);
+  }
+  const te = await db.query(`select job_id, employee_id from public.time_entries where org_id = $1 and job_id is not null`, [org]);
+  for (const t of te.rows) m.get(t.job_id)?.techs.add(t.employee_id);
+  const li = await db.query(`select job_id, name from public.job_line_items where org_id = $1 and deleted_at is null and coalesce(included, true)`, [org]);
+  for (const l of li.rows) m.get(l.job_id)?.lignes.push(norm(l.name));
+  return m;
 }
 
-/** Même définition, sans l'import : ce que les PAIEMENTS seuls justifient (sert la répartition par mode). */
-export async function encaissePaiementsParMode(db: Client, org: string, p: Periode): Promise<Array<{ mode: string; cents: number }>> {
-  return (await plusieurs(db, `${BORNES}
-    select coalesce(p.method, '∅') mode, sum(p.amount_cents - coalesce(p.refunded_cents, 0))::bigint cents
-      from public.payments p, b
+async function nomService(db: Client, id: string): Promise<string> {
+  return norm((await db.query(`select name from public.predefined_services where id = $1`, [id])).rows[0]?.name ?? '');
+}
+
+/** Le job passe-t-il les filtres demandés (sous-ensemble de clés) ? */
+async function testeur(db: Client, org: string, f: Filtres, cles: Array<keyof Filtres> = ['equipe', 'technicien', 'vendeur', 'client', 'service']) {
+  const jobs = await infosJobs(db, org);
+  const service = f.service ? await nomService(db, f.service) : '';
+  return (jobId: string | null): boolean => {
+    const j = jobId ? jobs.get(jobId) : undefined;
+    if (!j) return false;
+    if (cles.includes('equipe') && f.equipe && j.team !== f.equipe && !j.equipesVisites.has(f.equipe)) return false;
+    if (cles.includes('technicien') && f.technicien && !j.techs.has(f.technicien)) return false;
+    if (cles.includes('vendeur') && f.vendeur && j.vendeur !== f.vendeur) return false;
+    if (cles.includes('client') && f.client && j.client !== f.client) return false;
+    if (cles.includes('service') && f.service && !j.lignes.includes(service)) return false;
+    return true;
+  };
+}
+
+/* ── Encaissé ──────────────────────────────────────────────────────────────── */
+interface Encaissement { mois: string; cents: number; methode: string | null; client: string | null; source: 'paiement' | 'facture'; id: string }
+
+/**
+ * ENCAISSÉ : paiements réussis NETS des remboursements (un 'refunded' vaut 0), pourboires exclus,
+ * taxes incluses, à la date de paiement locale ; + factures payées SANS aucune ligne de paiement
+ * (import Jobber) : paid_cents à paid_at. Filtres : client/vendeur sur le paiement ou sa facture,
+ * filtres « job » sur le job du paiement (ou de sa facture).
+ */
+export async function encaissements(db: Client, org: string, p: Periode, f: Filtres = {}): Promise<Encaissement[]> {
+  const r = await db.query(`
+    select to_char(p.payment_date at time zone ${TZ}, 'YYYY-MM') mois, (p.amount_cents - coalesce(p.refunded_cents, 0)) cents, p.method,
+           coalesce(p.client_id, i.client_id) client, coalesce(i.salesperson_id, j.salesperson_id) vendeur, j.id job, 'paiement' source, p.id
+      from public.payments p left join public.invoices i on i.id = p.invoice_id
+      left join public.jobs j on j.id = coalesce(p.job_id, i.job_id) and j.deleted_at is null
      where p.org_id = $1 and p.deleted_at is null and p.status in ('succeeded', 'refunded')
-       and p.payment_date >= b.debut and p.payment_date < b.fin
-     group by 1 having sum(p.amount_cents - coalesce(p.refunded_cents, 0)) > 0 order by 2 desc`, [org, p.du, p.au]))
-    .map((r) => ({ mode: r.mode, cents: n(r.cents) }));
+       and p.payment_date >= ${DEBUT} and p.payment_date < ${FIN}
+    union all
+    select to_char(coalesce(i.paid_at, i.issued_at) at time zone ${TZ}, 'YYYY-MM'), i.paid_cents, null, i.client_id, coalesce(i.salesperson_id, j.salesperson_id), j.id, 'facture', i.id
+      from public.invoices i left join public.jobs j on j.id = i.job_id and j.deleted_at is null
+     where i.org_id = $1 and i.deleted_at is null and i.status in ('paid', 'partial') and i.paid_cents > 0
+       and not exists (select 1 from public.payments p where p.invoice_id = i.id and p.deleted_at is null)
+       and coalesce(i.paid_at, i.issued_at) >= ${DEBUT} and coalesce(i.paid_at, i.issued_at) < ${FIN}`, [org, p.du, p.au]);
+  const passe = await testeur(db, org, f, ['equipe', 'technicien', 'service']);
+  return r.rows
+    .filter((x) => (!f.client || x.client === f.client) && (!f.vendeur || x.vendeur === f.vendeur) && (!filtreJobActif(f) || passe(x.job)))
+    .map((x) => ({ mois: x.mois, cents: n(x.cents), methode: x.method, client: x.client, source: x.source, id: x.id }));
 }
 
-/** FACTURÉ : total TTC des factures émises (envoyée, partielle, payée ; ni brouillon ni annulée), à la date d'émission locale. */
-export async function factureParMois(db: Client, org: string, p: Periode): Promise<Array<{ mois: string; cents: number }>> {
-  return (await plusieurs(db, `${BORNES},
-    mois as (select generate_series(date_trunc('month', $2::date), date_trunc('month', $3::date), interval '1 month')::date m)
-    select to_char(m.m, 'YYYY-MM') mois, coalesce(sum(i.total_cents), 0)::bigint cents
-      from mois m
-      left join (select i.*, b.z from public.invoices i, b
-                  where i.org_id = $1 and i.deleted_at is null and i.status in ('sent', 'partial', 'paid')
-                    and coalesce(i.issued_at, i.created_at) >= b.debut and coalesce(i.issued_at, i.created_at) < b.fin) i
-        on date_trunc('month', coalesce(i.issued_at, i.created_at) at time zone i.z)::date = m.m
-     group by m.m order by m.m`, [org, p.du, p.au])).map((r) => ({ mois: r.mois, cents: n(r.cents) }));
+export async function encaisseParMois(db: Client, org: string, p: Periode, f: Filtres = {}): Promise<Array<{ mois: string; cents: number }>> {
+  const e = await encaissements(db, org, p, f);
+  return moisDe(p).map((mois) => ({ mois, cents: e.filter((x) => x.mois === mois).reduce((s, x) => s + x.cents, 0) }));
 }
 
-/** « Revenu par service » tel que la page le DÉFINIT (valeur TTC des jobs créés, hors brouillon/annulé, par titre), sans troncature. */
-export async function valeurParTitreDeJob(db: Client, org: string, p: Periode): Promise<Array<{ titre: string; cents: number }>> {
-  return (await plusieurs(db, `${BORNES}
-    select coalesce(nullif(j.title, ''), 'Untitled') titre, sum(j.total_cents)::bigint cents
-      from public.jobs j, b
-     where j.org_id = $1 and j.deleted_at is null and j.status not in ('draft', 'cancelled')
-       and j.created_at >= b.debut and j.created_at < b.fin
-     group by 1 order by 2 desc, 1`, [org, p.du, p.au])).map((r) => ({ titre: r.titre, cents: n(r.cents) }));
+/** Encaissé par mode (paiements seulement), nets des remboursements. */
+export async function encaisseParMode(db: Client, org: string, p: Periode, f: Filtres = {}): Promise<Array<{ mode: string; cents: number }>> {
+  const par = new Map<string, number>();
+  for (const x of await encaissements(db, org, p, f)) if (x.source === 'paiement') par.set(x.methode ?? 'other', (par.get(x.methode ?? 'other') ?? 0) + x.cents);
+  return [...par.entries()].filter(([, c]) => c !== 0).map(([mode, cents]) => ({ mode, cents })).sort((a, b) => b.cents - a.cents || a.mode.localeCompare(b.mode));
 }
 
-/** Valeur moyenne d'un job COMPLÉTÉ (TTC), par mois local de complétion, et moyenne réelle de la période (somme / nombre). */
-export async function valeurMoyenneJob(db: Client, org: string, p: Periode) {
-  const mois = await plusieurs(db, `${BORNES},
-    mois as (select generate_series(date_trunc('month', $2::date), date_trunc('month', $3::date), interval '1 month')::date m)
-    select to_char(m.m, 'YYYY-MM') mois, coalesce(round(avg(j.total_cents)), 0)::bigint moy, count(j.id)::int nb
-      from mois m
-      left join (select j.*, b.z from public.jobs j, b where j.org_id = $1 and j.deleted_at is null and j.status = 'completed'
-                   and j.completed_at >= b.debut and j.completed_at < b.fin) j
-        on date_trunc('month', j.completed_at at time zone j.z)::date = m.m
-     group by m.m order by m.m`, [org, p.du, p.au]);
-  const tot = await un(db, `${BORNES}
-    select coalesce(sum(j.total_cents), 0)::bigint s, count(*)::int nb from public.jobs j, b
-     where j.org_id = $1 and j.deleted_at is null and j.status = 'completed' and j.completed_at >= b.debut and j.completed_at < b.fin`, [org, p.du, p.au]);
-  return { mois: mois.map((r) => ({ mois: r.mois, moyenne: n(r.moy), nb: n(r.nb) })), moyenne: tot.nb ? Math.round(n(tot.s) / tot.nb) : 0, nb: n(tot.nb) };
+/** Top clients : encaissé par client sur la période. */
+export async function topClients(db: Client, org: string, p: Periode, f: Filtres = {}, limite = 5) {
+  const par = new Map<string, number>();
+  for (const x of await encaissements(db, org, p, f)) if (x.client) par.set(x.client, (par.get(x.client) ?? 0) + x.cents);
+  const noms = await db.query(`select id, coalesce(nullif(btrim(concat_ws(' ', first_name, last_name)), ''), company, '—') nom from public.clients where org_id = $1`, [org]);
+  const nom = new Map(noms.rows.map((r) => [r.id, r.nom]));
+  return [...par.entries()].filter(([, c]) => c > 0).map(([id, cents]) => ({ id, nom: String(nom.get(id) ?? '—'), cents }))
+    .sort((a, b) => b.cents - a.cents || a.nom.localeCompare(b.nom)).slice(0, limite);
 }
 
-/** Équipes : jobs créés dans la période (hors supprimés), complétés, revenu (TTC) des complétés. Équipes actives seulement. */
-export async function equipes(db: Client, org: string, p: Periode) {
-  return (await plusieurs(db, `${BORNES}
-    select t.id, t.name, count(j.id)::int nb, count(j.id) filter (where j.status = 'completed')::int faits,
-           coalesce(sum(j.total_cents) filter (where j.status = 'completed'), 0)::bigint revenu
-      from public.teams t
-      left join (select j.* from public.jobs j, b where j.org_id = $1 and j.deleted_at is null and j.created_at >= b.debut and j.created_at < b.fin) j
-        on j.team_id = t.id
-     where t.org_id = $1 and t.deleted_at is null and t.is_active
-     group by t.id, t.name order by revenu desc, t.name`, [org, p.du, p.au]))
-    .map((r) => ({ id: r.id, nom: r.name, nb: n(r.nb), faits: n(r.faits), revenu: n(r.revenu) }));
+/** FACTURÉ : total TTC des factures émises (envoyée, partielle, payée), à la date d'émission locale. */
+export async function factureParMois(db: Client, org: string, p: Periode, f: Filtres = {}): Promise<Array<{ mois: string; cents: number }>> {
+  const r = await db.query(`
+    select to_char(coalesce(i.issued_at, i.created_at) at time zone ${TZ}, 'YYYY-MM') mois, i.total_cents, i.client_id, coalesce(i.salesperson_id, j.salesperson_id) vendeur, j.id job
+      from public.invoices i left join public.jobs j on j.id = i.job_id and j.deleted_at is null
+     where i.org_id = $1 and i.deleted_at is null and i.status in ('sent', 'partial', 'paid')
+       and coalesce(i.issued_at, i.created_at) >= ${DEBUT} and coalesce(i.issued_at, i.created_at) < ${FIN}`, [org, p.du, p.au]);
+  const passe = await testeur(db, org, f, ['equipe', 'technicien', 'service']);
+  const ok = r.rows.filter((x) => (!f.client || x.client_id === f.client) && (!f.vendeur || x.vendeur === f.vendeur) && (!filtreJobActif(f) || passe(x.job)));
+  return moisDe(p).map((mois) => ({ mois, cents: ok.filter((x) => x.mois === mois).reduce((s, x) => s + n(x.total_cents), 0) }));
 }
 
-/** Valeur à vie d'un client (définition CLV de la base) : max(jobs non brouillon/annulés TTC, factures payées TTC). Tous les clients. */
-export async function valeurClients(db: Client, org: string) {
-  return (await plusieurs(db, `
-    with cs as (select c.id, concat(c.first_name, ' ', c.last_name) nom, count(j.id) nb, coalesce(sum(j.total_cents), 0) rev
-                  from public.clients c
-                  left join public.jobs j on j.client_id = c.id and j.org_id = c.org_id and j.deleted_at is null and j.status not in ('draft', 'cancelled')
-                 where c.org_id = $1 and c.deleted_at is null group by c.id, c.first_name, c.last_name),
-         ir as (select i.client_id, sum(i.total_cents) inv from public.invoices i
-                 where i.org_id = $1 and i.deleted_at is null and i.status = 'paid' group by 1)
-    select cs.id, cs.nom, cs.nb::int, greatest(cs.rev, coalesce(ir.inv, 0))::bigint revenu
-      from cs left join ir on ir.client_id = cs.id where cs.nb > 0 order by revenu desc, cs.nom`, [org]))
-    .map((r) => ({ id: r.id, nom: r.nom, nb: n(r.nb), revenu: n(r.revenu) }));
+/* ── Jobs ──────────────────────────────────────────────────────────────────── */
+async function jobsCompletesBruts(db: Client, org: string, p: Periode) {
+  return (await db.query(`
+    select id, to_char(completed_at at time zone ${TZ}, 'YYYY-MM') mois, total_cents, subtotal_cents, job_type from public.jobs
+     where org_id = $1 and deleted_at is null and status = 'completed' and completed_at >= ${DEBUT} and completed_at < ${FIN}`, [org, p.du, p.au])).rows;
 }
 
-/** Part récurrente de la valeur des jobs COMPLÉTÉS dans la période (date de complétion locale, comme la valeur moyenne). */
-export async function partRecurrente(db: Client, org: string, p: Periode): Promise<number> {
-  const r = await un(db, `${BORNES}
-    select coalesce(sum(j.total_cents), 0) tot, coalesce(sum(j.total_cents) filter (where j.job_type = 'recurring'), 0) rec
-      from public.jobs j, b where j.org_id = $1 and j.deleted_at is null and j.status = 'completed'
-       and j.completed_at >= b.debut and j.completed_at < b.fin`, [org, p.du, p.au]);
-  return n(r.tot) > 0 ? Math.round((n(r.rec) / n(r.tot)) * 100) : 0;
+/** Revenu par service : lignes (incluses) des jobs complétés, avant taxes ; nom du catalogue si la ligne le porte ; job sans ligne → « (sans détail) ». */
+export async function revenuParService(db: Client, org: string, p: Periode, f: Filtres = {}): Promise<Array<{ nom: string; cents: number }>> {
+  const passe = await testeur(db, org, f, ['equipe', 'technicien', 'vendeur', 'client']);
+  const jobs = (await jobsCompletesBruts(db, org, p)).filter((j) => passe(j.id));
+  const cat = (await db.query(`select id, name from public.predefined_services where org_id = $1 order by is_active desc, created_at`, [org])).rows;
+  const nomCatalogue = new Map<string, { nom: string; id: string }>();
+  for (const s of cat) if (!nomCatalogue.has(norm(s.name))) nomCatalogue.set(norm(s.name), { nom: s.name, id: s.id });
+  const lignes = (await db.query(`select job_id, name, total_cents from public.job_line_items where org_id = $1 and deleted_at is null and coalesce(included, true)`, [org])).rows;
+  const par = new Map<string, number>();
+  for (const j of jobs) {
+    const ls = lignes.filter((l) => l.job_id === j.id);
+    if (ls.length === 0) { if (!f.service) par.set('(sans détail)', (par.get('(sans détail)') ?? 0) + n(j.subtotal_cents)); continue; }
+    for (const l of ls) {
+      const c = nomCatalogue.get(norm(l.name));
+      if (f.service && c?.id !== f.service) continue;
+      const nom = c?.nom ?? String(l.name).trim();
+      par.set(nom, (par.get(nom) ?? 0) + n(l.total_cents));
+    }
+  }
+  return [...par.entries()].filter(([, c]) => c !== 0).map(([nom, cents]) => ({ nom, cents })).sort((a, b) => b.cents - a.cents || a.nom.localeCompare(b.nom));
 }
 
-/** Leads : créés (clients qui ont été des leads) et convertis (leads distincts devenus job dans la période). */
-export async function conversionLeads(db: Client, org: string, p: Periode) {
-  const r = await un(db, `${BORNES}
-    select (select count(*) from public.clients l, b where l.org_id = $1 and l.deleted_at is null
-              and l.created_at >= b.debut and l.created_at < b.fin
-              and (l.status = 'lead' or l.lead_status is not null
-                   or exists (select 1 from public.jobs j2 where j2.org_id = l.org_id and j2.lead_id = l.id and j2.deleted_at is null)))::int crees,
-           (select count(distinct j.lead_id) from public.jobs j, b where j.org_id = $1 and j.deleted_at is null and j.lead_id is not null
-              and j.created_at >= b.debut and j.created_at < b.fin)::int convertis`, [org, p.du, p.au]);
-  const taux = r.crees > 0 ? Math.min(1, Math.round((r.convertis / r.crees) * 10000) / 10000) : 0;
-  return { crees: n(r.crees), convertis: n(r.convertis), taux };
+/** Jobs complétés dans la période : valeur moyenne (TTC, somme / nombre), par mois, part récurrente. */
+export async function jobsCompletes(db: Client, org: string, p: Periode, f: Filtres = {}) {
+  const passe = await testeur(db, org, f);
+  const jobs = (await jobsCompletesBruts(db, org, p)).filter((j) => passe(j.id));
+  const tot = jobs.reduce((s, j) => s + n(j.total_cents), 0);
+  const rec = jobs.filter((j) => j.job_type === 'recurring').reduce((s, j) => s + n(j.total_cents), 0);
+  const mois = [...new Set(jobs.map((j) => String(j.mois)))].sort().map((m) => {
+    const js = jobs.filter((j) => j.mois === m);
+    return { mois: m, nombre: js.length, totalCents: js.reduce((s, j) => s + n(j.total_cents), 0) };
+  });
+  return { mois, nombre: jobs.length, moyenneCents: jobs.length ? Math.round(tot / jobs.length) : 0, partRecurrentePct: tot > 0 ? Math.round((rec / tot) * 100) : 0, ids: jobs.map((j) => String(j.id)) };
 }
 
-/** Soumissions créées dans la période : total, approuvées (approved + converted), valeurs TTC. */
-export async function soumissions(db: Client, org: string, p: Periode) {
-  const r = await un(db, `${BORNES}
-    select count(*)::int nb, coalesce(sum(q.total_cents), 0)::bigint valeur,
-           count(*) filter (where q.status in ('approved', 'converted'))::int approuvees,
-           coalesce(sum(q.total_cents) filter (where q.status in ('approved', 'converted')), 0)::bigint valeur_approuvee
-      from public.quotes q, b where q.org_id = $1 and q.deleted_at is null and q.created_at >= b.debut and q.created_at < b.fin`, [org, p.du, p.au]);
-  return { nb: n(r.nb), valeur: n(r.valeur), approuvees: n(r.approuvees), valeurApprouvee: n(r.valeur_approuvee) };
+/** Équipes actives : jobs créés dans la période (filtres hors « équipe »), complétés, revenu TTC des complétés. */
+export async function equipes(db: Client, org: string, p: Periode, f: Filtres = {}) {
+  const passe = await testeur(db, org, f, ['technicien', 'vendeur', 'client', 'service']);
+  const teams = (await db.query(`select id, name from public.teams where org_id = $1 and deleted_at is null and is_active order by name`, [org])).rows
+    .filter((t) => !f.equipe || t.id === f.equipe);
+  const jobs = (await db.query(`select id, team_id, status, total_cents from public.jobs where org_id = $1 and deleted_at is null and created_at >= ${DEBUT} and created_at < ${FIN}`, [org, p.du, p.au])).rows
+    .filter((j) => passe(j.id));
+  return teams.map((t) => {
+    const js = jobs.filter((j) => j.team_id === t.id);
+    const faits = js.filter((j) => j.status === 'completed');
+    return { id: String(t.id), nom: String(t.name), jobs: js.length, completes: faits.length, revenuCents: faits.reduce((s, j) => s + n(j.total_cents), 0) };
+  });
 }
 
-/**
- * Pipeline : deals créés dans la période, SANS les deals « source = 'job' » (copies du classement,
- * créées gagnées d'office pour chaque job qui a un vendeur — ce ne sont pas des opportunités).
- * Taux = gagnés / (gagnés + perdus) ; délai = won_at − created_at (pas updated_at).
- */
-export async function pipeline(db: Client, org: string, p: Periode) {
-  const r = await un(db, `${BORNES}
-    select count(*) filter (where d.stage = 'closed_won')::int gagnes, count(*) filter (where d.stage = 'closed_lost')::int perdus,
-           avg(extract(epoch from (d.won_at - d.created_at)) / 86400.0) filter (where d.stage = 'closed_won' and d.won_at is not null) delai
-      from public.pipeline_deals d, b
-     where d.org_id = $1 and d.deleted_at is null and coalesce(d.source, '') <> 'job'
-       and d.created_at >= b.debut and d.created_at < b.fin`, [org, p.du, p.au]);
-  const clos = n(r.gagnes) + n(r.perdus);
-  return { gagnes: n(r.gagnes), perdus: n(r.perdus), tauxPct: clos ? Math.round((n(r.gagnes) / clos) * 1000) / 10 : null, delaiJours: r.delai == null ? null : Number(r.delai) };
+/** Valeur vie moyenne (à vie) : max(jobs non brouillon/annulés retenus TTC, factures payées TTC) par client ayant un job retenu. */
+export async function valeurVieMoyenne(db: Client, org: string, f: Filtres = {}) {
+  const passe = await testeur(db, org, f);
+  const jobs = (await db.query(`select id, client_id, total_cents from public.jobs where org_id = $1 and deleted_at is null and status not in ('draft', 'cancelled') and client_id is not null
+                                  and client_id in (select id from public.clients where org_id = $1 and deleted_at is null)`, [org])).rows.filter((j) => passe(j.id));
+  const factures = filtreJobActif(f) ? [] : (await db.query(`select client_id, total_cents, salesperson_id from public.invoices where org_id = $1 and deleted_at is null and status = 'paid'`, [org])).rows
+    .filter((i) => !f.vendeur || i.salesperson_id === f.vendeur);
+  const clients = [...new Set(jobs.map((j) => j.client_id))];
+  const valeurs = clients.map((c) => Math.max(jobs.filter((j) => j.client_id === c).reduce((s, j) => s + n(j.total_cents), 0), factures.filter((i) => i.client_id === c).reduce((s, i) => s + n(i.total_cents), 0)));
+  return { clients: clients.length, moyenneCents: valeurs.length ? Math.round(valeurs.reduce((s, v) => s + v, 0) / valeurs.length) : 0 };
 }
 
-/** À recevoir (toute l'entreprise, sans borne) et nombre en retard au jour local donné. */
-export async function aRecevoir(db: Client, org: string, aujourdhui: string) {
-  const r = await un(db, `
-    select coalesce(sum(i.balance_cents), 0)::bigint solde, count(*) filter (where i.due_date < $2::date)::int en_retard
-      from public.invoices i where i.org_id = $1 and i.deleted_at is null and i.status in ('sent', 'partial') and i.balance_cents > 0`, [org, aujourdhui]);
-  return { solde: n(r.solde), enRetard: n(r.en_retard) };
+/* ── Ventes ────────────────────────────────────────────────────────────────── */
+/** Cohorte : leads créés dans la période → ayant une soumission OU un job → devenus un job. */
+export async function entonnoir(db: Client, org: string, p: Periode, f: Filtres = {}) {
+  const leads = (await db.query(`
+    select l.id, l.created_at, l.assigned_to from public.clients l where l.org_id = $1 and l.deleted_at is null and l.created_at >= ${DEBUT} and l.created_at < ${FIN}
+       and (l.status = 'lead' or l.lead_status is not null or exists (select 1 from public.jobs j where j.org_id = l.org_id and j.lead_id = l.id and j.deleted_at is null))`, [org, p.du, p.au])).rows
+    .filter((l) => (!f.vendeur || l.assigned_to === f.vendeur) && (!f.client || l.id === f.client));
+  const quotes = (await db.query(`select lead_id, client_id from public.quotes where org_id = $1 and deleted_at is null`, [org])).rows;
+  const jobs = (await db.query(`select lead_id, client_id, created_at from public.jobs where org_id = $1 and deleted_at is null`, [org])).rows;
+  let avec = 0; let conv = 0; const delais: number[] = [];
+  for (const l of leads) {
+    const jl = jobs.filter((j) => j.lead_id === l.id || j.client_id === l.id);
+    const soumis = quotes.some((q) => q.lead_id === l.id || q.client_id === l.id);
+    if (soumis || jl.length) avec += 1;
+    if (jl.length) { conv += 1; delais.push((Math.min(...jl.map((j) => new Date(j.created_at).getTime())) - new Date(l.created_at).getTime()) / 86_400_000); }
+  }
+  return { crees: leads.length, avecSoumission: avec, convertis: conv, tauxPct: leads.length ? Math.round((conv / leads.length) * 100) : 0,
+    joursMoyens: delais.length ? Math.round((delais.reduce((s, d) => s + d, 0) / delais.length) * 10) / 10 : null };
 }
 
-/** Délai moyen facture → payée (jours), factures payées dans la période locale. */
-export async function delaiPaiement(db: Client, org: string, p: Periode): Promise<number | null> {
-  const r = await un(db, `${BORNES}
-    select avg(extract(epoch from (i.paid_at - i.issued_at)) / 86400.0) j from public.invoices i, b
-     where i.org_id = $1 and i.deleted_at is null and i.paid_at is not null and i.issued_at is not null
-       and i.paid_at >= b.debut and i.paid_at < b.fin and i.paid_at >= i.issued_at`, [org, p.du, p.au]);
-  return r.j == null ? null : Number(r.j);
+/** Soumissions créées dans la période (valeur TTC, approuvées = approved + converted). */
+export async function soumissions(db: Client, org: string, p: Periode, f: Filtres = {}) {
+  const q = (await db.query(`select id, total_cents, status, coalesce(client_id, lead_id) c, salesperson_id from public.quotes
+                               where org_id = $1 and deleted_at is null and created_at >= ${DEBUT} and created_at < ${FIN}`, [org, p.du, p.au])).rows;
+  const liees = f.service ? new Set((await db.query(`select quote_id from public.quote_line_items where source_service_id = $1`, [f.service])).rows.map((r) => r.quote_id)) : null;
+  const ok = q.filter((x) => (!f.client || x.c === f.client) && (!f.vendeur || x.salesperson_id === f.vendeur) && (!liees || liees.has(x.id)));
+  const app = ok.filter((x) => ['approved', 'converted'].includes(x.status));
+  return { nombre: ok.length, valeurCents: ok.reduce((s, x) => s + n(x.total_cents), 0), approuvees: app.length, valeurApprouveeCents: app.reduce((s, x) => s + n(x.total_cents), 0) };
 }
 
-/** Zones : jobs complétés ayant au moins une visite dans la période locale ; un job compte une fois, pour son total TTC. */
-export async function zones(db: Client, org: string, p: Periode) {
-  const r = await un(db, `${BORNES}
-    select coalesce(sum(j.total_cents), 0)::bigint revenu, count(*)::int nb from public.jobs j
-     where j.org_id = $1 and j.deleted_at is null and j.status = 'completed'
-       and exists (select 1 from public.schedule_events e, b where e.job_id = j.id and e.org_id = $1 and e.deleted_at is null
-                     and e.start_at >= b.debut and e.start_at < b.fin)`, [org, p.du, p.au]);
-  return { revenu: n(r.revenu), nb: n(r.nb) };
+/** Deals créés dans la période, SANS les copies du classement (source = 'job') ; taux = gagnés / (gagnés + perdus). */
+export async function pipeline(db: Client, org: string, p: Periode, f: Filtres = {}) {
+  const d = (await db.query(`select stage, rep_id, coalesce(client_id, lead_id) c from public.pipeline_deals where org_id = $1 and deleted_at is null and coalesce(source, '') <> 'job'
+                               and created_at >= ${DEBUT} and created_at < ${FIN}`, [org, p.du, p.au])).rows
+    .filter((x) => (!f.vendeur || x.rep_id === f.vendeur) && (!f.client || x.c === f.client));
+  const g = d.filter((x) => x.stage === 'closed_won').length; const pe = d.filter((x) => x.stage === 'closed_lost').length;
+  return { gagnes: g, perdus: pe, tauxPct: g + pe ? Math.round((g / (g + pe)) * 1000) / 10 : null };
+}
+
+/* ── Trésorerie ────────────────────────────────────────────────────────────── */
+async function facturesFiltrees(db: Client, org: string, f: Filtres) {
+  const r = await db.query(`select i.*, coalesce(i.salesperson_id, j.salesperson_id) vendeur, j.id job from public.invoices i left join public.jobs j on j.id = i.job_id and j.deleted_at is null
+                             where i.org_id = $1 and i.deleted_at is null`, [org]);
+  const passe = await testeur(db, org, f, ['equipe', 'technicien', 'service']);
+  return r.rows.filter((x) => (!f.client || x.client_id === f.client) && (!f.vendeur || x.vendeur === f.vendeur) && (!filtreJobActif(f) || passe(x.job)));
+}
+const jourIso = (d: Date | string) => (typeof d === 'string' ? d.slice(0, 10) : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+/** À recevoir (à ce jour) et nombre en retard au jour local donné. */
+export async function aRecevoir(db: Client, org: string, aujourdhui: string, f: Filtres = {}) {
+  const ouvertes = (await facturesFiltrees(db, org, f)).filter((i) => ['sent', 'partial'].includes(i.status) && n(i.balance_cents) > 0);
+  return { solde: ouvertes.reduce((s, i) => s + n(i.balance_cents), 0), enRetard: ouvertes.filter((i) => i.due_date && jourIso(i.due_date) < aujourdhui).length };
+}
+/** Délai moyen émise → payée (jours), factures payées dans la période locale. */
+export async function delaiPaiement(db: Client, org: string, p: Periode, f: Filtres = {}): Promise<number | null> {
+  const bornes = (await db.query(`select ${DEBUT} d, ${FIN} f`, [org, p.du, p.au])).rows[0];
+  const ok = (await facturesFiltrees(db, org, f)).filter((i) => i.paid_at && i.issued_at && i.paid_at >= bornes.d && i.paid_at < bornes.f && i.paid_at >= i.issued_at);
+  return ok.length ? ok.reduce((s, i) => s + (i.paid_at.getTime() - i.issued_at.getTime()) / 86_400_000, 0) / ok.length : null;
+}
+
+/** Zones : jobs complétés géolocalisés ayant une visite dans la période, comptés une fois, TTC. */
+export async function zones(db: Client, org: string, p: Periode, f: Filtres = {}) {
+  const passe = await testeur(db, org, f);
+  const r = (await db.query(`
+    select j.id, j.total_cents from public.jobs j where j.org_id = $1 and j.deleted_at is null and j.status = 'completed'
+       and j.latitude is not null and j.longitude is not null and not (j.latitude = 0 and j.longitude = 0)
+       and exists (select 1 from public.schedule_events e where e.job_id = j.id and e.org_id = $1 and e.deleted_at is null and e.start_at >= ${DEBUT} and e.start_at < ${FIN})`, [org, p.du, p.au])).rows
+    .filter((j) => passe(j.id));
+  return { revenu: r.reduce((s, j) => s + n(j.total_cents), 0), nb: r.length, ids: r.map((j) => String(j.id)) };
+}
+
+/** Mois « YYYY-MM » couverts par la période. */
+export function moisDe(p: Periode): string[] {
+  const out: string[] = [];
+  let y = Number(p.du.slice(0, 4)); let m = Number(p.du.slice(5, 7));
+  const ey = Number(p.au.slice(0, 4)); const em = Number(p.au.slice(5, 7));
+  while (y < ey || (y === ey && m <= em)) { out.push(`${y}-${String(m).padStart(2, '0')}`); m += 1; if (m > 12) { m = 1; y += 1; } }
+  return out;
 }

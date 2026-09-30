@@ -14,12 +14,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, GeoJSON, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import type { Geometry } from 'geojson';
-import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../../i18n';
-import { fetchZonesParAdresse } from '../../lib/insightsApi';
+import type { ZoneAdresse } from '../../lib/statistiquesApi';
+import type { CleFiltre } from '../../lib/statsFiltres';
 import ErreurCarte from './ErreurCarte';
-import PeriodSelector from './PeriodSelector';
-import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
+import EnteteCarte, { PastilleVariation } from './EnteteCarte';
 import { BASEMAP_LIGHT, BASEMAP_DARK, BASEMAP_ATTR } from '../../lib/basemap';
 
 const DEFAULT_CENTER: L.LatLngTuple = [45.5017, -73.5673];
@@ -57,7 +56,7 @@ function cityFromAddress(addr?: string | null): string | null {
   return null;
 }
 
-interface Zone { name: string; lat: number; lng: number; rev: number; jobs: number; }
+interface Zone { name: string; lat: number; lng: number; rev: number; jobs: number; ids: string[] }
 
 // ── City boundary polygons (Nominatim / OSM) ─────────────────────
 // ref = OSM relation id, used to dedupe two parsed spellings ("Montréal" /
@@ -146,14 +145,15 @@ function FitTopCity({ top, topPoly, center }: { top: Zone | null; topPoly: Geome
   return null;
 }
 
-export default function ZonesHeatmapCard({
-  range,
-  period,
-  onPeriod,
-}: {
-  range: InsightsRange;
-  period: InsightsPeriod;
-  onPeriod: (p: InsightsPeriod) => void;
+export default function ZonesHeatmapCard({ lignes: donnees, chargement, erreur, onRetry, onDetail, variation, nonAppliques }: {
+  lignes: ZoneAdresse[] | undefined;
+  chargement: boolean;
+  erreur: boolean;
+  onRetry: () => void;
+  /** Les jobs derrière la carte entière (nom null) ou une ville. */
+  onDetail: (ville: string | null, jobIds: string[]) => void;
+  variation?: { texte: string; sens: 'hausse' | 'baisse' | 'stable' } | null;
+  nonAppliques?: CleFiltre[];
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -168,13 +168,7 @@ export default function ZonesHeatmapCard({
     document.head.appendChild(el);
   }, []);
 
-  const q = useQuery({
-    queryKey: ['zones-heat', range.from, range.to],
-    // Jobs complétés regroupés par adresse (fuseau de l'entreprise) ; la ville se lit dans l'adresse.
-    queryFn: () => fetchZonesParAdresse({ from: range.from, to: range.to }),
-    staleTime: 60_000,
-    refetchOnMount: 'always',
-  });
+  const q = { data: donnees, isLoading: chargement, isError: erreur, refetch: onRetry };
 
   const kc = (cents: number) => new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
@@ -183,16 +177,16 @@ export default function ZonesHeatmapCard({
     const lignes = q.data || [];
     const nJobs = lignes.reduce((s, z) => s + z.jobs, 0);
     const center: L.LatLngTuple = nJobs
-      ? [lignes.reduce((s, z) => s + z.lat_somme, 0) / nJobs, lignes.reduce((s, z) => s + z.lng_somme, 0) / nJobs]
+      ? [lignes.reduce((s, z) => s + z.latSomme, 0) / nJobs, lignes.reduce((s, z) => s + z.lngSomme, 0) / nJobs]
       : DEFAULT_CENTER;
-    const agg = new Map<string, { rev: number; jobs: number; lat: number; lng: number }>();
+    const agg = new Map<string, { rev: number; jobs: number; lat: number; lng: number; ids: string[] }>();
     for (const z of lignes) {
       const name = cityFromAddress(z.adresse) || (fr ? 'Autres' : 'Other');
-      const e = agg.get(name) || { rev: 0, jobs: 0, lat: 0, lng: 0 };
-      e.rev += z.revenu_cents; e.jobs += z.jobs; e.lat += z.lat_somme; e.lng += z.lng_somme;
+      const e = agg.get(name) || { rev: 0, jobs: 0, lat: 0, lng: 0, ids: [] };
+      e.rev += z.revenuCents; e.jobs += z.jobs; e.lat += z.latSomme; e.lng += z.lngSomme; e.ids.push(...z.jobIds);
       agg.set(name, e);
     }
-    const zones: Zone[] = Array.from(agg.entries()).map(([name, v]) => ({ name, rev: v.rev, jobs: v.jobs, lat: v.lat / v.jobs, lng: v.lng / v.jobs })).sort((a, b) => b.rev - a.rev);
+    const zones: Zone[] = Array.from(agg.entries()).map(([name, v]) => ({ name, rev: v.rev, jobs: v.jobs, lat: v.lat / v.jobs, lng: v.lng / v.jobs, ids: v.ids })).sort((a, b) => b.rev - a.rev || a.name.localeCompare(b.name));
     const totalRev = zones.reduce((s, z) => s + z.rev, 0);
     const totalJobs = zones.reduce((s, z) => s + z.jobs, 0);
     const maxRev = Math.max(1, ...zones.map((z) => z.rev));
@@ -220,10 +214,10 @@ export default function ZonesHeatmapCard({
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-end justify-between gap-3 px-6 pb-3 border-b border-border">
-        <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Revenu par ville' : 'Revenue by city'}</div>
-        <PeriodSelector value={period} onChange={onPeriod} />
-      </div>
+      <EnteteCarte titre={fr ? 'Revenu par ville' : 'Revenue by city'} nonAppliques={nonAppliques}
+        definition={fr ? 'Jobs complétés avec une visite dans la période, taxes incluses, ville tirée de l’adresse' : 'Completed jobs with a visit in the period, taxes included, city from the address'}
+        droite={<PastilleVariation v={variation} />}
+        onDetail={() => onDetail(null, zones.flatMap((z) => z.ids))} />
 
       {/* stats strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 px-6 pt-4">
@@ -328,14 +322,14 @@ export default function ZonesHeatmapCard({
           ) : (
             <div className="flex flex-col">
               {stats.top.map((z, i) => (
-                <div key={z.name} className="py-2.5 border-b border-border-light last:border-0">
+                <button type="button" key={z.name} onClick={() => onDetail(z.name, z.ids)} className="block w-full text-left py-2.5 border-b border-border-light last:border-0 rounded-md hover:bg-surface-secondary focus-visible:outline-none focus-visible:bg-surface-secondary">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-[13px] font-semibold text-text-primary truncate">{i + 1}. {z.name}</span>
                     <span className="text-[13px] font-bold text-text-primary tabular-nums shrink-0">{kc(z.rev)}</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-surface-tertiary overflow-hidden mt-2"><span className="block h-full rounded-full" style={{ width: `${Math.round((z.rev / maxRev) * 100)}%`, background: 'var(--color-text-primary)' }} /></div>
                   <div className="text-[11px] text-text-tertiary font-semibold mt-1.5">{z.jobs} job{z.jobs > 1 ? 's' : ''} · {kc(z.jobs ? z.rev / z.jobs : 0)} {fr ? 'moy.' : 'avg'}</div>
-                </div>
+                </button>
               ))}
             </div>
           )}
