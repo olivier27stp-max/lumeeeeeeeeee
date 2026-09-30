@@ -40,6 +40,7 @@ import {
 } from '../lib/validation';
 import { MODELES_AUTOMATISATION, trouverModele } from '../lib/automationTemplates';
 import { copierEtapes, nomDisponible } from '../../src/lib/automationTemplates';
+import { projeterFormatOrigine } from '../../src/lib/sequenceTypes';
 import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie } from '../lib/automatisations-bureaux';
 import { logger } from '../lib/logger';
 import { oublierPause } from '../lib/automations-pause-org';
@@ -582,7 +583,13 @@ router.post('/automations/templates/utiliser', validate(automationModeleUtiliser
     const en = reglages?.default_language === 'en';
     const nom = nomDisponible(en ? modele.nom.en : modele.nom.fr, (noms ?? []).map((n) => String(n.name ?? '')));
     let compteur = 0;
-    const steps = modele.steps ? copierEtapes(modele.steps, () => `e${++compteur}`) : null;
+    // Toujours un PARCOURS, modifiable étape par étape dans l'éditeur. Un
+    // modèle d'une seule vague (actions + délai) est projeté comme le fait
+    // la conversion de l'éditeur : l'attente en tête (« X avant le
+    // rendez-vous » pour un délai négatif), puis les actions dans l'ordre.
+    // Sans ça, la copie s'ouvrait en lecture seule (Rafba, 2026-09-30).
+    const source = modele.steps ?? projeterFormatOrigine({ actions: modele.actions, delay_seconds: modele.delai_secondes });
+    const steps = copierEtapes(source, () => `e${++compteur}`);
 
     const { data, error } = await auth.client
       .from('automation_rules')
@@ -592,7 +599,8 @@ router.post('/automations/templates/utiliser', validate(automationModeleUtiliser
         description: en ? modele.description.en : modele.description.fr,
         trigger_event: modele.declencheur,
         conditions: JSON.parse(JSON.stringify(modele.conditions)),
-        delay_seconds: modele.delai_secondes,
+        // Un parcours porte ses attentes dans ses étapes.
+        delay_seconds: 0,
         actions: JSON.parse(JSON.stringify(modele.actions)),
         steps,
         settings: modele.settings ? JSON.parse(JSON.stringify(modele.settings)) : null,

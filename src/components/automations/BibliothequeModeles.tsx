@@ -21,7 +21,7 @@ import { fetchModelesAutomatisation, utiliserModele } from '../../lib/automation
 import type { AutomationRule } from '../../lib/automationRulesApi';
 import { trouverAction, trouverDeclencheur } from '../../lib/automationCatalogue';
 import {
-  CATEGORIES_MODELES, etapesApercu, filtrerModeles, trierModeles,
+  CATEGORIES_MODELES, etapesApercu, filtrerModeles, texteSansHtml, trierModeles,
   type CanalModele, type CategorieModele, type EtapeApercu, type ModeleAutomatisation, type TriModeles,
 } from '../../lib/automationTemplates';
 
@@ -92,18 +92,6 @@ function libellesConditions(conditions: Record<string, unknown>): string[] {
     }
     return `${cle} = ${String(v)}`;
   });
-}
-
-/** Le texte d'un courriel HTML, lisible, sans jamais injecter de HTML. */
-function texteBrut(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
-    .replace(/<li[^>]*>/gi, '• ')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
 }
 
 /** Les variables ([client_first_name], {{deal.title}}) en surbrillance. */
@@ -518,7 +506,7 @@ function ContenuAction({ type, config, fr }: { type: string; config: Record<stri
   }
   if (type === 'send_email') {
     const sujet = lire('subject');
-    const corps = texteBrut(lire('body'));
+    const corps = texteSansHtml(lire('body'));
     return (
       <div className="mt-2 rounded-lg bg-surface-secondary p-2.5 text-[12px] leading-relaxed text-text-secondary">
         {sujet && <p className="font-semibold text-text-primary"><AvecVariables texte={sujet} /></p>}

@@ -867,9 +867,24 @@ function valeurValide(champ: ChampAction, brut: unknown): string | null {
  * champ retire cesse d'etre accepte le jour meme. C'est le second raffinement
  * qui verifie ensuite que la cle appartient bien a CETTE action-la.
  */
+/**
+ * Clés que le MOTEUR lit sans que l'éditeur les propose : `lien` (le lien
+ * d'une notification), `depuis_role`/`vers_role` (déplacer le deal entre deux
+ * étapes repérées par leur rôle), `description` (le détail d'une tâche). Les
+ * préréglages en portent — mesuré en prod le 2026-09-30 : 9, 9, 9 et 20
+ * règles. Sans elles, convertir un de ces parcours puis l'enregistrer était
+ * refusé (« Unrecognized key »), ou pire, les aurait amputées.
+ */
+const CLES_LUES_PAR_LE_MOTEUR_PAR_ACTION: Record<string, string[]> = {
+  create_notification: ['lien'],
+  move_deal_stage: ['depuis_role', 'vers_role'],
+  create_task: ['description'],
+};
+const CLES_LUES_PAR_LE_MOTEUR = Object.values(CLES_LUES_PAR_LE_MOTEUR_PAR_ACTION).flat();
+
 const configAction = z.object(
   Object.fromEntries(
-    CLES_CHAMPS_ACTION.flatMap((cle) => [
+    [...new Set([...CLES_CHAMPS_ACTION, ...CLES_LUES_PAR_LE_MOTEUR])].flatMap((cle) => [
       [cle, z.string().trim().max(10000).optional()],
       /* La variante anglaise du meme champ.
          `champLocalise` (server/lib/actions/index.ts) lit `<champ>_en` quand
@@ -958,7 +973,10 @@ const actionAutomatisation = z
     // Un champ rempli qui n'appartient pas a cette action : refuse plutot
     // qu'ignore, sinon l'utilisateur croit avoir ecrit un objet de courriel
     // sur un texto et ne comprend pas pourquoi il disparait.
-    const attendus = new Set(modele.champs.flatMap((c) => [c.cle, `${c.cle}_en`]));
+    const attendus = new Set([
+      ...modele.champs.flatMap((c) => [c.cle, `${c.cle}_en`]),
+      ...(CLES_LUES_PAR_LE_MOTEUR_PAR_ACTION[action.type] ?? []),
+    ]);
     for (const cle of Object.keys(config)) {
       if (!attendus.has(cle)) {
         ctx.addIssue({
@@ -1035,11 +1053,27 @@ const conditionsAutomatisation = z
  */
 const ID_ETAPE = z.string().trim().min(1).max(40).regex(/^[a-zA-Z0-9_-]+$/, 'Invalid step id.');
 
+/**
+ * `log_activity` : la note que le moteur écrit dans l'historique du client
+ * (« rappel envoyé »…). Hors catalogue — on ne la propose pas dans l'éditeur
+ * —, mais 123 règles réelles en portent une (2026-09-30). Sans elle ici, un
+ * parcours qui la contient était refusé : ces automatisations restaient en
+ * lecture seule, impossibles à convertir, donc à modifier (Rafba : « je ne
+ * suis pas capable de jouer avec les paramètres des autres bulles »).
+ */
+const actionJournal = z.object({
+  type: z.literal('log_activity'),
+  config: z.object({
+    event_type: z.string().trim().min(1).max(80),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  }).strict(),
+});
+
 const etapeSequence = z.discriminatedUnion('type', [
   z.object({
     id: ID_ETAPE,
     type: z.literal('action'),
-    action: actionAutomatisation,
+    action: z.union([actionJournal, actionAutomatisation]),
     suivant: ID_ETAPE.nullable().optional(),
     /*
      * Le nom que l'utilisateur donne a l'etape (le « Action Name » de

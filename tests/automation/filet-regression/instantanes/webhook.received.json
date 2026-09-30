@@ -557,9 +557,7 @@
      "entity_type": "automation_webhook",
      "entity_id": "aaaaaaaa-0000-4000-8000-00000000000d",
      "action_type": "request_review",
-     "action_config": {
-      "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
-     },
+     "action_config": {},
      "result_success": false,
      "result_error": "en cours",
      "execution_key": "regle-webhook.received-request_review-0:aaaaaaaa-0000-4000-8000-00000000000d:0@14910930"
@@ -576,9 +574,7 @@
      "entity_type": "automation_webhook",
      "entity_id": "aaaaaaaa-0000-4000-8000-00000000000d",
      "action_type": "request_review",
-     "action_config": {
-      "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
-     },
+     "action_config": {},
      "result_success": false,
      "result_data": null,
      "result_error": "Client has no email address or phone number.",
@@ -608,7 +604,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-00000000000d",
      "action_config": {
       "type": "request_review",
-      "config": "#7da2d3b10aed",
+      "config": "#44136fa355b3",
       "trigger_event": "webhook.received",
       "event_metadata": {
        "source": "facebook",
@@ -678,9 +674,7 @@
      "entity_type": "automation_webhook",
      "entity_id": "aaaaaaaa-0000-4000-8000-00000000000d",
      "action_type": "request_review",
-     "action_config": {
-      "body": "Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?"
-     },
+     "action_config": {},
      "result_success": false,
      "result_data": null,
      "result_error": "Client has no email address or phone number.",

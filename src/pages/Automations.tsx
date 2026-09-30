@@ -467,6 +467,8 @@ export default function Automations() {
   const [filtresOuverts, setFiltresOuverts] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatut, setFilterStatut] = useState<'all' | 'publiee' | 'brouillon'>('all');
+  /** Tri par date de création (Rafba, 2026-09-30) ; « defaut » = l'ordre d'avant. */
+  const [triDate, setTriDate] = useState<'defaut' | 'recent' | 'ancien'>('defaut');
   /** Pagination, comme GHL : 10 par page par défaut. */
   /**
    * Combien de lignes par page — RETENU d'une visite à l'autre.
@@ -676,7 +678,7 @@ export default function Automations() {
   // Changer d'onglet ou de filtre remet à la première page : rester en page 3
   // d'une liste qui n'en a plus qu'une donne un écran vide inexplicable.
   // Le dossier aussi (launch 2026-09-28) : rester en page 3 d'un dossier qui n'en a qu'une donnait « Aucune automatisation ».
-  useEffect(() => { setPage(1); setRestentAffichees(new Set()); }, [onglet, search, filterCategory, filterStatut, dossierActif]);
+  useEffect(() => { setPage(1); setRestentAffichees(new Set()); }, [onglet, search, filterCategory, filterStatut, dossierActif, triDate]);
 
   // Une sélection ne survit à AUCUN changement de vue (M9) : onglet, dossier,
   // page, recherche, filtres, taille de page.
@@ -892,6 +894,10 @@ export default function Automations() {
     if (dossierActif && dossierActif !== 'racine' && r.folder_id !== dossierActif) return false;
     return true;
   });
+  if (triDate !== 'defaut') {
+    const sens = triDate === 'recent' ? -1 : 1;
+    filtrees.sort((a, b) => sens * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+  }
 
   const pages = Math.max(1, Math.ceil(filtrees.length / parPage));
   // Après une suppression (ou un déplacement) sur la dernière page, la page
@@ -1451,6 +1457,17 @@ export default function Automations() {
               <option value="all">{fr ? 'Tous' : 'All'}</option>
               <option value="publiee">{fr ? 'Publiée' : 'Published'}</option>
               <option value="brouillon">{fr ? 'Brouillon' : 'Draft'}</option>
+            </select>
+            <label htmlFor="f-tri-date" className="ml-2 text-[12px] text-text-secondary">{fr ? 'Trier' : 'Sort'}</label>
+            <select
+              id="f-tri-date"
+              value={triDate}
+              onChange={(e) => setTriDate(e.target.value as typeof triDate)}
+              className="glass-input"
+            >
+              <option value="defaut">{fr ? 'Ordre par défaut' : 'Default order'}</option>
+              <option value="recent">{fr ? 'Créées le plus récemment' : 'Newest first'}</option>
+              <option value="ancien">{fr ? 'Créées le plus anciennement' : 'Oldest first'}</option>
             </select>
           </div>
         )}

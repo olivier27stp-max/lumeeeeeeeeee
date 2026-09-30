@@ -15,7 +15,8 @@ import {
   CATEGORIES_MODELES, actionVisible, copierEtapes, etapesApercu, filtrerModeles, nomDisponible, normaliser, trierModeles,
   type CategorieModele,
 } from '../../src/lib/automationTemplates';
-import type { Etape } from '../../src/lib/sequenceTypes';
+import { apercuConversion, projeterFormatOrigine, type Etape } from '../../src/lib/sequenceTypes';
+import { AUTOMATION_PRESETS } from '../../server/lib/automationPresets.data';
 
 describe('catalogue de modèles', () => {
   it('reprend les préréglages existants, sans métadonnée orpheline', () => {
@@ -37,10 +38,9 @@ describe('catalogue de modèles', () => {
       // bornes). Le schéma de l'ÉDITEUR, lui, est volontairement plus strict
       // (pas de `body_en`, `lien`…) : les préréglages portent ces clés, les
       // copies aussi — exactement comme « Dupliquer » un préréglage.
-      if (m.steps) {
-        const r = sequenceEtapes.safeParse(m.steps);
-        expect(r.success, r.success ? '' : JSON.stringify(r.error.issues.slice(0, 3))).toBe(true);
-      }
+      // La copie est TOUJOURS un parcours (modèle d'une vague projeté).
+      const r = sequenceEtapes.safeParse(m.steps ?? projeterFormatOrigine({ actions: m.actions, delay_seconds: m.delai_secondes }));
+      expect(r.success, r.success ? '' : JSON.stringify(r.error.issues.slice(0, 3))).toBe(true);
       // La vérification que la route serveur de publication applique à la
       // COPIE (une automatisation ordinaire, pas un préréglage) : rien de
       // bloquant — sinon l'entreprise ne pourrait pas la publier.
@@ -108,4 +108,22 @@ describe('fonctions partagées', () => {
     const recents = trierModeles(MODELES_AUTOMATISATION, 'recent', true);
     expect(recents[0].ajoute_le >= recents[recents.length - 1].ajoute_le).toBe(true);
   });
+});
+
+describe('conversion des automatisations au format d’origine (Rafba : « les autres bulles »)', () => {
+  // Les règles réelles sont, à 250 sur 251, des préréglages au format
+  // d'origine. Converties, elles doivent être acceptées par le serveur —
+  // `log_activity` compris — sinon l'éditeur les laisse en lecture seule.
+  for (const p of AUTOMATION_PRESETS) {
+    it(`${p.preset_key} se convertit et passe la validation`, () => {
+      const c = apercuConversion({ actions: p.actions, delay_seconds: p.delay_seconds });
+      expect(c.possible, c.bloquants.join(',')).toBe(true);
+      const r = sequenceEtapes.safeParse(c.etapes);
+      expect(r.success, r.success ? '' : JSON.stringify(r.error.issues.slice(0, 3))).toBe(true);
+      if (p.delay_seconds < 0) {
+        // Un rappel « la veille » reste la veille une fois converti.
+        expect(c.etapes[0]).toMatchObject({ type: 'attendre', mode: 'avant_date', secondes_avant: -p.delay_seconds });
+      }
+    });
+  }
 });
