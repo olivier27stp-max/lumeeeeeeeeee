@@ -258,6 +258,9 @@ function messageHumainErreur(e: any, contexte?: string): string {
     : 'L\'action n\'a pas fonctionné côté Lume. Dis-le simplement et propose de réessayer.';
 }
 
+/** Deux demandes identiques de la même personne à moins de 10 min = un doublon (double clic, retentative). */
+export const FENETRE_DOUBLON_MS = 10 * 60_000;
+
 export async function executerIdempotent(
   ctx: ToolContext,
   outil: string,
@@ -269,30 +272,50 @@ export async function executerIdempotent(
     return { dry_run: true, outil, args, note: 'Simulation : aucune écriture faite. Voici ce qui aurait été exécuté.' };
   }
   const admin = getServiceClient();
-  const argsHash = crypto.createHash('sha256').update(stableStringify(args)).digest('hex');
+  // Empreinte PAR PERSONNE (audit 2026-09-30) : sans l'utilisateur, le pointage
+  // d'un employé bloquait celui d'un autre (mêmes arguments vides).
+  const argsHash = crypto.createHash('sha256').update(stableStringify({ utilisateur: ctx.userId, args })).digest('hex');
 
-  const { data: posee, error: insErr } = await admin
+  const poser = () => admin
     .from('agent_actions')
     .insert({ org_id: ctx.orgId, user_id: ctx.userId, outil, args_hash: argsHash })
     .select('id')
     .maybeSingle();
+  let { data: posee, error: insErr } = await poser();
 
-  if (insErr) {
-    // 23505 = l'empreinte existe déjà : on renvoie le résultat mémorisé.
-    if ((insErr as any).code === '23505') {
-      const { data: existante } = await admin
-        .from('agent_actions')
-        .select('resultat, created_at')
-        .eq('org_id', ctx.orgId).eq('outil', outil).eq('args_hash', argsHash)
-        .maybeSingle();
-      return {
-        deja_fait: true,
-        note: 'Cette action identique a déjà été tentée récemment — voici son résultat, rien n\'a été refait en double.',
-        ...(existante?.resultat || {}),
-      };
+  // 23505 = l'empreinte existe déjà. Un DOUBLON n'est qu'une répétition rapprochée
+  // (double clic, retentative) : au-delà de FENETRE_DOUBLON_MS, la même action
+  // redemandée est une nouvelle action. Avant, l'empreinte ne vieillissait jamais :
+  // la relance des retards, le même texto « on arrive » la semaine suivante… ne
+  // partaient plus jamais, et Lumi répondait « déjà fait ».
+  for (let tentative = 0; insErr && (insErr as any).code === '23505' && tentative < 2; tentative++) {
+    const { data: existante } = await admin
+      .from('agent_actions')
+      .select('id, resultat, created_at')
+      .eq('org_id', ctx.orgId).eq('outil', outil).eq('args_hash', argsHash)
+      .maybeSingle();
+    if (!existante) { ({ data: posee, error: insErr } = await poser()); continue; }
+    const age = Date.now() - new Date(existante.created_at as string).getTime();
+    if (age > FENETRE_DOUBLON_MS) {
+      // Ancienne exécution : on libère l'empreinte (seulement CETTE ligne-là, si
+      // personne ne l'a remplacée entre-temps) et on repose la nôtre.
+      await admin.from('agent_actions').delete().eq('id', existante.id).eq('created_at', existante.created_at);
+      ({ data: posee, error: insErr } = await poser());
+      continue;
     }
-    return erreurOutil(`${outil}:dedup`, insErr);
+    const resultat = existante.resultat && typeof existante.resultat === 'object' ? existante.resultat as Record<string, any> : {};
+    if (Object.keys(resultat).length === 0) {
+      // La première exécution n'a pas encore rendu son résultat : ce n'est pas
+      // « fait ». Dire l'état réel plutôt qu'un succès qui pourrait échouer.
+      return { error: 'Cette action est déjà en cours d\'exécution (double clic ?). Attends son résultat avant de la redemander.' };
+    }
+    return {
+      ...resultat,
+      deja_fait: true,
+      note: 'Cette action identique vient d\'être exécutée (il y a moins de 10 minutes) — voici son résultat, rien n\'a été refait en double.',
+    };
   }
+  if (insErr) return erreurOutil(`${outil}:dedup`, insErr);
 
   try {
     const resultat = await action();
@@ -1698,14 +1721,25 @@ export const handlerSendSms = async (args: Record<string, any>, ctx: ToolContext
   executerIdempotent(ctx, 'send_sms', args, async () => {
     // Tout passe par le noyau partagé (mêmes garde-fous que le lot de
     // relances) : opt-out STOP, numéro de l'org, plan, conversation, journal.
-    const { message_id, provider_sid } = await envoyerUnSms(
-      ctx,
-      String(args.phone_number || ''),
-      String(args.message_text || ''),
-      args.client_id || null,
-      args.client_name || null,
-    );
-    return { sent: true, to: normalizeE164(String(args.phone_number || '')), message_id, provider_sid };
+    //
+    // Avec un client : le numéro est celui DE SA FICHE, jamais celui fourni par le
+    // modèle (audit 2026-09-30). Avant, un `client_id` sautait la garde « contact
+    // connu » et le texto partait au `phone_number` donné — une injection pouvait
+    // afficher « À Marie Tremblay » sur la carte et écrire à un autre numéro.
+    let telephone = String(args.phone_number || '');
+    let clientNom: string | null = args.client_name || null;
+    if (args.client_id) {
+      const { data: c, error } = await getServiceClient().from('clients')
+        .select('phone, first_name, last_name, company').eq('org_id', ctx.orgId).eq('id', String(args.client_id))
+        .is('deleted_at', null).maybeSingle();
+      if (error) throw error;
+      if (!c) throw new Error('Ce client est introuvable dans ton entreprise.');
+      if (!c.phone) throw new Error('Ce client n’a pas de numéro de téléphone sur sa fiche. Ajoute-le avant de lui écrire.');
+      telephone = String(c.phone);
+      clientNom = [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || c.company || clientNom;
+    }
+    const { message_id, provider_sid } = await envoyerUnSms(ctx, telephone, String(args.message_text || ''), args.client_id || null, clientNom);
+    return { sent: true, to: normalizeE164(telephone), message_id, provider_sid };
   });
 
 /* ── Nouvelles déclarations d'écriture ───────────────────────────── */
@@ -2830,6 +2864,48 @@ const cancelQuoteTool: AgentTool = {
     }),
 };
 
+/**
+ * Enregistre un paiement manuel par la route de l'écran (POST /invoices/:id/mark-paid) :
+ * ligne `payments` réelle (le trigger recalcule payé, solde et statut), événement
+ * « Facture payée », permission payments.create. Sans montant = le solde entier.
+ * Réponse perdue en route : le paiement est PEUT-ÊTRE enregistré → effet partiel,
+ * l'empreinte reste (jamais de second paiement par retentative).
+ */
+export async function enregistrerPaiementViaRoute(
+  ctx: ToolContext, invoiceId: string, opts: { methode: string | null; montantCents?: number },
+): Promise<{ invoice_number: string | null; status: string | null; balance_cents: number | null }> {
+  let r: { ok: boolean; status: number; json: any };
+  try {
+    r = await appelInterne(ctx, `/invoices/${invoiceId}/mark-paid`, {
+      ...(opts.methode ? { method: opts.methode } : {}),
+      ...(opts.montantCents ? { amount_cents: opts.montantCents } : {}),
+    });
+  } catch (e) {
+    if (e instanceof AppelInterneIncertain) {
+      throw new EffetPartiel({
+        incertain: true,
+        note: 'Je n’ai pas eu la confirmation que le paiement est enregistré — il l’est PEUT-ÊTRE. Vérifie la facture dans Lume avant de le refaire.',
+      });
+    }
+    throw e;
+  }
+  if (!r.ok) throw new Error(typeof r.json?.error === 'string' ? r.json.error : 'Le paiement n’a pas pu être enregistré.');
+  const { data } = await getServiceClient().from('invoices').select('invoice_number, balance_cents, status')
+    .eq('org_id', ctx.orgId).eq('id', invoiceId).maybeSingle();
+  return { invoice_number: data?.invoice_number ?? null, status: data?.status ?? null, balance_cents: data?.balance_cents ?? null };
+}
+
+/** Facture soldée → commissions du vendeur (comme le bouton de l'écran). Renvoie un avertissement à dire, ou null. */
+export async function commissionsApresPaiement(ctx: ToolContext, invoiceId: string): Promise<string | null> {
+  try {
+    const res = await generateCommissionsForInvoice(getServiceClient(), ctx.orgId, invoiceId);
+    return res.skipped === 'no_rule' ? 'Aucune commission créée : le vendeur n’a pas de plan de commission (Réglages → Commissions).' : null;
+  } catch (err: any) {
+    console.error(`[commissions] génération après paiement Lumi échouée (org ${ctx.orgId}, facture ${invoiceId}):`, err?.message);
+    return null;
+  }
+}
+
 const markInvoicePaidTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -2871,48 +2947,22 @@ const markInvoicePaidTool: AgentTool = {
       if (inv.status === 'draft') {
         throw new Error('Cette facture est encore un brouillon — envoie-la d’abord au client envoie-la d’abord au client, ensuite je pourrai la marquer payée.');
       }
+      if (inv.status === 'void' || inv.status === 'cancelled') throw new Error('Cette facture est annulée — on ne la marque pas payée.');
       const reste = Number(inv.balance_cents) > 0 ? Number(inv.balance_cents) : Number(inv.total_cents);
       const methode = ['cash', 'e-transfer', 'check', 'card'].includes(String(args.method)) ? String(args.method) : null;
-
-      // On passe par la RPC dédiée apply_invoice_payment (service_role) : elle
-      // met paid_cents/balance/status/paid_at à jour atomiquement, filtrée par
-      // org_id. C'est la SEULE voie propre — un insert direct dans `payments`
-      // est bloqué (pas de GRANT à authenticated ; et le service client
-      // déclenche une cascade webhook qui exige un contexte auth). Testé en
-      // staging : balance → 0, statut → payée.
-      const admin = getServiceClient();
-      const { error: eApply } = await admin.rpc('apply_invoice_payment', {
-        p_invoice_id: invoiceId,
-        p_org_id: ctx.orgId,
-        p_amount_cents: reste,
-      });
-      if (eApply) throw eApply;
-
-      const { data: apres } = await admin
-        .from('invoices').select('invoice_number, balance_cents, status')
-        .eq('id', invoiceId).maybeSingle();
-
-      // Facture soldée → commissions du rep. Stripe les génère par webhook et
-      // le bouton « Marquer payée » de l'app via generate-for-invoice ; Lumi
-      // les oubliait : un paiement enregistré par l'assistant ne payait
-      // jamais le vendeur. « no_rule » = aucun plan configuré → on le dit.
-      let avertCommission: string | null = null;
-      if (apres?.status === 'paid') {
-        try {
-          const res = await generateCommissionsForInvoice(admin, ctx.orgId, invoiceId);
-          if (res.skipped === 'no_rule') avertCommission = 'Aucune commission créée : le vendeur n’a pas de plan de commission (Réglages → Commissions).';
-        } catch (err: any) {
-          console.error(`[commissions] génération après paiement Lumi échouée (org ${ctx.orgId}, facture ${invoiceId}):`, err?.message);
-        }
-      }
-      const avertEvt = await signalerEvenement(ctx, '/automations/events/invoice-paid', { invoiceId, clientId: inv.client_id || undefined });
-      const warning = [avertEvt, avertCommission].filter(Boolean).join(' ');
+      // La MÊME route que « Marquer payée » à l'écran (audit 2026-09-30) : une vraie
+      // ligne `payments`, l'événement « Facture payée », la permission payments.create.
+      // Avant, la RPC apply_invoice_payment n'écrivait aucun paiement : le prochain
+      // vrai paiement recalculait le solde et effaçait celui saisi par Lumi.
+      const apres = await enregistrerPaiementViaRoute(ctx, invoiceId, { methode });
+      const avertCommission = apres.status === 'paid' ? await commissionsApresPaiement(ctx, invoiceId) : null;
+      const warning = avertCommission ?? '';
       return {
-        paid: true,
+        paid: apres.status === 'paid',
         ...(warning ? { warning } : {}),
         invoice: {
-          invoice_number: apres?.invoice_number || inv.invoice_number,
-          statut: traduireStatut(apres?.status, STATUT_FACTURE),
+          invoice_number: apres.invoice_number || inv.invoice_number,
+          statut: traduireStatut(apres.status, STATUT_FACTURE),
         },
         amount_cents: reste,
         methode_paiement: methode,

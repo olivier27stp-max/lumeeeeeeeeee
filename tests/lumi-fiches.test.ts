@@ -81,8 +81,18 @@ describe('apercuProposition', () => {
     const a: any = await apercuProposition('create_invoice', { client_id: C1, no_taxes: true, items: [{ name: 'X', qty: 1, unit_price_cents: 100 }] }, ctx());
     expect(a.taxes).toEqual([]);
     expect(a.total_cents).toBe(100);
-    const s: any = await apercuProposition('send_sms', { client_name: 'Marie', phone_number: '514', message: 'Bonjour' }, ctx());
-    expect(s).toEqual({ genre: 'sms', to: 'Marie', subject: null, body: 'Bonjour' });
+    // Le vrai nom du champ est message_text (l'ancien test passait `message` et cachait une carte toujours vide).
+    const s: any = await apercuProposition('send_sms', { client_name: 'Marie', phone_number: '514', message_text: 'Bonjour' }, ctx());
+    expect(s).toMatchObject({ genre: 'sms', to: 'Marie · 514', subject: null, body: 'Bonjour' });
+    expect(s.drapeaux).toMatchObject({ vers_client: true, jamais_d_office: true });
+  });
+
+  it('texto à un client : le numéro DE LA FICHE (celui que l’outil utilise), pas un numéro inventé', async () => {
+    const { apercuProposition } = await import('../server/lib/lumi/fiches');
+    const s: any = await apercuProposition('send_sms', { client_id: C1, client_name: 'Marie', phone_number: '+15145550000', message_text: 'On arrive' },
+      ctx({ clients: { first_name: 'Marie', last_name: 'Tremblay', phone: '+15145550199' } }));
+    expect(s.to).toBe('Marie Tremblay · +15145550199');
+    expect(s.body).toBe('On arrive');
   });
 
   it('envoi d une soumission existante : numéro, montant et destinataire lus en base', async () => {
@@ -111,9 +121,23 @@ describe('apercuProposition', () => {
     expect(a.garder).toMatchObject({ name: 'Gaston Doublon', email: 'g@x.ca', jobs: 2, quotes: 1, invoices: 1, since: '2026-09-11' });
   });
 
-  it('un outil sans aperçu → null (la carte retombe sur la liste des champs)', async () => {
+  it('toute autre écriture : aperçu générique, l’élément visé NOMMÉ (audit 2026-09-30)', async () => {
     const { apercuProposition } = await import('../server/lib/lumi/fiches');
-    expect(await apercuProposition('create_task', { title: 'Rappeler' }, ctx())).toBeNull();
+    const t: any = await apercuProposition('create_task', { title: 'Rappeler' }, ctx());
+    expect(t).toMatchObject({ genre: 'action', cibles: [], details: [{ valeur: 'Rappeler' }] });
+    // Supprimer un client : avant, carte VIDE ; maintenant le client nommé + « irréversible ».
+    const d: any = await apercuProposition('delete_client', { client_id: C1 },
+      ctx({ clients: { first_name: 'Marie', last_name: 'Tremblay', address: '12 rue des Érables', city: 'Québec', status: 'active' } }));
+    expect(d.cibles[0]).toMatchObject({ libelle: { fr: 'Client' }, valeur: 'Marie Tremblay · 12 rue des Érables, Québec' });
+    expect(d.drapeaux).toMatchObject({ irreversible: true, jamais_d_office: true });
+    // Un identifiant qui ne correspond à rien dans l'entreprise est SIGNALÉ, jamais caché.
+    const x: any = await apercuProposition('delete_client', { client_id: C1 }, ctx());
+    expect(x.cibles[0]).toMatchObject({ alerte: true });
+    // Remboursement : le montant en dollars, pas « amount cents 5000 ».
+    const r: any = await apercuProposition('refund_payment', { payment_id: Q1, amount_cents: 5000, reason: 'Erreur' },
+      ctx({ payments: { amount_cents: 11498, refunded_cents: 0, paid_at: '2026-09-12T15:00:00Z', method: 'card', invoice_id: null } }));
+    expect(r.cibles[0].valeur).toMatch(/^114,98 \$ · /);
+    expect(r.details).toEqual(expect.arrayContaining([expect.objectContaining({ valeur: '50,00 $' })]));
   });
 });
 

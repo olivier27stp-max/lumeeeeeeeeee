@@ -69,7 +69,7 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   add_note:                  { cle: 'jobs.read',          capacite: "l'ajout de notes" },
   cancel_visit:              { cle: 'calendar.update',    capacite: "l'annulation d'une visite" },
   cancel_quote:              { cle: 'quotes.update',      capacite: "l'annulation d'un devis" },
-  mark_invoice_paid:         { cle: 'financial.view_payments', capacite: "l'enregistrement d'un paiement" },
+  mark_invoice_paid:         { cle: 'payments.create',    capacite: "l'enregistrement d'un paiement" }, // = « Marquer payée » à l'écran (audit 2026-09-30)
   // Agrégats financiers : permission dédiée, comme la paie.
   get_financial_overview:    { cle: 'financial.view_reports', capacite: 'la vue financière' },
   get_revenue_summary:       { cle: 'financial.view_reports', capacite: 'le résumé des revenus' },

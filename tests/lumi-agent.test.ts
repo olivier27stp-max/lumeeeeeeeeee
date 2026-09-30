@@ -376,13 +376,14 @@ describe('paramètres de réflexion selon le modèle', () => {
 });
 
 describe('mode de confirmation', () => {
-  it('demander = rien ; argent = tout sauf argent, envois et gestes irréversibles ; tout = tout', async () => {
+  it('demander = rien ; argent = tout sauf argent, envois et gestes irréversibles ; tout = tout SAUF « jamais d’office »', async () => {
     const { outilsAutorisesParMode, ECRITURES_SENSIBLES } = await import('../server/lib/lumi/execution');
     const ecritures = ['create_job', 'create_task', 'update_job_status', 'remember_this', 'create_quote', 'send_sms', 'mark_invoice_paid', 'merge_clients', 'archive_job'];
     expect(outilsAutorisesParMode('demander', ecritures).size).toBe(0);
     const argent = outilsAutorisesParMode('argent', ecritures);
     expect([...argent].sort()).toEqual(['create_job', 'create_task', 'remember_this', 'update_job_status']);
-    expect(outilsAutorisesParMode('tout', ecritures).size).toBe(ecritures.length);
+    // Audit 2026-09-30 : même en mode « tout », l'argent, les envois au client et l'irréversible demandent la carte.
+    expect([...outilsAutorisesParMode('tout', ecritures)].sort()).toEqual(['archive_job', 'create_job', 'create_quote', 'create_task', 'remember_this', 'update_job_status']);
     for (const s of ['create_quote', 'send_sms', 'send_email', 'mark_invoice_paid', 'send_payment_reminders', 'merge_clients']) expect(ECRITURES_SENSIBLES.has(s), s).toBe(true);
   });
 });

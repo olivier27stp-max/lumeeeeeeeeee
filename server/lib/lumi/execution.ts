@@ -10,7 +10,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { executerOutilGarde } from '../agent/garde';
-import { ECRITURES_SENSIBLES } from '../agent/registre';
+import { ECRITURES_SENSIBLES, JAMAIS_D_OFFICE } from '../agent/registre';
 import { ficheCreee, type Fiche } from './fiches';
 import { logger } from '../logger';
 
@@ -147,7 +147,8 @@ export async function definirMode(admin: SupabaseClient, orgId: string, userId: 
 export function outilsAutorisesParMode(mode: ModeLumi, outilsEcriture: Iterable<string>, sensibles: ReadonlySet<string> = ECRITURES_SENSIBLES): Set<string> {
   const out = new Set<string>();
   if (mode === 'demander') return out;
-  for (const t of outilsEcriture) if (mode === 'tout' || !sensibles.has(t)) out.add(t);
+  // Même en mode « tout » : jamais d'office pour l'argent, les droits, les envois au client et l'irréversible.
+  for (const t of outilsEcriture) if (!JAMAIS_D_OFFICE.has(t) && (mode === 'tout' || !sensibles.has(t))) out.add(t);
   return out;
 }
 
@@ -158,7 +159,8 @@ export function outilsAutorisesParMode(mode: ModeLumi, outilsEcriture: Iterable<
 export async function autorisationsDe(admin: SupabaseClient, orgId: string, userId: string, outilsEcriture?: Iterable<string>): Promise<Set<string>> {
   const { data, error } = await admin.from('lumi_autorisations').select('tool').eq('org_id', orgId).eq('user_id', userId);
   if (error) { logger.error('[lumi] autorisations illisibles', { error: error.message, orgId }); return new Set(); }
-  const out = new Set((data ?? []).map((r: any) => String(r.tool)));
+  // Une ancienne autorisation sur un outil devenu « jamais d'office » ne vaut plus rien.
+  const out = new Set((data ?? []).map((r: any) => String(r.tool)).filter((t) => !JAMAIS_D_OFFICE.has(t)));
   if (outilsEcriture) {
     const [mode, sensibles] = await Promise.all([modeDe(admin, orgId, userId), ecrituresSensiblesPour(admin, orgId)]);
     for (const t of outilsAutorisesParMode(mode, outilsEcriture, sensibles)) out.add(t);

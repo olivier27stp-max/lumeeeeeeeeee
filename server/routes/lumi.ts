@@ -52,6 +52,7 @@ import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } fro
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
+import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
@@ -966,6 +967,10 @@ router.put('/lumi/autorisations', validate(autorisationSchema), async (req, res)
     const { tool, actif } = req.body as z.infer<typeof autorisationSchema>;
     // Seul un outil d'ÉCRITURE connu peut être autorisé d'office.
     if (TOOLS_BY_NAME[tool]?.kind !== 'write') return res.status(400).json({ error: 'Unknown write tool.', code: 'outil_inconnu' });
+    // Argent, droits, envois au client, irréversible : toujours une carte (audit 2026-09-30).
+    if (actif && JAMAIS_D_OFFICE.has(tool)) {
+      return res.status(400).json({ error: 'This action always asks for confirmation.', code: 'jamais_d_office' });
+    }
     await definirAutorisation(getServiceClient(), auth.orgId, auth.user.id, tool, actif);
     const outils = await autorisationsDe(getServiceClient(), auth.orgId, auth.user.id);
     return res.json({ tools: [...outils].sort() });

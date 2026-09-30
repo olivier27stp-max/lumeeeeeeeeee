@@ -31,6 +31,7 @@ import type { AgentTool, ToolContext } from './tools';
 import {
   executerIdempotent, champRequis, appelInterne, AppelInterneIncertain,
   traduireStatut, STATUT_DEVIS, STATUT_FACTURE,
+  enregistrerPaiementViaRoute, commissionsApresPaiement,
 } from './tools-etendus';
 
 /* ── Garde-fous locaux ─────────────────────────────────────────── */
@@ -1227,31 +1228,17 @@ const recordInvoicePaymentTool: AgentTool = {
         throw new Error('Ce montant règle la facture au complet — utilise mark_invoice_paid pour la marquer payée.');
       }
       const methode = ['cash', 'e-transfer', 'check', 'card'].includes(String(args.method)) ? String(args.method) : null;
-      // Même RPC (service_role) que mark_invoice_paid : paid/balance/statut mis à jour atomiquement, filtrée org.
-      const admin = getServiceClient();
-      const { error: eApply } = await admin.rpc('apply_invoice_payment', { p_invoice_id: invoiceId, p_org_id: ctx.orgId, p_amount_cents: montant });
-      if (eApply) throw eApply;
-      const { data: apres } = await admin.from('invoices').select('invoice_number, balance_cents, status').eq('org_id', ctx.orgId).eq('id', invoiceId).maybeSingle();
-
-      // Facture soldée → commissions du rep. Stripe les génère par webhook et
-      // le bouton « Marquer payée » de l'app via generate-for-invoice ; Lumi
-      // les oubliait : un paiement enregistré par l'assistant ne payait
-      // jamais le vendeur. « no_rule » = aucun plan configuré → on le dit.
-      let avertCommission: string | null = null;
-      if (apres?.status === 'paid') {
-        try {
-          const res = await generateCommissionsForInvoice(admin, ctx.orgId, invoiceId);
-          if (res.skipped === 'no_rule') avertCommission = 'Aucune commission créée : le vendeur n’a pas de plan de commission (Réglages → Commissions).';
-        } catch (err: any) {
-          console.error(`[commissions] génération après paiement Lumi échouée (org ${ctx.orgId}, facture ${invoiceId}):`, err?.message);
-        }
-      }
+      // La route de l'écran, avec le montant (audit 2026-09-30) : une vraie ligne `payments`
+      // que le trigger additionne. Avant, la RPC n'écrivait aucun paiement : le prochain
+      // vrai paiement recalculait le solde et effaçait celui-ci.
+      const apres = await enregistrerPaiementViaRoute(ctx, invoiceId, { methode, montantCents: montant });
+      const avertCommission = apres.status === 'paid' ? await commissionsApresPaiement(ctx, invoiceId) : null;
       return {
         recorded: true,
         ...(avertCommission ? { warning: avertCommission } : {}),
-        invoice: { invoice_number: apres?.invoice_number || inv.invoice_number, statut: traduireStatut(apres?.status, STATUT_FACTURE) },
+        invoice: { invoice_number: apres.invoice_number || inv.invoice_number, statut: traduireStatut(apres.status, STATUT_FACTURE) },
         amount_cents: montant,
-        balance_cents: apres?.balance_cents ?? (solde - montant),
+        balance_cents: apres.balance_cents ?? (solde - montant),
         methode_paiement: methode,
         note: 'Paiement partiel enregistré : le solde a diminué et la facture est partiellement payée. Rien n’a été prélevé — c’est un paiement reçu à part.',
       };
@@ -1842,6 +1829,12 @@ const chargeCardOnFileTool: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'charge_card_on_file', args, async () => {
       const invoiceId = champRequis(args.invoice_id, 'La facture');
+      // Jamais de prélèvement sur une facture annulée, supprimée ou encore en brouillon
+      // (audit 2026-09-30 : une facture annulée garde un solde > 0 et passait).
+      const inv = await lireFacture(ctx, invoiceId, 'id, status, deleted_at');
+      if (inv.deleted_at) throw new Error('Cette facture a été supprimée — rien à prélever.');
+      if (inv.status === 'void' || inv.status === 'cancelled') throw new Error('Cette facture est annulée — on ne prélève pas la carte du client.');
+      if (inv.status === 'draft') throw new Error('Cette facture est encore un brouillon — envoie-la d’abord au client avant de prélever.');
       let res;
       try {
         res = await appelInterne(ctx, '/payments/card-on-file/charge', { invoiceId });
@@ -2138,21 +2131,21 @@ export const PERMISSIONS_ARGENT: Record<string, { cle: PermissionKey; capacite: 
   convert_quote_to_invoice:  { cle: 'invoices.create',    capacite: 'la création de factures' },
   // Pré-réglages et modèles de devis
   list_quote_presets:        { cle: 'quotes.read',        capacite: 'la consultation des modèles de devis' },
-  create_quote_preset:       { cle: 'quotes.create',      capacite: 'la création de modèles de devis' },
-  update_quote_preset:       { cle: 'quotes.update',      capacite: 'la modification des modèles de devis' },
-  delete_quote_preset:       { cle: 'quotes.delete',      capacite: 'la suppression des modèles de devis' },
-  duplicate_quote_preset:    { cle: 'quotes.create',      capacite: 'la création de modèles de devis' },
+  create_quote_preset:       { cle: 'settings.update',      capacite: 'la création de modèles de devis' },
+  update_quote_preset:       { cle: 'settings.update',      capacite: 'la modification des modèles de devis' },
+  delete_quote_preset:       { cle: 'settings.update',      capacite: 'la suppression des modèles de devis' },
+  duplicate_quote_preset:    { cle: 'settings.update',      capacite: 'la création de modèles de devis' },
   list_quote_templates:      { cle: 'quotes.read',        capacite: 'la consultation des modèles de devis' },
-  create_quote_template:     { cle: 'quotes.create',      capacite: 'la création de modèles de devis' },
-  update_quote_template:     { cle: 'quotes.update',      capacite: 'la modification des modèles de devis' },
-  delete_quote_template:     { cle: 'quotes.delete',      capacite: 'la suppression des modèles de devis' },
+  create_quote_template:     { cle: 'settings.update',      capacite: 'la création de modèles de devis' },
+  update_quote_template:     { cle: 'settings.update',      capacite: 'la modification des modèles de devis' },
+  delete_quote_template:     { cle: 'settings.update',      capacite: 'la suppression des modèles de devis' },
   // Factures
   update_invoice:            { cle: 'invoices.update',    capacite: 'la modification des factures' },
   void_invoice:              { cle: 'invoices.update',    capacite: "l'annulation des factures" },
   revert_invoice_to_draft:   { cle: 'invoices.update',    capacite: 'la modification des factures' },
   duplicate_invoice:         { cle: 'invoices.create',    capacite: 'la création de factures' },
   delete_invoice:            { cle: 'invoices.delete',    capacite: 'la suppression des factures' },
-  record_invoice_payment:    { cle: 'financial.view_payments', capacite: "l'enregistrement d'un paiement" }, // même clé que mark_invoice_paid
+  record_invoice_payment:    { cle: 'payments.create',    capacite: "l'enregistrement d'un paiement" }, // même clé que mark_invoice_paid et que l'écran
   // Factures récurrentes
   list_recurring_invoices:   { cle: 'invoices.read',      capacite: 'la consultation des factures récurrentes' },
   create_recurring_invoice:  { cle: 'invoices.create',    capacite: 'la création de factures récurrentes' },

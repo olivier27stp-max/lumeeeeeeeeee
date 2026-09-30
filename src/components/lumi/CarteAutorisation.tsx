@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, FileText, Mail, MessageSquare, Briefcase, CheckSquare, UserPlus, Send, Pencil, XCircle, Merge } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { getCompanySettings } from '../../lib/invoicesApi';
-import type { ApercuDocumentLumi, ApercuLumi, FicheLumi, PropositionLumi } from '../../lib/lumiApi';
+import type { ApercuDocumentLumi, ApercuLumi, FicheLumi, LigneApercuLumi, PropositionLumi } from '../../lib/lumiApi';
 
 /* ── Libellés : ce que Lumi veut faire, en mots courants ─────────────────── */
 type Verbe = { fr: string; en: string; type: string; typeEn: string; icone: React.ComponentType<{ size?: number; className?: string }> };
@@ -66,6 +66,8 @@ function resume(p: PropositionLumi, fr: boolean): string {
   if (a && a.genre === 'fusion') {
     return `${a.garder?.name ?? '?'} ${fr ? '← absorbe' : '← absorbs'} ${a.absorber?.name ?? '?'}`;
   }
+  // Aperçu générique : l'élément visé d'abord (« Marie Tremblay · 12 rue des Érables »), même carte repliée.
+  if (a && a.genre === 'action' && a.cibles[0]) return fr ? a.cibles[0].valeur : (a.cibles[0].valeur_en ?? a.cibles[0].valeur);
   const args = p.args as Record<string, unknown>;
   if (p.tool === 'remember_this' && typeof args.note === 'string') return args.note;
   if (p.tool === 'forget_note' && typeof args.key === 'string') return args.key;
@@ -225,6 +227,39 @@ function FusionApercu({ a, fr }: { a: Extract<ApercuLumi, { genre: 'fusion' }>; 
   );
 }
 
+/** Aperçu générique (serveur, apercu-action.ts) : chaque élément visé NOMMÉ, puis le détail lisible. */
+function ActionApercu({ a, fr }: { a: Extract<ApercuLumi, { genre: 'action' }>; fr: boolean }) {
+  const ligne = (l: LigneApercuLumi, i: number, fort: boolean) => (
+    <React.Fragment key={i}>
+      <dt className={cn('text-text-tertiary', l.alerte && 'text-danger')}>{fr ? l.libelle.fr : l.libelle.en}</dt>
+      <dd className={cn('break-words whitespace-pre-wrap', fort ? 'font-medium text-text-primary' : 'text-text-secondary', l.alerte && 'text-danger font-semibold')}>
+        {fr ? l.valeur : (l.valeur_en ?? l.valeur)}
+      </dd>
+    </React.Fragment>
+  );
+  if (!a.cibles.length && !a.details.length) {
+    return <p className="px-4 py-3 text-[12.5px] text-text-tertiary">{fr ? 'Aucun détail de plus : l’action ne vise aucun élément précis.' : 'No further detail: the action targets no specific record.'}</p>;
+  }
+  return (
+    <dl className="px-4 py-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12.5px]">
+      {a.cibles.map((l, i) => ligne(l, i, true))}
+      {a.details.map((l, i) => ligne(l, a.cibles.length + i, false))}
+    </dl>
+  );
+}
+
+/** Irréversible / part chez le client : dit AVANT de confirmer (registre des écritures). */
+function Drapeaux({ a, fr }: { a: ApercuLumi | null; fr: boolean }) {
+  const d = a?.drapeaux;
+  if (!d || (!d.irreversible && !d.vers_client)) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5 border-t border-outline px-3.5 py-2">
+      {d.irreversible && <span className="rounded-full bg-danger-light px-2 py-0.5 text-[11.5px] font-medium text-danger">{fr ? 'Irréversible' : 'Cannot be undone'}</span>}
+      {d.vers_client && <span className="rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11.5px] font-medium text-[#b45309]">{fr ? 'Part chez le client' : 'Goes to the client'}</span>}
+    </div>
+  );
+}
+
 /** Liste des champs, quand il n'y a pas d'aperçu composé (jobs, tâches, clients…). */
 function ChampsApercu({ args }: { args: Record<string, unknown> }) {
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -250,6 +285,7 @@ function LigneGroupe({ p, fr, index }: { p: PropositionLumi; fr: boolean; index:
   const document = a && (a.genre === 'quote' || a.genre === 'invoice') ? a : null;
   const message = a && (a.genre === 'sms' || a.genre === 'email') ? a : null;
   const fusion = a && a.genre === 'fusion' ? a : null;
+  const action = a && a.genre === 'action' ? a : null;
   const sousTitre = resume(p, fr);
   const ok = p.statut === 'confirmee';
   return (
@@ -269,7 +305,8 @@ function LigneGroupe({ p, fr, index }: { p: PropositionLumi; fr: boolean; index:
         {ok && p.fiche && p.fiche.type !== 'task' && <Link to={p.fiche.href} onClick={(ev) => ev.stopPropagation()} className="shrink-0 text-[12px] text-text-secondary underline hover:text-text-primary">{fr ? 'Ouvrir' : 'Open'}</Link>}
         <ChevronDown size={14} className="shrink-0 text-text-tertiary transition-transform group-open:rotate-180" />
       </summary>
-      {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : fusion ? <FusionApercu a={fusion} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
+      {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : fusion ? <FusionApercu a={fusion} fr={fr} /> : action ? <ActionApercu a={action} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
+      <Drapeaux a={a} fr={fr} />
     </details>
   );
 }
@@ -294,7 +331,10 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
   const document = a && (a.genre === 'quote' || a.genre === 'invoice') ? a : null;
   const message = a && (a.genre === 'sms' || a.genre === 'email') ? a : null;
   const fusion = a && a.genre === 'fusion' ? a : null;
+  const action = a && a.genre === 'action' ? a : null;
   const attente = p.statut === 'en_attente';
+  // Argent, droits, envois au client, irréversible : jamais « toujours confirmer » (le serveur le refuse aussi).
+  const jamaisDOffice = !!a?.drapeaux?.jamais_d_office || (p.groupe && p.groupe.some((g) => !!g.apercu?.drapeaux?.jamais_d_office));
   const ok = p.statut === 'confirmee';
   const groupe = p.groupe && p.groupe.length > 1 ? p.groupe : null;
   const nFaites = groupe ? groupe.filter((g) => g.statut === 'confirmee').length : 0;
@@ -337,15 +377,16 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
           {groupe.map((g, i) => <LigneGroupe key={g.tool_use_id} p={g} fr={fr} index={i} />)}
         </div>
       )}
-      {!groupe && (document || message || fusion || Object.keys(p.args).length > 0) && (
-        <details className="group border-t border-outline" open={(!!document || !!fusion) && attente}>
+      {!groupe && (document || message || fusion || action || Object.keys(p.args).length > 0) && (
+        <details className="group border-t border-outline" open={attente}>
           <summary className="flex cursor-pointer list-none items-center gap-2 bg-surface px-3.5 py-2 text-[12.5px] text-text-secondary [&::-webkit-details-marker]:hidden">
             {detailLabel}
             <ChevronDown size={14} className="ml-auto text-text-tertiary transition-transform group-open:rotate-180" />
           </summary>
-          {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : fusion ? <FusionApercu a={fusion} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
+          {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : fusion ? <FusionApercu a={fusion} fr={fr} /> : action ? <ActionApercu a={action} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
         </details>
       )}
+      {!groupe && <Drapeaux a={a} fr={fr} />}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-outline bg-surface px-3.5 py-2.5">
         {attente ? (
@@ -353,7 +394,7 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
             <button type="button" disabled={busy} onClick={() => onDecision('confirm')} className="rounded-lg bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
               {fr ? 'Confirmer' : 'Confirm'}
             </button>
-            {!groupe && (
+            {!groupe && !jamaisDOffice && (
               <button type="button" disabled={busy} onClick={() => { onAutoriser(p.tool, true); onDecision('confirm', true); }} className="rounded-lg border border-outline-strong bg-surface-card px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:bg-surface-secondary disabled:opacity-50">
                 {fr ? `Toujours confirmer ${v.type}` : `Always confirm ${v.typeEn}`}
               </button>

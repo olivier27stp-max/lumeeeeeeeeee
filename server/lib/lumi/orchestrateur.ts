@@ -46,7 +46,7 @@ import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './
 import { executerEcriture, type ReçuExecution } from './execution';
 import { signalerAppelLumi } from './cache-chaud';
 import { allegerSchema } from './alleger-outils';
-import { ECRITURES_ANODINES } from '../agent/registre';
+import { ECRITURES_ANODINES, JAMAIS_D_OFFICE } from '../agent/registre';
 
 const MAX_ETAPES = 8;
 /** Sortie par appel (réflexion incluse) : règle stricte, voir regles-cout.ts. */
@@ -99,6 +99,24 @@ export function avecCacheConversation(messages: Anthropic.Messages.MessageParam[
  * Déterministe : le même historique purge de la même façon, donc le
  * préfixe déjà purgé reste en cache.
  */
+/**
+ * Lectures qui rapportent du texte écrit hors de l'entreprise (ou recopié tel
+ * quel) : formulaires web, textos et courriels de clients, notes, souvenirs,
+ * fiches de prospects et de deals remplies par un formulaire. Après l'une
+ * d'elles, les écritures repassent toutes par la carte (voir tourLumi).
+ */
+export const LECTURES_A_CONTENU_EXTERNE: ReadonlySet<string> = new Set([
+  'list_request_submissions', 'get_conversations', 'get_conversation_messages',
+  'get_client_profile', 'search_leads', 'list_deals', 'list_notes', 'recall_notes',
+  'list_notifications', 'get_job', 'list_job_agreements',
+]);
+
+/** L'historique contient-il déjà un appel à une lecture de contenu extérieur ? */
+export function aLuDuContenuExterne(historique: Anthropic.Messages.MessageParam[]): boolean {
+  return historique.some((m) => m.role === 'assistant' && Array.isArray(m.content)
+    && m.content.some((b: any) => b?.type === 'tool_use' && LECTURES_A_CONTENU_EXTERNE.has(String(b.name))));
+}
+
 export const SEUIL_PURGE_CARACTERES = 40_000; // ≈ 10 000 tokens
 export const RESULTATS_CONSERVES = 3;
 export const NOTE_PURGE = JSON.stringify({ purged: true, note: 'Old tool result removed from context to save tokens. Call the tool again if you need this data.' });
@@ -325,6 +343,12 @@ export async function tourLumi(opts: {
 
   const maxEtapes = Math.min(MAX_ETAPES, Math.max(0, opts.reglages?.max_etapes ?? MAX_ETAPES));
   if (maxEtapes === 0) return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true };
+  // Injection de prompt : dès qu'un texte écrit par quelqu'un d'EXTÉRIEUR (demande
+  // web, texto ou courriel d'un client, note, souvenir…) est entré dans la
+  // conversation, plus aucune écriture ne part d'office : chacune repasse par la
+  // carte, même en mode « argent » ou « toujours confirmer ». Une consigne glissée
+  // dans ce contenu ne peut donc jamais agir sans qu'un humain voie la carte.
+  let contenuExterneLu = aLuDuContenuExterne(opts.historique);
 
   for (let etape = 0; etape < maxEtapes; etape++) {
     // Un tour qui coûte cher ne doit PAS être coupé en plein milieu :
@@ -414,7 +438,7 @@ export async function tourLumi(opts: {
         continue;
       }
       // Plafond d'écritures atteint : plus rien ne part d'office, tout repasse par la carte.
-      const dOffice = ECRITURES_ANODINES.has(appel.name) || opts.autorisations?.has(appel.name);
+      const dOffice = !contenuExterneLu && !JAMAIS_D_OFFICE.has(appel.name) && (ECRITURES_ANODINES.has(appel.name) || opts.autorisations?.has(appel.name));
       const sousLePlafond = opts.ecrituresRestantes === undefined || opts.ecrituresRestantes > 0;
       if (outil.kind === 'write' && dOffice && sousLePlafond) {
         if (opts.ecrituresRestantes !== undefined) opts.ecrituresRestantes -= 1;
@@ -448,6 +472,7 @@ export async function tourLumi(opts: {
           // Fiches touchées, lues AVANT le masquage : l'interface seule les reçoit.
           const fiches = fichesDuResultat(appel.name, args, r.result);
           if (fiches.length) opts.emettre({ type: 'fiches', fiches });
+          if (LECTURES_A_CONTENU_EXTERNE.has(appel.name)) contenuExterneLu = true;
           const masque = masquerIds(espaceRefs, r.result);
           // Compacté (vides retirés, listes en table) : −35 à −45 % de tokens sur une liste, sans perte (compress.ts).
           const contenuOutil = serialiserResultat(masque);

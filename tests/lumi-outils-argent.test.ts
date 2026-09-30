@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const h = vi.hoisted(() => ({
   appelInterne: vi.fn(),
   executerIdempotent: vi.fn(),
+  enregistrerPaiement: vi.fn(),
   runOneSchedule: vi.fn(),
   admin: null as any,
 }));
@@ -22,6 +23,8 @@ vi.mock('../server/lib/agent/tools-etendus', async (orig) => ({
   ...(await orig<typeof import('../server/lib/agent/tools-etendus')>()),
   appelInterne: h.appelInterne,
   executerIdempotent: h.executerIdempotent,
+  enregistrerPaiementViaRoute: h.enregistrerPaiement,
+  commissionsApresPaiement: async () => null,
 }));
 vi.mock('../server/lib/supabase', async (orig) => ({
   ...(await orig<typeof import('../server/lib/supabase')>()),
@@ -120,7 +123,7 @@ describe('manifestes : outils, registre, permissions, topics', () => {
 
   it('permissions : une clé par outil (lectures comprises), record_invoice_payment = même clé que mark_invoice_paid', () => {
     expect(Object.keys(PERMISSIONS_ARGENT).sort()).toEqual([...noms].sort());
-    expect(PERMISSIONS_ARGENT.record_invoice_payment.cle).toBe('financial.view_payments');
+    expect(PERMISSIONS_ARGENT.record_invoice_payment.cle).toBe('payments.create'); // = l'écran (audit 2026-09-30) ; avant : 'financial.view_payments');
     expect(PERMISSIONS_ARGENT.refund_payment.cle).toBe('payments.refund');
     expect(PERMISSIONS_ARGENT.update_reminder_settings.cle).toBe('settings.update');
     for (const p of Object.values(PERMISSIONS_ARGENT)) expect(p.capacite.length).toBeGreaterThan(3);
@@ -381,12 +384,16 @@ describe('factures', () => {
     expect(f.rpcs.length).toBe(0);
   });
 
-  it('record_invoice_payment : paiement partiel via la RPC apply_invoice_payment (service), filtrée org', async () => {
-    const admin = fauxClient(() => ({ data: { invoice_number: 'INV-0042', balance_cents: 9000, status: 'partial' }, error: null }));
+  it('record_invoice_payment : paiement partiel par la route de l’écran (vraie ligne payments), jamais la RPC', async () => {
+    // Audit 2026-09-30 : apply_invoice_payment n'écrivait aucun paiement ; le prochain vrai
+    // paiement effaçait celui-ci. On passe par POST /invoices/:id/mark-paid avec le montant.
+    const admin = fauxClient(() => ({ data: null, error: null }));
     h.admin = admin.client;
+    h.enregistrerPaiement.mockResolvedValueOnce({ invoice_number: 'INV-0042', balance_cents: 9000, status: 'partial' });
     const f = fauxClient(() => ({ data: facture, error: null }));
     const r = await lancer('record_invoice_payment', { invoice_id: 'i1', amount_cents: 2500, method: 'cash' }, f.client);
-    expect(admin.rpcs).toEqual([{ name: 'apply_invoice_payment', params: { p_invoice_id: 'i1', p_org_id: ORG, p_amount_cents: 2500 } }]);
+    expect(h.enregistrerPaiement).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG }), 'i1', { methode: 'cash', montantCents: 2500 });
+    expect(admin.rpcs).toEqual([]);
     expect(r).toMatchObject({ recorded: true, amount_cents: 2500, balance_cents: 9000, methode_paiement: 'cash', invoice: { statut: 'partiellement payée' } });
     expect(estFrancais(r.note)).toBe(true);
     expect(filtreOrg(f.journal[0])).toBe(true);
@@ -516,12 +523,22 @@ describe('paiements', () => {
   });
 
   it('charge_card_on_file : POST /payments/card-on-file/charge ; refus 402 traduit en français', async () => {
+    const envoyee = () => fauxClient(() => ({ data: { id: 'i1', status: 'sent', deleted_at: null }, error: null })).client;
     h.appelInterne.mockResolvedValueOnce({ ok: true, status: 200, json: { ok: true, status: 'processing', paymentIntentId: 'pi_1' } });
-    const r = await lancer('charge_card_on_file', { invoice_id: 'i1' }, fauxClient().client);
+    const r = await lancer('charge_card_on_file', { invoice_id: 'i1' }, envoyee());
     expect(h.appelInterne).toHaveBeenCalledWith(expect.anything(), '/payments/card-on-file/charge', { invoiceId: 'i1' });
     expect(r).toMatchObject({ charged: true, statut: 'en traitement' });
     h.appelInterne.mockResolvedValueOnce({ ok: false, status: 402, json: { ok: false, status: 'no_card_on_file', reason: 'No card on file for this client.' } });
-    expect((await lancer('charge_card_on_file', { invoice_id: 'i1' }, fauxClient().client)).error).toMatch(/pas de carte au dossier/);
+    expect((await lancer('charge_card_on_file', { invoice_id: 'i1' }, envoyee())).error).toMatch(/pas de carte au dossier/);
+  });
+
+  it('charge_card_on_file : jamais sur une facture annulée ou un brouillon (audit 2026-09-30)', async () => {
+    for (const status of ['void', 'draft']) {
+      h.appelInterne.mockClear();
+      const r = await lancer('charge_card_on_file', { invoice_id: 'i1' }, fauxClient(() => ({ data: { id: 'i1', status, deleted_at: null }, error: null })).client);
+      expect(r.error).toMatch(status === 'void' ? /annulée/ : /brouillon/);
+      expect(h.appelInterne).not.toHaveBeenCalled();
+    }
   });
 
   it('remove_card_on_file : POST /payments/card-on-file/remove ; 404 en français', async () => {

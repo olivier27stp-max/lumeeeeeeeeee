@@ -14,6 +14,10 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { taxesParDefaut } from '../agent/tools-etendus';
+import { drapeauxEcriture } from '../agent/registre';
+import { apercuAction, apercuTexto, type ApercuAction } from './apercu-action';
+
+export type { ApercuAction, LigneApercu } from './apercu-action';
 
 export type TypeFiche = 'client' | 'lead' | 'job' | 'quote' | 'invoice' | 'task';
 export interface Fiche {
@@ -127,22 +131,33 @@ export interface ApercuMessage {
 }
 export interface FicheClientApercu { id: string; name: string; company: string | null; email: string | null; phone: string | null; address: string | null; since: string | null; jobs: number; quotes: number; invoices: number }
 export interface ApercuFusion { genre: 'fusion'; garder: FicheClientApercu | null; absorber: FicheClientApercu | null }
-export type Apercu = ApercuDocument | ApercuMessage | ApercuFusion;
+/** Ce que la carte doit dire en plus : irréversible, part chez le client, jamais d'office (registre). */
+export interface DrapeauxApercu { irreversible: boolean; vers_client: boolean; jamais_d_office: boolean }
+export type Apercu = (ApercuDocument | ApercuMessage | ApercuFusion | ApercuAction) & { drapeaux?: DrapeauxApercu };
 
 interface CtxApercu { client: SupabaseClient; orgId: string; userId: string }
 
+/**
+ * L'aperçu de TOUTE écriture proposée (audit 2026-09-30) : un aperçu composé
+ * pour les documents, messages et fusions, sinon l'aperçu générique qui nomme
+ * chaque élément visé (apercu-action.ts). Toujours accompagné des drapeaux du
+ * registre (irréversible, vers le client, jamais d'office).
+ */
 export async function apercuProposition(tool: string, args: Record<string, any>, ctx: CtxApercu): Promise<Apercu | null> {
+  const drapeaux = drapeauxEcriture(tool);
+  let base: ApercuDocument | ApercuMessage | ApercuFusion | ApercuAction | null = null;
   try {
-    if (tool === 'create_quote' || tool === 'create_invoice') return await apercuDocument(tool === 'create_quote' ? 'quote' : 'invoice', args, ctx);
-    if (tool === 'send_sms') return { genre: 'sms', to: texte(args.client_name) || texte(args.phone_number) || null, subject: null, body: texte(args.message ?? args.body) };
-    if (tool === 'send_email') return { genre: 'email', to: texte(args.to) || texte(args.client_name) || null, subject: texte(args.subject) || null, body: texte(args.body ?? args.message) };
-    if (tool === 'send_quote' || tool === 'send_invoice') return await apercuEnvoiDocument(tool === 'send_quote' ? 'quote' : 'invoice', args, ctx);
-    if (tool === 'merge_clients') return { genre: 'fusion', garder: await ficheClientApercu(args.keep_client_id, ctx), absorber: await ficheClientApercu(args.absorb_client_id, ctx) };
+    if (tool === 'create_quote' || tool === 'create_invoice') base = await apercuDocument(tool === 'create_quote' ? 'quote' : 'invoice', args, ctx);
+    else if (tool === 'send_sms') base = await apercuTexto(args, ctx);
+    else if (tool === 'send_email') base = { genre: 'email', to: texte(args.to) || texte(args.client_name) || null, subject: texte(args.subject) || null, body: texte(args.body ?? args.message) };
+    else if (tool === 'send_quote' || tool === 'send_invoice') base = await apercuEnvoiDocument(tool === 'send_quote' ? 'quote' : 'invoice', args, ctx);
+    else if (tool === 'merge_clients') base = { genre: 'fusion', garder: await ficheClientApercu(args.keep_client_id, ctx), absorber: await ficheClientApercu(args.absorb_client_id, ctx) };
+    if (!base) base = await apercuAction(args, ctx);
   } catch (err: any) {
-    // Un aperçu qui rate ne bloque pas la proposition : la carte retombe sur la liste des champs.
+    // Un aperçu qui rate ne bloque pas la proposition : la carte dit alors qu'elle ne peut pas le montrer.
     console.error('[lumi/apercu]', err?.message || err);
   }
-  return null;
+  return base ? { ...base, drapeaux } : { genre: 'action', cibles: [], details: [], drapeaux };
 }
 
 async function apercuDocument(genre: 'quote' | 'invoice', args: Record<string, any>, ctx: CtxApercu): Promise<ApercuDocument> {
