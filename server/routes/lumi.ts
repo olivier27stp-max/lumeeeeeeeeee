@@ -40,6 +40,7 @@ import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { reponseAideMulti } from '../lib/support/aide-multi';
 import { peutRepondreHorsScope, reponseHorsScope } from '../lib/lumi/hors-scope';
 import { detecterActionDirecte, repondreActionDirecte, actionDepuisExtraction } from '../lib/lumi/actions-directes';
+import { detecterOptimisation, dateVisee, repondreOptimisation } from '../lib/lumi/optimiserJournee';
 import { texteRecus, lireContenuEcriture, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
@@ -82,7 +83,8 @@ const executeSchema = z.object({
 /** Étage 0 : une action d'interface, nommée, avec ses paramètres — pas de texte à interpréter. */
 const actionSchema = z.object({
   conversation_id: z.string().regex(UUID).optional().nullable(),
-  action: z.enum(IDS_RACCOURCIS as [IdRaccourci, ...IdRaccourci[]]),
+  // « optimiser-journee » : bouton du Calendrier (audit Agenda 2026-09-30), proposition + carte, 0 LLM.
+  action: z.union([z.enum(IDS_RACCOURCIS as [IdRaccourci, ...IdRaccourci[]]), z.literal('optimiser-journee')]),
   params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   /** Ce que l'utilisateur a cliqué : stocké comme son message, pour que la conversation se lise. */
   label: z.string().trim().min(1).max(200),
@@ -229,6 +231,35 @@ export function propositionEnAttente(msgs: Msg[]): EcritureEnAttente | null {
 }
 
 // ── Contexte d'un tour ──────────────────────────────────────────
+/**
+ * « Optimiser la journée » (audit Agenda 2026-09-30) : proposition par gabarit
+ * + carte de confirmation standard, 0 LLM, pour le bouton ET le texte.
+ */
+async function servirOptimisation(
+  ctx: NonNullable<Awaited<ReturnType<typeof contexteTour>>>, res: Response,
+  o: { conversationId: string; nouveaux: Msg[]; date: string; teamId: string | null; origine: OrigineTrace; enonce: string | null; etage: number; action: string; params?: Record<string, unknown> },
+): Promise<void> {
+  const debut = Date.now();
+  const rep = await repondreOptimisation({ client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken, language: ctx.language, fuseau: ctx.fuseau }, o.date, o.teamId);
+  if ('refus' in rep) {
+    res.status(422).json({ error: rep.refus, code: 'action_indisponible' });
+    return;
+  }
+  await sauverMessages(o.conversationId, ctx.auth.orgId, [...o.nouveaux, ...(rep.messages as Msg[])], `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+  const emettreSse = ouvrirSse(res);
+  emettreSse('tool', { type: 'tool', name: 'propose_day_optimization', statut: 'debut' });
+  emettreSse('tool', { type: 'tool', name: 'propose_day_optimization', statut: 'fin' });
+  emettreSse('text', { type: 'text', delta: rep.texte });
+  if (rep.carte) emettreSse('proposal', { type: 'proposal', ...rep.carte });
+  emettreSse('done', { conversation_id: o.conversationId, cost_cents: 0, budget: ctx.budget, proposal: rep.carte ? { tool_use_id: rep.carte.tool_use_id, tool: rep.carte.tool, args: rep.carte.args } : null, raccourci: o.action, etage: o.etage });
+  void journaliserTrace(ctx.admin, {
+    orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: o.conversationId, canal: 'lumi', origine: o.origine,
+    enonce: o.enonce, etage: o.etage, action: o.action, params: o.params, outils: ['propose_day_optimization'], resultat: rep.carte ? 'proposition' : 'ok',
+    model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+  });
+  res.end();
+}
+
 async function contexteTour(req: Request, res: Response) {
   if (!isLumiConfigured()) {
     res.status(503).json({ error: 'Lumi is not configured. Set ANTHROPIC_API_KEY on the server.', code: 'lumi_not_configured' });
@@ -600,6 +631,13 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // (pointage, pause, mémoire), et cartes préparées par le code (job 33
     // terminé, envoie la facture 4, invite marc@… comme technicien). 0 token.
     // Au moindre doute la fonction rend null et le modèle prend le relais.
+    const optimisation = enAttente.length || repli ? null : detecterOptimisation(message);
+    if (optimisation) {
+      return servirOptimisation(ctx, res, {
+        conversationId: conversationId!, nouveaux, date: dateVisee(optimisation.quand, ctx.fuseau), teamId: null,
+        origine, enonce: normaliserEnonce(message), etage: ETAGE.raccourci, action: 'optimiser-journee', params: { quand: optimisation.quand },
+      });
+    }
     const directe = enAttente.length || repli ? null : detecterActionDirecte(message);
     if (directe) {
       const debut = Date.now();
@@ -807,8 +845,10 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;
     const { conversation_id, action, params = {}, label, origine = 'suggestion' } = req.body as z.infer<typeof actionSchema>;
-    const raccourci = raccourciDepuisAction(action, params);
-    if (!raccourci) return res.status(422).json({ error: 'Unknown action or parameters.', code: 'action_indisponible' });
+    const optimiser = action === 'optimiser-journee';
+    const raccourci = optimiser ? null : raccourciDepuisAction(action, params);
+    if (!optimiser && !raccourci) return res.status(422).json({ error: 'Unknown action or parameters.', code: 'action_indisponible' });
+    if (optimiser && params.date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(params.date))) return res.status(422).json({ error: 'Invalid date.', code: 'action_indisponible' });
 
     let conversationId = conversation_id ?? null;
     let historique: Msg[] = [];
@@ -831,8 +871,15 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
     }
     nouveaux.push({ role: 'user', content: label });
 
+    if (optimiser) {
+      return servirOptimisation(ctx, res, {
+        conversationId: conversationId!, nouveaux, date: params.date ? String(params.date) : dateVisee('aujourdhui', ctx.fuseau),
+        teamId: params.equipe ? String(params.equipe) : null, origine, enonce: label, etage: ETAGE.interface, action, params,
+      });
+    }
+
     const debut = Date.now();
-    const reponse = await repondreRaccourci(raccourci, {
+    const reponse = await repondreRaccourci(raccourci!, {
       client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
       language: ctx.language, fuseau: ctx.fuseau,
       prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
@@ -843,14 +890,14 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
     const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
     await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
     const emettreSse = ouvrirSse(res);
-    emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'debut' });
-    emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'fin' });
+    emettreSse('tool', { type: 'tool', name: raccourci!.tool, statut: 'debut' });
+    emettreSse('tool', { type: 'tool', name: raccourci!.tool, statut: 'fin' });
     emettreSse('text', { type: 'text', delta: reponse.texte });
     if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
-    emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id, etage: ETAGE.interface });
+    emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci!.id, etage: ETAGE.interface });
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-      enonce: label, etage: ETAGE.interface, action, params, outils: [raccourci.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+      enonce: label, etage: ETAGE.interface, action, params, outils: [raccourci!.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
     });
     return res.end();
   } catch (error: any) {

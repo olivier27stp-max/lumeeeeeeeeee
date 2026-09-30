@@ -8,6 +8,8 @@ import { getJobs } from '../lib/jobsApi';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import LeaveFormConfirm from './ui/LeaveFormConfirm';
 import TeamDayRoster from './TeamDayRoster';
+import { useFuseauEntreprise, instantDepuisSaisie } from '../lib/fuseauEntreprise';
+import { useCurrentOrgId } from '../contexts/CompanyContext';
 
 interface LockedJob {
   id: string;
@@ -57,6 +59,7 @@ export default function AddVisitModal({
 }: AddVisitModalProps) {
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const fuseau = useFuseauEntreprise(useCurrentOrgId());
   const id = useId();
 
   const baseStart = defaultStart || nextHour();
@@ -144,8 +147,9 @@ export default function AddVisitModal({
       toast.error(fr ? 'Choisis un job pour la visite.' : 'Pick a job for the visit.');
       return;
     }
-    const start = new Date(`${date}T${anytime ? ANYTIME_START_TIME : startTime}`);
-    const end = new Date(`${date}T${anytime ? ANYTIME_END_TIME : endTime}`);
+    // La saisie est à l'heure de l'ENTREPRISE, pas du navigateur (audit Agenda C2).
+    const start = new Date(instantDepuisSaisie(date, anytime ? ANYTIME_START_TIME : startTime, fuseau));
+    const end = new Date(instantDepuisSaisie(date, anytime ? ANYTIME_END_TIME : endTime, fuseau));
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       toast.error(fr ? 'Date ou heure invalide.' : 'Invalid date or time.');
       return;

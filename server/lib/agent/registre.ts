@@ -42,6 +42,7 @@ export const REGISTRE_ECRITURES: Readonly<Record<string, AttributsEcriture>> = {
   archive_job:              S({ sensible: true }),
   set_job_expenses:         S({}),
   add_visit:                S({}),
+  apply_day_optimization:   S({ sensible: true }),               // replanifie plusieurs rendez-vous clients d'un coup (audit Agenda 2026-09-30)
   reschedule_job:           S({ sensible: true }),               // touche un rendez-vous convenu avec le client (audit 2026-09-16)
   cancel_visit:             S({ sensible: true, reversible: false }),
   // Devis

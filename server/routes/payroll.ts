@@ -5,6 +5,7 @@ import { logDataExport } from '../lib/data-export-log';
 import { getPayrollPreview, toutesLesEntrees } from '../lib/field-sales/commission-engine';
 import { bornesPeriode, totauxCommissions } from '../lib/field-sales/commission-periode';
 import { fuseauOrg } from '../lib/automations-fuseau-org';
+import { verserCommissionsPeriode, annulerVersementPeriode } from '../lib/field-sales/commission-verrou';
 import {
   DEFAULT_PAYROLL_SETTINGS,
   computePayPeriod,
@@ -403,9 +404,10 @@ router.post('/payroll/mark-paid', async (req, res) => {
     if (!user_id) return res.status(400).json({ error: 'user_id is required.' });
 
     // Recompute server-side so the snapshot can't be forged by the client.
-    const { period, rows } = await buildPeriodRows(sc, auth.orgId, ref);
+    const { period, rows, settings } = await buildPeriodRows(sc, auth.orgId, ref);
     const row = rows.find((r) => r.user_id === user_id);
     if (!row) return res.status(404).json({ error: 'Member not found in this period.' });
+    const verseLe = new Date().toISOString();
 
     const { data, error } = await sc
       .from('payroll_payments')
@@ -420,13 +422,16 @@ router.post('/payroll/mark-paid', async (req, res) => {
         adjustments_cents: row.adjustments_cents,
         total_cents: row.total_cents,
         note: String(note || '').trim() || null,
-        paid_at: new Date().toISOString(),
+        paid_at: verseLe,
         paid_by: auth.user.id,
       }, { onConflict: 'org_id,user_id,period_start,period_end' })
       .select('user_id, total_cents, paid_at, note')
       .single();
     if (error) throw new Error(error.message);
-    res.json(data);
+    // Période versée = commissions versées et période verrouillée : même
+    // instant que la photo, pour pouvoir l'annuler exactement.
+    const commissionsVersees = await verserCommissionsPeriode(sc, auth.orgId, user_id, period, verseLe, settings.timezone || undefined);
+    res.json({ ...data, commissions_versees: commissionsVersees });
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to mark as paid.', '[payroll]');
   }
@@ -445,6 +450,12 @@ router.post('/payroll/unmark-paid', async (req, res) => {
     if (!user_id) return res.status(400).json({ error: 'user_id is required.' });
     const settings = await loadSettings(sc, auth.orgId);
     const period = computePayPeriod(settings, ref);
+
+    // Les commissions versées PAR CE versement redeviennent « approuvées ».
+    const { data: versement } = await sc.from('payroll_payments').select('paid_at')
+      .eq('org_id', auth.orgId).eq('user_id', user_id)
+      .eq('period_start', period.start).eq('period_end', period.end).maybeSingle();
+    if (versement?.paid_at) await annulerVersementPeriode(sc, auth.orgId, user_id, period, versement.paid_at, settings.timezone || undefined);
 
     const { error } = await sc
       .from('payroll_payments')

@@ -143,12 +143,19 @@ export async function definirMode(admin: SupabaseClient, orgId: string, userId: 
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Jamais d'office, quel que soit le mode ou la case « toujours confirmer » :
+ * replanifier toute une journée de rendez-vous clients ne part qu'après un
+ * clic sur la carte (audit Agenda 2026-09-30, « Optimiser la journée »).
+ */
+export const TOUJOURS_CARTE: ReadonlySet<string> = new Set(['apply_day_optimization']);
+
 /** Outils qu'un mode autorise d'office, parmi les outils d'écriture connus. */
 export function outilsAutorisesParMode(mode: ModeLumi, outilsEcriture: Iterable<string>, sensibles: ReadonlySet<string> = ECRITURES_SENSIBLES): Set<string> {
   const out = new Set<string>();
   if (mode === 'demander') return out;
-  // Même en mode « tout » : jamais d'office pour l'argent, les droits, les envois au client et l'irréversible.
-  for (const t of outilsEcriture) if (!JAMAIS_D_OFFICE.has(t) && (mode === 'tout' || !sensibles.has(t))) out.add(t);
+  // Même en mode « tout » : jamais d'office pour l'argent, les droits, les envois au client, l'irréversible (audit) ni ce qui touche l'agenda des clients (TOUJOURS_CARTE).
+  for (const t of outilsEcriture) if (!JAMAIS_D_OFFICE.has(t) && !TOUJOURS_CARTE.has(t) && (mode === 'tout' || !sensibles.has(t))) out.add(t);
   return out;
 }
 
@@ -160,7 +167,7 @@ export async function autorisationsDe(admin: SupabaseClient, orgId: string, user
   const { data, error } = await admin.from('lumi_autorisations').select('tool').eq('org_id', orgId).eq('user_id', userId);
   if (error) { logger.error('[lumi] autorisations illisibles', { error: error.message, orgId }); return new Set(); }
   // Une ancienne autorisation sur un outil devenu « jamais d'office » ne vaut plus rien.
-  const out = new Set((data ?? []).map((r: any) => String(r.tool)).filter((t) => !JAMAIS_D_OFFICE.has(t)));
+  const out = new Set((data ?? []).map((r: any) => String(r.tool)).filter((t) => !JAMAIS_D_OFFICE.has(t) && !TOUJOURS_CARTE.has(t)));
   if (outilsEcriture) {
     const [mode, sensibles] = await Promise.all([modeDe(admin, orgId, userId), ecrituresSensiblesPour(admin, orgId)]);
     for (const t of outilsAutorisesParMode(mode, outilsEcriture, sensibles)) out.add(t);

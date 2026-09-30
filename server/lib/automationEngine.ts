@@ -1490,12 +1490,14 @@ const TACHE_FIGEE_MS = 15 * 60 * 1000; // 15 minutes
  * Chaque déploiement pendant un tick perdait ainsi quelques relances et
  * rendait l'entité concernée sourde pour cette règle.
  */
-async function recupererTachesFigees(supabase: SupabaseClient): Promise<void> {
+async function recupererTachesFigees(supabase: SupabaseClient, orgId?: string): Promise<void> {
   const limite = new Date(Date.now() - TACHE_FIGEE_MS).toISOString();
-  const { data, error } = await supabase
+  let requete = supabase
     .from('automation_scheduled_tasks')
     .update({ status: 'pending', execute_at: new Date().toISOString() })
-    .eq('status', 'running')
+    .eq('status', 'running');
+  if (orgId) requete = requete.eq('org_id', orgId);
+  const { data, error } = await requete
     // `updated_at` N'EXISTE PAS sur cette table (colonnes vérifiées en base).
     // Avec PostgREST, une seule colonne inconnue fait échouer TOUTE la requête
     // — et supabase-js ne lève pas : la récupération des tâches figées ne
@@ -1513,7 +1515,13 @@ async function recupererTachesFigees(supabase: SupabaseClient): Promise<void> {
   }
 }
 
-export async function processScheduledTasks(supabase: SupabaseClient) {
+/**
+ * `orgId` : ne dépiler que la file d'UNE entreprise. Sert à la suite de tests
+ * (npm run test:automations), qui fait avancer le temps de son bureau de test
+ * sans toucher aux tâches des autres entreprises de staging. Le serveur,
+ * lui, appelle toujours sans filtre.
+ */
+export async function processScheduledTasks(supabase: SupabaseClient, options: { orgId?: string } = {}) {
   if (!engineConfig) return;
   // Interrupteur d'arrêt (F6) : AVANT la récupération des tâches figées.
   // Remettre des tâches en file serait déjà y toucher, et l'arrêt doit
@@ -1521,12 +1529,12 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!automatisationsActivesAvecTrace()) return;
 
   // Avant tout : libérer ce qu'un arrêt brutal aurait laissé coincé.
-  await recupererTachesFigees(supabase);
+  await recupererTachesFigees(supabase, options.orgId);
 
   const now = new Date().toISOString();
 
   // Fetch pending tasks that are ready
-  const { data: tasks, error } = await supabase
+  let requeteTaches = supabase
     .from('automation_scheduled_tasks')
     // Clé étrangère nommée explicitement — même cause que dans
     // recurringJobScheduler : depuis 20260751100200, automation_scheduled_tasks
@@ -1536,7 +1544,9 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // n'était plus exécutée.
     .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, trigger_event, delay_seconds, preset_key, conditions, steps, settings, is_active, deleted_at)')
     .eq('status', 'pending')
-    .lte('execute_at', now)
+    .lte('execute_at', now);
+  if (options.orgId) requeteTaches = requeteTaches.eq('org_id', options.orgId);
+  const { data: tasks, error } = await requeteTaches
     .order('execute_at', { ascending: true })
     .limit(50);
 

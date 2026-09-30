@@ -13,10 +13,10 @@ const COPY = {
   fr: {
     title: 'Partage de votre localisation',
     intro:
-      'Pour le suivi des équipes sur le terrain, cette application peut enregistrer votre position GPS pendant que vous êtes connecté(e).',
+      'Pour le suivi des équipes sur le terrain, cette application peut enregistrer votre position GPS pendant vos heures pointées.',
     points: [
       'Votre position est mise à jour en temps réel et visible par les gestionnaires de votre organisation sur la carte.',
-      'Le suivi s’arrête dès que vous vous déconnectez.',
+      'Le suivi s’arrête dès que vous dépointez (ou vous déconnectez).',
       'Vous pouvez refuser maintenant et continuer à utiliser l’application normalement.',
       'Vous pourrez changer d’avis plus tard dans vos réglages.',
     ],
@@ -27,10 +27,10 @@ const COPY = {
   en: {
     title: 'Share your location',
     intro:
-      'For field-team tracking, this app can record your GPS position while you are signed in.',
+      'For field-team tracking, this app can record your GPS position while you are clocked in.',
     points: [
       'Your position updates in real time and is visible to your organization’s managers on the map.',
-      'Tracking stops as soon as you sign out.',
+      'Tracking stops as soon as you clock out (or sign out).',
       'You can decline now and keep using the app normally.',
       'You can change your mind later in your settings.',
     ],

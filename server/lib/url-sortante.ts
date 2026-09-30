@@ -128,6 +128,8 @@ export async function posterSansSsrf(
     entetes?: Record<string, string>;
     /** Corps déjà sérialisé — une signature porte sur ces octets exacts. */
     corpsBrut?: string;
+    /** Entreprise émettrice : une entreprise en bac à sable n'appelle personne. */
+    orgId?: string | null;
   } = {},
 ): Promise<Response> {
   const fetcher = options.fetcher ?? fetch;
@@ -138,6 +140,22 @@ export async function posterSansSsrf(
     if (!verdict.ok) throw new Error(`Adresse refusée : ${verdict.raison}.`);
     if (!(await resolutionPublique(verdict.hote, options.resoudre))) {
       throw new Error('Adresse refusée : elle ne pointe pas vers une adresse publique.');
+    }
+    // Bac à sable (server/lib/bac-a-sable.ts) : l'appel est consigné, jamais
+    // émis. Décidé APRÈS la garde d'adresse : une adresse refusée l'est aussi
+    // en bac à sable, et le test la voit refusée comme en vrai.
+    if (saut === 0 && options.orgId) {
+      const { verdictBacASable, consignerEnvoiSimule } = await import('./bac-a-sable');
+      const bac = await verdictBacASable(options.orgId, []);
+      if (bac.simule) {
+        await consignerEnvoiSimule(bac, {
+          canal: 'webhook',
+          destinataire: url,
+          corps: options.corpsBrut ?? JSON.stringify(corps),
+          meta: { entetes: options.entetes ?? {} },
+        });
+        return new Response(JSON.stringify({ simule: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
     }
     const reponse = await fetcher(cible, {
       method: 'POST',

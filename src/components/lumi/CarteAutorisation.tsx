@@ -30,6 +30,7 @@ const VERBES: Record<string, Verbe> = {
   create_job: { fr: 'créer un job', en: 'create a job', type: 'les jobs', typeEn: 'jobs', icone: Briefcase },
   update_job: { fr: 'modifier un job', en: 'update a job', type: 'les modifications de jobs', typeEn: 'job updates', icone: Briefcase },
   reschedule_job: { fr: 'déplacer un job', en: 'reschedule a job', type: 'les déplacements de jobs', typeEn: 'job reschedules', icone: Briefcase },
+  apply_day_optimization: { fr: 'réorganiser la journée', en: 'reorganize the day', type: 'les optimisations de journée', typeEn: 'day optimizations', icone: Briefcase },
   create_task: { fr: 'créer une tâche', en: 'create a task', type: 'les tâches', typeEn: 'tasks', icone: CheckSquare },
   update_task: { fr: 'modifier une tâche', en: 'update a task', type: 'les modifications de tâches', typeEn: 'task updates', icone: CheckSquare },
   create_client: { fr: 'créer un client', en: 'create a client', type: 'les nouveaux clients', typeEn: 'new clients', icone: UserPlus },
@@ -65,6 +66,10 @@ function resume(p: PropositionLumi, fr: boolean): string {
   }
   if (a && a.genre === 'fusion') {
     return `${a.garder?.name ?? '?'} ${fr ? '← absorbe' : '← absorbs'} ${a.absorber?.name ?? '?'}`;
+  }
+  if (a && a.genre === 'optimisation') {
+    const n = a.lignes.length;
+    return fr ? `${n} visite${n > 1 ? 's' : ''} déplacée${n > 1 ? 's' : ''} · ${a.gain_minutes} min de route en moins` : `${n} visit${n > 1 ? 's' : ''} moved · ${a.gain_minutes} fewer driving minutes`;
   }
   // Aperçu générique : l'élément visé d'abord (« Marie Tremblay · 12 rue des Érables »), même carte repliée.
   if (a && a.genre === 'action' && a.cibles[0]) return fr ? a.cibles[0].valeur : (a.cibles[0].valeur_en ?? a.cibles[0].valeur);
@@ -215,6 +220,50 @@ function FicheFusion({ f, titre, teinte }: { f: { name: string; company: string 
   );
 }
 
+/**
+ * « Optimiser la journée » : chaque visite avec son ancienne et sa nouvelle
+ * heure, et — AVANT d'accepter — ce que les clients recevront (audit Agenda).
+ */
+function OptimisationApercu({ a, fr }: { a: Extract<ApercuLumi, { genre: 'optimisation' }>; fr: boolean }) {
+  return (
+    <div className="px-3.5 py-3 text-[12.5px]" data-testid="apercu-optimisation">
+      <table className="w-full">
+        <thead>
+          <tr className="text-left text-[11px] uppercase tracking-wide text-text-tertiary">
+            <th className="pb-1 font-semibold">{fr ? 'Visite' : 'Visit'}</th>
+            <th className="pb-1 font-semibold">{fr ? 'Équipe' : 'Team'}</th>
+            <th className="pb-1 text-right font-semibold">{fr ? 'Avant' : 'Before'}</th>
+            <th className="pb-1 text-right font-semibold">{fr ? 'Après' : 'After'}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {a.lignes.map((l, i) => (
+            <tr key={i} className="border-t border-outline" data-testid="ligne-optimisation">
+              <td className="py-1 pr-2 text-text-primary">{l.titre}</td>
+              <td className="py-1 pr-2 text-text-secondary">{l.equipe}</td>
+              <td className="py-1 text-right tabular-nums text-text-tertiary line-through">{l.avant}</td>
+              <td className="py-1 text-right font-semibold tabular-nums text-text-primary">{l.apres}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <ul className="mt-2.5 space-y-1 text-[12px] text-text-secondary" data-testid="avis-clients">
+        <li>{fr ? 'L’optimisation n’envoie aucun message aux clients.' : 'The optimization sends no message to clients.'}</li>
+        {a.clients.rappels_replanifies && (
+          <li>{fr ? 'Les rappels automatiques de rendez-vous suivront les nouvelles heures.' : 'Automatic appointment reminders will follow the new times.'}</li>
+        )}
+        {a.clients.automatisations_avis > 0 && (
+          <li className="font-semibold text-warning">
+            {fr
+              ? `${a.clients.automatisations_avis} automatisation${a.clients.automatisations_avis > 1 ? 's préviennent' : ' prévient'} les clients d’un rendez-vous déplacé : chaque client concerné recevra cet avis.`
+              : `${a.clients.automatisations_avis} automation${a.clients.automatisations_avis > 1 ? 's notify' : ' notifies'} clients of a moved appointment: each affected client will receive it.`}
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
 function FusionApercu({ a, fr }: { a: Extract<ApercuLumi, { genre: 'fusion' }>; fr: boolean }) {
   return (
     <div className="px-4 py-3.5">
@@ -285,6 +334,7 @@ function LigneGroupe({ p, fr, index }: { p: PropositionLumi; fr: boolean; index:
   const document = a && (a.genre === 'quote' || a.genre === 'invoice') ? a : null;
   const message = a && (a.genre === 'sms' || a.genre === 'email') ? a : null;
   const fusion = a && a.genre === 'fusion' ? a : null;
+  const optimisation = a && a.genre === 'optimisation' ? a : null;
   const action = a && a.genre === 'action' ? a : null;
   const sousTitre = resume(p, fr);
   const ok = p.statut === 'confirmee';
@@ -305,7 +355,7 @@ function LigneGroupe({ p, fr, index }: { p: PropositionLumi; fr: boolean; index:
         {ok && p.fiche && p.fiche.type !== 'task' && <Link to={p.fiche.href} onClick={(ev) => ev.stopPropagation()} className="shrink-0 text-[12px] text-text-secondary underline hover:text-text-primary">{fr ? 'Ouvrir' : 'Open'}</Link>}
         <ChevronDown size={14} className="shrink-0 text-text-tertiary transition-transform group-open:rotate-180" />
       </summary>
-      {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : fusion ? <FusionApercu a={fusion} fr={fr} /> : action ? <ActionApercu a={action} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
+      {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : fusion ? <FusionApercu a={fusion} fr={fr} /> : optimisation ? <OptimisationApercu a={optimisation} fr={fr} /> : action ? <ActionApercu a={action} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
       <Drapeaux a={a} fr={fr} />
     </details>
   );
@@ -331,6 +381,7 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
   const document = a && (a.genre === 'quote' || a.genre === 'invoice') ? a : null;
   const message = a && (a.genre === 'sms' || a.genre === 'email') ? a : null;
   const fusion = a && a.genre === 'fusion' ? a : null;
+  const optimisation = a && a.genre === 'optimisation' ? a : null;
   const action = a && a.genre === 'action' ? a : null;
   const attente = p.statut === 'en_attente';
   // Argent, droits, envois au client, irréversible : jamais « toujours confirmer » (le serveur le refuse aussi).
@@ -356,6 +407,7 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
     ? (document.genre === 'quote' ? (fr ? 'Voir la soumission' : 'View the quote') : (fr ? 'Voir la facture' : 'View the invoice'))
     : message ? (message.genre === 'sms' ? (fr ? 'Voir le texto' : 'View the text') : (fr ? 'Voir le courriel' : 'View the email'))
       : fusion ? (fr ? 'Voir les deux fiches' : 'View both records')
+        : optimisation ? (fr ? 'Voir les heures avant et après' : 'View before and after times')
         : (fr ? 'Voir les détails' : 'View details');
 
   return (
@@ -377,13 +429,13 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
           {groupe.map((g, i) => <LigneGroupe key={g.tool_use_id} p={g} fr={fr} index={i} />)}
         </div>
       )}
-      {!groupe && (document || message || fusion || action || Object.keys(p.args).length > 0) && (
+      {!groupe && (document || message || fusion || optimisation || action || Object.keys(p.args).length > 0) && (
         <details className="group border-t border-outline" open={attente}>
           <summary className="flex cursor-pointer list-none items-center gap-2 bg-surface px-3.5 py-2 text-[12.5px] text-text-secondary [&::-webkit-details-marker]:hidden">
             {detailLabel}
             <ChevronDown size={14} className="ml-auto text-text-tertiary transition-transform group-open:rotate-180" />
           </summary>
-          {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : fusion ? <FusionApercu a={fusion} fr={fr} /> : action ? <ActionApercu a={action} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
+          {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : fusion ? <FusionApercu a={fusion} fr={fr} /> : optimisation ? <OptimisationApercu a={optimisation} fr={fr} /> : action ? <ActionApercu a={action} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
         </details>
       )}
       {!groupe && <Drapeaux a={a} fr={fr} />}
@@ -394,7 +446,8 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
             <button type="button" disabled={busy} onClick={() => onDecision('confirm')} className="rounded-lg bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
               {fr ? 'Confirmer' : 'Confirm'}
             </button>
-            {!groupe && !jamaisDOffice && (
+            {/* Jamais « toujours » pour réorganiser une journée ni pour l'argent, les envois, l'irréversible et les droits : le serveur l'exige à chaque fois. */}
+            {!groupe && !jamaisDOffice && p.tool !== 'apply_day_optimization' && (
               <button type="button" disabled={busy} onClick={() => { onAutoriser(p.tool, true); onDecision('confirm', true); }} className="rounded-lg border border-outline-strong bg-surface-card px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:bg-surface-secondary disabled:opacity-50">
                 {fr ? `Toujours confirmer ${v.type}` : `Always confirm ${v.typeEn}`}
               </button>

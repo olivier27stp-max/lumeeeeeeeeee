@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { creerClientStripe } from './stripe-sdk';
 import Twilio from 'twilio';
 import { envelopperTwilio } from './qa-redirect';
+import { envelopperBacASable } from './bac-a-sable';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -30,14 +31,16 @@ export const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER || ''; // E.164
 // à l'unique point d'instanciation, plutôt qu'aux 8 sites d'appel dispersés — un
 // neuvième appelant est ainsi couvert d'office. Sans la variable, `envelopperTwilio`
 // renvoie le client inchangé.
-export const twilioClient = envelopperTwilio(
+// Par-dessus, le bac à sable (server/lib/bac-a-sable.ts) : un texto d'une
+// entreprise de test, ou vers un numéro fictif, est consigné, jamais envoyé.
+export const twilioClient = envelopperBacASable(envelopperTwilio(
   twilioAccountSid && twilioAuthToken && twilioAccountSid.startsWith('AC')
     // timeout : sans borne, une lenteur réseau Twilio suspend l'appelant
     // indéfiniment (l'agent MCP, une automatisation…). 20 s est très au-delà
     // d'un envoi normal (~1-2 s) et libère la requête en cas de blocage.
     ? Twilio(twilioAccountSid, twilioAuthToken, { timeout: 20_000 })
     : null,
-);
+));
 
 /**
  * Client réservé à l'ACHAT de numéros (IncomingPhoneNumbers / AvailablePhoneNumbers).

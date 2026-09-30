@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { format, isSameDay } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
+import { FUSEAU_PAR_DEFAUT } from '../../lib/fuseauEntreprise';
 import { frCA, enCA } from 'date-fns/locale';
 import { AlertTriangle, CheckSquare } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -49,6 +51,8 @@ const PLACEHOLDER_ROW_COUNT = 5;
 
 interface DailyDispatchViewProps {
   date: Date;
+  /** Fuseau de l'entreprise : la ligne « maintenant » suit son heure, comme les visites. */
+  fuseau?: string;
   events: ScheduleEventRecord[];
   teams: TeamRecord[];
   /** Équipes sélectionnées dans le filtre ([] = toutes). */
@@ -80,7 +84,7 @@ type DailyDrag =
     };
 
 export default function DailyDispatchView({
-  date, events, teams, visibleTeamIds, orgId, unassignedMode, isError,
+  date, events, teams, visibleTeamIds, orgId, unassignedMode, isError, fuseau = FUSEAU_PAR_DEFAUT,
   onEventClick, onSlotClick, onReschedule, onResize, externalDnd,
   scheduledTasks, onTaskClick,
 }: DailyDispatchViewProps) {
@@ -381,12 +385,13 @@ export default function DailyDispatchView({
     return () => clearInterval(id);
   }, []);
   const nowX = useMemo(() => {
-    const n = new Date(nowTick);
+    // « Maintenant » à l'heure de l'entreprise, comme les visites (audit Agenda C2).
+    const n = toZonedTime(new Date(nowTick), fuseau);
     if (!isSameDay(n, date)) return null;
     const min = n.getHours() * 60 + n.getMinutes();
     if (min < range.startMin || min > range.endMin) return null;
     return minutesToX(min, range.startMin);
-  }, [nowTick, date, range]);
+  }, [nowTick, date, range, fuseau]);
 
   /* ── Formats horaires ── */
   const fmtMin = useCallback((min: number) => {
