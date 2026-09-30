@@ -20,24 +20,27 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { bloquantsPublication, type RegleAPublier } from '../../src/lib/publicationAutomatisation';
 import { logger } from './logger';
+import { MESSAGES_EN } from './automations-langue';
 
 export type ResultatPublication =
   | { ok: true; id: string; is_active: boolean; name: string }
   | { ok: false; id: string; statut: 403 | 404 | 422 | 500; erreur: string; problemes?: string[] };
 
 /** Le message affiché quand la publication est refusée — il NOMME les problèmes. */
-export function messageRefus(problemes: string[]): string {
-  return `Publication refusée : ${problemes.join(' · ')}`;
+export function messageRefus(problemes: string[], fr = true): string {
+  return fr ? `Publication refusée : ${problemes.join(' · ')}` : `Publishing refused: ${problemes.join(' · ')}`;
 }
 
 /** Refus d'une modification qui casserait une automatisation PUBLIÉE (A-03). */
-export function messagePublieeCassee(problemes: string[]): string {
-  return `Cette automatisation est publiée : cette modification l’empêcherait de fonctionner (${problemes.join(' · ')}). Corrigez-la, ou repassez-la en brouillon d’abord.`;
+export function messagePublieeCassee(problemes: string[], fr = true): string {
+  return fr
+    ? `Cette automatisation est publiée : cette modification l’empêcherait de fonctionner (${problemes.join(' · ')}). Corrigez-la, ou repassez-la en brouillon d’abord.`
+    : `This automation is published: this change would stop it from working (${problemes.join(' · ')}). Fix it, or switch it back to draft first.`;
 }
 
 /** Les problèmes bloquants d'une règle, en texte (vide = publiable). */
-export function problemesBloquants(regle: RegleAPublier): string[] {
-  return bloquantsPublication({ ...regle, fr: true }).map((p) => p.message);
+export function problemesBloquants(regle: RegleAPublier, fr = true): string[] {
+  return bloquantsPublication({ ...regle, fr }).map((p) => p.message);
 }
 
 export async function changerPublication(
@@ -45,7 +48,10 @@ export async function changerPublication(
   orgId: string,
   id: string,
   actif: boolean,
+  /** Langue de l'interface de l'appelant (A-09) : les refus sont dits dans sa langue. */
+  fr = true,
 ): Promise<ResultatPublication> {
+  const t = (m: string) => (fr ? m : (MESSAGES_EN[m] ?? m));
   const { data: regle, error: lectureErr } = await client
     .from('automation_rules')
     .select('id, name, trigger_event, conditions, steps, actions, is_preset, is_active, deleted_at')
@@ -55,20 +61,20 @@ export async function changerPublication(
 
   if (lectureErr) {
     logger.error('[publication] lecture échouée', { rule_id: id, message: lectureErr.message });
-    return { ok: false, id, statut: 500, erreur: 'Impossible de lire l’automatisation.' };
+    return { ok: false, id, statut: 500, erreur: t('Impossible de lire l’automatisation.') };
   }
-  if (!regle) return { ok: false, id, statut: 404, erreur: 'Automatisation introuvable.' };
+  if (!regle) return { ok: false, id, statut: 404, erreur: t('Automatisation introuvable.') };
 
   if (actif) {
     if (regle.deleted_at) {
       return {
         ok: false, id, statut: 422,
-        erreur: 'Cette automatisation est à la corbeille : restaurez-la avant de la publier.',
+        erreur: t('Cette automatisation est à la corbeille : restaurez-la avant de la publier.'),
       };
     }
-    const problemes = problemesBloquants(regle as RegleAPublier);
+    const problemes = problemesBloquants(regle as RegleAPublier, fr);
     if (problemes.length > 0) {
-      return { ok: false, id, statut: 422, erreur: messageRefus(problemes), problemes };
+      return { ok: false, id, statut: 422, erreur: messageRefus(problemes, fr), problemes };
     }
   }
 
@@ -82,17 +88,17 @@ export async function changerPublication(
 
   if (error) {
     if (error.code === '42501') {
-      return { ok: false, id, statut: 403, erreur: 'Votre rôle ne permet pas de publier une automatisation.' };
+      return { ok: false, id, statut: 403, erreur: t('Votre rôle ne permet pas de publier une automatisation.') };
     }
     logger.error('[publication] écriture échouée', { rule_id: id, message: error.message, code: error.code });
-    return { ok: false, id, statut: 500, erreur: 'Impossible de changer le statut de l’automatisation.' };
+    return { ok: false, id, statut: 500, erreur: t('Impossible de changer le statut de l’automatisation.') };
   }
   const ligne = (data ?? [])[0] as { id: string; name: string; is_active: boolean } | undefined;
   if (!ligne) {
-    return { ok: false, id, statut: 403, erreur: 'Votre rôle ne permet pas de publier une automatisation.' };
+    return { ok: false, id, statut: 403, erreur: t('Votre rôle ne permet pas de publier une automatisation.') };
   }
   if (ligne.is_active !== actif) {
-    return { ok: false, id, statut: 500, erreur: 'La modification n’a pas été appliquée — réessayez.' };
+    return { ok: false, id, statut: 500, erreur: t('La modification n’a pas été appliquée — réessayez.') };
   }
   return { ok: true, id: ligne.id, is_active: ligne.is_active, name: ligne.name };
 }

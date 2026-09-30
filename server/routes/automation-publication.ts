@@ -14,8 +14,11 @@ import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
 import { validate, publicationSchema, publicationLotSchema } from '../lib/validation';
 import { changerPublication, type ResultatPublication } from '../lib/automations-publication';
+import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
 
 const router = Router();
+// Les refus sont dits dans la langue de l'interface (A-09).
+router.use('/automations', repondreDansLaLangue);
 
 // Le lot AVANT la route unitaire : `publication` n'est pas un identifiant.
 router.post('/automations/rules/publication', validate(publicationLotSchema), async (req, res) => {
@@ -27,7 +30,7 @@ router.post('/automations/rules/publication', validate(publicationLotSchema), as
   // En SÉQUENCE : un décompte exact de ce qui a marché, et une ligne en
   // échec n'arrête pas les autres.
   for (const id of ids) {
-    resultats.push(await changerPublication(auth.client, auth.orgId, id, req.body.actif));
+    resultats.push(await changerPublication(auth.client, auth.orgId, id, req.body.actif, langueDe(req) === 'fr'));
   }
   return res.json({
     resultats: resultats.map((r) => (r.ok
@@ -40,7 +43,7 @@ router.post('/automations/rules/:id/publication', validate(publicationSchema), a
   const auth = await requireAuthedClient(req, res);
   if (!auth) return;
 
-  const r = await changerPublication(auth.client, auth.orgId, req.params.id, req.body.actif);
+  const r = await changerPublication(auth.client, auth.orgId, req.params.id, req.body.actif, langueDe(req) === 'fr');
   if (!r.ok) {
     return res.status(r.statut).json({
       error: r.erreur,

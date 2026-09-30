@@ -35,3 +35,23 @@ describe('A-07 — « Messages en FR/EN » ne ment plus sur un refus silencieux'
     expect(etat.ecritures).toEqual([{ default_language: 'en' }]);
   });
 });
+
+describe('A-09 — le navigateur envoie la langue de l’interface aux routes des automatisations', () => {
+  it('Accept-Language suit « lume-language » (fr par défaut)', async () => {
+    const { creerDossier } = await import('../src/lib/automationBuilderApi');
+    const { listerAdressesDAppel } = await import('../src/lib/automationWebhooksApi');
+    const vus: Array<Record<string, string>> = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+      vus.push((init?.headers ?? {}) as Record<string, string>);
+      return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    let langue: string | null = 'en';
+    vi.stubGlobal('localStorage', { getItem: () => langue, setItem: () => {}, removeItem: () => {} });
+    await creerDossier('Relances');
+    await listerAdressesDAppel();
+    langue = null;
+    await creerDossier('Relances');
+    expect(vus.map((h) => h['Accept-Language'])).toEqual(['en', 'en', 'fr']);
+    vi.unstubAllGlobals();
+  });
+});

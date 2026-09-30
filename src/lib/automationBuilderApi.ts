@@ -14,6 +14,7 @@
 
 import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
+import { interfaceEnFrancais } from './champs/messages';
 import type { AutomationRule } from './automationRulesApi';
 import type { DeclencheurCatalogue, ActionCatalogue } from './automationCatalogue';
 import type { ModeleAutomatisation } from './automationTemplates';
@@ -68,6 +69,9 @@ async function entetes(): Promise<HeadersInit> {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
+    // La langue de l'INTERFACE : le serveur répond dans cette langue
+    // (server/lib/automations-langue.ts — audit V2, A-09).
+    'Accept-Language': interfaceEnFrancais() ? 'fr' : 'en',
     ...(orgId ? { 'x-org-id': orgId } : {}),
   };
 }

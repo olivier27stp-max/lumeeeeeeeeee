@@ -20,14 +20,18 @@ const ecritures: Array<{ id: string; patch: Ligne }> = [];
 /** Un faux client qui lit `lignes` et note chaque update. */
 function fauxClient() {
   return {
-    from: () => {
+    from: (table: string) => {
       let filtreId: string | null = null;
       let patch: Ligne | null = null;
+      let insertion = false;
       const chaine: Record<string, unknown> = {
+        // Un dossier au nom déjà pris : l'index unique répond 23505.
+        insert: () => { insertion = true; return chaine; },
         select: () => chaine,
         eq: (col: string, v: string) => { if (col === 'id') filtreId = v; return chaine; },
         maybeSingle: async () => ({ data: filtreId ? lignes[filtreId] ?? null : null, error: null }),
         single: async () => {
+          if (insertion && table === 'automation_folders') return { data: null, error: { code: '23505', message: 'duplicate' } };
           if (patch && filtreId && lignes[filtreId]) {
             ecritures.push({ id: filtreId, patch });
             lignes[filtreId] = { ...lignes[filtreId], ...patch };
@@ -145,5 +149,51 @@ describe('A-03 — une automatisation PUBLIÉE ne peut pas être rendue cassée'
       steps: [{ id: 'e1', type: 'action', action: { type: 'send_email', config: { subject: 'Suivi', body: 'Bonjour' } }, suivant: null }],
     });
     expect(r.status).toBe(200);
+  });
+});
+
+// ─── A-09 ───────────────────────────────────────────────────────
+
+describe('A-09 — le serveur répond dans la langue de l’interface', () => {
+  const EN = { 'Accept-Language': 'en' };
+
+  it('refus de publication en anglais pour un utilisateur anglais', async () => {
+    lignes[FACTURE].is_active = false;
+    lignes[FACTURE].steps = [{ id: 'e1', type: 'action', action: { type: 'envoyer_soumission', config: {} }, suivant: null }];
+    const r = await appeler('POST', `/automations/rules/${FACTURE}/publication`, { actif: true }, EN);
+    expect(r.status).toBe(422);
+    expect(r.json.error).toMatch(/^Publishing refused/);
+    expect(r.json.error).not.toMatch(/Publication refusée|déclencheur/);
+  });
+
+  it('… et en français par défaut', async () => {
+    lignes[FACTURE].is_active = false;
+    lignes[FACTURE].steps = [{ id: 'e1', type: 'action', action: { type: 'envoyer_soumission', config: {} }, suivant: null }];
+    const r = await appeler('POST', `/automations/rules/${FACTURE}/publication`, { actif: true });
+    expect(r.json.error).toMatch(/^Publication refusée/);
+  });
+
+  it('une publiée qu’on casserait : refus en anglais', async () => {
+    const r = await appeler('PATCH', `/automations/rules/${FACTURE}`, { trigger_event: 'lead.created' }, EN);
+    expect(r.status).toBe(422);
+    expect(r.json.error).toMatch(/is published/);
+  });
+
+  it('dossier en double : message anglais', async () => {
+    const r = await appeler('POST', '/automations/folders', { name: 'Relances' }, EN);
+    expect(r.status).toBe(409);
+    expect(r.json.error).toBe('A folder already has this name.');
+  });
+
+  it('chaque message d’erreur écrit en dur dans les routes a sa traduction anglaise', async () => {
+    const { MESSAGES_EN } = await import('../server/lib/automations-langue');
+    const { readFileSync } = await import('node:fs');
+    const sources = ['server/routes/automation-rules.ts', 'server/lib/automations-publication.ts']
+      .map((f) => readFileSync(f, 'utf8')).join('\n');
+    // `error: '…'` dans les routes, `erreur: t('…')` dans la publication.
+    const litteraux = [...sources.matchAll(/\b(?:error|erreur): (?:t\()?'((?:[^'\\]|\\.)+)'/g)].map((m) => m[1].replace(/\\'/g, "'"));
+    const enMoins = litteraux.filter((m) => !(m in MESSAGES_EN));
+    expect(enMoins).toEqual([]);
+    expect(litteraux.length).toBeGreaterThan(30);
   });
 });

@@ -46,6 +46,7 @@ import { logger } from '../lib/logger';
 import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
 import { problemesBloquants, messageRefus, messagePublieeCassee } from '../lib/automations-publication';
+import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
 import {
   DECLENCHEURS,
   ACTIONS,
@@ -55,6 +56,8 @@ import {
 } from '../../src/lib/automationCatalogue';
 
 const router = Router();
+// Les messages d'erreur partent dans la langue de l'interface (A-09).
+router.use('/automations', repondreDansLaLangue);
 
 /** Colonnes renvoyées au navigateur. `org_id` n'a aucun intérêt côté client. */
 const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, folder_id, modele_id, deleted_at, created_at, updated_at, lumi_conversation';
@@ -70,7 +73,7 @@ function verifierCoherence(corps: {
   trigger_event?: string;
   delay_seconds?: number;
   actions?: Array<{ type: string }>;
-}): string | null {
+}, fr = true): string | null {
   const { trigger_event, delay_seconds, actions } = corps;
 
   // Un délai négatif = « X avant la date de référence ». Le moteur ne sait le
@@ -83,7 +86,9 @@ function verifierCoherence(corps: {
     }
     const decl = trouverDeclencheur(trigger_event);
     if (!decl?.accepte_delai_negatif) {
-      return `« ${decl?.fr ?? trigger_event} » n'a pas de date future : on ne peut pas envoyer avant. Utilisez un délai après l'événement.`;
+      return fr
+        ? `« ${decl?.fr ?? trigger_event} » n'a pas de date future : on ne peut pas envoyer avant. Utilisez un délai après l'événement.`
+        : `“${decl?.en ?? trigger_event}” has no future date: you cannot send before. Use a delay after the event.`;
     }
     if (delay_seconds < -DELAI_NEGATIF_MAX_SECONDES) {
       return 'On ne peut pas envoyer plus de 30 jours avant.';
@@ -164,13 +169,14 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
     return res.status(400).json({ error: 'Dossier introuvable dans ce bureau.' });
   }
 
-  const probleme = verifierCoherence(req.body);
+  const fr = langueDe(req) === 'fr';
+  const probleme = verifierCoherence(req.body, fr);
   if (probleme) return res.status(400).json({ error: probleme });
 
   // Naître publiée = publier : mêmes vérifications que la route de publication (M8).
   if (req.body.is_active === true) {
-    const problemes = problemesBloquants(req.body);
-    if (problemes.length) return res.status(422).json({ error: messageRefus(problemes), code: 'publication_refusee', problemes });
+    const problemes = problemesBloquants(req.body, fr);
+    if (problemes.length) return res.status(422).json({ error: messageRefus(problemes, fr), code: 'publication_refusee', problemes });
   }
 
   const { data, error } = await auth.client
@@ -488,18 +494,19 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     });
   }
 
+  const fr = langueDe(req) === 'fr';
   const probleme = verifierCoherence({
     trigger_event: patch.trigger_event ?? existante.trigger_event,
     delay_seconds: patch.delay_seconds ?? existante.delay_seconds,
     actions: patch.actions,
-  });
+  }, fr);
   if (probleme) return res.status(400).json({ error: probleme });
 
   // Publier par ce chemin passe par les mêmes vérifications que la route de
   // publication (M8), sur la règle telle qu'elle SERA après modification.
   if (patch.is_active === true) {
-    const problemes = problemesBloquants({ ...existante, ...patch });
-    if (problemes.length) return res.status(422).json({ error: messageRefus(problemes), code: 'publication_refusee', problemes });
+    const problemes = problemesBloquants({ ...existante, ...patch }, fr);
+    if (problemes.length) return res.status(422).json({ error: messageRefus(problemes, fr), code: 'publication_refusee', problemes });
   }
 
   /*
@@ -514,10 +521,10 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
    */
   const parcoursModifie = (['trigger_event', 'steps', 'actions', 'conditions'] as const).some((k) => k in patch);
   if (existante.is_active && patch.is_active === undefined && parcoursModifie) {
-    const avant = new Set(problemesBloquants(existante));
-    const nouveaux = problemesBloquants({ ...existante, ...patch }).filter((p) => !avant.has(p));
+    const avant = new Set(problemesBloquants(existante, fr));
+    const nouveaux = problemesBloquants({ ...existante, ...patch }, fr).filter((p) => !avant.has(p));
     if (nouveaux.length) {
-      return res.status(422).json({ error: messagePublieeCassee(nouveaux), code: 'publiee_cassee', problemes: nouveaux });
+      return res.status(422).json({ error: messagePublieeCassee(nouveaux, fr), code: 'publiee_cassee', problemes: nouveaux });
     }
   }
 
