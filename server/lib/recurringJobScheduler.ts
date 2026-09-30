@@ -157,6 +157,11 @@ export async function processRecurringJobs(supabase: SupabaseClient, options: { 
               job_id: newJob.id,
               // schedule_events n'a pas de client_id : le client se resout via le job.
               team_id: job.team_id,
+              // Obligatoire hors contexte d'authentification (trigger) : sans
+              // lui, CHAQUE visite récurrente était refusée (« created_by is
+              // required when no auth context ») — le job existait, absent du
+              // calendrier, sans confirmation ni rappel au client.
+              created_by: job.created_by,
               start_at: scheduledAt,
               end_at: new Date(nextDate.getTime() + 2 * 60 * 60 * 1000).toISOString(), // 2h default
               status: 'scheduled',
