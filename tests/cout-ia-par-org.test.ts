@@ -86,10 +86,8 @@ describe('journaliserUsage', () => {
     const champs = Object.keys(e.inserts[0].ligne).sort();
     expect(champs).toEqual([
       'cache_creation_input_tokens', 'cache_read_input_tokens', 'conversation_id',
-      'cost_cents', 'input_tokens', 'model', 'org_id', 'output_tokens', 'request_id', 'source', 'user_id',
+      'cost_cents', 'input_tokens', 'model', 'org_id', 'output_tokens', 'source', 'user_id',
     ]);
-    // request_id (crédits Lumi, 2026-09-30) : l'identifiant technique de la
-    // réponse du fournisseur (msg_…), pour l'idempotence — jamais du contenu.
     // Aucun champ ne peut transporter du texte libre : que des compteurs,
     // un modèle, et des identifiants.
     for (const [k, v] of Object.entries(e.inserts[0].ligne)) {

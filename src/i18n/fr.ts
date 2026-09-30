@@ -3934,32 +3934,6 @@ const fr: TranslationKeys = {
       },
     },
   },
-  // Crédits Lumi (2026-09-30) : l'usage IA se compte en crédits, jamais en dollars.
-  // `unit` est LA clé du libellé : la renommer ici renomme partout.
-  lumiCredits: {
-    unit: 'crédits Lumi',
-    counter: '{restants} / {total} {unit}',
-    renews: 'renouvellement le {date}',
-    renewsOn: 'Renouvellement le {date}',
-    untilRenewal: 'renouvellement',
-    barLabel: '{unit} restants pour la période',
-    barValue: '{restants} {unit} restants sur {total}',
-    warn80: 'Il te reste {n} {unit} jusqu’au {date}.',
-    exhausted: 'Tes {unit} sont épuisés jusqu’au {date}. Les actions rapides et tout le reste de Lume fonctionnent toujours.',
-    exhaustedInput: '{Unit} épuisés jusqu’au {date}.',
-    slowed: 'Lumi ménage tes {unit} : il répond une fois par minute jusqu’au {date}. Réessaie dans un instant.',
-    perMonth: '{n} {unit} / mois',
-    deducted: 'Déduit de tes {unit}',
-    left: 'restants',
-    ofTotal: 'sur {total}',
-    noRollover: 'Les {unit} non utilisés ne sont pas reportés. Le compteur repart à chaque renouvellement.',
-    historyTitle: '30 derniers jours',
-    historyEmpty: 'Aucune consommation pour l’instant dans cette période.',
-    historyError: 'L’historique de consommation est indisponible pour le moment.',
-    byUser: 'Par utilisateur',
-    dayUsage: '{jour} : {n} {unit}',
-    downgradeLost: 'Lumi, l’assistant IA ({n} {unit} / mois)',
-  },
 } as const;
 
 export default fr;

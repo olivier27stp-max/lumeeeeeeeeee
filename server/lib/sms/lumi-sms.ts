@@ -20,7 +20,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Anthropic from '@anthropic-ai/sdk';
 import { tourLumi, promptSystemeLumi, isLumiConfigured } from '../lumi/orchestrateur';
-import { etatBudget, reserverBudget, reglerBudget, reglagesPourPalier, messagePause, journaliserUsage } from '../lumi/budget';
+import { etatBudget, reserverBudget, reglerBudget, reglagesPourPalier, messagePause } from '../lumi/budget';
 import { modeleLumi } from '../lumi/tarifs';
 import { logger } from '../logger';
 
@@ -116,7 +116,7 @@ export async function repondreParSms(
       : "I'm not included in your plan. Reach out if you'd like to add me.");
   }
   if (budget.palier === 'epuise') {
-    return vide(messagePause(ctx.langue, budget.renouvellement_le || new Date()));
+    return vide(messagePause(ctx.langue));
   }
 
   const reglages = reglagesPourPalier(budget.palier, modeleLumi());
@@ -154,22 +154,14 @@ export async function repondreParSms(
     emettre: (e) => {
       if (e.type === 'text') texte += e.delta;
     },
-    // Journalisé comme le chat : la consommation se lit dans ai_usage. Avant le
-    // 2026-09-30, ce crochet était vide — Lumi par texto ne comptait jamais.
-    journaliser: (usage, model, cost_cents, requestId) => journaliserUsage(ctx.admin, {
-      orgId: ctx.orgId, userId: ctx.userId, conversationId: null, model,
-      input_tokens: usage.input_tokens, output_tokens: usage.output_tokens,
-      cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
-      cache_read_input_tokens: usage.cache_read_input_tokens ?? 0, cost_cents,
-      requestId: requestId ?? null,
-    }),
+    journaliser: async () => { /* l'usage est journalisé par la réservation ci-dessous */ },
     budget: {
       reserver: (cents) => reserverBudget(ctx.admin, ctx.orgId, cents),
       regler: (id, cents) => reglerBudget(ctx.admin, id, cents),
     },
   });
 
-  if (resultat.plafond) return vide(messagePause(ctx.langue, budget.renouvellement_le || new Date()));
+  if (resultat.plafond) return vide(messagePause(ctx.langue));
 
   const final = pourSms(texte || resultat.texte || '');
   return {
