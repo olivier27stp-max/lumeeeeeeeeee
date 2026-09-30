@@ -122,14 +122,23 @@ describe('réglages : seuls les six booléens connus passent', () => {
 });
 
 describe('courriel « paiement reçu » au propriétaire', () => {
-  it('le sujet porte le montant, la référence et le pourboire', () => {
+  it('le sujet porte le montant, la référence et le pourboire quand il tient', () => {
     const sujet = sujetPaiementRecu({
-      orgId: ORG, genre: 'invoice', amountCents: 12_500, tipCents: 1_000, currency: 'CAD', reference: '2026-014',
+      orgId: ORG, genre: 'invoice', amountCents: 12_500, tipCents: 1_000, currency: 'CAD', reference: '14',
     }, 'fr');
     expect(sujet).toContain('Paiement reçu');
-    expect(sujet).toContain('2026-014');
     expect(sujet).toMatch(/125,00/);
-    expect(sujet).toMatch(/10,00.*pourboire/);
+    expect(sujet).toMatch(/pourboire 10,00/);
+    expect(sujet.length).toBeLessThanOrEqual(60);
+  });
+
+  it('jamais plus de 60 caractères : le pourboire (détaillé dans le corps) quitte l’objet', () => {
+    const sujet = sujetPaiementRecu({
+      orgId: ORG, genre: 'invoice', amountCents: 148_750, tipCents: 2_500, currency: 'CAD', reference: 'INV-2026-00042',
+    }, 'fr');
+    expect(sujet.length).toBeLessThanOrEqual(60);
+    expect(sujet).toContain('INV-2026-00042');
+    expect(sujet).not.toContain('pourboire');
   });
 
   it('dépôt de devis, en anglais, sans pourboire', () => {

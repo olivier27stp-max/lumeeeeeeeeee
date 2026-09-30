@@ -52,9 +52,12 @@ export function sujetPaiementRecu(p: PaiementRecuParams, langue: 'fr' | 'en'): s
     : (langue === 'fr' ? `facture ${p.reference}` : `invoice ${p.reference}`);
   const tete = langue === 'fr' ? 'Paiement reçu' : 'Payment received';
   const pourboire = p.tipCents && p.tipCents > 0
-    ? (langue === 'fr' ? ` (+ ${formaterMontant(p.tipCents, p.currency, langue)} de pourboire)` : ` (+ ${formaterMontant(p.tipCents, p.currency, langue)} tip)`)
+    ? (langue === 'fr' ? ` (pourboire ${formaterMontant(p.tipCents, p.currency, langue)})` : ` (tip ${formaterMontant(p.tipCents, p.currency, langue)})`)
     : '';
-  return `${tete} — ${montant}${pourboire} — ${quoi}`;
+  // 60 caractères au plus (normes des courriels) : le pourboire, toujours
+  // détaillé dans le corps, quitte l'objet quand il le ferait déborder.
+  const complet = `${tete} — ${montant}${pourboire} — ${quoi}`;
+  return complet.length <= 60 ? complet : `${tete} — ${montant} — ${quoi}`;
 }
 
 export async function notifierPaiementRecu(p: PaiementRecuParams): Promise<void> {
@@ -82,7 +85,8 @@ export async function notifierPaiementRecu(p: PaiementRecuParams): Promise<void>
     void client;
     const html = rendreCourrielLume({
       langue,
-      preheader: sujet,
+      // Le texte d'aperçu répétait l'objet mot pour mot : il reprend la phrase d'intro.
+      preheader: null,
       titre: langue === 'fr' ? 'Paiement reçu' : 'Payment received',
       intro: langue === 'fr'
         ? `${p.clientName || 'Un client'} vient de payer en ligne ${p.genre === 'deposit' ? `le dépôt du devis ${p.reference}` : `la facture ${p.reference}`}.`
@@ -93,7 +97,7 @@ export async function notifierPaiementRecu(p: PaiementRecuParams): Promise<void>
         { libelle: p.genre === 'deposit' ? (langue === 'fr' ? 'Devis' : 'Quote') : (langue === 'fr' ? 'Facture' : 'Invoice'), valeur: p.reference },
       ],
       bouton: lien ? { texte: langue === 'fr' ? (p.genre === 'deposit' ? 'Voir le devis' : 'Voir la facture') : (p.genre === 'deposit' ? 'View quote' : 'View invoice'), url: lien } : null,
-      note: langue === 'fr' ? 'Vous recevez ce courriel parce que « Être avisé de chaque paiement par courriel » est activé dans Paramètres → Lume Payments.' : 'You receive this email because “Get notified of payments by email” is on in Settings → Lume Payments.',
+      note: langue === 'fr' ? 'Tu reçois ce courriel parce que « Être avisé de chaque paiement par courriel » est activé dans Paramètres → Lume Payments.' : 'You receive this email because “Get notified of payments by email” is on in Settings → Lume Payments.',
     });
     await sendEmail({
       to: destinataire,

@@ -530,6 +530,19 @@ export function sansPrenomVide(texte: string): string {
     .replace(/([A-Za-zÀ-ÿ])\.\.(?!\.)/g, '$1.');
 }
 
+/**
+ * « 1 vue(s) » → « 1 vue », « 3 vue(s) » → « 3 vues » : un nombre suivi d'un
+ * mot à « (s) » est accordé (normes des courriels, 2026-09-29). En français,
+ * 0 et 1 sont au singulier ; en anglais, seul 1 l'est.
+ */
+export function accorderPluriels(texte: string, langue: 'fr' | 'en' = 'fr'): string {
+  return texte.replace(/(\d[\d   ]*)\s+(\p{L}+)\(s\)/gu, (_t, n: string, mot: string) => {
+    const valeur = Number(n.replace(/\D/g, ''));
+    const singulier = langue === 'fr' ? valeur < 2 : valeur === 1;
+    return `${n.trimEnd()} ${mot}${singulier ? '' : 's'}`;
+  });
+}
+
 export function echapperHtml(v: string): string {
   return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
@@ -1621,8 +1634,8 @@ export async function executeCreateNotification(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  const title = resolveTemplate(config.title, vars);
-  const body = resolveTemplate(config.body ?? '', vars);
+  const title = accorderPluriels(resolveTemplate(config.title, vars));
+  const body = accorderPluriels(resolveTemplate(config.body ?? '', vars));
   const lien = config.lien ? resolveTemplate(config.lien, vars) : null;
   const entityId = config.reference_id || ctx.entityId;
   // « Aussi par courriel » : les mêmes personnes que la cloche, à leur adresse
@@ -1631,7 +1644,16 @@ export async function executeCreateNotification(
     if (config.par_courriel !== 'true' || destinataires.size === 0) return 0;
     const { getServiceClient } = await import('../supabase');
     const { envoyerNotificationParCourriel } = await import('../notificationCourriel');
-    return envoyerNotificationParCourriel(getServiceClient(), ctx.orgId, destinataires, { title, body, lien },
+    const cfg = config as Record<string, unknown>;
+    const en = typeof cfg.title_en === 'string' && cfg.title_en.trim()
+      ? { title: accorderPluriels(resolveTemplate(cfg.title_en, vars), 'en'), body: accorderPluriels(resolveTemplate(String(cfg.body_en ?? ''), vars), 'en') }
+      : null;
+    // « Bon moment pour appeler » sans le numéro obligeait à ouvrir l'app pour
+    // le trouver : le courriel porte le lien tel: quand l'alerte parle d'appeler.
+    const appeler = /\bappel|\bcall\b/i.test(`${title} ${body}`) && vars.client_phone
+      ? { nom: vars.client_name || vars.client_first_name || '', telephone: vars.client_phone }
+      : null;
+    return envoyerNotificationParCourriel(getServiceClient(), ctx.orgId, destinataires, { title, body, lien, en, appeler },
       { entityType: ctx.entityType, entityId });
   };
 
