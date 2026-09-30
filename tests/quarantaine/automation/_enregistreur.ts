@@ -46,7 +46,11 @@ export function clientEnregistreur(reponses: Record<string, Preparee>) {
     o.delete = () => { req.op = 'delete'; return o; };
     o.maybeSingle = async () => { const r = resoudre(req); return { data: Array.isArray(r.data) ? r.data[0] ?? null : r.data ?? null, error: r.error ?? null }; };
     o.single = o.maybeSingle;
-    o.then = (res: any, rej: any) => { const r = resoudre(req); return Promise.resolve({ data: r.data ?? null, error: r.error ?? null, count: r.count ?? null }).then(res, rej); };
+    // Sans `.single()`/`.maybeSingle()`, PostgREST rend TOUJOURS un tableau : une
+    // réponse préparée en objet seul y est enveloppée. Sinon un `.find` ou un
+    // `.filter` du moteur levait, et le moteur le lisait comme une panne de base
+    // (« lecture du carnet de clients impossible »).
+    o.then = (res: any, rej: any) => { const r = resoudre(req); const data = r.data == null || Array.isArray(r.data) ? r.data ?? null : [r.data]; return Promise.resolve({ data, error: r.error ?? null, count: r.count ?? null }).then(res, rej); };
     return o;
   };
   const rpc = async (nom: string) => {
@@ -56,6 +60,43 @@ export function clientEnregistreur(reponses: Record<string, Preparee>) {
     return { data: r.data ?? null, error: r.error ?? null };
   };
   return { client: { from, rpc } as any, journal };
+}
+
+/**
+ * Ligne de RÉSERVATION du moteur (anti-doublon F3, `reserverExecution`) : insérée
+ * « en cours » avant l'action, complétée ensuite. Ce n'est pas un résultat —
+ * compter les inserts du journal sans l'écarter double chaque exécution.
+ */
+export const estReservation = (v: any) => v?.result_success === false && v?.result_error === 'en cours';
+
+/** Résultats d'exécution réellement journalisés (réservations écartées). */
+export const executionsJournalisees = (journal: Requete[]) =>
+  requetes(journal, 'automation_execution_logs', 'insert').filter((r) => !estReservation(r.valeur));
+
+/**
+ * `automation_execution_logs` avec son index UNIQUE sur `execution_key`, comme
+ * en base : une 2e réservation de la même clé reçoit 23505, et la lecture de la
+ * tranche précédente retrouve ce qui a été écrit. Sans ça, le banc ne peut pas
+ * éprouver l'anti-doublon — il le déclare cassé à tort.
+ */
+export function journalExecutionsUnique() {
+  const lignes: Array<Record<string, unknown>> = [];
+  return (req: Requete): Reponse => {
+    const v = req.valeur as Record<string, unknown> | undefined;
+    if (req.op === 'insert' && v) {
+      if (v.execution_key && lignes.some((l) => l.execution_key === v.execution_key)) {
+        return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
+      }
+      const ligne = { id: `log-${lignes.length + 1}`, ...v };
+      lignes.push(ligne);
+      return { data: [{ id: ligne.id }] };
+    }
+    if (req.op === 'select') {
+      const cle = req.filtres.find(([op, col]) => op === 'eq' && col === 'execution_key');
+      return { data: cle ? lignes.filter((l) => l.execution_key === cle[2]) : [] };
+    }
+    return { data: null };
+  };
 }
 
 /** Les requêtes d'une table, optionnellement d'une opération. */
