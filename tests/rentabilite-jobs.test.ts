@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const racine = resolve(__dirname, '..');
-const MIG = readFileSync(resolve(racine, 'supabase/migrations/20261002700000_rentabilite_jobs.sql'), 'utf8');
+const MIG = readFileSync(resolve(racine, 'supabase/migrations/20261002750000_rentabilite_jobs.sql'), 'utf8');
 const corps = (fn: string) => {
   const debut = MIG.indexOf(`create or replace function public.${fn}(`);
   return MIG.slice(debut, MIG.indexOf('$function$;', debut));
