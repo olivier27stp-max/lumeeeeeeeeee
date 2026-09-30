@@ -25,6 +25,7 @@ function fauxAdmin(existantes: string[]) {
       insert(l: any[]) { ecrits.push({ op: 'insert', lignes: l, filtres }); return Promise.resolve({ error: null }); },
       select() { return b; },
       eq(c: string, v: unknown) { filtres.push(['eq', c, v]); return b; },
+      is(c: string, v: unknown) { filtres.push(['is', c, v]); return b; },
       in(c: string, v: unknown) { filtres.push(['in', c, v]); return b; },
       not(c: string, o: string, v: unknown) { filtres.push(['not', c, v]); return b; },
       maybeSingle() { return Promise.resolve({ data: { review_enabled: false }, error: null }); },

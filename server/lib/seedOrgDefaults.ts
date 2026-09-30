@@ -217,9 +217,28 @@ export async function seedOrgComplete(
   const result = { industry: false, automations: false, taxes: false };
   if (!orgId) return result;
 
+  /*
+   * Une entreprise EXISTANTE ne se refait pas un socle. Le webhook de paiement
+   * et l'onboarding rappellent cette fonction sur une entreprise qui a déjà
+   * ses services et ses taxes (le client qui paie par un lien a déjà un
+   * compte) : le catalogue de métier réécrivait son unité par défaut et
+   * reposait les services qu'elle avait supprimés ; une région mal lue
+   * (« Quebec » au lieu de « QC ») ajoutait un 2e groupe de taxes et en
+   * faisait le groupe PAR DÉFAUT (2026-09-30). Chaque brique ne s'applique
+   * donc que si l'entreprise n'a encore rien de ce côté-là.
+   */
+  const [lectureServices, lectureTaxes] = await Promise.all([
+    admin.from('predefined_services').select('id').eq('org_id', orgId).limit(1),
+    admin.from('tax_groups').select('id').eq('org_id', orgId).limit(1),
+  ]);
+  // Lecture en échec = on ne sait pas : on ne touche à rien plutôt que de
+  // risquer d'écraser.
+  const aDejaDesServices = !!lectureServices.error || (lectureServices.data ?? []).length > 0;
+  const aDejaDesTaxes = !!lectureTaxes.error || (lectureTaxes.data ?? []).length > 0;
+
   // 1. Catalogue de services métier — uniquement si l'industrie est connue.
   const industry = (opts.industry || '').trim();
-  if (industry) {
+  if (industry && !aDejaDesServices) {
     try {
       await seedOrgFromIndustry(admin, orgId, industry);
       result.industry = true;
@@ -238,11 +257,13 @@ export async function seedOrgComplete(
 
   // 3. Taxes (universelles au QC — toujours, sauf région explicitement 'NONE'/'LATER').
   const taxRegion = (opts.taxRegion || 'QC').trim();
-  try {
-    const r = await seedTaxPreset(admin, orgId, taxRegion, true);
-    result.taxes = r.created;
-  } catch (err: any) {
-    console.warn(`[seedOrgComplete] seedTaxPreset failed for org ${orgId}:`, err?.message);
+  if (!aDejaDesTaxes) {
+    try {
+      const r = await seedTaxPreset(admin, orgId, taxRegion, true);
+      result.taxes = r.created;
+    } catch (err: any) {
+      console.warn(`[seedOrgComplete] seedTaxPreset failed for org ${orgId}:`, err?.message);
+    }
   }
 
   return result;
