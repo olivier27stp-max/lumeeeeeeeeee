@@ -235,9 +235,17 @@ export function evaluerCondition(type: TypeChamp, valeur: unknown, c: Condition,
   if (estVide(valeur)) return false;
   // Valeur ramenée à l'heure murale locale (une date seule est un jour civil).
   const texte = String(valeur);
+  // Une valeur qui n'est pas une date ne satisfait rien : comparée en texte,
+  // « n/a » est « après » 2026-01-01 (« n » > « 2 »).
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(texte);
+  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12 || Number(m[3]) < 1 || Number(m[3]) > joursDansMois(Number(m[1]), Number(m[2]))) return false;
   const avecHeure = ctx.avecHeure ?? texte.length > 10;
+  if (avecHeure && Number.isNaN(new Date(texte).getTime())) return false;
   const mur = avecHeure ? heureMurale(new Date(texte), fuseau) : `${texte.slice(0, 10)}T00:00:00`;
   const jour = mur.slice(0, 10);
+  // Une durée illisible valait NaN : « il y a plus de NaN jours » était vrai
+  // pour toute date (comparaison de texte avec « NaN-NaN-NaN »).
+  if (c.n !== undefined && c.n !== null && !Number.isFinite(Number(c.n))) throw new Error(`Durée manquante pour « ${c.op} ».`);
   const n = Math.max(0, Math.floor(Number(c.n ?? 0)));
   const unite: UniteDuree = c.unit ?? 'days';
   const borne = retirerDuree(avecHeure ? maintenant : `${aujourdhui}T00:00:00`, n, unite);
