@@ -227,14 +227,19 @@ export async function seedOrgComplete(
    * faisait le groupe PAR DÉFAUT (2026-09-30). Chaque brique ne s'applique
    * donc que si l'entreprise n'a encore rien de ce côté-là.
    */
-  const [lectureServices, lectureTaxes] = await Promise.all([
+  const [lectureOrg, lectureServices, lectureTaxes] = await Promise.all([
+    admin.from('orgs').select('automations_initialisees_le').eq('id', orgId).maybeSingle(),
     admin.from('predefined_services').select('id').eq('org_id', orgId).limit(1),
     admin.from('tax_groups').select('id').eq('org_id', orgId).limit(1),
   ]);
-  // Lecture en échec = on ne sait pas : on ne touche à rien plutôt que de
-  // risquer d'écraser.
-  const aDejaDesServices = !!lectureServices.error || (lectureServices.data ?? []).length > 0;
-  const aDejaDesTaxes = !!lectureTaxes.error || (lectureTaxes.data ?? []).length > 0;
+  // Déjà installée (marquée à sa première installation — toutes les
+  // entreprises existantes le sont) : on ne refait RIEN de son socle, même
+  // si elle a vidé son catalogue ou retiré ses taxes : c'était son choix.
+  // Lecture en échec = on ne sait pas : on ne touche à rien.
+  const dejaInstallee = !!lectureOrg.error
+    || !!(lectureOrg.data as { automations_initialisees_le?: string | null } | null)?.automations_initialisees_le;
+  const aDejaDesServices = dejaInstallee || !!lectureServices.error || (lectureServices.data ?? []).length > 0;
+  const aDejaDesTaxes = dejaInstallee || !!lectureTaxes.error || (lectureTaxes.data ?? []).length > 0;
 
   // 1. Catalogue de services métier — uniquement si l'industrie est connue.
   const industry = (opts.industry || '').trim();

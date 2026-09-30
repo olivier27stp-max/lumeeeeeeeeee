@@ -84,6 +84,12 @@ describe('services et taxes : on ne refait pas le socle d’une entreprise équi
     expect(activations(ecrits)).toEqual([]);
   });
 
+  it('entreprise DÉJÀ INSTALLÉE qui a vidé son catalogue et retiré ses taxes : on respecte son choix', async () => {
+    const { admin, ecrits } = fauxAdmin({ marque: '2026-09-01T00:00:00Z', presets: AUTOMATION_PRESETS.map((p) => p.preset_key), services: 0, taxes: 0 });
+    await seedOrgComplete(admin, 'org-existante', { industry: 'window_cleaning', taxRegion: 'QC' });
+    expect(ecrits.filter((e) => ['company_settings', 'predefined_services', 'tax_groups', 'tax_configs'].includes(e.table))).toEqual([]);
+  });
+
   it('entreprise NEUVE : services et taxes posés', async () => {
     const { admin, ecrits } = fauxAdmin({ marque: null, presets: AUTOMATION_PRESETS.map((p) => p.preset_key) });
     await seedOrgComplete(admin, 'org-neuve', { industry: 'window_cleaning', taxRegion: 'QC' });
