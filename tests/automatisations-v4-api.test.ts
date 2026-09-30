@@ -1,0 +1,37 @@
+// VAGUE 4 — les fonctions API de l'interface des automatisations
+// (audit V2, 11-interface.md §9), devant un faux client Supabase.
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const etat = { lignesModifiees: [] as unknown[], ecritures: [] as unknown[] };
+vi.mock('../src/lib/supabase', () => {
+  const chaine: Record<string, unknown> = {};
+  Object.assign(chaine, {
+    select: () => chaine,
+    eq: () => chaine,
+    update: (p: unknown) => { etat.ecritures.push(p); return chaine; },
+    then: (ok: (r: unknown) => unknown) => Promise.resolve({ data: etat.lignesModifiees, error: null }).then(ok),
+  });
+  return { supabase: { from: () => chaine, auth: { getSession: async () => ({ data: { session: { access_token: 't' } } }) } } };
+});
+vi.mock('../src/lib/orgApi', () => ({ getCurrentOrgId: async () => 'org-1' }));
+
+import { setAutomationLanguage } from '../src/lib/automationRulesApi';
+
+beforeEach(() => {
+  etat.lignesModifiees = [];
+  etat.ecritures = [];
+});
+
+describe('A-07 — « Messages en FR/EN » ne ment plus sur un refus silencieux', () => {
+  it('0 ligne modifiée (RLS : rôle sans droit sur les réglages) = une erreur dite', async () => {
+    etat.lignesModifiees = [];
+    await expect(setAutomationLanguage('en')).rejects.toThrow(/administrateur|administrator/);
+  });
+
+  it('une ligne modifiée = succès', async () => {
+    etat.lignesModifiees = [{ org_id: 'org-1' }];
+    await expect(setAutomationLanguage('en')).resolves.toBeUndefined();
+    expect(etat.ecritures).toEqual([{ default_language: 'en' }]);
+  });
+});

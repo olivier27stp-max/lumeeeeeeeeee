@@ -263,11 +263,23 @@ export async function getAutomationLanguage(): Promise<'fr' | 'en'> {
 export async function setAutomationLanguage(lang: 'fr' | 'en'): Promise<void> {
   const orgId = await getCurrentOrgId();
   if (!orgId) throw new Error('No organization');
-  const { error } = await supabase
+  /*
+   * `.select()` : un rôle sans droit sur `company_settings` (membre avec
+   * seulement `automations.update`) voyait sa mise à jour filtrée par la RLS
+   * — 0 ligne, aucune erreur — et l'écran affichait « Messages en anglais »
+   * alors que rien n'avait changé (audit V2, A-07).
+   */
+  const { data, error } = await supabase
     .from('company_settings')
     .update({ default_language: lang })
-    .eq('org_id', orgId);
+    .eq('org_id', orgId)
+    .select('org_id');
   if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error(interfaceEnFrancais()
+      ? 'Seul un administrateur peut changer la langue des messages. Rien n’a été modifié.'
+      : 'Only an administrator can change the message language. Nothing was changed.');
+  }
 }
 
 /**

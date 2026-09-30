@@ -501,9 +501,13 @@ export default function Automations() {
       toast.success(fr
         ? (lang === 'en' ? 'Messages en anglais' : 'Messages en français')
         : (lang === 'en' ? 'Messages set to English' : 'Messages set to French'));
-    } catch {
+    } catch (e: unknown) {
       setOrgLang(avant);
-      toast.error(fr ? 'Impossible de changer la langue' : 'Could not change language');
+      // La RAISON (« seul un administrateur… »), pas un « impossible » muet.
+      console.error('[automations] langue des messages', e);
+      toast.error(e instanceof Error && e.message
+        ? e.message
+        : (fr ? 'Impossible de changer la langue' : 'Could not change language'));
     } finally {
       setSavingLang(false);
     }
