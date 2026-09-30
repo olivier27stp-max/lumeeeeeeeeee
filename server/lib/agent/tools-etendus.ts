@@ -39,6 +39,7 @@ import { etatDesabonnement } from '../desabonnement';
 import { resolveTaxesForOrg, computeTaxLines, type TaxLine as LigneTaxe } from '../taxResolve';
 import { adresseInjoignable } from '../mailer';
 import type { AgentTool, ToolContext } from './tools';
+import { minuitLocal } from '../dates-locales';
 
 interface TaxLine { code: string; label: string; rate: number; enabled: boolean }
 
@@ -1140,13 +1141,24 @@ const getTopClients: AgentTool = {
     },
   },
   handler: async (args, ctx) => {
-    const { data, error } = await ctx.client.rpc('rpc_insights_client_lifetime_value', {
-      p_org: ctx.orgId, p_limit: clamp(args.limit, 10, 25),
-    });
-    if (error) return erreurOutil('top_clients', error);
+    // La RPC trie par « score CLV » (récence, fréquence) : ses N premiers ne sont PAS les
+    // N clients qui ont le plus dépensé. On lit tous les clients, triés par total dépensé,
+    // comme la carte « Top clients par revenu » de /insights.
+    const tous: any[] = [];
+    for (let de = 0; ; de += 1000) {
+      const { data, error } = await ctx.client
+        .rpc('rpc_insights_client_lifetime_value', { p_org: ctx.orgId, p_limit: 1_000_000 })
+        .range(de, de + 999);
+      if (error) return erreurOutil('top_clients', error);
+      tous.push(...(data || []));
+      if ((data || []).length < 1000) break;
+    }
+    const data = tous
+      .sort((a, b) => Number(b.total_revenue_cents) - Number(a.total_revenue_cents) || String(a.client_name).localeCompare(String(b.client_name)))
+      .slice(0, clamp(args.limit, 10, 25));
     return {
-      count: data?.length || 0,
-      clients: (data || []).map((c: any) => ({
+      count: data.length,
+      clients: data.map((c: any) => ({
         client_id: c.client_id, // interne
         nom: c.client_name,
         total_cents: Math.round(Number(c.total_revenue_cents) || 0),
@@ -1257,19 +1269,29 @@ const getTopServices: AgentTool = {
   handler: async (args, ctx) => {
     const to = args.to ? String(args.to) : dateOrgAujourdhui();
     const from = args.from ? String(args.from) : `${to.slice(0, 7)}-01`;
-    // Pas de RPC : on agrège les jobs par titre, comme l'écran Insights.
-    const { data, error } = await ctx.client
-      .from('jobs')
-      .select('title, total_cents')
-      .eq('org_id', ctx.orgId)
-      .is('deleted_at', null)
-      .not('status', 'in', '(draft,cancelled)')
-      .gte('created_at', `${from}T00:00:00`)
-      .lte('created_at', `${to}T23:59:59`)
-      .limit(5000);
-    if (error) return erreurOutil('top_services', error);
+    // Pas de RPC : on agrège les jobs par titre, comme l'écran Insights — bornes au minuit
+    // LOCAL (pas UTC) et TOUTES les lignes (PostgREST en rend 1 000 au plus par réponse).
+    const debut = minuitLocal(from, FUSEAU_ORG);
+    const [ay, am, ad] = to.split('-').map(Number);
+    const fin = minuitLocal(new Date(Date.UTC(ay, am - 1, ad + 1)).toISOString().slice(0, 10), FUSEAU_ORG);
+    const data: Array<{ title: string | null; total_cents: number | null }> = [];
+    for (let de = 0; ; de += 1000) {
+      const { data: lot, error } = await ctx.client
+        .from('jobs')
+        .select('title, total_cents')
+        .eq('org_id', ctx.orgId)
+        .is('deleted_at', null)
+        .not('status', 'in', '(draft,cancelled)')
+        .gte('created_at', debut)
+        .lt('created_at', fin)
+        .order('id')
+        .range(de, de + 999);
+      if (error) return erreurOutil('top_services', error);
+      data.push(...(lot || []));
+      if ((lot || []).length < 1000) break;
+    }
     const parType = new Map<string, { total: number; count: number }>();
-    for (const j of data || []) {
+    for (const j of data) {
       const cle = String(j.title || 'Autre').trim() || 'Autre';
       const cur = parType.get(cle) || { total: 0, count: 0 };
       cur.total += Number(j.total_cents) || 0;
@@ -1278,7 +1300,7 @@ const getTopServices: AgentTool = {
     }
     const services = [...parType.entries()]
       .map(([nom, s]) => ({ service: nom, total_cents: s.total, nombre_de_jobs: s.count }))
-      .sort((a, b) => b.total_cents - a.total_cents)
+      .sort((a, b) => b.total_cents - a.total_cents || a.service.localeCompare(b.service))
       .slice(0, 10);
     return { periode: { du: from, au: to }, services };
   },
@@ -3184,7 +3206,7 @@ const markInvoicePaidTool: AgentTool = {
       // On lit la facture À L'IDENTITÉ (RLS garantit l'appartenance à l'org).
       const { data: inv, error: eInv } = await ctx.client
         .from('invoices')
-        .select('id, invoice_number, total_cents, balance_cents, status, client_id')
+        .select('id, invoice_number, total_cents, balance_cents, status, client_id, job_id, currency')
         .eq('org_id', ctx.orgId).eq('id', invoiceId)
         .is('deleted_at', null).maybeSingle();
       if (eInv) throw eInv;
@@ -3886,3 +3908,4 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   setJobExpensesTool,
   sendEmailTool,
 ];
+

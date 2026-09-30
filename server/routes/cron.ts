@@ -17,6 +17,7 @@ import { sendSafeError } from '../lib/error-handler';
 import { runDueSchedules } from '../lib/recurringInvoicesEngine';
 import { processPendingDeliveries } from '../lib/webhookDispatcher';
 import { logger } from '../lib/logger';
+import { withAdvisoryLock } from '../lib/advisory-lock';
 
 const router = Router();
 
@@ -68,8 +69,11 @@ router.post('/cron/purge-audit', async (req, res) => {
 router.post('/cron/recurring-invoices', async (req, res) => {
   if (!checkCronAuth(req, res)) return;
   try {
-    const svc = getServiceClient();
-    const summary = await runDueSchedules(svc);
+    // Un seul passage à la fois : deux appels simultanés (pg_cron + un autre
+    // planificateur) créaient la même facture récurrente deux fois.
+    const verrou = await withAdvisoryLock('cron-recurring-invoices', () => runDueSchedules(getServiceClient()));
+    if (!verrou.acquired || !verrou.result) return res.status(200).json({ ok: true, skipped: 'already_running' });
+    const summary = verrou.result;
     logger.info('[cron] recurring-invoices:', {
       processed: summary.processed, errors: summary.errors,
     });
@@ -102,7 +106,9 @@ router.post('/cron/rappels-dates', async (req, res) => {
 router.post('/cron/webhook-retries', async (req, res) => {
   if (!checkCronAuth(req, res)) return;
   try {
-    const summary = await processPendingDeliveries({ concurrency: 5 });
+    const verrou = await withAdvisoryLock('cron-webhook-retries', () => processPendingDeliveries({ concurrency: 5 }));
+    if (!verrou.acquired || !verrou.result) return res.status(200).json({ ok: true, skipped: 'already_running' });
+    const summary = verrou.result;
     logger.info('[cron] webhook-retries:', { ...summary });
     return res.status(200).json({ ok: true, ...summary });
   } catch (err: any) {

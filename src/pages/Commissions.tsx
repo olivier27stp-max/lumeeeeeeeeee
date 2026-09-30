@@ -14,7 +14,9 @@ import {
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { fetchTeamList, type OrgMember } from '../lib/invitationsApi';
 import type { FsCommissionRule } from '../types';
-import PersonalCommissionView from '../components/commissions/PersonalCommissionView';
+import PersonalCommissionView, { defaultRange } from '../components/commissions/PersonalCommissionView';
+import { confirmer } from '../components/ui/ConfirmDialog';
+import { fmtArgent } from '../components/commissions/format';
 import PayrollSummaryCard from '../components/payroll/PayrollSummaryCard';
 import AdminCommissionOverview from '../components/commissions/AdminCommissionOverview';
 import RepCommissionSummary from '../components/commissions/RepCommissionSummary';
@@ -123,6 +125,7 @@ function AccessDenied() {
 // ──────────────────────────────────────────────────────────────────────
 
 function AdminCommissionsLayout() {
+  const { userId } = useCompany();
   const { language } = useTranslation();
   const isFr = language === 'fr';
   const [tab, setTab] = useState<AdminTab>('overview');
@@ -149,8 +152,9 @@ function AdminCommissionsLayout() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2">
+      {/* Tabs — défilent sur petit écran : à 390 px, « Taux » sortait de l'écran,
+          coupé par le conteneur, donc inatteignable. */}
+      <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
         {([
           { key: 'overview' as AdminTab, label: isFr ? 'Vue d\'ensemble' : 'Overview' },
           { key: 'reps' as AdminTab,     label: isFr ? 'Représentants' : 'Reps' },
@@ -199,7 +203,10 @@ function AdminCommissionsLayout() {
       {tab === 'my' && (
         <div className="space-y-6">
           <PayrollSummaryCard canManagePlans />
+          {/* userId explicite : sans lui, le serveur (appelant admin) renvoyait
+              les commissions de TOUTE l'équipe sous le titre « Mes commissions ». */}
           <PersonalCommissionView
+            userId={userId ?? undefined}
             title={isFr ? 'Mes commissions' : 'My commissions'}
             subtitle={isFr ? 'Vos propres commissions, le cas échéant' : 'Your own commissions, if any'}
           />
@@ -218,13 +225,6 @@ function AdminCommissionsLayout() {
 interface RepsTabProps {
   onSelectRep: (userId: string) => void;
   onProfileMap: (map: Record<string, string>) => void;
-}
-
-function defaultRange() {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-  return { from, to };
 }
 
 function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
@@ -285,27 +285,33 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
 
   useEffect(() => { void load(); }, [load]);
 
-  const handleApprove = async (id: string) => {
+  // Avant : pas de catch — un refus du serveur (403, commission déjà versée…)
+  // ne montrait rien et le bouton semblait mort.
+  const agir = async (id: string, action: () => Promise<FsCommissionEntry>, echec: string) => {
     setActionLoading(id);
     try {
-      const updated = await approveCommission(id);
-      setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
+      const updated = await action();
+      setEntries((prev) => prev?.map((e) => (e.id === id ? { ...e, ...updated } : e)) ?? null);
+    } catch (err: any) {
+      console.error('[commissions] action refusée', err);
+      toast.error(err?.message || echec);
     } finally { setActionLoading(null); }
   };
+  const handleApprove = (id: string) => agir(id, () => approveCommission(id), isFr ? "Échec de l'approbation" : 'Approve failed');
   const handleReverse = async (id: string) => {
-    setActionLoading(id);
-    try {
-      const updated = await reverseCommission(id);
-      setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
-    } finally { setActionLoading(null); }
+    const cible = entries?.find((e) => e.id === id);
+    const ok = await confirmer({
+      title: isFr ? 'Reverser cette commission ?' : 'Reverse this commission?',
+      message: isFr
+        ? `${cible ? fmtArgent(cible.amount, true) + ' — ' : ''}la commission ne sera plus due au représentant. Cette action ne peut pas être annulée.`
+        : `${cible ? fmtArgent(cible.amount, false) + ' — ' : ''}the commission will no longer be owed to the rep. This cannot be undone.`,
+      confirmLabel: isFr ? 'Reverser' : 'Reverse',
+      danger: true,
+    });
+    if (!ok) return;
+    await agir(id, () => reverseCommission(id, isFr ? 'Reversée manuellement' : 'Manually reversed'), isFr ? 'Échec du reversement' : 'Reverse failed');
   };
-  const handleMarkPaid = async (id: string) => {
-    setActionLoading(id);
-    try {
-      const updated = await markCommissionPaid(id);
-      setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
-    } finally { setActionLoading(null); }
-  };
+  const handleMarkPaid = (id: string) => agir(id, () => markCommissionPaid(id), isFr ? 'Échec du versement' : 'Mark paid failed');
 
   const repOptions = allReps.length
     ? allReps
@@ -359,6 +365,13 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
 // (admin-only; lets owner/admin edit per-rep commission % rules)
 // ──────────────────────────────────────────────────────────────────────
 
+/** Libellé du rôle (la colonne affichait « Sales_rep », « Owner » en français). */
+function libelleRole(role: string | null | undefined, isFr: boolean): string {
+  const fr: Record<string, string> = { owner: 'Propriétaire', admin: 'Administrateur', sales_rep: 'Représentant', technician: 'Technicien' };
+  const en: Record<string, string> = { owner: 'Owner', admin: 'Admin', sales_rep: 'Sales rep', technician: 'Technician' };
+  return (isFr ? fr : en)[role ?? ''] ?? role ?? '—';
+}
+
 /** Taux effectif d'un plan (base_percent > percentage, ou forfait). */
 function planRateLabel(rule: FsCommissionRule | undefined, isFr: boolean): string {
   if (!rule) return isFr ? 'Plan par défaut' : 'Default plan';
@@ -384,7 +397,10 @@ function RatesPanel() {
     setBusy(true);
     try {
       const [team, rulesData, reglages, orgId] = await Promise.all([fetchTeamList(), getCommissionRules(), getCommissionSettings().catch(() => null), getCurrentOrgIdOrThrow()]);
-      setMembers(team.members.filter((m) => m.status === 'active'));
+      // Ordre alphabétique stable : la liste d'équipe arrive sans ordre garanti
+      // et les lignes changeaient de place d'un chargement à l'autre.
+      setMembers(team.members.filter((m) => m.status === 'active')
+        .sort((a, b) => (a.full_name || a.email || '').localeCompare(b.full_name || b.email || '', 'fr')));
       setRules(rulesData.filter((r) => r.is_active && !r.deleted_at));
       setDefaultRuleId(reglages?.default_rule_id ?? null);
       const { data: tm, error: tmErr } = await supabase
@@ -414,6 +430,18 @@ function RatesPanel() {
   // payée — donc l'assignation ici est réellement effective.
   function planForUser(userId: string): FsCommissionRule | undefined {
     return rules.find((r) => (r.assigned_user_ids || []).includes(userId));
+  }
+
+  // Bénéficiaire d'un split d'une AUTRE règle : il touche une part des ventes
+  // du vendeur assigné. Sans ça, l'onglet affichait « Aucun plan : aucune
+  // commission ne sera calculée » pour quelqu'un qui en touche (audit 2026-09-30).
+  function partsDeSplit(userId: string): Array<{ rule: FsCommissionRule; pct: number }> {
+    return rules.flatMap((r) => {
+      const a = r.attribution as { mode?: string; splits?: Array<{ user_id: string; pct: number }> } | null | undefined;
+      if (a?.mode !== 'split' || (r.assigned_user_ids || []).includes(userId)) return [];
+      const part = (a.splits || []).find((s) => s.user_id === userId);
+      return part ? [{ rule: r, pct: Number(part.pct) }] : [];
+    });
   }
 
   async function handleAssign(userId: string, ruleId: string) {
@@ -476,7 +504,8 @@ function RatesPanel() {
                 const mode = paie?.mode ?? 'hourly';
                 const modeLabel = mode === 'hourly' ? (isFr ? 'À l’heure' : 'Hourly') : mode === 'commission' ? 'Commission' : (isFr ? 'Horaire + commission' : 'Hourly + commission');
                 const planParDefautValide = !!defaultRuleId && rules.some((r) => r.id === defaultRuleId);
-                const sansPlan = mode !== 'hourly' && !plan && !planParDefautValide;
+                const splits = partsDeSplit(m.user_id);
+                const sansPlan = mode !== 'hourly' && !plan && !planParDefautValide && splits.length === 0;
                 return (
                   <tr key={m.user_id} className="border-b border-border-subtle last:border-b-0">
                     <td className="px-5 py-2.5 text-sm font-medium">
@@ -484,7 +513,7 @@ function RatesPanel() {
                         {m.full_name || m.email}
                       </Link>
                     </td>
-                    <td className="px-5 py-2.5 text-sm text-text-muted capitalize">{m.role}</td>
+                    <td className="px-5 py-2.5 text-sm text-text-muted">{libelleRole(m.role, isFr)}</td>
                     <td className="px-5 py-2.5 text-sm">
                       {paie ? (
                         <Link to={`/settings/team/${paie.id}`} className="text-text-primary hover:underline" title={isFr ? 'Modifier dans la fiche Équipe' : 'Edit on the team member page'}>
@@ -503,6 +532,11 @@ function RatesPanel() {
                           {isFr ? 'Aucun plan : aucune commission ne sera calculée' : 'No plan: no commission will be calculated'}
                         </p>
                       )}
+                      {splits.map((s) => (
+                        <p key={s.rule.id} className="mb-1 text-[11px] text-text-tertiary">
+                          {isFr ? `Part de split : ${s.pct} % de « ${s.rule.name} »` : `Split share: ${s.pct}% of “${s.rule.name}”`}
+                        </p>
+                      ))}
                       <div className="flex items-center gap-2">
                         <select
                           value={plan?.id ?? ''}

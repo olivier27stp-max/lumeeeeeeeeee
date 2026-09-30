@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient, findUserByEmail } from '../lib/supabase';
 import { parseOrgId, clampInt, resolvePublicBaseUrl, urlApplication } from '../lib/helpers';
 import { dispatchWebhook } from '../lib/webhookDispatcher';
-import { generateCommissionsForInvoice, handleInvoiceReversal } from '../lib/field-sales/commission-engine';
+import { commissionsFacturePayee, commissionsFactureRemboursee } from '../lib/field-sales/commission-declencheurs';
 import { seedOrgComplete } from '../lib/seedOrgDefaults';
 import { montantRembourse } from '../lib/remboursements';
 
@@ -314,9 +314,8 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
                 provider: 'stripe',
                 provider_payment_id: intent.id,
               }).catch((err) => console.error('[webhooks] invoice.paid failed:', err?.message));
-              // Auto-generate sales commission entries
-              generateCommissionsForInvoice(admin, metadata.orgId, metadata.invoiceId)
-                .catch((err) => console.error('[commissions] generate failed:', err?.message));
+              // Commissions de la facture soldée (idempotent, échec → lettre morte).
+              void commissionsFacturePayee(admin, metadata.orgId, metadata.invoiceId, 'stripe-webhook');
             }
           }
         }
@@ -866,7 +865,7 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           // (absolu, donc rejouable) ; le trigger recalcule la facture.
           const { data: paiement, error: lectureErr } = await admin
             .from('payments')
-            .select('id, amount_cents')
+            .select('id, amount_cents, org_id, invoice_id')
             .eq('provider', 'stripe')
             .eq('provider_payment_id', paymentIntentId)
             .maybeSingle();
@@ -883,6 +882,13 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
               })
               .eq('id', paiement.id);
             if (majErr) console.error('[webhook/stripe] charge.refunded : mise à jour refusée', majErr.message);
+            // Même politique de reprise des commissions qu'un remboursement
+            // fait depuis Lume (POST /payments/refund) : avant, un
+            // remboursement fait dans le tableau de bord Stripe laissait les
+            // commissions intactes.
+            else if (rembourse >= paiement.amount_cents && paiement.invoice_id) {
+              await commissionsFactureRemboursee(admin, paiement.org_id, paiement.invoice_id, `Refund: ${charge.id}`, 'stripe-charge-refunded');
+            }
           }
         }
       }
@@ -1944,9 +1950,8 @@ router.post('/payments/refund', async (req, res) => {
     }
 
     if (isFullRefund && payment.invoice_id) {
-      // Apply commission reversal policy
-      handleInvoiceReversal(admin, orgId, payment.invoice_id, `Refund: ${refund.id}`)
-        .catch((err) => console.error('[commissions] reversal failed:', err?.message));
+      // Apply commission reversal policy (échec → lettre morte rejouable)
+      void commissionsFactureRemboursee(admin, orgId, payment.invoice_id, `Refund: ${refund.id}`, 'payments-refund');
     }
 
     // Update associated payment_request status if full refund

@@ -72,8 +72,12 @@ describe('le coût reste celui du chemin bon marché', () => {
     expect(corpsOutil()).toContain('genererParcours');
   });
 
-  it('genererParcours tourne sur Haiku', () => {
-    expect(GEN).toContain("const MODELE = 'claude-haiku-4-5'");
+  it('genererParcours tourne sur Sonnet 5 — jamais Opus', () => {
+    // Haiku jusqu'au 2026-09-30 : textes plats et même phrase répétée trois
+    // fois sur une vraie conversation (tests/lumi-parcours-montre-les-textes).
+    // Sonnet ≈ 1,2 ¢ la demande ; Opus serait le coût de l'orchestrateur.
+    expect(GEN).toContain("const MODELE = 'claude-sonnet-5'");
+    expect(GEN).not.toMatch(/const MODELE = 'claude-opus/);
   });
 
   it('son catalogue est mis en cache', () => {
@@ -95,8 +99,11 @@ describe('le coût reste celui du chemin bon marché', () => {
     expect(GEN).toMatch(/reglerBudget\(admin, reservation\.id, coutGeneration\)/);
   });
 
-  it('la sortie est plafonnée', () => {
-    expect(GEN).toMatch(/MAX_TOKENS\s*=\s*1_500/);
+  it('la sortie est plafonnée — assez haut pour Sonnet, et une réponse coupée est dite, pas déguisée', () => {
+    // 1 500 coupait 2 réponses sur 3 de Sonnet (JSON illisible → « Lumi n'a pas compris »), mesuré le 2026-09-30.
+    expect(GEN).toMatch(/MAX_TOKENS\s*=\s*4_000/);
+    expect(GEN).toMatch(/stop_reason === 'max_tokens'/);
+    expect(GEN, 'le JSON compact faisait 2/10 JSON illisibles').not.toMatch(/JSON, COMPACT/);
   });
 
   it('l’usage est journalisé, donc mesurable', () => {

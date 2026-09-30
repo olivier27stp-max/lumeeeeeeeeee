@@ -39,6 +39,14 @@ export function bornesPeriodeRevenus(period: string, du?: string, au?: string, a
   }
 }
 import { OUTILS_RAPPORTS } from './tools-rapports';
+import { jourLocal } from '../dates-locales';
+
+const FUSEAU_ORG = 'America/Montreal';
+/** « 2026-02-28 » : dernier jour du mois d'un « YYYY-MM-DD ». */
+function dernierJourDuMois(jour: string): string {
+  const [y, m] = jour.split('-').map(Number);
+  return `${jour.slice(0, 7)}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
+}
 import { searchHelp } from './tools-aide';
 import { OUTILS_DOMAINES } from './outils-domaines';
 

@@ -119,9 +119,11 @@ describe('POST /api/webhooks/email', () => {
     const maj = ecritures.find((e) => e.table === 'email_deliveries' && e.op === 'update');
     expect(maj?.row).toMatchObject({ status: 'bounced', error: 'Domain does not exist' });
     expect(maj?.filtres.join(' ')).toContain('like(message_id,em_123%)');
+    // Une ligne par gestionnaire (FR/EN) ; ici aucun membre : une ligne pour l'entreprise.
     const notif = ecritures.find((e) => e.table === 'notifications');
-    expect(notif?.row).toMatchObject({ org_id: 'org-1', type: 'email_bounced', link: '/invoices/inv-1' });
-    expect(notif?.row.title).toContain('qa-viktor@example.invalid');
+    const ligne = Array.isArray(notif?.row) ? notif?.row[0] : notif?.row;
+    expect(ligne).toMatchObject({ org_id: 'org-1', type: 'email_bounced', link: '/invoices/inv-1' });
+    expect(ligne.title).toContain('qa-viktor@example.invalid');
   });
 
   it('email.delivered → delivered, sans notification', async () => {

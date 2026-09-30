@@ -340,8 +340,11 @@ describe('statusCallback — les SMS ne restent plus figés à « envoyé »', (
     // Non-régression : ce webhook devient enfin utile, il ne doit pas s'ouvrir.
     const messages = read('server/routes/messages.ts');
     expect(messages).toContain('Twilio.validateRequest');
-    expect(messages).toContain("delivered: 'delivered'");
-    expect(messages).toContain("undelivered: 'failed'");
+    // Correspondance des statuts : server/lib/sms/statut-livraison.ts (C13).
+    const statuts = read('server/lib/sms/statut-livraison.ts');
+    expect(messages).toContain('appliquerStatutTwilio(');
+    expect(statuts).toContain("case 'delivered': case 'read': return 'delivered';");
+    expect(statuts).toContain("case 'undelivered': case 'failed': case 'canceled': return 'failed';");
     // Un 500 sur échec d'écriture force Twilio à rejouer plutôt que de perdre
     // l'accusé de réception.
     expect(messages).toContain("return res.status(500).json({ error: 'Failed to persist status update' })");
@@ -966,18 +969,21 @@ describe('heures calmes — plus de relance courriel à 3h du matin', () => {
     // Le critère est le délai de la règle, pas une liste de déclencheurs à
     // maintenir : immédiat = confirmation attendue, différé = relance.
     expect(engine).toContain('function shouldRespectQuietHours');
-    expect(engine).toContain("if (actionType === 'send_sms') return true;");
+    expect(engine).toContain("if (actionType === 'send_sms' || actionType === 'request_review') return true;");
     expect(engine).toContain('return delaySeconds !== 0;');
   });
 
-  it('une confirmation immédiate par courriel n’est jamais retardée', () => {
+  it('une confirmation immédiate par courriel n’est retardée QUE si l’entreprise a réglé une fenêtre', () => {
     // Retarder « rendez-vous confirmé » jusqu'à 8h ferait croire au client que
-    // sa demande n'est pas passée.
+    // sa demande n'est pas passée. Exception voulue (audit V2, D-13) : une
+    // fenêtre RÉGLÉE promet « aucun message en dehors de ces heures ».
     const fn = engine.slice(
       engine.indexOf('function shouldRespectQuietHours'),
       engine.indexOf('/** Next moment inside the send window'),
     );
-    expect(fn).toContain("if (actionType !== 'send_email') return false;");
+    expect(fn).toContain('if (!ACTIONS_MESSAGE.has(actionType)) return false;');
+    expect(fn).toContain('if (reglages?.fenetre || reglages?.jours_ouvrables) return true;');
+    expect(fn.indexOf('reglages?.fenetre')).toBeLessThan(fn.indexOf('return delaySeconds !== 0;'));
   });
 
   it('les tâches différées respectent la fenêtre sur les DEUX canaux', () => {
@@ -987,7 +993,9 @@ describe('heures calmes — plus de relance courriel à 3h du matin', () => {
     // (`horsFenetre(reglages)`), avec 8 h-20 h comme défaut. Ce qui doit
     // rester vrai : LES DEUX CANAUX sont soumis à la fenêtre — auparavant
     // seuls les SMS l'étaient, et un courriel partait à 3 h du matin.
-    expect(engine).toMatch(/taskType === 'send_sms' \|\| taskType === 'send_email'\) && horsFenetre\(/);
+    // Tous les messages (texto, courriel, avis, facture, soumission) — audit V2.
+    expect(engine).toMatch(/ACTIONS_MESSAGE\.has\(String\(taskType\)\) && horsFenetre\(/);
+    expect(engine).toMatch(/const ACTIONS_MESSAGE = new Set\(\['send_sms', 'send_email'/);
   });
 
   it('le report ne consomme pas de tentative', () => {

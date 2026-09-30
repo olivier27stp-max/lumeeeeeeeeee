@@ -116,25 +116,30 @@ const commissions: ReportDefinition = {
   title: L('Commissions', 'Commissions'),
   description: L('Commissions générées par vendeur avec règle, base, montant et statut de paiement.', 'Commissions generated per salesperson with rule, base, amount and payment status.'),
   permission: 'financial.view_reports',
-  dateFilter: { label: L('Date de création', 'Created date'), default: 'thisMonth' },
+  // Période = date où la commission est GAGNÉE (paiement de la facture),
+  // comme la page Commissions et la Paie (audit 2026-09-30).
+  dateFilter: { label: L('Date gagnée', 'Earned date'), default: 'thisMonth' },
   filters: [
     { key: 'status', label: L('Statut', 'Status'), type: 'select', options: optionsFrom(LABELS.commissionStatus) },
     { key: 'user', label: L('Vendeur', 'Salesperson'), type: 'select', source: 'members' },
   ],
   columns: [
-    col.date('created_at', 'Créée le', 'Created'),
+    col.date('triggered_at', 'Gagnée le', 'Earned'),
     col.text('user', 'Vendeur', 'Salesperson', { sortable: false, width: '1.2fr' }),
     col.text('rule', 'Règle', 'Rule', { sortable: false, width: '140px' }),
     col.text('job_number', 'Job', 'Job', { sortable: false, width: '80px' }),
     col.text('invoice_number', 'Facture', 'Invoice', { sortable: false, width: '90px' }),
     col.text('description', 'Description', 'Description', { sortable: false, width: '1.4fr' }),
     col.money('base_cents', 'Base', 'Base', { total: undefined }),
-    col.money('amount_cents', 'Commission', 'Commission'),
+    col.money('amount_cents', 'Commission', 'Commission', { total: undefined }),
+    // Seul total additionné : ce qui est dû. Les reprises et les estimations
+    // (jobs pas encore payés) gonflaient le total de la colonne Commission.
+    col.money('du_cents', 'Dû', 'Due'),
     col.enum('status', 'Statut', 'Status', LABELS.commissionStatus, { width: '110px' }),
     col.date('approved_at', 'Approuvée le', 'Approved'),
     col.date('paid_at', 'Payée le', 'Paid'),
   ],
-  defaultSort: { key: 'created_at', dir: 'desc' },
+  defaultSort: { key: 'triggered_at', dir: 'desc' },
   source: {
     kind: 'query',
     // Table du module terrain : lue par le serveur avec le client service-role
@@ -142,18 +147,19 @@ const commissions: ReportDefinition = {
     // pour les non-admins.
     build: (ctx, q) => {
       let b = ctx.service.from('fs_commission_entries')
-        .select('id,user_id,rule_id,job_id,invoice_id,status,amount,base_amount,description,created_at,approved_at,paid_at', COUNT_EXACT)
+        .select('id,user_id,rule_id,job_id,invoice_id,status,amount,base_amount,description,triggered_at,approved_at,paid_at', COUNT_EXACT)
         .eq('org_id', ctx.orgId).is('deleted_at', null);
       b = ownScope(b, ctx, 'user_id');
-      b = applyPeriod(b, 'created_at', 'timestamp', q.from, q.to);
+      b = applyPeriod(b, 'triggered_at', 'timestamp', q.from, q.to);
       b = eqFilter(b, q.filters.status, 'status');
       if (ctx.isAdmin) b = eqFilter(b, q.filters.user, 'user_id');
       return b;
     },
     map: (raw) => ({
-      id: raw.id, created_at: raw.created_at, user_id: raw.user_id, user: '', rule_id: raw.rule_id, rule: '',
+      id: raw.id, triggered_at: raw.triggered_at, user_id: raw.user_id, user: '', rule_id: raw.rule_id, rule: '',
       job_id: raw.job_id, job_number: '', invoice_id: raw.invoice_id, invoice_number: '', description: raw.description || '',
       base_cents: dollarsToCents(raw.base_amount), amount_cents: dollarsToCents(raw.amount), status: raw.status,
+      du_cents: raw.status === 'reversed' || !raw.invoice_id ? 0 : dollarsToCents(raw.amount),
       approved_at: raw.approved_at, paid_at: raw.paid_at,
     }),
     enrich: async (rows, ctx) => {

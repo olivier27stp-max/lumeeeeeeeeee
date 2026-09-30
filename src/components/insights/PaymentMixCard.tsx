@@ -8,6 +8,16 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../../i18n';
 import { fetchPaymentMix } from '../../lib/statsExtraApi';
 import PeriodSelector from './PeriodSelector';
+import ErreurCarte from './ErreurCarte';
+
+/** Libellé d'un mode de paiement dans la langue de l'interface (paymentMethodLabel ne parle qu'anglais). */
+const MODES: Record<string, { fr: string; en: string }> = {
+  card: { fr: 'Carte', en: 'Card' },
+  'e-transfer': { fr: 'Virement Interac', en: 'e-Transfer' },
+  cash: { fr: 'Comptant', en: 'Cash' },
+  check: { fr: 'Chèque', en: 'Cheque' },
+  other: { fr: 'Autre', en: 'Other' },
+};
 import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
 
 const R = 15.9;
@@ -32,6 +42,7 @@ export default function PaymentMixCard({
     queryKey: ['pm-mix', range.from, range.to],
     queryFn: () => fetchPaymentMix({ from: range.from, to: range.to }),
     staleTime: 60_000,
+    refetchOnMount: 'always',
   });
 
   const money = (cents: number) =>
@@ -46,10 +57,11 @@ export default function PaymentMixCard({
       const seg = Math.max(0, (pct / 100) * C - GAP);
       const off = -(acc / 100) * C;
       acc += pct;
-      return { name: s.name, value: s.value, op: OPACITY[i] ?? 0.2, pct, dash: seg, off };
+      const libelle = MODES[s.name] ? (fr ? MODES[s.name].fr : MODES[s.name].en) : s.name;
+      return { name: libelle, value: s.value, op: OPACITY[i] ?? 0.2, pct, dash: seg, off };
     });
     return { segs, total: tot };
-  }, [q.data]);
+  }, [q.data, fr]);
 
   const detail = active != null && segs[active] ? segs[active] : null;
 
@@ -60,12 +72,14 @@ export default function PaymentMixCard({
         <PeriodSelector value={period} onChange={onPeriod} />
       </div>
 
-      {q.isLoading ? (
+      {q.isError ? (
+        <ErreurCarte hauteur={200} onRetry={() => q.refetch()} />
+      ) : q.isLoading ? (
         <div className="h-[200px] mx-6 mt-4 rounded-lg bg-surface-secondary/40 animate-pulse" />
       ) : segs.length === 0 ? (
         <div className="h-[200px] flex items-center justify-center text-[12.5px] text-text-tertiary">{fr ? 'Aucun paiement sur la période' : 'No payments for this period'}</div>
       ) : (
-        <div className="flex items-center gap-6 px-6 pt-4 pb-6">
+        <div className="flex flex-col sm:flex-row items-center gap-6 px-6 pt-4 pb-6">
           <div className="relative w-[168px] h-[168px] shrink-0">
             <svg width="168" height="168" viewBox="0 0 42 42" className="-rotate-90">
               <circle cx="21" cy="21" r={R} fill="none" stroke="var(--color-surface-tertiary)" strokeWidth={5} />
@@ -107,7 +121,7 @@ export default function PaymentMixCard({
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="w-full sm:flex-1 flex flex-col min-w-0">
             {segs.map((s, i) => (
               <div
                 key={i}

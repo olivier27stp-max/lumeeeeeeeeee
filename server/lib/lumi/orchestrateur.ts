@@ -58,6 +58,23 @@ export function parametresReflexion(model: string, effort: 'low' | 'medium'): Pi
 }
 
 /** Point de cache d'une heure (voir l'en-tête). Même objet partout : un seul endroit à changer. */
+/**
+ * TTL des points de cache.
+ *
+ * ⚠️ Mesuré en prod le 2026-09-30 : **214 des 241 écarts entre appels
+ * consécutifs sont sous 5 minutes** (6 entre 5 et 60 min, 21 au-delà d'une
+ * heure). Or une LECTURE rafraîchit le minuteur gratuitement — donc à ce
+ * rythme, une entrée 5 min reste chaude indéfiniment d'elle-même.
+ *
+ * Le TTL d'une heure coûte 2× le tarif d'entrée à l'écriture ; celui de 5 min
+ * coûte 1,25×. Dans 97 % des cas mesurés (les < 5 min ET les > 1 h, où aucun
+ * TTL ne sauve la mise et où l'écriture la moins chère gagne), le 5 min est
+ * strictement moins cher. Seuls les 6 écarts entre 5 et 60 min profitaient
+ * du 1 h — 2,5 % du trafic pour un surcoût sur les 97,5 % restants.
+ *
+ * Garde 1 h ici seulement si le trafic change de forme (beaucoup d'écarts
+ * entre 5 et 60 min) : rejouer la mesure avant de trancher, pas au flair.
+ */
 const CACHE_1H: Anthropic.Messages.CacheControlEphemeral = { type: 'ephemeral', ttl: '1h' };
 /** Point de cache 5 min pour la CONVERSATION (les appels d'un tour sont à quelques secondes, les tours à quelques minutes). */
 const CACHE_5M: Anthropic.Messages.CacheControlEphemeral = { type: 'ephemeral' };
@@ -172,8 +189,12 @@ export const OUTIL_RECHERCHE: Anthropic.Messages.ToolSearchToolRegex20251119 = {
  * [recherche, outils de base (le dernier porte le point de cache), outils différés].
  * Un outil différé ne peut pas porter cache_control (400 de l'API).
  */
-export function outilsClaude(sousAgent: IdTopic | null = null): Anthropic.Messages.ToolUnion[] {
-  const defs: Anthropic.Messages.Tool[] = AGENT_TOOLS.map((t) => ({
+export function outilsClaude(sousAgent: IdTopic | null = null, permis: ReadonlySet<string> | null = null): Anthropic.Messages.ToolUnion[] {
+  // RBAC (audit 2026-09-30) : le modèle ne voit QUE les outils permis à cette
+  // personne. Sans ce filtre il voyait les 243 et proposait des actions
+  // interdites. `permis = null` (appels internes, tests) garde l'ancien jeu.
+  const source = permis ? AGENT_TOOLS.filter((t) => permis.has(t.declaration.name)) : AGENT_TOOLS;
+  const defs: Anthropic.Messages.Tool[] = source.map((t) => ({
     name: t.declaration.name,
     description: t.declaration.description,
     // Sans les descriptions de paramètres qui répètent le nom (« Job id. ») : −2 à −3 % du bloc, déterministe (alleger-outils.ts).
@@ -185,7 +206,7 @@ export function outilsClaude(sousAgent: IdTopic | null = null): Anthropic.Messag
   const base = defs.filter((d) => charges.has(d.name));
   const differes = defs.filter((d) => !charges.has(d.name)).map((d) => ({ ...d, defer_loading: true }));
   const dernier = base[base.length - 1];
-  if (dernier) dernier.cache_control = CACHE_1H;
+  if (dernier) dernier.cache_control = CACHE_5M;
   return [OUTIL_RECHERCHE, ...base, ...differes];
 }
 
@@ -201,7 +222,7 @@ export interface Souvenir { key: string; value: string }
  */
 export { ECRITURES_ANODINES } from '../agent/registre';
 
-export function promptSystemeLumi(ctx: { companyName: string | null; userName: string | null; language: 'fr' | 'en'; todayIso: string; souvenirs?: Souvenir[]; focus?: string | null }): Anthropic.Messages.TextBlockParam[] {
+export function promptSystemeLumi(ctx: { companyName: string | null; userName: string | null; language: 'fr' | 'en'; todayIso: string; souvenirs?: Souvenir[]; focus?: string | null; restrictions?: string | null }): Anthropic.Messages.TextBlockParam[] {
   // Partie STABLE (sans date, nom ni entreprise) → cache. La partie variable suit.
   // Le nom de l'entreprise est dans la partie VARIABLE : mesuré en prod le
   // 2026-09-16, un préfixe qui le contenait était mis en cache PAR org, et
@@ -269,9 +290,12 @@ ${CONSIGNES_COLLEGUE}`;
   const variable = langue + ' ' + (ctx.language === 'fr'
     ? `Entreprise : ${company}. Aujourd'hui : ${ctx.todayIso}.${ctx.userName ? ` Tu parles à ${ctx.userName}.` : ''}`
     : `Company: ${company}. Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`) + memoire
+    // Ce que le rôle ne permet pas : dans la partie VARIABLE, jamais dans le
+    // bloc en cache — il dépend de la personne. Null pour qui a tout accès.
+    + (ctx.restrictions ? `\n\n${ctx.restrictions}` : '')
     + (ctx.focus ? `\n\n${ctx.focus}` : '');
   return [
-    { type: 'text', text: stable, cache_control: CACHE_1H },
+    { type: 'text', text: stable, cache_control: CACHE_5M },
     { type: 'text', text: variable },
   ];
 }
@@ -332,10 +356,16 @@ export async function tourLumi(opts: {
   autorisations?: ReadonlySet<string>;
   /** Écritures encore permises d'office dans cette conversation (plafond, voir execution.ts). Absent = pas de plafond. */
   ecrituresRestantes?: number;
+  /**
+   * RBAC : les outils permis à CETTE personne (rôle + overrides). Absent =
+   * aucun filtre (appels internes, tests) ; la garde d'exécution reste la
+   * vraie barrière dans tous les cas.
+   */
+  outilsPermis?: ReadonlySet<string> | null;
 }): Promise<ResultatTour> {
   const model = opts.reglages?.model ?? modeleLumi();
   const effort = opts.reglages?.effort ?? reglesCout().effort_defaut;
-  const outils = outilsClaude(opts.sousAgent ?? null);
+  const outils = outilsClaude(opts.sousAgent ?? null, opts.outilsPermis ?? null);
   const messages: Anthropic.Messages.MessageParam[] = [...opts.historique];
   const nouveaux: Anthropic.Messages.MessageParam[] = [];
   const espaceRefs = `${opts.orgId}:${opts.userId}`;

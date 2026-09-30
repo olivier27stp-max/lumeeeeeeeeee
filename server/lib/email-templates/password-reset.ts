@@ -65,7 +65,7 @@ export function renderAccountExistsEmail(data: AccountExistsEmailData): string {
   return rendreCourrielLume({
     langue: 'fr',
     preheader: 'Bonne nouvelle : tu as déjà un compte. Connecte-toi.',
-    titre: 'Tu as déjà un compte Lume',
+    titre: 'Ton compte t’attend',
     salutation: salut(data.name),
     intro: `Quelqu’un — probablement toi — vient d’essayer de créer un compte Lume avec cette adresse. Bonne nouvelle : tu en as déjà un. ${explication}`,
     bouton: { texte: 'Me connecter', url: `${app}/auth` },

@@ -20,6 +20,15 @@ const invitation = renderInvitationEmail({
   branding: { company_name: 'Vision Lavage', logo_url: null, primary_color: '#0f766e', website: 'https://visionlavage.ca' },
 });
 
+// Le rappel, avec un nom d'entreprise long : l'objet doit tenir en 60 caractères.
+const invitationRappel = renderInvitationEmail({
+  orgName: 'Entretien Paysager et Déneigement Rive-Sud inc.',
+  role: 'technician',
+  inviteLink: `${app}/invite/exemple-jeton`,
+  inviterName: 'Marie Tremblay',
+  rappel: true,
+});
+
 export const EXEMPLES: Exemple[] = [
   { nom: 'compte-confirmation', de, sujet: 'Confirme ton compte Lume', html: renderVerificationEmail({ name: 'Rafba', verifyUrl: `${app}/verify-email?token=exemple&email=rafba%40exemple.ca`, expiresInHours: 24 }) },
   { nom: 'compte-existant', de, sujet: 'Tu as déjà un compte Lume', html: renderAccountExistsEmail({ name: 'Rafba', appUrl: app, hasPassword: false }) },
@@ -27,5 +36,5 @@ export const EXEMPLES: Exemple[] = [
   { nom: 'compte-mot-de-passe', de, sujet: 'Choisis un nouveau mot de passe Lume', html: renderPasswordResetEmail({ name: 'Rafba', resetUrl: `${app}/reset-password?token=exemple&email=rafba%40exemple.ca`, expiresInMinutes: 60 }) },
   { nom: 'compte-checkout-bienvenue', de, sujet: 'Bienvenue chez Lume — configure ton compte', html: renderCheckoutWelcomeEmail({ planName: 'Pro', setupUrl: `${app}/checkout/success?session_id=cs_test_exemple` }) },
   { nom: 'compte-invitation', de, sujet: invitation.subject, html: invitation.html },
-  { nom: 'compte-invitation-rappel', de, sujet: `Rappel : ${invitation.subject}`, html: invitation.html },
+  { nom: 'compte-invitation-rappel', de, sujet: invitationRappel.subject, html: invitationRappel.html },
 ];

@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchTopServices } from '../../lib/insightsApi';
 import { useTranslation } from '../../i18n';
 import PeriodSelector from './PeriodSelector';
+import ErreurCarte from './ErreurCarte';
 import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
 
 const R = 15.9;
@@ -32,6 +33,7 @@ export default function ServiceMixCard({
     queryKey: ['svc-mix', range.from, range.to],
     queryFn: () => fetchTopServices({ from: range.from, to: range.to }),
     staleTime: 60_000,
+    refetchOnMount: 'always',
   });
 
   const money = (cents: number) =>
@@ -61,12 +63,14 @@ export default function ServiceMixCard({
         <PeriodSelector value={period} onChange={onPeriod} />
       </div>
 
-      {q.isLoading ? (
+      {q.isError ? (
+        <ErreurCarte hauteur={200} onRetry={() => q.refetch()} />
+      ) : q.isLoading ? (
         <div className="h-[200px] mx-6 mt-4 rounded-lg bg-surface-secondary/40 animate-pulse" />
       ) : segs.length === 0 ? (
         <div className="h-[200px] flex items-center justify-center text-[12.5px] text-text-tertiary">{fr ? 'Aucune donnée' : 'No data'}</div>
       ) : (
-        <div className="flex items-center gap-6 px-6 pt-4 pb-6">
+        <div className="flex flex-col sm:flex-row items-center gap-6 px-6 pt-4 pb-6">
           <div className="relative w-[168px] h-[168px] shrink-0">
             <svg width="168" height="168" viewBox="0 0 42 42" className="-rotate-90">
               <circle cx="21" cy="21" r={R} fill="none" stroke="var(--color-surface-tertiary, #ededea)" strokeWidth={5} />
@@ -108,7 +112,7 @@ export default function ServiceMixCard({
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="w-full sm:flex-1 flex flex-col min-w-0">
             {segs.map((s, i) => (
               <div
                 key={i}

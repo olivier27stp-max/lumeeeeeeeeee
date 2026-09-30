@@ -11,6 +11,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
 import { validerArgs } from './validation-args';
 import { normaliserDatesHeures } from '../lumi/temps';
+import { getUserContext, hasPermission, type UserContext } from '../rbac';
+import { logger } from '../logger';
+import { journaliserTrace } from '../lumi/traces';
 
 /** Fuseau de l'entreprise (company_settings.timezone), gardé 10 min en mémoire. */
 const fuseaux = new Map<string, { fuseau: string; expire: number }>();
@@ -25,7 +28,6 @@ async function fuseauDeLOrg(orgId: string): Promise<string> {
   fuseaux.set(orgId, { fuseau, expire: Date.now() + 600_000 });
   return fuseau;
 }
-import { getUserContext, hasPermission } from '../rbac';
 import { PERMISSIONS_DOMAINES, OUTILS_FINANCIERS_DOMAINES } from './outils-domaines';
 import { TOOLS_BY_NAME, type ToolContext } from './tools';
 
@@ -109,6 +111,20 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   remember_this:             { cle: 'settings.update',    capacite: 'la mémoire de Lumi (réglage d’entreprise)' },
   forget_note:               { cle: 'settings.update',    capacite: 'la mémoire de Lumi (réglage d’entreprise)' },
   get_recent_agent_actions:  { cle: 'reports.read',       capacite: 'le journal des actions de Lumi' },
+  // ── Couverture totale (audit RBAC 2026-09-30) ──────────────────────────
+  // RELIRE la mémoire est aussi sensible que l'écrire : org_knowledge
+  // « assistant » vaut pour TOUTE l'org, et une note du propriétaire peut
+  // porter une marge ou un taux horaire. Même clé que remember_this —
+  // surtout PAS settings.read, que les quatre rôles possèdent.
+  recall_notes:              { cle: 'settings.update',    capacite: 'la mémoire de Lumi (réglage d’entreprise)' },
+  // Anodins, mais déclarés : un trou assumé vaut mieux qu'un oubli, et le test
+  // de couverture refuse désormais tout outil non déclaré.
+  get_company_info:          { cle: 'settings.read',      capacite: "les informations de l'entreprise" },
+  get_weather:               { cle: 'settings.read',      capacite: 'la météo' },
+  search_help:               { cle: 'settings.read',      capacite: "l'aide de Lume" },
+  // Les formations n'ont pas de clé dédiée : on s'aligne sur la consultation
+  // de l'équipe, que le preset technicien n'a pas.
+  list_courses:              { cle: 'team.read',          capacite: 'la consultation des formations' },
   // Domaines (couverture 100 %) : une permission par outil, déclarée dans chaque module.
   ...PERMISSIONS_DOMAINES,
 };
@@ -211,6 +227,89 @@ export function masquerMontants(v: any): any {
 export type RefusOutil = { refus: string };
 
 /**
+ * Journal des refus (audit) — dans `lumi_traces`, la table qui existe déjà,
+ * avec `resultat: 'refus'`. Pas de table dédiée : ce serait une migration, et
+ * celle-ci porte déjà org, utilisateur, outil et motif.
+ *
+ * Silencieux en cas d'échec : un problème de journal ne doit jamais ouvrir un
+ * accès ni casser un tour. Le refus a déjà eu lieu quand on arrive ici.
+ */
+function journaliserRefus(d: { userId: string; orgId: string; outil: string; cle: string; role: string | null; raison: 'permission' | 'montants' }): void {
+  logger.warn('[agent-garde] refus', d);
+  void journaliserTrace(getServiceClient(), {
+    orgId: d.orgId, userId: d.userId, canal: 'lumi', origine: 'api', resultat: 'refus',
+    action: d.outil, outils: [d.outil],
+    params: { motif: d.raison, permission: d.cle, role: d.role },
+  }).catch(() => { /* déjà journalisé côté logger */ });
+}
+
+/**
+ * Les outils que cette personne a le droit d'utiliser (rôle + overrides).
+ * Sert à ne montrer au modèle QUE le permis ; `executerOutilGarde` revérifie
+ * à l'exécution — les deux sont nécessaires : la première évite de proposer
+ * une action qui sera refusée, la seconde est la vraie barrière.
+ *
+ * Un outil sans clé déclarée est REFUSÉ : la couverture est totale, et un
+ * futur outil non déclaré doit échouer fermé.
+ */
+/**
+ * Ce que cette personne NE PEUT PAS faire, en mots simples, pour que Lumi le
+ * lui dise clairement au lieu d'improviser.
+ *
+ * ⚠️ Ceci n'est PAS une garde — la sécurité reste entièrement côté serveur
+ * (`outilsPermis` retire les outils, `executerOutilGarde` refuse). Ce texte
+ * ne fait qu'EXPLIQUER le refus. Même si le modèle l'ignorait, rien ne
+ * fuirait : il n'a tout simplement pas les outils.
+ *
+ * Pourquoi : sans ça, un technicien qui demandait son chiffre du mois
+ * s'entendait répondre « je ne trouve pas d'outil… mais je peux te sortir un
+ * rapport financier, tu veux ? » — une porte qui n'existe pas, et il se
+ * cognait dessus. Mesuré en prod le 2026-09-30.
+ *
+ * Rend null quand il n'y a rien à dire (propriétaire, admin) : aucun token de
+ * plus pour ceux qui ont tout.
+ */
+export function restrictionsDe(ctx: UserContext | null, voitLesMontants: boolean, langue: 'fr' | 'en'): string | null {
+  if (!ctx) return null;
+  const fr = langue === 'fr';
+  const manques: string[] = [];
+  if (!voitLesMontants || !hasPermission(ctx, 'financial.view_reports')) {
+    manques.push(fr
+      ? 'les chiffres d’argent : revenus, chiffre d’affaires, marges, rentabilité, valeur des clients, rapports financiers'
+      : 'money figures: revenue, margins, profitability, client value, financial reports');
+  }
+  if (!hasPermission(ctx, 'financial.view_invoices')) manques.push(fr ? 'les factures et les paiements en retard' : 'invoices and overdue payments');
+  if (!hasPermission(ctx, 'financial.view_reports')) manques.push(fr ? 'la paie et les taux horaires' : 'payroll and hourly rates');
+  if (!hasPermission(ctx, 'settings.update')) manques.push(fr ? 'les notes d’entreprise retenues par Lumi' : 'the company notes Lumi remembers');
+  if (!hasPermission(ctx, 'team.read')) manques.push(fr ? 'la liste de l’équipe' : 'the team roster');
+  if (!manques.length) return null;
+
+  return fr
+    ? `# Ce que le rôle de cette personne ne lui donne pas
+Son rôle dans Lume (« ${ctx.role} ») ne lui donne PAS accès à : ${manques.join(' ; ')}.
+`
+      + 'Si elle demande une de ces choses, dis-lui simplement que son rôle ne lui donne pas accès à cette information dans Lume, et qu’elle peut en parler à un administrateur si ça devrait changer. '
+      + 'N’invente aucun contournement, ne propose PAS de rapport ni d’autre chemin pour l’obtenir, et ne donne ni chiffre, ni estimation, ni ordre de grandeur. Passe ensuite à ce que tu peux faire pour elle.'
+    : `# What this person's role does not allow
+Their role in Lume ("${ctx.role}") does NOT give access to: ${manques.join('; ')}.
+`
+      + 'If they ask for any of it, simply say their role does not give them access to that in Lume, and that an administrator can change it if it should. '
+      + 'Do not invent a workaround, do NOT offer a report or another route to get it, and give no figure, estimate or ballpark. Then move on to what you can do for them.';
+}
+
+export function outilsPermis(ctx: UserContext | null, voitLesMontants: boolean): ReadonlySet<string> {
+  const permis = new Set<string>();
+  if (!ctx) return permis;
+  for (const nom of Object.keys(TOOLS_BY_NAME)) {
+    if (!voitLesMontants && OUTILS_FINANCIERS.has(nom)) continue;
+    const regle = PERMISSION_PAR_OUTIL[nom];
+    if (!regle) continue;
+    if (hasPermission(ctx, regle.cle)) permis.add(nom);
+  }
+  return permis;
+}
+
+/**
  * Exécute un outil pour un UTILISATEUR identifié, avec toutes les gardes :
  * outil connu, permission de la page Rôles, montants masqués si le rôle ne
  * les voit pas. Le message de refus est écrit pour être relayé tel quel par
@@ -231,8 +330,11 @@ export async function executerOutilGarde(opts: {
 
   const regle = PERMISSION_PAR_OUTIL[opts.name];
   if (regle) {
-    const ctxRole = await getUserContext(getServiceClient(), opts.userId, opts.orgId);
+    // `true` : jamais de permission en cache pour un agent — un droit retiré
+    // doit mordre immédiatement, pas au bout d'une minute.
+    const ctxRole = await getUserContext(getServiceClient(), opts.userId, opts.orgId, true);
     if (!ctxRole || !hasPermission(ctxRole, regle.cle)) {
+      journaliserRefus({ userId: opts.userId, orgId: opts.orgId, outil: opts.name, cle: regle.cle, role: ctxRole?.role ?? null, raison: 'permission' });
       return {
         refus: `Les accès Lume de cette personne n'incluent pas ${regle.capacite} `
           + '(réglage de l’écran des rôles de son entreprise). Dis-le-lui simplement, '
@@ -243,6 +345,7 @@ export async function executerOutilGarde(opts: {
 
   const voitLesMontants = await membreVoitLesMontants(opts.userId, opts.orgId);
   if (!voitLesMontants && OUTILS_FINANCIERS.has(opts.name)) {
+    journaliserRefus({ userId: opts.userId, orgId: opts.orgId, outil: opts.name, cle: 'financial.view_pricing', role: null, raison: 'montants' });
     return { refus: 'Cette personne ne voit pas les montants dans Lume (réglage de son rôle) : cet outil financier ne lui est pas accessible. Dis-le-lui simplement.' };
   }
   // Audit 2026-09-30 : qui ne VOIT pas les montants ne les ÉCRIT pas non plus

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
+import { TAILLE_PAGE, toutesLesLignesEnParallele, toutesLesLignesParId } from './lignesPaginees';
 
 export type InsightsTab = 'finance' | 'revenue' | 'reports' | 'lead_conversion' | 'jobs' | 'invoices' | 'teams' | 'pipeline' | 'clients' | 'profitability' | 'churn' | 'cohort' | 'budget' | 'relations';
 
@@ -127,7 +128,16 @@ export interface ChurnRiskClient {
 
 // ── Helpers ─────────────────────────────────────────────────
 
-function toIsoRange(from: string, to: string) {
+/**
+ * La fonction d'agrégat n'existe pas encore en base (migration pas appliquée) :
+ * PostgREST répond PGRST202. On retombe alors sur la lecture paginée, plus lente mais juste.
+ */
+export function fonctionAbsente(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === 'PGRST202';
+}
+
+/** Bornes d'une période de dates LOCALES : minuit du premier jour, minuit du lendemain du dernier (exclusif). */
+export function toIsoRange(from: string, to: string) {
   const fromDate = new Date(`${from}T00:00:00`);
   const toDate = new Date(`${to}T00:00:00`);
   const endExclusive = new Date(toDate);
@@ -242,25 +252,33 @@ export async function fetchInsightsJobsSummary(params: { from: string; to: strin
 
 export async function fetchTopServices(params: { from: string; to: string }): Promise<Array<{ name: string; value: number }>> {
   const orgId = await getCurrentOrgIdOrThrow();
+  const agregat = await supabase.rpc('rpc_insights_service_mix', { p_org: orgId, p_from: params.from, p_to: params.to });
+  if (!agregat.error) return top3EtAutre((agregat.data || []).map((r: any) => ({ name: String(r.title), value: Number(r.cents) || 0 })));
+  if (!fonctionAbsente(agregat.error)) throw agregat.error;
   const { fromIso, toIsoExclusive } = toIsoRange(params.from, params.to);
-  const { data, error } = await supabase
-    .from('jobs')
-    .select('title,total_cents')
-    .eq('org_id', orgId)
-    .is('deleted_at', null)
-    .not('status', 'in', '(draft,cancelled)')
-    .gte('created_at', fromIso)
-    .lt('created_at', toIsoExclusive);
-  if (error) throw error;
-  const rows = data || [];
+  const rows = await toutesLesLignesParId<{ id: string; title: string | null; total_cents: number | null }>((apres) => {
+    let q = supabase
+      .from('jobs')
+      .select('id,title,total_cents')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .not('status', 'in', '(draft,cancelled)')
+      .gte('created_at', fromIso)
+      .lt('created_at', toIsoExclusive);
+    if (apres) q = q.gt('id', apres);
+    return q.order('id').limit(TAILLE_PAGE);
+  });
   const byTitle = new Map<string, number>();
   for (const row of rows) {
     const title = (row as any).title || 'Untitled';
     byTitle.set(title, (byTitle.get(title) || 0) + ((row as any).total_cents || 0));
   }
-  const sorted = Array.from(byTitle.entries())
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+  return top3EtAutre(Array.from(byTitle.entries()).map(([name, value]) => ({ name, value })));
+}
+
+/** 3 premiers par valeur (ex æquo : ordre alphabétique), le reste regroupé dans « Other ». */
+function top3EtAutre(lignes: Array<{ name: string; value: number }>): Array<{ name: string; value: number }> {
+  const sorted = lignes.slice().sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
   if (sorted.length <= 3) return sorted;
   const top3 = sorted.slice(0, 3);
   const otherValue = sorted.slice(3).reduce((sum, s) => sum + s.value, 0);
@@ -303,46 +321,40 @@ export async function fetchRevenueForecast(): Promise<RevenueForecast[]> {
   }
 }
 
+// Les lectures de /insights ne transforment plus une erreur en « zéro » : la page
+// affichait « Aucune donnée » (ou 0 %) sur une panne, indiscernable d'une période vide.
 export async function fetchTeamPerformance(params: { from: string; to: string }): Promise<TeamPerformance[]> {
-  try {
-    const orgId = await getCurrentOrgIdOrThrow();
-    const { data, error } = await supabase.rpc('rpc_insights_team_performance', {
-      p_org: orgId, p_from: params.from, p_to: params.to,
-    });
-    if (error) throw error;
-    return (data || []).map((row: any) => ({
-      team_id: String(row.team_id),
-      team_name: String(row.team_name || 'Unknown'),
-      jobs_count: Number(row.jobs_count || 0),
-      jobs_completed: Number(row.jobs_completed || 0),
-      completion_rate: Number(row.completion_rate || 0),
-      revenue_cents: Number(row.revenue_cents || 0),
-      avg_job_value_cents: Number(row.avg_job_value_cents || 0),
-    }));
-  } catch {
-    return [];
-  }
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase.rpc('rpc_insights_team_performance', {
+    p_org: orgId, p_from: params.from, p_to: params.to,
+  });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    team_id: String(row.team_id),
+    team_name: String(row.team_name || 'Unknown'),
+    jobs_count: Number(row.jobs_count || 0),
+    jobs_completed: Number(row.jobs_completed || 0),
+    completion_rate: Number(row.completion_rate || 0),
+    revenue_cents: Number(row.revenue_cents || 0),
+    avg_job_value_cents: Number(row.avg_job_value_cents || 0),
+  }));
 }
 
 export async function fetchPipelineVelocity(params: { from: string; to: string }): Promise<PipelineVelocity> {
-  try {
-    const orgId = await getCurrentOrgIdOrThrow();
-    const { data, error } = await supabase.rpc('rpc_insights_pipeline_velocity', {
-      p_org: orgId, p_from: params.from, p_to: params.to,
-    });
-    if (error) throw error;
-    const row = Array.isArray(data) ? data[0] : data;
-    return {
-      total_deals: Number(row?.total_deals || 0),
-      won_deals: Number(row?.won_deals || 0),
-      lost_deals: Number(row?.lost_deals || 0),
-      win_rate: Number(row?.win_rate || 0),
-      avg_deal_value_cents: Number(row?.avg_deal_value_cents || 0),
-      avg_days_to_close: Number(row?.avg_days_to_close || 0),
-    };
-  } catch {
-    return { total_deals: 0, won_deals: 0, lost_deals: 0, win_rate: 0, avg_deal_value_cents: 0, avg_days_to_close: 0 };
-  }
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase.rpc('rpc_insights_pipeline_velocity', {
+    p_org: orgId, p_from: params.from, p_to: params.to,
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    total_deals: Number(row?.total_deals || 0),
+    won_deals: Number(row?.won_deals || 0),
+    lost_deals: Number(row?.lost_deals || 0),
+    win_rate: Number(row?.win_rate || 0),
+    avg_deal_value_cents: Number(row?.avg_deal_value_cents || 0),
+    avg_days_to_close: Number(row?.avg_days_to_close || 0),
+  };
 }
 
 // ── Bloc 2 fetchers ─────────────────────────────────────────
@@ -430,6 +442,96 @@ export async function fetchClientLifetimeValue(limit = 20): Promise<ClientLifeti
   } catch { return []; }
 }
 
+function versValeurClient(row: any): ClientLifetimeValue {
+  return {
+    client_id: String(row.client_id),
+    client_name: String(row.client_name || 'Unknown'),
+    first_job_at: row.first_job_at || null,
+    tenure_days: Number(row.tenure_days || 0),
+    total_jobs: Number(row.total_jobs || 0),
+    total_revenue_cents: Number(row.total_revenue_cents || 0),
+    avg_job_value_cents: Number(row.avg_job_value_cents || 0),
+    last_activity_at: row.last_activity_at || null,
+    days_since_last_activity: Number(row.days_since_last_activity || 0),
+    clv_score: Number(row.clv_score || 0),
+  };
+}
+
+export interface ZoneAdresse { adresse: string | null; jobs: number; revenu_cents: number; lat_somme: number; lng_somme: number }
+
+/**
+ * Revenu par ville : jobs COMPLÉTÉS ayant une visite dans la période, comptés une fois,
+ * regroupés par adresse (agrégat en base ; sinon toutes les visites, dédoublonnées par job).
+ */
+export async function fetchZonesParAdresse(params: { from: string; to: string }): Promise<ZoneAdresse[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const agregat = await supabase.rpc('rpc_insights_zones', { p_org: orgId, p_from: params.from, p_to: params.to });
+  if (!agregat.error) {
+    return ((agregat.data || []) as any[]).map((r) => ({
+      adresse: r.adresse ?? null, jobs: Number(r.jobs) || 0, revenu_cents: Number(r.revenu_cents) || 0,
+      lat_somme: Number(r.lat_somme) || 0, lng_somme: Number(r.lng_somme) || 0,
+    }));
+  }
+  if (!fonctionAbsente(agregat.error)) throw agregat.error;
+  const { fetchMapJobsInRange } = await import('./mapApi');
+  const { fromIso, toIsoExclusive } = toIsoRange(params.from, params.to);
+  const { pins } = await fetchMapJobsInRange(fromIso, toIsoExclusive);
+  const vus = new Set<string>();
+  const parAdresse = new Map<string, ZoneAdresse>();
+  for (const p of pins) {
+    if (p.status !== 'completed' || vus.has(p.jobId)) continue;
+    if (!Number.isFinite(p.latitude) || !Number.isFinite(p.longitude) || (p.latitude === 0 && p.longitude === 0)) continue;
+    vus.add(p.jobId);
+    const cle = p.address ?? '';
+    const z = parAdresse.get(cle) || { adresse: p.address, jobs: 0, revenu_cents: 0, lat_somme: 0, lng_somme: 0 };
+    z.jobs += 1; z.revenu_cents += p.totalCents || 0; z.lat_somme += p.latitude; z.lng_somme += p.longitude;
+    parAdresse.set(cle, z);
+  }
+  return [...parAdresse.values()];
+}
+
+/**
+ * Les N clients qui ont le plus rapporté (tri par revenu fait par la base, un seul appel).
+ * La RPC trie par « score CLV » (récence, fréquence) : prendre ses 6 premiers puis trier
+ * par revenu perdait un gros client inactif — la carte « Top clients par revenu » mentait.
+ */
+export async function fetchTopClientsParRevenu(n = 5): Promise<ClientLifetimeValue[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .rpc('rpc_insights_client_lifetime_value', { p_org: orgId, p_limit: 1_000_000 })
+    .order('total_revenue_cents', { ascending: false })
+    .order('client_name', { ascending: true })
+    .limit(n);
+  if (error) throw error;
+  return (data || []).map(versValeurClient);
+}
+
+/** Valeur vie moyenne sur TOUS les clients qui ont eu un job (agrégat en base, sinon lecture complète). */
+export async function fetchValeurVieMoyenne(): Promise<number> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase.rpc('rpc_insights_valeur_vie_moyenne', { p_org: orgId });
+  if (!error) return Number((Array.isArray(data) ? data[0] : data)?.moyenne_cents) || 0;
+  if (!fonctionAbsente(error)) throw error;
+  const tous = await fetchValeurTousClients();
+  return tous.length ? Math.round(tous.reduce((s, c) => s + c.total_revenue_cents, 0) / tous.length) : 0;
+}
+
+/**
+ * Valeur de TOUS les clients qui ont eu un job, triée par revenu décroissant.
+ * La RPC trie par « score CLV » (récence, fréquence) : prendre ses 6 premiers puis trier
+ * par revenu perdait un gros client inactif — la carte « Top clients par revenu » mentait.
+ */
+export async function fetchValeurTousClients(): Promise<ClientLifetimeValue[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  // La RPC recalcule tout à chaque appel : pages en parallèle, ordre stable par client.
+  const lignes = await toutesLesLignesEnParallele((a, b, compter) => supabase
+    .rpc('rpc_insights_client_lifetime_value', { p_org: orgId, p_limit: 1_000_000 }, compter ? { count: 'exact' } : undefined)
+    .order('client_id')
+    .range(a, b));
+  return lignes.map(versValeurClient)
+    .sort((x, y) => y.total_revenue_cents - x.total_revenue_cents || x.client_name.localeCompare(y.client_name));
+}
+
 export async function fetchJobProfitability(params: { from: string; to: string }): Promise<JobProfitability> {
   try {
     const orgId = await getCurrentOrgIdOrThrow();
@@ -492,18 +594,16 @@ export interface BudgetRow {
 }
 
 export async function fetchCohortRetention(): Promise<CohortRow[]> {
-  try {
-    const orgId = await getCurrentOrgIdOrThrow();
-    const { data, error } = await supabase.rpc('rpc_insights_cohort_retention', { p_org: orgId });
-    if (error) throw error;
-    return (data || []).map((row: any) => ({
-      cohort_month: String(row.cohort_month),
-      months_after: Number(row.months_after),
-      cohort_size: Number(row.cohort_size),
-      active_count: Number(row.active_count),
-      retention_pct: Number(row.retention_pct),
-    }));
-  } catch { return []; }
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase.rpc('rpc_insights_cohort_retention', { p_org: orgId });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    cohort_month: String(row.cohort_month),
+    months_after: Number(row.months_after),
+    cohort_size: Number(row.cohort_size),
+    active_count: Number(row.active_count),
+    retention_pct: Number(row.retention_pct),
+  }));
 }
 
 export async function fetchBudgetVsActual(params: { from: string; to: string }): Promise<BudgetRow[]> {

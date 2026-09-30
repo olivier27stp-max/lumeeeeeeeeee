@@ -22,8 +22,12 @@ export function periodLabel(p: InsightsPeriod, fr: boolean): string {
   return fr ? LABELS[p].fr : LABELS[p].en;
 }
 
+/**
+ * Date LOCALE (YYYY-MM-DD). toISOString() donnait la date UTC : le soir (après 20 h
+ * à Toronto), « 12 derniers mois » finissait le lendemain et commençait un jour trop tard.
+ */
 function toIso(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export interface InsightsRange {

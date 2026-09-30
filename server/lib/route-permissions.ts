@@ -116,6 +116,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/automations/rules': 'automations.read',
   // Total déclenché, en cours, passages par étape (une route agrégée).
   'GET /api/automations/rules/stats': 'automations.read',
+  // L'éditeur d'une automatisation : sa règle + le catalogue (lecture).
+  'GET /api/automations/editeur': 'automations.read',
   // « X clients correspondent aujourd'hui » (déclencheur Client inactif).
   'GET /api/automations/clients-inactifs/apercu': 'automations.read',
   // Aperçu d'une automatisation : montre un vrai client (launch 2026-09-28).
@@ -142,6 +144,34 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/automations/events/invoice-paid': 'financial.view_invoices',
   'POST /api/automations/events/lead-created': 'automations.update',
   'POST /api/automations/events/lead-status-changed': 'automations.update',
+  // Audit V2, S10 : ces routes n'avaient AUCUNE entrée. La RLS rattrapait
+  // (liste vide, 404), mais un membre sans droit recevait 200 / 404 au lieu
+  // d'un 403 explicite, et tout membre pouvait signaler un événement.
+  'POST /api/automations/rules/:id/restaurer': 'automations.update',
+  // Vider une ligne de la corbeille (l'historique d'envois reste).
+  'DELETE /api/automations/rules/:id/definitivement': 'automations.update',
+  'GET /api/automations/folders': 'automations.read',
+  'POST /api/automations/folders': 'automations.update',
+  'PATCH /api/automations/folders/:id': 'automations.update',
+  'DELETE /api/automations/folders/:id': 'automations.update',
+  'GET /api/automations/webhooks': 'automations.read',
+  'POST /api/automations/webhooks': 'automations.update',
+  'POST /api/automations/webhooks/:id/regenerer': 'automations.update',
+  'PATCH /api/automations/webhooks/:id': 'automations.update',
+  'DELETE /api/automations/webhooks/:id': 'automations.update',
+  // « Tout arrêter » : la route exige en plus un administrateur.
+  'GET /api/automations/pause': 'automations.read',
+  'POST /api/automations/pause': 'automations.update',
+  // Événements signalés par le navigateur : le droit de faire l'action
+  // elle-même (déplacer une visite, étiqueter un client, travailler une
+  // tâche), pas celui de modifier les automatisations — un technicien qui
+  // déplace SA visite doit replanifier ses rappels.
+  'POST /api/automations/events/appointment-rescheduled': ['jobs.update', 'calendar.update'],
+  'POST /api/automations/events/client-tagged': ['clients.update', 'leads.update'],
+  'POST /api/automations/events/client-untagged': ['clients.update', 'leads.update'],
+  // Pas de clé « tâches » : ceux qui travaillent des tâches dans chaque rôle
+  // prédéfini (la route vérifie en plus que la tâche est VRAIMENT terminée).
+  'POST /api/automations/events/task-completed': ['jobs.update', 'clients.update', 'leads.update'],
 
   // ── AI / Agent ── (backend removed — only external agent auth remains)
   // External agent endpoints live under /api/agent/connect and /api/agent/webhook
@@ -214,15 +244,26 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/sending-domain/verify': 'settings.update',
   'DELETE /api/sending-domain': 'settings.update',
 
-  // ── Commissions ── (financial: reports)
-  'GET /api/commissions': 'financial.view_reports',
+  // ── Commissions ──
+  // Lecture : `commissions.read` (la permission de la page). Le serveur
+  // restreint lui-même un non-admin à SES commissions et à SON plan. Avec
+  // `financial.view_reports`, un sales_rep (qui a commissions.read mais pas
+  // les rapports) recevait 403 sur sa propre page (audit 2026-09-30).
+  'GET /api/commissions': 'commissions.read',
+  'GET /api/commissions/payroll-preview': 'commissions.read',
+  'GET /api/commissions/rules': 'commissions.read',
+  'GET /api/commissions/settings': 'commissions.read',
   'POST /api/commissions/calculate': 'financial.view_reports',
+  // Écritures : même permission pour approuver, verser et reprendre (verser
+  // n'en demandait aucune ; approuver, si).
   'POST /api/commissions/:id/approve': 'team.update',
   'POST /api/commissions/:id/reverse': 'team.update',
-  'GET /api/commissions/rules': 'financial.view_reports',
+  'POST /api/commissions/:id/mark-paid': 'team.update',
   'POST /api/commissions/rules': 'settings.update',
   'PUT /api/commissions/rules/:id': 'settings.update',
-  'GET /api/commissions/payroll-preview': 'financial.view_reports',
+  'DELETE /api/commissions/rules/:id': 'settings.update',
+  'POST /api/commissions/rules/assign-member': 'settings.update',
+  'PUT /api/commissions/settings': 'settings.update',
 
   // ── Integrations ──
   'GET /api/integrations': 'integrations.read',

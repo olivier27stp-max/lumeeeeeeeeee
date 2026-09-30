@@ -538,13 +538,18 @@ async function reecrireMessageAutomation(
     ...(config || {}), body, ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}),
   });
 
+  // Une automatisation à ÉTAPES : le moteur exécute `steps` et ignore `actions`,
+  // qui n'en est qu'un reflet (constaté en prod le 2026-09-30, #799 ; audit des
+  // outils). On réécrit l'étape visée ; plusieurs messages du même type → Lumi
+  // demande lequel (message_number) au lieu de tout réécrire ou de refuser.
   const etapes: any[] = Array.isArray(regle.steps) ? regle.steps : [];
+  const actions: any[] = Array.isArray(regle.actions) ? regle.actions : [];
   const parcours = etapes.length > 0;
   // Les messages de ce type, dans l'ordre du parcours (ou de la liste d'actions).
   const cibles: Array<{ index: number; texte: string; nom: string | null }> = parcours
     ? etapes.flatMap((e, index) => (e?.type === 'action' && e.action?.type === actionType
       ? [{ index, texte: String(e.action?.config?.body ?? ''), nom: e.nom ?? null }] : []))
-    : (Array.isArray(regle.actions) ? regle.actions : []).flatMap((a: any, index: number) => (a?.type === actionType
+    : actions.flatMap((a: any, index: number) => (a?.type === actionType
       ? [{ index, texte: String(a?.config?.body ?? ''), nom: null }] : []));
   if (!cibles.length) throw new Error(`Cette automatisation n’envoie pas de ${quoi} : rien à réécrire.`);
   if (cibles.length > 1 && !numero) {
@@ -554,9 +559,14 @@ async function reecrireMessageAutomation(
   const cible = cibles[(numero ?? 1) - 1];
   if (!cible) throw new Error(`Il n’y a que ${cibles.length} ${quoi}(s) dans cette automatisation.`);
 
+  // Reflet `actions` tenu à jour quand il n'y a qu'un message de ce type (sans ambiguïté).
+  const refletUnique = parcours && cibles.length === 1 && actions.filter((a) => a?.type === actionType).length === 1;
   const maj = parcours
-    ? { steps: etapes.map((e, i) => (i === cible.index ? { ...e, action: { ...e.action, config: nouvelleConfig(e.action?.config) } } : e)) }
-    : { actions: (regle.actions as any[]).map((a, i) => (i === cible.index ? { ...a, config: nouvelleConfig(a.config) } : a)) };
+    ? {
+      steps: etapes.map((e, i) => (i === cible.index ? { ...e, action: { ...e.action, config: nouvelleConfig(e.action?.config) } } : e)),
+      ...(refletUnique ? { actions: actions.map((a) => (a?.type === actionType ? { ...a, config: nouvelleConfig(a.config) } : a)) } : {}),
+    }
+    : { actions: actions.map((a, i) => (i === cible.index ? { ...a, config: nouvelleConfig(a.config) } : a)) };
   const { data, error } = await ctx.client
     .from('automation_rules')
     .update({ ...maj, updated_at: new Date().toISOString() })

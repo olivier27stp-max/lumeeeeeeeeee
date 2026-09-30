@@ -51,6 +51,8 @@ export async function getAutomationRules(): Promise<AutomationRule[]> {
     .from('automation_rules')
     .select('*')
     .eq('org_id', orgId)
+    // Supprimée définitivement depuis la corbeille : n'apparaît plus nulle part.
+    .is('purged_at', null)
     .order('name');
   if (error) throw error;
   return (data || []) as AutomationRule[];

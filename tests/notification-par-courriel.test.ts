@@ -20,8 +20,8 @@ vi.mock('../server/lib/supabase', () => ({
   }),
 }));
 
-import { courrielNotification, lienAbsolu } from '../server/lib/notificationCourriel';
-import { executeCreateNotification, type ActionContext } from '../server/lib/actions';
+import { courrielNotification, lienAbsolu, objetNotification } from '../server/lib/notificationCourriel';
+import { executeCreateNotification, accorderPluriels, type ActionContext } from '../server/lib/actions';
 import { AUTOMATION_PRESETS } from '../server/lib/automationPresets.data';
 import { ACTIONS } from '../src/lib/automationCatalogue';
 
@@ -41,18 +41,53 @@ function ctx(): ActionContext {
 beforeEach(() => { envois.length = 0; });
 
 describe('Notifier l’équipe — aussi par courriel', () => {
-  it('case cochée : un courriel par personne prévenue, dans sa langue', async () => {
+  it('case cochée : un courriel par personne prévenue, dans sa langue quand le texte existe en anglais', async () => {
     const r = await executeCreateNotification(
-      { title: 'Jean a ouvert la soumission #12', body: 'Ouverte à 10 h', par_courriel: 'true', lien: '/quotes/q' },
+      { title: 'Jean a ouvert la soumission #12', body: 'Ouverte à 10 h', par_courriel: 'true', lien: '/quotes/q',
+        title_en: 'Jean opened quote #12', body_en: 'Opened at 10 a.m.' } as never,
       {}, ctx(),
     );
     expect(r.success).toBe(true);
     expect(envois.map((e) => e.to).sort()).toEqual(['proprio@exemple.test', 'rep@exemple.test']);
-    expect(envois[0].subject).toBe('Jean a ouvert la soumission #12');
     const fr = envois.find((e) => e.to === 'rep@exemple.test')!;
     const en = envois.find((e) => e.to === 'proprio@exemple.test')!;
+    expect(fr.subject).toBe('Jean a ouvert la soumission 12');
     expect(fr.html).toContain('Ouvrir dans Lume');
+    expect(en.subject).toBe('Jean opened quote 12');
     expect(en.html).toContain('Open in Lume');
+  });
+
+  it('une seule langue par courriel : sans texte anglais, le membre anglophone reçoit tout en français', async () => {
+    await executeCreateNotification({ title: 'Paiement reçu', body: 'Facture 40', par_courriel: 'true', lien: '/invoices/i' }, {}, ctx());
+    const en = envois.find((e) => e.to === 'proprio@exemple.test')!;
+    expect(en.html).toContain('Ouvrir dans Lume');
+    expect(en.html).not.toContain('Open in Lume');
+  });
+
+  it('objet : sans emoji ni « # », la première phrase, ≤ 60 caractères', () => {
+    const titre = "👀 Marie-Christine Tremblay vient d'ouvrir la soumission #Q-2026-042 (1 626,90 $). Bon moment pour appeler.";
+    const sujet = objetNotification(titre);
+    expect(sujet.length).toBeLessThanOrEqual(60);
+    expect(sujet).not.toMatch(/^\p{Extended_Pictographic}|#/u);
+    expect(sujet.startsWith('Marie-Christine Tremblay vient d')).toBe(true);
+    expect(objetNotification('👀 Jean a ouvert la soumission #12 (500 $). Bon moment pour appeler.'))
+      .toBe("Jean a ouvert la soumission 12 (500 $)");
+  });
+
+  it('« Bon moment pour appeler » : le numéro du client en lien tel:', async () => {
+    await executeCreateNotification(
+      { title: 'Marie a ouvert la soumission. Bon moment pour appeler.', body: '', par_courriel: 'true' },
+      { client_name: 'Marie Tremblay', client_phone: '+1 514 555-0199' }, ctx(),
+    );
+    expect(envois[0].html).toContain('href="tel:+15145550199"');
+    expect(envois[0].html).toContain('Appeler Marie Tremblay');
+  });
+
+  it('pluriels accordés : jamais « vue(s) »', () => {
+    expect(accorderPluriels('1 vue(s)')).toBe('1 vue');
+    expect(accorderPluriels('0 vue(s)')).toBe('0 vue');
+    expect(accorderPluriels('3 vue(s) · 12 courriel(s)')).toBe('3 vues · 12 courriels');
+    expect(accorderPluriels('0 view(s)', 'en')).toBe('0 views');
   });
 
   it('case décochée ou absente : aucun courriel', async () => {

@@ -96,7 +96,7 @@ export function composerAlerte(s: SanteCourriels, causes: AdresseEnCause[]): { s
     : '';
   const html = rendreCourrielLume({
     langue: 'fr',
-    preheader: `${s.nonLivres + s.plaintes} courriel(s) sur ${s.total} non livrés ou signalés — ${taux}`,
+    preheader: `${s.nonLivres + s.plaintes} ${s.nonLivres + s.plaintes > 1 ? 'courriels' : 'courriel'} sur ${s.total} ${s.nonLivres + s.plaintes > 1 ? 'non livrés ou signalés' : 'non livré ou signalé'} — ${taux}`,
     titre: `Taux de rebond ${taux} sur 24 h`,
     intro: `Au-dessus du seuil de ${formaterTaux(SEUIL_TAUX)}. Un domaine qui rebondit se fait classer en pourriel pour toutes les entreprises : à regarder aujourd'hui (adresses invalides saisies par un client, liste importée, domaine mal configuré).`,
     lignes: [
