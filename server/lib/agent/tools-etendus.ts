@@ -33,6 +33,8 @@ import {
   computePayPeriod, periodToIsoRange, computeEntryHours, DEFAULT_PAYROLL_SETTINGS,
   type PayrollSettings,
 } from '../payroll';
+import { analyserRentabilite, pourAgent } from '../rentabilite';
+import { ecrireValeurs } from '../champs/service';
 import type { AgentTool, ToolContext } from './tools';
 
 interface TaxLine { code: string; label: string; rate: number; enabled: boolean }
@@ -943,8 +945,8 @@ const getFinancialOverview: AgentTool = {
   declaration: {
     name: 'get_financial_overview',
     description:
-      'Financial overview: invoice KPIs (30 days), revenue collected this month, and job margins '
-      + '(revenue vs recorded expenses) for completed jobs this month. Requires financial access in Lume.',
+      'Financial overview: invoice KPIs (30 days), revenue collected this month, and the profit of this '
+      + 'month’s jobs (same calculation as analyze_profitability). Requires financial access in Lume.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -954,37 +956,36 @@ const getFinancialOverview: AgentTool = {
     const to = dateOrgAujourdhui();
     const from = `${to.slice(0, 7)}-01`;
 
-    const [kpisR, serieR, jobsR] = await Promise.all([
+    // La marge du mois vient de LA définition de la rentabilité (server/lib/rentabilite) :
+    // avant taxes, main-d'œuvre et commissions comprises, mois local. Avant, elle
+    // valait « total TAXES INCLUSES − dépenses », sans main-d'œuvre, mois borné en UTC.
+    const [kpisR, serieR, renta] = await Promise.all([
       ctx.client.rpc('rpc_invoices_kpis_30d', { p_org: ctx.orgId }),
       ctx.client.rpc('rpc_insights_revenue_series', { p_org: ctx.orgId, p_from: from, p_to: to, p_granularity: 'month' }),
-      ctx.client
-        .from('jobs_active')
-        .select('total_cents, expenses_cents')
-        .eq('org_id', ctx.orgId)
-        .eq('status', 'completed')
-        .gte('completed_at', `${from}T00:00:00Z`),
+      analyserRentabilite({ client: ctx.client, orgId: ctx.orgId, userId: ctx.userId, demande: { date_from: from, date_to: to, limit: 1 } }),
     ]);
     if (kpisR.error) return erreurOutil('finances', kpisR.error);
     if (serieR.error) return erreurOutil('finances', serieR.error);
-    if (jobsR.error) return erreurOutil('finances', jobsR.error);
 
     const kpis = Array.isArray(kpisR.data) ? kpisR.data[0] : kpisR.data;
     const revenus = (Array.isArray(serieR.data) ? serieR.data : [])
       .reduce((s: number, r: any) => s + (Number(r.revenue_cents) || 0), 0);
-    const jobs = jobsR.data || [];
-    const ca = jobs.reduce((s, j: any) => s + (Number(j.total_cents) || 0), 0);
-    const depenses = jobs.reduce((s, j: any) => s + (Number(j.expenses_cents) || 0), 0);
 
     return {
       invoices_30d: kpis || {},
       revenue_this_month_cents: revenus,
-      completed_jobs_this_month: {
-        count: jobs.length,
-        revenue_cents: ca,
-        expenses_cents: depenses,
-        margin_cents: ca - depenses,
-        margin_pct: ca > 0 ? Math.round(((ca - depenses) / ca) * 1000) / 10 : null,
-      },
+      jobs_this_month: renta.ok
+        ? {
+          count: renta.resultat.nb_jobs,
+          revenue_cents: renta.resultat.totaux.revenus_cents,
+          costs_cents: renta.resultat.totaux.couts_cents,
+          profit_cents: renta.resultat.totaux.profit_cents,
+          margin_pct: renta.resultat.completude === 'insuffisante' ? null : renta.resultat.totaux.marge_pct,
+          margin_is_maximum: renta.resultat.marge_est_un_maximum,
+          summary_fr: renta.resultat.resume_fr,
+          summary_en: renta.resultat.resume_en,
+        }
+        : { note: 'refus' in renta ? renta.refus.fr : renta.erreur },
     };
   },
 };
@@ -1104,42 +1105,48 @@ const getChurnRisk: AgentTool = {
   },
 };
 
-const getJobProfitability: AgentTool = {
+/**
+ * Rentabilité : UNE action déterministe (server/lib/rentabilite), la même que
+ * l'écran. Le modèle ne calcule rien : il relaie resume_fr / resume_en.
+ * Remplace get_job_profitability (agrégat seul, mois courant par défaut).
+ */
+const analyzeProfitability: AgentTool = {
   kind: 'read',
   needsIdentity: true,
   declaration: {
-    name: 'get_job_profitability',
+    name: 'analyze_profitability',
     description:
-      'Profitability of your jobs over a period: total revenue vs cost, gross margin and %, how many jobs '
-      + 'made money vs lost money. Use for « am I profitable », « where am I losing money ». '
-      + 'from/to YYYY-MM-DD; defaults to this month.',
+      'Profit and margin (before taxes) of one job, several jobs, or a period grouped by job, technician, sales rep, '
+      + 'client, service or month. Counts invoiced revenue minus refunds (job/quote price as an estimate when not invoiced), '
+      + 'clocked labour × hourly rate, commissions and job expenses, and says what is included and what is missing: '
+      + 'with a missing cost the margin is a MAXIMUM. The answer is ready in resume_fr / resume_en — relay it as is '
+      + 'for a simple question, never recompute. Period defaults to Jan 1 → today (the whole job when job ids/numbers '
+      + 'are given). Use for « am I profitable », « my least profitable jobs » (sort profit_asc), « profit on job 42 », '
+      + '« which technician / client / service makes me the most money ».',
     parameters: {
       type: 'object',
       properties: {
-        from: { type: 'string', description: 'Start YYYY-MM-DD (default: 1st of month).' },
-        to: { type: 'string', description: 'End YYYY-MM-DD (default: today).' },
+        job_ids: { type: 'array', items: { type: 'string' }, description: 'Job ids (from the jobs list).' },
+        job_numbers: { type: 'array', items: { type: 'string' }, description: 'Job numbers as the user says them (e.g. "42").' },
+        technician_id: { type: 'string', description: 'Only the part of the work done by this member (user id).' },
+        rep_id: { type: 'string', description: 'Only jobs sold by this sales rep (user id).' },
+        client_id: { type: 'string', description: 'Only this client’s jobs.' },
+        service_id: { type: 'string', description: 'Only this catalogue service (its share of each job).' },
+        date_from: { type: 'string', description: 'Start YYYY-MM-DD (default: Jan 1 of this year).' },
+        date_to: { type: 'string', description: 'End YYYY-MM-DD (default: today).' },
+        group_by: { type: 'string', enum: ['job', 'technicien', 'rep', 'client', 'service', 'mois'], description: 'Breakdown (default job).' },
+        sort: { type: 'string', enum: ['revenus_desc', 'profit_desc', 'profit_asc', 'marge_desc', 'marge_asc'], description: 'Order of the groups (default revenus_desc).' },
+        limit: { type: 'number', description: 'How many groups to return (default 5).' },
+        detail: { type: 'boolean', description: 'true = every cost line per group (labour, commissions, expenses, hours). Only when the user asks for the breakdown.' },
       },
     },
   },
   handler: async (args, ctx) => {
-    const to = args.to ? String(args.to) : dateOrgAujourdhui();
-    const from = args.from ? String(args.from) : `${to.slice(0, 7)}-01`;
-    const { data, error } = await ctx.client.rpc('rpc_insights_job_profitability', {
-      p_org: ctx.orgId, p_from: from, p_to: to,
-    });
-    if (error) return erreurOutil('rentabilite', error);
-    const r: any = Array.isArray(data) ? data[0] : data;
-    if (!r) return { periode: { du: from, au: to }, note: 'Aucune donnée de rentabilité sur cette période.' };
-    return {
-      periode: { du: from, au: to },
-      nombre_de_jobs: Number(r.total_jobs) || 0,
-      revenus_cents: Math.round(Number(r.total_revenue_cents) || 0),
-      couts_cents: Math.round(Number(r.total_cost_cents) || 0),
-      marge_cents: Math.round(Number(r.gross_margin_cents) || 0),
-      marge_pct: r.margin_pct == null ? null : Math.round(Number(r.margin_pct) * 10) / 10,
-      jobs_rentables: Number(r.profitable_jobs) || 0,
-      jobs_a_perte: Number(r.unprofitable_jobs) || 0,
-    };
+    const { detail, ...demande } = args;
+    const r = await analyserRentabilite({ client: ctx.client, orgId: ctx.orgId, userId: ctx.userId, demande: { limit: 5, ...demande } });
+    if (r.ok) return detail ? r.resultat : pourAgent(r.resultat);
+    if ('refus' in r) return { acces_refuse: true, message: r.refus.fr, message_en: r.refus.en };
+    return { error: r.erreur };
   },
 };
 
@@ -3168,9 +3175,10 @@ const setJobExpensesTool: AgentTool = {
   declaration: {
     name: 'set_job_expenses',
     description:
-      'Record the total expenses/costs on a job (gas, materials, subcontractor…) so its profit is '
-      + 'accurate. This SETS the total expense figure (it replaces it, it does not add to it) — if there '
-      + 'were already expenses, include them. Amount in dollars. Get the job id from the jobs list.',
+      'Record an expense amount on a job (gas, materials, subcontractor…) so its profit is accurate. '
+      + 'It SETS the job’s « other expenses » amount (it replaces it, it does not add to it) — if there '
+      + 'were already other expenses, include them. Detailed expense fields (fuel, materials…) are left as they are. '
+      + 'Amount in dollars. Get the job id from the jobs list.',
     parameters: {
       type: 'object',
       properties: {
@@ -3188,21 +3196,47 @@ const setJobExpensesTool: AgentTool = {
       const cents = Math.max(0, Math.round(montant * 100));
       const cap = depassePlafond(cents);
       if (cap) throw new Error(cap.error);
+
+      // Avec le dossier Dépenses (migration 20261003470000), le montant va dans
+      // « Autres dépenses » : c'est ce que compte la rentabilité, et les autres
+      // champs (carburant, matériaux…) restent tels quels. Sans le dossier,
+      // l'ancien total du job, comme avant.
+      const { data: autres } = await ctx.client.from('custom_fields')
+        .select('id, custom_field_folders!inner(cle_systeme)')
+        .eq('org_id', ctx.orgId).eq('object_type', 'job').eq('key', 'depense_autres')
+        .eq('field_type', 'monetary').is('archived_at', null)
+        .eq('custom_field_folders.cle_systeme', 'depenses')
+        .maybeSingle();
+      if (autres?.id) {
+        const { data: j, error: ej } = await ctx.client.from('jobs').select('id, job_number')
+          .eq('org_id', ctx.orgId).eq('id', jobId).is('deleted_at', null).maybeSingle();
+        if (ej) throw ej;
+        if (!j) throw new Error('Job introuvable.');
+        const [r] = await ecrireValeurs(ctx.client, ctx.orgId, 'job', jobId, [{ field_id: autres.id, value: cents }], { acteur: ctx.userId, source: 'agent' });
+        if (!r?.ok) throw new Error(r?.erreur || 'Dépenses non enregistrées.');
+        return {
+          updated: true,
+          job: { job_number: j.job_number },
+          depenses_cents: cents,
+          note: 'Enregistré dans « Autres dépenses » du job (les autres champs de dépenses sont inchangés). Pour la marge, utiliser analyze_profitability.',
+        };
+      }
+
       const { data, error } = await ctx.client
         .from('jobs')
         .update({ expenses_cents: cents, updated_at: new Date().toISOString() })
         .eq('org_id', ctx.orgId).eq('id', jobId)
         .is('deleted_at', null)
-        .select('id, job_number, total_cents, expenses_cents')
+        .select('id, job_number, expenses_cents')
         .single();
       if (error) throw error;
-      const marge = (Number(data.total_cents) || 0) - cents;
+      // Pas de « marge » ici : elle se calcule avant taxes, avec la main-d'œuvre
+      // et les commissions — c'est le travail d'analyze_profitability.
       return {
         updated: true,
         job: { job_number: data.job_number },
         depenses_cents: cents,
-        marge_cents: marge,
-        note: 'Dépenses enregistrées ; la marge du job est recalculée.',
+        note: 'Dépenses enregistrées. Pour la marge du job, utiliser analyze_profitability.',
       };
     }),
 };
@@ -3440,7 +3474,7 @@ export const OUTILS_LECTURE_ETENDUS: AgentTool[] = [
   compareRevenue,
   getTopClients,
   getChurnRisk,
-  getJobProfitability,
+  analyzeProfitability,
   getTopServices,
   listServices,
   findFreeSlotTool,

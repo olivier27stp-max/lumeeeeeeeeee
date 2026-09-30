@@ -24,13 +24,13 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
-      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#171717;font-size:15px;line-height:1.5;\"><p style=\"margin:0 0 16px;\">Bonjour Marie,</p><p style=\"margin:0 0 16px;\">Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous.</p><p style=\"margin:0 0 16px;\">Notez votre expérience en 10 secondes :</p><p style=\"text-align:center;margin:30px 0;\"><a href=\"https://app.lume.test/survey/<jeton>\" style=\"background:#171717;color:#ffffff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:bold;\">Noter mon expérience</a></p><p style=\"margin:0 0 16px;\">Merci d'avoir choisi Plomberie Tremblay inc. !</p></div>",
+      "subject": "Comment s'est passé notre service ?",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#171717;font-size:15px;line-height:1.5;\"><p style=\"margin:0 0 16px;\">Bonjour Marie,</p><p style=\"margin:0 0 16px;\">Nous venons de terminer Nettoyage de gouttières et votre opinion compte pour nous.</p><p style=\"margin:0 0 16px;\">Notez votre expérience en 10 secondes :</p><p style=\"text-align:center;margin:30px 0 8px;\"><a href=\"https://app.lume.test/survey/<jeton>\" style=\"background:#171717;color:#ffffff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:bold;\">Noter mon expérience</a></p><p style=\"text-align:center;margin:0 0 24px;font-size:12px;color:#6b7280;\">Le bouton ne fonctionne pas ? <a href=\"https://app.lume.test/survey/<jeton>\" style=\"color:#6b7280;\">Ouvrir le lien</a></p><p style=\"margin:0 0 16px;\">Merci d'avoir choisi Plomberie Tremblay inc. !</p></div>",
       "moment": "differe"
     },
     {
       "canal": "avis",
-      "body": "sent: Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+      "body": "sent: Comment s'est passé notre service ?",
       "moment": "differe"
     }
   ],

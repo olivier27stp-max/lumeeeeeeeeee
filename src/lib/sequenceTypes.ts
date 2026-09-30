@@ -187,7 +187,7 @@ export function retirerEtape(steps: Etape[], id: string): Etape[] {
     : cible.type === 'arreter' ? null
     : (cible.suivant ?? null);
 
-  return steps
+  const recousues = steps
     .filter((e) => e.id !== id)
     .map((e) => {
       if (e.type === 'si') {
@@ -200,6 +200,53 @@ export function retirerEtape(steps: Etape[], id: string): Etape[] {
       if (e.type === 'arreter') return e;
       return { ...e, suivant: e.suivant === id ? suite : e.suivant };
     });
+
+  /*
+   * LA TÊTE DU PARCOURS, C'EST `steps[0]` (moteur et canevas).
+   *
+   * Retirer la première étape laissait en tête le premier élément RESTANT du
+   * tableau — pas sa suite. Quand l'ordre du tableau diffère de celui du
+   * parcours (une condition insérée après coup est rangée en fin de
+   * tableau), tout le reste devenait orphelin : le canevas n'affichait plus
+   * qu'une carte, et le moteur partait de là (audit V2, A-01). Sa suite
+   * — ou, à défaut, sa première branche — prend donc la tête.
+   */
+  if (steps[0]?.id !== id) return recousues;
+  const nouvelleTete = suite ?? (
+    cible.type === 'si' ? (cible.sinon ?? null)
+      : cible.type === 'attendre' ? (cible.si_reponse ?? cible.si_depasse ?? null)
+      : null
+  );
+  const tete = recousues.find((e) => e.id === nouvelleTete);
+  return tete ? [tete, ...recousues.filter((e) => e !== tete)] : recousues;
+}
+
+/**
+ * Où accrocher une étape ajoutée « à la FIN du parcours ».
+ *
+ * On marche le chemin principal depuis la tête (`steps[0]`) : `suivant`,
+ * et la branche « si oui » d'une condition. Prendre le dernier élément du
+ * TABLEAU insérait au milieu dès que l'ordre du tableau différait de celui
+ * du parcours (audit V2, A-05). Un « Arrêter ici » termine le chemin : la
+ * nouvelle étape s'accroche juste avant lui.
+ */
+export function finDuParcours(steps: Etape[]): { apresId: string | null; branche?: 'alors' | 'sinon' } {
+  let courante = steps[0] ?? null;
+  let precedente: { apresId: string | null; branche?: 'alors' | 'sinon' } = { apresId: null };
+  const vues = new Set<string>();
+  while (courante && !vues.has(courante.id)) {
+    vues.add(courante.id);
+    if (courante.type === 'arreter') return precedente;
+    const suite: string | null = courante.type === 'si' ? (courante.alors ?? null) : (courante.suivant ?? null);
+    const ici: { apresId: string; branche?: 'alors' } = courante.type === 'si'
+      ? { apresId: courante.id, branche: 'alors' }
+      : { apresId: courante.id };
+    const prochaine = suite ? steps.find((e) => e.id === suite) ?? null : null;
+    if (!prochaine) return ici;
+    precedente = ici;
+    courante = prochaine;
+  }
+  return precedente;
 }
 
 // ── Le format D'ORIGINE (`actions`) ─────────────────────────
@@ -278,6 +325,18 @@ export function projeterFormatOrigine(regle: {
       delai_secondes: delai,
       suivant: 'origine-0',
     });
+  } else if (delai < 0) {
+    // Délai NÉGATIF = « X avant le rendez-vous » (rappels la veille, 2 h
+    // avant). Un parcours ignore `delay_seconds` : sans cette attente, le
+    // rappel converti partirait dès la prise du rendez-vous.
+    etapes.push({
+      id: 'origine-attente',
+      type: 'attendre',
+      mode: 'avant_date',
+      secondes_avant: -delai,
+      delai_secondes: 0,
+      suivant: 'origine-0',
+    });
   }
 
   actions.forEach((brut, i) => {
@@ -316,8 +375,15 @@ export interface ApercuConversion {
   bloquants: string[];
 }
 
-/** Les types que le catalogue ne connaît pas et que le serveur refusera. */
-const TYPES_HORS_CATALOGUE = ['log_activity', 'send_notification', 'update_status'];
+/**
+ * Les types que le catalogue ne connaît pas et que le serveur refusera.
+ * `log_activity` n'y est plus (2026-09-30) : le serveur l'accepte désormais
+ * dans un parcours, la conversion le garde tel quel.
+ */
+const TYPES_HORS_CATALOGUE = ['send_notification', 'update_status'];
+
+/** L'étape technique « note dans l'historique » : gardée, jamais proposée. */
+export const ACTION_JOURNAL = 'log_activity';
 
 export function apercuConversion(regle: {
   actions?: unknown;

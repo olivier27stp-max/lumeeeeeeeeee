@@ -28,6 +28,7 @@ function fauxAdmin(reviewEnabled: boolean | null) {
       insert() { return Promise.resolve({ error: null }); },
       select() { return b; },
       eq(c: string, v: unknown) { filtres.push(['eq', c, v]); return b; },
+      is(c: string, v: unknown) { filtres.push(['is', c, v]); return b; },
       in(c: string, v: unknown) { filtres.push(['in', c, v]); return b; },
       not(c: string, _o: string, v: unknown) { filtres.push(['not', c, v]); return b; },
       maybeSingle() {

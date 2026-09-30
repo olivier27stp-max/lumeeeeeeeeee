@@ -100,9 +100,15 @@ function buildPaymentEmailHtml(params: {
     langue: params.langue,
     marque: marqueDepuis(params.company),
     preheader: fr ? `${params.amountFormatted} à payer — facture ${params.invoiceNumber}` : `${params.amountFormatted} due — invoice ${params.invoiceNumber}`,
-    titre: fr ? 'Paiement demandé' : 'Payment requested',
+    // Le titre complète l'objet (« Paiement demandé — … »), il ne le répète pas.
+    titre: fr ? 'Payez en ligne en quelques secondes' : 'Pay online in a few seconds',
     salutation: modeleOrg ? null : m.bonjour(params.clientName),
-    intro: modeleOrg ? null : (fr ? 'Ce dépôt réserve votre date à l’horaire. Dès qu’il est reçu, la date est à vous.' : 'This deposit holds your spot in the schedule. As soon as it is received, the date is yours.'),
+    /* Le texte parlait TOUJOURS d'un dépôt (« Ce dépôt réserve votre
+       date ») — faux pour une simple facture, et cette route ne sait pas
+       lequel des deux elle envoie. Une phrase vraie dans les deux cas. */
+    intro: modeleOrg ? null : (fr
+      ? 'Voici le lien pour régler votre facture en ligne. Le paiement se fait par carte, en toute sécurité.'
+      : 'Here is the link to pay your invoice online. Payment is made by card, securely.'),
     corpsHtml: modeleOrg?.corpsHtml ?? null,
     montant: { libelle: m.montantDu, valeur: params.amountFormatted, sous: `${m.facture} ${params.invoiceNumber}` },
     // Meme garde que les routes de document : « /pay/undefined » est pire

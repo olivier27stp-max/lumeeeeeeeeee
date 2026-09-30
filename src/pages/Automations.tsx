@@ -11,7 +11,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Zap, Clock, Mail, Bell, FileText, CalendarClock, MessageSquare,
   ToggleLeft, ToggleRight, Loader2, Send, UserPlus, AlertTriangle,
@@ -19,18 +19,19 @@ import {
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
   Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
   Plus, Pencil, Copy, Trash2, RotateCcw, X, EllipsisVertical,
-  Settings, FolderPlus, Filter, Building2, Link2, Eye, } from 'lucide-react';
+  Settings, FolderPlus, Filter, Building2, Link2, Eye, Trophy, ArrowUp, ArrowDown, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { localizeAutomationName } from '../lib/automationNames';
+import { trouverDeclencheur } from '../lib/automationCatalogue';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
 import BandeauPause from '../components/automations/BandeauPause';
+import BibliothequeModeles from '../components/automations/BibliothequeModeles';
 import MessageEditor from '../components/automations/MessageEditor';
 import InterrupteurPublication from '../components/automations/InterrupteurPublication';
 import CopierVersBureauxModal from '../components/automations/CopierVersBureauxModal';
 import {
-  chargerAutomatisations,
   dupliquerAutomatisation,
   supprimerAutomatisation,
   restaurerAutomatisation,
@@ -45,7 +46,6 @@ import {
   chargerStatistiques,
   type StatsRegle,
   type BureauCible,
-  type CatalogueAutomatisations,
   type DossierAutomatisation,
 } from '../lib/automationBuilderApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
@@ -195,6 +195,7 @@ const PRESET_META: Record<string, {
   quote_opened_notify:      { icon: Eye,            category: 'Quotes' },
   quote_opened_move_deal:   { icon: Eye,            category: 'Quotes' },
   quote_sent_move_deal:     { icon: Send,           category: 'Quotes' },
+  quote_approved_move_deal: { icon: Trophy,         category: 'Quotes' },
   quote_followup_1d:        { icon: Mail,           category: 'Quotes' },
   quote_followup_3d:        { icon: Mail,           category: 'Quotes' },
   quote_followup_7d:        { icon: Mail,           category: 'Quotes' },
@@ -346,6 +347,9 @@ function getActionLabel(type: string, fr: boolean): string {
   return type.replace(/_/g, ' ');
 }
 
+/** Les colonnes triables de la liste (A-17). */
+type CleTri = 'nom' | 'statut' | 'declenches' | 'en_cours' | 'modifiee' | 'creee';
+
 // ═════════════════════════════════════════════════════════════
 
 /**
@@ -418,15 +422,25 @@ export default function Automations() {
   const [stats, setStats] = useState<Record<string, StatsRegle> | null>(null);
   /** Le bureau a-t-il un numéro texto ? `false` = bandeau ; `null` = inconnu, rien. */
   const [textoConfigure, setTextoConfigure] = useState<boolean | null>(null);
-  const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
   const [occupeId, setOccupeId] = useState<string | null>(null);
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
   const [savingLang, setSavingLang] = useState(false);
 
-  /** Onglet de la liste — les quatre de GHL. */
-  const [onglet, setOnglet] = useState<'toutes' | 'verifier' | 'corbeille' | 'modeles'>('toutes');
+  /**
+   * Onglet de la liste — les quatre de GHL. `?onglet=verifier` l'ouvre
+   * directement : c'est là que mène « Voir les automatisations à vérifier »
+   * de la Vue d'ensemble, qui atterrissait sur « Toutes » (audit V2, A-14).
+   */
+  const [parametres] = useSearchParams();
+  const [onglet, setOnglet] = useState<'toutes' | 'verifier' | 'corbeille' | 'modeles'>(() => {
+    const demande = parametres.get('onglet');
+    return demande === 'verifier' || demande === 'corbeille' || demande === 'modeles' ? demande : 'toutes';
+  });
   /** Menu « Créer » : les cinq départs de GHL. */
   const [menuCreer, setMenuCreer] = useState(false);
+  const [bibliotheque, setBibliotheque] = useState(false);
+  /** Le focus revient ici à la fermeture de la bibliothèque (l'entrée du menu n'existe plus). */
+  const boutonCreer = useRef<HTMLButtonElement>(null);
   /** Menu « … » ouvert sur quelle ligne ? */
   const [menuLigne, setMenuLigne] = useState<string | null>(null);
 
@@ -462,6 +476,8 @@ export default function Automations() {
   const [filtresOuverts, setFiltresOuverts] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatut, setFilterStatut] = useState<'all' | 'publiee' | 'brouillon'>('all');
+  /** Tri par date de création (Rafba, 2026-09-30) ; « defaut » = l'ordre d'avant. */
+  const [triDate, setTriDate] = useState<'defaut' | 'recent' | 'ancien'>('defaut');
   /** Pagination, comme GHL : 10 par page par défaut. */
   /**
    * Combien de lignes par page — RETENU d'une visite à l'autre.
@@ -481,6 +497,16 @@ export default function Automations() {
     }
   });
   const [page, setPage] = useState(1);
+  /**
+   * Tri par colonne (audit V2, A-17) : les en-têtes n'étaient pas
+   * cliquables. `null` = l'ordre du serveur (par nom), ou celui choisi dans
+   * « Trier » des filtres avancés ; un clic sur un en-tête l'emporte.
+   * Recliquer inverse.
+   */
+  const [tri, setTri] = useState<{ cle: CleTri; sens: 'asc' | 'desc' } | null>(null);
+  const trierPar = (cle: CleTri) => setTri((t) => (t && t.cle === cle
+    ? { cle, sens: t.sens === 'asc' ? 'desc' : 'asc' }
+    : { cle, sens: 'asc' }));
 
   useEffect(() => { getAutomationLanguage().then(setOrgLang).catch(() => {}); }, []);
 
@@ -494,9 +520,13 @@ export default function Automations() {
       toast.success(fr
         ? (lang === 'en' ? 'Messages en anglais' : 'Messages en français')
         : (lang === 'en' ? 'Messages set to English' : 'Messages set to French'));
-    } catch {
+    } catch (e: unknown) {
       setOrgLang(avant);
-      toast.error(fr ? 'Impossible de changer la langue' : 'Could not change language');
+      // La RAISON (« seul un administrateur… »), pas un « impossible » muet.
+      console.error('[automations] langue des messages', e);
+      toast.error(e instanceof Error && e.message
+        ? e.message
+        : (fr ? 'Impossible de changer la langue' : 'Could not change language'));
     } finally {
       setSavingLang(false);
     }
@@ -570,9 +600,17 @@ export default function Automations() {
     }
   }, [fr]);
 
+  /*
+   * Double Entrée / double clic sur « Créer » : la 2e requête arrivait sur un
+   * nom déjà pris et affichait « Un dossier porte déjà ce nom » à côté du
+   * succès (audit V2, A-10). Une création à la fois.
+   */
+  const creationDossierEnVol = useRef(false);
   const validerNouveauDossier = async () => {
     const nom = nomDossier.trim();
     if (!nom) { setSaisieDossier(false); return; }
+    if (creationDossierEnVol.current) return;
+    creationDossierEnVol.current = true;
     try {
       const d = await creerDossier(nom);
       setDossiers((prev) => [...prev, d].sort((a, b) => a.name.localeCompare(b.name)));
@@ -581,6 +619,8 @@ export default function Automations() {
       toast.success(fr ? `Dossier « ${d.name} » créé` : `Folder “${d.name}” created`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      creationDossierEnVol.current = false;
     }
   };
 
@@ -650,15 +690,12 @@ export default function Automations() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    let vivant = true;
-    chargerAutomatisations()
-      .then((d) => { if (vivant) setCatalogue(d.catalogue); })
-      .catch((e: unknown) => {
-        console.error('[Automations] catalogue indisponible', e instanceof Error ? e.message : String(e));
-      });
-    return () => { vivant = false; };
-  }, []);
+  /*
+   * PERF-1 (audit V2) : la liste relisait ICI toutes les règles une deuxième
+   * fois (`/api/automations/rules`, 316 ko à 400 règles) pour un catalogue
+   * qu'elle ne lisait jamais. Les libellés viennent du catalogue embarqué
+   * (`automationCatalogue.ts`) : une seule lecture des règles suffit.
+   */
 
   // Fermer les menus au clic ailleurs.
   useEffect(() => {
@@ -671,7 +708,7 @@ export default function Automations() {
   // Changer d'onglet ou de filtre remet à la première page : rester en page 3
   // d'une liste qui n'en a plus qu'une donne un écran vide inexplicable.
   // Le dossier aussi (launch 2026-09-28) : rester en page 3 d'un dossier qui n'en a qu'une donnait « Aucune automatisation ».
-  useEffect(() => { setPage(1); setRestentAffichees(new Set()); }, [onglet, search, filterCategory, filterStatut, dossierActif]);
+  useEffect(() => { setPage(1); setRestentAffichees(new Set()); }, [onglet, search, filterCategory, filterStatut, dossierActif, triDate, tri]);
 
   // Une sélection ne survit à AUCUN changement de vue (M9) : onglet, dossier,
   // page, recherche, filtres, taille de page.
@@ -887,6 +924,34 @@ export default function Automations() {
     if (dossierActif && dossierActif !== 'racine' && r.folder_id !== dossierActif) return false;
     return true;
   });
+  if (triDate !== 'defaut') {
+    const sens = triDate === 'recent' ? -1 : 1;
+    filtrees.sort((a, b) => sens * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+  }
+
+  /** La valeur comparée pour une colonne (nombres, dates en ms, texte). */
+  const valeurTri = (r: AutomationRule, cle: CleTri): number | string => {
+    switch (cle) {
+      case 'nom': return localizeAutomationName(r.name, language).toLocaleLowerCase(fr ? 'fr-CA' : 'en-CA');
+      case 'statut': return r.deleted_at ? 0 : r.is_active ? 2 : 1;
+      case 'declenches': return stats?.[r.id]?.declenches ?? 0;
+      case 'en_cours': return stats?.[r.id]?.en_cours ?? 0;
+      case 'modifiee': return Date.parse(r.updated_at) || 0;
+      case 'creee': return Date.parse(r.created_at) || 0;
+    }
+  };
+  const triees = tri
+    ? [...filtrees].sort((a, b) => {
+      const va = valeurTri(a, tri.cle);
+      const vb = valeurTri(b, tri.cle);
+      const ecart = typeof va === 'number' && typeof vb === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb), fr ? 'fr-CA' : 'en-CA');
+      // À égalité, le nom départage : un ordre stable d'un clic à l'autre.
+      return (tri.sens === 'asc' ? ecart : -ecart)
+        || localizeAutomationName(a.name, language).localeCompare(localizeAutomationName(b.name, language));
+    })
+    : filtrees;
 
   const pages = Math.max(1, Math.ceil(filtrees.length / parPage));
   // Après une suppression (ou un déplacement) sur la dernière page, la page
@@ -896,7 +961,7 @@ export default function Automations() {
 
   /** Combien d'automatisations dans chaque dossier — un dossier vide se voit. */
   const compteParDossier = (id: string) => vivantes.filter((r) => r.folder_id === id).length;
-  const visibles = filtrees.slice((page - 1) * parPage, page * parPage);
+  const visibles = triees.slice((page - 1) * parPage, page * parPage);
 
   const toutCoche = visibles.length > 0 && visibles.every((r) => cochees.has(r.id));
   const basculerTout = () => {
@@ -1052,7 +1117,7 @@ export default function Automations() {
     { cle: 'lumi', fr: 'Construire avec Lumi', en: 'Build with Lumi', icone: Sparkles,
       aideFr: 'Décris ce que tu veux, Lumi le monte. Inclus dans Autopilot.', aideEn: 'Describe it, Lumi builds it. Included in Autopilot.' },
     { cle: 'modele', fr: 'Partir d’un modèle', en: 'Start from a template', icone: FileText,
-      aideFr: `${modeles.length} modèles prêts à l’emploi.`, aideEn: `${modeles.length} ready-made templates.` },
+      aideFr: 'Une bibliothèque de modèles prêts à l’emploi.', aideEn: 'A library of ready-made templates.' },
     /*
      * GoHighLevel en offre deux de plus : « Importer d'une campagne » et
      * « Automatisation d'entreprise ». Ni l'un ni l'autre n'a d'équivalent
@@ -1068,7 +1133,10 @@ export default function Automations() {
     setMenuCreer(false);
     if (cle === 'zero') { partirDeZero(false); return; }
     if (cle === 'lumi') { partirDeZero(true); return; }
-    if (cle === 'modele') { setOnglet('modeles'); return; }
+    // Ouvre la bibliothèque. Avant (jusqu'au 2026-09-30), ce départ basculait
+    // sur l'onglet « Modèles » — les vraies automatisations en brouillon de
+    // l'entreprise — et rien n'était créé.
+    if (cle === 'modele') { setBibliotheque(true); return; }
     // Inatteignable : les trois départs ci-dessus couvrent tout `DEPARTS`.
     // Le garder évite qu'un ajout futur retombe dans le vide sans un mot.
     console.error('[automations] départ inconnu :', cle);
@@ -1130,6 +1198,18 @@ export default function Automations() {
           dorment coûte des relances pendant des jours.
         */}
         <BandeauPause fr={fr} onChange={setToutEnPause} />
+
+        <BibliothequeModeles
+          open={bibliotheque}
+          fr={fr}
+          onClose={() => { setBibliotheque(false); requestAnimationFrame(() => boutonCreer.current?.focus()); }}
+          onCree={(regle) => {
+            setBibliotheque(false);
+            toast.success(fr ? 'Automatisation créée en brouillon' : 'Automation created as a draft');
+            navigate(`/automations/${regle.id}`);
+          }}
+          onErreur={(message) => toast.error(message)}
+        />
 
         {/*
           Aucun numéro texto (bloqué tant que Trust Hub n'est pas approuvé) :
@@ -1228,6 +1308,7 @@ export default function Automations() {
             <div className="relative">
               <button
                 type="button"
+                ref={boutonCreer}
                 onClick={(e) => { e.stopPropagation(); setMenuCreer((m) => !m); }}
                 aria-haspopup="menu"
                 aria-expanded={menuCreer}
@@ -1431,6 +1512,17 @@ export default function Automations() {
               <option value="publiee">{fr ? 'Publiée' : 'Published'}</option>
               <option value="brouillon">{fr ? 'Brouillon' : 'Draft'}</option>
             </select>
+            <label htmlFor="f-tri-date" className="ml-2 text-[12px] text-text-secondary">{fr ? 'Trier' : 'Sort'}</label>
+            <select
+              id="f-tri-date"
+              value={triDate}
+              onChange={(e) => setTriDate(e.target.value as typeof triDate)}
+              className="glass-input"
+            >
+              <option value="defaut">{fr ? 'Ordre par défaut' : 'Default order'}</option>
+              <option value="recent">{fr ? 'Créées le plus récemment' : 'Newest first'}</option>
+              <option value="ancien">{fr ? 'Créées le plus anciennement' : 'Oldest first'}</option>
+            </select>
           </div>
         )}
 
@@ -1526,12 +1618,34 @@ export default function Automations() {
                         className="h-3.5 w-3.5 rounded border-outline"
                       />
                     </th>
-                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Nom' : 'Name'}</th>
-                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Statut' : 'Status'}</th>
-                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Total déclenché' : 'Total enrolled'}</th>
-                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'En cours' : 'Active enrolled'}</th>
-                    <th scope="col" className="hidden px-3 py-3 font-medium lg:table-cell">{fr ? 'Modifiée le' : 'Last updated'}</th>
-                    <th scope="col" className="hidden px-3 py-3 font-medium lg:table-cell">{fr ? 'Créée le' : 'Created on'}</th>
+                    {([
+                      ['nom', fr ? 'Nom' : 'Name', ''],
+                      ['statut', fr ? 'Statut' : 'Status', ''],
+                      ['declenches', fr ? 'Total déclenché' : 'Total enrolled', ''],
+                      ['en_cours', fr ? 'En cours' : 'Active enrolled', ''],
+                      ['modifiee', fr ? 'Modifiée le' : 'Last updated', 'hidden lg:table-cell'],
+                      ['creee', fr ? 'Créée le' : 'Created on', 'hidden lg:table-cell'],
+                    ] as const).map(([cle, libelle, classe]) => {
+                      const actif = tri?.cle === cle;
+                      const Fleche = actif && tri?.sens === 'desc' ? ArrowDown : ArrowUp;
+                      return (
+                        <th
+                          key={cle}
+                          scope="col"
+                          aria-sort={actif ? (tri?.sens === 'asc' ? 'ascending' : 'descending') : 'none'}
+                          className={cn('px-3 py-3 font-medium', classe)}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => trierPar(cle)}
+                            className="inline-flex items-center gap-1 rounded transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          >
+                            {libelle}
+                            <Fleche size={11} className={actif ? 'text-text-primary' : 'opacity-0'} aria-hidden="true" />
+                          </button>
+                        </th>
+                      );
+                    })}
                     <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Stats' : 'Stats'}</th>
                     <th scope="col" className="w-24 px-3 py-3" />
                   </tr>
@@ -1563,7 +1677,11 @@ export default function Automations() {
                   ) : visibles.map((r) => {
                     const rule = r;
                     const echecs = failureCounts[rule.id] ?? 0;
-                    const decl = TRIGGER_DISPLAY[rule.trigger_event];
+                    // Le libellé du CATALOGUE d'abord — celui de l'éditeur :
+                    // « Lead créé » ici, « Nouveau prospect » là-bas, pour le
+                    // même déclencheur (audit V2, A-16). La table locale ne
+                    // sert plus qu'aux événements hors catalogue.
+                    const decl = trouverDeclencheur(rule.trigger_event) ?? TRIGGER_DISPLAY[rule.trigger_event];
                     const meta = PRESET_META[rule.preset_key || ''];
                     const Icone = meta?.icon ?? Zap;
                     return (

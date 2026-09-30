@@ -160,40 +160,27 @@ const FILET_CLIENT = '#e4e7ec';
    selon les clients, on fixe la couleur. */
 const CADENAS = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 
-/* La mascotte au pied d'un courriel d'entreprise.
-
-   Le pied disait « Envoyé avec Lume », en texte seul. Une pastille ronde avec
-   le bonhomme se reconnaît d'un coup d'œil là où trois mots gris se lisent
-   à peine — et elle reste DISCRÈTE : 18 px, à côté de notre nom, sous les
-   coordonnées de l'entreprise. Jamais en tête : le courriel appartient à
-   l'entreprise, pas à nous.
-
-   `favicon-mascot-v2.png` est le bonhomme SEUL, sans le mot « LUME » : 512 px
-   carrés, fond transparent, 32 Ko. Le logo complet (v2) porte le mot, donc il
-   ferait doublon avec le texte à côté.
-
-   Dimensions en attributs ET en style : Outlook ignore le style seul et
-   afficherait l'image à sa taille native — 512 px au milieu du pied.
-
-   `vertical-align:middle` sur les deux cellules : sans lui, le texte se pose
-   sur la ligne de base et flotte sous la pastille. */
-// Cadrée sur le visage : le logo v2 entier devient illisible sous 40px.
-const MASCOTTE_LUME_URL = 'https://lumecrm.net/lume-mascotte-pastille.png';
-/**
- * Le pied d'un courriel CLIENT ne porte que la pastille : ni « Envoyé avec »,
- * ni le mot « Lume », ni lien vers la plateforme. Le courriel vient de
- * l'entreprise, la plateforme n'a pas à s'y écrire. La pastille reste,
- * discrète, sans texte ni lien — `alt` vide pour qu'aucun mot n'apparaisse
- * si le client bloque les images.
- */
-const SIGNATURE_LUME = () => `
-<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:16px auto 0;">
-<tr>
-<td style="line-height:0;"><img src="${MASCOTTE_LUME_URL}" alt="" width="28" height="28" style="width:28px;height:28px;display:block;border:0;outline:none;border-radius:50%;opacity:0.55;"/></td>
-</tr>
-</table>`;
-
 const POLICE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+/**
+ * Le texte d'aperçu, quand un courriel n'en fournit pas : les premières
+ * phrases du corps, sans balises. Sans lui, Gmail affiche en aperçu le
+ * premier texte venu — souvent le nom de l'entreprise ou « Bonjour Marie, »
+ * (audit du 2026-09-29 : préheader absent sur les automatisations).
+ */
+export function preheaderDepuis(html: string | null | undefined): string {
+  const texte = String(html ?? '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#39;|&rsquo;/g, '’')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!texte) return '';
+  // La salutation n'apprend rien dans l'aperçu : on la saute.
+  const sansSalut = texte.replace(/^(Bonjour|Bonsoir|Salut|Hi|Hello|Dear)\b[^,!.]{0,60}[,!.]\s*/i, '');
+  const base = sansSalut || texte;
+  return base.length > 110 ? `${base.slice(0, 107).replace(/\s+\S*$/, '')}…` : base;
+}
 
 export function echapper(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -384,7 +371,7 @@ body, .lume-fond { background-color: ${fond} !important; }
 </style>
 </head>
 <body style="margin:0;padding:0;background:${fond};font-family:${POLICE};-webkit-text-size-adjust:100%;">
-${p.preheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:${fond};">${echapper(p.preheader)}${'&#8203;&nbsp;'.repeat(40)}</div>` : ''}
+${(() => { const ph = p.preheader || preheaderDepuis(p.corpsHtml); return ph ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:${fond};">${echapper(ph)}${'&#8203;&nbsp;'.repeat(40)}</div>` : ''; })()}
 <table role="presentation" class="lume-fond" width="100%" cellpadding="0" cellspacing="0" style="background:${fond};">
 ${bandeau}
 <tr><td align="center" style="background:${fond};padding:24px 12px 0;">
@@ -506,8 +493,11 @@ export function rendreCourrielClient(c: CourrielClient): string {
 ${joindre ? `<p style="margin:0;font-size:13px;line-height:1.6;">${joindre}</p>` : ''}
 <p style="margin:${joindre ? '4px' : '0'} 0 0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${echapper(nom)}${postal ? ` &nbsp;&middot;&nbsp; ${postal}` : ''}</p>
 ${liensSociauxHtml(c.marque.liensSociaux)}
-${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">${taxes.map(echapper).join(' &nbsp;&middot;&nbsp; ')}</p>` : ''}
-${SIGNATURE_LUME()}`;
+${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">${taxes.map(echapper).join(' &nbsp;&middot;&nbsp; ')}</p>` : ''}`;
+  /* Plus de pastille Lume au pied (audit du 2026-09-29, marque blanche) :
+     le courriel d'une entreprise à son client ne porte QUE la marque de
+     l'entreprise — comme Stripe ou Shopify pour les courriels de leurs
+     marchands. */
   return coquille({
     langue: c.langue, titreDocument: c.titre || nom, preheader: c.preheader, enTeteHtml: enTete,
     corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? `— ${nom}` : `— ${nom}`) : c.signature }, couleur),

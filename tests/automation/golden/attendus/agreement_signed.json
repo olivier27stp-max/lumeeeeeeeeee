@@ -13,8 +13,8 @@
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
-      "subject": "Plomberie Tremblay inc. — Contrat signé",
-      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci Marie,</h2><p>Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps ici :</p><p><a href=\"\"></a></p><p></p><p>À bientôt!<br/>Plomberie Tremblay inc.</p></div>",
+      "subject": "Votre contrat est signé",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci Marie,</h2><p>Votre contrat avec Plomberie Tremblay inc. est signé. Vous pouvez le consulter en tout temps ici :</p><p><a href=\"\">Consulter votre contrat signé</a></p><p></p><p>À bientôt!<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "immediat"
     }
   ],

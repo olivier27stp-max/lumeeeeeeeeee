@@ -36,12 +36,17 @@ import { sequenceEtapes } from '../lib/validation';
 import {
   validate, automationRuleCreateSchema, automationRuleUpdateSchema,
   dossierCreateSchema, dossierUpdateSchema, automationCopieBureauxSchema,
+  automationModeleUtiliserSchema,
 } from '../lib/validation';
+import { MODELES_AUTOMATISATION, trouverModele } from '../lib/automationTemplates';
+import { copierEtapes, nomDisponible } from '../../src/lib/automationTemplates';
+import { projeterFormatOrigine } from '../../src/lib/sequenceTypes';
 import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie } from '../lib/automatisations-bureaux';
 import { logger } from '../lib/logger';
 import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
-import { problemesBloquants, messageRefus } from '../lib/automations-publication';
+import { problemesBloquants, messageRefus, messagePublieeCassee } from '../lib/automations-publication';
+import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
 import {
   DECLENCHEURS,
   ACTIONS,
@@ -51,6 +56,8 @@ import {
 } from '../../src/lib/automationCatalogue';
 
 const router = Router();
+// Les messages d'erreur partent dans la langue de l'interface (A-09).
+router.use('/automations', repondreDansLaLangue);
 
 /** Colonnes renvoyées au navigateur. `org_id` n'a aucun intérêt côté client. */
 const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, folder_id, modele_id, deleted_at, created_at, updated_at, lumi_conversation';
@@ -66,7 +73,7 @@ function verifierCoherence(corps: {
   trigger_event?: string;
   delay_seconds?: number;
   actions?: Array<{ type: string }>;
-}): string | null {
+}, fr = true): string | null {
   const { trigger_event, delay_seconds, actions } = corps;
 
   // Un délai négatif = « X avant la date de référence ». Le moteur ne sait le
@@ -79,7 +86,9 @@ function verifierCoherence(corps: {
     }
     const decl = trouverDeclencheur(trigger_event);
     if (!decl?.accepte_delai_negatif) {
-      return `« ${decl?.fr ?? trigger_event} » n'a pas de date future : on ne peut pas envoyer avant. Utilisez un délai après l'événement.`;
+      return fr
+        ? `« ${decl?.fr ?? trigger_event} » n'a pas de date future : on ne peut pas envoyer avant. Utilisez un délai après l'événement.`
+        : `“${decl?.en ?? trigger_event}” has no future date: you cannot send before. Use a delay after the event.`;
     }
     if (delay_seconds < -DELAI_NEGATIF_MAX_SECONDES) {
       return 'On ne peut pas envoyer plus de 30 jours avant.';
@@ -125,18 +134,65 @@ router.get('/automations/rules', async (req, res) => {
     return res.status(500).json({ error: 'Impossible de lire les automatisations.' });
   }
 
-  // Le catalogue voyage avec les règles : l'interface n'a pas à le dupliquer,
-  // et une clé retirée ici disparaît du sélecteur sans redéploiement du front.
-  // Un déclencheur réservé à une capacité en rodage n'est offert qu'aux
-  // entreprises qui ont son drapeau : ailleurs, son événement n'est jamais émis.
-  // Client de l'UTILISATEUR (RLS de org_features), comme tout ce fichier.
-  const actifs = new Set<string>();
-  for (const d of DECLENCHEURS) {
-    if (d.drapeau && !actifs.has(d.drapeau) && await drapeauActif(auth.client, auth.orgId, d.drapeau as CleDrapeauAutomatisation)) actifs.add(d.drapeau);
-  }
   return res.json({
     rules: data ?? [],
-    catalogue: { declencheurs: DECLENCHEURS.filter((d) => declencheurOffert(d, actifs)), actions: ACTIONS },
+    catalogue: await catalogueOffert(auth.client, auth.orgId),
+  });
+});
+
+/**
+ * Le catalogue voyage avec les règles : l'interface n'a pas à le dupliquer,
+ * et une clé retirée ici disparaît du sélecteur sans redéploiement du front.
+ * Un déclencheur réservé à une capacité en rodage n'est offert qu'aux
+ * entreprises qui ont son drapeau : ailleurs, son événement n'est jamais émis.
+ * Client de l'UTILISATEUR (RLS de org_features), comme tout ce fichier.
+ */
+async function catalogueOffert(client: SupabaseClient, orgId: string) {
+  const actifs = new Set<string>();
+  for (const d of DECLENCHEURS) {
+    if (d.drapeau && !actifs.has(d.drapeau) && await drapeauActif(client, orgId, d.drapeau as CleDrapeauAutomatisation)) actifs.add(d.drapeau);
+  }
+  return { declencheurs: DECLENCHEURS.filter((d) => declencheurOffert(d, actifs)), actions: ACTIONS };
+}
+
+/*
+ * GET /automations/editeur?rule_id=… — ce que l'ÉDITEUR affiche (PERF-2).
+ *
+ * L'éditeur chargeait TOUTES les règles (316 ko à 400 règles) pour en
+ * afficher une. Il reçoit maintenant sa règle (par id), le catalogue, et la
+ * liste LÉGÈRE (id, nom) des autres automatisations publiées, pour l'action
+ * « Démarrer une automatisation ». Sans `rule_id` (`/nouvelle`) : pas de
+ * règle. Règle absente : `rule: null` (l'écran dit « introuvable »).
+ */
+router.get('/automations/editeur', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const ruleId = typeof req.query.rule_id === 'string' && req.query.rule_id ? req.query.rule_id : null;
+  if (ruleId && !/^[0-9a-f-]{36}$/i.test(ruleId)) {
+    return res.json({ rule: null, catalogue: await catalogueOffert(auth.client, auth.orgId), autres: [] });
+  }
+
+  const [regle, autres] = await Promise.all([
+    ruleId
+      ? auth.client.from('automation_rules').select(COLONNES).eq('id', ruleId).eq('org_id', auth.orgId).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    auth.client
+      .from('automation_rules')
+      .select('id, name')
+      .eq('org_id', auth.orgId)
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .order('name'),
+  ]);
+  if (regle.error || autres.error) {
+    logger.error('[automation-rules] lecture de l’éditeur échouée', { message: (regle.error ?? autres.error)?.message });
+    return res.status(500).json({ error: 'Impossible de lire l’automatisation.' });
+  }
+  return res.json({
+    rule: regle.data ?? null,
+    catalogue: await catalogueOffert(auth.client, auth.orgId),
+    // Jamais la règle ouverte elle-même : une automatisation qui se démarre boucle.
+    autres: ((autres.data ?? []) as Array<{ id: string; name: string }>).filter((r) => r.id !== ruleId),
   });
 });
 
@@ -160,13 +216,14 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
     return res.status(400).json({ error: 'Dossier introuvable dans ce bureau.' });
   }
 
-  const probleme = verifierCoherence(req.body);
+  const fr = langueDe(req) === 'fr';
+  const probleme = verifierCoherence(req.body, fr);
   if (probleme) return res.status(400).json({ error: probleme });
 
   // Naître publiée = publier : mêmes vérifications que la route de publication (M8).
   if (req.body.is_active === true) {
-    const problemes = problemesBloquants(req.body);
-    if (problemes.length) return res.status(422).json({ error: messageRefus(problemes), code: 'publication_refusee', problemes });
+    const problemes = problemesBloquants(req.body, fr);
+    if (problemes.length) return res.status(422).json({ error: messageRefus(problemes, fr), code: 'publication_refusee', problemes });
   }
 
   const { data, error } = await auth.client
@@ -457,7 +514,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
 
   const { data: existante, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('id, is_preset, trigger_event, delay_seconds, modele_id, conditions, steps, actions')
+    .select('id, is_preset, is_active, trigger_event, delay_seconds, modele_id, conditions, steps, actions')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .maybeSingle();
@@ -484,18 +541,38 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     });
   }
 
+  const fr = langueDe(req) === 'fr';
   const probleme = verifierCoherence({
     trigger_event: patch.trigger_event ?? existante.trigger_event,
     delay_seconds: patch.delay_seconds ?? existante.delay_seconds,
     actions: patch.actions,
-  });
+  }, fr);
   if (probleme) return res.status(400).json({ error: probleme });
 
   // Publier par ce chemin passe par les mêmes vérifications que la route de
   // publication (M8), sur la règle telle qu'elle SERA après modification.
   if (patch.is_active === true) {
-    const problemes = problemesBloquants({ ...existante, ...patch });
-    if (problemes.length) return res.status(422).json({ error: messageRefus(problemes), code: 'publication_refusee', problemes });
+    const problemes = problemesBloquants({ ...existante, ...patch }, fr);
+    if (problemes.length) return res.status(422).json({ error: messageRefus(problemes, fr), code: 'publication_refusee', problemes });
+  }
+
+  /*
+   * UNE AUTOMATISATION PUBLIÉE NE SE CASSE PAS EN SILENCE (audit V2, A-03).
+   *
+   * Changer le déclencheur d'une règle publiée (« Facture envoyée » →
+   * « Nouveau prospect ») laissait « Envoyer la facture » sans facture : la
+   * règle restait publiée et ne faisait plus rien. On rejoue les contrôles
+   * de publication sur l'état FINAL dès que le parcours bouge, et on refuse
+   * ce qui AJOUTE un problème. Une règle publiée déjà cassée (d'avant la
+   * garde) reste corrigeable pas à pas ; la dépublier n'est jamais refusé.
+   */
+  const parcoursModifie = (['trigger_event', 'steps', 'actions', 'conditions'] as const).some((k) => k in patch);
+  if (existante.is_active && patch.is_active === undefined && parcoursModifie) {
+    const avant = new Set(problemesBloquants(existante, fr));
+    const nouveaux = problemesBloquants({ ...existante, ...patch }, fr).filter((p) => !avant.has(p));
+    if (nouveaux.length) {
+      return res.status(422).json({ error: messagePublieeCassee(nouveaux, fr), code: 'publiee_cassee', problemes: nouveaux });
+    }
   }
 
   const { data, error } = await auth.client
@@ -527,6 +604,109 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   return res.json(copies.length ? { ...data, copies } : data);
 });
 
+// ── Bibliothèque de modèles ─────────────────────────────────
+//
+// GET : le catalogue, global et en lecture seule — ouvrir la bibliothèque
+// n'écrit RIEN. POST : « Utiliser ce modèle » crée UNE automatisation, copie
+// profonde du modèle, en brouillon, dans l'entreprise de la SESSION. Aucune
+// autre règle n'est touchée (un seul INSERT, aucun UPDATE).
+
+router.get('/automations/templates', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  return res.json({ modeles: MODELES_AUTOMATISATION });
+});
+
+/**
+ * Double clic = une seule copie. La clé d'idempotence (en-tête
+ * `Idempotency-Key`, générée à l'ouverture de l'aperçu) est retenue 10 min
+ * par entreprise : le 2e appel reçoit la MÊME réponse que le 1er, même s'il
+ * arrive pendant que le 1er s'exécute encore.
+ */
+const utilisationsEnCours = new Map<string, { expire: number; resultat: Promise<{ status: number; body: unknown }> }>();
+const IDEMPOTENCE_MS = 10 * 60_000;
+
+router.post('/automations/templates/utiliser', validate(automationModeleUtiliserSchema), async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+  const { templateId } = req.body as { templateId: string };
+  const modele = trouverModele(templateId);
+  if (!modele) return res.status(404).json({ error: 'Modèle introuvable.' });
+
+  const cleBrute = String(req.header('idempotency-key') ?? '').slice(0, 100);
+  const cle = cleBrute ? `${auth.orgId}:${cleBrute}` : '';
+  const maintenant = Date.now();
+  for (const [k, v] of utilisationsEnCours) if (v.expire < maintenant) utilisationsEnCours.delete(k);
+  const deja = cle ? utilisationsEnCours.get(cle) : undefined;
+  if (deja) {
+    const r = await deja.resultat;
+    return res.status(r.status).json(r.body);
+  }
+
+  const travail = (async (): Promise<{ status: number; body: unknown }> => {
+    const [{ data: reglages }, { data: noms, error: nomsErr }] = await Promise.all([
+      auth.client.from('company_settings').select('default_language').eq('org_id', auth.orgId).maybeSingle(),
+      auth.client.from('automation_rules').select('name').eq('org_id', auth.orgId).is('deleted_at', null),
+    ]);
+    if (nomsErr) {
+      logger.error('[automation-templates] lecture des noms échouée', { message: nomsErr.message });
+      return { status: 500, body: { error: 'Impossible de créer l’automatisation.' } };
+    }
+    const en = reglages?.default_language === 'en';
+    const nom = nomDisponible(en ? modele.nom.en : modele.nom.fr, (noms ?? []).map((n) => String(n.name ?? '')));
+    let compteur = 0;
+    // Toujours un PARCOURS, modifiable étape par étape dans l'éditeur. Un
+    // modèle d'une seule vague (actions + délai) est projeté comme le fait
+    // la conversion de l'éditeur : l'attente en tête (« X avant le
+    // rendez-vous » pour un délai négatif), puis les actions dans l'ordre.
+    // Sans ça, la copie s'ouvrait en lecture seule (Rafba, 2026-09-30).
+    const source = modele.steps ?? projeterFormatOrigine({ actions: modele.actions, delay_seconds: modele.delai_secondes });
+    const steps = copierEtapes(source, () => `e${++compteur}`);
+
+    const { data, error } = await auth.client
+      .from('automation_rules')
+      .insert({
+        org_id: auth.orgId,
+        name: nom.slice(0, 120),
+        description: en ? modele.description.en : modele.description.fr,
+        trigger_event: modele.declencheur,
+        conditions: JSON.parse(JSON.stringify(modele.conditions)),
+        // Un parcours porte ses attentes dans ses étapes.
+        delay_seconds: 0,
+        actions: JSON.parse(JSON.stringify(modele.actions)),
+        steps,
+        settings: modele.settings ? JSON.parse(JSON.stringify(modele.settings)) : null,
+        // Brouillon, jamais activée d'office. Une automatisation À SOI : ni
+        // `is_preset` ni `preset_key` — le seeder ne la réécrira jamais.
+        is_active: false,
+        is_preset: false,
+        preset_key: null,
+      })
+      .select(COLONNES)
+      .single();
+
+    if (error) {
+      if (error.code === '42501') return { status: 403, body: { error: 'Votre rôle ne permet pas de créer une automatisation.' } };
+      logger.error('[automation-templates] création échouée', { message: error.message, code: error.code, templateId });
+      return { status: 500, body: { error: 'Impossible de créer l’automatisation.' } };
+    }
+    return { status: 201, body: data };
+  })();
+
+  if (cle) utilisationsEnCours.set(cle, { expire: maintenant + IDEMPOTENCE_MS, resultat: travail });
+  try {
+    const r = await travail;
+    // Un échec n'est pas retenu : réessayer doit pouvoir réussir.
+    if (cle && r.status >= 400) utilisationsEnCours.delete(cle);
+    return res.status(r.status).json(r.body);
+  } catch (e: unknown) {
+    if (cle) utilisationsEnCours.delete(cle);
+    logger.error('[automation-templates] création échouée', { message: e instanceof Error ? e.message : String(e), templateId });
+    return res.status(500).json({ error: 'Impossible de créer l’automatisation.' });
+  }
+});
+
 // ── Dupliquer ───────────────────────────────────────────────
 
 router.post('/automations/rules/:id/duplicate', async (req, res) => {
@@ -550,7 +730,8 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
     .from('automation_rules')
     .insert({
       org_id: auth.orgId,
-      name: `${source.name} (copie)`.slice(0, 120),
+      // Suffixe dans la langue de l'interface (audit V2, A-16).
+      name: `${source.name} ${langueDe(req) === 'fr' ? '(copie)' : '(copy)'}`.slice(0, 120),
       description: source.description ?? '',
       trigger_event: source.trigger_event,
       conditions: source.conditions ?? {},

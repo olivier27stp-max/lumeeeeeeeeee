@@ -19,6 +19,7 @@
  */
 
 import { getServiceClient } from './supabase';
+import { urlApplication } from './helpers';
 import { sendEmail, isMailerConfigured } from './mailer';
 import { emailFrom, supportEmail } from './config';
 import { rendreCourrielLume, echapper, montant, dateLisible, type LigneDetail } from './courriels/gabarit';
@@ -29,7 +30,7 @@ export interface CourrielPret { sujet: string; html: string }
 
 /** La page Forfait & facturation de l'app — la cible du seul bouton de chaque courriel. */
 function urlFacturation(): string {
-  return `${(process.env.FRONTEND_URL || 'http://localhost:5173').trim().replace(/\/$/, '')}/settings/billing`;
+  return `${urlApplication()}/settings/billing`;
 }
 
 function formatMoney(cents: number, currency: string): string {

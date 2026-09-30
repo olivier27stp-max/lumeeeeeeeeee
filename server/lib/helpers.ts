@@ -113,6 +113,28 @@ export function normalizeAddress(address: string | null | undefined) {
   return String(address || '').trim().replace(/\s+/g, ' ');
 }
 
+/** Le domaine public canonique de Lume — le repli de dernier recours, jamais localhost. */
+export const DOMAINE_PUBLIC_LUME = 'https://lumecrm.net';
+
+/**
+ * L'URL de l'APPLICATION (pages de l'abonné : facturation, forfait…).
+ *
+ * Remplace sept `process.env.FRONTEND_URL || 'http://localhost:5173'` :
+ * une variable manquante sur un serveur faisait partir des courriels avec
+ * des liens localhost (audit du 2026-09-29). Même ordre qu'avant
+ * (FRONTEND_URL d'abord, pour ne rien changer là où elle est posée), puis
+ * les autres noms, puis le domaine public.
+ */
+export function urlApplication(): string {
+  const configuree =
+    process.env.FRONTEND_URL ||
+    process.env.PUBLIC_URL ||
+    process.env.PUBLIC_BASE_URL ||
+    process.env.APP_URL ||
+    '';
+  return (configuree.trim() || DOMAINE_PUBLIC_LUME).replace(/\/$/, '');
+}
+
 export function resolvePublicBaseUrl(_req?: express.Request) {
   // PUBLIC_URL is the canonical name — Twilio provisioning registers its webhook URLs against it.
   // Fall back to legacy names for environments that haven't migrated yet.

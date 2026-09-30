@@ -48,29 +48,51 @@ describe('migration rentabilite_jobs', () => {
 });
 
 const rpc = vi.hoisted(() => vi.fn());
-vi.mock('../src/lib/supabase', () => ({ supabase: { rpc } }));
-vi.mock('../src/lib/orgApi', () => ({ getCurrentOrgIdOrThrow: async () => 'org-1' }));
+vi.mock('../src/lib/supabase', () => ({ supabase: { rpc, auth: { getSession: async () => ({ data: { session: { access_token: 'jeton' } } }) } } }));
+vi.mock('../src/lib/orgApi', () => ({ getCurrentOrgIdOrThrow: async () => 'org-1', getCurrentOrgId: async () => 'org-1' }));
 
-describe('client : fetchJobPnL et la fiche de job lisent la fonction en base', () => {
-  it('les totaux viennent des lignes de rentabilite_jobs', async () => {
-    rpc.mockResolvedValueOnce({ data: [
-      { job_id: 'a', job_number: '106', client_nom: 'Marie Tremblay', revenu_cents: 40000, heures: 14, main_oeuvre_cents: 32900, depenses_cents: 8000, profit_cents: -900, marge_pct: -2.3 },
-      { job_id: 'b', job_number: '101', client_nom: 'Isabelle Morin', revenu_cents: 24000, heures: 2, main_oeuvre_cents: 5000, depenses_cents: 1500, profit_cents: 17500, marge_pct: 72.9 },
-    ], error: null });
+// Depuis analyze_profitability, l'écran lit la route serveur (même calcul que Lumi), plus la fonction SQL.
+describe('client : fetchJobPnL et la fiche de job lisent l’action serveur', () => {
+  const reponse = (statut: number, corps: unknown) => ({ status: statut, ok: statut < 400, json: async () => corps });
+
+  it('les lignes et totaux viennent de GET /api/profitability', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(reponse(200, {
+      completude: 'partielle', marge_est_un_maximum: true, resume_fr: 'phrase', resume_en: 'sentence',
+      totaux: { revenus_cents: 64000, main_oeuvre_cents: 37900, commissions_cents: 0, depenses_cents: 9500, profit_cents: 16600, marge_pct: 25.9 },
+      groupes: [
+        { cle: 'a', numero: '106', client: 'Marie Tremblay', revenus_cents: 40000, heures: 14, main_oeuvre_cents: 32900, commissions_cents: 0, depenses_cents: 8000, profit_cents: -900, marge_pct: -2.3, completude: 'complete', marge_est_un_maximum: false, depenses_saisie_libre: true },
+        { cle: 'b', numero: '101', client: 'Isabelle Morin', revenus_cents: 24000, heures: 2, main_oeuvre_cents: 5000, commissions_cents: 0, depenses_cents: 1500, profit_cents: 17500, marge_pct: 72.9, completude: 'partielle', marge_est_un_maximum: true, depenses_saisie_libre: false },
+      ],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
     const { fetchJobPnL } = await import('../src/lib/profitabilityApi');
     const r = await fetchJobPnL({ from: '2026-09-01', to: '2026-09-30' });
-    expect(rpc).toHaveBeenCalledWith('rentabilite_jobs', { p_org: 'org-1', p_from: '2026-09-01', p_to: '2026-09-30' });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/^\/api\/profitability\?/);
+    expect(String(url)).toContain('date_from=2026-09-01');
+    expect(String(url)).toContain('date_to=2026-09-30');
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer jeton', 'x-org-id': 'org-1' });
+    expect(rpc).not.toHaveBeenCalled();
     expect(r.total_revenue_cents).toBe(64000);
-    expect(r.total_labour_cents).toBe(37900);
-    expect(r.total_expenses_cents).toBe(9500);
     expect(r.total_profit_cents).toBe(16600);
+    expect(r.margin_is_maximum).toBe(true);
     expect(r.rows.find((x) => x.job_number === '106')!.profit_cents).toBe(-900);
+    expect(r.rows.find((x) => x.job_number === '101')!.expenses_editable).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
+  it('carte des Statistiques : un refus REMONTE (plus de « aucun job » trompeur)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(reponse(403, { error: 'refus', code: 'permission' })));
+    const { fetchJobPnL, RentabiliteRefusee } = await import('../src/lib/profitabilityApi');
+    await expect(fetchJobPnL({ from: '2026-09-01', to: '2026-09-30' })).rejects.toBeInstanceOf(RentabiliteRefusee);
+    vi.unstubAllGlobals();
   });
 
   it('fiche de job sans la permission des marges → null (pas d’erreur affichée)', async () => {
-    rpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'Permission refusée' } });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(reponse(403, { error: 'refus', code: 'permission' })));
     const { fetchJobPnLForJob } = await import('../src/lib/profitabilityApi');
     expect(await fetchJobPnLForJob('a')).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it('la fiche de job n’affiche plus de main-d’œuvre ni de dépenses écrites en dur', () => {

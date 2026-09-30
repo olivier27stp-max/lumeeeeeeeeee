@@ -79,7 +79,7 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   compare_revenue:           { cle: 'financial.view_reports', capacite: 'la comparaison des revenus' },
   get_top_clients:           { cle: 'financial.view_reports', capacite: 'la valeur des clients' },
   get_churn_risk:            { cle: 'financial.view_reports', capacite: 'les clients à risque' },
-  get_job_profitability:     { cle: 'financial.view_reports', capacite: 'la rentabilité des jobs' },
+  analyze_profitability:     { cle: 'financial.view_margins', capacite: 'la rentabilité (marges et profits)' },
   get_top_services:          { cle: 'financial.view_reports', capacite: 'les services les plus rentables' },
   set_job_expenses:          { cle: 'financial.view_reports', capacite: "la saisie des dépenses d'un job" },
   // Catalogue / planification.
@@ -104,7 +104,7 @@ export const OUTILS_FINANCIERS = new Set([
   'send_invoice', 'create_quote', 'send_quote', 'list_quotes',
   'mark_invoice_paid', 'cancel_quote',
   'compare_revenue', 'get_top_clients', 'get_churn_risk',
-  'get_job_profitability', 'get_top_services',
+  'analyze_profitability', 'get_top_services',
   'build_report',
   ...OUTILS_FINANCIERS_DOMAINES,
 ]);

@@ -29,6 +29,7 @@ import {
 import { cn } from '../../lib/utils';
 import type { Etape } from '../../lib/sequenceTypes';
 import { trouverAction } from '../../lib/automationCatalogue';
+import { texteSansHtml } from '../../lib/automationTemplates';
 
 interface Props {
   /** Le déclencheur, affiché en tête — il n'est pas une étape. */
@@ -101,9 +102,12 @@ function titreEtape(etape: Etape, fr: boolean): string {
       // « Courriel de rappel » quand un parcours en contient trois.
       const surnom = etape.nom?.trim();
       if (surnom) return surnom;
+      if (etape.action?.type === 'log_activity') return fr ? 'Note dans l’historique' : 'History note';
       const modele = trouverAction(etape.action?.type ?? '');
       if (modele) return fr ? modele.fr : modele.en;
-      return 'Action';
+      // Une écriture interne du moteur (`log_activity`…), hors catalogue :
+      // « Action » ne disait rien (audit V2, A-15).
+      return fr ? 'Étape technique' : 'Technical step';
     }
     case 'attendre':
       return fr ? 'Attendre' : 'Wait';
@@ -131,7 +135,9 @@ function detailEtape(etape: Etape, fr: boolean): string {
     return `${Math.round(s / 60)} ${fr ? 'minute(s)' : 'minute(s)'}`;
   }
   if (etape.type === 'action') {
-    const texte = String(etape.action?.config?.body ?? etape.action?.config?.title ?? '');
+    if (etape.action?.type === 'log_activity') return fr ? 'Étape technique, automatique' : 'Technical step, automatic';
+    // Un courriel stocke du HTML : on résume son TEXTE, pas son balisage.
+    const texte = texteSansHtml(String(etape.action?.config?.body ?? etape.action?.config?.title ?? '')).replace(/\s+/g, ' ');
     return texte.length > 60 ? `${texte.slice(0, 60)}…` : texte;
   }
   if (etape.type === 'si') {

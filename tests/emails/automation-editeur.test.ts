@@ -92,7 +92,8 @@ describe('éditeur — ce que l’utilisateur voit et fait', () => {
 
   it('le bouton reste inerte tant que rien n’a changé', () => {
     expect(editeur).toContain('const modifie =');
-    expect(editeur).toContain('disabled={!modifie || enregistrement}');
+    // … ni quand le texte est vide (A-06, vague 4) : un texto vide partirait vide.
+    expect(editeur).toContain('disabled={!modifie || vide || enregistrement}');
   });
 
   it('un échec d’enregistrement est signalé, pas avalé', () => {

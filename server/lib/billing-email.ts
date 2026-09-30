@@ -8,6 +8,7 @@
  */
 
 import { getServiceClient } from './supabase';
+import { urlApplication } from './helpers';
 import { sendEmail, isMailerConfigured } from './mailer';
 import { renderPaymentReceiptEmail, sujetRecuAbonnement, type ReceiptTemplateData } from './email-templates/payment-receipt';
 import { montant, dateLisible } from './courriels/gabarit';
@@ -181,7 +182,7 @@ export async function resendPaymentReceipt(subscriptionId: string): Promise<{
   const email = bp?.billing_email || '';
   if (!email) return { sent: false, error: 'No billing email on file' };
 
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const frontendUrl = urlApplication();
 
   // Force re-send (bypass idempotency by not passing checkout session)
   const result = await sendPaymentReceipt({

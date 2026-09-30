@@ -186,7 +186,8 @@ describe('le ciel et les règles des maquettes', () => {
        puis `background:#ffffff` (devenu omniprésent quand chaque conteneur a
        reçu son fond). Le titre, lui, est ce que l'en-tête précède par
        définition. */
-    const enTete = h.slice(0, h.indexOf('<h1'));
+    // Le texte d'aperçu (caché, avant l'en-tête) n'est pas l'en-tête : on part du tableau de fond.
+    const enTete = h.slice(h.indexOf('class="lume-fond"'), h.indexOf('<h1'));
     expect(enTete).toContain('alt="Vision Lavage"');
     expect(enTete.split('Vision Lavage').length - 1).toBe(1);
   });
@@ -198,26 +199,29 @@ describe('le ciel et les règles des maquettes', () => {
   });
 });
 
-describe('pastille Lume au pied des courriels clients', () => {
+describe('marque blanche : un courriel client ne porte que la marque de l’entreprise', () => {
+  // Audit du 2026-09-29 : la pastille-mascotte Lume au pied est retirée.
   const courriel = () =>
     rendreCourrielClient({
       langue: 'fr',
       marque: { nom: 'Test', logoUrl: null, couleur: '#de7a1b' },
       titre: 'T', salutation: 'Bonjour,', intro: 'Texte.',
+      bouton: { texte: 'Voir', url: 'https://lumecrm.net/invoice/x' },
     });
 
-  it('affiche la mascotte cadrée sur le visage, pas le logo entier', () => {
-    const html = courriel();
-    expect(html).toContain('lume-mascotte-pastille.png');
-    // le logo complet est illisible en pastille : il reste aux courriels de Lume
-    expect(html).not.toContain('favicon-mascot-v2.png');
+  it('aucune image ni mention de Lume', () => {
+    const html = courriel().replace(/https:\/\/lumecrm\.net\/invoice\/x/g, '');
+    expect(html).not.toMatch(/lume-mascotte|favicon-mascot|logo-lume/i);
+    expect(html).not.toMatch(/\bLume\b/);
   });
+});
 
-  it('la rend ronde et à une taille lisible, dimensions déclarées pour Outlook', () => {
-    const html = courriel();
-    const img = html.match(/<img[^>]*lume-mascotte-pastille[^>]*>/)?.[0] ?? '';
-    expect(img).toContain('width="28"');
-    expect(img).toContain('height="28"');
-    expect(img).toContain('border-radius:50%');
+describe('texte d’aperçu (préheader)', () => {
+  it('dérivé du corps quand le courriel n’en fournit pas, sans la salutation', () => {
+    const html = rendreCourrielClient({
+      langue: 'fr', marque: { nom: 'Test', logoUrl: null, couleur: null },
+      corpsHtml: '<p>Bonjour Marie,</p><p>Votre rendez-vous est confirmé pour mardi 9 h.</p>',
+    });
+    expect(html).toMatch(/display:none[^>]*>Votre rendez-vous est confirmé pour mardi 9 h\./);
   });
 });

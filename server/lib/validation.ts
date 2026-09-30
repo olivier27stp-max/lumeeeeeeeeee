@@ -868,23 +868,32 @@ function valeurValide(champ: ChampAction, brut: unknown): string | null {
  * qui verifie ensuite que la cle appartient bien a CETTE action-la.
  */
 /**
- * Clés que le MOTEUR lit et que les préréglages portent, sans champ dans le
- * panneau de l'éditeur (audit V2, D-14 : 36 préréglages sur 38 étaient
- * refusés par la route — impossible de les réenregistrer depuis l'éditeur).
- * Acceptées pour CETTE action seulement ; toute autre clé reste refusée.
+ * Clés que le MOTEUR lit sans que l'éditeur les propose : `lien` (le lien
+ * d'une notification), `depuis_role`/`vers_role` (déplacer le deal entre deux
+ * étapes repérées par leur rôle), `description` (le détail d'une tâche). Les
+ * préréglages en portent — mesuré en prod le 2026-09-30 : 9, 9, 9 et 20
+ * règles. Sans elles, convertir un de ces parcours puis l'enregistrer était
+ * refusé (« Unrecognized key »), ou pire, les aurait amputées.
  */
-export const CLES_INTERNES_PAR_ACTION: Readonly<Record<string, readonly string[]>> = {
-  create_task: ['description'],           // ancien nom de `body`, lu en repli
-  create_notification: ['lien'],          // lien interne ouvert par la notification
+const CLES_LUES_PAR_LE_MOTEUR_PAR_ACTION: Record<string, string[]> = {
+  create_notification: ['lien'],
   move_deal_stage: ['depuis_role', 'vers_role'],
+  create_task: ['description'],
+};
+const CLES_LUES_PAR_LE_MOTEUR = Object.values(CLES_LUES_PAR_LE_MOTEUR_PAR_ACTION).flat();
+/**
+ * Actions exécutées par le moteur mais jamais proposées dans l'éditeur
+ * (audit V2, D-14) : `log_activity` vient des préréglages. Seules les clés
+ * listées ici sont admises pour elles ; toute autre clé reste refusée.
+ */
+const CLES_ACTIONS_INTERNES: Readonly<Record<string, readonly string[]>> = {
   log_activity: ['event_type', 'metadata'],
 };
-/** Actions exécutées par le moteur mais jamais proposées dans l'éditeur. */
-export const ACTIONS_INTERNES: readonly string[] = ['log_activity'];
+export const ACTIONS_INTERNES: readonly string[] = Object.keys(CLES_ACTIONS_INTERNES);
 
 const configAction = z.object(
   Object.fromEntries(
-    CLES_CHAMPS_ACTION.flatMap((cle) => [
+    [...new Set([...CLES_CHAMPS_ACTION, ...CLES_LUES_PAR_LE_MOTEUR])].flatMap((cle) => [
       [cle, z.string().trim().max(10000).optional()],
       /* La variante anglaise du meme champ.
          `champLocalise` (server/lib/actions/index.ts) lit `<champ>_en` quand
@@ -895,10 +904,6 @@ const configAction = z.object(
     ]),
   ) as Record<string, z.ZodOptional<z.ZodString>>,
 ).extend({
-  description: z.string().trim().max(10000).optional(),
-  lien: z.string().trim().max(2000).optional(),
-  depuis_role: z.string().trim().max(60).optional(),
-  vers_role: z.string().trim().max(60).optional(),
   event_type: z.string().trim().max(100).optional(),
   // Seule valeur non textuelle : les métadonnées d'un journal d'activité.
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -912,7 +917,7 @@ const actionAutomatisation = z
   })
   .superRefine((action, ctx) => {
     const modele = trouverAction(action.type);
-    const internes = new Set(CLES_INTERNES_PAR_ACTION[action.type] ?? []);
+    const internes = new Set(CLES_ACTIONS_INTERNES[action.type] ?? []);
     const config = action.config as Record<string, unknown>;
     if (!modele) {
       // Action interne : seules ses clés internes sont admises.
@@ -990,7 +995,10 @@ const actionAutomatisation = z
     // Un champ rempli qui n'appartient pas a cette action : refuse plutot
     // qu'ignore, sinon l'utilisateur croit avoir ecrit un objet de courriel
     // sur un texto et ne comprend pas pourquoi il disparait.
-    const attendus = new Set([...modele.champs.flatMap((c) => [c.cle, `${c.cle}_en`]), ...internes]);
+    const attendus = new Set([
+      ...modele.champs.flatMap((c) => [c.cle, `${c.cle}_en`]),
+      ...(CLES_LUES_PAR_LE_MOTEUR_PAR_ACTION[action.type] ?? []),
+    ]);
     for (const cle of Object.keys(config)) {
       if (!attendus.has(cle)) {
         ctx.addIssue({
@@ -1067,11 +1075,27 @@ const conditionsAutomatisation = z
  */
 const ID_ETAPE = z.string().trim().min(1).max(40).regex(/^[a-zA-Z0-9_-]+$/, 'Invalid step id.');
 
+/**
+ * `log_activity` : la note que le moteur écrit dans l'historique du client
+ * (« rappel envoyé »…). Hors catalogue — on ne la propose pas dans l'éditeur
+ * —, mais 123 règles réelles en portent une (2026-09-30). Sans elle ici, un
+ * parcours qui la contient était refusé : ces automatisations restaient en
+ * lecture seule, impossibles à convertir, donc à modifier (Rafba : « je ne
+ * suis pas capable de jouer avec les paramètres des autres bulles »).
+ */
+const actionJournal = z.object({
+  type: z.literal('log_activity'),
+  config: z.object({
+    event_type: z.string().trim().min(1).max(80),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  }).strict(),
+});
+
 const etapeSequence = z.discriminatedUnion('type', [
   z.object({
     id: ID_ETAPE,
     type: z.literal('action'),
-    action: actionAutomatisation,
+    action: z.union([actionJournal, actionAutomatisation]),
     suivant: ID_ETAPE.nullable().optional(),
     /*
      * Le nom que l'utilisateur donne a l'etape (le « Action Name » de
@@ -1293,6 +1317,14 @@ export const conversationAssignSchema = z.object({
   assigned_to: z.string().uuid().nullable(),
 });
 
+/**
+ * « Utiliser ce modèle » : SEULEMENT l'identifiant du modèle. L'entreprise
+ * vient de la session, jamais du corps de la requête.
+ */
+export const automationModeleUtiliserSchema = z.object({
+  templateId: z.string().min(1).max(80).regex(/^[a-z0-9_]+$/),
+}).strict();
+
 /** Copier une automatisation vers d'autres bureaux de l'entreprise. */
 export const automationCopieBureauxSchema = z.object({
   org_ids: z.array(z.string().uuid()).min(1).max(50),
@@ -1463,4 +1495,22 @@ export const publicationSchema = z.object({ actif: z.boolean() }).strict();
 export const publicationLotSchema = z.object({
   actif: z.boolean(),
   ids: z.array(z.string().uuid()).min(1).max(200),
+}).strict();
+
+/**
+ * Rentabilité (GET /api/profitability) : paramètres de requête, tous facultatifs.
+ * L'org ne vient JAMAIS d'ici : elle vient de la session.
+ */
+const jourIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date attendue au format AAAA-MM-JJ.');
+export const rentabiliteQuerySchema = z.object({
+  job_id: z.string().uuid().optional(),
+  technician_id: z.string().uuid().optional(),
+  rep_id: z.string().uuid().optional(),
+  client_id: z.string().uuid().optional(),
+  service_id: z.string().uuid().optional(),
+  date_from: jourIso.optional(),
+  date_to: jourIso.optional(),
+  group_by: z.enum(['job', 'technicien', 'rep', 'client', 'service', 'mois']).optional(),
+  sort: z.enum(['revenus_desc', 'profit_desc', 'profit_asc', 'marge_desc', 'marge_asc']).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
 }).strict();

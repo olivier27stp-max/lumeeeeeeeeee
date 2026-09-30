@@ -203,7 +203,7 @@ function parcoursRelanceDevis(): Etape[] {
         body_en: 'Hi [client_first_name], following up on your quote from [company_name]. We can talk it over or adjust it: just reply to this message.',
       } },
       courriel: { type: 'send_email', config: {
-        subject: '[company_name] — Votre soumission', subject_en: '[company_name] — Your quote',
+        subject: 'On revient vers vous pour votre soumission', subject_en: 'Getting back to you about your quote',
         body: '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Bonjour [client_first_name],</h2><p>On revient vers vous au sujet de votre soumission. Si un détail vous fait hésiter, on peut en discuter ou l’ajuster à votre goût.</p><p>Répondez simplement à ce courriel.</p><p>Au plaisir,<br/>[company_name]</p></div>',
         body_en: '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Hi [client_first_name],</h2><p>Following up on your quote. If anything gives you pause, we can talk it over or adjust it.</p><p>Just reply to this email.</p><p>Best,<br/>[company_name]</p></div>',
       } },
@@ -341,4 +341,5 @@ export const PACK_ACTIF: ReadonlySet<string> = new Set([
   'quote_opened_notify',
   'quote_opened_move_deal',
   'quote_sent_move_deal',
+  'quote_approved_move_deal',
 ]);

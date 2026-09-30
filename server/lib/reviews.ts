@@ -56,7 +56,10 @@ export const DEFAULT_REVIEW_SMS_BODY_FR =
   "Bonjour [client_first_name], merci d'avoir choisi [company_name] ! "
   + "Comment s'est passé notre service ? Notez-nous en 10 secondes : [survey_url]";
 
-export const DEFAULT_REVIEW_EMAIL_SUBJECT_FR = "[company_name] — Comment s'est passé notre service ?";
+/* L'objet ne répète pas le nom de l'entreprise : l'expéditeur l'affiche déjà
+   (audit des courriels du 2026-09-29 — et un nom vide donnait « — Comment… »). */
+export const DEFAULT_REVIEW_EMAIL_SUBJECT_FR = "Comment s'est passé notre service ?";
+export const DEFAULT_REVIEW_EMAIL_SUBJECT_EN = 'How did we do?';
 
 export const DEFAULT_REVIEW_EMAIL_BODY_FR =
   'Bonjour [client_first_name],\n\n'
@@ -64,6 +67,15 @@ export const DEFAULT_REVIEW_EMAIL_BODY_FR =
   + 'Notez votre expérience en 10 secondes :\n\n'
   + '[survey_url]\n\n'
   + "Merci d'avoir choisi [company_name] !";
+
+/* La version anglaise : une entreprise anglophone envoyait la demande d'avis
+   en français (aucun défaut EN n'existait). */
+export const DEFAULT_REVIEW_EMAIL_BODY_EN =
+  'Hi [client_first_name],\n\n'
+  + 'We just finished [job_name] and your opinion matters to us.\n\n'
+  + 'Rate your experience in 10 seconds:\n\n'
+  + '[survey_url]\n\n'
+  + 'Thank you for choosing [company_name]!';
 
 export const DEFAULT_SURVEY_QUESTION_FR = "Comment s'est passé notre service ?";
 export const DEFAULT_SURVEY_QUESTION_EN = 'How did we do?';
@@ -79,6 +91,7 @@ export const DEFAULT_THANK_YOU_MESSAGE_EN = 'Thank you for your honesty. A team 
 
 /** Libellé du bouton dans le courriel (le lien [survey_url] devient ce bouton). */
 export const REVIEW_EMAIL_BUTTON_LABEL_FR = 'Noter mon expérience';
+export const REVIEW_EMAIL_BUTTON_LABEL_EN = 'Rate my experience';
 
 export function isPositiveRating(rating: number): boolean {
   return Number.isFinite(rating) && rating >= POSITIVE_RATING_MIN;
@@ -163,9 +176,14 @@ function escapeHtml(s: string): string {
 export function reviewEmail(
   settings: ReviewSettingsLike | null | undefined,
   vars: Record<string, string>,
+  options: { langue?: 'fr' | 'en'; couleur?: string | null } = {},
 ): { subject: string; html: string; text: string } {
-  const subject = resolveReviewTemplate(customOr(settings?.review_email_subject, DEFAULT_REVIEW_EMAIL_SUBJECT_FR), vars).trim();
-  const bodyTemplate = customOr(settings?.review_email_body, DEFAULT_REVIEW_EMAIL_BODY_FR);
+  const en = options.langue === 'en';
+  const subject = resolveReviewTemplate(customOr(settings?.review_email_subject, en ? DEFAULT_REVIEW_EMAIL_SUBJECT_EN : DEFAULT_REVIEW_EMAIL_SUBJECT_FR), vars).trim();
+  const bodyTemplate = customOr(settings?.review_email_body, en ? DEFAULT_REVIEW_EMAIL_BODY_EN : DEFAULT_REVIEW_EMAIL_BODY_FR);
+  // Le bouton à la couleur de l'ENTREPRISE (il était noir codé en dur) ;
+  // une valeur illisible retombe sur le noir.
+  const couleur = /^#[0-9a-f]{6}$/i.test(String(options.couleur ?? '')) ? String(options.couleur) : '#171717';
   const url = vars.survey_url || '';
   const placeholder = '[[SURVEY_BUTTON]]';
 
@@ -174,7 +192,10 @@ export function reviewEmail(
   const hasButton = resolved.includes(placeholder);
   const text = resolved.split(placeholder).join(url) + (hasButton ? '' : `\n\n${url}`);
 
-  const button = `<p style="text-align:center;margin:30px 0;"><a href="${escapeHtml(url)}" style="background:#171717;color:#ffffff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">${REVIEW_EMAIL_BUTTON_LABEL_FR}</a></p>`;
+  // Le bouton + le lien de secours en texte (« Le bouton ne fonctionne pas ? »),
+  // comme tous les autres courriels.
+  const button = `<p style="text-align:center;margin:30px 0 8px;"><a href="${escapeHtml(url)}" style="background:${couleur};color:#ffffff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">${en ? REVIEW_EMAIL_BUTTON_LABEL_EN : REVIEW_EMAIL_BUTTON_LABEL_FR}</a></p>`
+    + `<p style="text-align:center;margin:0 0 24px;font-size:12px;color:#6b7280;">${en ? 'Button not working?' : 'Le bouton ne fonctionne pas ?'} <a href="${escapeHtml(url)}" style="color:#6b7280;">${en ? 'Open the link' : 'Ouvrir le lien'}</a></p>`;
 
   const paragraphs = resolved
     .split(/\n{2,}/)

@@ -32,6 +32,13 @@ export default function AutomationsApercu() {
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [echecs, setEchecs] = useState<AutomationFailure[]>([]);
   const [chargement, setChargement] = useState(true);
+  /*
+   * Une lecture ÉCHOUÉE n'est pas une lecture vide (audit V2, A-08) :
+   * `allSettled` avalait l'échec, et des journaux illisibles affichaient
+   * « Aucune erreur — toutes les automatisations tournent normalement ».
+   */
+  const [reglesIllisibles, setReglesIllisibles] = useState(false);
+  const [echecsIllisibles, setEchecsIllisibles] = useState(false);
   /** Les vrais déclenchements, lus dans les journaux d'exécution. */
   const [activite, setActivite] = useState<{ total: number; parSemaine: ActiviteSemaine[] }>(
     { total: 0, parSemaine: [] },
@@ -43,14 +50,22 @@ export default function AutomationsApercu() {
       .then(([r, e, a]) => {
         if (!vivant) return;
         if (r.status === 'fulfilled') setRules(r.value);
+        else { setReglesIllisibles(true); console.error('[apercu] règles illisibles', r.reason); }
         if (e.status === 'fulfilled') setEchecs(e.value);
+        else { setEchecsIllisibles(true); console.error('[apercu] journaux illisibles', e.reason); }
         if (a.status === 'fulfilled') setActivite(a.value);
+        else console.error('[apercu] activité illisible', a.reason);
       })
       .finally(() => { if (vivant) setChargement(false); });
     return () => { vivant = false; };
   }, []);
 
-  const publiees = rules.filter((r) => r.is_active).length;
+  /*
+   * La corbeille ne compte pas (audit V2, A-14) : la tuile affichait 142
+   * pour 141 automatisations vivantes et 1 supprimée.
+   */
+  const vivantes = rules.filter((r) => !r.deleted_at);
+  const publiees = vivantes.filter((r) => r.is_active).length;
 
   /**
    * Les 7 dernières semaines, du lundi au dimanche.
@@ -107,8 +122,8 @@ export default function AutomationsApercu() {
             {/* Les trois tuiles */}
             <div className="grid gap-3 sm:grid-cols-3">
               {[
-                { l: fr ? 'Total des automatisations' : 'Total workflows', v: rules.length },
-                { l: fr ? 'Automatisations publiées' : 'Published workflows', v: publiees },
+                { l: fr ? 'Total des automatisations' : 'Total workflows', v: reglesIllisibles ? '—' : vivantes.length },
+                { l: fr ? 'Automatisations publiées' : 'Published workflows', v: reglesIllisibles ? '—' : publiees },
                 { l: fr ? 'Total des déclenchements' : 'Total enrollments', v: activite.total },
               ].map((t) => (
                 <div key={t.l} className="section-card px-4 py-3.5">
@@ -182,7 +197,16 @@ export default function AutomationsApercu() {
               <h2 className="text-[14px] font-semibold text-text-primary">
                 {fr ? 'Résumé des erreurs' : 'Error review summary'}
               </h2>
-              {echecs.length === 0 ? (
+              {echecsIllisibles ? (
+                <div className="mt-3 flex items-center gap-2.5 text-[13px] text-warning">
+                  <AlertTriangle size={16} aria-hidden="true" />
+                  <span>
+                    {fr
+                      ? 'Les erreurs n’ont pas pu être lues pour le moment. Réessayez dans un instant.'
+                      : 'Errors could not be read right now. Try again in a moment.'}
+                  </span>
+                </div>
+              ) : echecs.length === 0 ? (
                 <div className="mt-3 flex items-center gap-2.5 text-[13px] text-text-secondary">
                   <CheckCircle size={16} className="text-success" aria-hidden="true" />
                   <span>
@@ -201,7 +225,7 @@ export default function AutomationsApercu() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => navigate('/automations')}
+                    onClick={() => navigate('/automations?onglet=verifier')}
                     className="glass-button text-[12px]"
                   >
                     {fr ? 'Voir les automatisations à vérifier' : 'See workflows needing review'}

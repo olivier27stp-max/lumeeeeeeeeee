@@ -283,8 +283,8 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
   },
   {
     cle: 'client.replied', fr: 'Le client répond', en: 'Client replies',
-    aide_fr: 'Quand un client répond par texto, ou par courriel dans une boîte connectée à Lume.',
-    aide_en: 'When a client texts back, or replies by email to a mailbox connected to Lume.',
+    aide_fr: 'Quand un client répond par texto à un message de l’entreprise.',
+    aide_en: 'When a client texts back after a message from the company.',
     famille: 'client', entite: 'lead',
   },
   {
@@ -773,18 +773,15 @@ export const ACTIONS: ActionCatalogue[] = [
   },
   {
     cle: 'request_review', fr: 'Demander un avis', en: 'Ask for a review',
-    aide_fr: 'Envoie au client le lien pour laisser un avis.',
-    aide_en: 'Sends the client a link to leave a review.',
+    aide_fr: 'Envoie au client le sondage d’avis. Les textes (texto et courriel) et le lien Google ou Facebook se règlent dans Paramètres › Avis clients.',
+    aide_en: 'Sends the client the review survey. The texts (text and email) and the Google or Facebook link are set in Settings › Customer reviews.',
     famille: 'communication', vers_client: true,
-    champs: [
-      {
-        cle: 'body', fr: 'Texte du message', en: 'Message text', obligatoire: false, type: 'zone', max: 1600,
-        aide_fr: 'Vide = le texte de Réglages → Avis clients. Le lien vers l’avis est ajouté automatiquement.',
-        aide_en: 'Empty = the text from Settings → Customer reviews. The review link is added automatically.',
-        defaut_fr: 'Bonjour [client_name], merci d’avoir fait affaire avec [company_name] ! Laisseriez-vous un avis ?',
-        defaut_en: 'Hi [client_name], thanks for choosing [company_name]! Would you leave a review?',
-      },
-    ],
+    // Aucun champ : le moteur (executeRequestReview) ignore la config de
+    // l'action et lit les textes des réglages d'avis. L'ancien champ « Texte
+    // du message » était obligatoire et sans effet (2026-09-30) — il bloquait
+    // aussi la conversion du préréglage google_review. 0 étape réelle n'en
+    // portait un (vérifié prod et staging).
+    champs: [],
   },
   {
     cle: 'envoyer_slack', fr: 'Envoyer dans Slack', en: 'Send to Slack',
@@ -974,9 +971,10 @@ export const ACTIONS: ActionCatalogue[] = [
           { cle: 'etape', fr: 'Une étape précise', en: 'A specific stage' },
           { cle: 'role_envoyee', fr: 'L’étape « Soumission envoyée »', en: 'The “Quote sent” stage' },
           { cle: 'role', fr: 'L’étape « Soumission ouverte » (depuis « Soumission envoyée »)', en: 'The “Quote opened” stage (from “Quote sent”)' },
+          { cle: 'gagne', fr: 'L’étape « Gagné »', en: 'The “Won” stage' },
         ],
-        aide_fr: 'Les étapes « Soumission envoyée » et « Soumission ouverte » suivent l’étape même si vous la renommez, et ne font jamais reculer une opportunité déjà plus loin.',
-        aide_en: 'The “Quote sent” and “Quote opened” options follow the stage even if renamed, and never move a deal backwards.',
+        aide_fr: 'Les étapes « Soumission envoyée », « Soumission ouverte » et « Gagné » suivent l’étape même si vous la renommez, et ne font jamais reculer une opportunité déjà plus loin (une opportunité gagnée ou perdue ne bouge pas).',
+        aide_en: 'The “Quote sent”, “Quote opened” and “Won” options follow the stage even if renamed, and never move a deal backwards (a won or lost deal does not move).',
       },
       {
         cle: 'stage_id', fr: 'L’étape visée', en: 'Target stage', obligatoire: true, type: 'texte', max: 40,
@@ -1398,6 +1396,9 @@ export function problemesAvantPublication(regle: {
     rang?: number,
   ) => {
     const ou = etapeId ? '' : fr ? ` (action ${(rang ?? 0) + 1})` : ` (action ${(rang ?? 0) + 1})`;
+    // La note dans l'historique (`log_activity`) : technique, hors
+    // catalogue, acceptée par le serveur — rien à vérifier.
+    if (action?.type === 'log_activity') return;
     const modele = action?.type ? trouverAction(action.type) : undefined;
     if (!modele) {
       dire(

@@ -251,6 +251,8 @@ export default function PanneauEtape({
   };
 
   const modele = brouillon.type === 'action' ? trouverAction(brouillon.action.type) : undefined;
+  /** L'étape technique « note dans l'historique » (`log_activity`) : rien à régler. */
+  const journal = brouillon.type === 'action' && brouillon.action.type === 'log_activity';
 
   /** Ce qui empêche d'enregistrer, dit avant de cliquer. */
   const problemes = useMemo(() => {
@@ -320,6 +322,7 @@ export default function PanneauEtape({
 
   const titre = (() => {
     if (brouillon.type === 'action') {
+      if (journal) return fr ? 'Note dans l’historique' : 'History note';
       return brouillon.nom?.trim() || (modele ? (fr ? modele.fr : modele.en) : 'Action');
     }
     if (brouillon.type === 'attendre') return fr ? 'Attendre' : 'Wait';
@@ -426,7 +429,14 @@ export default function PanneauEtape({
         ) : (
           <div className="space-y-4">
             {/* ── Étape « action » ────────────────────────────── */}
-            {brouillon.type === 'action' && (
+            {journal && (
+              <p className="rounded-lg bg-surface-secondary p-3 text-[13px] text-text-secondary">
+                {fr
+                  ? 'Étape technique : Lume inscrit ce moment dans l’historique du client. Il n’y a rien à régler ; vous pouvez la supprimer si vous n’en voulez pas.'
+                  : 'Technical step: Lume records this moment in the client’s history. Nothing to set; you can delete it if you don’t want it.'}
+              </p>
+            )}
+            {brouillon.type === 'action' && !journal && (
               <>
                 {/* Nom de l'action — le « Action Name » de GHL. */}
                 <div>

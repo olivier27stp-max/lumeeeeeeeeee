@@ -14,8 +14,11 @@
 
 import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
+import { interfaceEnFrancais } from './champs/messages';
+import { appelServeur } from './appelServeur';
 import type { AutomationRule } from './automationRulesApi';
 import type { DeclencheurCatalogue, ActionCatalogue } from './automationCatalogue';
+import type { ModeleAutomatisation } from './automationTemplates';
 
 export interface ActionAutomatisation {
   type: string;
@@ -67,6 +70,9 @@ async function entetes(): Promise<HeadersInit> {
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
+    // La langue de l'INTERFACE : le serveur répond dans cette langue
+    // (server/lib/automations-langue.ts — audit V2, A-09).
+    'Accept-Language': interfaceEnFrancais() ? 'fr' : 'en',
     ...(orgId ? { 'x-org-id': orgId } : {}),
   };
 }
@@ -93,13 +99,29 @@ export async function chargerAutomatisations(): Promise<{
   rules: AutomationRule[];
   catalogue: CatalogueAutomatisations;
 }> {
-  const reponse = await fetch('/api/automations/rules', { headers: await entetes() });
+  const reponse = await appelServeur('/api/automations/rules', { headers: await entetes() });
   if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de charger les automatisations.');
   return reponse.json();
 }
 
+/**
+ * Ce que l'éditeur affiche : SA règle, le catalogue, et les autres
+ * automatisations publiées (id, nom) — sans télécharger toutes les règles
+ * (PERF-2). `ruleId` null = une nouvelle automatisation.
+ */
+export async function chargerEditeur(ruleId: string | null): Promise<{
+  rule: AutomationRule | null;
+  catalogue: CatalogueAutomatisations;
+  autres: Array<{ id: string; name: string }>;
+}> {
+  const url = ruleId ? `/api/automations/editeur?rule_id=${encodeURIComponent(ruleId)}` : '/api/automations/editeur';
+  const reponse = await appelServeur(url, { headers: await entetes() });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de charger cette automatisation.');
+  return reponse.json();
+}
+
 export async function creerAutomatisation(brouillon: BrouillonAutomatisation): Promise<AutomationRule> {
-  const reponse = await fetch('/api/automations/rules', {
+  const reponse = await appelServeur('/api/automations/rules', {
     method: 'POST',
     headers: await entetes(),
     body: JSON.stringify(brouillon),
@@ -112,7 +134,7 @@ export async function modifierAutomatisation(
   id: string,
   patch: Partial<BrouillonAutomatisation>,
 ): Promise<AutomationRule> {
-  const reponse = await fetch(`/api/automations/rules/${id}`, {
+  const reponse = await appelServeur(`/api/automations/rules/${id}`, {
     method: 'PATCH',
     headers: await entetes(),
     body: JSON.stringify(patch),
@@ -127,7 +149,7 @@ export async function modifierAutomatisation(
  * (audit M8). Plus aucune écriture directe du statut depuis le navigateur.
  */
 export async function changerPublication(id: string, actif: boolean): Promise<void> {
-  const reponse = await fetch(`/api/automations/rules/${id}/publication`, {
+  const reponse = await appelServeur(`/api/automations/rules/${id}/publication`, {
     method: 'POST',
     headers: await entetes(),
     body: JSON.stringify({ actif }),
@@ -143,7 +165,7 @@ export interface ResultatPublicationLot {
 
 /** Le même contrôle, pour plusieurs automatisations d'un coup (barre de lot). */
 export async function changerPublicationEnLot(ids: string[], actif: boolean): Promise<ResultatPublicationLot[]> {
-  const reponse = await fetch('/api/automations/rules/publication', {
+  const reponse = await appelServeur('/api/automations/rules/publication', {
     method: 'POST',
     headers: await entetes(),
     body: JSON.stringify({ ids, actif }),
@@ -183,17 +205,41 @@ export async function chargerStatistiques(ruleId?: string | null): Promise<{
   texto_configure?: boolean | null;
 }> {
   const url = ruleId ? `/api/automations/rules/stats?rule_id=${encodeURIComponent(ruleId)}` : '/api/automations/rules/stats';
-  const reponse = await fetch(url, { headers: await entetes() });
+  const reponse = await appelServeur(url, { headers: await entetes() });
   if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de lire les statistiques.');
   return reponse.json();
 }
 
 export async function dupliquerAutomatisation(id: string): Promise<AutomationRule> {
-  const reponse = await fetch(`/api/automations/rules/${id}/duplicate`, {
+  const reponse = await appelServeur(`/api/automations/rules/${id}/duplicate`, {
     method: 'POST',
     headers: await entetes(),
   });
   if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de dupliquer l\'automatisation.');
+  return reponse.json();
+}
+
+// ─── Bibliothèque de modèles ─────────────────────────────────────────
+/** Le catalogue global (lecture seule) : ouvrir la bibliothèque n'écrit rien. */
+export async function fetchModelesAutomatisation(): Promise<ModeleAutomatisation[]> {
+  const reponse = await fetch('/api/automations/templates', { headers: await entetes() });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de charger les modèles.');
+  const corps = (await reponse.json()) as { modeles: ModeleAutomatisation[] };
+  return corps.modeles;
+}
+
+/**
+ * « Utiliser ce modèle » : crée UNE automatisation en brouillon. Seul
+ * l'identifiant du modèle part ; l'entreprise est celle de la session. La clé
+ * d'idempotence fait qu'un double clic ne crée qu'une copie.
+ */
+export async function utiliserModele(templateId: string, cleIdempotence: string): Promise<AutomationRule> {
+  const reponse = await fetch('/api/automations/templates/utiliser', {
+    method: 'POST',
+    headers: { ...(await entetes()), 'Idempotency-Key': cleIdempotence },
+    body: JSON.stringify({ templateId }),
+  });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de créer l’automatisation.');
   return reponse.json();
 }
 
@@ -211,14 +257,14 @@ export interface ResultatCopie {
 
 /** Bureaux de l'entreprise (hors bureau actif) où l'on peut modifier les automatisations. */
 export async function chargerBureauxCibles(): Promise<BureauCible[]> {
-  const reponse = await fetch('/api/automations/bureaux-cibles', { headers: await entetes() });
+  const reponse = await appelServeur('/api/automations/bureaux-cibles', { headers: await entetes() });
   if (!reponse.ok) throw await erreurDe(reponse, 'Impossible de lister vos bureaux.');
   return (await reponse.json()).offices;
 }
 
 /** `lier` : les copies suivent cette automatisation (défaut). */
 export async function copierVersBureaux(id: string, orgIds: string[], lier = true): Promise<ResultatCopie[]> {
-  const reponse = await fetch(`/api/automations/rules/${id}/copier-bureaux`, {
+  const reponse = await appelServeur(`/api/automations/rules/${id}/copier-bureaux`, {
     method: 'POST',
     headers: await entetes(),
     body: JSON.stringify({ org_ids: orgIds, lier }),
@@ -228,7 +274,7 @@ export async function copierVersBureaux(id: string, orgIds: string[], lier = tru
 }
 
 export async function supprimerAutomatisation(id: string): Promise<void> {
-  const reponse = await fetch(`/api/automations/rules/${id}`, {
+  const reponse = await appelServeur(`/api/automations/rules/${id}`, {
     method: 'DELETE',
     headers: await entetes(),
   });
@@ -320,7 +366,7 @@ export async function genererParcoursAvecLumi(
     ruleId?: string | null;
   },
 ): Promise<ParcoursPropose> {
-  const reponse = await fetch('/api/automations/rules/generer', {
+  const reponse = await appelServeur('/api/automations/rules/generer', {
     method: 'POST',
     headers: await entetes(),
     body: JSON.stringify({
@@ -399,13 +445,13 @@ export interface DossierAutomatisation {
  * que personne ne sait lire).
  */
 export async function chargerDossiers(): Promise<DossierAutomatisation[]> {
-  const r = await fetch('/api/automations/folders', { headers: await entetes() });
+  const r = await appelServeur('/api/automations/folders', { headers: await entetes() });
   if (!r.ok) throw await erreurDe(r, 'Impossible de lire les dossiers.');
   return r.json();
 }
 
 export async function creerDossier(name: string): Promise<DossierAutomatisation> {
-  const r = await fetch('/api/automations/folders', {
+  const r = await appelServeur('/api/automations/folders', {
     method: 'POST', headers: await entetes(), body: JSON.stringify({ name }),
   });
   if (!r.ok) throw await erreurDe(r, 'Impossible de créer le dossier.');
@@ -413,7 +459,7 @@ export async function creerDossier(name: string): Promise<DossierAutomatisation>
 }
 
 export async function renommerDossier(id: string, name: string): Promise<DossierAutomatisation> {
-  const r = await fetch(`/api/automations/folders/${id}`, {
+  const r = await appelServeur(`/api/automations/folders/${id}`, {
     method: 'PATCH', headers: await entetes(), body: JSON.stringify({ name }),
   });
   if (!r.ok) throw await erreurDe(r, 'Impossible de renommer le dossier.');
@@ -422,7 +468,7 @@ export async function renommerDossier(id: string, name: string): Promise<Dossier
 
 /** Supprime le dossier — ses automatisations reviennent à la racine. */
 export async function supprimerDossier(id: string): Promise<void> {
-  const r = await fetch(`/api/automations/folders/${id}`, {
+  const r = await appelServeur(`/api/automations/folders/${id}`, {
     method: 'DELETE', headers: await entetes(),
   });
   if (!r.ok) throw await erreurDe(r, 'Impossible de supprimer le dossier.');
@@ -450,7 +496,7 @@ export interface ApercuAutomatisation {
  * un éditeur.
  */
 export async function apercuAutomatisation(id: string): Promise<ApercuAutomatisation> {
-  const r = await fetch(`/api/automations/rules/${id}/apercu`, {
+  const r = await appelServeur(`/api/automations/rules/${id}/apercu`, {
     method: 'POST', headers: await entetes(),
   });
   if (!r.ok) throw await erreurDe(r, "Impossible de préparer l'aperçu.");
@@ -464,7 +510,7 @@ export async function apercuAutomatisation(id: string): Promise<ApercuAutomatisa
  * relancer des envois à l'insu de qui restaure.
  */
 export async function restaurerAutomatisation(id: string): Promise<AutomationRule> {
-  const r = await fetch(`/api/automations/rules/${id}/restaurer`, {
+  const r = await appelServeur(`/api/automations/rules/${id}/restaurer`, {
     method: 'POST', headers: await entetes(),
   });
   if (!r.ok) throw await erreurDe(r, "Impossible de restaurer l'automatisation.");

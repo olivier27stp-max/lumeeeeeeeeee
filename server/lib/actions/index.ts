@@ -503,6 +503,18 @@ export type ActionType =
 // ── Template variable resolution ─────────────────────────────
 
 /** Échappe une valeur insérée dans du HTML. */
+/**
+ * Une variable de nom vide laissait « Bonjour , » ou « Paiement reçu — merci ! »
+ * (espace orpheline avant la ponctuation). On recolle la ponctuation.
+ */
+export function sansPrenomVide(texte: string): string {
+  return texte
+    .replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s+([,!.?])/g, '$1$2')
+    // Un nom qui finit déjà par un point (« Plomberie Tremblay inc. ») suivi
+    // du point de la phrase donnait « inc.. ». Les points de suspension restent.
+    .replace(/([A-Za-zÀ-ÿ])\.\.(?!\.)/g, '$1.');
+}
+
 export function echapperHtml(v: string): string {
   return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
@@ -676,7 +688,13 @@ export async function resolveEntityVariables(
       .format(Number(cents ?? 0) / 100);
 
   if (company) {
-    vars.company_name = company.company_name || '';
+    vars.company_name = String(company.company_name ?? '').trim();
+    // Nom vide dans les réglages : celui de l'organisation. Sinon l'objet
+    // « [company_name] — Paiement reçu » partait en « — Paiement reçu ».
+    if (!vars.company_name) {
+      const { data: org } = await supabase.from('orgs').select('name').eq('id', orgId).maybeSingle();
+      vars.company_name = String((org as { name?: string } | null)?.name ?? '').trim();
+    }
     vars.company_phone = company.phone || '';
     vars.google_review_url = company.google_review_url || '';
     vars.facebook_review_url = company.facebook_review_url || '';
@@ -1092,8 +1110,9 @@ export async function executeSendEmail(
   if (!to) return saute('Aucune adresse courriel pour ce client', 'sans_courriel');
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'subject', ctx.langue), champLocalise(config, 'body', ctx.langue));
-  const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
-  const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars, { html: true });
+  // Prénom manquant : « Bonjour , » / « merci ! » deviennent « Bonjour, » / « merci! ».
+  const subject = sansPrenomVide(resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars));
+  const body = sansPrenomVide(resolveTemplate(champLocalise(config, 'body', ctx.langue), vars, { html: true }));
 
   try {
     const { sendEmail, isMailerConfigured, adresseInjoignable } = await import('../mailer');
@@ -1738,14 +1757,14 @@ export async function executeUpdateStatus(
 // Google/Facebook, 1-3 → commentaires internes) se joue sur /survey/:token.
 
 export async function executeRequestReview(
-  config: Record<string, any>,
+  _config: Record<string, any>,
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
   // 1. Réglages « Avis clients » : au moins une plateforme + interrupteur actif
   const { data: cs } = await ctx.supabase
     .from('company_settings')
-    .select('review_enabled, google_review_url, facebook_review_url, review_sms_body, review_email_subject, review_email_body')
+    .select('review_enabled, google_review_url, facebook_review_url, review_sms_body, review_email_subject, review_email_body, brand_color')
     .eq('org_id', ctx.orgId)
     .limit(1)
     .maybeSingle();
@@ -1841,18 +1860,9 @@ export async function executeRequestReview(
     review_link: surveyUrl,
   };
 
-  /*
-   * Le texte écrit DANS l'action passe avant celui des réglages. L'éditeur
-   * le demandait (champ obligatoire) et le moteur l'ignorait : ce que
-   * l'entreprise tapait ne partait jamais (audit V2, 2026-09-30). Vide = le
-   * texte de Réglages → Avis clients, comme avant.
-   */
-  const texteAction = champLocalise(config ?? {}, 'body', ctx.langue).trim();
-  const reglagesAvis = texteAction ? { ...cs, review_sms_body: texteAction, review_email_body: texteAction } : cs;
+  let { subject, html: body } = reviewEmail(cs, messageVars, { langue: ctx.langue, couleur: (cs as { brand_color?: string | null } | null)?.brand_color ?? null });
 
-  let { subject, html: body } = reviewEmail(reglagesAvis, messageVars);
-
-  if (!String(reglagesAvis?.review_email_body || '').trim()) {
+  if (!String(cs?.review_email_body || '').trim()) {
     const { data: emailTemplate } = await ctx.supabase
       .from('email_templates')
       .select('subject, body')
@@ -1891,7 +1901,7 @@ export async function executeRequestReview(
     ? { success: false, error: 'Client has no phone number.' }
     : await depassePlafondFrequence(ctxPlafond, 'sms', vars.client_phone)
       ? auPlafond('sms', vars.client_phone)
-      : await executeSendSms({ body: reviewSmsBody(reglagesAvis, messageVars) }, vars, ctx);
+      : await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx);
 
   // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
   const sent = estEnvoye(emailResult) || estEnvoye(smsResult);
@@ -2068,7 +2078,10 @@ export async function executeMoveDealStage(
   if (ctx.entityType !== 'deal' && ctx.entityType !== 'quote') {
     return { success: false, error: `move_deal_stage s'applique à un deal ou à une soumission (reçu : ${ctx.entityType}).` };
   }
-  if (!config?.stage_id && !config?.vers_role) {
+  // « Vers : l'étape Gagné » (devis accepté). Pas de rôle système : c'est
+  // l'étape de type `won` du pipeline du deal, résolue plus bas.
+  const versGagne = config?.cible === 'gagne';
+  if (!config?.stage_id && !config?.vers_role && !versGagne) {
     return { success: false, error: 'move_deal_stage : stage_id (ou vers_role) manquant.' };
   }
 
@@ -2089,6 +2102,22 @@ export async function executeMoveDealStage(
     deal = data as typeof deal;
   }
   if (!deal) return { success: false, error: 'Deal introuvable dans cette organisation.' };
+
+  if (versGagne) {
+    // Seulement depuis une étape OUVERTE : un deal déjà gagné ne bouge pas,
+    // un deal perdu ne se rouvre pas tout seul parce qu'un vieux devis
+    // change de statut.
+    const { data: etapes } = await ctx.supabase
+      .from('pipeline_stages').select('id, kind, position')
+      .eq('pipeline_id', deal.pipeline_id).eq('org_id', ctx.orgId).is('archived_at', null);
+    const etapeActuelle = deal.stage_id;
+    const actuelle = (etapes ?? []).find((e) => e.id === etapeActuelle);
+    const gagnee = (etapes ?? []).filter((e) => e.kind === 'won')
+      .sort((a, b) => Number(a.position) - Number(b.position))[0];
+    if (!gagnee) return { success: true, data: { pas_d_etape_cible: true } };
+    if (!actuelle || actuelle.kind !== 'open') return { success: true, data: { deja_ailleurs: true } };
+    config = { ...config, stage_id: gagnee.id as string };
+  }
 
   // Étapes repérées par RÔLE, dans le pipeline DU DEAL : l'entreprise peut
   // les renommer ou les réordonner, la règle suit.
@@ -2158,7 +2187,9 @@ export async function executeMoveDealStage(
   // d'écrire la ligne ; on la complète.
   const motif = config.cible === 'role'
     ? 'Déplacée automatiquement — le client a ouvert la soumission'
-    : 'Déplacée automatiquement par une automatisation';
+    : versGagne
+      ? 'Déplacée automatiquement — le client a accepté la soumission'
+      : 'Déplacée automatiquement par une automatisation';
   const { data: derniere } = await ctx.supabase
     .from('deal_stage_history').select('id')
     .eq('deal_id', deal.id).eq('to_stage_id', cible)
@@ -2752,17 +2783,28 @@ async function envoyerDocument(
     return { success: false, error: 'Aucun lien public pour ce document.' };
   }
 
-  const numero = type === 'invoice' ? vars.invoice_number : vars.quote_number;
-  const objet = type === 'invoice'
-    ? `Facture ${numero || ''}`.trim()
-    : `Soumission ${numero || ''}`.trim();
+  /* Dans la langue de l'ENTREPRISE, en HTML, sans lien en clair.
+
+     Le texte partait en français codé en dur (même pour une entreprise
+     anglophone), en texte brut dont les sauts de ligne disparaissaient dans
+     le gabarit (tout sur une ligne), et avec l'URL écrite en clair EN PLUS du
+     bouton que `boutonPourEntite` pose déjà pour une facture ou une
+     soumission. */
+  const en = ctx.langue === 'en';
+  const numero = (type === 'invoice' ? vars.invoice_number : vars.quote_number) || '';
+  const nom = type === 'invoice' ? (en ? 'Invoice' : 'Facture') : (en ? 'Quote' : 'Soumission');
+  const objet = `${nom} ${numero}`.trim();
 
   const mot = (config.body || '').trim();
+  const paragraphe = (t: string) => `<p>${echapperHtml(t).replace(/\n/g, '<br/>')}</p>`;
   const corps = mot
-    ? `${mot}\n\n${lien}`
-    : (type === 'invoice'
-      ? `Bonjour [client_first_name],\n\nVoici votre facture ${numero || ''}.\n\n${lien}`
-      : `Bonjour [client_first_name],\n\nVoici votre soumission ${numero || ''}.\n\n${lien}`);
+    ? mot.split(/\n{2,}/).map(paragraphe).join('')
+    : [
+      paragraphe(en ? 'Hi [client_first_name],' : 'Bonjour [client_first_name],'),
+      paragraphe(type === 'invoice'
+        ? (en ? `Here is your invoice ${numero}. You can view and pay it online with the button below.` : `Voici votre facture ${numero}. Vous pouvez la consulter et la payer en ligne avec le bouton ci-dessous.`)
+        : (en ? `Here is your quote ${numero}. You can review and approve it online with the button below.` : `Voici votre soumission ${numero}. Vous pouvez la consulter et l’approuver en ligne avec le bouton ci-dessous.`)),
+    ].join('');
 
   const resultat = await executeSendEmail({ subject: objet, body: corps }, vars, ctx);
   // Parti pour de vrai (ni échec, ni étape sautée) : le document est ENVOYÉ.

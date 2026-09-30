@@ -1,23 +1,23 @@
 /**
- * Un préréglage se réenregistre depuis l'éditeur (audit V2, D-14), et le
- * texte de « Demander un avis » est celui qu'on écrit.
+ * Un préréglage se réenregistre depuis l'éditeur (audit V2, D-14), et
+ * « Demander un avis » ne demande plus un texte que le moteur ignore.
  *
  * 36 préréglages sur 38 étaient refusés par la route : `log_activity`
  * inconnue du catalogue, clés que le moteur lit mais que la validation
  * refusait (`description`, `lien`, `depuis_role`/`vers_role`, `metadata`).
  * Les ouvrir dans l'éditeur et enregistrer échouait. Et « Demander un avis »
- * exigeait un texte que le moteur ignorait.
+ * exigeait un texte que le moteur ignorait — réglé par #780 (champ retiré :
+ * le texte vient de Réglages → Avis clients, 0 étape réelle n'en portait un).
  */
 import { describe, it, expect, vi } from 'vitest';
 
-const envois = vi.hoisted(() => ({ sms: [] as string[] }));
 vi.mock('../../server/lib/mailer', async () => (await import('../quarantaine/_simulations')).mailerSimule(vi.fn(async () => ({ sent: true, messageId: 'x' }))));
 vi.mock('../../server/routes/emails', async () => (await import('../quarantaine/_simulations')).emailsSimules());
 vi.mock('../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 
 import { AUTOMATION_PRESETS } from '../../server/lib/automationPresets.data';
 import { automationRuleCreateSchema, automationRuleUpdateSchema } from '../../server/lib/validation';
-import { trouverDeclencheur } from '../../src/lib/automationCatalogue';
+import { trouverAction, trouverDeclencheur } from '../../src/lib/automationCatalogue';
 import { executeRequestReview } from '../../server/lib/actions/index';
 import { clientEnregistreur } from '../quarantaine/automation/_enregistreur';
 
@@ -43,28 +43,11 @@ describe('D-14 — chaque préréglage passe la validation de la route', () => {
   });
 });
 
-describe('« Demander un avis » envoie le texte écrit dans l’action', () => {
-  it('le texte de l’action remplace celui des réglages ; le lien est ajouté', async () => {
-    const ORG = '11111111-1111-4111-8111-111111111111';
-    const { client } = clientEnregistreur({
-      company_settings: { data: { review_enabled: true, google_review_url: 'https://g.page/x', review_sms_body: 'Texte des réglages', company_name: 'A inc.' } },
-      satisfaction_surveys: { data: { id: 'sondage-1' } },
-      review_requests: { data: null },
-      clients: { data: [{ id: 'c1', phone: '+15145550142', sms_consent_at: '2026-01-01T00:00:00Z', email_consent_at: null, email_opt_out_at: null }] },
-      sms_opt_outs: { data: null },
-      conversations: { data: { id: 'conv-1' } },
-      messages: { data: null, count: 0 },
-    });
-    const twilio = { client: { messages: { create: vi.fn(async (p: { body: string }) => { envois.sms.push(p.body); return { sid: 'SM1' }; }) } }, phoneNumber: '+15550000000' };
-    await executeRequestReview(
-      { body: 'Merci [client_first_name] ! Un petit avis ?' },
-      { client_first_name: 'Marie', client_phone: '+15145550142', client_email: '' },
-      { supabase: client, orgId: ORG, entityType: 'client', entityId: 'c1', twilio, baseUrl: 'https://app.lume.test' } as never,
-    );
-    expect(envois.sms).toHaveLength(1);
-    expect(envois.sms[0]).toMatch(/^Merci Marie ! Un petit avis \?/);
-    expect(envois.sms[0]).not.toMatch(/Texte des réglages/);
-    expect(envois.sms[0]).toMatch(/\/survey\//);
+describe('« Demander un avis » : aucun champ que le moteur ignorerait', () => {
+  it('l’éditeur ne propose pas de texte ; la route n’en accepte pas', () => {
+    expect(trouverAction('request_review')?.champs).toEqual([]);
+    const r = automationRuleUpdateSchema.safeParse({ actions: [{ type: 'request_review', config: { body: 'Texte ignoré' } }] });
+    expect(r.success).toBe(false);
   });
 });
 

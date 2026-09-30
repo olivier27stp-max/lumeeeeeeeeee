@@ -45,6 +45,7 @@ import {
   depuis, montant, libelleSource,
 } from '../../lib/pipeline/presentation';
 import type { DealSource } from '../../lib/pipeline/mockData';
+import ModalChangerPipeline from './ModalChangerPipeline';
 
 interface Membre { id: string; name: string }
 
@@ -1183,9 +1184,11 @@ function OngletLie({ deal, fr, lectureSeule }: { deal: Deal; fr: boolean; lectur
 
 export default function DealDrawer({
   deal, etapes, membres, montantCents, montantProvenance, onClose, onAssigner, onCreerJob,
-  onChangement, nomPipeline,
+  onChangement, nomPipeline, pipelinesCibles = [],
 }: {
   deal: Deal | null;
+  /** Pipelines où l'utilisateur peut déplacer ce deal (« Autre pipeline… »). */
+  pipelinesCibles?: { id: string; name: string }[];
   /** Nom du pipeline du deal (formulaire « Détails du deal »). */
   nomPipeline?: string;
   etapes: PipelineStage[];
@@ -1208,6 +1211,7 @@ export default function DealDrawer({
   const { language } = useTranslation();
   const fr = language === 'fr';
   const idAssignation = useId();
+  const [changerPipeline, setChangerPipeline] = useState(false);
   const idEtape = useId();
   const idSource = useId();
   const idRaisonPerte = useId();
@@ -1526,7 +1530,21 @@ export default function DealDrawer({
                   {fr ? 'Facturer' : 'Invoice'}
                 </Link>
               )}
+              {!champsEnLecture && pipelinesCibles.some((p) => p.id !== deal.pipeline_id) && (
+                <button type="button" onClick={() => setChangerPipeline(true)} className="btn-secondary text-[12px]">
+                  {fr ? 'Autre pipeline…' : 'Other pipeline…'}
+                </button>
+              )}
             </div>
+            <ModalChangerPipeline
+              ouvert={changerPipeline}
+              fr={fr}
+              dealIds={[deal.id]}
+              pipelines={pipelinesCibles.filter((p) => p.id !== deal.pipeline_id)}
+              onFermer={() => setChangerPipeline(false)}
+              // Le deal quitte ce tableau : on ferme la fiche et le parent recharge.
+              onDeplace={() => { setChangerPipeline(false); onChangement?.(); onClose(); }}
+            />
           </div>
         )}
 
