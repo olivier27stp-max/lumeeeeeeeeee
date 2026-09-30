@@ -13,16 +13,16 @@
 import { describe, it, expect } from 'vitest';
 import {
   evaluerCondition, evaluerConditions, familleDuType, OPERATEURS_PAR_FAMILLE, LIBELLES_OPERATEUR,
-  normaliserTelephone, normaliserTexte, retirerDuree, type Condition, type Operateur,
+  normaliserTelephone, normaliserTexte, retirerDuree, type Condition, type Operateur, type ContexteEvaluation,
 } from '../../../src/lib/champs/filtres';
 import { TYPES_CHAMP, type TypeChamp } from '../../../src/lib/champs/types';
 import { conditionChampSchema } from '../../../server/lib/validation';
 
 // Mercredi 30 septembre 2026, 12 h 00 à Toronto (16 h UTC).
 const MIDI = new Date('2026-09-30T16:00:00Z');
-const ctx = (maintenant: Date = MIDI, avecHeure?: boolean) => ({ maintenant, fuseau: 'America/Toronto', avecHeure });
+const ctx = (maintenant: Date = MIDI, avecHeure?: boolean): ContexteEvaluation => ({ maintenant, fuseau: 'America/Toronto', avecHeure });
 const c = (op: Operateur, extra: Partial<Condition> = {}): Condition => ({ field_id: '00000000-0000-4000-8000-000000000001', op, ...extra });
-const ev = (type: TypeChamp, valeur: unknown, cond: Condition, contexte = ctx()) => evaluerCondition(type, valeur, cond, contexte);
+const ev = (type: TypeChamp, valeur: unknown, cond: Condition, contexte: ContexteEvaluation = ctx()) => evaluerCondition(type, valeur, cond, contexte);
 
 const TOUS_OPERATEURS = Object.keys(LIBELLES_OPERATEUR) as Operateur[];
 const VIDES: Array<[string, unknown]> = [['null', null], ['undefined', undefined], ['chaîne vide', ''], ['liste vide', []]];
