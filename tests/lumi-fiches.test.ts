@@ -29,7 +29,7 @@ function clientFactice(rangees: Record<string, any>) {
   // .from(table).select().eq().eq().maybeSingle() → rangees[table]
   const chaine = (table: string) => {
     const q: any = {};
-    q.select = () => q; q.eq = () => q; q.maybeSingle = async () => ({ data: rangees[table] ?? null, error: null });
+    q.select = () => q; q.eq = () => q; q.is = () => q; q.maybeSingle = async () => ({ data: rangees[table] ?? null, error: null });
     return q;
   };
   return { from: chaine } as any;
@@ -184,5 +184,25 @@ describe('carte : identifiant inventé', () => {
     const a: any = await apercuProposition('delete_client', { client_id: 'jean-pierre-gagnon' }, ctx());
     expect(a.cibles[0]).toMatchObject({ alerte: true });
     expect(a.cibles[0].valeur).toMatch(/ne correspond à aucune fiche/);
+  });
+});
+
+describe('cartes : facture récurrente, contrat, rapport planifié (audit 2026-09-30)', () => {
+  it('nomment le client, la fréquence, le destinataire', async () => {
+    const { apercuProposition } = await import('../server/lib/lumi/fiches');
+    const S1 = '44444444-4444-4444-8444-444444444444';
+    const rec: any = await apercuProposition('run_recurring_invoice_now', { schedule_id: S1 }, ctx({
+      recurring_invoice_schedules: { client_id: C1, subject: 'Entretien mensuel', frequency: 'monthly', is_active: true, auto_send: true },
+      clients: { first_name: 'Marie', last_name: 'Tremblay' },
+    }));
+    expect(rec.cibles[0].valeur).toMatch(/Marie Tremblay.*Entretien mensuel.*monthly.*envoi automatique/);
+    const rap: any = await apercuProposition('send_scheduled_report_now', { report_id: S1 }, ctx({ scheduled_reports: { recipient_email: 'externe@exemple.com', frequency: 'monthly', enabled: true } }));
+    expect(rap.cibles[0].valeur).toMatch(/externe@exemple\.com/);
+    const con: any = await apercuProposition('send_agreement_sms', { agreement_id: S1 }, ctx({
+      job_agreements: { job_id: J1, client_id: C1, status: 'draft' },
+      jobs: { job_number: '30', title: 'Revêtement', client_name: 'Marie Tremblay' },
+      clients: { first_name: 'Marie', last_name: 'Tremblay' },
+    }));
+    expect(con.cibles[0].valeur).toMatch(/#30.*Marie Tremblay.*draft/);
   });
 });

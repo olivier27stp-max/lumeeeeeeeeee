@@ -164,6 +164,83 @@ const taxe: Resolveur = async (id, { client: db, orgId }) => {
   return { libelle: L('Taxe (actuellement)', 'Tax (currently)'), valeur: `${txt(t.name)} · ${String(t.rate).replace('.', ',')} %${t.is_active ? '' : ' · inactive'}`, valeur_en: `${txt(t.name)} · ${t.rate}%${t.is_active ? '' : ' · inactive'}` };
 };
 
+// Modèle (courriel, facture ou devis : même nom d'argument selon l'outil) — trois
+// requêtes explicites, la première qui trouve l'identifiant nomme le modèle.
+const modele: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: c } = await db.from('email_templates').select('name, type, is_active').eq('org_id', orgId).eq('id', id).maybeSingle();
+  if (c) return { libelle: L('Modèle de courriel', 'Email template'), valeur: [txt(c.name), txt(c.type), c.is_active === false ? 'inactif' : ''].filter(Boolean).join(' · ') };
+  const { data: f } = await db.from('invoice_templates').select('name').eq('org_id', orgId).eq('id', id).is('deleted_at', null).maybeSingle();
+  if (f) return { libelle: L('Modèle de facture', 'Invoice template'), valeur: txt(f.name) };
+  const { data: q } = await db.from('quote_templates').select('name').eq('org_id', orgId).eq('id', id).is('deleted_at', null).maybeSingle();
+  if (q) return { libelle: L('Modèle de devis', 'Quote template'), valeur: txt(q.name) };
+  return introuvable(L('Modèle', 'Template'));
+};
+// Rapport planifié : À QUI il part (un rapport financier vers une adresse externe = risque).
+const rapport: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: r } = await db.from('scheduled_reports').select('recipient_email, frequency, enabled').eq('org_id', orgId).eq('id', id).maybeSingle();
+  if (!r) return introuvable(L('Rapport planifié', 'Scheduled report'));
+  return { libelle: L('Rapport planifié', 'Scheduled report'), valeur: [txt(r.recipient_email), txt(r.frequency), r.enabled ? 'actif' : 'en pause'].filter(Boolean).join(' · '), valeur_en: [txt(r.recipient_email), txt(r.frequency), r.enabled ? 'active' : 'paused'].filter(Boolean).join(' · ') };
+};
+
+// Contrat : le job, le client qui le recevra, son statut.
+const contrat: Resolveur = async (id, ctx, fuseau) => {
+  const { data: c } = await ctx.client.from('job_agreements').select('job_id, client_id, status').eq('org_id', ctx.orgId).eq('id', id).is('deleted_at', null).maybeSingle();
+  if (!c) return introuvable(L('Contrat', 'Contract'));
+  const j = estUuid(c.job_id) ? await job(c.job_id, ctx, fuseau) : null;
+  const cl = estUuid(c.client_id) ? await client(c.client_id, ctx, fuseau) : null;
+  return { libelle: L('Contrat', 'Contract'), valeur: [j?.valeur, cl?.valeur, txt(c.status)].filter(Boolean).join(' · ') };
+};
+// Facture récurrente : client, objet, fréquence, actif — c'est de l'argent qui part tout seul.
+const recurrence: Resolveur = async (id, ctx, fuseau) => {
+  const { data: r } = await ctx.client.from('recurring_invoice_schedules').select('client_id, subject, frequency, is_active, auto_send').eq('org_id', ctx.orgId).eq('id', id).maybeSingle();
+  if (!r) return introuvable(L('Facture récurrente', 'Recurring invoice'));
+  const cl = estUuid(r.client_id) ? await client(r.client_id, ctx, fuseau) : null;
+  return {
+    libelle: L('Facture récurrente', 'Recurring invoice'),
+    valeur: [cl?.valeur, txt(r.subject), txt(r.frequency), r.is_active ? 'active' : 'arrêtée', r.auto_send ? 'envoi automatique' : ''].filter(Boolean).join(' · '),
+    valeur_en: [cl?.valeur, txt(r.subject), txt(r.frequency), r.is_active ? 'active' : 'stopped', r.auto_send ? 'auto-send' : ''].filter(Boolean).join(' · '),
+  };
+};
+// Préréglage de devis (stocké dans quote_templates).
+const prereglage: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: q } = await db.from('quote_templates').select('name').eq('org_id', orgId).eq('id', id).is('deleted_at', null).maybeSingle();
+  return q ? { libelle: L('Préréglage', 'Preset'), valeur: txt(q.name) } : introuvable(L('Préréglage', 'Preset'));
+};
+// Demande reçue d'un formulaire : qui l'a envoyée.
+const demande: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: d } = await db.from('form_submissions').select('first_name, last_name, company, email, phone, city').eq('org_id', orgId).eq('id', id).maybeSingle();
+  if (!d) return introuvable(L('Demande reçue', 'Request'));
+  return { libelle: L('Demande reçue', 'Request'), valeur: [nomPersonne(d), txt(d.city), txt(d.phone), txt(d.email)].filter(Boolean).join(' · ') };
+};
+// Note de l'onglet Notes : son texte (tronqué).
+const noteFiche: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: n } = await db.from('specific_notes').select('text, entity_type').eq('org_id', orgId).eq('id', id).maybeSingle();
+  if (!n) return introuvable(L('Note', 'Note'));
+  const t = txt(n.text);
+  return { libelle: L('Note', 'Note'), valeur: `« ${t.slice(0, 120)}${t.length > 120 ? '…' : ''} » (${txt(n.entity_type)})` };
+};
+// Jalon de facturation : libellé et montant.
+const jalon: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: m } = await db.from('job_billing_milestones').select('label, amount_cents').eq('org_id', orgId).eq('id', id).maybeSingle();
+  if (!m) return introuvable(L('Jalon de facturation', 'Billing milestone'));
+  const c = Number(m.amount_cents) || 0;
+  return { libelle: L('Jalon de facturation', 'Billing milestone'), valeur: `${txt(m.label)} · ${argentFr(c)}`, valeur_en: `${txt(m.label)} · ${argentEn(c)}` };
+};
+// Groupe de taxes.
+const groupeTaxes: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: g } = await db.from('tax_groups').select('name, region, is_default').eq('org_id', orgId).eq('id', id).maybeSingle();
+  if (!g) return introuvable(L('Groupe de taxes', 'Tax group'));
+  return { libelle: L('Groupe de taxes', 'Tax group'), valeur: [txt(g.name), txt(g.region), g.is_default ? 'par défaut actuellement' : ''].filter(Boolean).join(' · ') };
+};
+// Liste de vérification d'un job.
+const listeJob: Resolveur = async (id, ctx, fuseau) => {
+  const { data: l } = await ctx.client.from('job_checklists').select('job_id, items').eq('org_id', ctx.orgId).eq('id', id).maybeSingle();
+  if (!l) return introuvable(L('Liste de vérification', 'Checklist'));
+  const j = estUuid(l.job_id) ? await job(l.job_id, ctx, fuseau) : null;
+  const n = Array.isArray(l.items) ? l.items.length : 0;
+  return { libelle: L('Liste de vérification', 'Checklist'), valeur: [j?.valeur, `${n} élément(s)`].filter(Boolean).join(' · '), valeur_en: [j?.valeur, `${n} item(s)`].filter(Boolean).join(' · ') };
+};
+
 /** Nom d'argument → résolveur. Les identifiants non listés restent signalés comme « élément visé ». */
 const RESOLVEURS: Array<[RegExp, Resolveur]> = [
   [/^(client_id|lead_id|keep_client_id|absorb_client_id|customer_id)$/, client],
@@ -171,8 +248,8 @@ const RESOLVEURS: Array<[RegExp, Resolveur]> = [
   [/^invoice_id$/, facture],
   [/^quote_id$/, devis],
   [/^payment_id$/, paiement],
-  [/^(user_id|member_id|employee_id|technician_id|assigned_user_id|assignee_user_id|rep_id|assessment_user_id)$/, membre],
-  [/^(team_id|assessment_team_id)$/, equipe],
+  [/^(user_id|member_id|employee_id|technician_id|assigned_user_id|assignee_user_id|rep_id|assessment_user_id|challenger_user_id|opponent_user_id|leader_id)$/, membre],
+  [/^(team_id|assessment_team_id|assigned_team_id)$/, equipe],
   [/^property_id$/, propriete],
   [/^(visit_id|event_id|schedule_event_id)$/, visite],
   [/^task_id$/, tache],
@@ -181,6 +258,16 @@ const RESOLVEURS: Array<[RegExp, Resolveur]> = [
   [/^invitation_id$/, invitation],
   [/^deal_id$/, deal],
   [/^(tax_id|tax_config_id)$/, taxe],
+  [/^template_id$/, modele],
+  [/^agreement_id$/, contrat],
+  [/^schedule_id$/, recurrence],
+  [/^preset_id$/, prereglage],
+  [/^submission_id$/, demande],
+  [/^note_id$/, noteFiche],
+  [/^milestone_id$/, jalon],
+  [/^group_id$/, groupeTaxes],
+  [/^checklist_id$/, listeJob],
+  [/^(report_id|scheduled_report_id)$/, rapport],
 ];
 const resolveurDe = (cle: string) => RESOLVEURS.find(([re]) => re.test(cle))?.[1] ?? null;
 
