@@ -106,6 +106,57 @@ jobs:
           fi
           npm run check:schema-refs
 
+  # Suite des automatisations (npm run test:automations) : fonctions pures du
+  # moteur + VRAI moteur contre staging, sur un bureau de test en bac à sable
+  # (aucun envoi réel possible : voir tests/automations-suite/harnais/).
+  # BLOQUANT : un seul test rouge fait échouer le job. Les exécutions sont
+  # mises en file (même bureau de test sur staging, jamais deux à la fois).
+  automatisations:
+    name: Automatisations (npm run test:automations)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: automatisations-staging
+      cancel-in-progress: false
+    env:
+      SECRET_ATTENDU: ${{ github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Navigateur des tests d'interface
+        run: npx playwright install --with-deps chromium
+      - name: Suite des automatisations
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.LUMI_EVAL_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.LUMI_EVAL_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LUMI_EVAL_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            if [ "$SECRET_ATTENDU" = "true" ]; then
+              echo "::error::Secrets staging LUMI_EVAL_* absents alors que ce contexte y a droit — la suite des automatisations ne tourne pas."
+              exit 1
+            fi
+            echo "::warning::Secrets staging absents (fork / Dependabot) — tests unitaires seulement."
+            npm run test:automations:unitaires
+            exit $?
+          fi
+          npm run test:automations
+      - name: Rapport
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rapport-automatisations
+          path: rapports/automatisations/
+          if-no-files-found: warn
+
   # Non-blocking: surfaces vulnerable dependencies without failing the merge.
   # Promote to blocking later by removing continue-on-error.
   audit:
