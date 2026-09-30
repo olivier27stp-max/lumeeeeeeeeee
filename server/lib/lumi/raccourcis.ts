@@ -23,7 +23,7 @@
  * raccourci, le modèle explique.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { executerOutilGarde } from '../agent/garde';
+import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../agent/garde';
 import { composerBriefing, type DonneesBriefing } from './briefing';
 import { fichesDuResultat, type Fiche } from './fiches';
 import { jourLocal, minuitLocal } from '../dates-locales';
@@ -459,7 +459,28 @@ export async function repondreRaccourci(r: Raccourci, ctx: ContexteRaccourci): P
   }
   try {
     const res = await executerOutilGarde({ name: r.tool, args, userId: ctx.userId, orgId: ctx.orgId, client: ctx.client, accessToken: ctx.accessToken });
-    if ('refus' in res) return null;
+    if ('refus' in res) {
+      // Un refus de RÔLE se répond ICI, à zéro token.
+      //
+      // Avant, on rendait null : la question repartait vers le gros modèle,
+      // qui n'avait déjà plus l'outil, raisonnait dans le vide et finissait
+      // par proposer un contournement inexistant. Mesuré en prod le
+      // 2026-09-30 sur un technicien : « quel est mon chiffre du mois ? »
+      // = 16,88 ¢ pour produire un « non ». Payer Opus pour refuser est le
+      // pire rapport qualité-prix du système.
+      //
+      // La garde a déjà tranché ; il ne reste qu'à le dire. Une erreur
+      // d'OUTIL (≠ refus), elle, continue de passer au modèle : là il peut
+      // encore aider autrement.
+      const regle = PERMISSION_PAR_OUTIL[r.tool];
+      if (!regle) return null;
+      return {
+        texte: fr
+          ? `Ton rôle dans Lume ne te donne pas accès à ${regle.capacite}. Si ça devrait changer, parles-en à un administrateur.`
+          : 'Your role in Lume does not give you access to that. Talk to an administrator if that should change.',
+        fiches: [],
+      };
+    }
     const resultat = res.result;
     if (!resultat || typeof resultat !== 'object' || resultat.error) return null;
     if (r.id === 'briefing' && !resultat.todays_visits) return null;
