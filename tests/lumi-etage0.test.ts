@@ -89,9 +89,19 @@ describe('réponses fixes du widget public', () => {
 describe('les suggestions de Lumi sont des actions', () => {
   it('chaque suggestion porte une action connue ; le clic ne passe plus par envoyer(texte) ; repli sur le texte si 422', () => {
     const page = lu('src/pages/Lumi.tsx');
-    const actions = [...page.matchAll(/action: '([a-z-]+)'/g)].map((m) => m[1]);
-    expect(actions.length).toBe(8);
+    // Les suggestions vivent maintenant dans lumiSuggestions.ts, avec la
+    // permission que chacune exige : un technicien ne se fait plus proposer
+    // une question financière qu'il n'a pas le droit de poser (audit RBAC
+    // 2026-09-30). L'intention du test ne bouge pas : toute suggestion doit
+    // porter une action connue du serveur.
+    const suggestions = lu('src/lib/lumiSuggestions.ts');
+    const actions = [...suggestions.matchAll(/action: '([a-z-]+)'/g)].map((m) => m[1]);
+    expect(actions.length).toBeGreaterThanOrEqual(4);
     for (const a of actions) expect(IDS_RACCOURCIS).toContain(a);
+    // Chaque suggestion déclare une permission : aucune ne peut être ajoutée
+    // sans dire qui a le droit de la voir.
+    const permissions = [...suggestions.matchAll(/permission: '([a-z_.]+)'/g)].map((m) => m[1]);
+    expect(permissions.length).toBe(actions.length);
     expect(page).toContain('onClick={() => lancerAction(s)}');
     expect(page).not.toContain("envoyer(s, { origine: 'suggestion' })");
     expect(page).toContain("if (issue.valeur === 'indisponible')");

@@ -21,10 +21,13 @@ import { confirmer } from '../components/ui/ConfirmDialog';
 import { supabase } from '../lib/supabase';
 import {
   chargerConversationLumi, deciderPropositionLumi, envoyerMessageLumi, listerConversationsLumi, quotaLumi, supprimerConversationLumi,
-  listerAutorisationsLumi, definirAutorisationLumi, modeLumi, definirModeLumi, executerActionLumi, type ModeLumi, type OrigineMessageLumi, type SuggestionLumi,
+  listerAutorisationsLumi, definirAutorisationLumi, modeLumi, definirModeLumi, executerActionLumi, type ModeLumi, type OrigineMessageLumi, type SuggestionLumi, type ActionLumi,
   ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type FicheLumi, type MessageLumi, type PropositionLumi, type RapportLumi,
  type UsageLumi } from '../lib/lumiApi';
 import { CarteAutorisation, FichesLiees, avecLiensFiches } from '../components/lumi/CarteAutorisation';
+import { usePermissions } from '../hooks/usePermissions';
+import { hasPermission } from '../lib/permissions';
+import { suggestionsPour } from '../lib/lumiSuggestions';
 
 /** Fiches du message en cours de rendu : les noms qui y correspondent deviennent des liens dans le texte. */
 const FichesCtx = React.createContext<FicheLumi[]>([]);
@@ -545,20 +548,15 @@ export default function Lumi() {
     if (question?.text) void envoyer(question.text, { origine: 'repli' });
   }
 
-  // Chaque suggestion est une action nommée (étage 0) : le libellé est pour l'humain, l'action pour le serveur.
-  const suggestions: SuggestionLumi[] = fr
-    ? [
-      { label: 'Quel est mon chiffre du mois ?', action: 'revenu-mois' },
-      { label: 'Quelles factures sont en retard ?', action: 'retards' },
-      { label: 'Prépare ma journée de demain', action: 'agenda', params: { periode: 'demain' } },
-      { label: 'Qui sont mes meilleurs clients ?', action: 'top-clients', params: { limit: 5 } },
-    ]
-    : [
-      { label: 'What is my revenue this month?', action: 'revenu-mois' },
-      { label: 'Which invoices are overdue?', action: 'retards' },
-      { label: 'Prepare my day tomorrow', action: 'agenda', params: { periode: 'demain' } },
-      { label: 'Who are my best clients?', action: 'top-clients', params: { limit: 5 } },
-    ];
+  // Suggestions selon le RÔLE : un technicien se faisait proposer « Quel est
+  // mon chiffre du mois ? », cliquait, et récoltait un refus. Confort seulement
+  // — la vraie barrière est côté serveur (executerOutilGarde).
+  const { permissions, role } = usePermissions();
+  const suggestions: SuggestionLumi[] = React.useMemo(
+    () => suggestionsPour((cle) => hasPermission(permissions, cle, role ?? undefined), lang)
+      .map((s) => ({ label: s.label, action: s.action as ActionLumi, ...(s.params ? { params: s.params } : {}) })),
+    [permissions, role, lang],
+  );
 
   const bloque = budget && (!budget.includes_ai || budget.epuise || budget.configured === false);
   const pctBudget = budget && budget.budget_cents > 0 ? Math.min(100, Math.round((budget.depense_cents / budget.budget_cents) * 100)) : 0;

@@ -10,9 +10,11 @@ import type { PermissionKey } from '../../../src/lib/permissions';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
 import { validerArgs } from './validation-args';
-import { getUserContext, hasPermission } from '../rbac';
+import { getUserContext, hasPermission, type UserContext } from '../rbac';
 import { PERMISSIONS_DOMAINES, OUTILS_FINANCIERS_DOMAINES } from './outils-domaines';
 import { TOOLS_BY_NAME, type ToolContext } from './tools';
+import { logger } from '../logger';
+import { journaliserTrace } from '../lumi/traces';
 
 export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite: string }> = {
   search_clients:            { cle: 'clients.read',       capacite: 'la consultation des clients' },
@@ -79,7 +81,7 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   compare_revenue:           { cle: 'financial.view_reports', capacite: 'la comparaison des revenus' },
   get_top_clients:           { cle: 'financial.view_reports', capacite: 'la valeur des clients' },
   get_churn_risk:            { cle: 'financial.view_reports', capacite: 'les clients à risque' },
-  analyze_profitability:     { cle: 'financial.view_margins', capacite: 'la rentabilité (marges et profits)' },
+  get_job_profitability:     { cle: 'financial.view_reports', capacite: 'la rentabilité des jobs' },
   get_top_services:          { cle: 'financial.view_reports', capacite: 'les services les plus rentables' },
   set_job_expenses:          { cle: 'financial.view_reports', capacite: "la saisie des dépenses d'un job" },
   // Catalogue / planification.
@@ -94,6 +96,22 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   remember_this:             { cle: 'settings.update',    capacite: 'la mémoire de Lumi (réglage d’entreprise)' },
   forget_note:               { cle: 'settings.update',    capacite: 'la mémoire de Lumi (réglage d’entreprise)' },
   get_recent_agent_actions:  { cle: 'reports.read',       capacite: 'le journal des actions de Lumi' },
+  // ── Couverture totale (audit RBAC 2026-09-30) ──────────────────────────
+  // RELIRE la mémoire est aussi sensible que l'écrire : `org_knowledge`
+  // « assistant » vaut pour TOUTE l'org, et une note du propriétaire peut
+  // porter une marge ou un taux horaire. Même clé que remember_this /
+  // forget_note — surtout PAS `settings.read`, que tous les rôles possèdent.
+  recall_notes:              { cle: 'settings.update',    capacite: 'la mémoire de Lumi (réglage d’entreprise)' },
+  // Les trois derniers sont anodins (tous les rôles ont `settings.read`) mais
+  // déclarés explicitement : un trou assumé vaut mieux qu'un oubli, et le test
+  // de couverture refuse désormais tout outil non déclaré.
+  get_company_info:          { cle: 'settings.read',      capacite: "les informations de l'entreprise" },
+  get_weather:               { cle: 'settings.read',      capacite: 'la météo' },
+  search_help:               { cle: 'settings.read',      capacite: "l'aide de Lume" },
+  // Les formations n'ont pas de clé dédiée dans la page Rôles ; on s'aligne sur
+  // la consultation de l'équipe, que le preset technicien N'A PAS — cohérent
+  // avec l'onglet Formations, réservé aux forfaits et aux rôles encadrants.
+  list_courses:              { cle: 'team.read',          capacite: 'la consultation des formations' },
   // Domaines (couverture 100 %) : une permission par outil, déclarée dans chaque module.
   ...PERMISSIONS_DOMAINES,
 };
@@ -104,7 +122,7 @@ export const OUTILS_FINANCIERS = new Set([
   'send_invoice', 'create_quote', 'send_quote', 'list_quotes',
   'mark_invoice_paid', 'cancel_quote',
   'compare_revenue', 'get_top_clients', 'get_churn_risk',
-  'analyze_profitability', 'get_top_services',
+  'get_job_profitability', 'get_top_services',
   'build_report',
   ...OUTILS_FINANCIERS_DOMAINES,
 ]);
@@ -153,6 +171,53 @@ export function masquerMontants(v: any): any {
 export type RefusOutil = { refus: string };
 
 /**
+ * Les outils que cette personne a le droit d'utiliser, d'après son rôle et ses
+ * overrides. Sert à ne montrer au modèle QUE ce qui est permis (défense en
+ * largeur) ; `executerOutilGarde` revérifie de toute façon à l'exécution
+ * (défense en profondeur) — les deux sont nécessaires, la première évite de
+ * proposer une action qui sera refusée, la seconde est la vraie barrière.
+ *
+ * Un outil sans clé déclarée est REFUSÉ : la couverture est totale depuis
+ * l'audit du 2026-09-30, et un futur outil non déclaré doit échouer fermé.
+ *
+ * Note cache : le jeu d'outils dépend du rôle, donc le préfixe en cache se
+ * décline par rôle (4 variantes), pas par personne.
+ */
+export function outilsPermis(ctx: UserContext | null, voitLesMontants: boolean): ReadonlySet<string> {
+  const permis = new Set<string>();
+  if (!ctx) return permis;
+  for (const nom of Object.keys(TOOLS_BY_NAME)) {
+    if (!voitLesMontants && OUTILS_FINANCIERS.has(nom)) continue;
+    const regle = PERMISSION_PAR_OUTIL[nom];
+    if (!regle) continue;
+    if (hasPermission(ctx, regle.cle)) permis.add(nom);
+  }
+  return permis;
+}
+
+/**
+ * Journal des refus (audit) — dans `lumi_traces`, la table qui existe déjà,
+ * avec `resultat: 'refus'`. Pas de table dédiée : ce serait une migration, et
+ * celle-ci porte déjà org, utilisateur, outil et motif.
+ *
+ * Volontairement silencieux en cas d'échec : un problème d'écriture de journal
+ * ne doit jamais ouvrir un accès ni casser un tour. Le refus a déjà eu lieu.
+ */
+function journaliserRefus(d: { userId: string; orgId: string; outil: string; cle: string; role: string | null; raison: 'permission' | 'montants' }): void {
+  logger.warn('[agent-garde] refus', d);
+  void journaliserTrace(getServiceClient(), {
+    orgId: d.orgId,
+    userId: d.userId,
+    canal: 'lumi',
+    origine: 'api',
+    resultat: 'refus',
+    action: d.outil,
+    outils: [d.outil],
+    params: { motif: d.raison, permission: d.cle, role: d.role },
+  }).catch(() => { /* déjà journalisé côté logger */ });
+}
+
+/**
  * Exécute un outil pour un UTILISATEUR identifié, avec toutes les gardes :
  * outil connu, permission de la page Rôles, montants masqués si le rôle ne
  * les voit pas. Le message de refus est écrit pour être relayé tel quel par
@@ -173,8 +238,11 @@ export async function executerOutilGarde(opts: {
 
   const regle = PERMISSION_PAR_OUTIL[opts.name];
   if (regle) {
-    const ctxRole = await getUserContext(getServiceClient(), opts.userId, opts.orgId);
+    // `true` : jamais de permission mise en cache pour un agent — un droit retiré
+    // doit mordre immédiatement, pas au bout d'une minute.
+    const ctxRole = await getUserContext(getServiceClient(), opts.userId, opts.orgId, true);
     if (!ctxRole || !hasPermission(ctxRole, regle.cle)) {
+      journaliserRefus({ userId: opts.userId, orgId: opts.orgId, outil: opts.name, cle: regle.cle, role: ctxRole?.role ?? null, raison: 'permission' });
       return {
         refus: `Les accès Lume de cette personne n'incluent pas ${regle.capacite} `
           + '(réglage de l’écran des rôles de son entreprise). Dis-le-lui simplement, '
@@ -185,6 +253,7 @@ export async function executerOutilGarde(opts: {
 
   const voitLesMontants = await membreVoitLesMontants(opts.userId, opts.orgId);
   if (!voitLesMontants && OUTILS_FINANCIERS.has(opts.name)) {
+    journaliserRefus({ userId: opts.userId, orgId: opts.orgId, outil: opts.name, cle: 'financial.view_pricing', role: null, raison: 'montants' });
     return { refus: 'Cette personne ne voit pas les montants dans Lume (réglage de son rôle) : cet outil financier ne lui est pas accessible. Dis-le-lui simplement.' };
   }
 

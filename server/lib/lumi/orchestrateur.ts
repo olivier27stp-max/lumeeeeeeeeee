@@ -154,8 +154,13 @@ export const OUTIL_RECHERCHE: Anthropic.Messages.ToolSearchToolRegex20251119 = {
  * [recherche, outils de base (le dernier porte le point de cache), outils différés].
  * Un outil différé ne peut pas porter cache_control (400 de l'API).
  */
-export function outilsClaude(sousAgent: IdTopic | null = null): Anthropic.Messages.ToolUnion[] {
-  const defs: Anthropic.Messages.Tool[] = AGENT_TOOLS.map((t) => ({
+export function outilsClaude(sousAgent: IdTopic | null = null, permis: ReadonlySet<string> | null = null): Anthropic.Messages.ToolUnion[] {
+  // RBAC (audit 2026-09-30) : le modèle ne voit QUE les outils permis à cette
+  // personne. Sans ce filtre il voyait les 243, proposait des actions
+  // interdites, et l'utilisateur ne récoltait qu'un refus. `permis = null`
+  // (appels internes, tests) garde l'ancien comportement.
+  const source = permis ? AGENT_TOOLS.filter((t) => permis.has(t.declaration.name)) : AGENT_TOOLS;
+  const defs: Anthropic.Messages.Tool[] = source.map((t) => ({
     name: t.declaration.name,
     description: t.declaration.description,
     // Sans les descriptions de paramètres qui répètent le nom (« Job id. ») : −2 à −3 % du bloc, déterministe (alleger-outils.ts).
@@ -309,10 +314,16 @@ export async function tourLumi(opts: {
   autorisations?: ReadonlySet<string>;
   /** Écritures encore permises d'office dans cette conversation (plafond, voir execution.ts). Absent = pas de plafond. */
   ecrituresRestantes?: number;
+  /**
+   * RBAC : les outils permis à CETTE personne (rôle + overrides). Le modèle ne
+   * voit que ceux-là. Absent = aucun filtre (appels internes, tests) ; la garde
+   * d'exécution reste la vraie barrière dans tous les cas.
+   */
+  outilsPermis?: ReadonlySet<string> | null;
 }): Promise<ResultatTour> {
   const model = opts.reglages?.model ?? modeleLumi();
   const effort = opts.reglages?.effort ?? reglesCout().effort_defaut;
-  const outils = outilsClaude(opts.sousAgent ?? null);
+  const outils = outilsClaude(opts.sousAgent ?? null, opts.outilsPermis ?? null);
   const messages: Anthropic.Messages.MessageParam[] = [...opts.historique];
   const nouveaux: Anthropic.Messages.MessageParam[] = [];
   const espaceRefs = `${opts.orgId}:${opts.userId}`;
