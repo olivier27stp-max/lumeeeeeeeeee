@@ -489,6 +489,58 @@ type LigneJournal = {
 };
 
 /**
+ * Une facture = au plus UNE relance par jour, toutes automatisations
+ * confondues (audit V2, D-16).
+ *
+ * « Facture en retard », les préréglages « Invoice Reminder X jours » (sur
+ * invoice.sent) et le parcours « Relance de facture » ne se parlaient pas :
+ * une facture en retard recevait la relance « en retard » ET la relance J+1
+ * le même jour. Ici : si une AUTRE règle de relance a déjà envoyé un message
+ * pour cette facture dans les 20 dernières heures, celle-ci est sautée.
+ * Lecture ratée = on envoie (une relance de trop vaut mieux qu'aucune).
+ */
+export function estRegleDeRelanceFacture(r: { trigger_event?: string | null; preset_key?: string | null } | null | undefined): boolean {
+  if (!r) return false;
+  return r.trigger_event === 'invoice.overdue'
+    || (typeof r.preset_key === 'string' && (r.preset_key.startsWith('invoice_sent_reminder') || r.preset_key === 'pack_relance_facture'));
+}
+
+export const RELANCE_FACTURE_DEJA_PARTIE = 'Une autre relance de cette facture est déjà partie aujourd’hui';
+
+export async function relanceFactureDejaPartie(supabase: SupabaseClient, orgId: string, invoiceId: string, ruleId: string): Promise<boolean> {
+  try {
+    const { data: regles, error } = await supabase
+      .from('automation_rules')
+      .select('id, trigger_event, preset_key')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .or('trigger_event.eq.invoice.overdue,preset_key.like.invoice_sent_reminder%,preset_key.eq.pack_relance_facture');
+    if (error) throw new Error(error.message);
+    const autres = ((regles ?? []) as Array<{ id: string; trigger_event: string | null; preset_key: string | null }>)
+      .filter((r) => r.id !== ruleId && estRegleDeRelanceFacture(r))
+      .map((r) => r.id);
+    if (!autres.length) return false;
+    const { data: envois, error: eEnvois } = await supabase
+      .from('automation_execution_logs')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('entity_type', 'invoice')
+      .eq('entity_id', invoiceId)
+      .eq('result_success', true)
+      .is('result_data->saute', null)
+      .in('action_type', ['send_email', 'send_sms'])
+      .in('automation_rule_id', autres)
+      .gte('created_at', new Date(Date.now() - 20 * 3600_000).toISOString())
+      .limit(1);
+    if (eEnvois) throw new Error(eEnvois.message);
+    return (envois?.length ?? 0) > 0;
+  } catch (e) {
+    console.error('[automationEngine] relances de facture illisibles — envoi quand même:', e instanceof Error ? e.message : String(e));
+    return false;
+  }
+}
+
+/**
  * Réserve l'exécution d'une action immédiate.
  *
  * @returns l'id de la ligne de journal réservée ; `null` s'il ne faut PAS
@@ -676,6 +728,17 @@ async function executeRuleActions(
       } else {
         logger.info(`[automationEngine] ${action.type} deferred to send window (quiet hours) for rule "${rule.name}"`);
       }
+      continue;
+    }
+
+    if (event.entityType === 'invoice' && (action.type === 'send_email' || action.type === 'send_sms')
+      && estRegleDeRelanceFacture(rule) && await relanceFactureDejaPartie(config.supabase, event.orgId, event.entityId, rule.id)) {
+      await journaliserAction(config.supabase, undefined, rule, event, i, {
+        result_success: true,
+        result_data: { saute: RELANCE_FACTURE_DEJA_PARTIE, saute_code: 'deja_envoye' },
+        result_error: null,
+        duration_ms: 0,
+      });
       continue;
     }
 
@@ -1731,6 +1794,21 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
           });
           continue;
         }
+      }
+
+      if (task.entity_type === 'invoice' && (actionType === 'send_email' || actionType === 'send_sms')
+        && estRegleDeRelanceFacture(task.automation_rules)
+        && await relanceFactureDejaPartie(supabase, task.org_id, task.entity_id, task.automation_rule_id)) {
+        await supabase.from('automation_execution_logs').insert({
+          org_id: task.org_id, automation_rule_id: task.automation_rule_id, scheduled_task_id: task.id,
+          trigger_event: actionConfig.trigger_event || 'scheduled', entity_type: task.entity_type, entity_id: task.entity_id,
+          action_type: actionType, action_config: config, result_success: true,
+          result_data: { saute: RELANCE_FACTURE_DEJA_PARTIE, saute_code: 'deja_envoye' }, result_error: null, duration_ms: 0,
+        });
+        await supabase.from('automation_scheduled_tasks')
+          .update({ status: 'completed', completed_at: new Date().toISOString(), last_error: RELANCE_FACTURE_DEJA_PARTIE })
+          .eq('id', task.id);
+        continue;
       }
 
       const vars = await resolveEntityVariables(
