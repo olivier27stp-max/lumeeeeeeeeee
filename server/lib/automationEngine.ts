@@ -505,6 +505,32 @@ type LigneJournal = {
 };
 
 /**
+ * ÉTALEMENT des rafales de textos (F11, décision du 2026-09-23 revue par
+ * l'audit V2) : on ne PLAFONNE pas les messages d'une entreprise à ses
+ * clients — tout part —, mais au-delà de DEBIT_SMS_PAR_MINUTE textos
+ * d'automatisation dans la dernière minute pour un bureau, les suivants
+ * sont reportés d'une minute. Une rafale (webhook entrant, synchro) devient
+ * un flux qu'un humain a le temps de voir et d'arrêter (« Tout arrêter »).
+ * Lecture ratée = on envoie.
+ */
+export const DEBIT_SMS_PAR_MINUTE = 30;
+
+export async function rafaleDeTextos(supabase: SupabaseClient, orgId: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('automation_execution_logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .eq('action_type', 'send_sms')
+    .eq('result_success', true)
+    .gte('created_at', new Date(Date.now() - 60_000).toISOString());
+  if (error) {
+    console.error('[automationEngine] débit de textos illisible — envoi sans étalement:', error.message);
+    return false;
+  }
+  return (count ?? 0) >= DEBIT_SMS_PAR_MINUTE;
+}
+
+/**
  * Une facture = au plus UNE relance par jour, toutes automatisations
  * confondues (audit V2, D-16).
  *
@@ -743,6 +769,27 @@ async function executeRuleActions(
         }
       } else {
         logger.info(`[automationEngine] ${action.type} deferred to send window (quiet hours) for rule "${rule.name}"`);
+      }
+      continue;
+    }
+
+    if (action.type === 'send_sms' && await rafaleDeTextos(config.supabase, event.orgId)) {
+      const { error: etaleError } = await config.supabase.from('automation_scheduled_tasks').insert({
+        org_id: event.orgId,
+        automation_rule_id: rule.id,
+        entity_type: event.entityType,
+        entity_id: event.entityId,
+        // Même traitement que le report d'heures calmes : une confirmation
+        // reportée reste transactionnelle.
+        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata, report_heures_calmes: true, report_rafale: true },
+        execute_at: new Date(Date.now() + 60_000).toISOString(),
+        status: 'pending',
+        execution_key: executionKey,
+      });
+      if (etaleError && etaleError.code !== '23505') {
+        console.error(`[automationEngine] texto de rafale non reporté (rule ${rule.id}, org ${event.orgId}):`, etaleError.message);
+      } else {
+        logger.info(`[automationEngine] texto reporté d'une minute (rafale > ${DEBIT_SMS_PAR_MINUTE}/min) — règle "${rule.name}"`);
       }
       continue;
     }
@@ -1810,6 +1857,15 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
           });
           continue;
         }
+      }
+
+      // Étalement (F11) : repoussé d'une minute, sans consommer de tentative
+      // (la prise avait incrémenté `attempts` en base ; on remet la valeur lue).
+      if (actionType === 'send_sms' && await rafaleDeTextos(supabase, task.org_id)) {
+        await supabase.from('automation_scheduled_tasks')
+          .update({ status: 'pending', execute_at: new Date(Date.now() + 60_000).toISOString(), attempts: Number(task.attempts || 0), last_error: `Rafale de textos (> ${DEBIT_SMS_PAR_MINUTE}/min) : reporté d'une minute` })
+          .eq('id', task.id);
+        continue;
       }
 
       if (task.entity_type === 'invoice' && (actionType === 'send_email' || actionType === 'send_sms')
