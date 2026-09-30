@@ -114,7 +114,12 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
 
     let cancelled = false;
     (async () => {
-      setLoading(true);
+      // Cache expiré mais présent : on revérifie EN ARRIÈRE-PLAN, sans repasser
+      // par `loading`. Le repasser à true faisait afficher un sablier par
+      // PlanFeatureGate, qui DÉMONTAIT la page déjà montée puis la remontait :
+      // le bouton « Optimiser la journée » arrivait sur Lumi, l'action partait,
+      // le lien était vidé… et le remontage annulait tout (2026-09-30).
+      // Sans cache, `loading` vaut déjà true depuis l'état initial.
       try {
         // On distingue « pas d'abonnement » (reponse valide, subscription null)
         // de « appel echoue » (reseau, 500, 410...). Confondre les deux privait
