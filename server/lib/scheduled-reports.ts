@@ -165,15 +165,18 @@ export async function sendScheduledReport(reportId: string): Promise<void> {
   logger.info(`[scheduled-reports] Sent ${report.frequency} report`, { email: report.recipient_email, orgId: report.org_id });
 }
 
-export async function processScheduledReports(): Promise<number> {
+export async function processScheduledReports(options: { orgId?: string } = {}): Promise<number> {
   const admin = getServiceClient();
   const now = new Date();
   const dayOfWeek = now.getDay();
   const dayOfMonth = now.getDate();
 
-  const { data: reports } = await admin.from('scheduled_reports')
+  let lecture = admin.from('scheduled_reports')
     .select('*')
     .eq('enabled', true);
+  // Une seule entreprise (suite d'intégration, bureau de test).
+  if (options.orgId) lecture = lecture.eq('org_id', options.orgId);
+  const { data: reports } = await lecture;
 
   if (!reports?.length) return 0;
 

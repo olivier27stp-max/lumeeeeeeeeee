@@ -60,12 +60,13 @@ export function stopRecurringJobScheduler() {
   }
 }
 
-async function processRecurringJobs(supabase: SupabaseClient) {
+/** Exporté pour la suite d'intégration : `orgId` borne le passage à une entreprise. */
+export async function processRecurringJobs(supabase: SupabaseClient, options: { orgId?: string } = {}) {
   try {
     const now = new Date().toISOString();
 
     // Find active rules that are due
-    const { data: rules, error } = await supabase
+    let lecture = supabase
       .from('job_recurrence_rules')
       // La clé étrangère est nommée EXPLICITEMENT : depuis le durcissement
       // multi-tenant du 30 juillet (20260751100200), job_recurrence_rules a DEUX
@@ -75,8 +76,9 @@ async function processRecurringJobs(supabase: SupabaseClient) {
       // (constaté dans les journaux de production le 2026-07-31).
       .select('*, jobs!job_recurrence_rules_job_id_fkey!inner(id, org_id, client_id, property_id, title, description, job_type, property_address, team_id, created_by)')
       .eq('is_active', true)
-      .lte('next_run_at', now)
-      .limit(50);
+      .lte('next_run_at', now);
+    if (options.orgId) lecture = lecture.eq('org_id', options.orgId);
+    const { data: rules, error } = await lecture.limit(50);
 
     if (error) {
       console.error('[recurring-jobs] fetch error:', error.message);
