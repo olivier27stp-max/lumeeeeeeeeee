@@ -50,7 +50,7 @@ import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout'
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
-import { PERMISSION_PAR_OUTIL, outilsPermis, membreVoitLesMontants } from '../lib/agent/garde';
+import { PERMISSION_PAR_OUTIL, outilsPermis, membreVoitLesMontants, restrictionsDe } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
@@ -277,7 +277,15 @@ async function contexteTour(req: Request, res: Response) {
     const { data } = await admin.from('org_knowledge').select('key, value').eq('org_id', auth.orgId).eq('category', 'assistant').eq('is_active', true).order('updated_at', { ascending: false }).limit(30);
     souvenirs = (data ?? []).map((n: any) => ({ key: String(n.key), value: String(n.value ?? '') }));
   } catch { /* non-fatal : Lumi peut encore les relire avec recall_notes */ }
-  const promptCtx = { companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs };
+  // Ce que le rôle ne permet pas, en mots simples, pour que Lumi le dise
+  // clairement au lieu de proposer un chemin qui n'existe pas. Ce n'est PAS
+  // une garde — les outils interdits ne lui sont déjà pas remis.
+  let restrictions: string | null = null;
+  try {
+    const ctxRole = await getUserContext(getServiceClient(), auth.user.id, auth.orgId, true);
+    restrictions = restrictionsDe(ctxRole, await membreVoitLesMontants(auth.user.id, auth.orgId), language);
+  } catch { /* non-fatal : sans ce texte, Lumi refuse quand même, juste moins bien */ }
+  const promptCtx = { companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs, restrictions };
   const systeme = promptSystemeLumi(promptCtx);
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
   return { auth, admin, budget, systeme, promptCtx, language, accessToken, fuseau, userName };
