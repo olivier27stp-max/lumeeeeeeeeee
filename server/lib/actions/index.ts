@@ -1943,6 +1943,11 @@ export async function executeRequestReview(
     clientId = inv?.client_id || null;
     jobId = inv?.job_id || null;
   }
+  // Le catalogue offre « Demander un avis » après TOUT déclencheur (client,
+  // prospect, devis, deal, rendez-vous…). Sans client résolu, la demande
+  // n'était rattachée à personne et l'anti-doublon de 7 jours, qui cherche
+  // par client, ne voyait rien : chaque note ou étiquette renvoyait un avis.
+  if (!clientId) clientId = await clientDeLEntite(ctx);
 
   // 3. Il faut au moins un canal
   if (!vars.client_email && !vars.client_phone) {
