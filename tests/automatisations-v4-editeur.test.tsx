@@ -319,3 +319,31 @@ describe('A-05 — « Ajouter » (haut à droite) ajoute à la FIN du parcours',
     expect(par.get('e6')?.suivant).toBe('e3');
   });
 });
+
+// ─── A-12 ───────────────────────────────────────────────────────
+
+describe('A-12 — un échec de l’enregistrement automatique est DIT, et les reprises s’espacent', () => {
+  it('toast à la 1re panne, puis 2e essai après 6 s (pas toutes les 3 s)', async () => {
+    await ouvrir(`/automations/${ID}`);
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw new Error('Erreur serveur 500'); });
+    cliquer(bouton('Relance devis'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v5');
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    expect(toasts.erreur.join(' | ')).toContain('Erreur serveur 500');
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    expect(api.modifier).toHaveBeenCalledTimes(2);
+    // Au retour du serveur, l'enregistrement reprend et réussit.
+    api.modifier.mockImplementation(async (id: string, patch: any) => ({ ...regle({ id }), ...patch }) as any);
+    await act(async () => { vi.advanceTimersByTime(12_000); });
+    await attendre();
+    expect(api.modifier.mock.calls.at(-1)?.[1]).toMatchObject({ name: 'Relance devis v5' });
+    expect(container.textContent).toContain('Enregistré');
+  });
+});

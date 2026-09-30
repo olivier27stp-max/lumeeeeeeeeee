@@ -971,10 +971,21 @@ export default function AutomationBuilderPage() {
    * il fait partie de la promesse — mais on respire, on réessaie, et
    * l'utilisateur ne voit jamais l'erreur technique.
    */
+  /*
+   * Échecs d'affilée de l'enregistrement automatique (audit V2, A-12).
+   *
+   * Un échec repassait l'état à « modifié », ce qui relançait l'effet — donc
+   * un essai toutes les 3 s, sans fin — et le `toast.error` n'était jamais
+   * atteint : le nettoyage de l'effet (relancé par `en_cours`) avait déjà
+   * posé `annule`. On DIT l'échec, et on espace les reprises (3, 6, 12, 24,
+   * puis 48 s au plus) jusqu'au retour du serveur.
+   */
+  const echecsSauvegarde = useRef(0);
   useEffect(() => {
     if (etatSauvegarde !== 'modifie' || !regle) return;
     if (etapesIncompletes > 0) { setEtatSauvegarde('incomplet'); return; }
     let annule = false;
+    const delai = 3000 * 2 ** Math.min(echecsSauvegarde.current, 4);
 
     const minuterie = setTimeout(async () => {
       /*
@@ -1004,6 +1015,7 @@ export default function AutomationBuilderPage() {
         if (annule) return;
         try {
           await ecrire({ name: nom.trim() || regle.name, steps });
+          echecsSauvegarde.current = 0;
           /*
            * On confirme même si l'effet a été relancé : le serveur a bien
            * reçu `envoye`. Si l'écran a changé depuis, le nouvel état
@@ -1022,20 +1034,23 @@ export default function AutomationBuilderPage() {
             await new Promise((r) => setTimeout(r, attentes[essai]));
             continue;
           }
-          // Même raison : ne jamais rester bloqué sur « en cours ».
-          setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
-          if (annule) return;
+          echecsSauvegarde.current += 1;
+          // Dit AVANT de relancer (un seul toast, remplacé à chaque essai).
           // Jamais l'erreur brute : « Too many requests » en anglais ne dit
           // rien à un entrepreneur qui écrivait son message.
           toast.error(tropVite
             ? (fr
               ? 'Trop de modifications d’un coup — on réessaie dans un instant.'
               : 'Too many changes at once — retrying in a moment.')
-            : message);
+            : (fr
+              ? `Enregistrement impossible pour le moment — nouvel essai automatique. (${message})`
+              : `Could not save right now — retrying automatically. (${message})`), { id: 'enregistrement-auto' });
+          // Même raison : ne jamais rester bloqué sur « en cours ».
+          setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
           return;
         }
       }
-    }, 3000);
+    }, delai);
     return () => { annule = true; clearTimeout(minuterie); };
   }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire]);
 
