@@ -42,7 +42,11 @@ describe('l’heure du rendez-vous suit le fuseau de l’entreprise', () => {
 
   it('le formatage utilise le réglage de l’org, pas la constante', () => {
     expect(source, 'appointment_date doit prendre le fuseau résolu').toMatch(
-      /vars\.appointment_date = d\.toLocaleDateString\((?:'fr-CA'|locale), \{ timeZone: fuseau \}\)/,
+      /vars\.appointment_date = dateLisible\(d\.toISOString\(\), langueDates, fuseau\)/,
+    );
+    // La forme technique (AAAA-MM-JJ, webhook) suit le même fuseau.
+    expect(source, 'appointment_date_iso doit prendre le fuseau résolu').toMatch(
+      /vars\.appointment_date_iso = d\.toLocaleDateString\('en-CA', \{ timeZone: fuseau \}\)/,
     );
     expect(source, 'appointment_time doit prendre le fuseau résolu').toMatch(
       /vars\.appointment_time = d\.toLocaleTimeString\([^)]*timeZone: fuseau[^)]*\)/,

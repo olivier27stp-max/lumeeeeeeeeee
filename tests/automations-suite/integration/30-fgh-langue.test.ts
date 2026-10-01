@@ -149,13 +149,18 @@ describe('H — la langue de l’entreprise pour chaque message', () => {
     const { resolveEntityVariables } = await import('../../../server/lib/actions');
     const en = await resolveEntityVariables(b.admin, b.orgB, 'schedule_event', rdv.id);
     expect(en.appointment_time).toMatch(/^0?2:00\s?p\.?m\.?$/i);
-    expect(en.appointment_date).toBe('2026-10-15');
+    // [H-020] La date en toutes lettres, dans la langue de l'entreprise (elle
+    // partait « 2026-10-15 » dans les deux langues) ; la forme technique reste
+    // disponible pour le webhook.
+    expect(en.appointment_date).toBe('October 15, 2026');
+    expect(en.appointment_date_iso).toBe('2026-10-15');
     // Témoin : une entreprise française garde « 14 h 00 ».
     const { error } = await b.admin.from('company_settings').update({ default_language: 'fr' }).eq('org_id', b.orgB);
     expect(error).toBeNull();
     try {
       const fr = await resolveEntityVariables(b.admin, b.orgB, 'schedule_event', rdv.id);
       expect(fr.appointment_time).toBe('14 h 00');
+      expect(fr.appointment_date).toBe('15 octobre 2026');
     } finally {
       await b.admin.from('company_settings').update({ default_language: 'en' }).eq('org_id', b.orgB);
     }

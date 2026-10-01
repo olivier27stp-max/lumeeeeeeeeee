@@ -23,14 +23,14 @@
     {
       "canal": "sms",
       "to": "+15145550142",
-      "body": "Rappel : votre rendez-vous avec Plomberie Tremblay inc. est dans une semaine, le 2026-09-25 à 09 h 00.",
+      "body": "Rappel : votre rendez-vous avec Plomberie Tremblay inc. est dans une semaine, le 25 septembre 2026 à 09 h 00.",
       "moment": "differe"
     },
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
       "subject": "Rappel : rendez-vous dans une semaine",
-      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Petit rappel : votre rendez-vous est prévu le <strong>2026-09-25</strong> à <strong>09 h 00</strong>.</p><p>Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous.</p><p>À bientôt!<br/>Plomberie Tremblay inc.</p></div>",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Petit rappel : votre rendez-vous est prévu le <strong>25 septembre 2026</strong> à <strong>09 h 00</strong>.</p><p>Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous.</p><p>À bientôt!<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },
     {

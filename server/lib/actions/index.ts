@@ -18,6 +18,7 @@ import { avecMentionCommerciale } from '../desabonnement/mention-sms';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../automations-drapeaux';
 import { raisonLisible } from '../paiement-echoue';
 import { creerLienReservation, demandeLienReservation } from '../client-inactif';
+import { dateLisible } from '../courriels/gabarit';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -737,6 +738,30 @@ async function lienPageAvisDuJob(supabase: SupabaseClient, orgId: string, jobId:
   return token ? `${base}/survey/${token}` : '';
 }
 
+/**
+ * Dates écrites au client en toutes lettres (« 15 octobre 2026 ») et leur
+ * forme TECHNIQUE (AAAA-MM-JJ), gardée sous `<variable>_iso`.
+ *
+ * L'action « webhook » envoie les variables à un système tiers (Zapier, un
+ * tableur…) : lui a besoin d'une date qu'une machine sait lire, et il la
+ * recevait déjà en AAAA-MM-JJ. `executeWebhook` remet donc la forme technique
+ * sous le nom d'origine — sa charge utile ne change pas d'un octet.
+ */
+export const DATES_TECHNIQUES = ['invoice_due_date', 'quote_valid_until', 'appointment_date'] as const;
+
+/** Les variables telles qu'un système tiers les attend : dates en AAAA-MM-JJ. */
+export function variablesPourMachine(vars: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = { ...vars };
+  for (const cle of DATES_TECHNIQUES) {
+    const brute = `${cle}_iso`;
+    if (Object.prototype.hasOwnProperty.call(out, brute)) {
+      out[cle] = out[brute];
+      delete out[brute];
+    }
+  }
+  return out;
+}
+
 export async function resolveEntityVariables(
   supabase: SupabaseClient,
   orgId: string,
@@ -761,7 +786,18 @@ export async function resolveEntityVariables(
    * milliers) — visible par le client, sur cinq presets.
    */
   const locale = (company?.default_language === 'en' ? 'en-CA' : 'fr-CA');
-  const argent = (cents: number | null | undefined, devise = 'CAD') =>
+  /**
+   * Les DATES suivent la même règle que les montants : la langue de
+   * l'entreprise, en toutes lettres. `[invoice_due_date]` et
+   * `[quote_valid_until]` partaient en ISO brut (« était due le 2026-10-15 »),
+   * et `[appointment_date]` aussi (`toLocaleDateString('fr-CA')` rend
+   * AAAA-MM-JJ) : « confirmé pour le 2026-10-15 à 14 h 00 ».
+   * Une date SEULE (colonne `date`) n'a pas de fuseau : `dateLisible` ne la
+   * décale jamais. Un instant (rendez-vous) est lu dans le fuseau de
+   * l'entreprise.
+   */
+  const langueDates: 'fr' | 'en' = company?.default_language === 'en' ? 'en' : 'fr';
+  const argent =(cents: number | null | undefined, devise = 'CAD') =>
     new Intl.NumberFormat(locale, { style: 'currency', currency: devise || 'CAD' })
       .format(Number(cents ?? 0) / 100);
 
@@ -885,7 +921,8 @@ export async function resolveEntityVariables(
     if (quote) {
       vars.quote_number = quote.quote_number || '';
       vars.quote_total = argent(quote.total_cents, quote.currency || 'CAD');
-      vars.quote_valid_until = quote.valid_until || '';
+      vars.quote_valid_until = dateLisible(quote.valid_until, langueDates);
+      vars.quote_valid_until_iso = quote.valid_until || '';
       // Le lien public de la soumission — la page `/quote/:token` que le
       // client ouvre sans compte (`TokenRoutes`). Sans lui, une action
       // « envoyer la soumission » n'aurait rien a mettre dans le courriel.
@@ -1008,7 +1045,8 @@ export async function resolveEntityVariables(
           : '';
       }
       vars.invoice_number = inv.invoice_number || '';
-      vars.invoice_due_date = inv.due_date || '';
+      vars.invoice_due_date = dateLisible(inv.due_date, langueDates);
+      vars.invoice_due_date_iso = inv.due_date || '';
       vars.invoice_total = argent(inv.total_cents);
       // La page servie est `/invoice/:token`, et GET /api/invoices/public/:token
       // cherche la facture par `view_token`. `[invoice_link]` lisait
@@ -1069,7 +1107,9 @@ export async function resolveEntityVariables(
         const fuseau = (company?.timezone as string | undefined) || FUSEAU_CLIENT;
         // Dans la LANGUE de l'entreprise : « 14 h 00 » dans un texto anglais
         // était un défaut visible. `fr-CA` reste pour une entreprise française.
-        vars.appointment_date = d.toLocaleDateString(locale, { timeZone: fuseau });
+        vars.appointment_date = dateLisible(d.toISOString(), langueDates, fuseau);
+        // La forme technique (AAAA-MM-JJ, jour local de l'entreprise) : voir DATES_TECHNIQUES.
+        vars.appointment_date_iso = d.toLocaleDateString('en-CA', { timeZone: fuseau });
         vars.appointment_time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: fuseau });
       }
       vars.appointment_title = evt.job?.title || '';
@@ -2840,7 +2880,7 @@ export async function executeWebhook(
       entity_id: ctx.entityId,
       // Les variables déjà résolues : le destinataire reçoit le nom du
       // client et les montants, pas des identifiants à recroiser.
-      data: vars,
+      data: variablesPourMachine(vars),
       sent_at: new Date().toISOString(),
     }, ctx.cleIdempotence
       // La même clé à chaque reprise : le destinataire peut reconnaître un

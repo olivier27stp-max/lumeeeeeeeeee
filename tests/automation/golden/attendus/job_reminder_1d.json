@@ -30,7 +30,7 @@
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
       "subject": "Votre rendez-vous est demain",
-      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Votre rendez-vous est <strong>demain</strong>, le 2026-09-25 à 09 h 00.</p><p>Un empêchement? Répondez à ce courriel et on trouvera un autre moment.</p><p>À demain!<br/>Plomberie Tremblay inc.</p></div>",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Votre rendez-vous est <strong>demain</strong>, le 25 septembre 2026 à 09 h 00.</p><p>Un empêchement? Répondez à ce courriel et on trouvera un autre moment.</p><p>À demain!<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },
     {

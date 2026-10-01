@@ -159,7 +159,7 @@ const EXEMPLES: Record<string, string> = {
   valid_until: '2 mai 2026',
   contract_number: 'CTR-12',
   contract_link: 'lumecrm.net/contract/…',
-  invoice_due_date: '2026-08-30',
+  invoice_due_date: '30 août 2026',
   quote_number: 'SOU-218',
   quote_total: '1 250,00 $',
   appointment_date: '14 août 2026',

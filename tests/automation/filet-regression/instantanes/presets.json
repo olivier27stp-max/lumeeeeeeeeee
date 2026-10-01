@@ -404,7 +404,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Bonjour Marie, votre rendez-vous avec Plomberie Tremblay inc. est confirmé pour le 2026-09-25 à 09 h 00. À bientôt!\n",
+     "message_text": "Bonjour Marie, votre rendez-vous avec Plomberie Tremblay inc. est confirmé pour le 25 septembre 2026 à 09 h 00. À bientôt!\n",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -427,7 +427,7 @@
      "result_success": true,
      "result_data": {
       "to": "+15145550142",
-      "body": "Bonjour Marie, votre rendez-vous avec Plomberie Tremblay inc. est confirmé pour le 2026-09-25 à 09 h 00. À bientôt!\n"
+      "body": "Bonjour Marie, votre rendez-vous avec Plomberie Tremblay inc. est confirmé pour le 25 septembre 2026 à 09 h 00. À bientôt!\n"
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -554,15 +554,15 @@
     "moment": "immediat",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Bonjour Marie, votre rendez-vous avec Plomberie Tremblay inc. est confirmé pour le 2026-09-25 à 09 h 00. À bientôt!\n"
+    "texte": "Bonjour Marie, votre rendez-vous avec Plomberie Tremblay inc. est confirmé pour le 25 septembre 2026 à 09 h 00. À bientôt!\n"
    },
    {
     "moment": "immediat",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Votre rendez-vous est confirmé",
-    "texte": "Plomberie Tremblay inc. Votre rendez-vous est confirmé : Date : 2026-09-25 Heure : 09 h 00 Adresse : 412 rue des Érables,…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est confirmé : Date : 2026-09-25 Heure : 09 h 00 Adresse : 412 rue des Érables, Longueuil À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "bb02c3292b5e9db8"
+    "texte": "Plomberie Tremblay inc. Votre rendez-vous est confirmé : Date : 25 septembre 2026 Heure : 09 h 00 Adresse : 412 rue des Érables,…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est confirmé : Date : 25 septembre 2026 Heure : 09 h 00 Adresse : 412 rue des Érables, Longueuil À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "945561a890322b9d"
    }
   ],
   "annulees": []
@@ -5920,8 +5920,8 @@
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Votre rendez-vous est demain",
-    "texte": "Plomberie Tremblay inc. Votre rendez-vous est demain , le 2026-09-25 à 09 h 00. Un empêchement? Répondez à ce courriel et on…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est demain , le 2026-09-25 à 09 h 00. Un empêchement? Répondez à ce courriel et on trouvera un autre moment. À demain! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "d75a3e6965d2e10b"
+    "texte": "Plomberie Tremblay inc. Votre rendez-vous est demain , le 25 septembre 2026 à 09 h 00. Un empêchement? Répondez à ce courriel et…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Votre rendez-vous est demain , le 25 septembre 2026 à 09 h 00. Un empêchement? Répondez à ce courriel et on trouvera un autre moment. À demain! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "6c908767481d0087"
    }
   ],
   "annulees": []
@@ -6364,7 +6364,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Rappel : votre rendez-vous avec Plomberie Tremblay inc. est dans une semaine, le 2026-09-25 à 09 h 00.",
+     "message_text": "Rappel : votre rendez-vous avec Plomberie Tremblay inc. est dans une semaine, le 25 septembre 2026 à 09 h 00.",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -6388,7 +6388,7 @@
      "result_success": true,
      "result_data": {
       "to": "+15145550142",
-      "body": "Rappel : votre rendez-vous avec Plomberie Tremblay inc. est dans une semaine, le 2026-09-25 à 09 h 00."
+      "body": "Rappel : votre rendez-vous avec Plomberie Tremblay inc. est dans une semaine, le 25 septembre 2026 à 09 h 00."
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -6642,15 +6642,15 @@
     "moment": "differe:send_sms",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Rappel : votre rendez-vous avec Plomberie Tremblay inc. est dans une semaine, le 2026-09-25 à 09 h 00."
+    "texte": "Rappel : votre rendez-vous avec Plomberie Tremblay inc. est dans une semaine, le 25 septembre 2026 à 09 h 00."
    },
    {
     "moment": "differe:send_email",
     "canal": "courriel",
     "to": "marie.tremblay@example.test",
     "subject": "Rappel : rendez-vous dans une semaine",
-    "texte": "Plomberie Tremblay inc. Petit rappel : votre rendez-vous est prévu le 2026-09-25 à 09 h 00 . Répondez à ce courriel si vous avez…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel : votre rendez-vous est prévu le 2026-09-25 à 09 h 00 . Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous. À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
-    "empreinte": "2bd157b08d831c74"
+    "texte": "Plomberie Tremblay inc. Petit rappel : votre rendez-vous est prévu le 25 septembre 2026 à 09 h 00 . Répondez à ce courriel si vous…&#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; &#8203; Plomberie Tremblay inc. Bonjour Marie, Petit rappel : votre rendez-vous est prévu le 25 septembre 2026 à 09 h 00 . Répondez à ce courriel si vous avez des questions ou devez déplacer le rendez-vous. À bientôt! Plomberie Tremblay inc. +14505550199 &middot; info@plomberie.test Plomberie Tremblay inc. &middot; 120 rue Principale, Granby, QC, J2G 2V1",
+    "empreinte": "ef5002648d34d190"
    }
   ],
   "annulees": []

@@ -7,14 +7,14 @@
     {
       "canal": "sms",
       "to": "+15145550142",
-      "body": "Bonjour Marie, votre rendez-vous avec Plomberie Tremblay inc. est confirmé pour le 2026-09-25 à 09 h 00. À bientôt!\n",
+      "body": "Bonjour Marie, votre rendez-vous avec Plomberie Tremblay inc. est confirmé pour le 25 septembre 2026 à 09 h 00. À bientôt!\n",
       "moment": "immediat"
     },
     {
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
       "subject": "Votre rendez-vous est confirmé",
-      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Votre rendez-vous est confirmé :</p><ul><li><strong>Date :</strong> 2026-09-25</li><li><strong>Heure :</strong> 09 h 00</li><li><strong>Adresse :</strong> 412 rue des Érables, Longueuil</li></ul><p>À bientôt!<br/>Plomberie Tremblay inc.</p></div>",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Votre rendez-vous est confirmé :</p><ul><li><strong>Date :</strong> 25 septembre 2026</li><li><strong>Heure :</strong> 09 h 00</li><li><strong>Adresse :</strong> 412 rue des Érables, Longueuil</li></ul><p>À bientôt!<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "immediat"
     },
     {
