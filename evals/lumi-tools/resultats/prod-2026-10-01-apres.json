@@ -1,0 +1,2199 @@
+{
+ "date": "2026-10-01T14:44:10.286Z",
+ "api": "https://lumecrm.net",
+ "bilan": {
+  "global": {
+   "cas": 54,
+   "exactitude_outil_pct": 91.7,
+   "partiels": 0,
+   "rates": 4,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": 100,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 65.41,
+   "cout_par_1000_dollars": 12.11
+  },
+  "sensibles": {
+   "cas": 22,
+   "exactitude_outil_pct": 88.2,
+   "partiels": 0,
+   "rates": 2,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": 100,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 17.25,
+   "cout_par_1000_dollars": 7.84
+  },
+  "par_type": {
+   "action": {
+    "cas": 24,
+    "exactitude_outil_pct": 91.7,
+    "partiels": 0,
+    "rates": 2,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 17.52,
+    "cout_par_1000_dollars": 7.3
+   },
+   "lecture": {
+    "cas": 24,
+    "exactitude_outil_pct": 91.7,
+    "partiels": 0,
+    "rates": 2,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 40.68,
+    "cout_par_1000_dollars": 16.95
+   },
+   "clarification": {
+    "cas": 6,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": 100,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 7.21,
+    "cout_par_1000_dollars": 12.02
+   }
+  },
+  "par_section": {
+   "clients": {
+    "cas": 15,
+    "exactitude_outil_pct": 83.3,
+    "partiels": 0,
+    "rates": 2,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": 100,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 17.33,
+    "cout_par_1000_dollars": 11.55
+   },
+   "communications": {
+    "cas": 2,
+    "exactitude_outil_pct": 50,
+    "partiels": 0,
+    "rates": 1,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 3.43,
+    "cout_par_1000_dollars": 17.17
+   },
+   "devis": {
+    "cas": 7,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": 100,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 8.14,
+    "cout_par_1000_dollars": 11.63
+   },
+   "equipe": {
+    "cas": 5,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 3.67,
+    "cout_par_1000_dollars": 7.33
+   },
+   "facturation": {
+    "cas": 11,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": 100,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 13.83,
+    "cout_par_1000_dollars": 12.57
+   },
+   "memoire": {
+    "cas": 1,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 1,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 3.09,
+    "cout_par_1000_dollars": 30.86
+   },
+   "planification": {
+    "cas": 7,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 10.38,
+    "cout_par_1000_dollars": 14.83
+   },
+   "rapports": {
+    "cas": 6,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 5.54,
+    "cout_par_1000_dollars": 9.23
+   }
+  }
+ },
+ "resultats": [
+  {
+   "id": "list_request_submissions-1",
+   "section": "clients",
+   "outil": "list_request_submissions",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "J’ai-tu reçu des nouvelles demandes par le formulaire du site web ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_request_submissions"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Oui, une seule : Testeur Formulaire, de Montréal, reçue le 26 septembre dernier (courriel qa.formulaire@lume.test, tél. 514-555-0199). Veux-tu que je planifie une évaluation ou que je l'archive ?",
+   "cout_cents": 4.2161,
+   "conversation_id": "2285e29a-1d98-42fd-b812-e4a221da6234",
+   "duree_ms": 8757
+  },
+  {
+   "id": "get_top_clients-1",
+   "section": "clients",
+   "outil": "get_top_clients",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "C’est qui mes meilleurs clients, ceux qui m’ont rapporté le plus ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_top_clients"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Tes 1 meilleurs clients :\n1. Sophie Tremblay · 0,00 $ · 8 jobs",
+   "cout_cents": 0.1511,
+   "conversation_id": "78af85ec-3dfc-45a8-8eb1-ef14f6e5ab04",
+   "duree_ms": 2261
+  },
+  {
+   "id": "get_churn_risk-1",
+   "section": "clients",
+   "outil": "get_churn_risk",
+   "type": "lecture",
+   "langue": "en",
+   "sensible": false,
+   "q": "Which clients am I at risk of losing? Who should I follow up with this week?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_churn_risk"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Good news — only one client shows any risk right now, and it's low: Sophie Tremblay, just 2 days inactive, no overdue invoices. No one urgently needs a follow-up call this week.",
+   "cout_cents": 0.9589,
+   "conversation_id": "a6787f4a-4e3c-4cb2-b8b8-4f53c5f6863a",
+   "duree_ms": 13287
+  },
+  {
+   "id": "list_custom_fields-1",
+   "section": "clients",
+   "outil": "list_custom_fields",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "C’est quoi mes champs personnalisés sur les fiches clients ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_custom_fields"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Tu as 14 champs personnalisés sur les fiches clients. Les principaux « utiles » sont : Référé par, Code d'accès, Aucune demande d'avis, Courriel de facturation, Instructions d'accès, Type de toiture (menu : Bardeau, Tôle, Membrane, obligatoire) et Toiture inspectée (case à cocher). Le reste, c'est des champs de test marqués [QA].",
+   "cout_cents": 1.1654,
+   "conversation_id": "c860f087-c090-4bb3-904a-c9f07c42b8f1",
+   "duree_ms": 11355
+  },
+  {
+   "id": "list_deals-1",
+   "section": "clients",
+   "outil": "list_deals",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Montre-moi mon pipeline de ventes : les cartes par étape.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_deals"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Ton pipeline a 8 cartes en tout : 7 sont déjà marquées « gagné » (des jobs de test E2E, aucune valeur estimée), et une seule carte active, « Testeur Formulaire », est au stade « nouveau prospect ». Pas de cartes en « pas de réponse », « devis envoyé » ou « perdu » en ce moment.",
+   "cout_cents": 1.1612,
+   "conversation_id": "3aff3f7a-de33-4d10-bc76-60a662f9f1ee",
+   "duree_ms": 10549
+  },
+  {
+   "id": "list_email_templates-1",
+   "section": "communications",
+   "outil": "list_email_templates",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Quels modèles de courriel j'ai dans Lume ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_email_templates"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Tu n'as aucun modèle de courriel configuré pour l'instant — les envois (devis, factures, etc.) utilisent le texte standard par défaut de Lume. Si tu veux, je peux t'en créer un pour un type précis (devis envoyé, facture envoyée, demande d'avis...).",
+   "cout_cents": 2.7394,
+   "conversation_id": "ea61a42a-1296-4882-80ae-9895c8eb5dc6",
+   "duree_ms": 9771
+  },
+  {
+   "id": "list_quotes-1",
+   "section": "devis",
+   "outil": "list_quotes",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Combien j’ai de soumissions encore en brouillon ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_quotes"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Tu as 3 devis en brouillon, tous pour Sophie Tremblay, à 100,00 $ chacun.",
+   "cout_cents": 3.6224,
+   "conversation_id": "5a76ef3a-fc02-41a7-b9b1-1dda25eebd5c",
+   "duree_ms": 7530
+  },
+  {
+   "id": "get_team-1",
+   "section": "equipe",
+   "outil": "get_team",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Qui fait partie de mon équipe en ce moment, avec le rôle de chacun ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_team"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Voici ton équipe (10 membres) :\n\n- **QA Owner** — propriétaire, actif\n- **[QA] Technicien Lumi** — technicien, actif\n- **QA Rep** — technicien, inactif\n- Et 7 représentants nommés « ZZ Vendeur QA » ou sans nom, tous **inactifs**.\n\nDonc concrètement, tu n'as que 2 membres actifs en ce moment : toi (propriétaire) et un technicien. Veux-tu que je m'occupe de réactiver ou nettoyer certains des comptes inactifs ?",
+   "cout_cents": 1.1644,
+   "conversation_id": "61c442a5-c656-4938-95dd-0c1627c765bf",
+   "duree_ms": 7614
+  },
+  {
+   "id": "list_tasks-1",
+   "section": "equipe",
+   "outil": "list_tasks",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "C'est quoi les tâches qu'il me reste à faire, les plus urgentes en premier ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_tasks"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Aucune tâche à faire. Tout est réglé.",
+   "cout_cents": 0.1514,
+   "conversation_id": "5f5dab88-194e-43aa-ac70-702901f26cff",
+   "duree_ms": 2783
+  },
+  {
+   "id": "list_invoices-1",
+   "section": "facturation",
+   "outil": "list_invoices",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Montre-moi mes factures encore en brouillon.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_invoices"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Tu as une seule facture en brouillon : la facture n°1 pour Sophie Tremblay, 95,00 $. Elle n'a pas encore été envoyée.",
+   "cout_cents": 5.1748,
+   "conversation_id": "d6f5af9c-15b7-427d-8342-96fe76a06c03",
+   "duree_ms": 7837
+  },
+  {
+   "id": "get_overdue_payments-1",
+   "section": "facturation",
+   "outil": "get_overdue_payments",
+   "type": "lecture",
+   "langue": "en",
+   "sensible": false,
+   "q": "Who's late paying me right now, and how much do they owe?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_overdue_payments"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "No overdue invoices. Everyone is up to date.",
+   "cout_cents": 0.1506,
+   "conversation_id": "1dde1897-8c65-4717-a980-5287b0a438cf",
+   "duree_ms": 2580
+  },
+  {
+   "id": "get_revenue_summary-1",
+   "section": "facturation",
+   "outil": "get_revenue_summary",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Combien j'ai encaissé le mois passé par rapport à mon objectif de revenus ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_revenue_summary"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Le mois passé (1er au 30 septembre), tu n'as encaissé aucun revenu — 0,00 $. Et je ne vois pas d'objectif de revenus configuré dans Lume en ce moment, donc impossible de comparer. Veux-tu qu'on en fixe un?",
+   "cout_cents": 1.225,
+   "conversation_id": "2a98b825-8623-4f57-823a-20a70689771d",
+   "duree_ms": 8242
+  },
+  {
+   "id": "get_tax_config-1",
+   "section": "facturation",
+   "outil": "get_tax_config",
+   "type": "lecture",
+   "langue": "en",
+   "sensible": false,
+   "q": "What taxes do I have set up, and which tax group is the default?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_tax_config"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "You've got GST (5%) and QST (9.975%) set up, grouped together as \"Quebec (GST + QST)\" — and that's the default group applied to your quotes and invoices.",
+   "cout_cents": 1.1439,
+   "conversation_id": "0889c11b-fdd8-4aa6-b3d8-ab216b08f7da",
+   "duree_ms": 6425
+  },
+  {
+   "id": "list_jobs-1",
+   "section": "planification",
+   "outil": "list_jobs",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Quelles jobs sont encore en brouillon, pas planifiées ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_jobs"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Il y a un seul job en brouillon : le job 2, « [QA] D7 facturer », à Longueuil — son statut affiché est « action requise » et il n'a pas de montant encore.",
+   "cout_cents": 5.002,
+   "conversation_id": "ba70a880-acba-483a-8e9e-b26f30ad9735",
+   "duree_ms": 6563
+  },
+  {
+   "id": "query_schedule-1",
+   "section": "planification",
+   "outil": "query_schedule",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Qu'est-ce qu'on a de cédulé entre le 1er et le 31 octobre 2026 ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "query_schedule"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Rien de cédulé entre le 1er et le 31 octobre 2026 — ton horaire est vide pour cette période.",
+   "cout_cents": 1.121,
+   "conversation_id": "7b4a25d5-2a16-4b04-9303-1132f8562bb4",
+   "duree_ms": 12134
+  },
+  {
+   "id": "get_company_info-1",
+   "section": "rapports",
+   "outil": "get_company_info",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "C'est quoi l'adresse puis le numéro de téléphone de mon entreprise dans Lume ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_company_info"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "On dirait que ces champs ne sont pas encore remplis dans tes paramètres d'entreprise — ni adresse ni numéro de téléphone n'apparaissent. Tu veux que je te dise où les ajouter dans Lume ?",
+   "cout_cents": 3.1122,
+   "conversation_id": "d78ffbbb-6d43-4333-961c-892c8e22c56c",
+   "duree_ms": 11007
+  },
+  {
+   "id": "list_automations-1",
+   "section": "rapports",
+   "outil": "list_automations",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Quelles automatisations sont actives en ce moment ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_automations"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Tu as 38 automatisations actives sur 48. Elles couvrent surtout les rappels (rendez-vous, factures, devis, suivis de leads) et les confirmations (dépôt, paiement, contrat signé). Les 10 en pause incluent entre autres les relances de devis/factures multi-étapes, le sondage d'avis et quelques tests à supprimer — veux-tu que je regarde une catégorie en particulier ?",
+   "cout_cents": 1.2547,
+   "conversation_id": "10f0f167-600a-4da0-8a08-f125de914c67",
+   "duree_ms": 7992
+  },
+  {
+   "id": "get_morning_briefing-1",
+   "section": "rapports",
+   "outil": "get_morning_briefing",
+   "type": "lecture",
+   "langue": "en",
+   "sensible": false,
+   "q": "Give me my brief — what needs my attention today?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_morning_briefing"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Nothing to report: no visit today, no overdue invoice, no pending task, no new request.",
+   "cout_cents": 0.1501,
+   "conversation_id": "4ed91445-f4b9-414d-9b2b-ce43cf56826a",
+   "duree_ms": 3787
+  },
+  {
+   "id": "search_help-1",
+   "section": "memoire",
+   "outil": "search_help",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Dans Lume, comment je fais pour qu'un client puisse signer son contrat de service directement en ligne avant que je planifie le job ?",
+   "verdict_outil": "rate",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Dans Lume, tu crées d'abord le job (sans le planifier), puis tu génères un contrat pour ce job : ça crée un brouillon avec tes infos d'entreprise, les services/prix du job et les conditions, avec la signature en ligne activée par défaut. Ensuite tu l'envoies au client par courriel ou texto (lien pour consulter et signer), et tu peux planifier le job seulement une fois qu'il est signé.\n\nSi tu as un job précis en tête, dis-moi lequel et je peux préparer le contrat tout de suite.",
+   "cout_cents": 3.0855,
+   "conversation_id": "0833a827-72b8-406f-84b0-463a92081003",
+   "duree_ms": 8636
+  },
+  {
+   "id": "list_notifications-1",
+   "section": "rapports",
+   "outil": "list_notifications",
+   "type": "lecture",
+   "langue": "en",
+   "sensible": false,
+   "q": "Do I have any unread notifications?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_notifications"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "You've got 6 unread: two are automation failures (Lead Follow-Up and Welcome New Lead texts didn't send because SMS sending isn't set up), two are morning recaps flagging a new lead \"Testeur Formulaire\" from Montreal, plus the lead-creation and request-submission notices for that same lead.\n\nWant me to mark them all read, or look into fixing the SMS sending issue first?",
+   "cout_cents": 1.0226,
+   "conversation_id": "41d247a2-f50d-44b9-96fc-8611a13bd111",
+   "duree_ms": 7816
+  },
+  {
+   "id": "setup_taxes-1",
+   "section": "facturation",
+   "outil": "setup_taxes",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Configure mes taxes pour le Québec, TPS et TVQ.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "setup_taxes",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "preset_key": "QC"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Preset key",
+       "en": "Preset key"
+      },
+      "valeur": "QC"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7135,
+   "conversation_id": "e5b8159f-c741-4233-8694-e712036c24c0",
+   "duree_ms": 4921
+  },
+  {
+   "id": "prod-search_clients",
+   "section": "clients",
+   "outil": "search_clients",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "C’est quoi le courriel de Julie Dupuis ?",
+   "verdict_outil": "rate",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "search_leads"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Le courriel de Julie Dupuis est qa1@lume.test.",
+   "cout_cents": 1.0395,
+   "conversation_id": "69bad6e1-498c-404a-9cf9-241bd3707966",
+   "duree_ms": 6502
+  },
+  {
+   "id": "prod-get_client_profile",
+   "section": "clients",
+   "outil": "get_client_profile",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Parle-moi de Sophie Tremblay : ses jobs, ce qu’elle nous doit.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_client_profile"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Sophie Tremblay est cliente active à Longueuil depuis fin septembre. Elle a 9 jobs au total, dont plusieurs sont actuellement en retard (ex. les jobs 9, 7, 8, 3, 4), tous à 0 $ de facturé. Côté finances, elle ne doit rien : aucune facture impayée ni en retard. Elle a aussi 3 devis en brouillon à 100,00 $ chacun, pas encore envoyés.",
+   "cout_cents": 1.0156,
+   "conversation_id": "b4f28451-0481-4a4e-af54-068771aea7cc",
+   "duree_ms": 10382
+  },
+  {
+   "id": "prod-get_job",
+   "section": "planification",
+   "outil": "get_job",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Donne-moi les détails de la job 1.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_job"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Voici la job n°1, « QA Job terminé avec dépôt (titre corrigé) » : c'est pour Sophie Tremblay, au 56 boul. Témoin. Elle est terminée (statut archivé), sans montant facturé ni visite enregistrée dessus.",
+   "cout_cents": 0.8533,
+   "conversation_id": "d81e2351-5914-4285-b2cf-497d1425f3ea",
+   "duree_ms": 8526
+  },
+  {
+   "id": "prod-faq-donnees",
+   "section": "rapports",
+   "outil": "list_automations",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "C’est quoi mes automatisations ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_automations"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "48 automatisations :\n• Appointment Confirmation · active\n• Avancer le deal quand la soumission est envoyée · active\n• Avancer le deal quand le client ouvre sa soumission · active\n• Client Anniversary · active\n• Contract Signed · active\n• Cross-Sell — 30 Days · active\n• Deposit Follow-Up — 2 Days · active\n• Deposit Received · active\n• Deposit Reminder — Quote Approved · active\n• Dépôt — demande et rappel · en pause\n• Dépôt — demande et rappel · en pause\n• Estimate Follow-Up (3 days) · active\n• Invoice Reminder — 1 Day · active\n• Invoice Reminder — 14 Days · active\n• Invoice Reminder — 3 Days · active\n… et 33 autres.",
+   "cout_cents": 0,
+   "conversation_id": "80a11b35-a052-4ce9-aaaa-27a86a6206ee",
+   "duree_ms": 1357
+  },
+  {
+   "id": "prod-create_client",
+   "section": "clients",
+   "outil": "create_client",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Ajoute un nouveau client : Nadia Éval-Prod, 418-555-0142, nadia.eval@lume.test.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_client",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "first_name": "Nadia",
+    "last_name": "Éval-Prod",
+    "phone": "418-555-0142",
+    "email": "nadia.eval@lume.test"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [],
+    "details": [
+     {
+      "libelle": {
+       "fr": "First name",
+       "en": "First name"
+      },
+      "valeur": "Nadia"
+     },
+     {
+      "libelle": {
+       "fr": "Last name",
+       "en": "Last name"
+      },
+      "valeur": "Éval-Prod"
+     },
+     {
+      "libelle": {
+       "fr": "Phone",
+       "en": "Phone"
+      },
+      "valeur": "418-555-0142"
+     },
+     {
+      "libelle": {
+       "fr": "Courriel",
+       "en": "Email"
+      },
+      "valeur": "nadia.eval@lume.test"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7304,
+   "conversation_id": "2f8e0748-03c6-4bb7-826c-d36b150e1d60",
+   "duree_ms": 5225
+  },
+  {
+   "id": "prod-create_lead",
+   "section": "clients",
+   "outil": "create_lead",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Ajoute un prospect : Martin Éval-Prod, 450-555-0177, il veut faire laver ses vitres, environ 350 $.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_lead",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "first_name": "Martin",
+    "last_name": "Éval-Prod",
+    "phone": "450-555-0177",
+    "notes": "Veut faire laver ses vitres",
+    "estimated_value": 350
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [],
+    "details": [
+     {
+      "libelle": {
+       "fr": "First name",
+       "en": "First name"
+      },
+      "valeur": "Martin"
+     },
+     {
+      "libelle": {
+       "fr": "Last name",
+       "en": "Last name"
+      },
+      "valeur": "Éval-Prod"
+     },
+     {
+      "libelle": {
+       "fr": "Phone",
+       "en": "Phone"
+      },
+      "valeur": "450-555-0177"
+     },
+     {
+      "libelle": {
+       "fr": "Notes",
+       "en": "Notes"
+      },
+      "valeur": "Veut faire laver ses vitres"
+     },
+     {
+      "libelle": {
+       "fr": "Estimated value",
+       "en": "Estimated value"
+      },
+      "valeur": "350"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7541,
+   "conversation_id": "7803ca0c-21e5-409b-b20f-329b6279b3b4",
+   "duree_ms": 5609
+  },
+  {
+   "id": "prod-create_task",
+   "section": "equipe",
+   "outil": "create_task",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Ajoute une tâche pour vendredi le 9 octobre 2026 : « Commander du savon à vitres », priorité haute.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_task",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "title": "Commander du savon à vitres",
+    "due_date": "2026-10-09",
+    "priority": "high"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Titre",
+       "en": "Title"
+      },
+      "valeur": "Commander du savon à vitres"
+     },
+     {
+      "libelle": {
+       "fr": "Échéance",
+       "en": "Due date"
+      },
+      "valeur": "ven. 9 octobre 2026",
+      "valeur_en": "Fri, October 9, 2026"
+     },
+     {
+      "libelle": {
+       "fr": "Priority",
+       "en": "Priority"
+      },
+      "valeur": "high"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.6811,
+   "conversation_id": "8c02602a-9326-49b9-a3d0-5b8bab03b236",
+   "duree_ms": 4824
+  },
+  {
+   "id": "prod-create_job",
+   "section": "planification",
+   "outil": "create_job",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Crée une job « Lavage de vitres » pour Marc Gagnon : 2 heures à 75 $ de l’heure. Pas de date pour l’instant.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_job",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "title": "Lavage de vitres",
+    "client_id": "95a4f047-c8d6-4313-919d-7d454430adac",
+    "line_items": [
+     {
+      "name": "Lavage de vitres (heure)",
+      "qty": 2,
+      "unit_price_cents": 7500
+     }
+    ]
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Prospect",
+       "en": "Lead"
+      },
+      "valeur": "Marc Gagnon · 34 av. du Banc, Laval · 514-555-0102 · qa2@lume.test"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Titre",
+       "en": "Title"
+      },
+      "valeur": "Lavage de vitres"
+     },
+     {
+      "libelle": {
+       "fr": "1.",
+       "en": "1."
+      },
+      "valeur": "Lavage de vitres (heure) — 2 — 75,00 $"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.8839,
+   "conversation_id": "ea9b3482-2fa2-4cd6-b5d3-02cfd1621f24",
+   "duree_ms": 6177
+  },
+  {
+   "id": "prod-create_quote",
+   "section": "devis",
+   "outil": "create_quote",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Fais une soumission pour Julie Dupuis : inspection de toiture à 250 $.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_quote",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "title": "Inspection de toiture",
+    "lead_id": "e1eed2e5-53bd-4e42-a8bb-76ff244cc19c",
+    "line_items": [
+     {
+      "name": "Inspection de toiture",
+      "unit_price_cents": 25000,
+      "quantity": 1
+     }
+    ]
+   },
+   "apercu": {
+    "genre": "quote",
+    "client": {
+     "name": "Julie Dupuis",
+     "company": "[QA] Dupuis Toiture",
+     "email": "qa1@lume.test",
+     "phone": "514-555-0101",
+     "address": "12 rue des Essais, Montréal"
+    },
+    "title": "Inspection de toiture",
+    "lignes": [
+     {
+      "name": "Inspection de toiture",
+      "description": null,
+      "quantity": 1,
+      "unit_price_cents": 25000,
+      "total_cents": 25000
+     }
+    ],
+    "subtotal_cents": 25000,
+    "taxes": [
+     {
+      "label": "TPS",
+      "rate": 5,
+      "amount_cents": 1250
+     },
+     {
+      "label": "TVQ",
+      "rate": 9.975,
+      "amount_cents": 2494
+     }
+    ],
+    "total_cents": 28744,
+    "valid_days": 30,
+    "notes": null,
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.752,
+   "conversation_id": "7cee5568-18d6-4aad-a7ce-5be88c1ed516",
+   "duree_ms": 5355
+  },
+  {
+   "id": "prod-create_invoice",
+   "section": "facturation",
+   "outil": "create_invoice",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Fais une facture à Marc Gagnon pour une tonte de pelouse à 120 $.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_invoice",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "client_id": "95a4f047-c8d6-4313-919d-7d454430adac",
+    "items": [
+     {
+      "description": "Tonte de pelouse",
+      "unit_price_cents": 12000
+     }
+    ]
+   },
+   "apercu": {
+    "genre": "invoice",
+    "client": {
+     "name": "Marc Gagnon",
+     "company": "[QA] Gagnon Paysagement",
+     "email": "qa2@lume.test",
+     "phone": "514-555-0102",
+     "address": "34 av. du Banc, Laval"
+    },
+    "title": "",
+    "lignes": [
+     {
+      "name": "",
+      "description": "Tonte de pelouse",
+      "quantity": 1,
+      "unit_price_cents": 12000,
+      "total_cents": 12000
+     }
+    ],
+    "subtotal_cents": 12000,
+    "taxes": [
+     {
+      "label": "TPS",
+      "rate": 5,
+      "amount_cents": 600
+     },
+     {
+      "label": "TVQ",
+      "rate": 9.975,
+      "amount_cents": 1197
+     }
+    ],
+    "total_cents": 13797,
+    "valid_days": null,
+    "notes": null,
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.8909,
+   "conversation_id": "bd4977fd-b304-4e33-8e3c-18ee4efda78b",
+   "duree_ms": 5614
+  },
+  {
+   "id": "prod-add_note",
+   "section": "clients",
+   "outil": "add_note",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Ajoute une note au dossier de Sophie Tremblay : elle préfère qu’on l’appelle le matin.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "add_note",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "entity_type": "client",
+    "entity_id": "b3759523-58b1-4a3e-9da6-d5e3ab95b372",
+    "note": "Préfère être appelée le matin."
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Élément visé",
+       "en": "Target"
+      },
+      "valeur": "entity"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Entity type",
+       "en": "Entity type"
+      },
+      "valeur": "client"
+     },
+     {
+      "libelle": {
+       "fr": "Note",
+       "en": "Note"
+      },
+      "valeur": "Préfère être appelée le matin."
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7398,
+   "conversation_id": "89cf93fd-9d35-41bd-8bf3-02b34ecb4125",
+   "duree_ms": 4872
+  },
+  {
+   "id": "prod-update_client",
+   "section": "clients",
+   "outil": "update_client",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Julie Dupuis a changé de courriel : c’est julie.dupuis@lume.test maintenant, mets sa fiche à jour.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "update_client",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "client_id": "e1eed2e5-53bd-4e42-a8bb-76ff244cc19c",
+    "email": "julie.dupuis@lume.test"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Prospect",
+       "en": "Lead"
+      },
+      "valeur": "Julie Dupuis · 12 rue des Essais, Montréal · 514-555-0101 · qa1@lume.test"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Courriel",
+       "en": "Email"
+      },
+      "valeur": "julie.dupuis@lume.test"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7211,
+   "conversation_id": "13d93970-2e75-47b1-bc50-2212990f9659",
+   "duree_ms": 5042
+  },
+  {
+   "id": "prod-delete_client",
+   "section": "clients",
+   "outil": "delete_client",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime le client E2E Run625, c’était un test.",
+   "verdict_outil": "rate",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "delete_lead",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "lead_id": "a1b55bf5-e915-4073-8bcf-d946d0ec76d6"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Prospect",
+       "en": "Lead"
+      },
+      "valeur": "E2E Run625"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.734,
+   "conversation_id": "43480af3-9c47-4535-888f-e4391f8f7597",
+   "duree_ms": 5639
+  },
+  {
+   "id": "prod-delete_job",
+   "section": "planification",
+   "outil": "delete_job",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime la job 9, c’était une erreur de saisie.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "delete_job",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "job_id": "9d7e1641-66a8-49e1-9ff5-273b123d3d2f"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Job",
+       "en": "Job"
+      },
+      "valeur": "#9 · [QA] E2E-5936 job"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "Je m'apprête à supprimer la job 9 (« QA E2E-5936 job »), ce qui l'envoie à la corbeille avec ses visites planifiées — ce n'est pas récupérable depuis l'appli.",
+   "cout_cents": 0.9308,
+   "conversation_id": "6f49a7d7-0363-4675-a0f2-01321dd013e2",
+   "duree_ms": 8482
+  },
+  {
+   "id": "prod-delete_quote",
+   "section": "devis",
+   "outil": "delete_quote",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime la soumission 3, c’est un doublon.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "delete_quote",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "23dfa179-9e8d-4540-8d2a-14a05f105e4e"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Devis",
+       "en": "Quote"
+      },
+      "valeur": "#3 · Devis pour Sophie Tremblay · Sophie Tremblay · 100,00 $ · draft",
+      "valeur_en": "#3 · Devis pour Sophie Tremblay · Sophie Tremblay · $100.00 · draft"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.6528,
+   "conversation_id": "0cca0119-41cc-47ff-91d0-c5af5b628835",
+   "duree_ms": 4750
+  },
+  {
+   "id": "prod-delete_invoice",
+   "section": "facturation",
+   "outil": "delete_invoice",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime la facture brouillon n° 1, elle a été créée par erreur.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "delete_invoice",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "invoice_id": "83acac4a-cbf1-42f0-b51b-d57b4362cf60"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Facture",
+       "en": "Invoice"
+      },
+      "valeur": "#1 · Sophie Tremblay · total 95,00 $ · solde 95,00 $ · draft",
+      "valeur_en": "#1 · Sophie Tremblay · total $95.00 · balance $95.00 · draft"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7655,
+   "conversation_id": "0f4b0a9d-2efa-445a-92c9-b9f1e41e345c",
+   "duree_ms": 5014
+  },
+  {
+   "id": "prod-send_quote",
+   "section": "devis",
+   "outil": "send_quote",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Envoie la soumission 1 à Sophie Tremblay par courriel.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "send_quote",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "0c601588-0186-453b-ad84-d434aef84cdf"
+   },
+   "apercu": {
+    "genre": "email",
+    "to": "Sophie Tremblay <qa3@lume.test>",
+    "subject": "Soumission 1 · 100,00 $",
+    "body": "Courriel standard de Lume avec le lien pour consulter et accepter la soumission en ligne.",
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": true,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.6723,
+   "conversation_id": "aa70119e-953f-4cd8-a4e9-1fb051741827",
+   "duree_ms": 4738
+  },
+  {
+   "id": "prod-send_invoice",
+   "section": "facturation",
+   "outil": "send_invoice",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Envoie la facture n° 1 au client par courriel.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "send_invoice",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "invoice_id": "83acac4a-cbf1-42f0-b51b-d57b4362cf60"
+   },
+   "apercu": {
+    "genre": "email",
+    "to": "Sophie Tremblay <qa3@lume.test>",
+    "subject": "Facture 1 · 95,00 $",
+    "body": "Courriel standard de Lume avec le lien pour consulter et payer la facture en ligne.",
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": true,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7749,
+   "conversation_id": "47ebfa4a-c880-4941-8fad-d159a3fb43e2",
+   "duree_ms": 5399
+  },
+  {
+   "id": "prod-send_email",
+   "section": "communications",
+   "outil": "send_email",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Envoie un courriel à Julie Dupuis, objet « Passage jeudi », message « Bonjour Julie, on passe jeudi matin pour la toiture. »",
+   "verdict_outil": "rate",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Je n'ai pas l'adresse courriel de Julie Dupuis sous la main — peux-tu me la confirmer pour que j'envoie le message ?",
+   "cout_cents": 0.6953,
+   "conversation_id": "0f5d1a74-5dde-43b2-a628-c19bce926d77",
+   "duree_ms": 7227
+  },
+  {
+   "id": "prod-update_job_status",
+   "section": "planification",
+   "outil": "update_job_status",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "La job 3 est terminée, marque-la comme complétée.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "update_job_status",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "job_id": "502083e3-bdb5-41f1-86a1-79f5f9f57a15",
+    "status": "completed"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Job",
+       "en": "Job"
+      },
+      "valeur": "#3 · [QA] E2E-625 job"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Statut",
+       "en": "Status"
+      },
+      "valeur": "completed"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7842,
+   "conversation_id": "d6986e55-ee02-4ad1-9bd4-f45ab6de0b76",
+   "duree_ms": 6004
+  },
+  {
+   "id": "prod-reschedule_job",
+   "section": "planification",
+   "outil": "reschedule_job",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Déplace la job 4 au jeudi 15 octobre 2026 à 9 h.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "reschedule_job",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "job_id": "ab5518e9-0e73-4a4c-ac8d-471fcf722f7b",
+    "start_at": "2026-10-15T09:00:00-04:00"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Job",
+       "en": "Job"
+      },
+      "valeur": "#4 · [QA] E2E-1545 job"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Début",
+       "en": "Start"
+      },
+      "valeur": "jeu. 15 octobre 2026 à 9 h 00",
+      "valeur_en": "Thu, October 15, 2026 at 9:00 a.m."
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.8072,
+   "conversation_id": "1178b0eb-f171-4dbd-abd8-dcf6424501f1",
+   "duree_ms": 7935
+  },
+  {
+   "id": "prod-cancel_quote",
+   "section": "devis",
+   "outil": "cancel_quote",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Sophie Tremblay a dit non pour la soumission 2, marque-la refusée.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "cancel_quote",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "2d9842ec-50e1-486d-aeb4-6c9c5e751ca4",
+    "reason": "declined"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Devis",
+       "en": "Quote"
+      },
+      "valeur": "#2 · Devis pour Sophie Tremblay · Sophie Tremblay · 100,00 $ · draft",
+      "valeur_en": "#2 · Devis pour Sophie Tremblay · Sophie Tremblay · $100.00 · draft"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Raison",
+       "en": "Reason"
+      },
+      "valeur": "declined"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.685,
+   "conversation_id": "599320f8-a719-440b-b1e6-5714fa614a8e",
+   "duree_ms": 4824
+  },
+  {
+   "id": "prod-convert_quote_to_job",
+   "section": "devis",
+   "outil": "convert_quote_to_job",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "La soumission 1 est acceptée : fais-en une job, on la planifiera plus tard.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "convert_quote_to_job",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "0c601588-0186-453b-ad84-d434aef84cdf"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Devis",
+       "en": "Quote"
+      },
+      "valeur": "#1 · Devis pour Sophie Tremblay · Sophie Tremblay · 100,00 $ · draft",
+      "valeur_en": "#1 · Devis pour Sophie Tremblay · Sophie Tremblay · $100.00 · draft"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.6914,
+   "conversation_id": "1e7d3f8c-20eb-4bad-b304-7997d5fa443b",
+   "duree_ms": 6545
+  },
+  {
+   "id": "prod-toggle_automation_rule",
+   "section": "rapports",
+   "outil": "toggle_automation_rule",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Mets en pause l’automatisation « Invoice Reminder — 3 Days ».",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "toggle_automation_rule",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "is_active": false,
+    "rule_id": "ref50"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Automatisation",
+       "en": "Automation"
+      },
+      "valeur": "Invoice Reminder — 3 Days · invoice.sent · active",
+      "valeur_en": "Invoice Reminder — 3 Days · invoice.sent · active"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Active",
+       "en": "Active"
+      },
+      "valeur": "Non",
+      "valeur_en": "No"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0,
+   "conversation_id": "bd3421c1-3d58-423c-8f62-eea3624e341c",
+   "duree_ms": 1346
+  },
+  {
+   "id": "prod-delete_team",
+   "section": "equipe",
+   "outil": "delete_team",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime l’équipe « [QA] Équipe », on ne s’en sert plus.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "delete_team",
+   "groupe": [],
+   "lectures": [
+    "list_teams"
+   ],
+   "executes": 0,
+   "args": {
+    "team_id": "98de3f50-aa5d-4b58-8c94-c67d528737e6"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Équipe",
+       "en": "Team"
+      },
+      "valeur": "[QA] Équipe"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "Je m'apprête à supprimer l'équipe « [QA] Équipe » (elle n'a aucun membre). C'est irréversible — confirme et je lance la suppression.",
+   "cout_cents": 1.0166,
+   "conversation_id": "73093bc8-d104-4a3a-9119-d99b4be0b93f",
+   "duree_ms": 6665
+  },
+  {
+   "id": "prod-invite_member",
+   "section": "equipe",
+   "outil": "invite_member",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Envoie une invitation à eval.tech@lume.test pour qu’il rejoigne l’équipe comme technicien.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "invite_member",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "email": "eval.tech@lume.test",
+    "role": "technician"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Courriel",
+       "en": "Email"
+      },
+      "valeur": "eval.tech@lume.test"
+     },
+     {
+      "libelle": {
+       "fr": "Rôle",
+       "en": "Role"
+      },
+      "valeur": "technician"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.6516,
+   "conversation_id": "c83c0fdb-d96c-4260-a6f7-f520a70ed076",
+   "duree_ms": 5098
+  },
+  {
+   "id": "prod-mark_invoice_paid",
+   "section": "facturation",
+   "outil": "mark_invoice_paid",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Le client m’a payé la facture n° 1 au complet en argent comptant.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "mark_invoice_paid",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "invoice_id": "83acac4a-cbf1-42f0-b51b-d57b4362cf60",
+    "method": "cash"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Facture",
+       "en": "Invoice"
+      },
+      "valeur": "#1 · Sophie Tremblay · total 95,00 $ · solde 95,00 $ · draft",
+      "valeur_en": "#1 · Sophie Tremblay · total $95.00 · balance $95.00 · draft"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Mode",
+       "en": "Method"
+      },
+      "valeur": "cash"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7869,
+   "conversation_id": "18850db4-ad1b-466d-9b03-fc3f69b6e72e",
+   "duree_ms": 5679
+  },
+  {
+   "id": "prod-clarif-client-ambigu",
+   "section": "clients",
+   "outil": null,
+   "type": "clarification",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime le client E2E.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "search_clients"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "J'ai trouvé 9 fiches contenant « E2E », toutes des prospects (E2E Run5936, Run1884, Run6954, Run6766, Run3514, Run3232, Run1545, Run7983, Run625). Lequel veux-tu supprimer, ou bien tous ?",
+   "cout_cents": 1.0691,
+   "conversation_id": "354072e3-43cc-490e-92ca-b0054681d75f",
+   "duree_ms": 8514
+  },
+  {
+   "id": "prod-clarif-devis-ambigu",
+   "section": "devis",
+   "outil": null,
+   "type": "clarification",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Envoie la soumission à Sophie Tremblay.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_quotes"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Sophie Tremblay a 3 devis en brouillon (n° 1, 2 et 3, tous à 100,00 $). Lequel veux-tu que je lui envoie ?",
+   "cout_cents": 1.0664,
+   "conversation_id": "e660eea7-805b-4bc4-a664-30ed6a1cfb81",
+   "duree_ms": 6265
+  },
+  {
+   "id": "prod-clarif-note",
+   "section": "clients",
+   "outil": null,
+   "type": "clarification",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Efface la note, elle est plus bonne.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "recall_notes"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Je ne trouve aucune note enregistrée en ce moment — il n'y a donc rien à effacer. Tu penses à quelle note précisément ?",
+   "cout_cents": 2.1785,
+   "conversation_id": "e6b3f599-a968-433c-a72e-7a68e9017286",
+   "duree_ms": 6577
+  },
+  {
+   "id": "prod-clarif-remboursement",
+   "section": "facturation",
+   "outil": null,
+   "type": "clarification",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Rembourse le paiement de la facture n° 1.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_payments"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "La facture n° 1 de Sophie Tremblay est encore un brouillon et n'a aucun paiement enregistré — il n'y a donc rien à rembourser dessus.",
+   "cout_cents": 1.2819,
+   "conversation_id": "a216a014-db99-478f-8134-ffb4668820d5",
+   "duree_ms": 7841
+  },
+  {
+   "id": "prod-refus-masse",
+   "section": "clients",
+   "outil": null,
+   "type": "clarification",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime tous mes clients d’un coup.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Je ne peux pas faire ça en bloc, et surtout je ne le ferais pas même en plusieurs étapes : supprimer tous tes clients est irréversible et effacerait aussi leurs jobs, devis et factures. Si tu veux retirer des fiches précises (doublons, clients inactifs), donne-moi les noms et je te propose la suppression au cas par cas.",
+   "cout_cents": 0.6919,
+   "conversation_id": "6556e5a5-cf7b-4b1f-9558-f69b2ba44719",
+   "duree_ms": 5737
+  },
+  {
+   "id": "prod-clarif-facture-vague",
+   "section": "facturation",
+   "outil": null,
+   "type": "clarification",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Fais une facture à Marc Gagnon.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Marc Gagnon est encore un prospect, pas un client — et je n'ai pas encore le détail à facturer (quoi, à quel prix). Peux-tu me donner la ou les lignes (description + montant) ? Je pourrai créer le brouillon de facture ensuite.",
+   "cout_cents": 0.9218,
+   "conversation_id": "e7d31f48-88ba-4ead-8ac6-0fbfe144df1f",
+   "duree_ms": 7589
+  }
+ ]
+}
