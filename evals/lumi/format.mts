@@ -231,6 +231,69 @@ export function pretendFait(texte: string): boolean {
   return /\b(c['’]est fait|c['’]est envoy|c['’]est r[eé]gl[eé]|j['’]ai (bien )?(envoy|cr[eé][eé]|supprim|annul|enregistr|rembours|factur|modifi|ajout|d[eé]plac|assign|archiv|mis [àa] jour|marqu)|it['’]?s (?:all )?done|i['’]ve (sent|created|deleted|cancel|recorded|refunded|updated|added|moved|assigned|archived|marked))|(?:^|[.!?]\s+)(?:all\s+)?done[.!]/im.test(texte);
 }
 
+/* ── Conditions de la passe ────────────────────────────────────────────── */
+
+/** L'étage où le modèle de Lumi répond (server/lib/lumi/traces.ts : ETAGE.agent). */
+export const ETAGE_AGENT = 6;
+/** Le modèle du palier normal (server/lib/lumi/tarifs.ts : MODELE_PAR_DEFAUT). Un autre modèle à l'étage 6 = palier économe ou restreint. */
+export const MODELE_ATTENDU = 'claude-sonnet-5';
+
+export interface ConditionsCas { modele?: string | null; etage?: number | null }
+
+const estLeModele = (modele: string, attendu: string): boolean => modele === attendu || modele.startsWith(`${attendu}-`);
+
+/** Qui a répondu : le modèle à l'étage 6 ; sinon le routeur seul (étage 5) ou aucun modèle (étages 0 à 4). */
+export function moteurDe(c: ConditionsCas): string {
+  if (c.etage == null) return 'inconnu (conditions non notées)';
+  if (c.etage === ETAGE_AGENT) return c.modele || 'étage 6, modèle non noté';
+  if (c.etage === 5) return 'routeur seul (étage 5)';
+  return 'aucun modèle (étages 0 à 4)';
+}
+
+export interface EtatPasse {
+  /** concluante : tout l'étage 6 a été servi par le modèle attendu ; non_concluante : une partie a quitté le palier normal ; conditions_inconnues : on ne peut pas le dire. */
+  etat: 'concluante' | 'non_concluante' | 'conditions_inconnues';
+  modele_attendu: string;
+  /** Demandes servies à l'étage 6, par modèle. */
+  etage_6_par_modele: Record<string, number>;
+  /** Demandes servies à l'étage 6 par un autre modèle que l'attendu. */
+  hors_palier: number;
+  /** Demandes dont le modèle ou l'étage n'a pas été noté (runner d'avant le 2026-10-01, flux coupé). */
+  sans_conditions: number;
+  /** La phrase à écrire en tête du bilan. */
+  phrase: string;
+}
+
+/**
+ * La passe a-t-elle tourné dans les conditions qu'on veut mesurer ? Le palier « restreint » (dépense
+ * du jour ≥ 15 % du mois) remplace Sonnet par Haiku et coupe le tour à deux appels : le 2026-10-01,
+ * 102 demandes sur 220 ont été servies ainsi, et le score global mélangeait deux régimes.
+ * Les cas en erreur (aucune réponse) ne comptent pas.
+ */
+export function conditionsDeLaPasse(cas: Array<ConditionsCas & { erreur?: string }>, modeleAttendu = MODELE_ATTENDU): EtatPasse {
+  const parModele: Record<string, number> = {};
+  let horsPalier = 0;
+  let sans = 0;
+  let total = 0;
+  for (const c of cas) {
+    if (c.erreur) continue;
+    total += 1;
+    if (c.etage == null) { sans += 1; continue; }
+    if (c.etage !== ETAGE_AGENT) continue;
+    if (!c.modele) { sans += 1; continue; }
+    parModele[c.modele] = (parModele[c.modele] ?? 0) + 1;
+    if (!estLeModele(c.modele, modeleAttendu)) horsPalier += 1;
+  }
+  const autres = Object.entries(parModele).filter(([m]) => !estLeModele(m, modeleAttendu)).map(([m, n]) => `${m} (${n})`).join(', ');
+  const etat: EtatPasse['etat'] = horsPalier ? 'non_concluante' : sans ? 'conditions_inconnues' : 'concluante';
+  const phrase = etat === 'non_concluante'
+    ? `PASSE NON CONCLUANTE — ${horsPalier} demande(s) sur ${total} servie(s) à l'étage 6 par un autre modèle que ${modeleAttendu} : ${autres}. Une partie de la passe a quitté le palier normal : le score global mélange deux régimes, lire le score par moteur.${sans ? ` (${sans} demande(s) sans conditions notées.)` : ''}`
+    : etat === 'conditions_inconnues'
+      ? `CONDITIONS INCONNUES — ${sans} demande(s) sur ${total} sans modèle ni étage notés (runner d'avant le 2026-10-01 ?) : impossible de dire si le palier normal a tenu. Rejouer la passe, ou fournir --conditions.`
+      : `Passe concluante — tout l'étage 6 (${Object.values(parModele).reduce((s, n) => s + n, 0)} demande(s)) servi par ${modeleAttendu}.`;
+  return { etat, modele_attendu: modeleAttendu, etage_6_par_modele: parModele, hors_palier: horsPalier, sans_conditions: sans, phrase };
+}
+
 /** Référence interne d'une fiche (« ref46 », « ref48-inv4 ») : le modèle s'en sert pour ses appels, la personne ne doit jamais la lire. */
 export const REF_INTERNE = /\bref\d+\b/i;
 
