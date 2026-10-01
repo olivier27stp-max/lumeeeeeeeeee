@@ -112,9 +112,13 @@ export function calculateCommissionAmount(rule: any, input: CalcInput): CalcResu
   const total = input.invoiceTotalCents;
 
   // 1. Base
-  const baseKind: 'percent' | 'flat' = rule.base_kind || 'percent';
-  const basePct = Number(rule.base_percent ?? 0);
-  const baseFlat = Number(rule.base_value_cents ?? 0);
+  // Règles créées avant les colonnes du moteur (base_*) : leur taux vit encore
+  // dans les colonnes historiques `type` / `percentage` / `flat_amount` ($).
+  // Sans ce repli, un plan affiché « 10 % » payait 0 $ (constaté en prod le
+  // 2026-09-30 sur « [DEMO] Commission 10% »). L'écran lisait déjà ces colonnes.
+  const baseKind: 'percent' | 'flat' = rule.base_kind || (rule.type === 'flat' ? 'flat' : 'percent');
+  const basePct = Number(rule.base_percent ?? rule.percentage ?? 0);
+  const baseFlat = Number(rule.base_value_cents ?? (rule.flat_amount != null ? Math.round(Number(rule.flat_amount) * 100) : 0));
 
   // Apply per-category overrides where defined, base rate elsewhere
   const overrides: Array<{ category: string; base_kind: 'percent'|'flat'; base_percent: number|null; base_value_cents: number|null }> =
