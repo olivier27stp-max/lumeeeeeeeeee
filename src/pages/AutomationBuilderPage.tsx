@@ -2151,10 +2151,20 @@ export default function AutomationBuilderPage() {
               </div>
             )}
 
-            {resumeLumi && (
+            {/*
+              Le bandeau flotte AU-DESSUS du canevas, là où se trouve la carte
+              du déclencheur. Deux règles pour qu'il ne la cache pas :
+               · quand la conversation est ouverte à gauche, la réponse y est
+                 déjà, en entier et mise en forme : pas de bandeau ;
+               · sinon, la PREMIÈRE phrase seulement. La réponse complète
+                 (nouveaux textes, étapes retirées…) tient en plusieurs
+                 paragraphes : aplatie ici, elle recouvrait le déclencheur
+                 (constaté en prod le 2026-10-01).
+            */}
+            {resumeLumi && !(lumiLateral && !lumiReduit) && (
               <div className="absolute left-1/2 top-4 z-10 flex max-w-[520px] -translate-x-1/2 items-start gap-2 rounded-xl border border-accent/40 bg-surface-card px-3 py-2 shadow-sm">
                 <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
-                <p className="text-[12px] text-text-primary">{resumeLumi}</p>
+                <p className="text-[12px] text-text-primary">{resumeLumi.split('\n\n')[0]}</p>
                 <button
                   type="button"
                   onClick={() => setResumeLumi(null)}
