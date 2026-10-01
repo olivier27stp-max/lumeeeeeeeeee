@@ -132,8 +132,37 @@ const MARQUES_DONNEES = [
   // Les accents comptent : le message arrive tel que tapé (« numéro »), il
   // n'est pas normalisé avant d'arriver ici. Et « Comment ajouter un numéro
   // de téléphone à une fiche ? » doit rester une question PRODUIT : la règle
-  // ne s'applique donc pas quand la phrase commence par « comment ».
-  /^(?!\s*comment\b)(?=.*\b(num[ée]ro|t[ée]l|t[ée]l[ée]phone|courriel|email|adresse|solde|montant)\b[^.?]{0,25}\bde\s+(M\.|Mme|Mlle)?\s*[A-ZÀ-Þ][\wÀ-ÿ'-]+)/,
+  // ne s'applique donc pas quand la phrase commence par « comment » — avec ou
+  // sans majuscule : la règle n'a pas le drapeau `i` (elle repère les noms
+  // propres), et « Comment… » en début de phrase lui échappait (2026-10-01).
+  /^(?!\s*[Cc]omment\b)(?=.*\b(num[ée]ro|t[ée]l|t[ée]l[ée]phone|courriel|email|adresse|solde|montant)\b[^.?]{0,25}\bde\s+(M\.|Mme|Mlle)?\s*[A-ZÀ-Þ][\wÀ-ÿ'-]+)/,
+  // ── Passe de référence du 2026-10-01 (220 demandes en prod) : six questions sur
+  // les données du compte ont reçu un article, dont une réponse fausse (« aucune
+  // limite » à « combien de clients ai-je au total »). Les trous, un par un :
+  //
+  // Le nom propre arrive aussi après « à » (parler québécois : « le numéro à
+  // Jean-François Pelletier »), « pour », « chez », et derrière une PIÈCE autant
+  // qu'une coordonnée (« la facture de Pelletier »). Un nom propre = une fiche.
+  /^(?!\s*[Cc]omment\b)(?=.*\b(num[ée]ro|t[ée]l|t[ée]l[ée]phone|cell|courriel|email|adresse|solde|montant|factures?|devis|soumissions?|jobs?|contrats?|paiements?|visites?|rendez-vous|fiche|dossier)\b[^.?]{0,25}\s(de|du|à|a|pour|chez)\s+(M\.|Mme|Mlle)?\s*[A-ZÀ-Þ][\wÀ-ÿ'-]+)/,
+  /^(?!\s*[Hh]ow\b)(?=.*\b(phone|number|email|address|balance|invoices?|quotes?|estimates?|jobs?|payments?|visits?)\b[^.?]{0,25}\s(of|for|from)\s+(Mr\.?|Mrs\.?|Ms\.?)?\s*[A-Z][\w'-]+)/,
+  /\b[A-Z][\w-]+(?:\s+[A-Z][\w-]+)?[’']s\s+(phone|number|email|address|balance|invoices?|quotes?|estimates?|jobs?|payments?|visits?|file)\b/,
+  // « qui me doit de l'argent », « ce qu'on me doit », « who owes me » : une créance
+  // est toujours une ligne du compte.
+  /\b(me|nous)\s+doi(t|vent)\b/i,
+  /\b(owes?|owed|owing)\b/i,
+  // « combien de clients AI-JE », « avons-nous », « au total », « en tout » : le
+  // verbe inversé et le total échappaient aux règles « j'ai combien » plus haut.
+  /\b(combien|cb)\b[^.?]{0,40}\b(ai[- ]je|avons[- ]nous|a[- ]t[- ]on|au total|en tout)\b/i,
+  // L'état AVANT le quantificateur : « … en retard, pis combien chacun ».
+  /\b(impay[ée]\w*|en retard|en souffrance)\b[^?]{0,40}\b(combien|cb)\b/i,
+  // « est-ce que mes clients REÇOIVENT un rappel » : ce que les clients reçoivent
+  // dépend des réglages et des automatisations de CE compte, pas du produit.
+  /\b(mes|nos)\s+(clients?|employ[ée]s?|techniciens?)\b[^.?]{0,15}\b(re[cç]oi\w*|ont re[cç]u|ont pay[ée]|ont sign[ée]|ont accept[ée])\b/i,
+  // L'anglais n'avait aucune règle de quantité : « How many invoices are overdue
+  // right now » partait à l'article « facture impayée ». « How many clients CAN I
+  // have » et « how much does it COST » restent des questions produit.
+  /\bhow\s+(many|much)\b(?![^.?]*\b(can|could|may|allowed|costs?|included?|includes|limit|maximum|max)\b)/i,
+  /\b(who|which|what)\b[^.?]{0,40}\b(overdue|unpaid|outstanding|past due|late)\b/i,
 ];
 
 /**

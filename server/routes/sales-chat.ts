@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { repondreSupportIA, isSupportIAConfigured, MODELE_SUPPORT } from '../lib/support/ia';
 import { getServiceClient } from '../lib/supabase';
-import { journaliserTrace, normaliserEnonce } from '../lib/lumi/traces';
+import { journaliserTrace } from '../lib/lumi/traces';
 import { reponseFixePour } from '../lib/agent/reponsesFixes';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { embed, chercherSemantique, memoriserSemantique } from '../lib/lumi/cache-semantique';
@@ -94,7 +94,7 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
     if ((await reponsesPubliquesAujourdhui(getServiceClient())) >= reglesCout().plafond_public_par_jour) {
       void journaliserTrace(getServiceClient(), {
         orgId: null, userId: null, canal: 'public', origine: (req.body as any)?.origine === 'suggestion' ? 'suggestion' : 'texte',
-        enonce: normaliserEnonce(dernier), etage: 0, action: 'plafond_public', resultat: 'refus', model: null, costCents: 0, dureeMs: Date.now() - debut,
+        enonce: dernier, etage: 0, action: 'plafond_public', resultat: 'refus', model: null, costCents: 0, dureeMs: Date.now() - debut,
       });
       return res.json({ reply: "Bonne question ! Le plus simple, c'est une courte démo — tu veux que je t'aide à en réserver une ?", fixe: 'plafond_public' });
     }
@@ -108,7 +108,7 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
     // Trace sans tenant (page publique) : coût réel du modèle.
     void journaliserTrace(getServiceClient(), {
       orgId: null, userId: null, canal: 'public', origine: (req.body as any)?.origine === 'suggestion' ? 'suggestion' : 'texte',
-      enonce: normaliserEnonce(dernier),
+      enonce: dernier,
       etage: 6, action: 'support-public', outils: r.outils, resultat: 'ok', model: MODELE_SUPPORT, promptVersion: VERSION_PROMPT, costCents: r.coutCents, dureeMs: Date.now() - debut,
     });
     const reply = (r.texte || '').trim();

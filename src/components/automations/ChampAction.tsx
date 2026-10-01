@@ -210,7 +210,8 @@ function ChampActionRendu({
         }
         return (
           <select id={id} value={valeur} onChange={(e) => onChange(e.target.value)} className={classeChamp}>
-            <option value="">{fr ? '— Toutes les étapes —' : '— Every stage —'}</option>
+            {/* Filtre d'un déclencheur : vide = « toutes ». Cible d'une action : vide = rien de choisi. */}
+            <option value="">{fr ? (champ.vide_fr ?? '— Toutes les étapes —') : (champ.vide_en ?? '— Every stage —')}</option>
             {etapesPipeline.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.label}
