@@ -22,6 +22,7 @@
  *   node --env-file=.env.local --import tsx evals/lumi-tools/run.mts [--api http://localhost:3012] [--section facturation]
  *        [--seulement void_invoice,refund_payment] [--sortie evals/lumi-tools/resultats/apres.json] [--parallele 3]
  *        [--reprendre resultats/avant.json]   (rejoue les cas en erreur et fusionne)
+ *        --remettre   (après une batterie interrompue : remet mode Lumi, budget et forfait d'origine)
  *        [--forfait autopilot] [--budget 100000]   (staging : forfait avec Lumi et budget relevé le temps de la batterie, remis à la fin)   (staging : forfait avec Lumi le temps de la batterie, remis à la fin)
  */
 import { createClient } from '@supabase/supabase-js';
@@ -120,7 +121,26 @@ export function juger(c: Cas, r: { proposition: string | null; groupe: string[];
   return { verdict_outil, verdict_params, faux_fait, interdit_propose: interdit, params_manquants: manquants };
 }
 
+const FICHIER_ETAT = join(ICI, 'resultats', '.etat-staging.json');
+
+/** Remet le mode Lumi, le budget du forfait et le forfait de l'org QA (staging). */
+async function remettreEtat(admin: any, etat: { orgId: string; userId: string; lumi_mode: string | null; budget: { planId: string; valeurs: Record<string, number> } | null; forfait: { id: string; plan_id: string } | null }) {
+  await admin.from('memberships').update({ lumi_mode: etat.lumi_mode ?? 'argent' }).eq('user_id', etat.userId).eq('org_id', etat.orgId);
+  if (etat.budget) { await admin.from('plans').update(etat.budget.valeurs).eq('id', etat.budget.planId); console.log('budget d’origine remis'); }
+  if (etat.forfait) { await admin.from('subscriptions').update({ plan_id: etat.forfait.plan_id }).eq('id', etat.forfait.id); console.log('forfait d’origine remis'); }
+  try { writeFileSync(FICHIER_ETAT, ''); } catch { /* rien à effacer */ }
+}
+
 async function main() {
+  // --remettre : rejoue la remise en état d'une batterie interrompue, puis s'arrête.
+  if (process.argv.includes('--remettre')) {
+    const url0 = process.env.VITE_SUPABASE_URL ?? '';
+    if (process.env.SUPABASE_PROJECT_REF_PROD && url0.includes(process.env.SUPABASE_PROJECT_REF_PROD)) throw new Error('Refus : la prod.');
+    const brut = (() => { try { return readFileSync(FICHIER_ETAT, 'utf8'); } catch { return ''; } })();
+    if (!brut.trim()) { console.log('rien à remettre'); process.exit(0); }
+    await remettreEtat(createClient(url0, process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', { auth: { persistSession: false, autoRefreshToken: false } }), JSON.parse(brut));
+    process.exit(0);
+  }
   const API = arg('--api', process.env.QA_API_URL || 'http://localhost:3012').replace(/\/$/, '');
   const SECTION = arg('--section', '');
   const SEULEMENT = arg('--seulement', '') ? new Set(arg('--seulement', '').split(',')) : null;
@@ -231,6 +251,18 @@ async function main() {
     console.log(`budget temporaire : ${JSON.stringify(nouvelles)} (sera remis à ${JSON.stringify(valeurs)})`);
   }
   // Mode « demander » le temps de la batterie : aucune écriture ne s'exécute.
+  // État d'origine écrit sur disque AVANT toute modification : si la batterie est tuée
+  // (le « finally » ne tourne pas), `--remettre` le rejoue. Vécu le 2026-10-01 :
+  // batterie arrêtée, org QA restée sur autopilot avec un budget relevé.
+  const etat = { orgId, userId, lumi_mode: (m as any).lumi_mode as string | null, budget: budgetAvant, forfait: forfaitAvant };
+  writeFileSync(FICHIER_ETAT, JSON.stringify(etat, null, 1));
+  let remis = false;
+  const remettre = async () => {
+    if (remis) return;
+    remis = true;
+    await remettreEtat(admin, etat);
+  };
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK'] as const) process.once(sig, () => { void remettre().finally(() => process.exit(130)); });
   await admin.from('memberships').update({ lumi_mode: 'demander' }).eq('user_id', userId).eq('org_id', orgId);
   const resultats: Resultat[] = [];
   try {
@@ -245,15 +277,7 @@ async function main() {
       }
     }));
   } finally {
-    await admin.from('memberships').update({ lumi_mode: (m as any).lumi_mode }).eq('user_id', userId).eq('org_id', orgId);
-    if (budgetAvant) {
-      await admin.from('plans').update(budgetAvant.valeurs).eq('id', budgetAvant.planId);
-      console.log('budget d’origine remis');
-    }
-    if (forfaitAvant) {
-      await admin.from('subscriptions').update({ plan_id: forfaitAvant.plan_id }).eq('id', forfaitAvant.id);
-      console.log('forfait d’origine remis');
-    }
+    await remettre();
   }
 
   if (REPRENDRE) {
