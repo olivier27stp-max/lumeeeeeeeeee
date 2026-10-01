@@ -10,10 +10,13 @@ import {
   getCommissionRules,
   assignMemberToRule,
   getCommissionSettings,
+  updateCommissionSettings,
+  deleteCommissionRule,
 } from '../lib/commissionsApi';
+import PlanEditeur from '../components/commissions/PlanEditeur';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { fetchTeamList, type OrgMember } from '../lib/invitationsApi';
-import type { FsCommissionRule } from '../types';
+import type { FsCommissionRule, CommissionSettings } from '../types';
 import PersonalCommissionView, { defaultRange } from '../components/commissions/PersonalCommissionView';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { fmtArgent } from '../components/commissions/format';
@@ -23,11 +26,14 @@ import RepCommissionSummary from '../components/commissions/RepCommissionSummary
 import CommissionFilters, { type CommissionFiltersValue } from '../components/commissions/CommissionFilters';
 import CommissionTable from '../components/commissions/CommissionTable';
 import { supabase } from '../lib/supabase';
+import { fetchRemunerations } from '../lib/teamMembersApi';
 import {
   getCommissionEntries,
   approveCommission,
   reverseCommission,
   markCommissionPaid,
+  unmarkCommissionPaid,
+  telechargerExportCommissions,
 } from '../lib/commissionsApi';
 import type { FsCommissionEntry } from '../types';
 import { useTranslation } from '../i18n';
@@ -312,6 +318,26 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
     await agir(id, () => reverseCommission(id, isFr ? 'Reversée manuellement' : 'Manually reversed'), isFr ? 'Échec du reversement' : 'Reverse failed');
   };
   const handleMarkPaid = (id: string) => agir(id, () => markCommissionPaid(id), isFr ? 'Échec du versement' : 'Mark paid failed');
+  const handleUnmarkPaid = async (id: string) => {
+    const ok = await confirmer({
+      title: isFr ? 'Annuler ce versement ?' : 'Undo this payout?',
+      message: isFr
+        ? 'La commission redevient « approuvée » (à verser). À utiliser seulement si elle a été marquée versée par erreur.'
+        : 'The commission goes back to “approved” (to pay). Only use this if it was marked paid by mistake.',
+      confirmLabel: isFr ? 'Annuler le versement' : 'Undo payout',
+    });
+    if (ok) await agir(id, () => unmarkCommissionPaid(id), isFr ? "Échec de l'annulation" : 'Undo failed');
+  };
+  const exporter = async () => {
+    try {
+      await telechargerExportCommissions({
+        from: filters.from, to: filters.to, userId: filters.repId,
+        status: filters.status === 'all' ? undefined : filters.status, lang: isFr ? 'fr' : 'en',
+      });
+    } catch (err: any) {
+      toast.error(err?.message || (isFr ? "Échec de l'export" : 'Export failed'));
+    }
+  };
 
   const repOptions = allReps.length
     ? allReps
@@ -320,6 +346,11 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
   return (
     <div className="space-y-6">
       <CommissionFilters value={filters} onChange={setFilters} reps={repOptions} />
+      <div className="-mt-3 flex justify-end">
+        <Button variant="outline" size="sm" onClick={() => void exporter()}>
+          {filters.repId ? (isFr ? 'Relevé du représentant (CSV)' : 'Rep statement (CSV)') : (isFr ? 'Exporter (CSV)' : 'Export (CSV)')}
+        </Button>
+      </div>
 
       {loading && (
         <div className="flex items-center justify-center py-12">
@@ -351,6 +382,7 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
                 onApprove={handleApprove}
                 onReverse={handleReverse}
                 onMarkPaid={handleMarkPaid}
+                onUnmarkPaid={handleUnmarkPaid}
               />
             </CardContent>
           </Card>
@@ -392,9 +424,16 @@ function RatesPanel() {
   // au même endroit que le plan.
   const [paieParUser, setPaieParUser] = useState<Record<string, { id: string; mode: 'hourly' | 'commission' | 'both'; rate_cents: number }>>({});
   const [defaultRuleId, setDefaultRuleId] = useState<string | null>(null);
+  // Tous les plans (actifs ou non), pour l'écran de gestion des plans.
+  const [tousLesPlans, setTousLesPlans] = useState<FsCommissionRule[]>([]);
+  const [politique, setPolitique] = useState<CommissionSettings['reversal_policy']>('alert');
+  const [editeur, setEditeur] = useState<{ ouvert: boolean; regle: FsCommissionRule | null }>({ ouvert: false, regle: null });
+  const [reglageEnCours, setReglageEnCours] = useState(false);
 
-  const reload = useCallback(async () => {
-    setBusy(true);
+  // `silencieux` : rafraîchir après un enregistrement SANS remplacer l'onglet par
+  // un spinner (la liste disparaissait puis revenait à chaque sauvegarde).
+  const reload = useCallback(async (silencieux = false) => {
+    if (!silencieux) setBusy(true);
     try {
       const [team, rulesData, reglages, orgId] = await Promise.all([fetchTeamList(), getCommissionRules(), getCommissionSettings().catch(() => null), getCurrentOrgIdOrThrow()]);
       // Ordre alphabétique stable : la liste d'équipe arrive sans ordre garanti
@@ -403,17 +442,25 @@ function RatesPanel() {
         .sort((a, b) => (a.full_name || a.email || '').localeCompare(b.full_name || b.email || '', 'fr')));
       setRules(rulesData.filter((r) => r.is_active && !r.deleted_at));
       setDefaultRuleId(reglages?.default_rule_id ?? null);
-      const { data: tm, error: tmErr } = await supabase
-        .from('team_members')
-        .select('id, user_id, compensation_mode, hourly_rate_cents, labour_cost_hourly')
-        .eq('org_id', orgId)
-        .neq('status', 'inactive')
-        .not('user_id', 'is', null);
+      setPolitique(reglages?.reversal_policy ?? 'alert');
+      setTousLesPlans(rulesData.filter((r) => !r.deleted_at));
+      // Taux horaires : pas lisibles en direct (grants par colonne) ; membres_remuneration rend sa
+      // propre fiche, ou toute l'équipe à qui gère l'équipe / voit les marges.
+      const [{ data: tm, error: tmErr }, remunerations] = await Promise.all([
+        supabase
+          .from('team_members')
+          .select('id, user_id, compensation_mode')
+          .eq('org_id', orgId)
+          .neq('status', 'inactive')
+          .not('user_id', 'is', null),
+        fetchRemunerations(orgId),
+      ]);
       if (tmErr) throw tmErr;
+      const tauxParFiche = new Map(remunerations.map((r) => [r.teamMemberId, r.hourlyRateCents || Math.round((r.labourCostHourly ?? 0) * 100)]));
       const map: typeof paieParUser = {};
-      for (const r of (tm || []) as Array<{ id: string; user_id: string; compensation_mode: string | null; hourly_rate_cents: number | null; labour_cost_hourly: number | null }>) {
+      for (const r of (tm || []) as Array<{ id: string; user_id: string; compensation_mode: string | null }>) {
         const mode = r.compensation_mode === 'commission' || r.compensation_mode === 'both' ? r.compensation_mode : 'hourly';
-        map[r.user_id] = { id: r.id, mode, rate_cents: Number(r.hourly_rate_cents) || Math.round(Number(r.labour_cost_hourly || 0) * 100) || 0 };
+        map[r.user_id] = { id: r.id, mode, rate_cents: tauxParFiche.get(r.id) ?? 0 };
       }
       setPaieParUser(map);
     } catch (err) {
@@ -471,7 +518,146 @@ function RatesPanel() {
     );
   }
 
+  async function supprimerPlan(regle: FsCommissionRule) {
+    const ok = await confirmer({
+      title: isFr ? `Supprimer « ${regle.name} » ?` : `Delete “${regle.name}”?`,
+      message: isFr
+        ? 'Les commissions déjà calculées ne changent pas. Les membres de ce plan passeront au plan par défaut de l’entreprise (ou à aucun).'
+        : 'Commissions already calculated do not change. Members of this plan fall back to the company default plan (or none).',
+      confirmLabel: isFr ? 'Supprimer' : 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteCommissionRule(regle.id);
+      if (defaultRuleId === regle.id) await updateCommissionSettings({ default_rule_id: null });
+      toast.success(isFr ? 'Plan supprimé' : 'Plan deleted');
+      await reload(true);
+    } catch (err: any) {
+      console.error('[commissions] suppression du plan refusée', err);
+      toast.error(err?.message || (isFr ? 'Échec de la suppression' : 'Delete failed'));
+    }
+  }
+
+  async function changerReglage(patch: Partial<CommissionSettings>) {
+    setReglageEnCours(true);
+    try {
+      const r = await updateCommissionSettings(patch);
+      setDefaultRuleId(r.default_rule_id ?? null);
+      setPolitique(r.reversal_policy);
+      toast.success(isFr ? 'Réglage enregistré' : 'Setting saved');
+    } catch (err: any) {
+      console.error('[commissions] réglage refusé', err);
+      toast.error(err?.message || (isFr ? "Échec de l'enregistrement" : 'Save failed'));
+    } finally {
+      setReglageEnCours(false);
+    }
+  }
+
+  const politiques: Array<{ v: CommissionSettings['reversal_policy']; fr: string; en: string }> = [
+    { v: 'alert', fr: 'Signaler seulement — la commission reste due, marquée « facture remboursée »', en: 'Flag only — commission stays owed, marked “invoice refunded”' },
+    { v: 'auto', fr: 'Annuler si pas encore versée — une commission déjà versée reste versée', en: 'Cancel if not yet paid out — an already paid commission stays paid' },
+    { v: 'clawback', fr: 'Annuler, et reprendre une commission déjà versée sur la prochaine paie', en: 'Cancel, and claw back an already paid commission on the next payroll' },
+    { v: 'keep', fr: 'Ne rien faire — le représentant garde sa commission', en: 'Do nothing — the rep keeps the commission' },
+  ];
+  const membresPlan = members.map((m) => ({ user_id: m.user_id, nom: m.full_name || m.email || m.user_id }));
+  const idPlanDefaut = `plan-defaut-reglage`;
+  const idPolitique = `politique-remboursement-reglage`;
+
   return (
+    <div className="space-y-6">
+      <PlanEditeur
+        open={editeur.ouvert}
+        regle={editeur.regle}
+        membres={membresPlan}
+        fr={isFr}
+        onClose={() => setEditeur({ ouvert: false, regle: null })}
+        onSaved={() => { void reload(true); }}
+      />
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>{isFr ? 'Plans de commission' : 'Commission plans'}</CardTitle>
+            <Button size="sm" onClick={() => setEditeur({ ouvert: true, regle: null })}>
+              {isFr ? 'Nouveau plan' : 'New plan'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {tousLesPlans.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-text-muted">{isFr ? 'Aucun plan. Crée ton premier plan de commission.' : 'No plan yet. Create your first commission plan.'}</p>
+          ) : (
+            <ul className="divide-y divide-border-subtle">
+              {tousLesPlans.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-text-primary">
+                      {r.name}
+                      {r.id === defaultRuleId && <span className="ml-2 rounded bg-info/10 px-1.5 py-0.5 text-[11px] font-semibold text-info">{isFr ? 'Par défaut' : 'Default'}</span>}
+                      {!r.is_active && <span className="ml-2 rounded bg-surface-elevated px-1.5 py-0.5 text-[11px] text-text-muted">{isFr ? 'Inactif' : 'Inactive'}</span>}
+                    </p>
+                    <p className="text-xs text-text-tertiary">
+                      {planRateLabel(r, isFr)}
+                      {(r.performance_tiers?.length ?? 0) > 0 && ` · ${r.performance_tiers.length} ${isFr ? 'palier(s)' : 'tier(s)'}`}
+                      {(r.product_overrides?.length ?? 0) > 0 && ` · ${r.product_overrides.length} ${isFr ? 'catégorie(s)' : 'categor(ies)'}`}
+                      {(r.bonuses?.length ?? 0) > 0 && ` · ${r.bonuses.length} bonus`}
+                      {r.attribution?.mode === 'split' && ` · ${isFr ? 'partagé' : 'split'}`}
+                      {` · ${(r.assigned_user_ids ?? []).length} ${isFr ? 'membre(s)' : 'member(s)'}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setEditeur({ ouvert: true, regle: r })}>{isFr ? 'Modifier' : 'Edit'}</Button>
+                    <Button size="sm" variant="outline" onClick={() => void supprimerPlan(r)}>{isFr ? 'Supprimer' : 'Delete'}</Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{isFr ? 'Réglages des commissions' : 'Commission settings'}</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <label htmlFor={idPlanDefaut} className="mb-1 block text-xs font-medium text-text-secondary">
+              {isFr ? "Plan par défaut de l'entreprise" : 'Company default plan'}
+            </label>
+            <select
+              id={idPlanDefaut}
+              value={defaultRuleId ?? ''}
+              disabled={reglageEnCours}
+              onChange={(e) => void changerReglage({ default_rule_id: e.target.value || null })}
+              className="w-full rounded-md border border-border-subtle px-2 py-1.5 text-sm text-text-primary"
+              style={{ colorScheme: 'dark light' }}
+            >
+              <option value="">{isFr ? 'Aucun (pas de commission sans plan assigné)' : 'None (no commission without an assigned plan)'}</option>
+              {rules.map((r) => <option key={r.id} value={r.id}>{r.name} — {planRateLabel(r, isFr)}</option>)}
+            </select>
+            <p className="mt-1 text-[11px] text-text-tertiary">{isFr ? 'Utilisé pour un membre payé à commission qui n’a aucun plan assigné.' : 'Used for a commission-paid member with no assigned plan.'}</p>
+          </div>
+          <div>
+            <label htmlFor={idPolitique} className="mb-1 block text-xs font-medium text-text-secondary">
+              {isFr ? 'Quand une facture est remboursée' : 'When an invoice is refunded'}
+            </label>
+            <select
+              id={idPolitique}
+              value={politique}
+              disabled={reglageEnCours}
+              onChange={(e) => void changerReglage({ reversal_policy: e.target.value as CommissionSettings['reversal_policy'] })}
+              className="w-full rounded-md border border-border-subtle px-2 py-1.5 text-sm text-text-primary"
+              style={{ colorScheme: 'dark light' }}
+            >
+              {politiques.map((p) => <option key={p.v} value={p.v}>{isFr ? p.fr : p.en}</option>)}
+            </select>
+            <p className="mt-1 text-[11px] text-text-tertiary">{isFr ? 'Une période de paie déjà versée ne change jamais : toute correction passe par la période suivante.' : 'A pay period already paid out never changes: any correction goes to the next period.'}</p>
+          </div>
+        </CardContent>
+      </Card>
+
     <Card>
       <CardHeader>
         <CardTitle>{isFr ? 'Plan de commission par membre' : 'Commission plan per member'}</CardTitle>
@@ -574,5 +760,6 @@ function RatesPanel() {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }

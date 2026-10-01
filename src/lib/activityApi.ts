@@ -61,6 +61,7 @@ export const EVENT_TYPE_LABELS: Record<string, { en: string; fr: string; icon: s
   feedback_received: { en: 'Feedback received', fr: 'Commentaire reçu', icon: 'message-circle' },
   review_requested: { en: 'Review requested', fr: 'Avis demandé', icon: 'star' },
   public_review_written: { en: 'Public review written', fr: 'Avis public rédigé', icon: 'star' },
+  review_platform_chosen: { en: 'Opened the review page', fr: 'Page d’avis ouverte', icon: 'star' },
 };
 
 export async function fetchActivityLog(

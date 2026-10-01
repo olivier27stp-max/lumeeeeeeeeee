@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useRef } from 'react';
 import { addDays, addMonths, addWeeks, format, isValid, parseISO } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
 import { resolveCalendarDateParam } from '../lib/searchParsing';
@@ -67,12 +67,20 @@ export function CalendarControllerProvider({ children }: { children: React.React
   const view = useMemo(() => parseView(viewParam), [viewParam]);
   const selectedTeamIds = useMemo(() => parseTeams(teamsParam), [teamsParam]);
 
+  // Deux mises à jour dans le même clic (ex. vue Mois : setDate(jour) puis
+  // setView('day')) : React Router donne à la 2e l'URL d'AVANT la 1re, qui
+  // était donc écrasée — le clic sur un jour ramenait au jour déjà affiché
+  // (souvent aujourd'hui). On part de l'URL en attente tant que le clic dure.
+  const enAttenteRef = useRef<URLSearchParams | null>(null);
   const updateParams = useCallback((updates: { date?: Date; view?: CalendarUiView; teamIds?: string[]; hasTeamsParam?: boolean }) => {
     setSearchParams((prev) => {
-      const currentTeamIds = parseTeams(prev.get('teams'));
-      const currentHasTeamsParam = prev.has('teams');
-      const next = writeParams(prev, { ...updates, currentHasTeamsParam, currentTeamIds });
-      return next ?? prev;
+      const base = enAttenteRef.current ?? prev;
+      const currentTeamIds = parseTeams(base.get('teams'));
+      const currentHasTeamsParam = base.has('teams');
+      const next = writeParams(base, { ...updates, currentHasTeamsParam, currentTeamIds }) ?? base;
+      if (!enAttenteRef.current) queueMicrotask(() => { enAttenteRef.current = null; });
+      enAttenteRef.current = next;
+      return next;
     }, { replace: true });
   }, [setSearchParams]);
 

@@ -104,9 +104,16 @@ function versLigne(g: any): JobPnLRow {
   };
 }
 
-export async function fetchJobPnL(params: { from: string; to: string }): Promise<JobPnL> {
+/** Filtres de la page Statistiques que la rentabilité sait appliquer (pas « équipe »). */
+export interface FiltresRentabilite { technicien?: string; vendeur?: string; client?: string; service?: string }
+
+export async function fetchJobPnL(params: { from: string; to: string; filtres?: FiltresRentabilite }): Promise<JobPnL> {
   try {
-    const r = await lireRentabilite({ date_from: params.from, date_to: params.to, group_by: 'job', sort: 'revenus_desc', limit: 500 });
+    const f = params.filtres ?? {};
+    const r = await lireRentabilite({
+      date_from: params.from, date_to: params.to, group_by: 'job', sort: 'revenus_desc', limit: 500,
+      technician_id: f.technicien, rep_id: f.vendeur, client_id: f.client, service_id: f.service,
+    });
     const rows = ((r?.groupes || []) as any[]).map(versLigne);
     if (rows.length === 0) return { ...EMPTY, summary_fr: r?.resume_fr ?? '', summary_en: r?.resume_en ?? '' };
     const t = r.totaux;

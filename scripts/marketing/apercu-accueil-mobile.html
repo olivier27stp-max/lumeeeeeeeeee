@@ -1,0 +1,169 @@
+<!doctype html>
+<!-- Maquette de l'écran Accueil de l'APP iOS (Expo / React Native, dépôt
+     lume-mobile-app, branche mobile-app : mobile/src/app/(app)/(tabs)/index.tsx
+     + (tabs)/_layout.tsx), mode technicien, pour le mockup iPhone du hero de la
+     landing (public/landing/apercu-accueil-mobile.webp).
+     Reprend fidèlement : fond chantier N&B à 20 %, « Bonjour Marc 👋 » + date,
+     bulles Messages / Notifications, recherche client, pointage « Au travail »
+     (Pause / Terminer), « Jobs du jour » en carrousel de cartes (82 % de largeur,
+     bande d'état à gauche, avatar DiceBear, actions rondes), bouton + flottant,
+     barre d'onglets iOS. Palette = mobile/tailwind.config.js. Les SF Symbols
+     sont redessinés en SVG. Données fictives (Vision Lavage).
+     Régénérer : capture Playwright en viewport 390×844 (iPhone 15),
+     deviceScaleFactor 2 (→ 780×1688), puis WebP qualité 90. -->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 390px; height: 844px; overflow: hidden; background: #FAFAFA; }
+  body { font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; color: #171717; -webkit-font-smoothing: antialiased; position: relative; }
+  svg { display: block; }
+
+  /* Fond chantier N&B, opacité 0.2 (FIELD_BG) */
+  .bg { position: absolute; inset: 0; background: url("https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1200&q=50&sat=-100") center / cover no-repeat; opacity: .2; filter: grayscale(1); }
+
+  /* Barre d'état iOS (insets.top = 59 sur iPhone 15 ; l'îlot est dessiné par le cadre) */
+  .status { position: relative; height: 59px; display: flex; align-items: center; justify-content: space-between; padding: 0 32px 0 50px; font-size: 17px; font-weight: 600; }
+  .status .r { display: flex; align-items: center; gap: 7px; }
+
+  .scroll { position: relative; }
+  .top { display: flex; align-items: center; gap: 12px; padding: 4px 20px 0; }
+  .top .who { flex: 1; min-width: 0; }
+  .top h1 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+  .top .date { font-size: 12px; color: #525252; }
+  .round { position: relative; width: 40px; height: 40px; border-radius: 20px; background: #fff; display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  .round i { position: absolute; right: -4px; top: -4px; height: 16px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: #DC2626; color: #fff; font-style: normal; font-size: 10px; font-weight: 700; display: grid; place-items: center; }
+
+  .search { margin: 12px 20px 0; display: flex; align-items: center; gap: 8px; border-radius: 20px; background: #fff; padding: 12px 16px; font-size: 14px; color: #525252; box-shadow: 0 2px 6px rgba(0,0,0,.04); }
+
+  .clock { margin: 16px 20px 0; display: flex; flex-direction: column; gap: 8px; }
+  .clock .on { display: flex; align-items: center; gap: 8px; border-radius: 24px; background: #171717; color: #fff; padding: 14px 20px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,.06); }
+  .clock .row { display: flex; gap: 8px; }
+  .clock .b { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 20px; padding: 12px 0; font-size: 14px; font-weight: 600; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.04); }
+  .clock .b.stop { background: #DC2626; color: #fff; box-shadow: none; }
+
+  .ttl { display: flex; align-items: baseline; gap: 8px; padding: 230px 20px 12px; }
+  .ttl b { font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
+  .ttl span { font-size: 18px; font-weight: 600; color: #525252; }
+
+  .carousel { display: flex; gap: 12px; padding: 4px 20px; }
+  .card { flex: none; width: 320px; border-radius: 24px; background: #fff; padding: 20px; border-left: 4px solid #7C3AED; box-shadow: 0 3px 10px rgba(0,0,0,.05); }
+  .card.sched { border-left-color: #2563EB; }
+  .card .h { display: flex; align-items: flex-start; gap: 12px; }
+  .card .av { width: 42px; height: 42px; border-radius: 21px; overflow: hidden; background: #f5f5f5; flex: none; }
+  .card .av img { width: 42px; height: 42px; display: block; }
+  .card .nm { flex: 1; min-width: 0; }
+  .card .nm b { display: block; font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .nm span { display: block; font-size: 14px; color: #525252; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .tm { text-align: right; font-variant-numeric: tabular-nums; }
+  .card .tm b { display: block; font-size: 14px; font-weight: 700; }
+  .card .tm span { display: block; font-size: 12px; color: #525252; }
+  .card .st { margin-top: 8px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: #A3A3A3; }
+  .card .st i { width: 8px; height: 8px; border-radius: 4px; background: #3FAF97; }
+  .card .ad { margin-top: 4px; font-size: 14px; color: #525252; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .acts { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
+  .cb { width: 44px; height: 44px; border-radius: 22px; background: #F5F5F5; display: grid; place-items: center; }
+
+  .fab { position: absolute; right: 24px; bottom: 107px; width: 56px; height: 56px; border-radius: 28px; background: #171717; display: grid; place-items: center; box-shadow: 0 4px 8px rgba(0,0,0,.2); }
+
+  /* Barre d'onglets iOS (expo-router Tabs) */
+  .tabs { position: absolute; left: 0; right: 0; bottom: 0; height: 83px; background: rgba(255,255,255,.96); border-top: 1px solid #E5E5E5; display: flex; padding: 7px 4px 0; }
+  .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #A3A3A3; font-size: 10px; font-weight: 500; }
+  .tab.on { color: #171717; }
+  .tab svg { width: 26px; height: 26px; }
+  .home-ind { position: absolute; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #111; }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+
+<div class="status">
+  <span>9:41</span>
+  <div class="r">
+    <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="8" width="3.2" height="4" rx="1" fill="#111"/><rect x="5.2" y="5.5" width="3.2" height="6.5" rx="1" fill="#111"/><rect x="10.4" y="3" width="3.2" height="9" rx="1" fill="#111"/><rect x="15.6" y="0" width="3.2" height="12" rx="1" fill="#111"/></svg>
+    <svg width="17" height="12" viewBox="0 0 16 12" fill="#111"><path d="M8 2.6c2.2 0 4.2.9 5.7 2.3l1.1-1.1A9.6 9.6 0 0 0 8 1 9.6 9.6 0 0 0 1.2 3.8l1.1 1.1A8 8 0 0 1 8 2.6zm0 3.2c1.3 0 2.5.5 3.4 1.4l1.1-1.1A6.4 6.4 0 0 0 8 4.2c-1.8 0-3.4.7-4.5 1.9l1.1 1.1c.9-.9 2.1-1.4 3.4-1.4zM8 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>
+    <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="#111" opacity=".4"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#111"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" fill="#111" opacity=".5"/></svg>
+  </div>
+</div>
+
+<div class="scroll">
+  <!-- Salutation + bulles -->
+  <div class="top">
+    <div class="who">
+      <h1>Bonjour Marc 👋</h1>
+      <div class="date">Mercredi 9 septembre</div>
+    </div>
+    <div class="round">
+      <!-- bubble.left.and.bubble.right.fill -->
+      <svg width="20" height="18" viewBox="0 0 24 22" fill="#171717"><path d="M3.5 1h10A3.5 3.5 0 0 1 17 4.5v5A3.5 3.5 0 0 1 13.5 13H8.2l-3.6 2.9c-.5.4-1.1 0-1.1-.6V13A3.5 3.5 0 0 1 0 9.5v-5A3.5 3.5 0 0 1 3.5 1z"/><path d="M18.6 6.3A3.5 3.5 0 0 1 24 9.3v5a3.5 3.5 0 0 1-3.5 3.5v2.3c0 .6-.6 1-1.1.6L15.8 17.8h-5.3a3.5 3.5 0 0 1-3.2-2.1h6.2a5.4 5.4 0 0 0 5.1-5.4z"/></svg>
+      <i>6</i>
+    </div>
+    <div class="round">
+      <!-- bell.fill -->
+      <svg width="17" height="19" viewBox="0 0 20 22" fill="#171717"><path d="M10 0c.8 0 1.4.6 1.4 1.4v.6a6.6 6.6 0 0 1 5.3 6.5v4.2c0 1 .4 2 1.1 2.7l1.2 1.3c.7.7.2 1.9-.8 1.9H1.8c-1 0-1.5-1.2-.8-1.9l1.2-1.3c.7-.7 1.1-1.7 1.1-2.7V8.5A6.6 6.6 0 0 1 8.6 2v-.6C8.6.6 9.2 0 10 0z"/><path d="M7 19.6h6a3 3 0 0 1-6 0z"/></svg>
+      <i>9+</i>
+    </div>
+  </div>
+
+  <!-- Recherche client -->
+  <div class="search">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A3A3A3" stroke-width="2.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5.5 5.5"/></svg>
+    Rechercher un client…
+  </div>
+
+  <!-- Pointage -->
+  <div class="clock">
+    <div class="on">
+      <!-- clock.badge.checkmark -->
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-5.3-8.2"/><path d="M12 7v5l3 2"/><path d="m16.5 5.5 2 2 4-4"/></svg>
+      Au travail · 3h 12m
+    </div>
+    <div class="row">
+      <div class="b"><svg width="13" height="14" viewBox="0 0 12 14" fill="#171717"><rect x="1" y="1" width="3.6" height="12" rx="1.2"/><rect x="7.4" y="1" width="3.6" height="12" rx="1.2"/></svg>Pause</div>
+      <div class="b stop"><svg width="13" height="13" viewBox="0 0 12 12" fill="#fff"><rect x="1" y="1" width="10" height="10" rx="2"/></svg>Terminer</div>
+    </div>
+  </div>
+
+  <!-- Jobs du jour -->
+  <div class="ttl"><b>Jobs du jour</b><span>· 6</span></div>
+  <div class="carousel">
+    <div class="card">
+      <div class="h">
+        <div class="av"><img src="https://api.dicebear.com/9.x/notionists/png?seed=Luc%20Gagnon&size=84&backgroundColor=f5f5f5&radius=50" alt=""></div>
+        <div class="nm"><b>Luc Gagnon</b><span>Lavage à pression</span></div>
+        <div class="tm"><b>9 h 30</b><span>→ 11 h 00</span></div>
+      </div>
+      <div class="st"><i></i>En cours</div>
+      <div class="ad">2275 boul. Clairevue, Saint-Bruno</div>
+      <div class="acts">
+        <div class="cb"><!-- phone.fill --><svg width="18" height="18" viewBox="0 0 24 24" fill="#171717"><path d="M6.6 2.3c.6-.3 1.3-.1 1.7.4l2.2 3c.4.6.4 1.4-.1 1.9L9 9c1.2 2.5 3.4 4.7 5.9 5.9l1.4-1.4c.5-.5 1.3-.6 1.9-.1l3 2.2c.5.4.7 1.1.4 1.7l-.9 2c-.5 1.1-1.7 1.8-2.9 1.6C10.4 19.8 4.2 13.6 3.1 6.2c-.2-1.2.5-2.4 1.6-2.9z"/></svg></div>
+        <div class="cb"><!-- location.north.fill --><svg width="17" height="17" viewBox="0 0 24 24" fill="#171717"><path d="M12 2.5c.3 0 .6.2.7.5l7 17.2c.3.7-.5 1.4-1.2 1L12 17.6l-6.5 3.6c-.7.4-1.5-.3-1.2-1L11.3 3c.1-.3.4-.5.7-.5z"/></svg></div>
+        <div class="cb"><!-- checkmark --><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#171717" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></svg></div>
+      </div>
+    </div>
+    <div class="card sched">
+      <div class="h">
+        <div class="av"><img src="https://api.dicebear.com/9.x/notionists/png?seed=Julie%20Bouchard&size=84&backgroundColor=f5f5f5&radius=50" alt=""></div>
+        <div class="nm"><b>Julie Bouchard</b><span>Gouttières</span></div>
+        <div class="tm"><b>11 h 15</b><span>→ 12 h 00</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bouton + flottant -->
+<div class="fab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg></div>
+
+<!-- Onglets : Home · Lumi · Schedule · Time · Map · More -->
+<nav class="tabs">
+  <div class="tab on"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3.5 11.5 13 3.5l9.5 8"/><path d="M6 9.6V21a1 1 0 0 0 1 1h4.2v-6h3.6v6H19a1 1 0 0 0 1-1V9.6"/></svg>Home</div>
+  <div class="tab"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M11 4.5c.8 4.6 2.4 6.2 7 7-4.6.8-6.2 2.4-7 7-.8-4.6-2.4-6.2-7-7 4.6-.8 6.2-2.4 7-7z"/><path d="M19.5 2.5c.3 1.7.9 2.3 2.6 2.6-1.7.3-2.3.9-2.6 2.6-.3-1.7-.9-2.3-2.6-2.6 1.7-.3 2.3-.9 2.6-2.6zM19 17.5c.25 1.3.7 1.75 2 2-1.3.25-1.75.7-2 2-.25-1.3-.7-1.75-2-2 1.3-.25 1.75-.7 2-2z"/></svg>Lumi</div>
+  <div class="tab"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="5" width="19" height="17" rx="3"/><path d="M3.5 10h19"/><path d="M8.5 3v4M17.5 3v4" stroke-linecap="round"/></svg>Schedule</div>
+  <div class="tab"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="13" cy="13" r="9.5"/><path d="M13 7.5V13l3.5 2.5"/></svg>Time</div>
+  <div class="tab"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3.5 6.5 9.5 4l7 2.5 6-2.5v15.5l-6 2.5-7-2.5-6 2.5z"/><path d="M9.5 4v15.5M16.5 6.5V22"/></svg>Map</div>
+  <div class="tab"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4.5 7h17M4.5 13h17M4.5 19h17"/></svg>More</div>
+  <div class="home-ind"></div>
+</nav>
+</body>
+</html>

@@ -5,7 +5,10 @@ import { supabase } from '../../lib/supabase';
 import {
   getCommissionEntries,
   getPayrollPreview,
+  telechargerExportCommissions,
 } from '../../lib/commissionsApi';
+import { toast } from 'sonner';
+import { Button } from '../d2d/button';
 import type { FsCommissionEntry, CommissionPayrollPreview } from '../../types';
 import CommissionFilters, { type CommissionFiltersValue } from './CommissionFilters';
 import CommissionTable from './CommissionTable';
@@ -138,6 +141,15 @@ export default function PersonalCommissionView({
       </div>
 
       <CommissionFilters value={filters} onChange={setFilters} />
+      <div className="-mt-3 flex justify-end">
+        {/* Le serveur limite un non-admin à SES commissions : c'est son relevé. */}
+        <Button variant="outline" size="sm" onClick={() => void telechargerExportCommissions({
+          from: filters.from, to: filters.to, userId,
+          status: filters.status === 'all' ? undefined : filters.status, lang: isFr ? 'fr' : 'en',
+        }).catch((err: any) => toast.error(err?.message || (isFr ? "Échec de l'export" : 'Export failed')))}>
+          {isFr ? 'Télécharger le relevé (CSV)' : 'Download statement (CSV)'}
+        </Button>
+      </div>
 
       {loading && (
         <div className="flex items-center justify-center py-12">

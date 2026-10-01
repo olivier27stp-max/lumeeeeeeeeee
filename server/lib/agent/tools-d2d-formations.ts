@@ -612,20 +612,20 @@ const updateD2dSettings: AgentTool = {
         auto_followup_days: { type: 'integer', description: 'Days before an automatic follow-up.' },
         voice_notes_enabled: { type: 'boolean', description: 'Allow voice notes on pins.' },
         ai_summaries_enabled: { type: 'boolean', description: 'AI summaries of notes.' },
-        show_peer_payouts: { type: 'boolean', description: 'Reps see each other’s payouts.' },
       },
     },
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'update_d2d_settings', args, async () => {
-      const updates = champsFournis(args, ['feature_enabled', 'territory_restriction_enabled', 'auto_revisit_days', 'auto_followup_days', 'voice_notes_enabled', 'ai_summaries_enabled', 'show_peer_payouts']);
+      const updates = champsFournis(args, ['feature_enabled', 'territory_restriction_enabled', 'auto_revisit_days', 'auto_followup_days', 'voice_notes_enabled', 'ai_summaries_enabled']);
       for (const k of ['auto_revisit_days', 'auto_followup_days']) {
         if (updates[k] !== undefined && (updates[k] < 0 || updates[k] > 365)) throw new Error('Un délai doit être entre 0 et 365 jours.');
       }
       if (!Object.keys(updates).length) throw new Error('Rien à modifier : précise au moins un réglage.');
       const { data, error } = await ctx.client
         .from('field_settings')
-        .upsert({ org_id: ctx.orgId, ...updates, updated_at: new Date().toISOString() }, { onConflict: 'org_id' })
+        // show_peer_payouts toujours faux (Loi 25 — voir server/routes/field-sales.ts PUT /settings).
+        .upsert({ org_id: ctx.orgId, ...updates, show_peer_payouts: false, updated_at: new Date().toISOString() }, { onConflict: 'org_id' })
         .select('id')
         .maybeSingle();
       verifierEcriture(error, data, 'Les réglages n’ont pas pu être enregistrés.');

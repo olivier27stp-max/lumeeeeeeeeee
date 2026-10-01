@@ -264,6 +264,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/commissions/:id/approve': 'team.update',
   'POST /api/commissions/:id/reverse': 'team.update',
   'POST /api/commissions/:id/mark-paid': 'team.update',
+  'POST /api/commissions/:id/unmark-paid': 'team.update',
+  'GET /api/commissions/export.csv': 'commissions.read',
   'POST /api/commissions/rules': 'settings.update',
   'PUT /api/commissions/rules/:id': 'settings.update',
   'DELETE /api/commissions/rules/:id': 'settings.update',

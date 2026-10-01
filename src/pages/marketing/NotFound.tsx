@@ -16,7 +16,7 @@ const COPY = {
   fr: {
     docTitle: '404 — Page introuvable | Lume',
     title: 'Page introuvable',
-    desc: 'Le lien est peut-être brisé, ou la page a été déplacée. Essayez de revenir en arrière ou de retourner à l\'accueil.',
+    desc: 'Le lien est peut-être brisé, ou la page a été déplacée. Essaie de revenir en arrière ou de retourner à l\'accueil.',
     goBack: 'Retour',
     homepage: 'Accueil',
   },

@@ -190,6 +190,22 @@ for (const [t, fichiers] of [...tables].sort()) {
     dit(`✗ TABLE/VUE ABSENTE DE LA BASE : ${t}  — utilisée par ${[...fichiers].slice(0, 2).join(', ')}`, t);
 }
 
+// Grants par colonne (migration 20261004300300) : sur team_members / memberships, authenticated
+// lit TOUT sauf la rémunération et la date de naissance. Une colonne ajoutée plus tard sans son
+// « grant select (col) » ferait échouer (42501) toute requête client qui la nomme.
+const PRIVEES = new Set(['hourly_rate_cents', 'labour_cost_hourly', 'birth_date']);
+const colRows = await query(`
+  select c.table_name as t, c.column_name as col,
+         has_column_privilege('authenticated', format('public.%I', c.table_name), c.column_name, 'select') as lisible
+    from information_schema.columns c
+   where c.table_schema = 'public' and c.table_name in ('team_members', 'memberships')`);
+for (const r of colRows) {
+  if (PRIVEES.has(r.col) && r.lisible)
+    dit(`✗ COLONNE PRIVÉE LISIBLE par authenticated : ${r.t}.${r.col}  — passer par membres_remuneration()`, `${r.t}.${r.col}`);
+  if (!PRIVEES.has(r.col) && !r.lisible)
+    dit(`✗ COLONNE SANS GRANT SELECT pour authenticated : ${r.t}.${r.col}  — ajouter « grant select (${r.col}) on public.${r.t} to anon, authenticated »`, `${r.t}.${r.col}`);
+}
+
 if (tolerees.length) {
   console.log(`\nÉcarts connus et gérés par un repli dans le code (${tolerees.length}) — informatif :`);
   for (const l of tolerees) console.log(l);

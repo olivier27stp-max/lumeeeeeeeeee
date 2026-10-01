@@ -97,15 +97,16 @@ describe.skipIf(!ACTIF)('Statistiques — parité avec Lumi', () => {
     });
     it(`get_top_services (${nom}) = carte « Revenu par service » (oracle)`, async () => {
       const r = await lire('get_top_services', { from: p.du, to: p.au });
-      const o = await O.valeurParTitreDeJob(db, T1, p);
-      expect(r.services.map((s: any) => [s.service, s.total_cents])).toEqual(o.slice(0, 10).map((x) => [x.titre, x.cents]));
+      const o = await O.revenuParService(db, T1, p);
+      expect(r.services.map((s: any) => s.total_cents)).toEqual(o.slice(0, 10).map((x) => x.cents));
+      expect(r.services.map((s: any) => s.service)).toEqual(o.slice(0, 10).map((x) => (x.nom === '(sans détail)' ? 'Jobs sans lignes de service' : x.nom)));
     });
   }
 
-  it('get_top_clients = carte « Top clients par revenu » (mêmes clients, même ordre)', async () => {
-    const r = await lire('get_top_clients', { limit: 5 });
-    const o = (await O.valeurClients(db, T1)).slice(0, 5);
-    expect(r.clients.map((c: any) => [c.nom, c.total_cents])).toEqual(o.map((c) => [c.nom, c.revenu]));
+  it('get_top_clients sur une période = carte « Top clients » (mêmes clients, même ordre)', async () => {
+    const r = await lire('get_top_clients', { limit: 5, from: P.douzeMois.du, to: P.douzeMois.au });
+    const o = await O.topClients(db, T1, P.douzeMois, {}, 5);
+    expect(r.clients.map((c: any) => [c.nom, c.total_cents])).toEqual(o.map((c) => [c.nom, c.cents]));
   });
 
   it('rapport programmé (rpc_insights_overview) : « Revenus encaissés » = encaissé de l’oracle', async () => {

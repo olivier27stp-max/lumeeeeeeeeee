@@ -6,17 +6,9 @@
 // Les chiffres contre la base : tests/stats/*.integration.test.ts (stack locale).
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/i18n', () => ({ useTranslation: () => ({ language: 'fr', t: {} }) }));
-vi.mock('../src/lib/insightsApi', async (orig) => ({
-  ...(await orig<typeof import('../src/lib/insightsApi')>()),
-  fetchInsightsRevenueSeries: vi.fn(async () => [
-    { bucket_start: '2026-08-01', revenue_cents: 137970, invoiced_cents: 0 },
-    { bucket_start: '2026-09-01', revenue_cents: 100483, invoiced_cents: 0 },
-  ]),
-}));
 
 import { periodRange } from '../src/lib/insightsPeriod';
 import { toutesLesLignes, toutesLesLignesParId, toutesLesLignesEnParallele, TAILLE_PAGE } from '../src/lib/lignesPaginees';
@@ -76,13 +68,12 @@ describe('RevenueTrendCard — chaque mois porte SON nom', () => {
   it('à Montréal, le point du 2026-09-01 s’appelle « sept. », pas « août »', async () => {
     hote = document.createElement('div'); document.body.appendChild(hote);
     racine = createRoot(hote);
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const points = [
+      { debut: '2026-08-01', encaisseCents: 137970, factureCents: 0 },
+      { debut: '2026-09-01', encaisseCents: 100483, factureCents: 0 },
+    ];
     await act(async () => {
-      racine!.render(
-        <QueryClientProvider client={qc}>
-          <RevenueTrendCard range={{ from: '2026-08-01', to: '2026-09-30', granularity: 'month' }} period="12m" onPeriod={() => {}} />
-        </QueryClientProvider>,
-      );
+      racine!.render(<RevenueTrendCard points={points} granularite="month" chargement={false} erreur={false} onRetry={() => {}} onDetail={() => {}} />);
     });
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     const texte = hote.textContent ?? '';

@@ -9,6 +9,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     globals: true,
+    maxWorkers: process.env.CI ? undefined : '25%', // voir vitest.config.ts
     environment: 'node',
     setupFiles: ['./vitest.setup.ts'],
     include: ['tests/quarantaine/**/*.test.ts', 'tests/quarantaine/**/*.test.tsx'],

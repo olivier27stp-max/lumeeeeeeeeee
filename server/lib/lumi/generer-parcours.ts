@@ -579,6 +579,7 @@ async function genererParcoursUneFois(params: {
         // Source distincte pour mesurer ce poste, mais COMPTÉE dans le budget
         // du client (20260929230300).
         source: 'automatisations',
+        requestId: rep.id ?? null,
       });
       return { rep, cout, texte: rep.content.map((b) => (b.type === 'text' ? b.text : '')).join('') };
     };

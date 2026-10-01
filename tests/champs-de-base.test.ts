@@ -10,12 +10,17 @@ import { SECTIONS_SYSTEME, clesStandard } from '../src/lib/champs/standard';
 import { MODELES_CHAMPS } from '../src/lib/champs/modeles';
 import { TYPES_CHAMP } from '../src/lib/champs/types';
 
+// Le trigger des nouvelles entreprises vit dans la migration d'origine ; le ménage (31 → 8 champs,
+// 2026-09-30) archive les champs retirés.
 const MIG = readFileSync(resolve(__dirname, '../supabase/migrations/20261003520000_champs_de_base.sql'), 'utf8');
+const MENAGE = readFileSync(resolve(__dirname, '../supabase/migrations/20261005400000_menage_champs_de_base.sql'), 'utf8');
+// Le catalogue COURANT : celui du ménage + noreview (avis clients, 2026-09-30).
+const NOREVIEW = readFileSync(resolve(__dirname, '../supabase/migrations/20261005500000_champ_noreview.sql'), 'utf8');
 const sqlTexte = (s: string) => s.replace(/''/g, "'");
 
 // Une ligne du VALUES : ('objet', 'dossier', 'cle', 'fr', 'en', 'type', 'config', options|null, position)
 const LIGNE = /\('(\w+)', '(\w+)', '(\w+)', '((?:[^']|'')*)', '((?:[^']|'')*)', '(\w+)', '([^']*)',\s*(null|'((?:[^']|'')*)'), (\d+)\)/g;
-const lignesSql = [...MIG.matchAll(LIGNE)].map((m) => ({
+const lignesSql = [...NOREVIEW.matchAll(LIGNE)].map((m) => ({
   objet: m[1], dossier: m[2], cle: m[3], fr: sqlTexte(m[4]), en: sqlTexte(m[5]), type: m[6],
   config: JSON.parse(m[7]), options: m[8] === 'null' ? undefined : JSON.parse(sqlTexte(m[9])), position: Number(m[10]),
 }));
@@ -50,8 +55,21 @@ describe('champs de base', () => {
     }
   });
 
-  it('les 12 types de champ sont représentés', () => {
-    expect(new Set(CHAMPS_DE_BASE.map((c) => c.type))).toEqual(new Set(TYPES_CHAMP));
+  it('liste courte, types valides (ménage du 2026-09-30 : un champ vide encombre chaque formulaire)', () => {
+    expect(CHAMPS_DE_BASE.length).toBeLessThanOrEqual(12);
+    for (const c of CHAMPS_DE_BASE) expect(TYPES_CHAMP, c.cle).toContain(c.type);
+  });
+
+  it('ménage : aucun champ gardé n’est archivé, et Lumi garde depense_autres', () => {
+    const archives = [...MENAGE.slice(MENAGE.indexOf('update public.custom_fields')).matchAll(/\('(\w+)', '(\w+)'\)/g)].map((m) => `${m[1]}:${m[2]}`);
+    expect(archives.length).toBe(30);
+    for (const c of CHAMPS_DE_BASE) expect(archives, c.cle).not.toContain(`${c.objet}:${c.cle}`);
+    const depenses = [...MENAGE.slice(MENAGE.indexOf('create or replace function public.cf_depenses_champs_base'), MENAGE.indexOf('update public.custom_fields')).matchAll(/\('(depense_\w+)'/g)].map((m) => m[1]);
+    expect(depenses).toEqual(['depense_carburant', 'depense_sous_traitance', 'depense_autres']);
+    for (const d of depenses) expect(archives).not.toContain(`job:${d}`);
+    // L'archivage ne touche que les champs d'origine et sans valeur.
+    expect(MENAGE).toContain('and f.created_by is null');
+    expect(MENAGE).toContain('not exists (select 1 from public.custom_field_values v where v.field_id = f.id)');
   });
 
   it('une clé partagée garde le même type partout (sinon la valeur ne suit pas devis → job → facture)', () => {

@@ -1282,13 +1282,14 @@ router.get('/settings', async (req: Request, res: Response) => {
         auto_followup_days: 1,
         voice_notes_enabled: true,
         ai_summaries_enabled: false,
-        show_peer_payouts: true,
+        show_peer_payouts: false,
         default_pin_template_id: null,
         automation_defaults: {},
       });
     }
 
-    return res.json(data);
+    // Toujours faux (Loi 25) : voir PUT ci-dessous.
+    return res.json({ ...data, show_peer_payouts: false });
   } catch (err: any) {
     return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
@@ -1314,13 +1315,25 @@ router.put('/settings', async (req: Request, res: Response) => {
       'auto_followup_days',
       'voice_notes_enabled',
       'ai_summaries_enabled',
-      'show_peer_payouts',
       'default_pin_template_id',
       'automation_defaults',
     ];
     const updates: Record<string, any> = { org_id: auth.orgId };
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+    // Loi 25 : « voir les versements des collègues » n'a aucun effet à l'écran
+    // (l'API limite un rep à SES commissions) ; son seul effet réel était
+    // d'ouvrir, EN BASE, la lecture des commissions de tous les collègues
+    // (politique RLS de fs_commission_entries). Toujours faux, même à la
+    // création de la ligne (la colonne vaut `true` par défaut).
+    updates.show_peer_payouts = false;
+    // Le drapeau « Reprendre » des commissions vit dans automation_defaults :
+    // un enregistrement des réglages terrain ne doit pas l'effacer.
+    if (updates.automation_defaults && typeof updates.automation_defaults === 'object') {
+      const { data: actuel } = await admin.from('field_settings').select('automation_defaults').eq('org_id', auth.orgId).maybeSingle();
+      const reprise = (actuel?.automation_defaults as Record<string, unknown> | null)?.commissions_reprise;
+      if (reprise !== undefined) updates.automation_defaults = { ...updates.automation_defaults, commissions_reprise: reprise };
     }
     updates.updated_at = new Date().toISOString();
 

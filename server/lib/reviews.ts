@@ -1,9 +1,13 @@
 /* ═══════════════════════════════════════════════════════════════
-   Avis clients — règles pures du workflow de sondage.
+   Avis clients — règles pures du workflow de demande d'avis.
 
-   job terminée → sondage d'étoiles (1-5) envoyé tout de suite
-     • 5 étoiles : redirection vers Google / Facebook + message d'invitation
-     • 4 étoiles ou moins : formulaire de commentaires interne + tâche de suivi
+   job terminée → lien envoyé tout de suite (courriel + SMS) à TOUS les
+   clients, sauf ceux dont le champ personnalisé « noreview » est coché.
+   La page /survey/:token mène tout le monde au choix Google / Facebook :
+   aucune note préalable, aucun filtrage (2026-09-30). Trier les clients
+   selon leur satisfaction avant de les envoyer vers un avis public
+   (« review gating ») est interdit par Google et Facebook et constitue une
+   pratique trompeuse (FTC 16 CFR 465, Loi sur la concurrence).
 
    Tous les textes vus par le client sont personnalisables dans
    Réglages → Avis clients (colonnes review_* de company_settings) ;
@@ -13,8 +17,19 @@
    publique /api/survey et les tests.
    ═══════════════════════════════════════════════════════════════ */
 
-/** Note minimale (incluse) à partir de laquelle on demande un avis public. */
-export const POSITIVE_RATING_MIN = 5;
+/**
+ * Clé du champ personnalisé client (case à cocher, posé d'office dans chaque
+ * entreprise par cf_champs_base) : cochée = ce client ne reçoit AUCUNE
+ * demande d'avis ni rappel d'avis.
+ */
+export const NO_REVIEW_FIELD_KEY = 'noreview';
+
+/** Automatisations qui sollicitent un avis : elles respectent « noreview ». */
+export const REVIEW_PRESET_KEYS = ['google_review', 'review_reminder_7d'] as const;
+
+export function isReviewPreset(presetKey: string | null | undefined): boolean {
+  return !!presetKey && (REVIEW_PRESET_KEYS as readonly string[]).includes(presetKey);
+}
 
 export type ReviewPlatform = 'google' | 'facebook';
 
@@ -31,8 +46,6 @@ export interface ReviewSettingsLike {
   review_email_subject?: string | null;
   review_email_body?: string | null;
   review_survey_question?: string | null;
-  review_low_rating_message?: string | null;
-  review_thank_you_message?: string | null;
 }
 
 /** Variables disponibles dans les messages du sondage (syntaxe [var] ou {var}). */
@@ -54,7 +67,7 @@ export const DEFAULT_REVIEW_INVITE_MESSAGE_EN =
 
 export const DEFAULT_REVIEW_SMS_BODY_FR =
   "Bonjour [client_first_name], merci d'avoir choisi [company_name] ! "
-  + "Comment s'est passé notre service ? Notez-nous en 10 secondes : [survey_url]";
+  + 'Un avis Google ou Facebook nous aiderait énormément : [survey_url]';
 
 /* Le texto par défaut d'une entreprise ANGLAISE : sans lui, ses clients
    recevaient la demande d'avis en français (le courriel, lui, suivait la
@@ -65,13 +78,13 @@ export const DEFAULT_REVIEW_SMS_BODY_EN =
 
 /* L'objet ne répète pas le nom de l'entreprise : l'expéditeur l'affiche déjà
    (audit des courriels du 2026-09-29 — et un nom vide donnait « — Comment… »). */
-export const DEFAULT_REVIEW_EMAIL_SUBJECT_FR = "Comment s'est passé notre service ?";
-export const DEFAULT_REVIEW_EMAIL_SUBJECT_EN = 'How did we do?';
+export const DEFAULT_REVIEW_EMAIL_SUBJECT_FR = 'Votre avis compte pour nous';
+export const DEFAULT_REVIEW_EMAIL_SUBJECT_EN = 'Your review means a lot to us';
 
 export const DEFAULT_REVIEW_EMAIL_BODY_FR =
   'Bonjour [client_first_name],\n\n'
   + 'Nous venons de terminer [job_name] et votre opinion compte pour nous.\n\n'
-  + 'Notez votre expérience en 10 secondes :\n\n'
+  + 'Prendriez-vous 30 secondes pour nous laisser un avis sur Google ou Facebook ?\n\n'
   + '[survey_url]\n\n'
   + "Merci d'avoir choisi [company_name] !";
 
@@ -80,34 +93,17 @@ export const DEFAULT_REVIEW_EMAIL_BODY_FR =
 export const DEFAULT_REVIEW_EMAIL_BODY_EN =
   'Hi [client_first_name],\n\n'
   + 'We just finished [job_name] and your opinion matters to us.\n\n'
-  + 'Rate your experience in 10 seconds:\n\n'
+  + 'Would you take 30 seconds to leave us a review on Google or Facebook?\n\n'
   + '[survey_url]\n\n'
   + 'Thank you for choosing [company_name]!';
 
-export const DEFAULT_SURVEY_QUESTION_FR = "Comment s'est passé notre service ?";
-export const DEFAULT_SURVEY_QUESTION_EN = 'How did we do?';
-
-export const DEFAULT_LOW_RATING_MESSAGE_FR =
-  "Nous sommes désolés que ce ne soit pas à la hauteur. Dites-nous ce qui n'a pas fonctionné : "
-  + "votre message est envoyé directement à l'équipe, il n'est pas publié.";
-export const DEFAULT_LOW_RATING_MESSAGE_EN =
-  "We're sorry it wasn't up to par. Tell us what went wrong: your message goes straight to the team, it is not published.";
-
-export const DEFAULT_THANK_YOU_MESSAGE_FR = "Merci pour votre franchise. Un membre de l'équipe vous contactera rapidement.";
-export const DEFAULT_THANK_YOU_MESSAGE_EN = 'Thank you for your honesty. A team member will reach out to you shortly.';
+/** Titre de la page publique, au-dessus du message d'invitation. */
+export const DEFAULT_SURVEY_QUESTION_FR = 'Merci de nous avoir fait confiance !';
+export const DEFAULT_SURVEY_QUESTION_EN = 'Thank you for trusting us!';
 
 /** Libellé du bouton dans le courriel (le lien [survey_url] devient ce bouton). */
-export const REVIEW_EMAIL_BUTTON_LABEL_FR = 'Noter mon expérience';
-export const REVIEW_EMAIL_BUTTON_LABEL_EN = 'Rate my experience';
-
-export function isPositiveRating(rating: number): boolean {
-  return Number.isFinite(rating) && rating >= POSITIVE_RATING_MIN;
-}
-
-export function isValidRating(value: unknown): value is number {
-  const n = Number(value);
-  return Number.isInteger(n) && n >= 1 && n <= 5;
-}
+export const REVIEW_EMAIL_BUTTON_LABEL_FR = 'Laisser un avis';
+export const REVIEW_EMAIL_BUTTON_LABEL_EN = 'Leave a review';
 
 /** Tolère « www.facebook.com/… » : préfixe https:// au lieu de rejeter. */
 export function normalizeReviewUrl(raw: string | null | undefined): string {
@@ -145,8 +141,6 @@ export function surveyTexts(settings: ReviewSettingsLike | null | undefined, lan
   const fr = lang === 'fr';
   return {
     question: customOr(settings?.review_survey_question, fr ? DEFAULT_SURVEY_QUESTION_FR : DEFAULT_SURVEY_QUESTION_EN),
-    low_rating_message: customOr(settings?.review_low_rating_message, fr ? DEFAULT_LOW_RATING_MESSAGE_FR : DEFAULT_LOW_RATING_MESSAGE_EN),
-    thank_you_message: customOr(settings?.review_thank_you_message, fr ? DEFAULT_THANK_YOU_MESSAGE_FR : DEFAULT_THANK_YOU_MESSAGE_EN),
     invite_message: reviewInviteMessage(settings, lang),
   };
 }
@@ -220,22 +214,17 @@ export function reviewEmail(
 }
 
 /**
- * Prochaine étape du sondage pour une note donnée.
- *  - `public_review` : message + liens, redirection automatique si UNE seule
- *    plateforme est configurée (`auto_redirect_url`).
- *  - `feedback_form` : commentaires internes d'abord, liens publics ensuite.
+ * Où mène la page : TOUJOURS au choix des plateformes configurées, pour tout
+ * le monde. Redirection automatique si une seule plateforme existe.
  */
-export function surveyNextStep(rating: number, settings: ReviewSettingsLike | null | undefined) {
-  // Politique Google (« review gating ») : on ne filtre jamais qui peut laisser
-  // un avis. La note basse change l'ORDRE (formulaire privé d'abord, liens
-  // publics ensuite), jamais l'accès au lien public.
+export function reviewLanding(settings: ReviewSettingsLike | null | undefined) {
   const destinations = reviewDestinations(settings);
-  if (!isPositiveRating(rating)) {
-    return { step: 'feedback_form' as const, destinations, auto_redirect_url: null as string | null };
-  }
   return {
-    step: 'public_review' as const,
     destinations,
-    auto_redirect_url: destinations.length === 1 ? destinations[0].url : null,
+    auto_redirect_url: destinations.length === 1 ? destinations[0].url : null as string | null,
   };
+}
+
+export function isReviewPlatform(value: unknown): value is ReviewPlatform {
+  return value === 'google' || value === 'facebook';
 }

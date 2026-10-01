@@ -337,6 +337,7 @@ test.describe('Optimiser la journée (Lumi)', () => {
     await simulerCartes(page); await seConnecter(page);
     await page.goto(`/calendar?view=day&date=${date}`);
     await page.getByRole('button', { name: 'Optimiser la journée' }).click();
+    await page.getByTestId(`jour-${date}`).click();
     await expect(page).toHaveURL(/\/lumi/);
     const apercu = page.getByTestId('apercu-optimisation');
     await expect(apercu).toBeVisible({ timeout: 30_000 });
@@ -359,6 +360,7 @@ test.describe('Optimiser la journée (Lumi)', () => {
     await simulerCartes(page); await seConnecter(page);
     await page.goto(`/calendar?view=day&date=${date}`);
     await page.getByRole('button', { name: 'Optimiser la journée' }).click();
+    await page.getByTestId(`jour-${date}`).click();
     await expect(page.getByTestId('apercu-optimisation')).toBeVisible({ timeout: 30_000 });
     await page.getByRole('button', { name: 'Refuser' }).click();
     await page.waitForTimeout(1500);

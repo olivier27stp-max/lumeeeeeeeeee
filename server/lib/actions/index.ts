@@ -10,7 +10,8 @@ import { annoncerEtiquette } from '../etiquettes';
 import { executerMajChamp } from '../champs/automatisations';
 import { variablesChamps } from '../champs/service';
 import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
-import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
+import { isReviewPreset, reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
+import { MOTIF_CLIENT_SANS_AVIS, clientRefuseAvis } from '../reviewOptOut';
 import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegale } from '../consentement/base-legale';
 import { motifSaut } from '../desabonnement';
 import { avecMentionCommerciale } from '../desabonnement/mention-sms';
@@ -80,6 +81,11 @@ export interface ActionContext {
    * moteur) = `commercial`.
    */
   marketing?: boolean;
+  /**
+   * preset_key de la règle en cours. Une automatisation d'avis
+   * (google_review, review_reminder_7d) saute les clients « noreview ».
+   */
+  presetKey?: string | null;
 }
 
 /** Envoi commercial au sens de la LCAP (contenu exigé : identification, retrait). */
@@ -133,7 +139,8 @@ export type CodeSaut =
   | 'desabonne'
   | 'deja_envoye'
   | 'boucle'
-  | 'identite_manquante';
+  | 'identite_manquante'
+  | 'client_sans_avis';
 
 /** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
 function saute(motif: string, code: CodeSaut = 'desabonne'): ActionResult {
@@ -710,6 +717,26 @@ async function resolveSignedContractVars(
   };
 }
 
+/** Lien /survey/:token de la dernière demande d'avis de la job ; vide sinon. */
+async function lienPageAvisDuJob(supabase: SupabaseClient, orgId: string, jobId: string): Promise<string> {
+  let base = '';
+  try {
+    base = resolvePublicBaseUrl();
+  } catch {
+    return '';
+  }
+  const { data } = await supabase
+    .from('satisfaction_surveys')
+    .select('token')
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const token = (data as { token?: string | null } | null)?.token;
+  return token ? `${base}/survey/${token}` : '';
+}
+
 export async function resolveEntityVariables(
   supabase: SupabaseClient,
   orgId: string,
@@ -749,8 +776,8 @@ export async function resolveEntityVariables(
     vars.company_phone = company.phone || '';
     vars.google_review_url = company.google_review_url || '';
     vars.facebook_review_url = company.facebook_review_url || '';
-    // Première plateforme configurée (Google d'abord) : utilisable dans les SMS
-    // de rappel quel que soit le réseau choisi par l'entreprise.
+    // Première plateforme configurée (Google d'abord). Pour une job qui a déjà
+    // reçu sa demande d'avis, remplacé plus bas par la page de choix.
     vars.review_page_url = reviewDestinations(company)[0]?.url || '';
   }
 
@@ -912,6 +939,10 @@ export async function resolveEntityVariables(
       .maybeSingle();
     if (job) {
       vars.job_name = job.title || '';
+      // Rappel d'avis : le lien mène à la page de choix Google / Facebook de
+      // CETTE job (même jeton que la demande), pas directement à Google.
+      const lienAvis = await lienPageAvisDuJob(supabase, orgId, entityId);
+      if (lienAvis) vars.review_page_url = lienAvis;
       if (job.client_id) {
         const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', job.client_id).eq('org_id', orgId).maybeSingle();
         if (c) {
@@ -1897,9 +1928,10 @@ export async function executeUpdateStatus(
 // ── Action: Request Review ──────────────────────────────────
 //
 // Workflow « Avis clients » : envoyé DÈS que la job est terminée (règle
-// google_review, délai 0). Le client reçoit le lien du sondage d'étoiles par
-// courriel ET par SMS (selon ce qu'on a de lui). La suite (4-5 étoiles →
-// Google/Facebook, 1-3 → commentaires internes) se joue sur /survey/:token.
+// google_review, délai 0) à TOUS les clients sauf ceux dont le champ
+// personnalisé « noreview » est coché. Le lien part par courriel ET par SMS
+// (selon ce qu'on a de lui) et mène tout le monde au choix Google / Facebook
+// sur /survey/:token — aucune note préalable, aucun filtrage.
 
 export async function executeRequestReview(
   _config: Record<string, any>,
@@ -1948,6 +1980,16 @@ export async function executeRequestReview(
   // n'était rattachée à personne et l'anti-doublon de 7 jours, qui cherche
   // par client, ne voyait rien : chaque note ou étiquette renvoyait un avis.
   if (!clientId) clientId = await clientDeLEntite(ctx);
+
+  // 2b. Client exclu des avis (champ personnalisé « noreview » coché) : un
+  // saut voulu, pas un échec — le parcours continue.
+  try {
+    if (await clientRefuseAvis(ctx.supabase, ctx.orgId, clientId)) {
+      return saute(MOTIF_CLIENT_SANS_AVIS, 'client_sans_avis');
+    }
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
+  }
 
   // 3. Il faut au moins un canal
   if (!vars.client_email && !vars.client_phone) {
@@ -3079,6 +3121,18 @@ async function aiguillerAction(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
+  // Rappel d'avis (et tout envoi d'une automatisation d'avis) : même règle
+  // que request_review, le client « noreview » ne reçoit rien.
+  if ((actionType === 'send_sms' || actionType === 'send_email') && isReviewPreset(ctx.presetKey)) {
+    try {
+      const clientId = await clientDeLEntite(ctx);
+      if (await clientRefuseAvis(ctx.supabase, ctx.orgId, clientId)) {
+        return saute(MOTIF_CLIENT_SANS_AVIS, 'client_sans_avis');
+      }
+    } catch (e) {
+      return { success: false, error: (e as Error).message };
+    }
+  }
   switch (actionType) {
     case 'send_email':
       return executeSendEmail(config as any, vars, ctx);

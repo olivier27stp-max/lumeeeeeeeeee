@@ -17,6 +17,8 @@ import {
   bornesPeriode, debutDuMoisLocal, enCents, totauxCommissions, repartirParts, baseAvantTaxesCents,
 } from './commission-periode';
 import { toLocalDate } from '../reports/dates';
+import { dateDeRattachement } from './commission-verrou';
+import { politiqueRemboursement } from './commission-reglages';
 
 /**
  * Cumul du mois pour les paliers de performance : ce que le rep a GAGNÉ ce
@@ -110,9 +112,13 @@ export function calculateCommissionAmount(rule: any, input: CalcInput): CalcResu
   const total = input.invoiceTotalCents;
 
   // 1. Base
-  const baseKind: 'percent' | 'flat' = rule.base_kind || 'percent';
-  const basePct = Number(rule.base_percent ?? 0);
-  const baseFlat = Number(rule.base_value_cents ?? 0);
+  // Règles créées avant les colonnes du moteur (base_*) : leur taux vit encore
+  // dans les colonnes historiques `type` / `percentage` / `flat_amount` ($).
+  // Sans ce repli, un plan affiché « 10 % » payait 0 $ (constaté en prod le
+  // 2026-09-30 sur « [DEMO] Commission 10% »). L'écran lisait déjà ces colonnes.
+  const baseKind: 'percent' | 'flat' = rule.base_kind || (rule.type === 'flat' ? 'flat' : 'percent');
+  const basePct = Number(rule.base_percent ?? rule.percentage ?? 0);
+  const baseFlat = Number(rule.base_value_cents ?? (rule.flat_amount != null ? Math.round(Number(rule.flat_amount) * 100) : 0));
 
   // Apply per-category overrides where defined, base rate elsewhere
   const overrides: Array<{ category: string; base_kind: 'percent'|'flat'; base_percent: number|null; base_value_cents: number|null }> =
@@ -505,6 +511,9 @@ export async function generateCommissionsForInvoice(
     const share = r.part_cents;
     if (share <= 0) continue;
 
+    // Période de paie déjà versée pour ce membre → rattachée à la période en
+    // cours (une paie versée ne change plus), vraie date gardée.
+    const rattachement = await dateDeRattachement(supabase, orgId, r.user_id, invoice.paid_at);
     const entryFields = {
       rule_id: rule.id,
       invoice_id: invoiceId,
@@ -513,8 +522,11 @@ export async function generateCommissionsForInvoice(
       amount: share / 100,
       base_amount: baseCents / 100,
       description: 'Commission on invoice payment',
-      triggered_at: invoice.paid_at,
-      calc_breakdown: { ...calc.breakdown, split_pct: r.pct, total_calculated_cents: calc.amountCents },
+      triggered_at: rattachement.triggered_at,
+      calc_breakdown: {
+        ...calc.breakdown, split_pct: r.pct, total_calculated_cents: calc.amountCents,
+        ...(rattachement.decalee ? { gagnee_le: invoice.paid_at, rattachee_periode_suivante: true } : {}),
+      },
     };
 
     // Confirm an existing projected (pending, no invoice) entry for this rep+job.
@@ -538,8 +550,20 @@ export async function generateCommissionsForInvoice(
     }
 
     if (!confirmed) {
-      const { error } = await supabase.from('fs_commission_entries')
+      let { error } = await supabase.from('fs_commission_entries')
         .insert({ org_id: orgId, user_id: r.user_id, lead_id: null, ...entryFields });
+      // Facture REFAITE sur un job (payée → remboursée → annulée → supprimée →
+      // nouvelle facture) : l'ancienne commission, reprise, occupe encore la
+      // place (job, rep) de l'index uniq_job_rep et bloquait la nouvelle — le
+      // rep n'était jamais payé. Sans toucher la base : la nouvelle commission
+      // est enregistrée sans lien direct au job (la facture reste liée, unique
+      // par uniq_invoice_rep) ; le job est gardé dans calc_breakdown.
+      if (error && error.code === '23505' && /uniq_job_rep/.test(error.message) && entryFields.job_id) {
+        ({ error } = await supabase.from('fs_commission_entries').insert({
+          org_id: orgId, user_id: r.user_id, lead_id: null, ...entryFields,
+          job_id: null, calc_breakdown: { ...entryFields.calc_breakdown, job_id: entryFields.job_id, facture_refaite: true },
+        }));
+      }
       if (error) {
         // Doublon concurrent (même facture, même rep) = déjà écrit par un
         // appel parallèle : pas un échec. Tout autre refus en est un — dont
@@ -564,14 +588,12 @@ export async function handleInvoiceReversal(
   orgId: string,
   invoiceId: string,
   reason: string
-): Promise<{ action: 'auto_reversed' | 'kept' | 'alert'; affected: number }> {
-  const { data: settings, error: setErr } = await supabase.from('commission_settings')
-    .select('reversal_policy').eq('org_id', orgId).maybeSingle();
-  if (setErr) console.error(`[commissions] reversal settings load failed (org ${orgId}):`, setErr.message);
-  const policy = settings?.reversal_policy || 'alert';
+): Promise<{ action: 'auto_reversed' | 'kept' | 'alert' | 'clawback'; affected: number }> {
+  // Politique effective, « Reprendre » compris (drapeau hors migration).
+  const policy = await politiqueRemboursement(supabase, orgId);
 
   const { data: entries, error: entriesErr } = await supabase.from('fs_commission_entries')
-    .select('id, status').eq('org_id', orgId).eq('invoice_id', invoiceId)
+    .select('id, status, user_id, rule_id, amount, base_amount').eq('org_id', orgId).eq('invoice_id', invoiceId)
     .is('deleted_at', null);
   if (entriesErr) {
     console.error(`[commissions] reversal entries load failed (org ${orgId}, invoice ${invoiceId}):`, entriesErr.message);
@@ -585,7 +607,7 @@ export async function handleInvoiceReversal(
 
   if (policy === 'keep') return { action: 'kept', affected };
 
-  if (policy === 'auto') {
+  if (policy === 'auto' || policy === 'clawback') {
     const ids = (entries ?? []).filter((e: any) => e.status !== 'paid' && e.status !== 'reversed').map((e: any) => e.id);
     if (ids.length > 0) {
       const { error: revErr } = await supabase.from('fs_commission_entries')
@@ -601,12 +623,37 @@ export async function handleInvoiceReversal(
     // bouge pas) — mais elle ne doit plus passer inaperçue : on la marque
     // « remboursée après versement », affiché sur la page. La reprise
     // éventuelle (ajustement négatif) est une décision en attente (D4).
-    const versees = (entries ?? []).filter((e: any) => e.status === 'paid').map((e: any) => e.id);
+    const versees = (entries ?? []).filter((e: any) => e.status === 'paid');
     if (versees.length > 0) {
       const { error: flagErr } = await supabase.from('fs_commission_entries')
         .update({ reverse_reason: `${reason} (après versement)`, updated_at: new Date().toISOString() })
-        .in('id', versees);
+        .in('id', versees.map((e: any) => e.id));
       if (flagErr) throw new Error(`Commission refund flag failed for invoice ${invoiceId}: ${flagErr.message}`);
+    }
+    if (policy === 'clawback') {
+      // Politique « Reprendre » (choisie par l'entreprise dans Réglages) : la
+      // commission déjà versée reste versée dans SA période (verrouillée) ; une
+      // ligne NÉGATIVE visible, du même montant, est ajoutée à la période en
+      // cours et sera déduite de la prochaine paie. Idempotent.
+      const { data: facture } = await supabase.from('invoices').select('invoice_number').eq('id', invoiceId).maybeSingle();
+      let reprises = 0;
+      for (const e of versees as any[]) {
+        const { data: deja, error: dejaErr } = await supabase.from('fs_commission_entries')
+          .select('id').eq('org_id', orgId).eq('calc_breakdown->>reprise_de', e.id).is('deleted_at', null).limit(1);
+        if (dejaErr) throw new Error(`Commission clawback check failed: ${dejaErr.message}`);
+        if (deja && deja.length) continue;
+        const { error: insErr } = await supabase.from('fs_commission_entries').insert({
+          org_id: orgId, user_id: e.user_id, rule_id: e.rule_id,
+          invoice_id: null, job_id: null, lead_id: null,
+          status: 'approved', amount: -Math.abs(Number(e.amount)), base_amount: -Math.abs(Number(e.base_amount || 0)),
+          description: `Reprise — facture ${facture?.invoice_number ? `#${facture.invoice_number} ` : ''}remboursée après versement`,
+          triggered_at: new Date().toISOString(),
+          calc_breakdown: { reprise_de: e.id, invoice_id: invoiceId, reason },
+        });
+        if (insErr) throw new Error(`Commission clawback insert failed for entry ${e.id}: ${insErr.message}`);
+        reprises++;
+      }
+      return { action: 'clawback', affected: ids.length + reprises };
     }
     return { action: 'auto_reversed', affected: ids.length };
   }
@@ -638,6 +685,20 @@ export async function markCommissionPaid(
     .eq('id', entryId).eq('org_id', orgId).eq('status', 'approved')
     .select().single();
   if (error) throw new Error(error.message);
+  return data;
+}
+
+/** « Annuler le versement » d'une commission versée par erreur : versée → approuvée. */
+export async function unmarkCommissionPaid(
+  supabase: SupabaseClient,
+  orgId: string,
+  entryId: string
+) {
+  const { data, error } = await supabase.from('fs_commission_entries')
+    .update({ status: 'approved', paid_at: null, updated_at: new Date().toISOString() })
+    .eq('id', entryId).eq('org_id', orgId).eq('status', 'paid')
+    .select().single();
+  if (error || !data) throw new Error('Commission not found or not paid.');
   return data;
 }
 
@@ -674,10 +735,12 @@ function requeteEntrees(supabase: SupabaseClient, orgId: string, colonnes: strin
 
 /**
  * Toutes les entrées du filtre, sans jamais être tronqué à max_rows.
- * Pagination par clé (`id > dernier`, clé primaire) et non par décalage : un
- * OFFSET re-triait toute la période à chaque page (mesuré : 42 s pour une
- * année de 100 000 commissions ; linéaire ici). Les totaux n'ont pas besoin
- * d'ordre chronologique.
+ * Pagination par clé (triggered_at, id) plutôt que par décalage (un OFFSET
+ * re-triait toute la période à chaque page : 42 s mesurés sur une année de
+ * 100 000 commissions). Lire la période en tranches parallèles a été essayé
+ * et mesuré SANS gain (15 s contre 14-18 s) : sans index de période, chaque
+ * page parcourt toute la table de l'org et les tranches se disputent le même
+ * processeur. Le vrai levier est l'index (migration proposée M3).
  */
 export async function toutesLesEntrees(supabase: SupabaseClient, orgId: string, colonnes: string, o: FiltreEntrees): Promise<any[]> {
   const out: any[] = [];
@@ -731,29 +794,45 @@ export async function getCommissionEntries(
     .order('triggered_at', { ascending: false }).order('id', { ascending: true })
     .range(0, LIMITE_LISTE - 1);
   if (error) throw new Error(error.message);
-  const rows: any[] = data ?? [];
-  const uniques = (k: string) => [...new Set(rows.map((e) => e[k]).filter(Boolean))] as string[];
-  const [userIds, ruleIds, invoiceIds, jobIds] = [uniques('user_id'), uniques('rule_id'), uniques('invoice_id'), uniques('job_id')];
+  return enrichirEntrees(supabase, orgId, data ?? []);
+}
 
-  // Enrichissements en parallèle, tous bornés à l'org (l'ancienne lecture des
-  // règles n'avait pas de filtre d'org).
-  const vide = Promise.resolve({ data: [] as any[] });
+/**
+ * Ajoute aux entrées le nom du rep, de la règle, le n° de facture / job et le
+ * client. Lectures en parallèle, bornées à l'org, par lots de 200 ids (un
+ * export peut en contenir des milliers : une URL trop longue échoue).
+ */
+export async function enrichirEntrees(supabase: SupabaseClient, orgId: string, rows: any[]) {
+  const uniques = (k: string) => [...new Set(rows.map((e) => e[k]).filter(Boolean))] as string[];
+  // Job d'une facture refaite : gardé dans calc_breakdown (voir generateCommissionsForInvoice).
+  const jobDe = (e: any): string | null => e.job_id || e.calc_breakdown?.job_id || null;
+  const [userIds, ruleIds, invoiceIds] = [uniques('user_id'), uniques('rule_id'), uniques('invoice_id')];
+  const jobIds = [...new Set(rows.map(jobDe).filter(Boolean))] as string[];
+  const parLots = async (table: string, colonnes: string, cle: string, ids: string[]) => {
+    const out: any[] = [];
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error } = await supabase.from(table).select(colonnes).eq('org_id', orgId).in(cle, ids.slice(i, i + 200));
+      if (error) throw new Error(`${table} lookup failed: ${error.message}`);
+      out.push(...(data ?? []));
+    }
+    return out;
+  };
   const [members, rules, invoices, jobs] = await Promise.all([
-    userIds.length ? supabase.from('memberships').select('user_id, full_name, avatar_url').eq('org_id', orgId).in('user_id', userIds) : vide,
-    ruleIds.length ? supabase.from('fs_commission_rules').select('id, name').eq('org_id', orgId).in('id', ruleIds) : vide,
-    invoiceIds.length ? supabase.from('invoices').select('id, invoice_number, client_name_snapshot').eq('org_id', orgId).in('id', invoiceIds) : vide,
-    jobIds.length ? supabase.from('jobs').select('id, job_number, title, client_name').eq('org_id', orgId).in('id', jobIds) : vide,
+    parLots('memberships', 'user_id, full_name, avatar_url', 'user_id', userIds),
+    parLots('fs_commission_rules', 'id, name', 'id', ruleIds),
+    parLots('invoices', 'id, invoice_number, client_name_snapshot', 'id', invoiceIds),
+    parLots('jobs', 'id, job_number, title, client_name', 'id', jobIds),
   ]);
-  const index = (l: any[] | null | undefined, k: string) => new Map<string, any>((l ?? []).map((x: any) => [x[k], x]));
-  const memberMap = index(members.data, 'user_id');
-  const ruleMap = index(rules.data, 'id');
-  const invoiceMap = index(invoices.data, 'id');
-  const jobMap = index(jobs.data, 'id');
+  const index = (l: any[], k: string) => new Map<string, any>(l.map((x: any) => [x[k], x]));
+  const memberMap = index(members, 'user_id');
+  const ruleMap = index(rules, 'id');
+  const invoiceMap = index(invoices, 'id');
+  const jobMap = index(jobs, 'id');
 
   return rows.map((entry) => {
     const member = memberMap.get(entry.user_id);
     const inv = entry.invoice_id ? invoiceMap.get(entry.invoice_id) : null;
-    const job = entry.job_id ? jobMap.get(entry.job_id) : null;
+    const job = jobDe(entry) ? jobMap.get(jobDe(entry) as string) : null;
     return {
       ...entry,
       rep_name: member?.full_name || 'Unknown',

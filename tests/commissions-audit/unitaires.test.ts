@@ -90,6 +90,19 @@ describe('totaux', () => {
   });
 });
 
+describe('calculateCommissionAmount — règles d’avant les colonnes du moteur', () => {
+  const entree = { invoiceTotalCents: 100000, invoicePaidAt: '', lineItems: [], repPeriodRevenueCents: 0, repPeriodSaleCount: 0 };
+  it('« [DEMO] Commission 10% » (percentage = 10, base_* vides) paie 10 %, pas 0 $', () => {
+    expect(calculateCommissionAmount({ type: 'percentage', percentage: 10, base_kind: null, base_percent: null, base_value_cents: null }, entree).amountCents).toBe(10000);
+  });
+  it('règle historique à montant fixe (flat_amount en dollars)', () => {
+    expect(calculateCommissionAmount({ type: 'flat', flat_amount: 150, base_kind: null, base_percent: null, base_value_cents: null }, entree).amountCents).toBe(15000);
+  });
+  it('les colonnes du moteur gardent la priorité', () => {
+    expect(calculateCommissionAmount({ type: 'percentage', percentage: 10, base_kind: 'percent', base_percent: 8 }, entree).amountCents).toBe(8000);
+  });
+});
+
 describe('calculateCommissionAmount — paliers en cents', () => {
   const regle = { base_kind: 'percent', base_percent: 5, performance_tiers: [{ metric: 'revenue_cents', threshold: 250000, modifier_percent: 2, modifier_flat_cents: null }] };
   it('cumul 2 300 $ + 300 $ ≥ 2 500 $ → 7 %', () => {

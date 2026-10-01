@@ -1143,8 +1143,8 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
       {
         "type": "send_sms",
         "config": {
-          "body": "Bonjour [client_first_name], un avis Google nous aiderait énormément : [google_review_url] Merci encore! — [company_name]",
-          "body_en": "Hi [client_first_name], a Google review would help us out a lot: [google_review_url] Thanks again! — [company_name]"
+          "body": "Bonjour [client_first_name], petit rappel : un avis Google ou Facebook nous aiderait énormément : [review_page_url] Merci encore! — [company_name]",
+          "body_en": "Hi [client_first_name], a quick reminder: a Google or Facebook review would help us out a lot: [review_page_url] Thanks again! — [company_name]"
         }
       },
       {

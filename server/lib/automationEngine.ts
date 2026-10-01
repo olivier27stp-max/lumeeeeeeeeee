@@ -776,6 +776,7 @@ async function executeRuleActions(
     baseUrl: config.baseUrl,
     langue: await langueOrg(config.supabase, event.orgId),
     ruleId: rule.id,
+    presetKey: rule.preset_key ?? null,
     chaine: Array.isArray(event.metadata?.chaine) ? (event.metadata!.chaine as string[]) : undefined,
     // Rejeu par l'outbox : le traitement coupé a pu envoyer avant de mourir.
     ...(event.rejoueDepuis ? { dejaEnvoyeDepuis: event.rejoueDepuis } : {}),
@@ -2053,6 +2054,7 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         ),
         langue: await langueOrg(supabase, task.org_id),
         ruleId: task.automation_rule_id,
+        presetKey: task.automation_rules?.preset_key ?? null,
         // Une tentative a déjà eu lieu (`attempts` est incrémenté à la prise) :
         // délai dépassé, ou tâche récupérée après un arrêt entre l'envoi et la
         // clôture. Le message est peut-être parti — on vérifie avant de

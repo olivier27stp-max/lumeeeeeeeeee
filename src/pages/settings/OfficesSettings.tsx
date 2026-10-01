@@ -2,8 +2,9 @@
  * Réglages → Bureaux — liste des bureaux de la compagnie.
  *
  * Un bureau = un org du même company_group. La liste est résolue côté
- * serveur (un admin n'est membre que de son bureau). Modifier un bureau =
- * y basculer puis Réglages → Entreprise (company_settings est déjà par bureau).
+ * serveur (un admin n'est membre que de son bureau). L'adresse se modifie ici
+ * (AdresseBureauDialog) ; le reste d'un bureau = y basculer puis Réglages →
+ * Entreprise (company_settings est déjà par bureau).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +20,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import OfficeAccessGrid from '../../components/offices/OfficeAccessGrid';
 import MarqueEntrepriseCard from '../../components/offices/MarqueEntrepriseCard';
 import SanteBureauxCard from '../../components/offices/SanteBureauxCard';
+import AdresseBureauDialog from '../../components/offices/AdresseBureauDialog';
 
 export default function OfficesSettings() {
   const navigate = useNavigate();
@@ -48,6 +50,7 @@ export default function OfficesSettings() {
   // le switcher du header : aucune donnée de l'ancien bureau ne survit).
   // Fermer / rouvrir (propriétaire) : archive, ne supprime jamais.
   const [enCours, setEnCours] = useState<string | null>(null);
+  const [adresseDe, setAdresseDe] = useState<OfficeSummary | null>(null);
   const fermer = async (o: OfficeSummary) => {
     const nomB = o.name || (fr ? 'ce bureau' : 'this office');
     const ok = await confirmer({
@@ -215,6 +218,17 @@ export default function OfficesSettings() {
                 </div>
               </div>
               <div className="shrink-0 text-[12px] font-medium flex items-center gap-3">
+                {/* Propriétaire : tout bureau ; admin : son bureau actuel (le serveur revérifie). */}
+                {(isOwner || isCurrent) && !o.archived && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setAdresseDe(o); }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    className="text-[12px] text-text-tertiary underline-offset-2 hover:underline"
+                  >
+                    {fr ? 'Modifier l’adresse' : 'Edit address'}
+                  </button>
+                )}
                 {isOwner && !isCurrent && (o.archived || !o.is_primary) && (
                   <button
                     type="button"
@@ -253,9 +267,17 @@ export default function OfficesSettings() {
 
       <p className="text-[12px] text-text-tertiary">
         {fr
-          ? 'Pour modifier le nom, l\'adresse ou le logo d\'un bureau : ouvrez-le puis allez dans Réglages → Entreprise.'
-          : 'To edit an office\'s name, address or logo: open it, then go to Settings → Business.'}
+          ? 'Pour modifier le nom ou le logo d\'un bureau : ouvrez-le puis allez dans Réglages → Entreprise.'
+          : 'To edit an office\'s name or logo: open it, then go to Settings → Business.'}
       </p>
+
+      {adresseDe && (
+        <AdresseBureauDialog
+          office={adresseDe}
+          onFermer={() => setAdresseDe(null)}
+          onEnregistre={() => { setAdresseDe(null); setVersion((v) => v + 1); }}
+        />
+      )}
     </div>
   );
 }

@@ -9,6 +9,9 @@
 import { supabase } from './supabase';
 import { deviceTokenHeader } from './deviceToken';
 import { bureauActifSync } from './orgApi';
+import type { EtatCredits } from './lumiCreditsApi';
+
+export type { EtatCredits } from './lumiCreditsApi';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -24,14 +27,13 @@ async function authHeaders(): Promise<Record<string, string>> {
   };
 }
 
-export interface BudgetLumi {
-  plan_slug: string | null;
-  includes_ai: boolean;
-  budget_cents: number;
-  depense_cents: number;
-  reste_cents: number;
-  epuise: boolean;
-  configured?: boolean;
+/**
+ * Ce que /api/lumi/quota renvoie depuis le 2026-09-30 : des CRÉDITS, plus
+ * aucun montant en dollars (l'ancien objet budget en ¢ a disparu).
+ */
+export interface QuotaLumi {
+  configured: boolean;
+  credits: EtatCredits;
 }
 
 export type StatutProposition = 'en_attente' | 'confirmee' | 'annulee' | 'echouee';
@@ -106,13 +108,16 @@ export interface RapportLumi {
   sections: SectionRapportLumi[];
 }
 
-/** Tokens et coût d'une réponse (somme des appels au modèle du tour), ou d'une conversation. */
+/**
+ * Tokens d'une réponse (somme des appels au modèle du tour), ou d'une
+ * conversation. Plus de coût en dollars : le serveur ne l'envoie plus, et
+ * seuls les comptes internes (@lume-test.ca) voient modèle et tokens.
+ */
 export interface UsageLumi {
   model: string | null;
   input_tokens: number;
   output_tokens: number;
   cache_read_input_tokens: number;
-  cost_cents: number;
   appels: number;
 }
 
@@ -140,17 +145,19 @@ export type EvenementFlux =
   | { type: 'fiches'; fiches: FicheLumi[] }
   | { type: 'executed'; tool_use_id: string; ok: boolean; fiche: FicheLumi | null; auto?: boolean }
   | { type: 'report'; tool_use_id: string; rapport: RapportLumi }
-  | { type: 'usage'; model: string; cost_cents: number; usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }
-  | { type: 'done'; conversation_id: string; cost_cents: number; budget: BudgetLumi; proposal: { tool_use_id: string; tool: string; args: Record<string, unknown> } | null }
+  | { type: 'usage'; model: string; usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }
+  // `credits` : porté par /chat et /execute ; l'étage 0 (/action) peut l'omettre.
+  | { type: 'done'; conversation_id: string; credits?: EtatCredits; proposal: { tool_use_id: string; tool: string; args: Record<string, unknown> } | null }
   | { type: 'error'; message: string };
 
 export class ErreurLumi extends Error {
   code: string;
-  budget?: BudgetLumi;
-  constructor(code: string, message: string, budget?: BudgetLumi) {
+  /** État des crédits joint à un refus (ex. quota_epuise), s'il y en a un. */
+  credits?: EtatCredits;
+  constructor(code: string, message: string, credits?: EtatCredits) {
     super(message);
     this.code = code;
-    this.budget = budget;
+    this.credits = credits;
   }
 }
 
@@ -158,7 +165,7 @@ export class ErreurLumi extends Error {
 async function lireFlux(res: Response, onEvent: (e: EvenementFlux) => void, signal?: AbortSignal): Promise<void> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ErreurLumi(body?.code || `http_${res.status}`, body?.error || `HTTP ${res.status}`, body?.budget);
+    throw new ErreurLumi(body?.code || `http_${res.status}`, body?.error || `HTTP ${res.status}`, body?.credits);
   }
   const reader = res.body?.getReader();
   if (!reader) throw new ErreurLumi('flux', 'No stream');
@@ -268,7 +275,7 @@ export async function definirAutorisationLumi(tool: string, actif: boolean): Pro
   return ((await res.json()) as { tools: string[] }).tools;
 }
 
-export async function quotaLumi(): Promise<BudgetLumi> {
+export async function quotaLumi(): Promise<QuotaLumi> {
   const res = await fetch(`${API_BASE}/api/lumi/quota`, { headers: await authHeaders() });
   if (!res.ok) throw new ErreurLumi(`http_${res.status}`, 'quota');
   return res.json();

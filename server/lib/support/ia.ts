@@ -258,6 +258,7 @@ export async function repondreSupportIA(
         cache_read_input_tokens: (reponse.usage as any).cache_read_input_tokens ?? 0,
         cost_cents: coutAppel,
         source: 'support',
+        requestId: reponse.id ?? null,
       }).catch((e: any) => console.error('[support/ia] usage non journalisé :', e?.message || e));
     }
 

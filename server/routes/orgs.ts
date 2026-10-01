@@ -175,7 +175,7 @@ router.get('/orgs/offices', async (req, res) => {
     const officeIds = await companyOrgIds(admin, auth.orgId);
     const [orgsRes, settingsRes, membersRes, subsRes, myMemRes] = await Promise.all([
       admin.from('orgs').select('id, name, created_at, archived_at').in('id', officeIds),
-      admin.from('company_settings').select('org_id, company_name, phone, street1, city, province, logo_url, brand_color, suit_marque_entreprise').in('org_id', officeIds),
+      admin.from('company_settings').select('org_id, company_name, phone, street1, street2, city, province, postal_code, country, weather_lat, weather_lng, logo_url, brand_color, suit_marque_entreprise').in('org_id', officeIds),
       admin.from('memberships').select('org_id').in('org_id', officeIds).eq('status', 'active'),
       admin.from('subscriptions').select('org_id').in('org_id', officeIds).in('status', ['active', 'trialing']),
       admin.from('memberships').select('org_id').eq('user_id', auth.user.id).in('org_id', officeIds).eq('status', 'active'),
@@ -200,8 +200,13 @@ router.get('/orgs/offices', async (req, res) => {
           created_at: o.created_at,
           phone: s.phone || '',
           street1: s.street1 || '',
+          street2: s.street2 || '',
           city: s.city || '',
           province: s.province || '',
+          postal_code: s.postal_code || '',
+          country: s.country || '',
+          weather_lat: s.weather_lat ?? null,
+          weather_lng: s.weather_lng ?? null,
           member_count: memberCount.get(String(o.id)) || 0,
           is_primary: primaryIds.has(String(o.id)),
           is_member: myOrgIds.has(String(o.id)),
@@ -380,6 +385,63 @@ router.post('/orgs/offices/:id/reprendre-base', validate(reprendreSchema), async
   } catch (err: any) {
     console.error('[orgs/reprendre-base]', err?.message);
     return res.status(500).json({ error: 'Copie impossible.' });
+  }
+});
+
+// ─── PATCH /orgs/offices/:id/address ─────────────────────────────
+// Modifier l'adresse d'un bureau depuis Réglages → Bureaux, sans y basculer.
+// Propriétaire ou admin DE CE BUREAU (les propriétaires sont membres de tous
+// les bureaux du groupe). Écrit dans company_settings, la source d'affichage.
+const officeAddressSchema = z.object({
+  street1: optionalText(200),
+  street2: optionalText(200),
+  city: z.string().trim().min(1, 'Operations city is required.').max(120),
+  province: optionalText(120),
+  postal_code: optionalText(20),
+  country: optionalText(60),
+  weather_lat: z.number().min(-90).max(90).nullable().optional(),
+  weather_lng: z.number().min(-180).max(180).nullable().optional(),
+});
+
+router.patch('/orgs/offices/:id/address', validate(officeAddressSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const cible = String(req.params.id);
+    const tous = await companyOrgIds(admin, auth.orgId);
+    if (!tous.includes(cible)) return res.status(404).json({ error: 'Bureau introuvable.' });
+    const role = await callerRole(admin, auth.user.id, cible);
+    if (role !== 'owner' && role !== 'admin') {
+      return res.status(403).json({ error: 'Réservé aux propriétaires et administrateurs de ce bureau.' });
+    }
+
+    const a = req.body as z.infer<typeof officeAddressSchema>;
+    const txt = (v: string | null | undefined) => (v ?? '').trim();
+    // Colonnes texte NOT NULL DEFAULT '' : un champ vidé s'écrit ''. Sans
+    // coordonnées choisies dans l'autocomplétion, on les remet à null pour que
+    // la météo géocode la nouvelle ville au lieu de garder l'ancien point.
+    const coords = typeof a.weather_lat === 'number' && typeof a.weather_lng === 'number';
+    const row = {
+      street1: txt(a.street1),
+      street2: txt(a.street2),
+      city: txt(a.city),
+      province: txt(a.province),
+      postal_code: txt(a.postal_code),
+      country: txt(a.country),
+      weather_lat: coords ? a.weather_lat : null,
+      weather_lng: coords ? a.weather_lng : null,
+    };
+    const { data: maj, error } = await admin.from('company_settings').update(row).eq('org_id', cible).select('org_id');
+    if (error) throw error;
+    if (!maj || maj.length === 0) {
+      const { error: eIns } = await admin.from('company_settings').insert({ org_id: cible, created_by: auth.user.id, ...row });
+      if (eIns) throw eIns;
+    }
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[orgs/offices/address]', err?.message);
+    return res.status(500).json({ error: 'Impossible d’enregistrer l’adresse.' });
   }
 });
 

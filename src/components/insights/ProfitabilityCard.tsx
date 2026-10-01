@@ -9,8 +9,9 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchJobPnL, updateJobExpenses, RentabiliteRefusee } from '../../lib/profitabilityApi';
 import { useTranslation } from '../../i18n';
-import PeriodSelector from './PeriodSelector';
-import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
+import EnteteCarte from './EnteteCarte';
+import { type InsightsRange } from '../../lib/insightsPeriod';
+import { filtresNonAppliques, type Filtres } from '../../lib/statsFiltres';
 
 function ExpenseInput({ jobId, cents, onSaved }: { jobId: string; cents: number; onSaved: () => void }) {
   const { language } = useTranslation();
@@ -45,21 +46,24 @@ function ExpenseInput({ jobId, cents, onSaved }: { jobId: string; cents: number;
   );
 }
 
+/** Clé et chargement partagés avec la page (export CSV) : une seule lecture. */
+export const cleRentabilite = (range: Pick<InsightsRange, 'from' | 'to'>, filtres: Filtres) => ['job-pnl', range.from, range.to, filtres];
+export const lireRentabilitePage = (range: Pick<InsightsRange, 'from' | 'to'>, filtres: Filtres) =>
+  fetchJobPnL({ from: range.from, to: range.to, filtres: { technicien: filtres.technicien, vendeur: filtres.vendeur, client: filtres.client, service: filtres.service } });
+
 export default function ProfitabilityCard({
   range,
-  period,
-  onPeriod,
+  filtres,
 }: {
   range: InsightsRange;
-  period: InsightsPeriod;
-  onPeriod: (p: InsightsPeriod) => void;
+  filtres: Filtres;
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const qc = useQueryClient();
 
-  const key = ['job-pnl', range.from, range.to];
-  const q = useQuery({ queryKey: key, queryFn: () => fetchJobPnL({ from: range.from, to: range.to }), staleTime: 30_000,
+  const key = cleRentabilite(range, filtres);
+  const q = useQuery({ queryKey: key, queryFn: () => lireRentabilitePage(range, filtres), staleTime: 30_000, refetchOnMount: 'always',
     retry: (n, err) => !(err instanceof RentabiliteRefusee) && n < 2 });
 
   const k = (cents: number) => new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
@@ -69,10 +73,8 @@ export default function ProfitabilityCard({
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-end justify-between gap-3 px-6 pb-3 border-b border-border">
-        <div className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary leading-none">{fr ? 'Rentabilité par job' : 'Profitability by job'}</div>
-        <PeriodSelector value={period} onChange={onPeriod} />
-      </div>
+      <EnteteCarte titre={fr ? 'Rentabilité par job' : 'Profitability by job'} nonAppliques={filtresNonAppliques('rentabilite', filtres)}
+        definition={fr ? 'Avant taxes : facturé moins remboursements − main-d’œuvre − commissions − dépenses' : 'Before taxes: invoiced minus refunds − labour − commissions − expenses'} />
 
       {q.isLoading ? (
         <div className="h-[140px] mx-6 mt-4 rounded-lg bg-surface-secondary/40 animate-pulse" />

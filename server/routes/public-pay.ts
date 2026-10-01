@@ -21,6 +21,7 @@ const router = Router();
 // l'apprend au chargement (statut 'disabled'), et toute création ou mise à
 // jour de PaymentIntent est refusée ici, pas seulement masquée.
 const ERREUR_PAIEMENTS_DESACTIVES = 'Online payments are currently disabled for this business.';
+const ERREUR_COMPTE_NON_PRET = 'This business is not yet ready to accept payments.';
 
 // ── GET /pay/:publicToken — Fetch payment page data (NO AUTH) ──
 
@@ -119,10 +120,17 @@ router.get('/pay/:publicToken', async (req, res) => {
       language: orgSettings?.default_language === 'en' ? 'en' : 'fr',
     };
 
-    if (!reglages.invoice_payments_enabled) {
+    // Compte Stripe Connect absent ou pas encore autorisé à encaisser : même
+    // écran « paiement en ligne indisponible » dès le chargement, au lieu de
+    // laisser le client arriver sur une erreur 503 en anglais à la création
+    // du PaymentIntent.
+    const compteConnect = reglages.invoice_payments_enabled
+      ? await getConnectedAccount(paymentRequest.org_id)
+      : null;
+    if (!reglages.invoice_payments_enabled || !compteConnect?.charges_enabled) {
       return res.json({
         status: 'disabled',
-        message: ERREUR_PAIEMENTS_DESACTIVES,
+        message: reglages.invoice_payments_enabled ? ERREUR_COMPTE_NON_PRET : ERREUR_PAIEMENTS_DESACTIVES,
         amount_cents: Number(invoice.balance_cents || 0),
         currency: paymentRequest.currency,
         business,
@@ -188,24 +196,9 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
       return res.status(410).json({ error: 'This payment link has expired.' });
     }
 
-    // If we already have a PI, return the existing client_secret
-    if (paymentRequest.stripe_payment_intent_id) {
-      const stripe = getPlatformStripe();
-      const existingIntent = await stripe.paymentIntents.retrieve(paymentRequest.stripe_payment_intent_id);
-
-      // If the intent is still active, reuse it
-      if (['requires_payment_method', 'requires_confirmation', 'requires_action'].includes(existingIntent.status)) {
-        return res.json({
-          client_secret: existingIntent.client_secret,
-          payment_intent_id: existingIntent.id,
-          amount_cents: existingIntent.amount,
-          currency: existingIntent.currency.toUpperCase(),
-          publishable_key: process.env.STRIPE_PUBLISHABLE_KEY || '',
-        });
-      }
-    }
-
-    // Interrupteur « paiement des factures en ligne » de l'entreprise.
+    // Interrupteur « paiement des factures en ligne » de l'entreprise — vérifié
+    // AVANT de resservir un intent existant : sinon un lien déjà ouvert une fois
+    // restait payable après que l'entreprise a coupé le paiement en ligne.
     const reglages = await getPaymentSettings(paymentRequest.org_id);
     if (!reglages.invoice_payments_enabled) {
       return res.status(403).json({ error: ERREUR_PAIEMENTS_DESACTIVES });
@@ -214,7 +207,52 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
     // Get connected account for destination charge
     const connectedAccount = await getConnectedAccount(paymentRequest.org_id);
     if (!connectedAccount || !connectedAccount.charges_enabled) {
-      return res.status(503).json({ error: 'This business is not yet ready to accept payments.' });
+      return res.status(503).json({ error: ERREUR_COMPTE_NON_PRET });
+    }
+
+    const admin = getServiceClient();
+
+    // If we already have a PI, return the existing client_secret
+    if (paymentRequest.stripe_payment_intent_id) {
+      const stripe = getPlatformStripe();
+      const existingIntent = await stripe.paymentIntents.retrieve(paymentRequest.stripe_payment_intent_id);
+
+      // If the intent is still active, reuse it
+      if (['requires_payment_method', 'requires_confirmation', 'requires_action'].includes(existingIntent.status)) {
+        // Le montant de l'intent date de sa création. Si le solde a bougé
+        // depuis (paiement manuel, facture modifiée), on le recale sur le
+        // solde actuel + le pourboire déjà choisi — sinon le client paierait
+        // l'ancien montant et la facture finirait en trop-perçu.
+        const { data: facture } = await admin
+          .from('invoices')
+          .select('balance_cents, org_id')
+          .eq('id', paymentRequest.invoice_id)
+          .maybeSingle();
+        if (!facture || facture.org_id !== paymentRequest.org_id) {
+          return res.status(403).json({ error: 'Payment request mismatch.' });
+        }
+        const soldeCents = Number(facture.balance_cents || 0);
+        if (soldeCents <= 0) {
+          await updatePaymentRequestStatus(paymentRequest.id, 'paid');
+          return res.status(400).json({ error: 'Invoice has no remaining balance.' });
+        }
+        const pourboireCents = Math.max(0, Number(existingIntent.metadata?.tip_cents || 0) || 0);
+        const attenduCents = soldeCents + pourboireCents;
+        let intent = existingIntent;
+        if (existingIntent.amount !== attenduCents) {
+          intent = await stripe.paymentIntents.update(existingIntent.id, {
+            amount: attenduCents,
+            application_fee_amount: calculateApplicationFee(attenduCents),
+          });
+        }
+        return res.json({
+          client_secret: intent.client_secret,
+          payment_intent_id: intent.id,
+          amount_cents: intent.amount,
+          currency: intent.currency.toUpperCase(),
+          publishable_key: process.env.STRIPE_PUBLISHABLE_KEY || '',
+        });
+      }
     }
 
     // Atomic lock: mark this payment request as "processing" to prevent concurrent PI creation.
@@ -224,7 +262,6 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
     // « pending » seul, chaque première tentative répondait 409 « déjà en
     // traitement » — aucun paiement par lien n'avait jamais abouti en prod
     // (trouvé le 2026-09-17 en payant une facture test).
-    const admin = getServiceClient();
     const statutAvant = paymentRequest.status;
     const { data: lockResult, error: lockErr } = await admin
       .from('payment_requests')

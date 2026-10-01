@@ -39,7 +39,7 @@ const COPY = {
     kicker: 'Industries',
     titleLine1: 'Conçu pour toutes les',
     titleLine2: 'entreprises de services résidentiels',
-    subtitle: 'Peu importe votre métier — Lume s\'adapte à votre façon de travailler.',
+    subtitle: 'Peu importe ton métier — Lume s\'adapte à ta façon de travailler.',
   },
 } as const;
 

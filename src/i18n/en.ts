@@ -3853,7 +3853,7 @@ const en = {
       // OAuth brand verification (the homepage must explain what the app does
       // and carry the same name as the consent screen).
       subtitle:
-        'Lume CRM is an all-in-one management platform for residential service businesses. Manage your clients, quotes, invoices, scheduling and email in one place.',
+        'Lume CRM is the all-in-one software for residential service and renovation businesses: a clear sales pipeline and automations that follow up with your clients for you.',
       bookDemo: 'Book a demo',
     },
     trust: {
@@ -3941,6 +3941,32 @@ const en = {
         contact: 'Contact',
       },
     },
+  },
+  // Crédits Lumi (2026-09-30) : l'usage IA se compte en crédits, jamais en dollars.
+  // `unit` est LA clé du libellé : la renommer ici renomme partout.
+  lumiCredits: {
+    unit: 'Lumi credits',
+    counter: '{restants} / {total} {unit}',
+    renews: 'renews {date}',
+    renewsOn: 'Renews on {date}',
+    untilRenewal: 'renewal',
+    barLabel: '{unit} left this period',
+    barValue: '{restants} of {total} {unit} left',
+    warn80: 'You have {n} {unit} left until {date}.',
+    exhausted: 'Your {unit} are used up until {date}. Quick actions and everything else in Lume still work.',
+    exhaustedInput: '{Unit} used up until {date}.',
+    slowed: 'Lumi is saving your {unit}: one reply per minute until {date}. Try again in a moment.',
+    perMonth: '{n} {unit} / month',
+    deducted: 'Uses your {unit}',
+    left: 'left',
+    ofTotal: 'of {total}',
+    noRollover: 'Unused {unit} do not roll over. The count restarts at each renewal.',
+    historyTitle: 'Last 30 days',
+    historyEmpty: 'No usage yet this period.',
+    historyError: 'Usage history is unavailable for now.',
+    byUser: 'By user',
+    dayUsage: '{jour}: {n} {unit}',
+    downgradeLost: 'Lumi, the AI assistant ({n} {unit} / month)',
   },
 } as const;
 
