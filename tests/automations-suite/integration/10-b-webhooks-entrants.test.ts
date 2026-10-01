@@ -158,6 +158,65 @@ describe('[B] webhooks Stripe signés', () => {
     expect(data!.deposit_status).toBe('paid');
   });
 
+  it('[B-591] paiement Stripe qui SOLDE la facture → invoice.paid porte payment_type=full : la règle « full » part, « deposit » et « partial » non', async () => {
+    const m = marque('B-591');
+    const client = await creerClient(b, m);
+    const f = await creerFacture(b, m, client.id, 12_000);
+    await ok(b.admin.from('invoices').update({ status: 'sent', issued_at: new Date().toISOString() }).eq('id', f.id), 'envoi');
+    const depot = await regle(`${m} depot`, 'invoice.paid', { payment_type: 'deposit' });
+    const partiel = await regle(`${m} partiel`, 'invoice.paid', { payment_type: 'partial' });
+    const complet = await regle(`${m} complet`, 'invoice.paid', { payment_type: 'full' });
+    const r = await envoyerStripe(intention('payment_intent.succeeded', `pi_qa_${randomBytes(8).toString('hex')}`, {
+      amount: 12_000, amount_received: 12_000, status: 'succeeded',
+      metadata: { org_id: b.orgA, invoice_id: f.id, client_id: client.id },
+    }));
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    const [t] = await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} complet`), (x) => x.length > 0);
+    expect(t, 'la règle « payment_type = full » n’est pas partie pour un paiement par carte').toMatchObject({ linked_entity_type: 'invoice', linked_entity_id: f.id });
+    expect((await journaux(b.admin, complet))[0]).toMatchObject({ trigger_event: 'invoice.paid', entity_id: f.id, result_success: true });
+    expect(await journaux(b.admin, depot)).toHaveLength(0);
+    expect(await journaux(b.admin, partiel)).toHaveLength(0);
+  });
+
+  it('[B-591] paiement PayPal qui solde la facture → payment_type=full aussi (même émetteur, aucun appel à PayPal)', async () => {
+    const m = marque('B-591p');
+    const client = await creerClient(b, m);
+    const f = await creerFacture(b, m, client.id, 8_000);
+    await ok(b.admin.from('invoices').update({ status: 'sent', issued_at: new Date().toISOString() }).eq('id', f.id), 'envoi');
+    const depot = await regle(`${m} depot`, 'invoice.paid', { payment_type: 'deposit' });
+    const complet = await regle(`${m} complet`, 'invoice.paid', { payment_type: 'full', provider: 'paypal' });
+    const httpAvant = appelsHttpBloques().length;
+    const { insertOrUpdatePaymentIdempotent } = await import('../../../server/lib/payments');
+    const p = await insertOrUpdatePaymentIdempotent({
+      org_id: b.orgA, client_id: client.id, invoice_id: f.id, provider: 'paypal',
+      provider_payment_id: `PAYPAL-QA-${randomBytes(6).toString('hex')}`, status: 'succeeded', amount_cents: 8_000, currency: 'CAD',
+    });
+    expect(p.inserted).toBe(true);
+    const [t] = await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} complet`), (x) => x.length > 0);
+    expect(t).toMatchObject({ linked_entity_type: 'invoice', linked_entity_id: f.id });
+    expect(await journaux(b.admin, depot)).toHaveLength(0);
+    expect(appelsHttpBloques().length, 'un appel sortant (PayPal ?) a été tenté').toBe(httpAvant);
+  });
+
+  it('[B-591] témoin : un paiement PARTIEL en ligne n’émet pas invoice.paid — ni « full » ni « partial » ne partent, la facture reste à payer', async () => {
+    const m = marque('B-591t');
+    const client = await creerClient(b, m);
+    const f = await creerFacture(b, m, client.id, 20_000);
+    await ok(b.admin.from('invoices').update({ status: 'sent', issued_at: new Date().toISOString() }).eq('id', f.id), 'envoi');
+    const partiel = await regle(`${m} partiel`, 'invoice.paid', { payment_type: 'partial' });
+    const complet = await regle(`${m} complet`, 'invoice.paid', { payment_type: 'full' });
+    const r = await envoyerStripe(intention('payment_intent.succeeded', `pi_qa_${randomBytes(8).toString('hex')}`, {
+      amount: 5_000, amount_received: 5_000, status: 'succeeded',
+      metadata: { org_id: b.orgA, invoice_id: f.id, client_id: client.id },
+    }));
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    const { data: facture } = await b.admin.from('invoices').select('status, balance_cents').eq('id', f.id).single();
+    expect(facture).toMatchObject({ status: 'partial', balance_cents: 15_000 });
+    await new Promise((res) => setTimeout(res, 2500));
+    expect(await journaux(b.admin, partiel)).toHaveLength(0);
+    expect(await journaux(b.admin, complet)).toHaveLength(0);
+  });
+
   it('[B-407][B-408] payment_intent.payment_failed (drapeau auto_paiement_echoue) → paiement échoué écrit, payment.failed : raison vraie / autre fausse', async () => {
     const m = marque('B-407');
     await drapeau(b, 'auto_paiement_echoue', true);
