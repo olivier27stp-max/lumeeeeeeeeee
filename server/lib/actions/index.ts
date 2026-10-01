@@ -531,9 +531,18 @@ export type ActionType =
  * Une variable de nom vide laissait « Bonjour , » ou « Paiement reçu — merci ! »
  * (espace orpheline avant la ponctuation). On recolle la ponctuation.
  */
-export function sansPrenomVide(texte: string): string {
-  return texte
-    .replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s+([,!.?])/g, '$1$2')
+export function sansPrenomVide(texte: string, options: { texto?: boolean } = {}): string {
+  /* Texto : le texte part TEL QUE l'entrepreneur l'a écrit et relu dans
+     l'éditeur. « Merci ! » (espace avant le point d'exclamation, typographie
+     française) n'est pas un trou laissé par un nom vide : on n'y touche pas.
+     Seuls trahissent un nom vide une virgule ou un point orphelins
+     (« Bonjour , ») et une espace DOUBLÉE avant « ! » ou « ? ». */
+  const salutation = options.texto
+    ? texte
+      .replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s+([,.])/g, '$1$2')
+      .replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s{2,}([!?])/g, '$1 $2')
+    : texte.replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s+([,!.?])/g, '$1$2');
+  return salutation
     // Un nom qui finit déjà par un point (« Plomberie Tremblay inc. ») suivi
     // du point de la phrase donnait « inc.. ». Les points de suspension restent.
     .replace(/([A-Za-zÀ-ÿ])\.\.(?!\.)/g, '$1.');
@@ -1253,6 +1262,16 @@ export function identiteManquante(company: { company_name?: string | null; compa
   return `Courriel commercial non envoyé : ${manque.join(' et ')} de l’entreprise ${manque.length > 1 ? 'manquent' : 'manque'} (Paramètres → Entreprise). La loi exige que le client sache qui lui écrit.`;
 }
 
+/**
+ * `dejaResolu` : le sujet et le corps sont le texte FINAL, déjà résolu par
+ * l'appelant. La demande d'avis résolvait son gabarit (reviews.ts), puis
+ * l'envoi le résolvait ENCORE : tout ce qu'une valeur portait entre crochets
+ * ou accolades (job « Lavage [vitres] », client « Tremblay {Montréal} »)
+ * était repris pour une variable inconnue et effacé du message. Jamais lu
+ * depuis la configuration d'une règle : c'est un paramètre d'appel interne.
+ */
+export interface OptionsEnvoi { dejaResolu?: boolean }
+
 export async function executeSendEmail(
   config: {
     to?: string; subject: string; body: string;
@@ -1260,6 +1279,7 @@ export async function executeSendEmail(
   },
   vars: Record<string, string>,
   ctx: ActionContext,
+  options: OptionsEnvoi = {},
 ): Promise<ActionResult> {
   // Le destinataire vient TOUJOURS de l'entité, jamais de la règle.
   // Voir `DESTINATAIRE_IMPOSE` plus haut : `config.to` permettait d'envoyer les
@@ -1269,8 +1289,12 @@ export async function executeSendEmail(
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'subject', ctx.langue), champLocalise(config, 'body', ctx.langue));
   // Prénom manquant : « Bonjour , » / « merci ! » deviennent « Bonjour, » / « merci! ».
-  const subject = sansPrenomVide(resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars));
-  const body = sansPrenomVide(resolveTemplate(champLocalise(config, 'body', ctx.langue), vars, { html: true }));
+  // Un texte DÉJÀ résolu par l'appelant (demande d'avis) n'est pas résolu une
+  // seconde fois : voir `OptionsEnvoi`.
+  const rendre = (gabarit: string, html = false) =>
+    (options.dejaResolu ? gabarit : resolveTemplate(gabarit, vars, html ? { html: true } : {}));
+  const subject = sansPrenomVide(rendre(champLocalise(config, 'subject', ctx.langue)));
+  const body = sansPrenomVide(rendre(champLocalise(config, 'body', ctx.langue), true));
 
   try {
     const { sendEmail, isMailerConfigured, adresseInjoignable } = await import('../mailer');
@@ -1412,7 +1436,7 @@ export async function executeSendEmail(
     /* L'apercu (« Pre-Header ») : la ligne que la boite de reception affiche
        apres l'objet. Masquee dans le corps du message — c'est la technique
        standard, et la seule qui marche sans champ d'en-tete dedie. */
-    const apercuTexte = resolveTemplate(champLocalise(config, 'preheader', ctx.langue), vars).trim();
+    const apercuTexte = sansPrenomVide(resolveTemplate(champLocalise(config, 'preheader', ctx.langue), vars)).trim();
     const apercu = apercuTexte
       ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${apercuTexte.replace(/[<>]/g, '')}</div>`
       : '';
@@ -1505,6 +1529,7 @@ export async function executeSendSms(
   },
   vars: Record<string, string>,
   ctx: ActionContext,
+  options: OptionsEnvoi = {},
 ): Promise<ActionResult> {
   if (!ctx.twilio) return saute('Aucun numéro texto configuré pour le bureau', 'sms_non_configure');
 
@@ -1547,7 +1572,11 @@ export async function executeSendSms(
   }
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'body', ctx.langue));
-  let body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
+  // Prénom manquant : « Bonjour , » devient « Bonjour, » — le courriel le
+  // faisait déjà, le texto partait avec l'espace orpheline (et « inc.. »
+  // quand le nom de l'entreprise finit par un point).
+  const gabaritTexto = champLocalise(config, 'body', ctx.langue);
+  let body = sansPrenomVide(options.dejaResolu ? gabaritTexto : resolveTemplate(gabaritTexto, vars), { texto: true });
   // LCAP (audit V2, L7) : un texto commercial nomme l'entreprise et offre le
   // retrait. Ajouté ici plutôt qu'exigé à la saisie : personne ne l'oublie.
   if (estCommercialLcap(ctx) || config.sollicitation === true) {
@@ -2036,11 +2065,14 @@ export async function executeRequestReview(
     return { success: false, error: 'Client has no email address or phone number.' };
   }
 
-  // 4. Resolve client name: first_name > full name > "Bonjour"
+  // 4. Le nom dans la salutation : prénom, sinon nom complet. Sans aucun des
+  // deux, RIEN en français (« Bonjour, ») et « there » en anglais (« Hi
+  // there, »). Le repli français était le mot « Bonjour » lui-même : le
+  // client lisait « Bonjour Bonjour, merci d'avoir choisi… ».
   const en = ctx.langue === 'en';
   const clientGreeting = vars.client_first_name
     || vars.client_name
-    || (en ? 'there' : 'Bonjour');
+    || (en ? 'there' : '');
 
   // 5. Anti-duplicate: check if review already sent to this client in last 7 days
   if (clientId) {
@@ -2094,6 +2126,9 @@ export async function executeRequestReview(
   };
 
   let { subject, html: body } = reviewEmail(cs, messageVars, { langue: ctx.langue, couleur: (cs as { brand_color?: string | null } | null)?.brand_color ?? null });
+  // Sujet, corps et texto sont résolus ICI, une seule fois : l'envoi les
+  // prend tels quels (`dejaResolu`).
+  const DEJA_RESOLU: OptionsEnvoi = { dejaResolu: true };
 
   if (!String(cs?.review_email_body || '').trim()) {
     const { data: emailTemplate } = await ctx.supabase
@@ -2112,6 +2147,8 @@ export async function executeRequestReview(
       body = resolveTemplate(emailTemplate.body, messageVars, { html: true });
     }
   }
+  // Le sujet consigné dans `review_requests` est celui que le client reçoit.
+  subject = sansPrenomVide(subject);
 
   // 9. Envoi : courriel si on a l'adresse, SMS si on a le numéro.
   //
@@ -2128,13 +2165,13 @@ export async function executeRequestReview(
     ? { success: false, error: 'Client has no email address.' }
     : await depassePlafondFrequence(ctxPlafond, 'email', vars.client_email)
       ? auPlafond('email', vars.client_email)
-      : await executeSendEmail({ subject, body }, vars, ctx);
+      : await executeSendEmail({ subject, body }, vars, ctx, DEJA_RESOLU);
 
   const smsResult: ActionResult = !vars.client_phone
     ? { success: false, error: 'Client has no phone number.' }
     : await depassePlafondFrequence(ctxPlafond, 'sms', vars.client_phone)
       ? auPlafond('sms', vars.client_phone)
-      : await executeSendSms({ body: reviewSmsBody(cs, messageVars, en ? 'en' : 'fr'), sollicitation: true }, vars, ctx);
+      : await executeSendSms({ body: reviewSmsBody(cs, messageVars, en ? 'en' : 'fr'), sollicitation: true }, vars, ctx, DEJA_RESOLU);
 
   // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
   const sent = estEnvoye(emailResult) || estEnvoye(smsResult);

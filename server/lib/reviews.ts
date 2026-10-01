@@ -145,11 +145,23 @@ export function surveyTexts(settings: ReviewSettingsLike | null | undefined, lan
   };
 }
 
-/** Remplace [var] et {var} ; une variable inconnue devient vide. */
+/**
+ * Remplace [var] et {var} ; une variable inconnue devient vide.
+ *
+ * UNE seule passe : une valeur insérée n'est jamais relue. En deux passes
+ * ({var} puis [var]), une job « Lavage [vitres] » perdait « [vitres] », pris
+ * pour une variable inconnue — et `{survey_url}` cassait le bouton du
+ * courriel (son marqueur interne « [[SURVEY_BUTTON]] » était vidé en « [] »).
+ * Seules les clés PROPRES de `vars` sont lues (« [constructor] » remontait à
+ * Object.prototype).
+ */
 export function resolveReviewTemplate(template: string, vars: Record<string, string | null | undefined>): string {
-  return String(template || '')
-    .replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '')
-    .replace(/\[(\w+)\]/g, (_, k) => vars[k] ?? '');
+  return String(template || '').replace(/\{(\w+)\}|\[(\w+)\]/g, (_, accolade: string | undefined, crochet: string | undefined) => {
+    const cle = (accolade ?? crochet) as string;
+    if (!Object.prototype.hasOwnProperty.call(vars, cle)) return '';
+    const v: unknown = vars[cle];
+    return typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
+  });
 }
 
 /** Corps du SMS du sondage, variables résolues. */

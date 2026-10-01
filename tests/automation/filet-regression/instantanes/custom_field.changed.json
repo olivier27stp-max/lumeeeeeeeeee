@@ -289,7 +289,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !\nRépondez STOP pour ne plus recevoir.",
+     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc. Merci !\nRépondez STOP pour ne plus recevoir.",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -311,7 +311,7 @@
      "result_success": true,
      "result_data": {
       "to": "+15145550142",
-      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !\nRépondez STOP pour ne plus recevoir."
+      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc. Merci !\nRépondez STOP pour ne plus recevoir."
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -323,7 +323,7 @@
     "moment": "immediat",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !\nRépondez STOP pour ne plus recevoir."
+    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc. Merci !\nRépondez STOP pour ne plus recevoir."
    }
   ],
   "annulees": []
@@ -429,7 +429,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !\nRépondez STOP pour ne plus recevoir.",
+     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc. Merci !\nRépondez STOP pour ne plus recevoir.",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -452,7 +452,7 @@
      "result_success": true,
      "result_data": {
       "to": "+15145550142",
-      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !\nRépondez STOP pour ne plus recevoir."
+      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc. Merci !\nRépondez STOP pour ne plus recevoir."
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -481,7 +481,7 @@
     "moment": "differe:send_sms",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !\nRépondez STOP pour ne plus recevoir."
+    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc. Merci !\nRépondez STOP pour ne plus recevoir."
    }
   ],
   "annulees": []
@@ -4640,7 +4640,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !\nRépondez STOP pour ne plus recevoir.",
+     "message_text": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc. Merci !\nRépondez STOP pour ne plus recevoir.",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -4663,7 +4663,7 @@
      "result_success": true,
      "result_data": {
       "to": "+15145550142",
-      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !\nRépondez STOP pour ne plus recevoir."
+      "body": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc. Merci !\nRépondez STOP pour ne plus recevoir."
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -4692,7 +4692,7 @@
     "moment": "differe:send_sms#e3",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc.. Merci !\nRépondez STOP pour ne plus recevoir."
+    "texte": "Bonjour Marie Tremblay, c’est Plomberie Tremblay inc. Merci !\nRépondez STOP pour ne plus recevoir."
    }
   ],
   "annulees": []

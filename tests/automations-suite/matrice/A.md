@@ -171,7 +171,7 @@ Statut : toutes les cellules avec un test PASSENT ; « NON COUVERT » / « NON C
 | A-244 | remplacerVariables (aperçu de l’éditeur) | {{client_first_name}} | « Marie » | BUG corrigé c2772a07 |
 | A-245 | remplacerParExemples (aperçu des modèles) | {{client_name}} | exemple, sans accolades | BUG corrigé c2772a07 |
 | A-246 | variablesInconnues | {{client_first_name}} / [prenom] | acceptée / signalée |  |
-| A-247 | request_review, send_email, send_sms | double rendu, prénom de repli « Bonjour Bonjour » | — | NON COUVERT ici : exécution d’action (lit la base) — catégories B / H |
+| A-247 | request_review → send_email, send_sms | prénom « Zoé [VIP] », job « Lavage [vitres] {sud} » ; `{survey_url}` en accolades | texte résolu UNE fois : crochets et accolades d’une valeur intacts, bouton du courriel présent | CORRIGÉ — `unitaires/H-contenu-messages.test.ts`, `integration/60-contenu-messages.test.ts` (FAIL avant : « Bonjour Zoé , merci… ») ; prénom de repli : voir H-022 |
 | A-260 | isQuietHours / horsFenetre | bornes 7 h 59 / 8 h / 19 h 59 / 20 h | calme ou non, heure locale |  |
 | A-261 | isQuietHours / horsFenetre | minuit, 23 h 59 | calme ou non, heure locale |  |
 | A-262 | isQuietHours / horsFenetre | 1er nov. 2026 (1 h 30 deux fois, 7 h 59 / 8 h EST) | calme ou non, heure locale |  |

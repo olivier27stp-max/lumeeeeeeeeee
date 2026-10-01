@@ -3,7 +3,10 @@
  *
  *  · [H-020] les dates (échéance de facture, validité de devis, rendez-vous)
  *    partent en toutes lettres, dans la langue de l'entreprise, sans décalage
- *    de fuseau pour une date seule.
+ *    de fuseau pour une date seule ;
+ *  · [H-022] [A-247] la demande d'avis d'un client sans prénom dit
+ *    « Bonjour, » — pas « Bonjour Bonjour, » — et son texte n'est résolu
+ *    qu'UNE fois (une valeur entre crochets n'est pas reprise pour une variable).
  *
  * Vrai moteur contre staging, bureaux de test en bac à sable : on lit
  * `envois_simules` (ce qui SERAIT parti), jamais un fournisseur.
@@ -166,5 +169,60 @@ describe('H — dates écrites au client', () => {
     const machine = variablesPourMachine(await resolveEntityVariables(b.admin, b.orgA, 'invoice', facture));
     expect(machine.invoice_due_date).toBe('2026-10-15');
     expect(Object.keys(machine).filter((k) => k.endsWith('_iso'))).toEqual([]);
+  });
+});
+
+describe('H — demande d’avis : salutation et résolution unique', () => {
+  async function unJob(org: string, clientId: string, titre: string) {
+    const job = await ok(b.admin.from('jobs').insert({
+      org_id: org, created_by: proprio(org), client_id: clientId, title: titre, status: 'completed',
+      job_number: `C-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+    }).select('id').single(), 'job');
+    nettoyer.push(() => b.admin.from('jobs').delete().eq('id', job.id));
+    nettoyer.push(() => b.admin.from('review_requests').delete().eq('job_id', job.id));
+    nettoyer.push(() => b.admin.from('satisfaction_surveys').delete().eq('job_id', job.id));
+    return job.id as string;
+  }
+  const AVIS = { review_enabled: true, google_review_url: 'https://g.page/r/qa-contenu/review', review_sms_body: null, review_email_subject: null, review_email_body: null };
+  async function demanderAvis(org: string, jobId: string) {
+    const regle = await uneRegle(org, { trigger_event: 'task.completed', actions: [{ type: 'request_review', config: {} }] });
+    return declencher(org, regle, { type: 'job', id: jobId }, 1, 'task.completed');
+  }
+
+  it('[H-022] client SANS prénom ni nom, entreprise française : « Bonjour, merci… » — jamais « Bonjour Bonjour, »', async () => {
+    await reglages(b.orgA, { ...AVIS, default_language: 'fr' });
+    const client = await unClient(b.orgA, { first_name: null, last_name: null, company: null });
+    const { logs, envois } = await demanderAvis(b.orgA, await unJob(b.orgA, client.id, `Vitres ${m}`));
+    const texto = envois.find((e) => e.destinataire === client.phone);
+    const courriel = envois.find((e) => e.destinataire === client.email);
+    expect(texto, JSON.stringify(logs)).toBeTruthy();
+    expect(courriel, JSON.stringify(logs)).toBeTruthy();
+    expect(String(texto!.corps)).toMatch(/^Bonjour, merci d'avoir choisi Nettoyage Test A !/);
+    expect(String(texto!.corps)).not.toMatch(/Bonjour\s+Bonjour|Bonjour ,/);
+    expect(String(courriel!.corps)).toContain('>Bonjour,</p>');
+    expect(String(courriel!.corps)).not.toMatch(/Bonjour\s+Bonjour|Bonjour ,/);
+  });
+
+  it('[H-022] client SANS prénom, entreprise anglaise : « Hi there, thanks… »', async () => {
+    await reglages(b.orgB, { ...AVIS, default_language: 'en' });
+    const client = await unClient(b.orgB, { first_name: null, last_name: null, company: null });
+    const { logs, envois } = await demanderAvis(b.orgB, await unJob(b.orgB, client.id, `Windows ${m}`));
+    const texto = envois.find((e) => e.destinataire === client.phone);
+    const courriel = envois.find((e) => e.destinataire === client.email);
+    expect(String(texto?.corps), JSON.stringify(logs)).toMatch(/^Hi there, thanks for choosing Nettoyage Test B!/);
+    expect(String(courriel?.corps)).toContain('>Hi there,</p>');
+    expect(String(courriel?.corps)).not.toMatch(/Bonjour/);
+  });
+
+  it('[A-247] le texte n’est résolu qu’UNE fois : crochets et accolades d’un prénom ou d’un titre de job arrivent intacts', async () => {
+    await reglages(b.orgA, { ...AVIS, default_language: 'fr' });
+    const client = await unClient(b.orgA, { first_name: 'Zoé [VIP]', last_name: m });
+    const titre = `Lavage [vitres] {sud} ${m}`;
+    const { logs, envois } = await demanderAvis(b.orgA, await unJob(b.orgA, client.id, titre));
+    const texto = envois.find((e) => e.destinataire === client.phone);
+    const courriel = envois.find((e) => e.destinataire === client.email);
+    expect(String(texto?.corps), JSON.stringify(logs)).toMatch(/^Bonjour Zoé \[VIP\], merci d'avoir choisi Nettoyage Test A !/);
+    expect(String(courriel?.corps), JSON.stringify(logs)).toContain('Bonjour Zoé [VIP],');
+    expect(String(courriel?.corps)).toContain(`Nous venons de terminer ${titre} `);
   });
 });

@@ -8952,7 +8952,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Bonjour Marie, dernière relance pour votre soumission de Plomberie Tremblay inc.. On serait contents de travailler avec vous!\nRépondez STOP pour ne plus recevoir.",
+     "message_text": "Bonjour Marie, dernière relance pour votre soumission de Plomberie Tremblay inc. On serait contents de travailler avec vous!\nRépondez STOP pour ne plus recevoir.",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -8976,7 +8976,7 @@
      "result_success": true,
      "result_data": {
       "to": "+15145550142",
-      "body": "Bonjour Marie, dernière relance pour votre soumission de Plomberie Tremblay inc.. On serait contents de travailler avec vous!\nRépondez STOP pour ne plus recevoir."
+      "body": "Bonjour Marie, dernière relance pour votre soumission de Plomberie Tremblay inc. On serait contents de travailler avec vous!\nRépondez STOP pour ne plus recevoir."
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -9430,7 +9430,7 @@
     "moment": "differe:send_sms",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Bonjour Marie, dernière relance pour votre soumission de Plomberie Tremblay inc.. On serait contents de travailler avec vous!\nRépondez STOP pour ne plus recevoir."
+    "texte": "Bonjour Marie, dernière relance pour votre soumission de Plomberie Tremblay inc. On serait contents de travailler avec vous!\nRépondez STOP pour ne plus recevoir."
    },
    {
     "moment": "differe:send_email",
@@ -10469,7 +10469,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Bonjour Marie, petit rappel pour votre soumission de Plomberie Tremblay inc.. On peut l'ajuster au besoin!\nRépondez STOP pour ne plus recevoir.",
+     "message_text": "Bonjour Marie, petit rappel pour votre soumission de Plomberie Tremblay inc. On peut l'ajuster au besoin!\nRépondez STOP pour ne plus recevoir.",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -10493,7 +10493,7 @@
      "result_success": true,
      "result_data": {
       "to": "+15145550142",
-      "body": "Bonjour Marie, petit rappel pour votre soumission de Plomberie Tremblay inc.. On peut l'ajuster au besoin!\nRépondez STOP pour ne plus recevoir."
+      "body": "Bonjour Marie, petit rappel pour votre soumission de Plomberie Tremblay inc. On peut l'ajuster au besoin!\nRépondez STOP pour ne plus recevoir."
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -10747,7 +10747,7 @@
     "moment": "differe:send_sms",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Bonjour Marie, petit rappel pour votre soumission de Plomberie Tremblay inc.. On peut l'ajuster au besoin!\nRépondez STOP pour ne plus recevoir."
+    "texte": "Bonjour Marie, petit rappel pour votre soumission de Plomberie Tremblay inc. On peut l'ajuster au besoin!\nRépondez STOP pour ne plus recevoir."
    },
    {
     "moment": "differe:send_email",
