@@ -18,7 +18,6 @@
  * gauche sont gérés par `MarketingLayout` / `LumiAgent`, pas ici.
  */
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
-import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
@@ -136,7 +135,6 @@ export default function HomeApercu() {
               {h.bookDemo}
               <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
             </button>
-            <Link to="/features" className="ha-btn ha-ghost">{fr ? 'Voir les fonctionnalités' : 'See the features'}</Link>
           </div>
         </div>
 
@@ -233,7 +231,6 @@ const HOME_APERCU_CSS = `
 .ha-ctas { display:flex; justify-content:center; gap:10px; margin-top:26px; flex-wrap:wrap; }
 .ha-btn { display:inline-flex; align-items:center; gap:8px; padding:13px 20px; border-radius:12px; border:0; font-size:14.5px; font-weight:700; cursor:pointer; text-decoration:none; }
 .ha-dark { background:#111; color:#fff; } .ha-dark:hover { background:#000; }
-.ha-ghost { background:rgba(255,255,255,.7); color:#171717; border:1.5px solid rgba(0,0,0,.22); font-weight:600; } .ha-ghost:hover { background:#fff; }
 
 .ha-stage { position:relative; z-index:2; max-width:1180px; margin:22px auto 0; padding:0 24px 40px; scroll-margin-top:84px; }
 .ha-frame { background:#fff; border-radius:18px; box-shadow:0 40px 90px -36px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.06); overflow:hidden; }
