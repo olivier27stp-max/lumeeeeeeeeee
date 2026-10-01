@@ -29,7 +29,8 @@ provisionSmsForNewSubscription()                                             ser
                       la relance l'ENREGISTRE sans en racheter un)
         ▼
 relancerProvisionnementsEnAttente()   toutes les 10 min, sous verrou (server/index.ts)
-  délai 15 min → 1 h → 4 h → 16 h → 24 h ; abandon (failed + alerte) 14 jours après le 1er essai ;
+  délai 15 min → 1 h → 4 h → 16 h → 24 h ; abandon (failed + alerte) 14 jours après le 1er essai,
+  SAUF blocage de conformité (il vient de notre compte Twilio : jamais d'abandon) ;
   forfait perdu entre-temps → abandoned ; numéro obtenu entre-temps → success.
         ▼
 SMS entrant → Twilio → POST /api/messages/inbound → org retrouvée par le numéro « To »
@@ -65,7 +66,7 @@ SMS entrant → Twilio → POST /api/messages/inbound → org retrouvée par le 
 - Clé Restricted facultative pour l'achat seul : `TWILIO_PROVISIONING_API_KEY_SID` / `_SECRET`. Le reste (envois, validation de signature) garde le jeton principal.
 - Tests : `tests/twilio-provisioning-file.test.ts` (18 cas, Twilio simulé).
 
-**Hors changement :** `+18707703627` et ses webhooks. La relance ne touche qu'aux orgs **sans** canal actif, et la libération ne touche qu'aux canaux `inactive` qui ont une date de libération. Aucun appel à l'API Twilio n'a été fait pendant ce travail. Le bouton « Obtenir mon numéro » (Réglages) reste manuel et ne dépend pas de l'interrupteur.
+**Hors changement :** `+18707703627` et ses webhooks. La relance ne touche qu'aux orgs **sans** canal actif, et la libération ne touche qu'aux canaux `inactive` qui ont une date de libération. Le bouton « Obtenir mon numéro » (Réglages) passe par la même file : un refus de Twilio ne s'affiche plus en anglais à l'écran, la demande attend et part seule (réponse 202, page « en cours d'attribution »).
 
 ## 4. Runbook
 
@@ -97,11 +98,16 @@ Rotation de la clé : créer la nouvelle clé, remplacer les deux variables, red
 4. Rapport : SID `PN…`, numéro E.164, URL du webhook.
 5. L'achat automatique est déjà actif : dès l'approbation, la relance sert d'elle-même les demandes en attente.
 
-## 5. GO Will restants
+## 5. Vérifié en prod le 2026-10-01
 
-1. Conformité Trust Hub (§ 4A). **Bloquant.**
-2. Créer la clé `lume-provisioning` et la poser dans Railway (§ 4B/C).
-3. Confirmer `TWILIO_ACCOUNT_SID` = parent et `PUBLIC_URL` en prod.
-4. Premier achat test sur quelle org (§ 4D) ?
-5. « Grok Audit (TEST) » : lui donner un numéro ou non (org de test, pas de rattrapage automatique) ?
-6. Le bouton manuel « Obtenir mon numéro » doit-il aussi obéir à l'interrupteur ?
+Sans accès Railway : session d'un compte de test (« Grok Audit (TEST) ») et routes du serveur de prod.
+
+- `GET /api/messages/twilio-diagnostic` : base des webhooks = `https://lumecrm.net`, jeton présent, client Twilio initialisé.
+- **Un** essai d'achat sur l'org de test (`POST /api/communications/provision-sms`). Réponse réelle de Twilio, statut 401 : « Primary compliance profile is not approved. Please refer to documentation and complete the KYC process in Trust Hub to gain access. » Rien n'a été acheté. Ce message est classé `conformite` (test dédié).
+- **Le canal de Coquin lavage a disparu.** La ligne `+18707703627` de `communication_channels` existait dans la sauvegarde du 2026-09-25 12:56 UTC et plus dans celle du 2026-09-26 17:34 UTC. Aucune cascade possible (l'org existe), rien dans `audit_events`, aucun code ne supprime cette table : suppression directe en base. Depuis, les textos de ce bureau échouent (« pas de numéro »). La ligne exacte est dans la sauvegarde ; la remettre demande un GO (vrai client, et la suppression était peut-être voulue).
+
+## 6. GO restants
+
+1. Conformité Trust Hub (§ 4A). **Seul bloquant de l'achat**, confirmé par Twilio le 2026-10-01.
+2. Remettre ou non le canal `+18707703627` de Coquin lavage (§ 5).
+3. Créer la clé `lume-provisioning` et la poser dans Railway (§ 4B/C). Facultatif.

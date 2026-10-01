@@ -5,7 +5,7 @@ import { twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { normalizeE164, findOrCreateConversation } from '../lib/helpers';
-import { provisionSmsNumber, getOrgSmsChannel, orgPlanIncludesSms, etatProvisionnementSms } from '../lib/twilioProvisioning';
+import { provisionSmsForNewSubscription, getOrgSmsChannel, orgPlanIncludesSms, etatProvisionnementSms } from '../lib/twilioProvisioning';
 import {
   submitA2PBrand,
   submitA2PCampaign,
@@ -364,46 +364,24 @@ router.post('/communications/provision-sms', requireRole('owner', 'admin'), asyn
     // override the area code, never the country (prevents buying US numbers by hand).
     const { area_code } = req.body || {};
 
-    // Journalise la tentative dans `provisioning_events` : sans ça, un
-    // provisionnement manuel qui échoue ne laissait AUCUNE trace en base —
-    // l'admin voyait une erreur à l'écran et le support n'avait rien à
-    // consulter. (Cette route conserve son propre appel car elle seule accepte
-    // un indicatif régional choisi par l'utilisateur.)
-    const admin = getServiceClient();
-    const { data: eventRow } = await admin
-      .from('provisioning_events')
-      .insert({
-        org_id: orgId,
-        event_type: 'sms_number_purchase',
-        status: 'pending',
-        metadata: { source: 'manual', requested_area_code: area_code || null },
-      })
-      .select('id')
-      .single();
+    // Même file que l'abonnement : un échec (conformité Twilio, stock vide…) ne
+    // renvoie plus l'erreur brute de Twilio à l'écran — la demande reste en
+    // file, la relance automatique la sert, et la page affiche « en cours
+    // d'attribution ». Avant, l'échec partait en `failed` sans relance : après
+    // l'approbation Twilio, le client devait penser à recliquer.
+    const r = await provisionSmsForNewSubscription({
+      orgId,
+      subscriptionId: null,
+      source: 'manuel',
+      areaCode: typeof area_code === 'string' && /^\d{3}$/.test(area_code) ? area_code : undefined,
+    });
 
-    try {
-      const result = await provisionSmsNumber(orgId, {
-        areaCode: typeof area_code === 'string' && /^\d{3}$/.test(area_code) ? area_code : undefined,
-      });
-      if (eventRow) {
-        await admin
-          .from('provisioning_events')
-          .update({ status: 'success', twilio_number: result.phoneNumber })
-          .eq('id', eventRow.id);
-      }
-      return res.json(result);
-    } catch (provErr: any) {
-      if (eventRow) {
-        await admin
-          .from('provisioning_events')
-          .update({
-            status: 'failed',
-            error_message: String(provErr?.message || provErr).slice(0, 500),
-          })
-          .eq('id', eventRow.id);
-      }
-      throw provErr;
+    if (r.provisioned || r.skipped === 'already_has_channel' || r.skipped === 'restored_pending_release') {
+      const canal = await getOrgSmsChannel(orgId);
+      return res.json({ channelId: canal?.id, phoneNumber: canal?.phone_number || r.phoneNumber, already_provisioned: !r.provisioned });
     }
+    // 202 : demande acceptée, numéro pas encore attribué.
+    return res.status(202).json({ pending: true, code: 'sms_provisioning_pending' });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to provision SMS number.', '[communications/provision-sms]');
   }

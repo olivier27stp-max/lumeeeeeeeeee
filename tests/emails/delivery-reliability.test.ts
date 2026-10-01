@@ -477,7 +477,7 @@ describe('provisionnement SMS — branché sur le chemin réellement utilisé', 
       lib.indexOf('async function findAvailableNumber'),
     );
     const insertIdx = fn.indexOf("from('provisioning_events')");
-    const buyIdx = fn.indexOf('await provisionSmsNumber(orgId)');
+    const buyIdx = fn.indexOf('await provisionSmsNumber(orgId');
     expect(insertIdx).toBeGreaterThan(-1);
     expect(buyIdx).toBeGreaterThan(insertIdx);
     // L'échec d'écriture du journal est désormais détecté (il ne l'était pas).
@@ -493,9 +493,13 @@ describe('provisionnement SMS — branché sur le chemin réellement utilisé', 
     // bien plus haut dans le fichier (gate d'envoi), ce qui donnerait une
     // tranche vide.
     const route = comm.slice(start, comm.indexOf("router.get('/communications/a2p/status'", start));
-    expect(route).toContain("from('provisioning_events')");
-    expect(route).toContain("source: 'manual'");
-    expect(route).toContain("status: 'failed'");
+    // La trace (et désormais la relance) vient de la même fonction que
+    // l'abonnement : la route n'écrit plus elle-même, et un échec ne part plus
+    // en `failed` sans suite — il reste en file.
+    expect(route).toContain('provisionSmsForNewSubscription({');
+    expect(route).toContain("source: 'manuel'");
+    expect(route).not.toContain("status: 'failed'");
+    expect(route).toContain("code: 'sms_provisioning_pending'");
     // Le garde de forfait reste en place : acheter un numéro coûte de l'argent.
     expect(route).toContain('orgPlanIncludesSms(orgId)');
   });

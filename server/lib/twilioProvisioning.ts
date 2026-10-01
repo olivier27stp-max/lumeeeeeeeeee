@@ -118,7 +118,7 @@ export function classerEchecProvisionnement(err: unknown): NatureEchecProvisionn
   // Heuristique : Twilio ne documente pas un code unique pour « profil en
   // brouillon ». Le message brut est conservé dans provisioning_events pour
   // affiner ce motif au premier refus réel.
-  if (/bundle|regulat|complian|customer profile|trust ?hub|end.?user|address.*required|identity/i.test(message)) {
+  if (/bundle|regulat|complian|kyc|customer profile|trust ?hub|end.?user|address.*required|identity/i.test(message)) {
     return 'conformite';
   }
   if (code === 20003 || code === 20403 || status === 401 || status === 403) return 'permissions';
@@ -154,9 +154,15 @@ export function classerEchecProvisionnement(err: unknown): NatureEchecProvisionn
  */
 export async function provisionSmsForNewSubscription(params: {
   orgId: string;
-  subscriptionId: string;
+  /** Absent pour une demande faite depuis Réglages → Messagerie (« Obtenir mon numéro »). */
+  subscriptionId: string | null;
+  /** `manuel` = bouton des Réglages : même file, même relance qu'à l'abonnement. */
+  source?: 'abonnement' | 'manuel';
+  /** Indicatif souhaité (3 chiffres) ; sinon déduit de l'adresse de l'entreprise. */
+  areaCode?: string;
 }): Promise<{ provisioned: boolean; phoneNumber?: string; skipped?: string; error?: string; nature?: NatureEchecProvisionnement }> {
   const { orgId, subscriptionId } = params;
+  const source = params.source || 'abonnement';
   const admin = getServiceClient();
 
   // Numéro encore en attente de libération (ré-abonnement pendant le délai de
@@ -210,7 +216,11 @@ export async function provisionSmsForNewSubscription(params: {
       status: actif ? 'pending' : 'retrying',
       // attempt_count = achats réellement TENTÉS ; une mise en file n'en est pas un.
       attempt_count: actif ? 1 : 0,
-      metadata: { source: 'abonnement', ...(actif ? {} : { nature: 'desactive' }) },
+      metadata: {
+        source,
+        ...(params.areaCode ? { requested_area_code: params.areaCode } : {}),
+        ...(actif ? {} : { nature: 'desactive' }),
+      },
     })
     .select(COLONNES_EVENEMENT)
     .single();
@@ -223,7 +233,7 @@ export async function provisionSmsForNewSubscription(params: {
 
   if (!actif) {
     await alerterEquipe(
-      `abonnement avec SMS en attente de numéro (achat coupé : TWILIO_AUTO_PROVISION=false) — ${await libelleOrg(orgId)}`,
+      `demande de numéro (${source}) en attente (achat coupé : TWILIO_AUTO_PROVISION=false) — ${await libelleOrg(orgId)}`,
       { orgId, subscriptionId },
     );
     return { provisioned: false, skipped: 'auto_provision_off' };
@@ -307,7 +317,10 @@ async function tenterProvisionnement(
       });
       phoneNumber = evt.twilio_number;
     } else {
-      phoneNumber = (await provisionSmsNumber(orgId)).phoneNumber;
+      const indicatif = evt?.metadata?.requested_area_code;
+      phoneNumber = (await provisionSmsNumber(orgId, {
+        areaCode: typeof indicatif === 'string' && /^\d{3}$/.test(indicatif) ? indicatif : undefined,
+      })).phoneNumber;
     }
 
     if (evt) {
@@ -326,7 +339,10 @@ async function tenterProvisionnement(
     const message = String(err?.message || err).slice(0, 500);
     const nature = classerEchecProvisionnement(err);
     const achete = err instanceof NumeroAcheteNonEnregistreError ? err : null;
-    const abandon = Date.now() - new Date(premierEssai).getTime() > PROVISIONNEMENT_ABANDON_JOURS * 86400_000;
+    // Un blocage de conformité vient de NOTRE compte Twilio, pas du client :
+    // on n'abandonne jamais, la demande part d'elle-même à l'approbation.
+    const abandon = nature !== 'conformite'
+      && Date.now() - new Date(premierEssai).getTime() > PROVISIONNEMENT_ABANDON_JOURS * 86400_000;
 
     if (evt) {
       const { error } = await admin
