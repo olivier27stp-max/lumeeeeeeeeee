@@ -34,7 +34,7 @@ Projet vitest `ui` (`tests/automations-suite/ui/`) : vrai Chromium, API locale s
 | J-051 | Éditeur — erreur | /api/automations/editeur en 503 | « Impossible de charger… » + « Réessayer » qui recharge | 71 |
 | J-060 | Écart UI↔moteur §2.4 n°7 (Réglages › Messagerie) | règle à étapes, texto modifié | l'écran montre le texte des étapes (celui qui part) ; l'enregistrement écrit steps ET actions | BUG corrigé (`updateRuleMessage` n'écrivait que `actions`) |
 | J-061 | Écart §2.4 n°1 (« si » + étiquettes) | client avec / sans l'étiquette | la branche suit les étiquettes RÉELLES du client (« sinon » quand il ne l'a pas) | CORRIGÉ (moteur : le « si » appelle `conditionsEtiquettesOk`) — `integration/10-b-parcours.test.ts` ([A-074][J-061], 2 tests) |
-| J-062 | Écart §2.4 n°2 (« si » sur RDV / deal) | — | — | NON COUVERT ici : moteur (metadonneesFraiches), invisible à l'écran ; matrice B |
+| J-062 | Écart §2.4 n°2 (« si » sur RDV / deal) | rendez-vous dont le statut change, opportunité déplacée entre le déclenchement et le « si » | la branche est jugée sur l'état ACTUEL (statut du rendez-vous, étape du deal) | CORRIGÉ (moteur : `metadonneesFraiches` relit `schedule_event` et `deal`) — `integration/10-b-parcours.test.ts` ([J-062], 2 tests) |
 | J-063 | Écart §2.4 n°3 (plafond client.inactive, jours_avant) | — | — | NON COUVERT ici : balayages serveur, pas de geste d'interface qui le révèle |
 | J-064 | Écart §2.4 n°4 (opérateurs in/not_in) | — | — | NON COUVERT : absence d'UI voulue (6 opérateurs offerts), pas un défaut constaté |
 | J-065 | Écart §2.4 n°11 (PATCH publie une règle en corbeille) | — | — | NON COUVERT : non atteignable depuis l'interface (l'éditeur publie par la route de publication, qui refuse la corbeille) ; relève des tests d'API |

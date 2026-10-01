@@ -205,6 +205,53 @@ describe('[B] parcours : ordre, délais, branches', () => {
     expect(await brancheSuivie(id, sans.id)).toEqual(['oui']);
   });
 
+  it('[J-062] si sur un RENDEZ-VOUS (entité « schedule_event ») : jugé sur son statut ACTUEL — prévu → « alors », changé entre-temps → « sinon »', async () => {
+    const m = marque('J-062');
+    const id = await parcours(m, 'appointment.created', [
+      { id: 's1', type: 'si', conditions: { statut: 'scheduled' }, alors: 'oui', sinon: 'non' },
+      tache('oui', `${m} alors`), tache('non', `${m} sinon`),
+    ], { conditions: { title: { in: [`Visite ${m} prévue`, `Visite ${m} changée`] } } });
+    const rdv = async (suffixe: string) => {
+      const client = await creerClient(b, `${m} ${suffixe}`);
+      const job = await creerJob(b, `${m} ${suffixe}`, client.id);
+      const debut = new Date(Date.now() + 3 * JOUR * 1000);
+      return ok<{ id: string }>(b.admin.from('schedule_events').insert({
+        org_id: b.orgA, job_id: job.id, title: `Visite ${m} ${suffixe}`, status: 'scheduled', created_by: b.users.proprioA,
+        start_at: debut.toISOString(), end_at: new Date(debut.getTime() + 3600_000).toISOString(),
+      }).select('id').single(), 'visite');
+    };
+    const prevue = await rdv('prévue');
+    await traiterBase(b);
+    expect(await brancheSuivie(id, prevue.id)).toEqual(['oui']);
+
+    const changee = await rdv('changée');
+    await traiterBase(b);
+    await attendre(async () => (await tachesPlanifiees(b.admin, id)).filter((t) => t.entity_id === changee.id), (t) => t.length > 0, 20_000);
+    // Le rendez-vous change d'état APRÈS le déclenchement (pas « annulé » : l'annulation arrête déjà tout le parcours).
+    await ok(b.admin.from('schedule_events').update({ status: 'completed' }).eq('id', changee.id), 'statut changé');
+    expect(await brancheSuivie(id, changee.id)).toEqual(['non']);
+  });
+
+  it('[J-062] si sur une OPPORTUNITÉ (entité « deal ») : jugé sur son étape ACTUELLE — déplacée entre-temps → « sinon »', async () => {
+    const m = marque('J-062d');
+    const pipe = await pipelineParDefaut(b);
+    const [e1, e2] = pipe.ouvertes;
+    const id = await parcours(m, 'deal.stage_entered', [
+      { id: 's1', type: 'si', conditions: { stage_id: e1.id }, alors: 'oui', sinon: 'non' },
+      tache('oui', `${m} alors`), tache('non', `${m} sinon`),
+    ]);
+    const reste = await creerDeal(b, (await creerClient(b, `${m} reste`)).id, e1.id, pipe.id);
+    await traiterPipeline(b);
+    expect(await brancheSuivie(id, reste.id)).toEqual(['oui']);
+
+    const bouge = await creerDeal(b, (await creerClient(b, `${m} bouge`)).id, e1.id, pipe.id);
+    await traiterPipeline(b);
+    await attendre(async () => (await tachesPlanifiees(b.admin, id)).filter((t) => t.entity_id === bouge.id), (t) => t.length > 0, 20_000);
+    // L'opportunité quitte l'étape APRÈS le déclenchement, avant que le « si » soit jugé.
+    await ok(b.admin.from('deals').update({ stage_id: e2.id }).eq('id', bouge.id), 'deal déplacé');
+    expect(await brancheSuivie(id, bouge.id)).toEqual(['non']);
+  });
+
   it('[B-304] arrêter : rien n’est planifié après l’étape « arrêter »', async () => {
     const m = marque('B-304');
     const client = await creerClient(b, m);

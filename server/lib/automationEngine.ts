@@ -2291,6 +2291,16 @@ async function metadonneesFraiches(
     lead: { table: 'clients', colonnes: 'status, lead_status, source, created_at' },
     client: { table: 'clients', colonnes: 'status, lead_status, source, created_at' },
     appointment: { table: 'schedule_events', colonnes: 'status, created_at' },
+    /*
+     * Les rendez-vous arrivent en `schedule_event` (événements écrits par la
+     * base) et les opportunités en `deal` : absents d'ici, leur « si » était
+     * jugé sur l'état d'ORIGINE — « si le rendez-vous est toujours prévu »
+     * ne lisait jamais le statut, « si l'opportunité est à l'étape X »
+     * restait vrai après son déplacement (J-062). Les colonnes du deal sont
+     * celles que porte l'événement (`pipeline_events.payload`).
+     */
+    schedule_event: { table: 'schedule_events', colonnes: 'status, created_at' },
+    deal: { table: 'deals', colonnes: 'stage_id, pipeline_id, statut, source, utm_campaign, assigned_user_id, created_at' },
   };
 
   const cible = source[task.entity_type];
@@ -2316,6 +2326,11 @@ async function metadonneesFraiches(
   // `data` est typé `unknown` par PostgREST quand les colonnes sont choisies
   // dynamiquement : la forme est garantie par `source` juste au-dessus.
   const frais: Record<string, unknown> = { ...(data as unknown as Record<string, unknown>) };
+  // Un rendez-vous sans statut est « prévu » : même convention que le trigger
+  // qui émet appointment.created (`coalesce(status, 'scheduled')`).
+  if (cible.table === 'schedule_events' && (frais.status === null || frais.status === '')) frais.status = 'scheduled';
+  // L'opportunité porte `statut` (ouvert / gagné / perdu), pas `status`.
+  if (frais.status === undefined && typeof frais.statut === 'string') frais.status = frais.statut;
   if (typeof frais.status === 'string') frais.status = statutAvecAlias(task.entity_type, frais.status);
   // Les noms français des exemples de l'éditeur (« statut = », « montant > »).
   if (frais.status !== undefined) frais.statut = frais.status;
