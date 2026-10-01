@@ -91,7 +91,7 @@ export function paramTrouve(args: Record<string, unknown> | null, cle: string, a
 
 /** Le texte prétend-il qu'une action est faite ? (FR/EN, formulations de Lumi observées) */
 export function pretendFait(texte: string): boolean {
-  return /\b(c['’]est fait|c['’]est envoy|c['’]est r[eé]gl[eé]|j['’]ai (bien )?(envoy|cr[eé][eé]|supprim|annul|enregistr|rembours|factur|modifi|ajout|d[eé]plac|assign|archiv|mis [àa] jour|marqu)|voil[àa], (c['’]est|la|le|les)|it['’]?s done|i['’]ve (sent|created|deleted|cancel|recorded|refunded|updated|added|moved|assigned|archived|marked)|done[.!])/i.test(texte);
+  return /\b(c['’]est fait|c['’]est envoy|c['’]est r[eé]gl[eé]|j['’]ai (bien )?(envoy|cr[eé][eé]|supprim|annul|enregistr|rembours|factur|modifi|ajout|d[eé]plac|assign|archiv|mis [àa] jour|marqu)|voil[àa], (c['’]est|la|le|les)|it['’]?s (?:all )?done|i['’]ve (sent|created|deleted|cancel|recorded|refunded|updated|added|moved|assigned|archived|marked))|(?:^|[.!?]\s+)(?:all\s+)?done[.!]/im.test(texte);
 }
 
 const REFUS = /\b(je ne (vais|peux|dois) pas|je n['’]ex[ée]cute pas|je refuse|il n['’]y a rien [àa] \w+|rien à (effacer|supprimer|rembourser|annuler)|aucune? (note|paiement|facture|fiche)\b[^.]{0,40}\b(enregistr|trouv|re[çc]u)|aucun paiement|nothing to (refund|undo|delete)|no payment (was|has been)|i (won['’]t|will not|can['’]t|cannot) (do|follow|act|execute|apply))\b/i;

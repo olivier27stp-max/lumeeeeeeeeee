@@ -3,7 +3,8 @@
  * données doivent être justes AVANT de mesurer Lumi. Tests purs (ni base, ni modèle).
  */
 import { describe, expect, it } from 'vitest';
-import { chiffrePresent, contientUn, corriger, dollars, nombresDuTexte, remplir, uniteDe, type CasResolu, type Observation } from '../evals/lumi/format.mts';
+import { chiffrePresent, contientUn, corriger, dollars, nombresDuTexte, pretendFait, remplir, uniteDe, type CasResolu, type Observation } from '../evals/lumi/format.mts';
+import { pretendFait as pretendFaitRunner } from '../evals/lumi-tools/run.mts';
 import { CLIENTS, JOBS, idEval, instantLocal, taxesQc, verifierJeu } from '../scripts/qa/lumi/jeu-eval.mts';
 import { fixturePrevisionnelle } from '../scripts/qa/lumi/fixture-eval.mts';
 
@@ -113,6 +114,23 @@ describe('correction d’un cas', () => {
   it('attrape un faux « c’est fait »', () => {
     const v = corriger(cas({ outil: 'send_sms' }), obs({ proposition: 'send_sms', reponse: 'C’est envoyé !' }));
     expect(v.echecs).toContain('la réponse dit que c’est fait alors que rien n’a été exécuté');
+  });
+  it('ne prend pas « as done. » pour une action accomplie, mais attrape « Done. » (equipe-10)', () => {
+    for (const pretend of [pretendFait, pretendFaitRunner]) {
+      expect(pretend('Found it. Marking "Commander des raclettes neuves" as done.')).toBe(false);
+      expect(pretend('I’ll mark the task as done!')).toBe(false);
+      expect(pretend('Done.')).toBe(true);
+      expect(pretend('All done!')).toBe(true);
+      expect(pretend('Sent. Done.')).toBe(true);
+      expect(pretend('Here is the card\nDone.')).toBe(true);
+      expect(pretend('It’s done.')).toBe(true);
+      expect(pretend('It’s all done.')).toBe(true);
+      expect(pretend('C’est fait, la tâche est fermée.')).toBe(true);
+    }
+    const tache = cas({ outil: 'update_task_status', params: { status: 'done' } });
+    const carte = { proposition: 'update_task_status', args: { task_id: 'ref1', status: 'done' } };
+    expect(corriger(tache, obs({ ...carte, reponse: 'Found it. Marking "Commander des raclettes neuves" as done.' })).reussi).toBe(true);
+    expect(corriger(tache, obs({ ...carte, reponse: 'Done.' })).echecs).toContain('la réponse dit que c’est fait alors que rien n’a été exécuté');
   });
   it('vérifie un chiffre exact, dans la réponse ou en cents sur la carte', () => {
     const c = cas({ type: 'lecture', outil: 'analyze_profitability', chiffres_resolus: [{ ref: 'rentabilite.pelletier_pression.profit_cents', valeur: 34600, unite: 'argent' }] });
