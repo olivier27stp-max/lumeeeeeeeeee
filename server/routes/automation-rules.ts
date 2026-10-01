@@ -32,7 +32,7 @@ import { randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { genererParcours } from '../lib/lumi/generer-parcours';
-import { lireDejaPubliees, noteDejaPubliees } from '../lib/lumi/deja-publiees';
+import { lireDejaPubliees, noteDejaPubliees, typesDAction } from '../lib/lumi/deja-publiees';
 import { sequenceEtapes } from '../lib/validation';
 import {
   validate, automationRuleCreateSchema, automationRuleUpdateSchema,
@@ -439,7 +439,7 @@ router.post('/automations/rules/generer', async (req, res) => {
    */
   if (!echanges?.length) {
     const dejaLa = await lireDejaPubliees(auth.client, auth.orgId, resultat.parcours.trigger_event, ruleIdEnvoye, langue);
-    resultat.parcours.resume += noteDejaPubliees(dejaLa, resultat.parcours.trigger_event, langue);
+    resultat.parcours.resume += noteDejaPubliees(dejaLa, resultat.parcours.trigger_event, langue, typesDAction({ steps: verdict.data }));
   }
 
   /*

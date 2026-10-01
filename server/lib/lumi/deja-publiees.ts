@@ -27,7 +27,7 @@ export interface DejaPubliee {
 }
 
 /** Les types d'action d'une règle, format d'origine (`actions`) ou parcours (`steps`). */
-function typesDAction(regle: { steps?: unknown; actions?: unknown }): string[] {
+export function typesDAction(regle: { steps?: unknown; actions?: unknown }): string[] {
   const steps = Array.isArray(regle.steps) ? regle.steps : [];
   const source = steps.length > 0
     ? steps.map((e) => (e as { action?: { type?: unknown } })?.action?.type)
@@ -65,8 +65,17 @@ export async function lireDejaPubliees(
   }));
 }
 
-/** La note ajoutée sous la réponse de Lumi. Vide s'il n'y a rien à signaler. */
-export function noteDejaPubliees(regles: DejaPubliee[], declencheur: string, langue: 'fr' | 'en'): string {
+/**
+ * La note ajoutée sous la réponse de Lumi. Vide s'il n'y a rien à signaler.
+ *
+ * `actionsNouvelles` : les types d'action du parcours qu'on vient de bâtir.
+ * On ne cite que les automatisations qui font LA MÊME CHOSE (au moins un type
+ * d'action en commun) : sur « Devis envoyé », cinq relances par texto et
+ * courriel ne sont pas un doublon d'une notification interne — les lister
+ * noyait l'information utile (constaté sur lumecrm.net le 2026-10-01).
+ */
+export function noteDejaPubliees(toutes: DejaPubliee[], declencheur: string, langue: 'fr' | 'en', actionsNouvelles: string[]): string {
+  const regles = toutes.filter((r) => r.actions.some((t) => actionsNouvelles.includes(t)));
   if (!regles.length) return '';
   const fr = langue === 'fr';
   const decl = trouverDeclencheur(declencheur);
@@ -79,6 +88,6 @@ export function noteDejaPubliees(regles: DejaPubliee[], declencheur: string, lan
   if (regles.length > montrees.length) lignes.push(fr ? '• … et d’autres.' : '• … and more.');
   const n = regles.length;
   return fr
-    ? `\n\nÀ savoir : tu as déjà ${n > 1 ? 'des automatisations publiées' : 'une automatisation publiée'} sur ce même déclencheur (« ${quand} ») :\n${lignes.join('\n')}\nVérifie qu’elles ne font pas double emploi avant de publier celle-ci.`
-    : `\n\nGood to know: you already have ${n > 1 ? 'published automations' : 'a published automation'} on this same trigger (“${quand}”):\n${lignes.join('\n')}\nCheck they do not overlap before publishing this one.`;
+    ? `\n\nÀ savoir : tu as déjà ${n > 1 ? 'des automatisations publiées qui font' : 'une automatisation publiée qui fait'} la même chose sur ce déclencheur (« ${quand} ») :\n${lignes.join('\n')}\nVérifie ${n > 1 ? 'qu’elles ne font' : 'qu’elle ne fait'} pas double emploi avant de publier celle-ci.`
+    : `\n\nGood to know: you already have ${n > 1 ? 'published automations that do' : 'a published automation that does'} the same thing on this trigger (“${quand}”):\n${lignes.join('\n')}\nCheck ${n > 1 ? 'they do' : 'it does'} not overlap before publishing this one.`;
 }
