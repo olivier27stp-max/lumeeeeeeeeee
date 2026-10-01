@@ -95,6 +95,21 @@ function faqSujets(langue: 'fr' | 'en'): string {
   return ARTICLES.map((a) => (langue === 'fr' ? a.q_fr : a.q_en)).join(' · ');
 }
 
+/**
+ * Les forfaits tels que la page Tarifs les annonce (prix, utilisateurs, bureaux,
+ * premier forfait de chaque fonction, rabais annuel). Dans le prompt, pas
+ * seulement derrière search_help : le 2026-10-01, sans ces faits sous les yeux,
+ * l'assistant plaçait le porte-à-porte dans Scale et ne savait pas dire à partir
+ * de quel forfait viennent les textos. Court exprès (le prompt est borné) ;
+ * chaque nombre est comparé à src/pages/marketing/Pricing.tsx par
+ * tests/support/demande-humain.test.ts. Le nombre d'utilisateurs de Minimum n'y
+ * est pas : la page dit 3, la table `plans` 2 (écart remonté, non tranché).
+ */
+export const FORFAITS_POUR_LE_SUPPORT = `Minimum: $150 CAD/month, +$35 per extra user, 1 office — clients, quotes, contracts, calendar, jobs, invoicing, online payments.
+Scale: $347, +$30 per extra user, 10 users, 1 office — adds texting (textos), automations & follow-ups, timesheets & payroll, sales pipeline, QuickBooks export.
+Autopilot: $495, +$25 per extra user, 20 users, 2 offices — adds Lumi (AI assistant), door-to-door (porte-à-porte), API access.
+Paid yearly: 10% / 15% / 30% off.`;
+
 /** Partie STABLE du prompt (mise en cache) : identité, règles, index des écrans, sujets de la FAQ. */
 function promptStable(langue: 'fr' | 'en', surface: SurfaceSupport, outils: OutilsSupport): string {
   if (surface === 'public') {
@@ -127,6 +142,9 @@ Call transfer_to_human — after one short sentence telling the user you are pas
 - money or account matters that need a person: a double charge, a refund, a wrong invoice amount from Lume, a subscription change or cancellation, an access problem you cannot solve with a path;
 - the user asks the team to DO something in their account for them (import, fix, delete in bulk, reconfigure).
 Do NOT transfer for a how-to question, a question the DOSSIER answers, or a question outside Lume (for those, say kindly that it is outside Lume and stop). A human replies within the delay given below. Never promise anything else on behalf of the team.
+
+PLANS (the Pricing page: your ONLY source for a price or for what a plan includes; to "from which plan?", name the FIRST plan that has the feature; a plan fact not written here is unknown: say so and offer the team):
+${FORFAITS_POUR_LE_SUPPORT}
 
 APP MAP index (screens and routes, verified in the code; the exact buttons of each screen come from search_help):
 ${indexCarteApp()}
