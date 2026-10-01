@@ -27,6 +27,12 @@ import type { Apercu } from '../lumi/fiches';
 import { argentFr, argentEn } from '../lumi/apercu-action';
 import { EXPIRATION_CONFIRMATION_MIN } from './confirmation';
 import { logger } from '../logger';
+import { getServiceClient } from '../supabase';
+import { getUserContext, hasPermission, type UserContext } from '../rbac';
+import { outilsPermis, membreVoitLesMontants, restrictionsDe } from '../agent/garde';
+import { verifierPlafond, ajouterDepense, compterRefus } from '../lumi/plafond-journalier';
+import { journaliserTrace, ajouterUsage, usageVide, ETAGE, type UsageAgrege } from '../lumi/traces';
+import { VERSION_PROMPT } from '../lumi/version';
 
 /** Un SMS est facturé par tranche de 160 caractères : au-delà, on coupe. */
 export const LONGUEUR_MAX_SMS = 900;
@@ -170,6 +176,31 @@ export async function repondreParSms(
 
   const reglages = reglagesPourPalier(budget.palier, modeleLumi());
 
+  // ── Mêmes gardes que le chat de l'app (mission fiabilité, 2026-10-01) ──
+  // Le texto appelait l'agent directement : sans vérifier que la personne a
+  // encore le droit d'utiliser Lumi (page Rôles), sans filtrer les outils selon
+  // son rôle, sans dire au modèle ce que ce rôle ne permet pas, sans plafond
+  // journalier et sans trace. La garde d'exécution de chaque outil restait la
+  // seule barrière. Ici comme dans l'app, un rôle introuvable = pas de Lumi.
+  let role: UserContext | null = null;
+  try {
+    role = await getUserContext(getServiceClient(), ctx.userId, ctx.orgId, true);
+  } catch (e) {
+    logger.error('[sms/lumi] rôle illisible', { orgId: ctx.orgId, error: e instanceof Error ? e.message : String(e) });
+  }
+  if (!role || !hasPermission(role, 'external_agent.use')) {
+    return vide(fr
+      ? "Lumi n'est pas activé pour ton compte. Demande à un administrateur de l'entreprise."
+      : "Lumi isn't enabled for your account. Ask a company administrator.");
+  }
+  if (!verifierPlafond('lumi').autorise) {
+    compterRefus('lumi');
+    return vide(fr ? "Je ne suis pas disponible pour l'instant. Réessaie plus tard." : "I'm not available right now. Try again later.");
+  }
+  const voitLesMontants = await membreVoitLesMontants(ctx.userId, ctx.orgId);
+  const permis = outilsPermis(role, voitLesMontants);
+  const restrictions = restrictionsDe(role, voitLesMontants, ctx.langue);
+
   let companyName: string | null = null;
   let fuseau = 'America/Toronto';
   try {
@@ -187,6 +218,7 @@ export async function repondreParSms(
     // prompt, après le point de cache. Les mettre ailleurs casserait le
     // préfixe partagé et ferait repayer le prompt entier à chaque texto.
     focus: consignesSms(ctx.langue),
+    restrictions,
   });
 
   // Les outils travaillent avec l'identité du membre ; le budget et les
@@ -196,6 +228,12 @@ export async function repondreParSms(
   let texte = '';
   // Les aperçus de la carte (non exécutés d'office) : ce que le « oui » confirmera.
   let apercus: Array<Apercu | null> = [];
+  // Mesure du tour, comme dans l'app : outils appelés, usage, modèle.
+  const debut = Date.now();
+  const outilsAppeles: string[] = [];
+  let usageTour: UsageAgrege = usageVide();
+  let modeleTour: string | null = null;
+  let erreurModele: string | null = null;
   const resultat = await tourLumi({
     client,
     accessToken,
@@ -204,9 +242,18 @@ export async function repondreParSms(
     systeme,
     historique: [...historique.slice(-TOURS_HISTORIQUE * 2), { role: 'user', content: message }],
     reglages,
+    langue: ctx.langue,
+    // Seuls les outils que son rôle permet sont remis au modèle.
+    outilsPermis: permis,
+    // Par texto, AUCUNE écriture ne part d'office : chacune attend le « OUI »,
+    // même une note de mémoire (elle vaut pour toute l'entreprise).
+    ecrituresRestantes: 0,
     emettre: (e) => {
       if (e.type === 'text') texte += e.delta;
       if (e.type === 'proposal' && !e.auto) apercus = e.groupe ? e.groupe.map((g) => g.apercu) : [e.apercu];
+      if (e.type === 'tool' && e.statut === 'fin' && !outilsAppeles.includes(e.name)) outilsAppeles.push(e.name);
+      if (e.type === 'usage') { usageTour = ajouterUsage(usageTour, e.usage); modeleTour = e.model; }
+      if (e.type === 'error') erreurModele = e.message;
     },
     // Journalisé comme le chat : la consommation se lit dans ai_usage. Avant le
     // 2026-09-30, ce crochet était vide — Lumi par texto ne comptait jamais.
@@ -221,6 +268,23 @@ export async function repondreParSms(
       reserver: (cents) => reserverBudget(ctx.admin, ctx.orgId, cents),
       regler: (id, cents) => reglerBudget(ctx.admin, id, cents),
     },
+  });
+
+  // Compté au plafond journalier et tracé comme un tour de l'app (canal « sms » dans params).
+  ajouterDepense('lumi', resultat.cost_cents ?? 0);
+  void journaliserTrace(ctx.admin, {
+    orgId: ctx.orgId, userId: ctx.userId, conversationId: null, canal: 'lumi', origine: 'texte',
+    enonce: message, etage: ETAGE.agent, action: resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null,
+    params: {
+      canal: 'sms',
+      mesure: {
+        stop_reason: resultat.stop_reason ?? null, appels_modele: resultat.appels_modele ?? 0, outils_charges: resultat.outils_charges ?? 0,
+        premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}), ...(erreurModele ? { erreur_modele: erreurModele } : {}),
+      },
+    },
+    outils: outilsAppeles,
+    resultat: resultat.proposition ? 'proposition' : erreurModele === 'refusal' ? 'refus' : erreurModele ? 'erreur' : 'ok',
+    model: modeleTour, promptVersion: VERSION_PROMPT, usage: usageTour, costCents: resultat.cost_cents ?? 0, dureeMs: Date.now() - debut,
   });
 
   if (resultat.plafond) return vide(messagePause(ctx.langue, budget.renouvellement_le || new Date()));
