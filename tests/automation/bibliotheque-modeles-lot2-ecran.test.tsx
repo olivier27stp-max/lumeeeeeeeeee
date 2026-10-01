@@ -224,3 +224,44 @@ describe('modeles-01 — les conditions se lisent en clair, dans la langue de l�
     expect(ligneConditions()).toBe('Aucune condition.');
   });
 });
+
+/** Les étapes numérotées de l'aperçu, telles qu'on les lit. */
+const etapesAffichees = () => [...fenetre().querySelectorAll('ol > li')];
+const canauxAnnonces = (dans: Element) => [...dans.querySelectorAll('svg[aria-label]')].map((s) => s.getAttribute('aria-label'));
+
+describe('modeles-08 — la carte et l’aperçu montrent toutes les branches', () => {
+  it('« Relance de devis » : 23 étapes et l’icône Courriel sur la carte et sur la ligne', async () => {
+    await monter();
+    expect(carte('pack_relance_devis').textContent).toContain('23 étapes');
+    expect(canauxAnnonces(carte('pack_relance_devis'))).toEqual(['Texto', 'Courriel', 'Notification', 'Tâche']);
+    cliquer(bouton(/^Liste$/));
+    expect(carte('pack_relance_devis').textContent).toContain('23 étapes');
+    expect(canauxAnnonces(carte('pack_relance_devis'))).toEqual(['Texto', 'Courriel', 'Notification', 'Tâche']);
+  });
+
+  it('l’aperçu montre les 23 étapes, dont les 5 courriels de la branche « si non »', async () => {
+    await monter();
+    cliquer(carte('pack_relance_devis'));
+    const etapes = etapesAffichees();
+    expect(etapes.length).toBe(23);
+    const courriels = etapes.filter((li) => /Envoyer un courriel/.test(li.textContent ?? ''));
+    const textos = etapes.filter((li) => /Envoyer un texto/.test(li.textContent ?? ''));
+    expect(courriels.length).toBe(5);
+    expect(textos.length).toBe(5);
+    // Chaque message dit de quel côté du « Si » il part — les mots de l'éditeur.
+    for (const li of textos) expect(li.textContent).toContain('si oui');
+    for (const li of courriels) expect(li.textContent).toContain('si non');
+    // Le texte du courriel est là, pas seulement son intitulé.
+    expect(courriels[0].textContent).toContain('[client_first_name]');
+    // Ce qui suit la jonction n'appartient à aucune branche.
+    for (const li of etapes.filter((x) => /^\d+Attendre/.test(x.textContent ?? ''))) expect(li.textContent).not.toMatch(/si oui|si non/);
+  });
+
+  it('en anglais : « if yes » / « if no »', async () => {
+    await monter(false);
+    cliquer(carte('pack_relance_devis'));
+    const etapes = etapesAffichees();
+    expect(etapes.filter((li) => /if yes/.test(li.textContent ?? '')).length).toBe(5);
+    expect(etapes.filter((li) => /if no/.test(li.textContent ?? '')).length).toBe(5);
+  });
+});

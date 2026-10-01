@@ -523,9 +523,15 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
 
         <ol className="mt-3 space-y-2">
           {etapes.map((e, i) => (
-            <li key={i} className="rounded-xl border border-outline p-3">
+            // Une étape d'une branche est décalée et dit son côté du « Si » — les mots de l'éditeur.
+            <li key={i} className={cn('rounded-xl border border-outline p-3', e.branche && 'ml-6')}>
               <div className="flex items-center gap-2 text-[13px]">
                 <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-secondary text-[11px] font-semibold tabular-nums text-text-secondary">{i + 1}</span>
+                {e.branche && (
+                  <span className="shrink-0 rounded-md bg-surface-secondary px-1.5 py-0.5 text-[11px] font-medium text-text-secondary">
+                    {e.branche === 'alors' ? (fr ? 'si oui' : 'if yes') : (fr ? 'si non' : 'if no')}
+                  </span>
+                )}
                 {e.genre === 'attente' && <span className="text-text-secondary">{libelleAttente(e, fr)}</span>}
                 {e.genre === 'condition' && <span className="text-text-secondary">{fr ? 'Si' : 'If'} {conditionsEnClair(e.conditions, fr, 'apresSi').join(fr ? ' et ' : ' and ')}</span>}
                 {e.genre === 'action' && <span className="font-medium text-text-primary">{libelleAction(e.type, fr)}</span>}
