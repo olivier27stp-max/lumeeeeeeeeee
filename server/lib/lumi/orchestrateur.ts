@@ -120,6 +120,54 @@ export function avecCacheConversation(messages: Anthropic.Messages.MessageParam[
  * lieu d'être relue (0,1 ×). Mesuré en prod sur une conversation de 11 tours :
  * 2 088 → 9 103 tokens écrits par tour.
  */
+/**
+ * Retire d'un texte destiné à la PERSONNE les références internes (« ref12 ») —
+ * ces étiquettes désignent une fiche pour le modèle, à la place de son
+ * identifiant ; elles n'ont aucun sens à l'écran. Le prompt l'interdit, mais
+ * une consigne ne suffit pas : passe du 2026-10-01, « la fiche de Longueuil
+ * (ref2) a plus d'historique ». « (ref12) » disparaît avec ses parenthèses,
+ * « ref12 » nu avec l'espace qui le précède.
+ */
+export function sansRefsInternes(texte: string): string {
+  return texte
+    .replace(/ ?\((?:ref\d{1,6}(?:, ?| et )?)+\)/g, '')
+    .replace(/ ?\bref\d{1,6}\b/g, '');
+}
+
+/**
+ * À partir d'où retenir la fin d'un texte en cours de flux : là où pourrait
+ * commencer une référence interne encore incomplète. Trois cas, le plus tôt
+ * l'emporte sur les suivants :
+ *  1. une parenthèse ouverte dont le contenu ne peut encore être qu'une liste
+ *     de références (« ( », « (re », « (ref2, r ») — avec l'espace qui la précède ;
+ *  2. un mot qui commence peut-être une référence nue (« r », « re », « ref1 ») —
+ *     avec l'espace qui le précède ;
+ *  3. une espace finale : elle doit pouvoir partir avec la référence qui suivrait.
+ * Ce qui est retenu à tort (« (re » de « (regardée) », « r » de « réserver »)
+ * repart intact au morceau suivant : aucun texte n'est perdu, seulement
+ * retardé de quelques lettres.
+ */
+function debutRetenu(t: string): number {
+  const avecEspace = (i: number): number => (i > 0 && t[i - 1] === ' ' ? i - 1 : i);
+  const p = t.lastIndexOf('(');
+  if (p !== -1 && t.length - p <= 60 && t.indexOf(')', p) === -1 && /^[ref\d, t]*$/.test(t.slice(p + 1))) return avecEspace(p);
+  const m = /(?:^|[^\p{L}\p{N}_])(r|re|ref\d{0,6})$/u.exec(t);
+  if (m) return avecEspace(t.length - m[1].length);
+  if (t.endsWith(' ')) return t.length - 1;
+  return t.length;
+}
+
+/**
+ * Filtre le flux de texte morceau par morceau : rend ce qui peut partir à
+ * l'écran (références retirées) et garde la queue qui pourrait être une
+ * référence encore incomplète. `fin` vide tout.
+ */
+export function filtrerRefsDuFlux(tampon: string, delta: string, fin = false): { pret: string; tampon: string } {
+  const tout = tampon + delta;
+  const coupe = fin ? tout.length : debutRetenu(tout);
+  return { pret: sansRefsInternes(tout.slice(0, coupe)), tampon: tout.slice(coupe) };
+}
+
 /** Attentes avant chaque reprise d'un appel au modèle (donc 2 reprises au plus). `LUMI_REPRISE_MODELE_MS` pour les tests. */
 export const DELAIS_REPRISE_MODELE_MS: readonly number[] = (process.env.LUMI_REPRISE_MODELE_MS ?? '700,2000').split(',').map((x) => Number(x)).filter((n) => Number.isFinite(n) && n >= 0);
 
@@ -533,12 +581,18 @@ export async function tourLumi(opts: {
       // préfixe et coûterait une réécriture, exactement ce qu'on veut éviter).
       ...(sansOutils ? { tool_choice: { type: 'none' as const } } : {}),
     });
-        stream.on('text', (delta) => {
+        let tamponRefs = '';
+        const partir = (delta: string, fin = false): void => {
+          const f = filtrerRefsDuFlux(tamponRefs, delta, fin);
+          tamponRefs = f.tampon;
+          if (!f.pret) return;
           texteParti = true;
           if (premierTokenMs === null) premierTokenMs = Date.now() - debutTour;
-          texteTotal += delta; opts.emettre({ type: 'text', delta });
-        });
+          texteTotal += f.pret; opts.emettre({ type: 'text', delta: f.pret });
+        };
+        stream.on('text', (delta) => partir(delta));
         reponse = await stream.finalMessage();
+        partir('', true);
       } catch (err) {
         if (essai < DELAIS_REPRISE_MODELE_MS.length && !texteParti && erreurPassagereDuModele(err)) {
           reprisesModele += 1;
@@ -604,7 +658,7 @@ export async function tourLumi(opts: {
       }
       // Jamais un message assistant vide (refusé par l'API au tour suivant).
       const contenu: Anthropic.Messages.TextBlockParam[] = [
-        ...textes.map((b) => ({ type: 'text' as const, text: b.text })),
+        ...textes.map((b) => ({ type: 'text' as const, text: sansRefsInternes(b.text) })),
         ...(avis ? [{ type: 'text' as const, text: avis }] : []),
       ];
       const fin: Anthropic.Messages.MessageParam = { role: 'assistant', content: contenu };
@@ -614,7 +668,8 @@ export async function tourLumi(opts: {
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, tronque: coupee, ...mesure() };
     }
 
-    const assistant: Anthropic.Messages.MessageParam = { role: 'assistant', content: reponse.content };
+    // Le texte sauvegardé est celui que la personne a lu : sans référence interne. Les blocs d'outils gardent les leurs.
+    const assistant: Anthropic.Messages.MessageParam = { role: 'assistant', content: reponse.content.map((b) => (b.type === 'text' ? { ...b, text: sansRefsInternes(b.text) } : b)) };
     messages.push(assistant);
     nouveaux.push(assistant);
     // pause_turn : l'API a interrompu le tour après un outil serveur (recherche
