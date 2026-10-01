@@ -222,6 +222,8 @@ export function periodeRentabilite(quand: string | undefined, fuseau: string, ma
 
 /** Motifs étendus (2026-09-17, deuxième vague) : créations avec champs, messages dictés, listes par client, report par numéro, relances, revenus. */
 const CONJONCTIONS = /\b(?:et|pis|puis|ensuite|apres|then|and)\b/;
+/** Un chiffre, un signe de dollar, ou un mot de date : ce texte décrit plus qu'un titre. (Texte déjà normalisé : sans accents, en minuscules.) */
+const PRIX_DATE_OU_HEURE = /\d|\$|\b(?:dollars?|piastres?|demain|apres-demain|aujourd'?hui|ce soir|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre|tomorrow|today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|june|july|august|september|october|november|december)\b/;
 function detecterExtension(s: string, brut: string, mots: string[]): ActionDirecte | null {
   let m: RegExpExecArray | null;
   // « Crée un job chez Gagnon et texte-lui » : deux demandes → le modèle. La partie dictée après « : » peut contenir « et ».
@@ -240,6 +242,10 @@ function detecterExtension(s: string, brut: string, mots: string[]): ActionDirec
   const titreJob = /^(.*?)(?:\s+[\-–—]\s+|\s*:\s+)(.{2,80})$/.exec(brut);
   const sJob = titreJob ? normaliser(titreJob[1]).join(' ') : s;
   m = new RegExp(`^(?:cree|crees|fais|fait|planifie|ajoute|book)(?: moi)? (?:une |un |a )?job (?:pour|chez|a|for) ${NOM}(?: ${MOTS_DATE}(?: ${MOTS_HEURE})?)?$`).exec(sJob);
+  // Ce qui suit « : » n'est un TITRE que s'il ne porte ni prix, ni date, ni heure. « … : lavage de vitres, 200 $,
+  // le 12 novembre à 9 h » est une job à composer (ligne, prix, planification) : le raccourci en faisait une
+  // job sans prix ni date dont le titre était toute la phrase (éval du 2026-10-01, planif-10) → le modèle.
+  if (m && titreJob && PRIX_DATE_OU_HEURE.test(normaliser(titreJob[2]).join(' '))) return null;
   if (m) return { id: 'job-chez', genre: 'carte', tool: 'create_job', args: { title: (titreJob?.[2] ?? '').trim() || 'Job' }, cible: { nom: m[1].trim(), quand: m[2], heure: m[3] ? `${m[3]}${m[4] ? ':' + m[4] : ''}` : m[5] } };
   // Note sur un client par nom : « ajoute une note sur Linda Tremblay : préfère le matin »
   const note = /^(?:ajoute|ajoutes|mets|met|add)\s+(?:une\s+)?note\s+(?:sur|pour|à|a|on|to)\s+(?:la\s+fiche\s+(?:de\s+|d')?)?(.{2,60}?)(?:\s+[\-–—]\s+|\s*:\s*)(.{2,2000})$/i.exec(brut);
