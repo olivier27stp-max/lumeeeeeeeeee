@@ -4,11 +4,11 @@ Mission du 30 septembre au 1er octobre 2026 : prouver que tout ce qui touche aux
 
 ## En bref
 
-- **La suite existe et tourne** : `npm run test:automations`, environ 3 400 tests. Elle fait tourner le vrai moteur, contre staging ou contre la prod, sans qu'aucun texto, courriel ou webhook réel ne puisse partir.
-- **Résultat contre la prod** : 3 388 tests réussis sur 3 398 à la dernière passe complète (1er octobre, 18 h 22 UTC). Les 10 échecs ont été repris un par un : 4 étaient des attentes de test à corriger, rejouées vertes contre la prod ; 6 étaient des tests unitaires sensibles à la charge du poste, verts quand ils tournent seuls. Aucun n'était un défaut du produit.
-- **Matrice** : 709 cas. 696 PASS, 0 FAIL, 13 NON COUVERT.
-- **79 défauts corrigés**, un commit chacun, chacun avec un test qui échoue sans le correctif. Tout est sur `main` et déployé (#813, #842, #861, #873).
-- **Aucun envoi réel** pendant toute la mission, vérifié en base sur staging et en prod.
+- **La suite existe et tourne** : `npm run test:automations`, environ 3 500 tests. Elle fait tourner le vrai moteur, contre staging ou contre la prod, sans qu'aucun texto, courriel ou webhook réel ne puisse partir.
+- **Résultat contre la prod** : dernière passe complète après le dernier déploiement (1er octobre, 19 h 13 à 20 h 01 UTC) : 3 484 tests réussis sur 3 505, 11 échecs, 10 sautés. Aucun n'était un défaut du moteur. Neuf échecs et les dix sautés venaient d'une base de prod saturée pendant la passe (trois redéploiements d'autres sessions) ; un était un défaut de robustesse de Lumi, corrigé (#879) ; un était un test qui ne se rejouait pas plus de trois fois par jour, corrigé. Les sept fichiers concernés, rejoués seuls contre la prod : 142 sur 142.
+- **Matrice** : 710 cas. 697 PASS, 0 FAIL, 13 NON COUVERT.
+- **80 défauts corrigés**, un commit chacun, chacun avec un test qui échoue sans le correctif. Tout est sur `main` et déployé (#813, #842, #861, #873, #879).
+- **Aucun envoi réel** pendant toute la mission, vérifié en base sur staging et en prod. En prod, sur les 30 dernières heures : 301 courriels et 82 textos des bureaux de test, tous simulés.
 - **Deux décisions de produit** restent à prendre (mascot, adresse d'expédition), plus deux décisions d'exploitation (voir « Ce qui attend ta décision »).
 
 ## Ce qui a été livré
@@ -54,14 +54,14 @@ Dernière passe complète, contre la production. Le détail cas par cas est dans
 | F | Sécurité, multi-bureaux, RLS, RBAC, injection | 54 | 1 |
 | G | Conformité LCAP / Loi 25 | 17 | 0 |
 | H | Langue et contenu | 13 | 1 |
-| I | Lumi | 39 | 0 |
+| I | Lumi | 40 | 0 |
 | J | Interface (Playwright) | 33 | 1 |
 | K | Préréglages et systèmes adjacents | 37 | 1 |
 | L | Observabilité | 10 | 0 |
 | M | Charge | 6 | 0 |
-| **Total** | | **696** | **13** |
+| **Total** | | **697** | **13** |
 
-Ces chiffres viennent de la passe complète du 1er octobre à 18 h 22 UTC (688 PASS, 5 FAIL, 14 NON COUVERT), plus la reprise ciblée des 5 cas en échec contre la prod après correction des attentes de test : B-407, B-408, J-065, K-014 et I-021 sont repassés verts. Trois cas se sont ajoutés avec les derniers correctifs (K-004, I-036, et D-044 qui n'était pas couvert), joués verts contre la prod. Il n'y a pas eu de seconde passe complète contre la prod après ces corrections ; la passe complète suivante est celle du job CI de la PR de finition.
+Ces chiffres combinent la passe complète du 1er octobre (19 h 13 à 20 h 01 UTC : 674 PASS, 13 FAIL, 22 NON COUVERT sur 709 cas, base saturée) et la reprise, seuls et contre la prod, des sept fichiers touchés : les 13 cas en échec et les 9 cas sautés sont repassés verts. Le 710e cas (I-037) est arrivé avec le dernier correctif. Il n'y a pas eu de passe complète verte d'un seul tenant contre la prod : les deux passes complètes ont chacune été perturbées, l'une par la charge du poste, l'autre par la charge de la base.
 
 ### Performance mesurée (rafale de 1 000 événements, staging)
 
@@ -78,7 +78,7 @@ En prod, la rafale est réduite à 200 événements : la même rafale de 1 000 a
 
 ## Défauts trouvés et corrigés
 
-79 commits, tous sur `main`. Le titre de chaque commit dit ce qui était faux ; son message donne la cause, le correctif et le test qui le prouve (`git show <commit>`).
+80 commits, tous sur `main`. Le titre de chaque commit dit ce qui était faux ; son message donne la cause, le correctif et le test qui le prouve (`git show <commit>`).
 
 Les plus graves :
 
@@ -183,7 +183,7 @@ Les plus graves :
 | `b7d8daa5` | Le parcours « Dépôt — demande et rappel » s'annulait lui-même, drapeau de sortie éteint |
 | `098dd153` | « Estimate Follow-Up » s'affichait publié alors qu'il ne peut jamais partir |
 
-### Lumi (10)
+### Lumi (11)
 
 | Commit | Ce qui était faux |
 |---|---|
@@ -197,6 +197,7 @@ Les plus graves :
 | `8630d9ef` | Lumi enregistrait un déclencheur inventé et oubliait la 2e automatisation |
 | `8f2ce578` | Redemander à Lumi une automatisation qu'on vient de supprimer répondait « c'est fait » sans rien créer |
 | `d03ea20d` | Lumi et l'API créaient une automatisation sur un déclencheur pas encore offert à l'entreprise |
+| `6cb59cf0` | Une étape sans son enveloppe `config` faisait refuser tout le parcours (« Reformule ta demande ») |
 
 ### Interface (6)
 
@@ -252,7 +253,8 @@ Deux choix d'exploitation.
 - **13 lignes « Estimate Follow-Up » restent en base en prod**, inertes et cachées. Les retirer demande une migration sur les données des entreprises ; je ne l'ai pas faite.
 - **Ancien système d'automatisations** (`server/lib/scheduler.ts`, table `automations`) : il tourne encore, ignore la pause et l'arrêt global, et aucun écran n'écrit plus dans sa table. À retirer.
 - **« Arrêt quand le client répond » par courriel** n'est pas prouvé : il faut une vraie boîte Gmail connectée. Par texto, c'est prouvé.
-- **Les tests qui parlent à Lumi coûtent** environ 0,30 $ par passe et dépendent du modèle : une formulation différente de Lumi peut faire rougir un test sans défaut réel. C'est arrivé une fois (I-021).
+- **La suite complète contre la prod charge la base de prod.** Lancée pendant que d'autres sessions déployaient et mesuraient (1er octobre, vers 19 h 30 UTC), elle a vu la base saturer : trois « statement timeout », deux actions de plus de 5 s. À lancer seule, hors des heures d'usage, et pas pendant un déploiement.
+- **Les tests qui parlent à Lumi coûtent** environ 0,30 $ par passe et dépendent du modèle : une formulation différente de Lumi peut faire rougir un test sans défaut réel. C'est arrivé deux fois : I-021 (formulation, le test a été assoupli) et I-018 (une étape mal formée par le modèle, corrigé dans le produit).
 
 ## Ménage
 
