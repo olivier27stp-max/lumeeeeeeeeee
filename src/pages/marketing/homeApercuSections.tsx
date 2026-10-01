@@ -101,13 +101,14 @@ function LogoMarquee({ fr }: { fr: boolean }) {
 }
 
 /* ── Quatre fonctions, texte et capture en alternance, dans l'ordre d'une
-   job : demande → soumission → dispatch → facture. La 1re rangée est propre à
-   l'accueil (formulaire de demande intégré au site du client, options du
-   constructeur de RequestFormSettings) ; les trois autres reprennent
+   job : demande → pipeline → dispatch → facture. Les deux premières rangées
+   sont propres à l'accueil (formulaire de demande intégré au site du client,
+   pipeline et ses automatisations par étape) ; les deux autres reprennent
    fonctionsData (mêmes textes et captures que les pages « En savoir plus »). ── */
-type FeatureRow = { slug: string; job: Bi; title: Bi; lead: Bi; points: Bi[]; shot: string; alt: Bi; h: number };
+type FeatureRow = { slug: string; to: string; job: Bi; title: Bi; lead: Bi; points: Bi[]; shot: string; alt: Bi; h: number };
 const REQUEST_FORM_ROW: FeatureRow = {
   slug: 'clients',
+  to: '/fonctions/clients',
   job: { fr: 'Formulaire de demande', en: 'Request form' },
   title: { fr: 'Ton formulaire de demande, branché sur ton site.', en: 'Your request form, plugged into your own website.' },
   lead: {
@@ -125,11 +126,34 @@ const REQUEST_FORM_ROW: FeatureRow = {
   alt: { fr: 'Constructeur du formulaire de demande dans Lume', en: 'Request form builder in Lume' },
   h: 1125,
 };
+/* Étapes et pipelines : PipelineDetail ; déclencheurs par étape
+   deal.stage_entered / stage_exited / stage_idle (eventBus). Pas de capture du
+   pipeline dans /public/landing : on montre la liste des automatisations. */
+const PIPELINE_ROW: FeatureRow = {
+  slug: 'pipeline',
+  to: '/features#pipeline',
+  job: { fr: 'Pipeline de vente', en: 'Sales pipeline' },
+  title: { fr: 'Ton pipeline, tes étapes, tes automatisations.', en: 'Your pipeline, your stages, your automations.' },
+  lead: {
+    fr: "Monte ton pipeline comme tu vends : tes étapes, dans ton ordre. Chaque étape a ses propres automatisations : un texto, un courriel ou une tâche part quand un lead y entre, en sort ou y dort trop longtemps.",
+    en: 'Build your pipeline the way you sell: your stages, in your order. Each stage has its own automations: a text, an email or a task goes out when a lead enters it, leaves it or sits there too long.',
+  },
+  points: [
+    { fr: 'Plusieurs pipelines, étapes à ton nom, réordonnées en les glissant', en: 'Several pipelines, stages named your way, reordered by dragging' },
+    { fr: "Automatisations par étape : à l'entrée, à la sortie, ou quand un lead dort", en: 'Automations per stage: on entry, on exit, or when a lead goes idle' },
+    { fr: 'SMS, courriel, tâche ou notification, avec le délai de ton choix', en: 'Text, email, task or notification, with the delay you choose' },
+    { fr: 'Probabilité de vente et conseil au vendeur pour chaque étape', en: 'Win probability and rep guidance for every stage' },
+  ],
+  shot: '/landing/apercu-automatisations.webp',
+  alt: { fr: 'Automatisations par étape dans Lume', en: 'Per-stage automations in Lume' },
+  h: 1125,
+};
 const FEATURE_ROWS: FeatureRow[] = [
   REQUEST_FORM_ROW,
-  ...['soumissions', 'calendrier', 'finances'].flatMap((slug) => {
+  PIPELINE_ROW,
+  ...['calendrier', 'finances'].flatMap((slug) => {
     const f = FONCTIONS.find((x) => x.slug === slug);
-    return f ? [{ slug, job: f.job, title: f.title, lead: f.lead, points: f.points.slice(0, 3).map((pt) => pt.t), shot: f.shot, alt: f.shotAlt, h: 1125 }] : [];
+    return f ? [{ slug, to: `/fonctions/${slug}`, job: f.job, title: f.title, lead: f.lead, points: f.points.slice(0, 3).map((pt) => pt.t), shot: f.shot, alt: f.shotAlt, h: 1125 }] : [];
   }),
 ];
 
@@ -145,7 +169,7 @@ export function FeatureRows({ fr }: { fr: boolean }) {
             <h3>{pick(fr, f.title)}</h3>
             <p>{pick(fr, f.lead)}</p>
             <ul>{f.points.map((pt) => <li key={pt.en}>{pick(fr, pt)}</li>)}</ul>
-            <Link to={`/fonctions/${f.slug}`} className="hs-link">{fr ? 'En savoir plus →' : 'Learn more →'}</Link>
+            <Link to={f.to} className="hs-link">{fr ? 'En savoir plus →' : 'Learn more →'}</Link>
           </div>
           <img src={f.shot} alt={pick(fr, f.alt)} loading="lazy" decoding="async" width={1800} height={f.h} />
         </div>
