@@ -461,7 +461,8 @@ router.post('/', async (req, res) => {
       // SORTIE : dernier filtre, tout UUID devient une réf courte (c1, j3…).
       // Un seul point de passage → aucun outil ne peut faire fuir un id, ni
       // aujourd'hui ni demain. L'agent ne verra jamais d'UUID.
-      const resultatSansIds = masquerIds(espaceRefs, resultatFinal);
+      // `stable` : sans conversation côté serveur, une réf ne doit jamais changer de fiche après un redéploiement (refs.ts).
+      const resultatSansIds = masquerIds(espaceRefs, resultatFinal, { stable: true });
 
       // MCP returns tool output as content parts; JSON goes in a text part.
       return res.json(
