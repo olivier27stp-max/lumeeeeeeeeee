@@ -147,7 +147,7 @@ function cliquer(el: Element | undefined | null) {
 }
 
 function bouton(texte: string) {
-  return Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === texte
+  return Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === texte
     || b.textContent?.includes(texte));
 }
 
@@ -383,14 +383,14 @@ describe('pagination — jamais « Aucune automatisation » à tort', () => {
     await attendre();
     cliquer(bouton('Suivant'));
     await attendre();
-    const derniere = Array.from(container.querySelectorAll('button')).find((b) => /^Actions pour/.test(b.getAttribute('aria-label') ?? ''));
+    const derniere = Array.from(document.body.querySelectorAll('button')).find((b) => /^Actions pour/.test(b.getAttribute('aria-label') ?? ''));
     expect(derniere).toBeTruthy();
     const nom = derniere!.getAttribute('aria-label')!.replace('Actions pour ', '');
     // La base ne rend plus que 10 règles après la suppression.
     reglesServies = reglesServies.filter((r) => r.name !== nom);
     cliquer(derniere);
     await attendre();
-    cliquer(Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Supprimer'));
+    cliquer(Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Supprimer'));
     await attendre();
     await attendre();
     expect(container.textContent).not.toContain('Aucune automatisation');

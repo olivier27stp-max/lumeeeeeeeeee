@@ -146,6 +146,8 @@ interface Props {
   etiquettes: string[];
   /** Autres automatisations publiées, pour « Démarrer une automatisation ». */
   automatisations?: Array<{ id: string; nom: string }>;
+  /** Étapes des pipelines du bureau, pour « Déplacer l’opportunité → Une étape précise ». */
+  etapesPipeline?: Array<{ id: string; label: string }>;
   /** Champs personnalisés actifs : action « Mettre à jour un champ », conditions, variables. */
   champsPerso?: ChampPerso[];
   /**
@@ -181,7 +183,7 @@ function decomposer(secondes: number): { valeur: number; unite: string } {
 }
 
 export default function PanneauEtape({
-  etape, fr, declencheur, membres, etiquettes, automatisations = [], champsPerso = [], objetChamps = null, stats,
+  etape, fr, declencheur, membres, etiquettes, automatisations = [], etapesPipeline = [], champsPerso = [], objetChamps = null, stats,
   onEnregistrer, onSupprimer, onFermer, onModifie,
 }: Props) {
   const ids = useId();
@@ -534,6 +536,7 @@ export default function PanneauEtape({
                       membres={membres}
                       etiquettes={etiquettes}
                       automatisations={automatisations}
+                      etapesPipeline={etapesPipeline}
                       sms={modele.cle === 'send_sms' && champ.cle === 'body'}
                     />
                   ))}
