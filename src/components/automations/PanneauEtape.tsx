@@ -158,6 +158,12 @@ interface Props {
   objetChamps?: ObjetChamp | null;
   /** Statistiques de l'étape, pour l'onglet du même nom. */
   stats?: { envoyes: number; sautes: number; echecs: number; en_attente: number } | null;
+  /**
+   * L'étape vient d'être choisie dans le tiroir et n'est PAS encore dans le
+   * parcours : « Enregistrer » l'y ajoute, fermer le panneau l'abandonne —
+   * ce qui se demande, comme toute saisie non enregistrée.
+   */
+  nouvelle?: boolean;
   onEnregistrer: (etape: Etape) => void;
   onSupprimer: (id: string) => void;
   onFermer: () => void;
@@ -184,7 +190,7 @@ function decomposer(secondes: number): { valeur: number; unite: string } {
 
 export default function PanneauEtape({
   etape, fr, declencheur, membres, etiquettes, automatisations = [], etapesPipeline = [], champsPerso = [], objetChamps = null, stats,
-  onEnregistrer, onSupprimer, onFermer, onModifie,
+  nouvelle = false, onEnregistrer, onSupprimer, onFermer, onModifie,
 }: Props) {
   const ids = useId();
   const [onglet, setOnglet] = useState<'edition' | 'stats'>('edition');
@@ -231,23 +237,33 @@ export default function PanneauEtape({
    * carte.
    */
   const modifie = useMemo(
-    () => brouillon.id === etape.id
-      && (JSON.stringify(brouillon) !== JSON.stringify(etape) || conditionsTexte !== texteDesConditions(etape)),
-    [brouillon, etape, conditionsTexte],
+    // Une étape NEUVE est tout entière une saisie non enregistrée.
+    () => nouvelle || (brouillon.id === etape.id
+      && (JSON.stringify(brouillon) !== JSON.stringify(etape) || conditionsTexte !== texteDesConditions(etape))),
+    [brouillon, etape, conditionsTexte, nouvelle],
   );
   useEffect(() => { onModifie?.(modifie); }, [modifie, onModifie]);
   useEffect(() => () => onModifie?.(false), [onModifie]);
 
   const fermer = async () => {
     if (modifie) {
-      const ok = await confirmer({
-        title: fr ? 'Fermer sans enregistrer ?' : 'Close without saving?',
-        message: fr
-          ? 'Les modifications de cette étape ne sont pas enregistrées : elles seront perdues.'
-          : 'This step’s changes are not saved: they will be lost.',
-        confirmLabel: fr ? 'Fermer sans enregistrer' : 'Close without saving',
-        danger: true,
-      });
+      const ok = await confirmer(nouvelle
+        ? {
+          title: fr ? 'Fermer sans ajouter cette étape ?' : 'Close without adding this step?',
+          message: fr
+            ? 'Cette étape n’a pas été enregistrée : elle ne sera pas ajoutée au parcours.'
+            : 'This step was not saved: it will not be added to the journey.',
+          confirmLabel: fr ? 'Ne pas l’ajouter' : 'Do not add it',
+          danger: true,
+        }
+        : {
+          title: fr ? 'Fermer sans enregistrer ?' : 'Close without saving?',
+          message: fr
+            ? 'Les modifications de cette étape ne sont pas enregistrées : elles seront perdues.'
+            : 'This step’s changes are not saved: they will be lost.',
+          confirmLabel: fr ? 'Fermer sans enregistrer' : 'Close without saving',
+          danger: true,
+        });
       if (!ok) return;
     }
     onFermer();

@@ -278,6 +278,19 @@ export default function AutomationBuilderPage() {
   // ── Le parcours ──
   const [steps, setSteps] = useState<Etape[]>([]);
   const [etapeChoisie, setEtapeChoisie] = useState<string | null>(null);
+  /*
+   * L'ÉTAPE CHOISIE DANS LE TIROIR, PAS ENCORE DANS LE PARCOURS (triage
+   * actions, ligne 1). Elle entrait dans `steps` au clic, et l'enregistrement
+   * automatique l'écrivait trois secondes plus tard : sur une automatisation
+   * PUBLIÉE, le texto d'exemple (« Bonjour [client_name], c'est
+   * [company_name]. Merci ! ») était en ligne avant que quiconque l'ait lu.
+   *
+   * Elle attend donc ICI, hors de `steps` : le canevas la montre à sa place,
+   * son panneau s'ouvre, et elle n'entre dans le parcours — donc dans ce que
+   * l'enregistrement automatique écrit — qu'au clic sur « Enregistrer » de son
+   * panneau. Fermer le panneau l'abandonne.
+   */
+  const [etapeEnAttente, setEtapeEnAttente] = useState<{ etape: Etape; apresId: string | null; branche?: 'alors' | 'sinon' } | null>(null);
   /** Le panneau ouvert a-t-il un brouillon non enregistré ? (PanneauEtape.onModifie) */
   const brouillonEtapeModifie = useRef(false);
   const signalerBrouillonEtape = useCallback((m: boolean) => { brouillonEtapeModifie.current = m; }, []);
@@ -336,7 +349,18 @@ export default function AutomationBuilderPage() {
   const quandPanneauLibre = useCallback((suite: () => void, versEtape?: string) => {
     const enFrancais = language === 'fr';
     const questions: Array<Parameters<typeof confirmer>[0]> = [];
-    if (etapeChoisie && versEtape !== etapeChoisie && brouillonEtapeModifie.current) {
+    const ajoutAbandonne = !!etapeEnAttente && versEtape !== etapeEnAttente.etape.id;
+    if (ajoutAbandonne) {
+      // L'étape en cours d'ajout n'est pas dans le parcours : la quitter l'abandonne.
+      questions.push({
+        title: enFrancais ? 'Abandonner l’étape en cours d’ajout ?' : 'Drop the step being added?',
+        message: enFrancais
+          ? 'L’étape ouverte n’a pas été enregistrée : elle ne sera pas ajoutée au parcours.'
+          : 'The open step was not saved: it will not be added to the journey.',
+        confirmLabel: enFrancais ? 'Ne pas l’ajouter' : 'Do not add it',
+        danger: true,
+      });
+    } else if (etapeChoisie && versEtape !== etapeChoisie && brouillonEtapeModifie.current) {
       questions.push(versEtape
         ? {
           title: enFrancais ? 'Changer d’étape sans enregistrer ?' : 'Switch step without saving?',
@@ -370,9 +394,10 @@ export default function AutomationBuilderPage() {
       for (const question of questions) {
         if (!(await confirmer(question))) return;
       }
+      if (ajoutAbandonne) setEtapeEnAttente(null);
       suite();
     })();
-  }, [etapeChoisie, reglageDeclencheur, language]);
+  }, [etapeChoisie, reglageDeclencheur, language, etapeEnAttente]);
 
   /** Affiche le panneau d'une étape — SEUL : tiroirs et réglages du déclencheur se ferment. */
   const montrerEtape = useCallback((idEtape: string) => {
@@ -380,6 +405,8 @@ export default function AutomationBuilderPage() {
     setReglageDeclencheur(false);
     setAjoutEnCours(null);
     setEtapeChoisie(idEtape);
+    // Une AUTRE étape affichée : l'ajout en attente est abandonné.
+    setEtapeEnAttente((a) => (a && a.etape.id !== idEtape ? null : a));
   }, []);
 
   /** Ouvrir une carte du canevas, à la demande de l'utilisateur. */
@@ -460,12 +487,17 @@ export default function AutomationBuilderPage() {
 
   /** Ouvre le choix du type d'étape à insérer. */
   const ouvrirAjout = (apresId: string | null, branche?: 'alors' | 'sinon') => {
+    // « + » sous la carte EN ATTENTE : elle n'est pas dans le parcours, la
+    // nouvelle prend donc SA place (s'y accrocher la laisserait orpheline).
+    const ancre = etapeEnAttente && apresId === etapeEnAttente.etape.id
+      ? { apresId: etapeEnAttente.apresId, branche: etapeEnAttente.branche }
+      : { apresId, branche };
     quandPanneauLibre(() => {
       // Le tiroir « Actions » prend la place des réglages du déclencheur :
       // resté ouvert, leur panneau le cachait et « + » ne faisait rien.
       setTiroirDeclencheur(false);
       setReglageDeclencheur(false);
-      setAjoutEnCours({ apresId, branche });
+      setAjoutEnCours(ancre);
     });
   };
 
@@ -495,8 +527,10 @@ export default function AutomationBuilderPage() {
       // au rechargement (signalé le 2026-09-25). Le texte proposé est un vrai
       // brouillon, envoyable tel quel et réécrit en un clic.
       : { ...etapeVierge('action', id), action: { type: cle, config: configParDefaut(cle, fr) } };
-    memoriser(insererEtape(steps, nouvelle, ajoutEnCours.apresId, ajoutEnCours.branche));
+    // Pas dans `steps` : rien n'est écrit tant que son panneau n'est pas
+    // enregistré (voir `etapeEnAttente`).
     montrerEtape(nouvelle.id);
+    setEtapeEnAttente({ etape: nouvelle, apresId: ajoutEnCours.apresId, branche: ajoutEnCours.branche });
   };
 
   /**
@@ -972,15 +1006,40 @@ export default function AutomationBuilderPage() {
   // Ouvrir une carte, la modifier, l'enregistrer ou la supprimer. C'etait
   // le trou du builder : cliquer une carte la selectionnait et n'ouvrait
   // rien — on voyait son parcours sans jamais pouvoir le modifier.
+  /*
+   * L'ajout en attente ne vaut que tant que le parcours autour de lui n'a pas
+   * bougé (annuler / refaire, proposition de Lumi) : son point d'accroche doit
+   * exister encore, et son identifiant rester libre.
+   */
+  const ajoutEnAttente = useMemo(() => {
+    if (!etapeEnAttente) return null;
+    const { etape, apresId } = etapeEnAttente;
+    if (steps.some((e) => e.id === etape.id)) return null;
+    if (apresId !== null && !steps.some((e) => e.id === apresId)) return null;
+    return etapeEnAttente;
+  }, [etapeEnAttente, steps]);
+  useEffect(() => {
+    if (etapeEnAttente && !ajoutEnAttente) setEtapeEnAttente(null);
+  }, [etapeEnAttente, ajoutEnAttente]);
+
   const etapeOuverte = useMemo(
-    () => steps.find((e) => e.id === etapeChoisie) ?? null,
-    [steps, etapeChoisie],
+    () => (ajoutEnAttente && ajoutEnAttente.etape.id === etapeChoisie
+      ? ajoutEnAttente.etape
+      : steps.find((e) => e.id === etapeChoisie) ?? null),
+    [steps, etapeChoisie, ajoutEnAttente],
   );
 
   const enregistrerEtape = useCallback((modifiee: Etape) => {
-    memoriser(steps.map((e) => (e.id === modifiee.id ? modifiee : e)));
+    if (ajoutEnAttente && ajoutEnAttente.etape.id === modifiee.id) {
+      // « Enregistrer » dans le panneau d'une étape neuve : c'est MAINTENANT
+      // qu'elle entre dans le parcours (et que l'enregistrement auto la verra).
+      memoriser(insererEtape(steps, modifiee, ajoutEnAttente.apresId, ajoutEnAttente.branche));
+      setEtapeEnAttente(null);
+    } else {
+      memoriser(steps.map((e) => (e.id === modifiee.id ? modifiee : e)));
+    }
     setEtapeChoisie(null);
-  }, [steps, memoriser]);
+  }, [steps, memoriser, ajoutEnAttente]);
 
   /**
    * Dupliquer une étape — le « Copier l'action » de leur menu.
@@ -1022,6 +1081,13 @@ export default function AutomationBuilderPage() {
    * un graphe mal formé ne doit pas faire boucler la suppression.
    */
   const supprimerDepuis = useCallback(async (idEtape: string) => {
+    // L'étape en cours d'ajout n'a rien après elle qui soit à elle : l'abandonner suffit.
+    if (ajoutEnAttente?.etape.id === idEtape) {
+      setEtapeEnAttente(null);
+      setMenuEtape(null);
+      setEtapeChoisie(null);
+      return;
+    }
     const aRetirer = new Set<string>();
     const file = [idEtape];
     while (file.length) {
@@ -1051,9 +1117,15 @@ export default function AutomationBuilderPage() {
     memoriser(restant);
     setMenuEtape(null);
     setEtapeChoisie(null);
-  }, [steps, memoriser, fr]);
+  }, [steps, memoriser, fr, ajoutEnAttente]);
 
   const supprimerEtape = useCallback(async (idEtape: string) => {
+    // L'étape en cours d'ajout n'est pas dans le parcours : rien à recoudre.
+    if (ajoutEnAttente?.etape.id === idEtape) {
+      setEtapeEnAttente(null);
+      setEtapeChoisie(null);
+      return;
+    }
     const ok = await confirmer({
       title: fr ? 'Supprimer cette étape ?' : 'Delete this step?',
       message: fr
@@ -1065,7 +1137,7 @@ export default function AutomationBuilderPage() {
     if (!ok) return;
     memoriser(retirerEtape(steps, idEtape));
     setEtapeChoisie(null);
-  }, [steps, memoriser, fr]);
+  }, [steps, memoriser, fr, ajoutEnAttente]);
 
   // ── Enregistrement ──
   // Différé d'une seconde après la dernière frappe : enregistrer à chaque
@@ -1246,6 +1318,13 @@ export default function AutomationBuilderPage() {
     // Une confirmation déjà à l'écran : les clics suivants n'en ouvrent pas d'autres.
     if (confirmationPublication.current) return;
     const versActive = !fileBascule.etatAffiche(regle.id, regle.is_active);
+    if (versActive && ajoutEnAttente) {
+      // Elle n'est pas dans le parcours : publier la laisserait de côté sans le dire.
+      toast.error(fr
+        ? 'Une étape est en cours d’ajout : enregistrez-la dans son panneau, ou fermez-le, avant de publier.'
+        : 'A step is being added: save it in its panel, or close it, before publishing.');
+      return;
+    }
     if (versActive) {
       /*
        * REFUSER AVANT, PAS APRÈS.
@@ -1380,8 +1459,11 @@ export default function AutomationBuilderPage() {
   const etapesAffichees = useMemo(
     () => (formatOrigine && regle
       ? projeterFormatOrigine({ actions: regle.actions, delay_seconds: regle.delay_seconds })
-      : steps),
-    [formatOrigine, regle, steps],
+      // L'étape en cours d'ajout est MONTRÉE à sa place, sans être dans `steps`.
+      : ajoutEnAttente
+        ? insererEtape(steps, ajoutEnAttente.etape, ajoutEnAttente.apresId, ajoutEnAttente.branche)
+        : steps),
+    [formatOrigine, regle, steps, ajoutEnAttente],
   );
 
   /**
@@ -1872,9 +1954,10 @@ export default function AutomationBuilderPage() {
     <div className="fixed inset-0 z-50 flex flex-col bg-surface">
       {/* ══ Barre 1 : sortie, nom, annuler/refaire, état ══ */}
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5">
+        {/* Une étape en cours d'ajout se perdrait en partant : on le demande d'abord. */}
         <button
           type="button"
-          onClick={() => void quitterEditeur()}
+          onClick={() => (ajoutEnAttente ? quandPanneauLibre(() => void quitterEditeur()) : void quitterEditeur())}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -2373,7 +2456,8 @@ export default function AutomationBuilderPage() {
                       onClick={() => {
                         const id = menuEtape;
                         if (!id) return;
-                        if (cle === 'dupliquer') dupliquerEtape(id);
+                        if (cle === 'dupliquer' && ajoutEnAttente) { setMenuEtape(null); quandPanneauLibre(() => dupliquerEtape(id)); }
+                        else if (cle === 'dupliquer') dupliquerEtape(id);
                         else if (cle === 'modifier') { setMenuEtape(null); void ouvrirEtape(id); }
                         else if (cle === 'supprimer') { setMenuEtape(null); void supprimerEtape(id); }
                         else void supprimerDepuis(id);
@@ -2663,9 +2747,10 @@ export default function AutomationBuilderPage() {
           champsPerso={champsPerso}
           objetChamps={objetRegle}
           stats={statsEtapes?.[etapeOuverte.id] ?? null}
+          nouvelle={ajoutEnAttente?.etape.id === etapeOuverte.id}
           onEnregistrer={enregistrerEtape}
           onSupprimer={supprimerEtape}
-          onFermer={() => setEtapeChoisie(null)}
+          onFermer={() => { setEtapeChoisie(null); setEtapeEnAttente(null); }}
           onModifie={signalerBrouillonEtape}
         />
       )}
