@@ -258,9 +258,10 @@ export const SECTIONS_CSS = `
 .hs-stop, .hs-pillars, .hs-roles, .hs-lumi, .hs-flow, .hs-plans, .hs-secu { max-width:1180px; margin:0 auto; padding:52px 24px 8px; }
 .hs-stoplist { list-style:none; margin:22px 0 0; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:6px 40px; }
 .hs-stoplist li { font-size:clamp(17px,1.6vw,22px); font-weight:600; letter-spacing:-.01em; line-height:1.3; color:#0a0a0a; padding:14px 0; border-top:1px solid #d9d9d4; }
-.hs-stoplist li span { position:relative; display:inline; }
-.hs-stoplist li span::after { content:""; position:absolute; left:0; right:0; top:55%; height:3px; background:#ef4444; border-radius:2px; transform:scaleX(0); transform-origin:left center; animation:hs-strike .6s cubic-bezier(.2,.8,.2,1) forwards; animation-delay:calc(.35s + var(--i) * .28s); }
-@keyframes hs-strike { to { transform:scaleX(1); } }
+/* Trait en arrière-plan découpé par ligne (box-decoration-break) : une phrase sur
+   deux lignes est barrée sur CHAQUE ligne, pas entre les deux. */
+.hs-stoplist li span { display:inline; background-image:linear-gradient(#ef4444,#ef4444); background-repeat:no-repeat; background-position:0 58%; background-size:0% 3px; -webkit-box-decoration-break:clone; box-decoration-break:clone; animation:hs-strike .6s cubic-bezier(.2,.8,.2,1) forwards; animation-delay:calc(.35s + var(--i) * .28s); }
+@keyframes hs-strike { to { background-size:100% 3px; } }
 .hs-stopnote { margin:22px 0 0; font-size:14.5px; color:#171717; }
 .hs-pgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:20px; }
 .hs-pc { display:flex; flex-direction:column; background:#fff; border:1px solid rgba(11,92,173,.12); border-radius:18px; padding:22px; text-decoration:none; color:inherit; transition:transform .2s, box-shadow .2s; }
@@ -310,5 +311,5 @@ export const SECTIONS_CSS = `
   .hs-stoplist, .hs-pgrid, .hs-rp, .hs-lgrid, .hs-band, .hs-steps, .hs-plgrid, .hs-sgrid { grid-template-columns:1fr; }
   .hs-steps::before { display:none; }
 }
-@media (prefers-reduced-motion: reduce) { .hs-stoplist li span::after { animation:none; transform:scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .hs-stoplist li span { animation:none; background-size:100% 3px; } }
 `;
