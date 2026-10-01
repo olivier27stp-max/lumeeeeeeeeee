@@ -330,6 +330,7 @@ export function raisonLisible(erreur: string | null, fr: boolean): string | null
     // Demandes d'avis (relevé en prod le 2026-10-01 : ces deux causes sortaient en anglais brut).
     ['review requests are disabled', 'les demandes d’avis sont désactivées dans Paramètres › Avis clients', 'review requests are turned off in Settings › Customer reviews'],
     ['already sent to this client', 'une demande d’avis a déjà été envoyée à ce client dans les 7 derniers jours', 'this client already got a review request in the last 7 days'],
+    ['could not be sent', 'la demande d’avis n’a pas pu être envoyée', 'the review request did not go out'],
     ['no org owner', 'aucun propriétaire trouvé pour ce bureau : la tâche n’a pas pu être créée', 'no owner was found for this office, so the task could not be created'],
     ['row matched', 'l’élément visé n’existe plus dans ce bureau', 'the targeted item no longer exists in this office'],
     ['table not allowed', 'cette étape ne s’applique pas à ce type d’élément', 'this step does not apply to this kind of item'],
@@ -389,6 +390,7 @@ export function raisonEchecListe(erreur: string | null, fr: boolean): string | n
   if (e.includes('not configured')) return fr ? 'Envoi non configuré dans les réglages.' : 'Sending is not configured in settings.';
   if (e.includes('plan does not include')) return fr ? 'Votre forfait n’inclut pas cet envoi.' : 'Your plan does not include this send.';
   if (e.includes('are disabled')) return fr ? 'Cette fonctionnalité est désactivée dans les réglages.' : 'This feature is disabled in settings.';
+  if (e.includes('could not be sent')) return fr ? 'La demande d’avis n’a pas pu être envoyée.' : 'The review request did not go out.';
   if (e.includes('no org owner')) return fr ? 'Aucun propriétaire trouvé pour ce bureau : la tâche n’a pas pu être créée.' : 'No owner was found for this office, so the task could not be created.';
   if (e.includes('row matched')) return fr ? 'L’élément visé n’existe plus dans ce bureau.' : 'The targeted item no longer exists in this office.';
   if (e.includes('table not allowed')) return fr ? 'Cette étape ne s’applique pas à ce type d’élément.' : 'This step does not apply to this kind of item.';
