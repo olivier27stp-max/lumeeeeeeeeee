@@ -1044,15 +1044,15 @@ const ABOUT_PAGE = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lume</title>
 <meta name="application-name" content="Lume">
-<meta name="description" content="Lume est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.">
+<meta name="description" content="Lume CRM, le logiciel tout-en-un des entreprises de services résidentiels et de rénovation : pipeline de vente clair et automatisations qui relancent vos clients à votre place.">
 <meta property="og:site_name" content="Lume">
 <meta property="og:title" content="Lume">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lumecrm.net/about">
-<meta property="og:description" content="Lume est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.">
+<meta property="og:description" content="Lume CRM, le logiciel tout-en-un des entreprises de services résidentiels et de rénovation : pipeline de vente clair et automatisations qui relancent vos clients à votre place.">
 <link rel="canonical" href="https://lumecrm.net/about">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Lume","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://lumecrm.net/","description":"Lume est un logiciel de gestion tout-en-un pour les entreprises de services résidentiels : clients, soumissions, factures, planification et courriels.","publisher":{"@type":"Organization","name":"Lume"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Lume","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://lumecrm.net/","description":"Lume CRM, le logiciel tout-en-un des entreprises de services résidentiels et de rénovation : pipeline de vente clair et automatisations qui relancent vos clients à votre place.","publisher":{"@type":"Organization","name":"Lume"}}
 </script>
 </head>
 <body>
@@ -1123,7 +1123,7 @@ app.get('/robots.txt', (_req, res) => {
    robots les lisent sans exécuter l'application. Miroir de src/hooks/usePageMeta.ts
    et des pages marketing : garder les deux cohérents. */
 const PAGE_META: Record<string, { title: string; description: string }> = {
-  "/": { title: "Lume · CRM et assistant IA pour entreprises de services", description: "Arrêtez de gérer manuellement, commencez à croître automatiquement. Clients, soumissions, calendrier, textos, factures et paie au même endroit, avec Lumi, l'assistant IA." },
+  "/": { title: "Lume · CRM pour les services résidentiels et la rénovation", description: "Lume CRM, le logiciel tout-en-un des entreprises de services résidentiels et de rénovation : pipeline de vente clair et automatisations qui relancent vos clients à votre place." },
   "/features": { title: "Fonctionnalités · Lume", description: "Assistant IA, pipeline, formulaires de demande, carte porte-à-porte, classement, relances de soumissions, avis Google, planification, automatisations et paiements." },
   "/pricing": { title: "Tarifs · Lume", description: "Trois forfaits qui s'emboîtent : Minimum, Scale et Autopilot. Prix simples, sans surprises, en CAD ou USD." },
   "/industries": { title: "Industries · Lume", description: "Lavage de vitres, toiture, paysagement, CVAC, pavé uni, peinture, extermination et plus : Lume s'adapte à chaque métier de services à domicile." },
