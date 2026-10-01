@@ -177,12 +177,18 @@ export function contientUn(texte: string, attendu: string): boolean {
 export interface Observation {
   proposition: string | null;
   groupe: string[];
+  /** Lectures FAITES (événement d'outil `fin`). Un outil refusé par la garde n'en est pas une. */
   lectures: string[];
+  /** Outils tentés mais refusés par la garde, ou en échec (événement `refus`). Absent des passes d'avant le 2026-10-01. */
+  refus?: string[];
   executes: number;
   args: Record<string, unknown> | null;
   apercu: unknown;
   reponse: string;
   erreur?: string;
+  /** Conditions de la passe : le modèle qui a répondu et l'étage (0 à 6). Absents des passes d'avant le 2026-10-01. */
+  modele?: string | null;
+  etage?: number | null;
 }
 
 export interface Verdict {
@@ -251,11 +257,13 @@ export function corriger(c: CasResolu, r: Observation): Verdict {
     if (a === c.outil && (c.equivalents ?? []).some((e) => appeles.has(e))) continue;
     const voisin = (c.voisins ?? []).some((v) => r.lectures.includes(v)) && proposes.length === 0;
     outil = voisin && outil !== 'rate' ? 'partiel' : 'rate';
-    echecs.push(`outil attendu absent : ${a}${proposes.length ? ` (proposé : ${proposes.join(', ')})` : r.lectures.length ? ` (lu : ${r.lectures.join(', ')})` : ' (aucun outil)'}`);
+    echecs.push(`outil attendu absent : ${a}${proposes.length ? ` (proposé : ${proposes.join(', ')})` : r.lectures.length ? ` (lu : ${r.lectures.join(', ')})` : ' (aucun outil)'}${r.refus?.length ? ` (refusé ou en échec : ${r.refus.join(', ')})` : ''}`);
   }
   for (const i of c.interdits ?? []) if (proposes.includes(i)) { outil = 'rate'; echecs.push(`outil interdit proposé : ${i}`); }
   for (const i of c.lectures_interdites ?? []) if (r.lectures.includes(i)) { outil = 'rate'; echecs.push(`lecture interdite appelée : ${i}`); }
-  if (c.aucun_outil && appeles.size) { outil = 'rate'; echecs.push(`aucun outil attendu, appelés : ${[...appeles].join(', ')}`); }
+  // « Aucun outil » compte aussi les tentatives refusées : c'est le choix d'appeler un outil qui est surveillé.
+  const tentes = new Set([...appeles, ...(r.refus ?? [])]);
+  if (c.aucun_outil && tentes.size) { outil = 'rate'; echecs.push(`aucun outil attendu, appelés : ${[...tentes].join(', ')}`); }
 
   // 2. Les paramètres et la carte (seulement si l'outil principal est bien celui de la carte)
   if (c.params && c.outil) {
