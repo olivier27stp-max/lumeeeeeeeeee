@@ -168,7 +168,10 @@ describe('H — dates écrites au client', () => {
     const { resolveEntityVariables, variablesPourMachine } = await import('../../../server/lib/actions');
     const machine = variablesPourMachine(await resolveEntityVariables(b.admin, b.orgA, 'invoice', facture));
     expect(machine.invoice_due_date).toBe('2026-10-15');
-    expect(Object.keys(machine).filter((k) => k.endsWith('_iso'))).toEqual([]);
+    // Aucune variable de plus chez le tiers ni dans les gabarits : la forme technique voyage à côté.
+    const lisibles = await resolveEntityVariables(b.admin, b.orgA, 'invoice', facture);
+    expect(Object.keys(machine).sort()).toEqual(Object.keys(lisibles).sort());
+    expect(Object.keys(lisibles).filter((k) => k.endsWith('_iso'))).toEqual([]);
   });
 });
 

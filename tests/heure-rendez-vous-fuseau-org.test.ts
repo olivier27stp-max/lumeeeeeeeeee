@@ -45,8 +45,8 @@ describe('l’heure du rendez-vous suit le fuseau de l’entreprise', () => {
       /vars\.appointment_date = dateLisible\(d\.toISOString\(\), langueDates, fuseau\)/,
     );
     // La forme technique (AAAA-MM-JJ, webhook) suit le même fuseau.
-    expect(source, 'appointment_date_iso doit prendre le fuseau résolu').toMatch(
-      /vars\.appointment_date_iso = d\.toLocaleDateString\('en-CA', \{ timeZone: fuseau \}\)/,
+    expect(source, 'la date technique du rendez-vous doit prendre le fuseau résolu').toMatch(
+      /noterDateTechnique\(vars, 'appointment_date', d\.toLocaleDateString\('en-CA', \{ timeZone: fuseau \}\)\)/,
     );
     expect(source, 'appointment_time doit prendre le fuseau résolu').toMatch(
       /vars\.appointment_time = d\.toLocaleTimeString\([^)]*timeZone: fuseau[^)]*\)/,

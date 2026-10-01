@@ -767,24 +767,38 @@ async function lienPageAvisDuJob(supabase: SupabaseClient, orgId: string, jobId:
 
 /**
  * Dates écrites au client en toutes lettres (« 15 octobre 2026 ») et leur
- * forme TECHNIQUE (AAAA-MM-JJ), gardée sous `<variable>_iso`.
+ * forme TECHNIQUE (AAAA-MM-JJ), gardée À CÔTÉ des variables.
  *
  * L'action « webhook » envoie les variables à un système tiers (Zapier, un
  * tableur…) : lui a besoin d'une date qu'une machine sait lire, et il la
  * recevait déjà en AAAA-MM-JJ. `executeWebhook` remet donc la forme technique
  * sous le nom d'origine — sa charge utile ne change pas d'un octet.
+ *
+ * Les formes techniques ne sont PAS des variables de gabarit : elles voyagent
+ * sous une clé symbole (copiée par `{ ...vars }`, ignorée par `Object.keys`,
+ * par JSON et par `resolveTemplate`). Ni l'éditeur ni Lumi ne peuvent donc
+ * écrire une date brute dans un message au client.
  */
 export const DATES_TECHNIQUES = ['invoice_due_date', 'quote_valid_until', 'appointment_date'] as const;
+type DateTechnique = typeof DATES_TECHNIQUES[number];
+const CLE_DATES_TECHNIQUES = Symbol('lume.datesTechniques');
+type VariablesAvecDates = Record<string, string> & { [CLE_DATES_TECHNIQUES]?: Partial<Record<DateTechnique, string>> };
+
+/** Note la forme technique d'une date à côté des variables (jamais dedans). */
+export function noterDateTechnique(vars: Record<string, string>, cle: DateTechnique, valeur: string | null | undefined): void {
+  const v = vars as VariablesAvecDates;
+  v[CLE_DATES_TECHNIQUES] = { ...(v[CLE_DATES_TECHNIQUES] ?? {}), [cle]: valeur || '' };
+}
 
 /** Les variables telles qu'un système tiers les attend : dates en AAAA-MM-JJ. */
 export function variablesPourMachine(vars: Record<string, string>): Record<string, string> {
-  const out: Record<string, string> = { ...vars };
+  const techniques = (vars as VariablesAvecDates)[CLE_DATES_TECHNIQUES] ?? {};
+  // Copie des seules clés TEXTE : la clé symbole ne part pas chez le tiers.
+  const out: Record<string, string> = {};
+  for (const cle of Object.keys(vars)) out[cle] = vars[cle];
   for (const cle of DATES_TECHNIQUES) {
-    const brute = `${cle}_iso`;
-    if (Object.prototype.hasOwnProperty.call(out, brute)) {
-      out[cle] = out[brute];
-      delete out[brute];
-    }
+    const brute = techniques[cle];
+    if (brute !== undefined) out[cle] = brute;
   }
   return out;
 }
@@ -949,7 +963,7 @@ export async function resolveEntityVariables(
       vars.quote_number = quote.quote_number || '';
       vars.quote_total = argent(quote.total_cents, quote.currency || 'CAD');
       vars.quote_valid_until = dateLisible(quote.valid_until, langueDates);
-      vars.quote_valid_until_iso = quote.valid_until || '';
+      noterDateTechnique(vars, 'quote_valid_until', quote.valid_until);
       // Le lien public de la soumission — la page `/quote/:token` que le
       // client ouvre sans compte (`TokenRoutes`). Sans lui, une action
       // « envoyer la soumission » n'aurait rien a mettre dans le courriel.
@@ -1073,7 +1087,7 @@ export async function resolveEntityVariables(
       }
       vars.invoice_number = inv.invoice_number || '';
       vars.invoice_due_date = dateLisible(inv.due_date, langueDates);
-      vars.invoice_due_date_iso = inv.due_date || '';
+      noterDateTechnique(vars, 'invoice_due_date', inv.due_date);
       vars.invoice_total = argent(inv.total_cents);
       // La page servie est `/invoice/:token`, et GET /api/invoices/public/:token
       // cherche la facture par `view_token`. `[invoice_link]` lisait
@@ -1136,7 +1150,7 @@ export async function resolveEntityVariables(
         // était un défaut visible. `fr-CA` reste pour une entreprise française.
         vars.appointment_date = dateLisible(d.toISOString(), langueDates, fuseau);
         // La forme technique (AAAA-MM-JJ, jour local de l'entreprise) : voir DATES_TECHNIQUES.
-        vars.appointment_date_iso = d.toLocaleDateString('en-CA', { timeZone: fuseau });
+        noterDateTechnique(vars, 'appointment_date', d.toLocaleDateString('en-CA', { timeZone: fuseau }));
         vars.appointment_time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: fuseau });
       }
       vars.appointment_title = evt.job?.title || '';

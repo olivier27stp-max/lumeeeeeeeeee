@@ -9,22 +9,37 @@
  * Aucune base, aucun réseau.
  */
 import { describe, it, expect } from 'vitest';
-import { sansPrenomVide, variablesPourMachine, DATES_TECHNIQUES } from '../../../server/lib/actions/index';
+import { sansPrenomVide, variablesPourMachine, noterDateTechnique, resolveTemplate, DATES_TECHNIQUES } from '../../../server/lib/actions/index';
 import { resolveReviewTemplate, reviewEmail, reviewSmsBody } from '../../../server/lib/reviews';
 
 describe('H-020 — dates : lisibles pour le client, techniques pour une machine', () => {
-  it('[H-020] variablesPourMachine remet AAAA-MM-JJ sous le nom d’origine et retire les clés `_iso`', () => {
-    const vars = {
-      client_name: 'Marie Tremblay',
-      invoice_due_date: '15 octobre 2026', invoice_due_date_iso: '2026-10-15',
-      quote_valid_until: '1 novembre 2026', quote_valid_until_iso: '2026-11-01',
-      appointment_date: 'October 15, 2026', appointment_date_iso: '2026-10-15',
+  const variables = () => {
+    const vars: Record<string, string> = {
+      client_name: 'Marie Tremblay', invoice_due_date: '15 octobre 2026', quote_valid_until: '1 novembre 2026', appointment_date: 'October 15, 2026',
     };
+    noterDateTechnique(vars, 'invoice_due_date', '2026-10-15');
+    noterDateTechnique(vars, 'quote_valid_until', '2026-11-01');
+    noterDateTechnique(vars, 'appointment_date', '2026-10-15');
+    return vars;
+  };
+
+  it('[H-020] variablesPourMachine remet AAAA-MM-JJ sous le nom d’origine, sans rien ajouter', () => {
+    const vars = variables();
     expect(variablesPourMachine(vars)).toEqual({
       client_name: 'Marie Tremblay', invoice_due_date: '2026-10-15', quote_valid_until: '2026-11-01', appointment_date: '2026-10-15',
     });
     // L'objet d'origine n'est pas modifié : les messages suivants gardent la date lisible.
     expect(vars.invoice_due_date).toBe('15 octobre 2026');
+    // La charge utile envoyée au tiers (JSON) ne porte aucune clé de plus.
+    expect(Object.keys(JSON.parse(JSON.stringify(variablesPourMachine(vars)))).sort()).toEqual(['appointment_date', 'client_name', 'invoice_due_date', 'quote_valid_until']);
+  });
+
+  it('[H-020] la forme technique n’est PAS une variable de gabarit : invisible pour les clés, le JSON et resolveTemplate, mais elle suit une copie `{ ...vars }`', () => {
+    const vars = variables();
+    expect(Object.keys(vars).sort()).toEqual(['appointment_date', 'client_name', 'invoice_due_date', 'quote_valid_until']);
+    expect(JSON.stringify(vars)).not.toContain('2026-10-15');
+    expect(resolveTemplate('Due le [invoice_due_date] {invoice_due_date_iso}', vars)).toBe('Due le 15 octobre 2026 ');
+    expect(variablesPourMachine({ ...vars, extra: 'x' }).invoice_due_date).toBe('2026-10-15');
   });
 
   it('[H-020] sans forme technique (autre entité), les variables passent telles quelles', () => {
