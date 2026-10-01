@@ -99,42 +99,6 @@ function LogoMarquee({ fr }: { fr: boolean }) {
   );
 }
 
-/* ── Six métiers ── */
-export function Pillars({ fr }: { fr: boolean }) {
-  const cards: { job: Bi; title: Bi; lead: Bi; items: Bi[]; to: string }[] = [
-    { job: { fr: 'Administration', en: 'Admin' }, title: { fr: 'Clients et demandes', en: 'Clients and requests' }, lead: { fr: 'Un client, une fiche, tout son historique.', en: 'One client, one record, the whole history.' },
-      items: [{ fr: 'Formulaire de demande sur ton site', en: 'Request form on your website' }, { fr: 'Propriétés, notes, photos, contrats', en: 'Properties, notes, photos, contracts' }, { fr: 'Portail client : approuver, payer, revoir', en: 'Client portal: approve, pay, review' }], to: '/fonctions/clients' },
-    { job: { fr: 'Ventes', en: 'Sales' }, title: { fr: 'Soumissions', en: 'Quotes' }, lead: { fr: 'Envoyée de la job, signée sur le téléphone.', en: 'Sent from the job site, signed on the phone.' },
-      items: [{ fr: 'Modèles et préréglages par service', en: 'Templates and presets per service' }, { fr: 'Mesure satellite du terrain', en: 'Satellite measuring of the property' }, { fr: 'Relance automatique, conversion en job', en: 'Automatic follow-up, conversion to job' }], to: '/fonctions/soumissions' },
-    { job: { fr: 'Répartition', en: 'Dispatch' }, title: { fr: 'Calendrier et dispatch', en: 'Calendar and dispatch' }, lead: { fr: 'La journée de chaque équipe, sur une carte.', en: "Each crew's day, on a map." },
-      items: [{ fr: 'Jobs récurrents, vue jour, semaine, mois', en: 'Recurring jobs, day, week and month views' }, { fr: 'Trajets optimisés sur de vraies routes', en: 'Routes optimized on real roads' }, { fr: 'GPS en direct, checklists sur le terrain', en: 'Live GPS, checklists in the field' }], to: '/fonctions/calendrier' },
-    { job: { fr: 'Service client', en: 'Customer service' }, title: { fr: 'Messages', en: 'Messages' }, lead: { fr: "Les textos des clients dans l'app, pas sur le cell perso.", en: 'Client texts in the app, not on a personal phone.' },
-      items: [{ fr: 'SMS bidirectionnels, numéro dédié', en: 'Two-way SMS, dedicated number' }, { fr: 'Rappels de rendez-vous automatiques', en: 'Automatic appointment reminders' }, { fr: 'Messages groupés, courriels depuis la fiche', en: 'Batch messages, emails from the record' }], to: '/fonctions/messages' },
-    { job: { fr: 'Comptabilité', en: 'Accounting' }, title: { fr: 'Finances et paie', en: 'Finances and payroll' }, lead: { fr: 'La facture part quand la job finit.', en: 'The invoice goes out when the job ends.' },
-      items: [{ fr: 'Paiement en ligne Stripe ou PayPal', en: 'Online payment with Stripe or PayPal' }, { fr: "Payées, en attente, en retard, d'un coup d'œil", en: 'Paid, pending, overdue at a glance' }, { fr: 'Feuilles de temps, paie, export QuickBooks', en: 'Timesheets, payroll, QuickBooks export' }], to: '/fonctions/finances' },
-    { job: { fr: 'Bras droit', en: 'Right hand' }, title: { fr: "Lumi, l'assistant", en: 'Lumi, the assistant' }, lead: { fr: 'Il propose, tu confirmes, tout est journalisé.', en: 'It proposes, you confirm, everything is logged.' },
-      items: [{ fr: 'Répond aux clients, propose un créneau', en: 'Answers clients, proposes a time slot' }, { fr: 'Replanifie quand la météo change', en: 'Reschedules when the weather changes' }, { fr: 'Relance ce qui traîne, te brief le matin', en: 'Follows up on stragglers, briefs you each morning' }], to: '/fonctions/lumi' },
-  ];
-  return (
-    <section className="hs-pillars">
-      <p className="ha-kicker">{fr ? 'Tout Lume' : 'All of Lume'}</p>
-      <h2>{fr ? 'Six métiers que tu faisais tout seul le soir. Un seul outil.' : 'Six jobs you used to do alone at night. One tool.'}</h2>
-      <p className="hs-sub">{fr ? 'Administration, ventes, répartition, service client, comptabilité, et un bras droit. Tout parle ensemble : un client, une soumission, une job, une facture, un paiement, sans ressaisie.' : 'Admin, sales, dispatch, customer service, accounting, and a right hand. Everything talks together: one client, one quote, one job, one invoice, one payment, with nothing retyped.'}</p>
-      <div className="hs-pgrid">
-        {cards.map((c) => (
-          <Link key={c.to + c.title.en} to={c.to} className="hs-pc">
-            <em>{pick(fr, c.job)}</em>
-            <b>{pick(fr, c.title)}</b>
-            <p>{pick(fr, c.lead)}</p>
-            <ul>{c.items.map((it) => <li key={it.en}>{pick(fr, it)}</li>)}</ul>
-            <span>{fr ? 'En savoir plus →' : 'Learn more →'}</span>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 /* ── Par rôle ── */
 export function Roles({ fr, goTo }: { fr: boolean; goTo: (t: Tab) => void }) {
   const roles: { key: Tab; label: Bi; title: Bi; items: Bi[]; cta: Bi }[] = [
@@ -319,7 +283,7 @@ export const SECTIONS_CSS = `
 .home-apercu h2 { font-size:28px; font-weight:800; letter-spacing:-.025em; line-height:1.12; color:#0a0a0a; margin:8px 0 0; max-width:26ch; }
 .home-apercu .hs-sub { margin:10px 0 0; font-size:15px; line-height:1.55; color:#333; max-width:70ch; }
 .home-apercu .hs-link { display:inline-block; margin-top:16px; font-weight:700; font-size:13.5px; color:var(--forest); background:none; border:0; padding:0; cursor:pointer; text-decoration:none; font-family:inherit; }
-.hs-stop, .hs-pillars, .hs-roles, .hs-lumi, .hs-flow, .hs-plans, .hs-secu { max-width:1180px; margin:0 auto; padding:52px 24px 8px; }
+.hs-stop, .hs-roles, .hs-lumi, .hs-flow, .hs-plans, .hs-secu { max-width:1180px; margin:0 auto; padding:52px 24px 8px; }
 .hs-vs { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:repeat(8,auto); column-gap:16px; margin-top:22px; }
 .hs-vscard { grid-row:span 8; display:grid; grid-template-rows:subgrid; border-radius:18px; padding:22px; }
 .hs-vscard { --vs:#ef4444; --vs-line:rgba(239,68,68,.25); background:#fff; border:2px solid var(--vs); box-shadow:0 24px 40px -28px var(--vs-line); }
@@ -340,14 +304,6 @@ export const SECTIONS_CSS = `
 .hs-logos li { display:flex; align-items:center; gap:12px; padding:8px 0; font-size:22px; font-weight:700; letter-spacing:-.015em; color:#111; white-space:nowrap; }
 .hs-logos svg { width:34px; height:34px; flex:none; }
 @keyframes hs-marquee { to { transform:translateX(-50%); } }
-.hs-pgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:20px; }
-.hs-pc { display:flex; flex-direction:column; background:#fff; border:1px solid rgba(11,92,173,.12); border-radius:18px; padding:22px; text-decoration:none; color:inherit; transition:transform .2s, box-shadow .2s; }
-.hs-pc:hover { transform:translateY(-3px); box-shadow:0 24px 40px -24px rgba(0,0,0,.3); }
-.hs-pc em { font-style:normal; font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:800; color:var(--forest); }
-.hs-pc b { margin-top:6px; font-size:19px; letter-spacing:-.015em; color:#111; }
-.hs-pc p { margin:6px 0 0; font-size:14px; line-height:1.5; color:#171717; }
-.hs-pc ul { list-style:none; margin:14px 0 0; padding:0; } .hs-pc li { font-size:13px; line-height:1.4; color:#333; padding:8px 0; border-top:1px solid #ececea; }
-.hs-pc > span { margin-top:auto; padding-top:14px; font-weight:700; font-size:13px; color:var(--forest); }
 .hs-rtabs { display:flex; gap:4px; background:#f1f1ef; border-radius:999px; padding:4px; width:max-content; max-width:100%; margin-top:18px; overflow:auto; }
 .hs-rtabs button { border:0; background:transparent; font-size:13px; font-weight:600; color:#555; padding:8px 16px; border-radius:999px; cursor:pointer; white-space:nowrap; font-family:inherit; } .hs-rtabs button[aria-selected="true"] { background:#111; color:#fff; }
 .hs-rp { display:grid; grid-template-columns:.9fr 1.4fr; gap:36px; align-items:center; margin-top:24px; }
@@ -388,7 +344,7 @@ export const SECTIONS_CSS = `
   .hs-vs { grid-template-columns:1fr; grid-template-rows:none; row-gap:16px; }
   .hs-vscard, .hs-vscard ul { grid-row:auto; display:flex; flex-direction:column; }
   .hs-vsstats { align-self:stretch; }
-  .hs-pgrid, .hs-rp, .hs-lgrid, .hs-band, .hs-steps, .hs-plgrid, .hs-sgrid { grid-template-columns:1fr; }
+  .hs-rp, .hs-lgrid, .hs-band, .hs-steps, .hs-plgrid, .hs-sgrid { grid-template-columns:1fr; }
   .hs-steps::before { display:none; }
 }
 @media (prefers-reduced-motion: reduce) {
