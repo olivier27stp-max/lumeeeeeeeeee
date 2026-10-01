@@ -85,3 +85,74 @@ describe('declencheurs-04 — à l’ouverture du tiroir, le curseur est dans la
     expect(document.activeElement).toBe(recherche());
   });
 });
+
+describe('declencheurs-05 — Échap ferme le tiroir, et le focus revient à ce qui l’a ouvert', () => {
+  it('Échap, le curseur dans la recherche : le tiroir se ferme', async () => {
+    await monter();
+    await ouvrirTiroir();
+    await touche(recherche()!, 'Escape');
+    expect(ferme).toHaveBeenCalledTimes(1);
+    expect(tiroir()).toBeNull();
+  });
+
+  it('Échap, le focus sur un choix du tiroir : pareil', async () => {
+    await monter();
+    await ouvrirTiroir();
+    const choix = Array.from(tiroir()!.querySelectorAll('button')).find((b) => b.textContent?.includes('Facture payée'))!;
+    await act(async () => { choix.focus(); });
+    await touche(choix, 'Escape');
+    expect(ferme).toHaveBeenCalledTimes(1);
+    expect(choisi).not.toHaveBeenCalled();
+    expect(tiroir()).toBeNull();
+  });
+
+  it('Échap, le focus nulle part (on a cliqué le canevas) : le tiroir se ferme aussi', async () => {
+    await monter();
+    await ouvrirTiroir();
+    await act(async () => { recherche()!.blur(); });
+    await touche(document.body, 'Escape');
+    expect(tiroir()).toBeNull();
+  });
+
+  it('après Échap, le focus est rendu au bouton qui avait ouvert le tiroir', async () => {
+    await monter();
+    await ouvrirTiroir();
+    expect(document.activeElement).toBe(recherche());
+    await touche(recherche()!, 'Escape');
+    expect(document.activeElement).toBe(ouvreur());
+  });
+
+  it('la croix rend le focus de la même façon', async () => {
+    await monter();
+    await ouvrirTiroir();
+    await act(async () => { tiroir()!.querySelector<HTMLButtonElement>('button[aria-label="Fermer"]')!.click(); });
+    expect(tiroir()).toBeNull();
+    expect(document.activeElement).toBe(ouvreur());
+  });
+
+  it('Échap tapé dans un champ HORS du tiroir (le nom de l’automatisation) ne ferme pas le tiroir', async () => {
+    await monter();
+    await ouvrirTiroir();
+    const nom = conteneur.querySelector<HTMLInputElement>('input[aria-label="Nom de l’automatisation"]')!;
+    await act(async () => { nom.focus(); });
+    await touche(nom, 'Escape');
+    expect(ferme).not.toHaveBeenCalled();
+    expect(tiroir()).not.toBeNull();
+  });
+
+  it('une autre touche ne ferme rien', async () => {
+    await monter();
+    await ouvrirTiroir();
+    await touche(recherche()!, 'Enter');
+    await touche(recherche()!, 'a');
+    expect(tiroir()).not.toBeNull();
+  });
+
+  it('le tiroir fermé n’écoute plus le clavier', async () => {
+    await monter();
+    await ouvrirTiroir();
+    await touche(recherche()!, 'Escape');
+    await touche(document.body, 'Escape');
+    expect(ferme).toHaveBeenCalledTimes(1);
+  });
+});

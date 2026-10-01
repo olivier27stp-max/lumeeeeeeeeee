@@ -70,7 +70,42 @@ export default function TiroirChoix({
    * 2026-10-01).
    */
   const champRecherche = useRef<HTMLInputElement>(null);
-  useEffect(() => { champRecherche.current?.focus(); }, []);
+  /*
+   * … et à la fermeture, le focus retourne à ce qui a ouvert le tiroir (la
+   * carte « Quand », le « + ») : sans ça il tombait sur la page entière, et
+   * au clavier on repartait du haut de l'écran. On ne le REPREND à personne :
+   * seulement s'il est resté dans le tiroir, donc perdu avec lui.
+   */
+  const ouvreur = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const actif = document.activeElement;
+    if (!ouvreur.current && actif instanceof HTMLElement && actif !== document.body) ouvreur.current = actif;
+    champRecherche.current?.focus();
+    return () => {
+      const reste = document.activeElement;
+      const retour = ouvreur.current;
+      if (retour?.isConnected && (!reste || reste === document.body)) retour.focus();
+    };
+  }, []);
+
+  /*
+   * ÉCHAP FERME LE TIROIR (audit du 2026-10-01) : seule la croix le faisait.
+   * Écouté sur le document, pour que la touche marche aussi quand le focus a
+   * quitté le tiroir (un clic sur le canevas). Un Échap tapé dans un champ ou
+   * une boîte de dialogue AILLEURS leur appartient : on n'y touche pas.
+   */
+  const tiroir = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const surTouche = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const cible = e.target instanceof Element ? e.target : null;
+      const dansLeTiroir = !!cible && !!tiroir.current?.contains(cible);
+      if (!dansLeTiroir && cible?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="alertdialog"]')) return;
+      onFermer();
+    };
+    document.addEventListener('keydown', surTouche);
+    return () => document.removeEventListener('keydown', surTouche);
+  }, [onFermer]);
 
   const groupes = useMemo(() => {
     const q = sansAccent(recherche.trim());
@@ -86,6 +121,7 @@ export default function TiroirChoix({
 
   return (
     <aside
+      ref={tiroir}
       aria-label={titre}
       className="flex h-full w-[380px] shrink-0 flex-col border-l border-border bg-surface-card"
     >
