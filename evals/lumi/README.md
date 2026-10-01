@@ -274,6 +274,52 @@ node --env-file=$ENV --import tsx scripts/qa/lumi/critiques/run.mts --nettoyer
 
 Elle a besoin du jeu `[EVAL]` (le seed ci-dessus), ne confirme que deux écritures anodines (une tâche `[CRIT]`, l'oubli d'une note `[CRIT]`), et ne lit du bureau B (« Grok Audit (TEST) ») que des identifiants et des faits, par SELECT.
 
+## La robustesse des conversations
+
+`scripts/qa/lumi/robustesse/` est la batterie de la phase 4 : ce qui arrive à une conversation quand elle dure, quand l'utilisateur change d'idée, quand la connexion tombe, quand deux appareils écrivent en même temps. Même patron que les tests critiques (connexion par lien magique, garde-fous avant la première écriture, mode « demander » posé puis remis, ménage, rapport `.json` + `.md` complété d'un lancement à l'autre, tout jugé par du code : `jugement.mts`, éprouvé par `tests/lumi-robustesse-jugement.test.ts`). Elle tourne dans le bureau « [TEST] QA Lumi éval 3 — ne pas utiliser » (`--org` pour éval 2).
+
+```bash
+# Ce qui serait fait, les envois par compte et le coût estimé — sans rien appeler, écrire, ni lire de variable
+npx tsx scripts/qa/lumi/robustesse/run.mts --plan
+
+# La passe complète (≈ 30 minutes ; refuse si une autre batterie tourne ou si un compte n'a plus assez de tours dans l'heure)
+node --env-file=$ENV --import tsx scripts/qa/lumi/robustesse/run.mts
+#   → evals/lumi/resultats/robustesse-<date>.md (le rapport) et .json (les données)
+
+# Famille par famille — le même rapport est complété ; « pannes » en DERNIER (elle relit les stop_reason de toutes les autres)
+node --env-file=$ENV --import tsx scripts/qa/lumi/robustesse/run.mts --famille longue
+node --env-file=$ENV --import tsx scripts/qa/lumi/robustesse/run.mts --famille references,revirement
+node --env-file=$ENV --import tsx scripts/qa/lumi/robustesse/run.mts --famille reprise,simultane
+node --env-file=$ENV --import tsx scripts/qa/lumi/robustesse/run.mts --famille entrees,vocal,pannes
+
+# Après une passe tuée : remettre le mode Lumi des comptes, mettre les tâches [ROB] à la corbeille
+node --env-file=$ENV --import tsx scripts/qa/lumi/robustesse/run.mts --remettre
+node --env-file=$ENV --import tsx scripts/qa/lumi/robustesse/run.mts --nettoyer
+```
+
+| Famille | Compte | Tests | Envois à Lumi | Ce qu'elle prouve |
+|---|---|---:|---:|---|
+| `longue` | proprio1 (à elle seule) | 4 | 50 | 50 tours dans une conversation : aucune erreur, historique valide, un fait du début honoré à la fin, coût par tour qui plafonne |
+| `references` | proprio2 | 5 | 10 | « la deuxième », « lui », « l'autre », « la même chose pour … », « fais pareil » visent la bonne fiche |
+| `revirement` | proprio2 | 4 | 9 | correction, « annule », reformulation, autre sujet devant une carte : la carte est annulée, rien n'est écrit |
+| `reprise` | proprio3 | 5 | 16 | connexion coupée au premier mot, à la carte, pendant « Confirmer » : rien de vide, rien de cassé, rien fait à moitié ni deux fois |
+| `simultane` | proprio3 (deux sessions) | 4 | 14 | deux appareils au même instant : jamais deux résultats pour une carte, historique valide |
+| `entrees` | proprio4 | 6 | 8 | message vide ou trop long refusé proprement ; long, collage, emojis servis ; double envoi sans double écriture |
+| `vocal` | proprio4 | 7 | 4 | dictée douteuse : une question ou une carte exacte, jamais une cible devinée ; la dictée d'un silence rend un texte vide |
+| `pannes` | proprio4 + technicien | 5 | 4 (+ 65 messages vides) | outil en échec = reçu d'échec ; réponse coupée dite ; limite horaire claire ; `stop_reason` de toute la passe |
+
+Budget : **≈ 1,20 $ d'inférence** estimé pour la passe complète (plafond visé 2,00 $ ; `--plan` donne le détail), et au plus 50 envois par compte et par heure — sauf le technicien, qui atteint EXPRÈS la limite horaire avec des messages vides (0 ¢) et y reste une heure.
+
+À savoir avant de lancer :
+
+- **Le palier.** Hors du palier « normal », le serveur ne rejoue que 6 messages d'historique et répond avec le modèle de repli : la famille `longue` rend alors NON COUVERT sans rien jouer (`--malgre-palier` pour forcer). Une seule passe propre par bureau et par jour (garde quotidienne de 15 %).
+- **Le plafond d'une conversation.** Une conversation qui a coûté 40 ¢ ne repasse plus par le modèle : c'est pourquoi les 50 tours de `longue` mêlent 19 demandes au modèle et 31 questions courantes servies sans modèle. Si le plafond tombe quand même, le script s'arrête et le dit.
+- **Ce que la batterie écrit.** Des tâches dont le titre commence par `[ROB]`, et rien d'autre : elle ne confirme JAMAIS une carte d'envoi, de paiement ou de suppression — « Confirmer » relit d'abord la conversation et refuse si une seule écriture en attente n'est pas une tâche `[ROB]`. Les cartes d'envoi sont annulées ; les envois consignés au bac à sable sont comptés avant et après.
+- **Les coupures.** La batterie coupe elle-même la connexion (au premier texte, à la carte, pendant « Confirmer »). Un flux qui se ferme sans « done » ni « error » sans qu'elle l'ait coupé est rapproché de `/api/health` : serveur redémarré = NON COUVERT « redéploiement », sinon FAIL.
+- **Le verrou.** Si le serveur répond 409 `conversation_occupee` / `decision_en_cours`, c'est un refus propre : la batterie attend et renvoie, quelques fois au plus. Sans verrou, les deux envois passent et c'est l'historique enregistré (SELECT sur `lumi_messages`) qui est jugé.
+
+NON COUVERT par construction : le bruit réel et l'accent dans un enregistrement (il faudrait de vrais sons), et les 429 / surcharge / délai de l'API du modèle (non provocables de l'extérieur — couverts hors réseau par `tests/lumi-fin-anormale.test.ts`, `tests/lumi-flux-interrompu.test.ts`, `tests/lumi-limite-horaire.test.ts` du dépôt principal).
+
 ## Ajouter un cas
 
 1. L'écrire dans `cas/<catégorie>.json` avec un nouvel `id`.
