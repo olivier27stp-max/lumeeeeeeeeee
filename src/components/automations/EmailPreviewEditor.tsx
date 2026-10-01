@@ -16,7 +16,9 @@ import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
 import { cn } from '../../lib/utils';
 import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRulesApi';
-import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
+import {
+  htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES, VARIABLES_CONNUES, VARIABLES_POINTEES_CONNUES,
+} from '../../lib/emailBodyText';
 import { variablesPour, VARIABLES_PAR_TYPE } from '../../lib/variablesCourriel';
 import { apercuCourriel, envoyerEssaiCourriel } from '../../lib/emailTemplatesApi';
 import { useChampsTous, variablesChampsPourCourriel } from '../champs/automatisations';
@@ -223,7 +225,7 @@ export default function EmailPreviewEditor({
      ET sur la clé — on cherche « prenom » comme « first_name ». */
   const [filtreVariable, setFiltreVariable] = useState('');
   const variablesAffichees = useMemo(() => {
-    const nu = (x: string) => x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const nu = (x: string) => x.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
     const cherche = nu(filtreVariable.trim());
     if (!cherche) return variables;
     return variables.filter((v) => nu(`${fr ? v.fr : v.en} ${v.cle} ${v.jeton ?? ''}`).includes(cherche));
@@ -247,6 +249,14 @@ export default function EmailPreviewEditor({
      pendant qu'on écrit. */
   const inconnues = useMemo(() => {
     const connues = new Set(variables.map((v) => v.cle));
+    /* Une AUTOMATISATION est rendue par le moteur, qui remplit bien plus que
+       les raccourcis de la palette : [appointment_address], [company_phone],
+       [contract_html]… L'éditeur les prenait pour des fautes et affichait
+       « Cette variable n'existe pas » sur les textes que Lume fournit
+       lui-même (vu en prod le 2026-10-01). Un modèle de courriel
+       (`typeCourriel`) garde sa liste stricte : là, le serveur ne remplit
+       que les variables de son poste. */
+    if (!typeCourriel) for (const v of VARIABLES_CONNUES) connues.add(v);
     const vues = new Set<string>();
     /* {{client.cle}} — le format GoHighLevel des champs personnalisés. On le
        traite avant les crochets : `{{client.x}}` passerait sinon pour la clé
@@ -255,7 +265,10 @@ export default function EmailPreviewEditor({
     const texte = `${objet} ${blocsEnTexte(blocs)}`.replace(
       /\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g,
       (entier, obj: string, cle: string) => {
-        if (!connues.has(`${obj}_cf_${cle}`)) vues.add(entier);
+        // {{soumission.total}}, {{facture.lien}}… : remplies par le moteur
+        // lui-même, ce ne sont pas des champs personnalisés.
+        const duMoteur = !typeCourriel && VARIABLES_POINTEES_CONNUES.includes(`${obj}.${cle}`);
+        if (!duMoteur && !connues.has(`${obj}_cf_${cle}`)) vues.add(entier);
         return ' ';
       },
     );
