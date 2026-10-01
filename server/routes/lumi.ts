@@ -545,13 +545,15 @@ async function executerTourSse(opts: {
 }
 
 /** Ce qu'on garde d'une exception pour la trace : son type, le statut HTTP s'il y en a un, et un message court sans coordonnées. */
-export function causeDuPlantage(err: unknown): { erreur: string; erreur_type?: string; erreur_statut?: number } {
-  const e = err as { message?: unknown; name?: unknown; status?: unknown } | null;
+export function causeDuPlantage(err: unknown): { erreur: string; erreur_type?: string; erreur_statut?: number; forme_messages?: string } {
+  const e = err as { message?: unknown; name?: unknown; status?: unknown; forme_messages?: unknown } | null;
   const message = masquerCoordonnees(String(e?.message ?? err ?? '')).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/\s+/g, ' ').trim().slice(0, 300);
   return {
     erreur: message || 'inconnue',
     ...(typeof e?.name === 'string' && e.name !== 'Error' ? { erreur_type: e.name } : {}),
     ...(typeof e?.status === 'number' ? { erreur_statut: e.status } : {}),
+    // Posée par l'orchestrateur sur un refus 400 de l'API : rôles et types de blocs, aucun contenu.
+    ...(typeof e?.forme_messages === 'string' ? { forme_messages: e.forme_messages } : {}),
   };
 }
 

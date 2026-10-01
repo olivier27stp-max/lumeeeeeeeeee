@@ -698,3 +698,77 @@ describe('le routeur Lumi est monté dans le serveur', () => {
     expect(src).toContain("app.use('/api/lumi', redisRateLimit(");
   });
 });
+
+// ── Recherche d'outil mise en pause par l'API (pause_turn) ──────────────
+// Passes d'évaluation du 2026-10-01, en prod : 4 puis 7 tours sur 221 finissaient en
+// « Lumi failed to respond ». La trace donne la cause : 400 « messages.1:
+// `tool_search_tool_regex` tool use … was found without a corresponding
+// `tool_search_tool_result` block ». La réponse s'était arrêtée sur la demande de
+// recherche d'outil ; son résultat, arrivé au début de la réponse suivante, était rangé
+// dans un SECOND message assistant.
+describe('recherche d’outil en pause : la suite du tour reste dans le même message', () => {
+  const recherche = { type: 'server_tool_use', id: 'srvtoolu_1', name: 'tool_search_tool_regex', input: { pattern: 'invoice' } };
+  const trouve = { type: 'tool_search_tool_result', tool_use_id: 'srvtoolu_1', content: { type: 'tool_search_tool_search_result', tool_references: [{ type: 'tool_reference', tool_name: 'list_invoices' }] } };
+  const forme = (msgs: any[]) => msgs.map((m) => `${m.role}[${typeof m.content === 'string' ? 'texte' : m.content.map((b: any) => b.type).join(',')}]`).join(' ');
+
+  it('pause_turn puis outil : l’appel suivant envoie la demande ET son résultat dans un seul message assistant', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [recherche], stop_reason: 'pause_turn', usage });
+    reponses.push({ content: [trouve, { type: 'tool_use', id: 'tu_1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Une facture en retard.' }], stop_reason: 'end_turn', usage });
+    const r = await tourLumi(baseTour([], []));
+    expect(streamSpy).toHaveBeenCalledTimes(3);
+    // 2e appel : la réponse en pause est renvoyée telle quelle, en dernier, sans message utilisateur.
+    expect(forme(instantanes[1].messages)).toBe('user[texte] assistant[server_tool_use]');
+    // 3e appel : UN message assistant, la demande suivie de son résultat — jamais deux.
+    expect(forme(instantanes[2].messages)).toBe('user[texte] assistant[server_tool_use,tool_search_tool_result,tool_use] user[tool_result]');
+    // Ce qui est enregistré a la même forme : la conversation reste rejouable au tour suivant.
+    expect(forme(r.nouveauxMessages)).toBe('assistant[server_tool_use,tool_search_tool_result,tool_use] user[tool_result] assistant[text]');
+    expect(r.texte).toBe('Une facture en retard.');
+    expect(outilsExecutes.map((o) => o.name)).toEqual(['list_invoices']);
+  });
+
+  it('pause_turn puis texte : un seul message assistant enregistré', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'text', text: 'Je cherche. ' }, recherche], stop_reason: 'pause_turn', usage });
+    reponses.push({ content: [trouve, { type: 'text', text: 'Rien à signaler.' }], stop_reason: 'end_turn', usage });
+    const r = await tourLumi(baseTour([], []));
+    expect(forme(r.nouveauxMessages)).toBe('assistant[text,server_tool_use,tool_search_tool_result,text]');
+  });
+
+  it('un tour normal n’est pas touché : chaque réponse garde son message', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'tu_1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Voilà.' }], stop_reason: 'end_turn', usage });
+    const r = await tourLumi(baseTour([], []));
+    expect(forme(r.nouveauxMessages)).toBe('assistant[tool_use] user[tool_result] assistant[text]');
+  });
+
+  it('une conversation enregistrée AVANT le correctif (deux messages assistant de suite) est réparée à la relecture', async () => {
+    const { assainirPourApi, fusionnerAssistantsConsecutifs } = await import('../server/lib/lumi/historique');
+    const casse: any[] = [
+      { role: 'user', content: 'Mes factures en retard' },
+      { role: 'assistant', content: [recherche] },
+      { role: 'assistant', content: [trouve, { type: 'text', text: 'Une facture en retard.' }] },
+      { role: 'user', content: 'Et celles payées ?' },
+    ];
+    expect(forme(assainirPourApi(casse))).toBe('user[texte] assistant[server_tool_use,tool_search_tool_result,text] user[texte]');
+    // Un historique sain revient tel quel (même tableau : rien n'est recopié pour rien).
+    const sain: any[] = [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: 'c' }];
+    expect(fusionnerAssistantsConsecutifs(sain)).toBe(sain);
+    // Un message texte suivi d'un message en blocs : le texte devient un bloc, rien n'est perdu.
+    expect(fusionnerAssistantsConsecutifs([{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'assistant', content: [{ type: 'text', text: 'c' }] }] as any)[1])
+      .toEqual({ role: 'assistant', content: [{ type: 'text', text: 'b' }, { type: 'text', text: 'c' }] });
+  });
+
+  it('un refus 400 de l’API emporte la FORME de la conversation vers la trace, jamais son contenu', async () => {
+    const { tourLumi, formeDesMessages } = await import('../server/lib/lumi/orchestrateur');
+    const refus = Object.assign(new Error('400 invalid_request_error'), { status: 400 });
+    streamSpy.mockImplementationOnce(() => ({ on() { return this; }, async finalMessage() { throw refus; } }) as any);
+    await expect(tourLumi({ ...baseTour([], []), historique: [{ role: 'user', content: 'Le numéro de Nathalie Côté est le 514-555-0101' }] })).rejects.toBe(refus);
+    expect((refus as any).forme_messages).toBe('0:user[texte]');
+    expect(formeDesMessages([{ role: 'user', content: 'x' }, { role: 'assistant', content: [recherche as any] }])).toBe('0:user[texte] 1:assistant[server_tool_use]');
+    const route = (await import('node:fs')).readFileSync('server/routes/lumi.ts', 'utf8');
+    expect(route).toContain("typeof e?.forme_messages === 'string' ? { forme_messages: e.forme_messages }");
+  });
+});

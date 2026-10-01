@@ -49,6 +49,7 @@ import { validerArgs, type SchemaSimple } from '../agent/validation-args';
 import { executerEcriture, type ReçuExecution } from './execution';
 import { signalerAppelLumi } from './cache-chaud';
 import { allegerSchema } from './alleger-outils';
+import { suiteDuMemeTour } from './historique';
 import { ECRITURES_ANODINES, JAMAIS_D_OFFICE } from '../agent/registre';
 
 const MAX_ETAPES = 8;
@@ -197,6 +198,14 @@ export function consigneDeConclusion(fr: boolean): string {
   return fr
     ? 'Dernière étape de ce tour : tu ne peux plus appeler d’outil. Réponds maintenant avec ce que tu as déjà lu. S’il reste une vérification ou une action à faire, dis précisément laquelle et propose de la faire au prochain message. N’affirme rien que tu n’as pas lu.'
     : 'Last step of this turn: you can no longer call a tool. Answer now with what you have already read. If a check or an action is still needed, say exactly which one and offer to do it in the next message. Do not state anything you have not read.';
+}
+
+/** « 0:user[text] 1:assistant[thinking,server_tool_use] … » : la forme d'une conversation, sans son contenu (diagnostic d'un refus de l'API). */
+export function formeDesMessages(messages: Anthropic.Messages.MessageParam[]): string {
+  return messages
+    .map((m, i) => `${i}:${m.role}[${typeof m.content === 'string' ? 'texte' : m.content.map((b) => b.type).join(',')}]`)
+    .join(' ')
+    .slice(-600);
 }
 
 export function avecContexteDuTour(messages: Anthropic.Messages.MessageParam[], contexte: string | null | undefined): Anthropic.Messages.MessageParam[] {
@@ -618,6 +627,11 @@ export async function tourLumi(opts: {
         }
         // On abandonne : la réservation est rendue tout de suite (coût réel 0), pas au prochain balayage.
         if (reservation && opts.budget) await opts.budget.regler(reservation.id, 0).catch(() => {});
+        // Une requête REFUSÉE par l'API (400) : la FORME de ce qu'on a envoyé part
+        // avec l'erreur vers la trace — rôles et types de blocs, jamais le contenu.
+        if (err && typeof err === 'object' && (err as { status?: unknown }).status === 400) {
+          (err as { forme_messages?: string }).forme_messages = formeDesMessages(messages);
+        }
         throw err;
       }
     }
@@ -687,8 +701,19 @@ export async function tourLumi(opts: {
 
     // Le texte sauvegardé est celui que la personne a lu : sans référence interne. Les blocs d'outils gardent les leurs.
     const assistant: Anthropic.Messages.MessageParam = { role: 'assistant', content: reponse.content.map((b) => (b.type === 'text' ? { ...b, text: sansRefsInternes(b.text) } : b)) };
-    messages.push(assistant);
-    nouveaux.push(assistant);
+    // La réponse CONTINUE le tour précédent de l'assistant (reprise après
+    // `pause_turn`, ou recherche d'outil seule) : elle s'ajoute au même message.
+    // En deux messages, la demande de recherche d'outil et son résultat sont
+    // séparés et l'API refuse l'appel suivant (400) — voir fusionnerAssistantsConsecutifs.
+    const precedent = messages[messages.length - 1];
+    if (precedent?.role === 'assistant' && nouveaux.length > 0 && nouveaux[nouveaux.length - 1] === precedent) {
+      const fusion = suiteDuMemeTour(precedent, assistant);
+      messages[messages.length - 1] = fusion;
+      nouveaux[nouveaux.length - 1] = fusion;
+    } else {
+      messages.push(assistant);
+      nouveaux.push(assistant);
+    }
     // pause_turn : l'API a interrompu le tour après un outil serveur (recherche
     // d'outils) ; on relance avec l'historique tel quel, sans message utilisateur.
     if (reponse.stop_reason === 'pause_turn') continue;
