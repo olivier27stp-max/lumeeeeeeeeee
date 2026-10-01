@@ -44,6 +44,7 @@ const NOMS_ACTION_FR: Record<string, string> = {
   update_client: 'la fiche client', update_job: 'la job', update_task: 'la tâche', update_task_status: 'le statut de la tâche', delete_task: 'la suppression de la tâche',
   archive_job: 'l’archivage', cancel_quote: 'l’annulation du devis', convert_quote_to_job: 'la conversion du devis en job', convert_lead_to_client: 'la conversion du prospect',
   add_note: 'la note', set_job_expenses: 'les dépenses', remember_this: 'la note en mémoire', forget_note: 'l’oubli',
+  apply_day_optimization: 'la réorganisation de la journée',
 };
 const NOMS_ACTION_EN: Record<string, string> = {
   create_job: 'the job', create_task: 'the task', create_client: 'the client', create_quote: 'the quote', create_invoice: 'the invoice',
@@ -53,6 +54,7 @@ const NOMS_ACTION_EN: Record<string, string> = {
   update_client: 'the client', update_job: 'the job', update_task: 'the task', update_task_status: 'the task status', delete_task: 'deleting the task',
   archive_job: 'archiving', cancel_quote: 'cancelling the quote', convert_quote_to_job: 'converting the quote', convert_lead_to_client: 'converting the lead',
   add_note: 'the note', set_job_expenses: 'the expenses', remember_this: 'the note', forget_note: 'forgetting it',
+  apply_day_optimization: 'reorganizing the day',
 };
 
 function nomAction(outil: string, fr: boolean): string {
