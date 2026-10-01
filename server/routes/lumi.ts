@@ -546,11 +546,38 @@ const limiteHoraireLumi = process.env.LUMI_TOURS_PAR_HEURE === '0'
   // `repliMemoire` : sans Redis (le cas de la prod au 2026-10-01), la limite tient en mémoire au lieu de ne pas exister.
   : redisRateLimit({ preset: 'lumi', keyFn: (req) => `lumi:${userKey(req)}`, repliMemoire: true });
 
+/**
+ * Un seul tour OU une seule décision à la fois par conversation.
+ *
+ * Tests critiques du 2026-10-01 : deux « Confirmer » partis en même temps lisaient
+ * tous deux la carte « en attente » ; l'action ne s'exécutait qu'une fois
+ * (idempotence d'agent_actions), mais la conversation gardait DEUX résultats pour
+ * la même carte — un historique que l'API du modèle refuse au tour suivant.
+ * Même danger entre un message et un « Confirmer » simultanés (web + téléphone,
+ * double envoi) : le message annule la carte pendant que la décision l'exécute.
+ * Le second arrivé reçoit un 409 avec un message clair ; rien n'est perdu, il
+ * suffit de renvoyer. En mémoire du processus : l'API tourne sur une instance.
+ */
+const conversationsOccupees = new Set<string>();
+
 router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, res) => {
+  let verrou: string | null = null;
   try {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;
     const { conversation_id, message, origine = 'texte' } = req.body as z.infer<typeof chatSchema>;
+    // La clé porte la personne : nul ne peut occuper la conversation d'un autre.
+    const cleVerrou = conversation_id ? `${ctx.auth.user.id}:${conversation_id}` : null;
+    if (cleVerrou) {
+      if (conversationsOccupees.has(cleVerrou)) {
+        return res.status(409).json({
+          error: ctx.language === 'fr' ? 'Lumi répond déjà dans cette conversation. Attends la fin de sa réponse, puis renvoie ton message.' : 'Lumi is already replying in this conversation. Wait for the reply to finish, then send your message again.',
+          code: 'conversation_occupee',
+        });
+      }
+      conversationsOccupees.add(cleVerrou);
+      verrou = cleVerrou;
+    }
 
     let conversationId = conversation_id ?? null;
     let historique: Msg[] = [];
@@ -900,6 +927,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');
+  } finally {
+    if (verrou) conversationsOccupees.delete(verrou);
   }
 });
 
@@ -970,16 +999,6 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
   }
 });
 
-/**
- * Une seule décision à la fois par conversation. Tests critiques du 2026-10-01 :
- * deux « Confirmer » partis en même temps lisaient tous deux la carte « en
- * attente » ; l'action ne s'exécutait qu'une fois (idempotence d'agent_actions),
- * mais la conversation gardait DEUX résultats pour la même carte — un historique
- * que l'API du modèle refuse au tour suivant. Le second attend ici son 409.
- * En mémoire du processus : l'API tourne sur une instance.
- */
-const decisionsEnCours = new Set<string>();
-
 // ── POST /lumi/execute — confirmer ou annuler une écriture proposée ──
 router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
   let verrou: string | null = null;
@@ -987,14 +1006,15 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;
     const { conversation_id, tool_use_id, decision } = req.body as z.infer<typeof executeSchema>;
-    if (decisionsEnCours.has(conversation_id)) {
+    const cleVerrou = `${ctx.auth.user.id}:${conversation_id}`;
+    if (conversationsOccupees.has(cleVerrou)) {
       return res.status(409).json({
         error: ctx.language === 'fr' ? 'Cette action est déjà en cours de traitement.' : 'This action is already being processed.',
         code: 'decision_en_cours',
       });
     }
-    decisionsEnCours.add(conversation_id);
-    verrou = conversation_id;
+    conversationsOccupees.add(cleVerrou);
+    verrou = cleVerrou;
 
     const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversation_id).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
@@ -1093,7 +1113,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to execute the action.', '[lumi/execute]');
   } finally {
-    if (verrou) decisionsEnCours.delete(verrou);
+    if (verrou) conversationsOccupees.delete(verrou);
   }
 });
 
