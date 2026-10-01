@@ -446,7 +446,7 @@ Un écart peut toucher plusieurs endroits : la carte de confirmation, par exempl
 
 | N° | Classe | Écart | Où |
 |---|---|---|---|
-| U1 | hors classe | **Huit libellés affichent un code à la place d'un accent.** Supprimer un devis montre « Devis supprimé ». | `src/i18n/fr.ts:2718`, `:2721`, `:2722`, `:2726`, `:2727`, `:2731`, `:2732`, `:2733` ; visible par `src/pages/Quotes.tsx:246` |
+| U1 | hors classe | **Huit libellés affichent un code à la place d'un accent.** Supprimer un devis montre « Devis supprim\u00e9 », lettre pour lettre. | `src/i18n/fr.ts:2718`, `:2721`, `:2722`, `:2726`, `:2727`, `:2731`, `:2732`, `:2733` ; visible par `src/pages/Quotes.tsx:246` |
 | U2 | (d) | Les textes traduits mêlent « tu » (69 formes) et « vous » (126) : « Essaie d'ajuster ta recherche » et « Commencez par créer votre premier devis » dans la même section. | `src/i18n/fr.ts:176`, `:218` |
 | U3 | (b) | Le menu dit « Devis » ; la page dit « Retour aux soumissions », « Titre de la soumission », « Le numéro de soumission… ». | `src/App.tsx:1110` · `src/pages/QuoteDetails.tsx:280`, `:287`, `src/pages/QuoteNew.tsx:639` |
 | U4 | (b) | Job fini : « Complétée », « Terminé », « Terminée ». | `src/i18n/fr.ts:3288` · `src/pages/Jobs.tsx:955` · `src/components/pipeline/DealDrawer.tsx:79` |
@@ -471,7 +471,7 @@ Un écart peut toucher plusieurs endroits : la carte de confirmation, par exempl
 
 ### Les dix écarts les plus visibles
 
-1. **U1** — « Devis supprimé » à l'écran, à chaque suppression d'un devis.
+1. **U1** — « Devis supprim\u00e9 » à l'écran, à chaque suppression d'un devis.
 2. **L1** — la carte de confirmation de Lumi montre « sent », « new_prospect », « sales_rep », « weekly ».
 3. **S2** — l'agent du site annonce 2 et 5 bureaux là où le forfait en donne 1 et 2.
 4. **S3** — l'agent du site promet le porte-à-porte et l'API dès Scale ; la page Tarifs dit Autopilot.
