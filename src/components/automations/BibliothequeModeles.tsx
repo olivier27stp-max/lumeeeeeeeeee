@@ -240,7 +240,12 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
 
   // Une catégorie sans modèle n'est pas affichée.
   const categoriesAffichees = CATEGORIES_MODELES.filter((c) => (compteParCategorie.get(c.cle) ?? 0) > 0);
-  const categoriesVisibles = toutesCategories ? categoriesAffichees : categoriesAffichees.slice(0, CATEGORIES_VISIBLES_PAR_DEFAUT);
+  // Repliée, la liste garde ses premières catégories ET celles qui sont
+  // cochées : une case qui filtre encore ne disparaît jamais (sinon la liste
+  // reste réduite sans que rien ne dise pourquoi).
+  const categoriesVisibles = toutesCategories
+    ? categoriesAffichees
+    : categoriesAffichees.filter((c, i) => i < CATEGORIES_VISIBLES_PAR_DEFAUT || categories.has(c.cle));
 
   const resultats = useMemo(
     () => trierModeles(filtrerModeles(modeles ?? [], { recherche, categories, fr }), tri, fr),

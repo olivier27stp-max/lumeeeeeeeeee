@@ -76,3 +76,33 @@ describe('modeles-04 — le focus suit l’aperçu', () => {
     expect((document.activeElement as HTMLElement).textContent).toContain('Contrat signé');
   });
 });
+
+const caseDe = (re: RegExp) => {
+  const etiquette = [...document.querySelectorAll('label')].find((l) => re.test(l.textContent ?? ''));
+  return etiquette ? document.getElementById(etiquette.htmlFor) as HTMLInputElement : null;
+};
+const compteur = () => (document.querySelector('[aria-live="polite"]')?.textContent ?? '').trim();
+
+describe('modeles-05 — une catégorie cochée reste visible', () => {
+  it('« Pipeline / leads » cochée puis « Afficher moins » : la case reste là, cochée', async () => {
+    await monter();
+    expect(caseDe(/Pipeline \/ leads/)).toBeNull(); // dans la seconde partie de la liste
+    cliquer(bouton(/^Afficher plus$/));
+    cliquer(caseDe(/Pipeline \/ leads/)!); // présente : la liste est dépliée
+    const n = MODELES_AUTOMATISATION.filter((m) => m.categorie === 'pipeline').length;
+    expect(compteur()).toBe(`Affichage de ${n} modèles`);
+
+    cliquer(bouton(/^Afficher moins$/));
+    expect(compteur()).toBe(`Affichage de ${n} modèles`); // le filtre tient toujours
+    const restee = caseDe(/Pipeline \/ leads/);
+    expect(restee, 'la case qui filtre encore a disparu').not.toBeNull();
+    expect(restee!.checked).toBe(true);
+    // L'autre catégorie de la seconde partie, non cochée, est bien repliée.
+    expect(caseDe(/Relance \/ réactivation de clients/)).toBeNull();
+
+    // Décochée, elle n'a plus de raison de rester : la liste repliée revient à ses cinq cases.
+    cliquer(restee!);
+    expect(caseDe(/Pipeline \/ leads/)).toBeNull();
+    expect(compteur()).toBe(`Affichage de ${MODELES_AUTOMATISATION.length} modèles`);
+  });
+});
