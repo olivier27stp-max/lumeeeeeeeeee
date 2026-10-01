@@ -15,9 +15,13 @@
  *  `nombre` / `*_nombre` = entier.
  */
 import {
-  CLIENTS, DEVIS, EQUIPES, FACTURES, JOBS, MEMBRES, MODELES_COURRIEL, TACHES, VALABLE_JUSQU_AU,
-  adresseClient, clientDe, heuresPointage, idEval, jourDe, membreDe, nomClient, sousTotal, taxesQc, ajouterJours,
+  CLIENTS, DEVIS, EQUIPES, FACTURES, JOBS, MEMBRES, MODELES_COURRIEL, PREFIXE_DEFAUT, TACHES, VALABLE_JUSQU_AU,
+  adresseClient, clientDe, courrielEval, heuresPointage, idEval, jourDe, membreDe, nomClient, sousTotal, taxesQc, ajouterJours,
 } from './jeu-eval.mts';
+
+/** Ce qui change d'un bureau d'évaluation à l'autre : le préfixe des courriels des membres et les comptes qui posent les demandes. */
+export interface VarianteBureau { prefixe: string; comptes: { proprietaire: string; technicien: string } }
+export const VARIANTE_DEFAUT: VarianteBureau = { prefixe: PREFIXE_DEFAUT, comptes: { proprietaire: 'qa.map.owner@lume.test', technicien: 'qa.lumi.tech@lume.test' } };
 
 export interface FaitClient { id: string; nom: string; prenom: string; nom_famille: string; entreprise: string | null; courriel: string | null; telephone: string; ville: string; adresse: string; statut: string }
 export interface FaitMembre { nom: string; prenom: string; nom_famille: string; role: string; courriel: string; taux_horaire_cents: number }
@@ -77,16 +81,16 @@ export function rentabiliteDe(p: { revenus: number; mainOeuvre: number; commissi
 }
 
 /** La fiche des faits telle que le PLAN la prévoit (aucune base). */
-export function fixturePrevisionnelle(ancre: string, orgId: string): Fixture {
+export function fixturePrevisionnelle(ancre: string, orgId: string, variante: VarianteBureau = VARIANTE_DEFAUT): Fixture {
   const clients: Fixture['clients'] = {};
   for (const c of CLIENTS) {
     clients[c.cle] = {
-      id: idEval(`client:${c.cle}`), nom: nomClient(c), prenom: c.prenom, nom_famille: c.nom, entreprise: c.entreprise ?? null, courriel: c.courriel,
+      id: idEval(`client:${c.cle}`, orgId), nom: nomClient(c), prenom: c.prenom, nom_famille: c.nom, entreprise: c.entreprise ?? null, courriel: c.courriel,
       telephone: c.telephone, ville: c.ville, adresse: adresseClient(c), statut: c.statut,
     };
   }
   const equipe: Fixture['equipe'] = {};
-  for (const m of MEMBRES) equipe[m.cle] = { nom: `${m.prenom} ${m.nom}`, prenom: m.prenom, nom_famille: m.nom, role: m.role, courriel: m.courriel, taux_horaire_cents: m.tauxCents };
+  for (const m of MEMBRES) equipe[m.cle] = { nom: `${m.prenom} ${m.nom}`, prenom: m.prenom, nom_famille: m.nom, role: m.role, courriel: courrielEval(m.courriel, variante.prefixe), taux_horaire_cents: m.tauxCents };
 
   const jobs: Fixture['jobs'] = {};
   for (const j of JOBS) {
@@ -155,7 +159,7 @@ export function fixturePrevisionnelle(ancre: string, orgId: string): Fixture {
     ancre,
     valable_jusqu_au: VALABLE_JUSQU_AU,
     org: { id: orgId, nom: null },
-    comptes: { proprietaire: 'qa.map.owner@lume.test', technicien: 'qa.lumi.tech@lume.test' },
+    comptes: { ...variante.comptes },
     clients,
     homonymes: { nom: nomClient(clientDe('roy_longueuil')), ville_a: clientDe('roy_longueuil').ville, ville_b: clientDe('roy_brossard').ville },
     equipe,
