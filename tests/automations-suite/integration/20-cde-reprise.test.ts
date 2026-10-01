@@ -18,7 +18,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { demarrerMoteur, marque, attendre, traiterFile } from '../harnais/moteur';
 import {
   Menage, creerClient, creerRegle, journaux, taches, avancer, rendreDues, envoisMarques,
-  emettreNote, attendreJournaux, notesMarquees, modeBac, courrielFictif,
+  emettreNote, attendreJournaux, notesMarquees, modeBac, courrielFictif, pause,
 } from './20-cde-outils';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
@@ -250,20 +250,135 @@ describe('E — actions immédiates en échec', () => {
       ['send_email', false, 'Fournisseur simulé en panne (bac à sable)'],
       ['ajouter_note', true, null],
     ]);
+    // Depuis E-031 : le courriel en panne passagère est repris ; la note, faite, ne l'est pas.
+    const t = await taches(b, regle);
+    expect(t.map((x) => [x.action_config.type, x.status, x.attempts])).toEqual([['send_email', 'pending', 1]]);
   });
 
-  it.fails('[E-031] ROUGE ATTENDU — décision requise : une confirmation IMMÉDIATE en panne passagère n’est ni reprise ni signalée à l’entreprise', async () => {
+  it('[E-031] une confirmation IMMÉDIATE par texto en panne passagère est REPRISE (5 min, puis 30 min) ; au retour du fournisseur elle part UNE fois', async () => {
     const m = marque('E-031');
+    const depuis = new Date().toISOString();
     const client = await creerClient(b, menage, m);
     const regle = await creerRegle(b, menage, m, { actions: [texto(m)] });
     await modeBac(b, 'panne');
     await emettreNote(b, client);
-    await attendreJournaux(b, regle, 1);
+    const j = await attendreJournaux(b, regle, 1);
+    expect(j.map((l) => [l.action_type, l.result_success, l.result_error, l.scheduled_task_id])).toEqual([
+      ['send_sms', false, 'Fournisseur simulé en panne (bac à sable)', null],
+    ]);
+    // La reprise suit le parcours d'une tâche différée : la tentative immédiate compte pour 1.
+    const [t1] = await attendre(() => taches(b, regle), (x) => x.length === 1);
+    expect([t1.status, t1.attempts, t1.step_id]).toEqual(['pending', 1, null]);
+    expect(dansMinutes(t1.execute_at)).toBe(5);
+    expect(t1.last_error).toBe('Fournisseur simulé en panne (bac à sable) — reprise 1/4 dans 5 min');
+    expect(t1.action_config).toMatchObject({ type: 'send_sms', trigger_event: 'note.added', reprise_immediate: true });
+    // Rien n'est encore parti.
+    const sortants = async () => (await b.admin.from('messages').select('id').eq('org_id', b.orgA).eq('direction', 'outbound').like('message_text', `%${m}%`)).data ?? [];
+    expect(await sortants()).toHaveLength(0);
+
+    // Le fournisseur est toujours en panne à +5 min → reprise suivante à 30 min.
+    await avancer(b, regle);
+    const [t2] = await taches(b, regle);
+    expect([t2.status, t2.attempts]).toEqual(['pending', 2]);
+    expect(dansMinutes(t2.execute_at)).toBe(30);
+    expect(t2.last_error).toBe('Fournisseur simulé en panne (bac à sable) — reprise 2/4 dans 30 min');
+
+    // Il revient : le texto part, une seule fois.
     await modeBac(b, 'succes');
-    // Attendu : une reprise planifiée (comme une tâche différée) OU une notification d'échec.
-    const t = await taches(b, regle);
-    const { data: notifs } = await b.admin.from('notifications').select('id').eq('org_id', b.orgA).eq('type', 'automation_failed').like('title', `%${m}%`);
-    expect(t.length + (notifs ?? []).length).toBeGreaterThan(0);
+    await avancer(b, regle);
+    const [t3] = await taches(b, regle);
+    expect([t3.status, t3.attempts, t3.last_error]).toEqual(['completed', 3, null]);
+    expect(await sortants()).toHaveLength(1);
+    const envois = await envoisMarques(b, depuis, m);
+    expect(envois.map((e) => (e.meta as { mode?: string }).mode)).toEqual(['panne', 'panne', 'succes']);
+    expect((await journaux(b, regle)).map((l) => [l.result_success, l.scheduled_task_id === t3.id])).toEqual([[false, false], [false, true], [true, true]]);
+    // Aucune notification d'échec : le message est parti.
+    expect(await notificationsDe(t3.id)).toEqual([]);
+  });
+
+  it('[E-034] courriel IMMÉDIAT, fournisseur en panne jusqu’au bout → 5 min, 30 min, 2 h, puis failed + notification à l’entreprise', async () => {
+    const m = marque('E-034');
+    const client = await creerClient(b, menage, m);
+    const regle = await creerRegle(b, menage, m, { name: `Confirmation ${m}`, actions: [courriel(m)] });
+    await modeBac(b, 'panne');
+    await emettreNote(b, client);
+    await attendreJournaux(b, regle, 1);
+    const [t0] = await attendre(() => taches(b, regle), (x) => x.length === 1);
+    expect([t0.status, t0.attempts, dansMinutes(t0.execute_at)]).toEqual(['pending', 1, 5]);
+    for (const [tentative, minutes] of [[2, 30], [3, 120]] as const) {
+      await avancer(b, regle);
+      const [t] = await taches(b, regle);
+      expect([t.status, t.attempts]).toEqual(['pending', tentative]);
+      expect(dansMinutes(t.execute_at)).toBe(minutes);
+      expect(t.last_error).toBe(`Fournisseur simulé en panne (bac à sable) — reprise ${tentative}/4 dans ${minutes} min`);
+    }
+    await avancer(b, regle);
+    const [t] = await taches(b, regle);
+    expect([t.status, t.attempts, t.last_error]).toEqual(['failed', 4, 'Fournisseur simulé en panne (bac à sable)']);
+    // 4 essais en tout : l'immédiat + 3 reprises, tous journalisés.
+    expect((await journaux(b, regle)).map((l) => [l.result_success, l.result_error])).toEqual(
+      [1, 2, 3, 4].map(() => [false, 'Fournisseur simulé en panne (bac à sable)']),
+    );
+    const notifs = await notificationsDe(t.id);
+    expect(notifs.map((n) => [n.type, n.title, n.body])).toEqual([[
+      'automation_failed', `Échec d'envoi — Confirmation ${m}`,
+      'Le courriel n\'est pas parti et ne partira pas : Fournisseur simulé en panne (bac à sable).',
+    ]]);
+  });
+
+  it('[E-035] échec DÉFINITIF d’une action immédiate (webhook vers une adresse interne) → aucune reprise ; une action interne en échec non plus', async () => {
+    const m = marque('E-035');
+    const client = await creerClient(b, menage, m);
+    const regle = await creerRegle(b, menage, m, {
+      actions: [{ type: 'webhook', config: { url: 'https://127.0.0.1/hook' } }, { type: 'ajouter_etiquette', config: { etiquette: '' } }],
+    });
+    await emettreNote(b, client);
+    const j = await attendreJournaux(b, regle, 2);
+    expect(j.map((l) => [l.action_type, l.result_success])).toEqual([['webhook', false], ['ajouter_etiquette', false]]);
+    expect(String(j[0].result_error)).toMatch(/adresse refusée/i);
+    await pause(1000);
+    expect(await taches(b, regle)).toEqual([]);
+  });
+
+  it('[E-036] l’événement revient pendant qu’une reprise attend (nouvelle panne) → toujours UNE reprise, et UN seul texto au retour du fournisseur', async () => {
+    const m = marque('E-036');
+    const client = await creerClient(b, menage, m);
+    const regle = await creerRegle(b, menage, m, { actions: [texto(m)] });
+    await modeBac(b, 'panne');
+    await emettreNote(b, client);
+    const [premier] = await attendreJournaux(b, regle, 1);
+    await attendre(() => taches(b, regle), (x) => x.length === 1);
+    // Le même événement plus de 2 min après (hors fenêtre anti-doublon des actions immédiates) :
+    // on vieillit la première exécution au lieu d'attendre.
+    await b.admin.from('automation_execution_logs').update({ execution_key: null }).eq('id', premier.id);
+    await emettreNote(b, client);
+    const j = await attendreJournaux(b, regle, 2);
+    expect(j.map((l) => l.result_success)).toEqual([false, false]);
+    await pause(1000);
+    const enFile = await taches(b, regle);
+    expect(enFile.map((t) => [t.status, t.attempts])).toEqual([['pending', 1]]);
+    await modeBac(b, 'succes');
+    await avancer(b, regle);
+    expect((await taches(b, regle)).map((t) => t.status)).toEqual(['completed']);
+    const { data: msgs } = await b.admin.from('messages').select('id').eq('org_id', b.orgA).eq('direction', 'outbound').like('message_text', `%${m}%`);
+    expect(msgs).toHaveLength(1);
+  });
+
+  it('[E-037] règle repassée en BROUILLON pendant que la reprise attend → la reprise est annulée, rien ne part', async () => {
+    const m = marque('E-037');
+    const depuis = new Date().toISOString();
+    const client = await creerClient(b, menage, m);
+    const regle = await creerRegle(b, menage, m, { actions: [courriel(m)] });
+    await modeBac(b, 'panne');
+    await emettreNote(b, client);
+    await attendreJournaux(b, regle, 1);
+    await attendre(() => taches(b, regle), (x) => x.length === 1);
+    await modeBac(b, 'succes');
+    await b.admin.from('automation_rules').update({ is_active: false }).eq('id', regle);
+    await avancer(b, regle);
+    const [t] = await taches(b, regle);
+    expect([t.status, t.last_error]).toEqual(['cancelled', 'Automatisation en brouillon : envoi annulé.']);
+    expect((await envoisMarques(b, depuis, m)).map((e) => (e.meta as { mode?: string }).mode)).toEqual(['panne']);
   });
 });
 

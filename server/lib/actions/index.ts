@@ -18,6 +18,7 @@ import { avecMentionCommerciale } from '../desabonnement/mention-sms';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from '../automations-drapeaux';
 import { raisonLisible } from '../paiement-echoue';
 import { creerLienReservation, demandeLienReservation } from '../client-inactif';
+import { dateLisible } from '../courriels/gabarit';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -91,6 +92,24 @@ export interface ActionContext {
 /** Envoi commercial au sens de la LCAP (contenu exigé : identification, retrait). */
 function estCommercialLcap(ctx: ActionContext): boolean {
   return ctx.marketing ?? ctx.commercial === true;
+}
+
+/**
+ * Un envoi MARKETING est commercial — parti tout de suite ou plus tard,
+ * drapeau `auto_desabonnement_canal` allumé ou non.
+ *
+ * Le moteur ne pose `commercial` que sur un envoi différé (ou sous le
+ * drapeau). Une règle « étiquette posée → courriel d'offre » partait donc
+ * immédiatement sans que le consentement (base légale LCAP) ni le plafond de
+ * fréquence soient regardés : le client sans relation ni consentement la
+ * recevait. Le TYPE de l'envoi (`marketing`, posé par le moteur dans tous les
+ * cas) décide maintenant aussi de ces deux gardes.
+ *
+ * Rien ne change pour un envoi transactionnel (confirmation, reçu, rappel),
+ * ni pour un appel hors moteur (`marketing` absent).
+ */
+function commercialSiMarketing(ctx: ActionContext): ActionContext {
+  return ctx.marketing === true && !ctx.commercial ? { ...ctx, commercial: true } : ctx;
 }
 
 /**
@@ -530,9 +549,18 @@ export type ActionType =
  * Une variable de nom vide laissait « Bonjour , » ou « Paiement reçu — merci ! »
  * (espace orpheline avant la ponctuation). On recolle la ponctuation.
  */
-export function sansPrenomVide(texte: string): string {
-  return texte
-    .replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s+([,!.?])/g, '$1$2')
+export function sansPrenomVide(texte: string, options: { texto?: boolean } = {}): string {
+  /* Texto : le texte part TEL QUE l'entrepreneur l'a écrit et relu dans
+     l'éditeur. « Merci ! » (espace avant le point d'exclamation, typographie
+     française) n'est pas un trou laissé par un nom vide : on n'y touche pas.
+     Seuls trahissent un nom vide une virgule ou un point orphelins
+     (« Bonjour , ») et une espace DOUBLÉE avant « ! » ou « ? ». */
+  const salutation = options.texto
+    ? texte
+      .replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s+([,.])/g, '$1$2')
+      .replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s{2,}([!?])/g, '$1 $2')
+    : texte.replace(/\b(Bonjour|Bonsoir|Salut|Merci|merci|Hi|Hello|Thanks|thanks|Thank you|thank you)\s+([,!.?])/g, '$1$2');
+  return salutation
     // Un nom qui finit déjà par un point (« Plomberie Tremblay inc. ») suivi
     // du point de la phrase donnait « inc.. ». Les points de suspension restent.
     .replace(/([A-Za-zÀ-ÿ])\.\.(?!\.)/g, '$1.');
@@ -737,6 +765,44 @@ async function lienPageAvisDuJob(supabase: SupabaseClient, orgId: string, jobId:
   return token ? `${base}/survey/${token}` : '';
 }
 
+/**
+ * Dates écrites au client en toutes lettres (« 15 octobre 2026 ») et leur
+ * forme TECHNIQUE (AAAA-MM-JJ), gardée À CÔTÉ des variables.
+ *
+ * L'action « webhook » envoie les variables à un système tiers (Zapier, un
+ * tableur…) : lui a besoin d'une date qu'une machine sait lire, et il la
+ * recevait déjà en AAAA-MM-JJ. `executeWebhook` remet donc la forme technique
+ * sous le nom d'origine — sa charge utile ne change pas d'un octet.
+ *
+ * Les formes techniques ne sont PAS des variables de gabarit : elles voyagent
+ * sous une clé symbole (copiée par `{ ...vars }`, ignorée par `Object.keys`,
+ * par JSON et par `resolveTemplate`). Ni l'éditeur ni Lumi ne peuvent donc
+ * écrire une date brute dans un message au client.
+ */
+export const DATES_TECHNIQUES = ['invoice_due_date', 'quote_valid_until', 'appointment_date'] as const;
+type DateTechnique = typeof DATES_TECHNIQUES[number];
+const CLE_DATES_TECHNIQUES = Symbol('lume.datesTechniques');
+type VariablesAvecDates = Record<string, string> & { [CLE_DATES_TECHNIQUES]?: Partial<Record<DateTechnique, string>> };
+
+/** Note la forme technique d'une date à côté des variables (jamais dedans). */
+export function noterDateTechnique(vars: Record<string, string>, cle: DateTechnique, valeur: string | null | undefined): void {
+  const v = vars as VariablesAvecDates;
+  v[CLE_DATES_TECHNIQUES] = { ...(v[CLE_DATES_TECHNIQUES] ?? {}), [cle]: valeur || '' };
+}
+
+/** Les variables telles qu'un système tiers les attend : dates en AAAA-MM-JJ. */
+export function variablesPourMachine(vars: Record<string, string>): Record<string, string> {
+  const techniques = (vars as VariablesAvecDates)[CLE_DATES_TECHNIQUES] ?? {};
+  // Copie des seules clés TEXTE : la clé symbole ne part pas chez le tiers.
+  const out: Record<string, string> = {};
+  for (const cle of Object.keys(vars)) out[cle] = vars[cle];
+  for (const cle of DATES_TECHNIQUES) {
+    const brute = techniques[cle];
+    if (brute !== undefined) out[cle] = brute;
+  }
+  return out;
+}
+
 export async function resolveEntityVariables(
   supabase: SupabaseClient,
   orgId: string,
@@ -761,6 +827,17 @@ export async function resolveEntityVariables(
    * milliers) — visible par le client, sur cinq presets.
    */
   const locale = (company?.default_language === 'en' ? 'en-CA' : 'fr-CA');
+  /**
+   * Les DATES suivent la même règle que les montants : la langue de
+   * l'entreprise, en toutes lettres. `[invoice_due_date]` et
+   * `[quote_valid_until]` partaient en ISO brut (« était due le 2026-10-15 »),
+   * et `[appointment_date]` aussi (`toLocaleDateString('fr-CA')` rend
+   * AAAA-MM-JJ) : « confirmé pour le 2026-10-15 à 14 h 00 ».
+   * Une date SEULE (colonne `date`) n'a pas de fuseau : `dateLisible` ne la
+   * décale jamais. Un instant (rendez-vous) est lu dans le fuseau de
+   * l'entreprise.
+   */
+  const langueDates: 'fr' | 'en' = company?.default_language === 'en' ? 'en' : 'fr';
   const argent = (cents: number | null | undefined, devise = 'CAD') =>
     new Intl.NumberFormat(locale, { style: 'currency', currency: devise || 'CAD' })
       .format(Number(cents ?? 0) / 100);
@@ -885,7 +962,8 @@ export async function resolveEntityVariables(
     if (quote) {
       vars.quote_number = quote.quote_number || '';
       vars.quote_total = argent(quote.total_cents, quote.currency || 'CAD');
-      vars.quote_valid_until = quote.valid_until || '';
+      vars.quote_valid_until = dateLisible(quote.valid_until, langueDates);
+      noterDateTechnique(vars, 'quote_valid_until', quote.valid_until);
       // Le lien public de la soumission — la page `/quote/:token` que le
       // client ouvre sans compte (`TokenRoutes`). Sans lui, une action
       // « envoyer la soumission » n'aurait rien a mettre dans le courriel.
@@ -1008,7 +1086,8 @@ export async function resolveEntityVariables(
           : '';
       }
       vars.invoice_number = inv.invoice_number || '';
-      vars.invoice_due_date = inv.due_date || '';
+      vars.invoice_due_date = dateLisible(inv.due_date, langueDates);
+      noterDateTechnique(vars, 'invoice_due_date', inv.due_date);
       vars.invoice_total = argent(inv.total_cents);
       // La page servie est `/invoice/:token`, et GET /api/invoices/public/:token
       // cherche la facture par `view_token`. `[invoice_link]` lisait
@@ -1069,7 +1148,9 @@ export async function resolveEntityVariables(
         const fuseau = (company?.timezone as string | undefined) || FUSEAU_CLIENT;
         // Dans la LANGUE de l'entreprise : « 14 h 00 » dans un texto anglais
         // était un défaut visible. `fr-CA` reste pour une entreprise française.
-        vars.appointment_date = d.toLocaleDateString(locale, { timeZone: fuseau });
+        vars.appointment_date = dateLisible(d.toISOString(), langueDates, fuseau);
+        // La forme technique (AAAA-MM-JJ, jour local de l'entreprise) : voir DATES_TECHNIQUES.
+        noterDateTechnique(vars, 'appointment_date', d.toLocaleDateString('en-CA', { timeZone: fuseau }));
         vars.appointment_time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: fuseau });
       }
       vars.appointment_title = evt.job?.title || '';
@@ -1213,6 +1294,16 @@ export function identiteManquante(company: { company_name?: string | null; compa
   return `Courriel commercial non envoyé : ${manque.join(' et ')} de l’entreprise ${manque.length > 1 ? 'manquent' : 'manque'} (Paramètres → Entreprise). La loi exige que le client sache qui lui écrit.`;
 }
 
+/**
+ * `dejaResolu` : le sujet et le corps sont le texte FINAL, déjà résolu par
+ * l'appelant. La demande d'avis résolvait son gabarit (reviews.ts), puis
+ * l'envoi le résolvait ENCORE : tout ce qu'une valeur portait entre crochets
+ * ou accolades (job « Lavage [vitres] », client « Tremblay {Montréal} »)
+ * était repris pour une variable inconnue et effacé du message. Jamais lu
+ * depuis la configuration d'une règle : c'est un paramètre d'appel interne.
+ */
+export interface OptionsEnvoi { dejaResolu?: boolean }
+
 export async function executeSendEmail(
   config: {
     to?: string; subject: string; body: string;
@@ -1220,17 +1311,23 @@ export async function executeSendEmail(
   },
   vars: Record<string, string>,
   ctx: ActionContext,
+  options: OptionsEnvoi = {},
 ): Promise<ActionResult> {
   // Le destinataire vient TOUJOURS de l'entité, jamais de la règle.
   // Voir `DESTINATAIRE_IMPOSE` plus haut : `config.to` permettait d'envoyer les
   // données d'un client (nom, montants, adresse) vers une adresse arbitraire.
+  ctx = commercialSiMarketing(ctx);
   const to = vars.client_email;
   if (!to) return saute('Aucune adresse courriel pour ce client', 'sans_courriel');
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'subject', ctx.langue), champLocalise(config, 'body', ctx.langue));
   // Prénom manquant : « Bonjour , » / « merci ! » deviennent « Bonjour, » / « merci! ».
-  const subject = sansPrenomVide(resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars));
-  const body = sansPrenomVide(resolveTemplate(champLocalise(config, 'body', ctx.langue), vars, { html: true }));
+  // Un texte DÉJÀ résolu par l'appelant (demande d'avis) n'est pas résolu une
+  // seconde fois : voir `OptionsEnvoi`.
+  const rendre = (gabarit: string, html = false) =>
+    (options.dejaResolu ? gabarit : resolveTemplate(gabarit, vars, html ? { html: true } : {}));
+  const subject = sansPrenomVide(rendre(champLocalise(config, 'subject', ctx.langue)));
+  const body = sansPrenomVide(rendre(champLocalise(config, 'body', ctx.langue), true));
 
   try {
     const { sendEmail, isMailerConfigured, adresseInjoignable } = await import('../mailer');
@@ -1372,7 +1469,7 @@ export async function executeSendEmail(
     /* L'apercu (« Pre-Header ») : la ligne que la boite de reception affiche
        apres l'objet. Masquee dans le corps du message — c'est la technique
        standard, et la seule qui marche sans champ d'en-tete dedie. */
-    const apercuTexte = resolveTemplate(champLocalise(config, 'preheader', ctx.langue), vars).trim();
+    const apercuTexte = sansPrenomVide(resolveTemplate(champLocalise(config, 'preheader', ctx.langue), vars)).trim();
     const apercu = apercuTexte
       ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${apercuTexte.replace(/[<>]/g, '')}</div>`
       : '';
@@ -1465,7 +1562,9 @@ export async function executeSendSms(
   },
   vars: Record<string, string>,
   ctx: ActionContext,
+  options: OptionsEnvoi = {},
 ): Promise<ActionResult> {
+  ctx = commercialSiMarketing(ctx);
   if (!ctx.twilio) return saute('Aucun numéro texto configuré pour le bureau', 'sms_non_configure');
 
   // Même règle que pour le courriel : le numéro vient de l'entité, pas de la
@@ -1507,7 +1606,11 @@ export async function executeSendSms(
   }
 
   vars = await avecLienReservation(ctx, vars, champLocalise(config, 'body', ctx.langue));
-  let body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
+  // Prénom manquant : « Bonjour , » devient « Bonjour, » — le courriel le
+  // faisait déjà, le texto partait avec l'espace orpheline (et « inc.. »
+  // quand le nom de l'entreprise finit par un point).
+  const gabaritTexto = champLocalise(config, 'body', ctx.langue);
+  let body = sansPrenomVide(options.dejaResolu ? gabaritTexto : resolveTemplate(gabaritTexto, vars), { texto: true });
   // LCAP (audit V2, L7) : un texto commercial nomme l'entreprise et offre le
   // retrait. Ajouté ici plutôt qu'exigé à la saisie : personne ne l'oublie.
   if (estCommercialLcap(ctx) || config.sollicitation === true) {
@@ -1996,11 +2099,14 @@ export async function executeRequestReview(
     return { success: false, error: 'Client has no email address or phone number.' };
   }
 
-  // 4. Resolve client name: first_name > full name > "Bonjour"
+  // 4. Le nom dans la salutation : prénom, sinon nom complet. Sans aucun des
+  // deux, RIEN en français (« Bonjour, ») et « there » en anglais (« Hi
+  // there, »). Le repli français était le mot « Bonjour » lui-même : le
+  // client lisait « Bonjour Bonjour, merci d'avoir choisi… ».
   const en = ctx.langue === 'en';
   const clientGreeting = vars.client_first_name
     || vars.client_name
-    || (en ? 'there' : 'Bonjour');
+    || (en ? 'there' : '');
 
   // 5. Anti-duplicate: check if review already sent to this client in last 7 days
   if (clientId) {
@@ -2054,6 +2160,9 @@ export async function executeRequestReview(
   };
 
   let { subject, html: body } = reviewEmail(cs, messageVars, { langue: ctx.langue, couleur: (cs as { brand_color?: string | null } | null)?.brand_color ?? null });
+  // Sujet, corps et texto sont résolus ICI, une seule fois : l'envoi les
+  // prend tels quels (`dejaResolu`).
+  const DEJA_RESOLU: OptionsEnvoi = { dejaResolu: true };
 
   if (!String(cs?.review_email_body || '').trim()) {
     const { data: emailTemplate } = await ctx.supabase
@@ -2072,6 +2181,8 @@ export async function executeRequestReview(
       body = resolveTemplate(emailTemplate.body, messageVars, { html: true });
     }
   }
+  // Le sujet consigné dans `review_requests` est celui que le client reçoit.
+  subject = sansPrenomVide(subject);
 
   // 9. Envoi : courriel si on a l'adresse, SMS si on a le numéro.
   //
@@ -2088,13 +2199,13 @@ export async function executeRequestReview(
     ? { success: false, error: 'Client has no email address.' }
     : await depassePlafondFrequence(ctxPlafond, 'email', vars.client_email)
       ? auPlafond('email', vars.client_email)
-      : await executeSendEmail({ subject, body }, vars, ctx);
+      : await executeSendEmail({ subject, body }, vars, ctx, DEJA_RESOLU);
 
   const smsResult: ActionResult = !vars.client_phone
     ? { success: false, error: 'Client has no phone number.' }
     : await depassePlafondFrequence(ctxPlafond, 'sms', vars.client_phone)
       ? auPlafond('sms', vars.client_phone)
-      : await executeSendSms({ body: reviewSmsBody(cs, messageVars, en ? 'en' : 'fr'), sollicitation: true }, vars, ctx);
+      : await executeSendSms({ body: reviewSmsBody(cs, messageVars, en ? 'en' : 'fr'), sollicitation: true }, vars, ctx, DEJA_RESOLU);
 
   // Un canal SAUTÉ (désabonné, sans numéro texto, sans consentement…) n'est pas un envoi.
   const sent = estEnvoye(emailResult) || estEnvoye(smsResult);
@@ -2840,7 +2951,7 @@ export async function executeWebhook(
       entity_id: ctx.entityId,
       // Les variables déjà résolues : le destinataire reçoit le nom du
       // client et les montants, pas des identifiants à recroiser.
-      data: vars,
+      data: variablesPourMachine(vars),
       sent_at: new Date().toISOString(),
     }, ctx.cleIdempotence
       // La même clé à chaque reprise : le destinataire peut reconnaître un

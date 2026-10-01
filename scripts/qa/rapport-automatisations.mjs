@@ -66,8 +66,10 @@ const statutCellule = (id) => {
 const matrice = cellules.map((c) => ({ ...c, ...statutCellule(c.id) }));
 
 const compte = (s) => tests.filter((t) => t.statut === s).length;
+const CIBLE = process.env.QA_AUTO_PROD === 'je-confirme-la-prod' ? 'production' : 'staging';
 const synthese = {
   date: new Date().toISOString(),
+  cible: CIBLE,
   succes: compte('failed') === 0 && tests.length > 0,
   tests: { total: tests.length, reussis: compte('passed'), echoues: compte('failed'), ignores: tests.length - compte('passed') - compte('failed') },
   matrice: {
@@ -84,7 +86,7 @@ writeFileSync(`${DOSSIER}/synthese.json`, JSON.stringify(synthese, null, 2));
 // ── Markdown ────────────────────────────────────────────────────────────
 const md = [];
 md.push(`# Suite des automatisations — ${synthese.succes ? '✅ VERT' : '❌ ROUGE'}`, '');
-md.push(`Généré le ${synthese.date}.`, '');
+md.push(`Généré le ${synthese.date} — cible : **${CIBLE}**.`, '');
 md.push(`**Tests** : ${synthese.tests.reussis} réussis, ${synthese.tests.echoues} échoués, ${synthese.tests.ignores} ignorés (${synthese.tests.total}).`, '');
 if (matrice.length) md.push(`**Matrice** : ${synthese.matrice.pass} PASS · ${synthese.matrice.fail} FAIL · ${synthese.matrice.non_couvert} NON COUVERT (${matrice.length} cellules).`, '');
 if (synthese.echecs.length) {

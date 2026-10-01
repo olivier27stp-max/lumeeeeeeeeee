@@ -187,7 +187,9 @@ const DEFAUTS = {
 export async function couvertureAutomatisations(
   svc: { from: (t: string) => any },
   orgId: string,
-): Promise<(inv: { id: string; status?: string | null; total_cents?: number | null; balance_cents?: number | null; invoice_number?: string | null; client_id?: string | null }) => Promise<boolean>> {
+  /** Le jour civil (« 2026-10-15 ») dont on compte le retard — celui du passage. */
+  aujourdHui: string = new Date().toISOString().slice(0, 10),
+): Promise<(inv: { id: string; status?: string | null; total_cents?: number | null; balance_cents?: number | null; invoice_number?: string | null; client_id?: string | null; due_date?: string | null }) => Promise<boolean>> {
   const { data: regles, error } = await svc
     .from('automation_rules')
     .select('id, trigger_event, preset_key, conditions')
@@ -205,9 +207,19 @@ export async function couvertureAutomatisations(
   if (!enRetard.length && !pack.length) return async () => false;
 
   return async (inv) => {
+    /* `days_overdue` et `due_date` : ce que porte le VRAI événement
+       « Facture en retard » (scheduler.ts). Sans eux, une règle « en retard
+       d'au moins 3 jours » était jugée sur un champ absent — donc fausse — et
+       le cron relançait une facture que l'automatisation relance aussi : au
+       30e jour, les deux le même jour. */
+    const echeance = inv.due_date ? String(inv.due_date).slice(0, 10) : null;
+    const retard = echeance
+      ? Math.round((Date.parse(`${aujourdHui}T00:00:00Z`) - Date.parse(`${echeance}T00:00:00Z`)) / 86_400_000)
+      : null;
     const metadata = {
       status: inv.status ?? null, total_cents: inv.total_cents ?? null, balance_cents: inv.balance_cents ?? null,
       montant: Number(inv.balance_cents ?? 0) / 100, invoice_number: inv.invoice_number ?? null, client_id: inv.client_id ?? null,
+      ...(retard !== null && Number.isFinite(retard) ? { days_overdue: retard, due_date: echeance } : {}),
     };
     const evenement = { type: 'invoice.overdue', orgId, entityType: 'invoice', entityId: inv.id, metadata } as CRMEvent;
     if (enRetard.some((r) => evaluateConditions((r.conditions ?? {}) as Record<string, any>, evenement))) return true;
@@ -334,7 +346,7 @@ export async function executerRelancesPaiement(opts: { publicBase: string; orgId
     // signait son rappel en anglais. Sans nom, on n'en invente pas.
     const companyName = orgSettings?.company_name || '';
     // Une facture déjà relancée par une automatisation publiée n'est pas relancée ici.
-    const couverteParAutomatisation = await couvertureAutomatisations(svc, orgId);
+    const couverteParAutomatisation = await couvertureAutomatisations(svc, orgId, today.toISOString().slice(0, 10));
 
     // Paliers du plus HAUT au plus bas : une facture n'est relancée qu'au
     // palier le plus élevé qu'elle a atteint. Avant, la fenêtre de chaque

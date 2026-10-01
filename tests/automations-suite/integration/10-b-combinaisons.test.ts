@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { marque, attendre } from '../harnais/moteur';
+import { cibleProd } from '../harnais/bureau-test';
 import {
   preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux,
   traiterPipeline, creerClient, creerJob, creerDeal, pipelineParDefaut, drapeau, ok, type Api, type Bureau,
@@ -62,7 +63,8 @@ describe('[B] déclencheurs balayés : deux règles, réglages différents', () 
     const { data: autres } = await b.admin.from('automation_rules').select('org_id')
       .eq('trigger_event', 'deal.stage_idle').eq('is_active', true).is('deleted_at', null).neq('org_id', b.orgA);
     const { data: sable } = await b.admin.from('orgs_envois_simules').select('org_id');
-    expect((autres ?? []).filter((r) => !(sable ?? []).some((s) => s.org_id === r.org_id)), 'appel global refusé').toHaveLength(0);
+    // En PROD : le serveur fait déjà cet appel à chaque passage, sans doublon possible.
+    if (!cibleProd()) expect((autres ?? []).filter((r) => !(sable ?? []).some((s) => s.org_id === r.org_id)), 'appel global refusé').toHaveLength(0);
     const client = await creerClient(b, m);
     const deal = await creerDeal(b, client.id, e2.id, pipe.id);
     await traiterPipeline(b);

@@ -7,9 +7,11 @@
  *  - Case absente (automatisations existantes) → comportement d'avant :
  *    arrêt pour soumission/facture/rendez-vous, pas pour l'opportunité.
  *  - Les règles déclenchées PAR la résolution (soumission acceptée, facture
- *    payée) ne s'annulent plus elles-mêmes — drapeau ON seulement.
- *  - Drapeau OFF → l'ancienne vérification, au mot près (le filet le prouve
- *    pour tout le catalogue ; ici, les cas qui changeraient).
+ *    payée, rendez-vous annulé) ne s'annulent plus elles-mêmes — drapeau ON
+ *    comme drapeau OFF (K-012 : le pack « Dépôt », publié d'office, n'envoyait
+ *    jamais sa demande dans une entreprise sans le drapeau).
+ *  - Drapeau OFF → pour le reste, l'ancienne vérification, au mot près (le
+ *    filet le prouve pour tout le catalogue).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -110,15 +112,37 @@ describe('une règle déclenchée PAR la résolution ne s\'annule plus elle-mêm
     ['quote.approved', 172800],
     ['invoice.paid', 86400],
     ['appointment.cancelled', 3600],
-  ])('%s + délai : drapeau ON → part ; drapeau OFF → annulée comme avant', async (cle, delai) => {
+  ])('[K-012] %s + délai : part, drapeau ON comme drapeau OFF', async (cle, delai) => {
     const on = await jouerCas(cle, delai, { drapeau: true });
     expect(sms(on)).toHaveLength(1);
     expect(on.annulees).toHaveLength(0);
 
     oublierDrapeaux();
     const off = await jouerCas(cle, delai, { drapeau: false });
-    expect(sms(off)).toHaveLength(0);
-    expect(off.annulees).toHaveLength(1);
+    expect(sms(off)).toHaveLength(1);
+    expect(off.annulees).toHaveLength(0);
+  });
+
+  it.each([[true], [false]])('[K-012] soumission acceptée puis CONVERTIE en job avant l\'échéance (drapeau %s) : la demande de dépôt part quand même', async (drapeau) => {
+    const m = monde({ id: 'x', trigger_event: 'quote.approved' });
+    const s: any = await jouer(regleSms('quote.approved', 3600), evenementPour('quote.approved'), etat.e,
+      { ...(drapeau ? ON : {}), quotes: { data: [{ ...m.quotes.data[0], status: 'converted' }] } });
+    expect(sms(s)).toHaveLength(1);
+    expect(s.annulees).toHaveLength(0);
+  });
+
+  it.each([[true], [false]])('[K-012] soumission acceptée puis REFUSÉE avant l\'échéance (drapeau %s) : arrêt, comme avant', async (drapeau) => {
+    const m = monde({ id: 'x', trigger_event: 'quote.approved' });
+    const s: any = await jouer(regleSms('quote.approved', 3600), evenementPour('quote.approved'), etat.e,
+      { ...(drapeau ? ON : {}), quotes: { data: [{ ...m.quotes.data[0], status: 'declined' }] } });
+    expect(sms(s)).toHaveLength(0);
+    expect(s.annulees).toHaveLength(1);
+  });
+
+  it('[K-012] drapeau OFF : une relance de soumission ENVOYÉE s\'arrête toujours quand elle est acceptée (l\'exception ne vaut que pour le déclencheur « acceptée »)', async () => {
+    const s = await jouerCas('quote.sent', 86400, { drapeau: false, resolu: true });
+    expect(sms(s)).toHaveLength(0);
+    expect(s.annulees).toHaveLength(1);
   });
 
   it('le rappel de dépôt (preset deposit_followup_2d) part enfin', async () => {
@@ -135,6 +159,14 @@ describe('une règle déclenchée PAR la résolution ne s\'annule plus elle-mêm
       { ...ON, quotes: { data: [{ ...m.quotes.data[0], status: 'approved', deleted_at: '2026-09-14T00:00:00Z' }] } });
     expect(sms(s)).toHaveLength(0);
     expect(s.annulees[0]).toContain('la soumission a été supprimée');
+  });
+
+  it('[K-012] une soumission SUPPRIMÉE arrête aussi drapeau OFF', async () => {
+    const m = monde({ id: 'x', trigger_event: 'quote.approved' });
+    const s: any = await jouer(regleSms('quote.approved', 172800), evenementPour('quote.approved'), etat.e,
+      { quotes: { data: [{ ...m.quotes.data[0], status: 'approved', deleted_at: '2026-09-14T00:00:00Z' }] } });
+    expect(sms(s)).toHaveLength(0);
+    expect(s.annulees).toHaveLength(1);
   });
 });
 

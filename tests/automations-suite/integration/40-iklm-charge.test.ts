@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { demarrerMoteur, marque, attendre, traiterFile } from '../harnais/moteur';
+import { cibleProd } from '../harnais/bureau-test';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
 const regles: string[] = [];
@@ -73,7 +74,9 @@ describe('M — rafale de 1 000 événements', () => {
     const m = marque('M');
     const type = `qa_charge_${m.slice(-13, -1)}`;
     const id = await regle(m, type);
-    const N = 1000;
+    // En PROD : 200 événements. La rafale de 1 000 a rendu l'API de staging
+    // indisponible par moments (521) ; on ne fait pas ça à de vrais clients.
+    const N = cibleProd() ? 200 : 1000;
     const entites = Array.from({ length: N }, () => randomUUID());
     const emis = new Map<string, number>();
     const debut = Date.now();

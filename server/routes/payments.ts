@@ -72,6 +72,7 @@ import { traiterPaiementEchoue } from '../lib/paiement-echoue';
 import { forfaitDepuisPrix, intervalleLu, intervalleDepuisPrix, estPrixVersements, appariementPlan, finDePeriode } from '../lib/abonnement-intervalle';
 import { repartirMontantRecu } from '../lib/payment-settings';
 import { notifierPaiementRecu, notifierLitigeOuvert } from '../lib/paiement-recu';
+import { typePaiement } from '../lib/type-paiement';
 
 const router = Router();
 
@@ -375,7 +376,7 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
                 entityType: 'quote',
                 entityId: quoteId,
                 metadata: {
-                  payment_type: 'deposit',
+                  payment_type: typePaiement({ depot: true, soldee: false }),
                   quote_number: q.quote_number || '',
                   client_id: q.client_id || q.lead_id || null,
                   amount_cents: Number(intent.amount_received || intent.amount || 0),

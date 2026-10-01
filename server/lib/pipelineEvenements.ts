@@ -48,6 +48,18 @@ interface EvenementPipeline {
 }
 
 /**
+ * Un événement de pipeline n'est lu qu'APRÈS ce délai. Quand une automatisation
+ * déplace un deal, l'entrée dans la nouvelle étape est écrite par un trigger
+ * SQL, puis l'action y pose la chaîne anti-boucle (les règles qui ont causé
+ * le déplacement) — deux écritures, ~150 ms d'écart. Un passage de la file
+ * tombé entre les deux lisait l'événement SANS sa chaîne : la règle inverse
+ * repartait, et le ping-pong continuait un tour de plus (vu en prod par la
+ * suite de tests, B-504, le 2026-10-01). 3 s : sans effet sur un passage
+ * toutes les 5 min, et bien plus que le temps d'une action.
+ */
+export const DELAI_GRACE_MS = 3_000;
+
+/**
  * Traite les événements du pipeline en attente.
  *
  * Appelée à chaque tick du planificateur. Ne lève jamais : une file en échec
@@ -66,7 +78,8 @@ export async function traiterEvenementsPipeline(supabase: SupabaseClient, option
     .from('pipeline_events')
     .select('id, org_id, deal_id, type, payload, attempts')
     .is('processed_at', null)
-    .lt('attempts', MAX_TENTATIVES);
+    .lt('attempts', MAX_TENTATIVES)
+    .lt('created_at', new Date(Date.now() - DELAI_GRACE_MS).toISOString());
   if (options.orgId) file = file.eq('org_id', options.orgId);
   const { data, error } = await file
     .order('created_at')

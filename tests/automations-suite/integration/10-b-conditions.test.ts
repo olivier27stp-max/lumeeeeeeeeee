@@ -16,7 +16,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { marque, attendre } from '../harnais/moteur';
 import {
-  preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux,
+  preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, journaux, lignesDAction,
   creerClient, creerChamp, ecrireChamps, ok, type Api, type Bureau,
 } from './10-b-outils';
 
@@ -68,7 +68,10 @@ async function verifierCas(m: string, c: Cas, ids: { vrai: string; faux: string 
   expect(vrai, `condition vraie sans effet : ${JSON.stringify(c.vraie)} — ${JSON.stringify(await journaux(b.admin, ids.vrai))}`).toHaveLength(1);
   if (ids.faux) {
     expect(await tachesTitrees(b.admin, b.orgA, `${m} ${c.id} faux`), `condition fausse avec effet : ${JSON.stringify(c.fausse)}`).toHaveLength(0);
-    expect(await journaux(b.admin, ids.faux)).toHaveLength(0);
+    // Aucune ACTION ; la règle écartée ne laisse que sa trace « conditions non remplies » (L-004).
+    const duFaux = await journaux(b.admin, ids.faux);
+    expect(lignesDAction(duFaux)).toHaveLength(0);
+    expect(duFaux.every((l) => l.result_success && (l.result_data as { saute_code?: string } | null)?.saute_code === 'conditions')).toBe(true);
   }
 }
 

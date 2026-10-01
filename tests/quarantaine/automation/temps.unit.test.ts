@@ -75,7 +75,7 @@ describe('T9.1 — l’heure de rendez-vous écrite au client est celle de Montr
     const { resolveEntityVariables } = await import('../../../server/lib/actions');
     const { client } = clientEnregistreur(visite(RDV));
     const vars = await resolveEntityVariables(client, ORG, 'schedule_event', VISITE);
-    expect(vars.appointment_date).toBe('2026-09-13');
+    expect(vars.appointment_date).toBe('13 septembre 2026');
     expect(vars.appointment_time.replace(/\s*h\s*/, ':'), `heure écrite au client : « ${vars.appointment_time} » pour un rendez-vous à 9 h à Montréal`).toMatch(/^0?9:00$/);
   });
 
@@ -93,7 +93,7 @@ describe('T9.1 — l’heure de rendez-vous écrite au client est celle de Montr
     // 22:00 EDT le 13 = 02:00Z le 14.
     const { client } = clientEnregistreur(visite('2026-09-14T02:00:00Z'));
     const vars = await resolveEntityVariables(client, ORG, 'schedule_event', VISITE);
-    expect(vars.appointment_date, `date écrite au client : ${vars.appointment_date}`).toBe('2026-09-13');
+    expect(vars.appointment_date, `date écrite au client : ${vars.appointment_date}`).toBe('13 septembre 2026');
   });
 });
 

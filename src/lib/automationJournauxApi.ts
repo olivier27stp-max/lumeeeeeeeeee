@@ -25,6 +25,7 @@
 
 import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
+import { ACTION_REGLE_ECARTEE } from './automationCatalogue';
 
 /** Sur combien de jours on garde l'historique visible, comme GHL. */
 export const FENETRE_JOURS = 60;
@@ -280,6 +281,8 @@ export function libelleAction(type: string, fr: boolean): string {
     log_activity: ['Journal', 'Activity log'],
     update_status: ['Changement de statut', 'Status change'],
     move_deal_stage: ['Déplacement dans le pipeline', 'Pipeline move'],
+    // Pas une action : la règle a vu l'événement et ses conditions l'ont écartée.
+    [ACTION_REGLE_ECARTEE]: ['Conditions', 'Conditions'],
   };
   const p = l[type];
   return p ? (fr ? p[0] : p[1]) : type.replace(/_/g, ' ');
@@ -389,6 +392,8 @@ export async function activiteParSemaine(semaines = 7): Promise<{
     .from('automation_execution_logs')
     .select('created_at, entity_id, trigger_event')
     .eq('org_id', orgId)
+    // Une règle écartée par ses conditions ne s'est pas déclenchée.
+    .neq('action_type', ACTION_REGLE_ECARTEE)
     .gte('created_at', depuis)
     .order('created_at', { ascending: true })
     .limit(5000);

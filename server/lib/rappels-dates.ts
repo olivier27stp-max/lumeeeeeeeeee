@@ -61,6 +61,43 @@ export interface ResumeRappels {
   erreurs: number;
 }
 
+/** Borne de `jours_avant`, des deux côtés (avant / après la date). */
+export const JOURS_AVANT_MAX = 365;
+
+/**
+ * `jours_avant` tel que le balayage ET le moteur le lisent : un entier borné.
+ *
+ * UNE seule fonction pour les deux : le balayage bornait et tronquait
+ * (« 3.5 » → 3, « 400 » → 365) puis émettait cette valeur, que le moteur
+ * comparait à la valeur BRUTE de la règle — jamais égales, la règle ne
+ * partait jamais, sans erreur (J-063). L'enregistrement refuse désormais
+ * ces valeurs (`problemeJoursAvant`) ; une règle déjà écrite ainsi part au
+ * décalage normalisé au lieu de rester muette.
+ */
+export function normaliserJoursAvant(brut: unknown): number {
+  const n = Number(brut);
+  if (!Number.isFinite(n)) return 0;
+  // Borné : au-delà d'un an, la date visée n'a plus de sens, et une faute
+  // de frappe (« 3650 ») ferait balayer dix ans de dates.
+  // (Les mêmes bornes que JOURS_AVANT_MAX, écrites en clair.)
+  return Math.max(-365, Math.min(365, Math.trunc(n)));
+}
+
+/**
+ * Ce qui cloche dans un `jours_avant` qu'on s'apprête à ENREGISTRER, ou null.
+ * Vide = le jour même (champ facultatif). Tout le reste doit être un nombre
+ * entier de jours entre −365 et 365 : ce que le balayage sait viser.
+ */
+export function problemeJoursAvant(brut: unknown, fr = true): string | null {
+  if (brut === undefined || brut === null || brut === '') return null;
+  const texte = typeof brut === 'string' ? brut.trim() : brut;
+  const n = typeof texte === 'number' ? texte : (typeof texte === 'string' && /^-?\d+$/.test(texte) ? Number(texte) : Number.NaN);
+  if (Number.isInteger(n) && Math.abs(n) <= JOURS_AVANT_MAX) return null;
+  return fr
+    ? `« Combien de jours avant » doit être un nombre entier de jours, entre -${JOURS_AVANT_MAX} et ${JOURS_AVANT_MAX} (0 = le jour même, -7 = une semaine après).`
+    : `“How many days before” must be a whole number of days, between -${JOURS_AVANT_MAX} and ${JOURS_AVANT_MAX} (0 = on the day, -7 = one week after).`;
+}
+
 /**
  * Le décalage d'une règle, en jours.
  *
@@ -68,12 +105,7 @@ export interface ResumeRappels {
  * `0` = le jour même. Un décalage négatif signifie « après ».
  */
 function decalageDeLaRegle(conditions: Record<string, unknown> | null): number {
-  const brut = conditions?.jours_avant;
-  const n = Number(brut);
-  if (!Number.isFinite(n)) return 0;
-  // Borné : au-delà d'un an, la date visée n'a plus de sens, et une faute
-  // de frappe (« 3650 ») ferait balayer dix ans de dates.
-  return Math.max(-365, Math.min(365, Math.trunc(n)));
+  return normaliserJoursAvant(conditions?.jours_avant);
 }
 
 /**
@@ -230,6 +262,10 @@ export async function balayerRappelsDates(
             entityType: 'deal',
             entityId: v.deal_id,
             metadata: {
+              // L'événement est celui de CETTE règle : les autres règles
+              // « date atteinte » du bureau ne le reprennent pas
+              // (`regleViseCetEvenement`, comme pour `deal.stage_idle`).
+              rule_id: regle.id,
               champ_id: champId,
               // Le moteur compare TOUTES les conditions de la règle aux
               // métadonnées (`evaluateConditions`) : sans `jours_avant` ici,
@@ -266,6 +302,7 @@ export async function balayerRappelsDates(
           entityType: 'client',
           entityId: v.client_id,
           metadata: {
+            rule_id: regle.id,
             champ_id: champId,
             // Voir plus haut : la règle porte `jours_avant`, l'événement aussi.
             jours_avant: decalage,

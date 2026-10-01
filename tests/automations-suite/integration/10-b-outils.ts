@@ -12,6 +12,7 @@ import express from 'express';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { afterAll } from 'vitest';
 import { demarrerMoteur, attendre } from '../harnais/moteur';
 import { sessionDe, COMPTES } from '../harnais/bureau-test';
 
@@ -43,10 +44,42 @@ export function fuseauEnJournee(maintenant = new Date()): string {
  *    entités éprouvées ; ils sont couverts par la catégorie K ;
  *  · automatisations non en pause.
  */
+let bureauPrepare: Bureau | null = null;
+let prereglagesEteints: string[] = [];
+
+/**
+ * Rend au bureau A ses préréglages. Enregistré ICI, à l'import du module :
+ * chaque fichier de tests qui importe ces outils le reçoit d'office.
+ * Si rien n'avait été retenu (un passage précédent tué avant de rendre), on
+ * recopie l'état du bureau B, que les tests B ne touchent jamais.
+ */
+afterAll(async () => {
+  const b = bureauPrepare;
+  if (!b) return;
+  if (prereglagesEteints.length) {
+    await b.admin.from('automation_rules').update({ is_active: true }).in('id', prereglagesEteints);
+    return;
+  }
+  const { data: reference } = await b.admin.from('automation_rules').select('preset_key')
+    .eq('org_id', b.orgB).eq('is_preset', true).eq('is_active', true).is('deleted_at', null);
+  const cles = (reference ?? []).map((r) => r.preset_key as string).filter(Boolean);
+  if (cles.length) {
+    await b.admin.from('automation_rules').update({ is_active: true })
+      .eq('org_id', b.orgA).eq('is_preset', true).is('deleted_at', null).in('preset_key', cles);
+  }
+});
+
 export async function preparerBureau(): Promise<Bureau & { fuseau: string }> {
   const b = await demarrerMoteur();
   const fuseau = fuseauEnJournee();
   await ok(b.admin.from('company_settings').update({ timezone: fuseau, automations_paused: false }).eq('org_id', b.orgA), 'fuseau');
+  // On retient ce qu'on éteint, pour le RENDRE à la fin du fichier (voir le
+  // afterAll plus bas) : sans ça, le fichier des préréglages (catégorie K)
+  // trouvait tout éteint dès qu'il passait après un fichier B.
+  const actifs = await ok<Array<{ id: string }>>(
+    b.admin.from('automation_rules').select('id').eq('org_id', b.orgA).eq('is_preset', true).eq('is_active', true), 'préréglages actifs');
+  bureauPrepare = b;
+  prereglagesEteints = (actifs ?? []).map((r) => r.id);
   await ok(b.admin.from('automation_rules').update({ is_active: false }).eq('org_id', b.orgA).eq('is_preset', true), 'préréglages');
   // Règles laissées actives par un passage interrompu : elles réagiraient à tout.
   await ok(b.admin.from('automation_rules').update({ is_active: false }).eq('org_id', b.orgA).like('name', '[QA-AUTO%'), 'restes');
@@ -187,6 +220,15 @@ export async function journaux(admin: SupabaseClient, ruleId: string) {
   return data ?? [];
 }
 
+/**
+ * Les lignes d'ACTION d'un journal. Depuis L-004, une règle écartée par ses
+ * conditions laisse une trace (`action_type = 'conditions'`, saut) : ce n'est
+ * pas une action. « La règle fausse n'a rien fait » = aucune ligne d'action.
+ */
+export function lignesDAction<T extends { action_type: string }>(lignes: T[]): T[] {
+  return lignes.filter((l) => l.action_type !== 'conditions');
+}
+
 export async function tachesPlanifiees(admin: SupabaseClient, ruleId: string) {
   const { data, error } = await admin.from('automation_scheduled_tasks')
     .select('id, status, step_id, execute_at, attempts, last_error, action_config, sequence_context, entity_type, entity_id, created_at, completed_at')
@@ -203,7 +245,11 @@ export async function traiterBase(b: Bureau): Promise<number> {
 
 /** Traite la file `pipeline_events` de NOTRE bureau. */
 export async function traiterPipeline(b: Bureau): Promise<number> {
-  const { traiterEvenementsPipeline } = await import('../../../server/lib/pipelineEvenements');
+  const { traiterEvenementsPipeline, DELAI_GRACE_MS } = await import('../../../server/lib/pipelineEvenements');
+  // La file ne lit un événement qu'après son délai de grâce (chaîne
+  // anti-boucle écrite) : on laisse ce délai passer, comme le ferait le
+  // passage toutes les 5 min. +1,5 s pour l'écart d'horloge poste/base.
+  await new Promise((r) => setTimeout(r, DELAI_GRACE_MS + 1500));
   return traiterEvenementsPipeline(b.admin, { orgId: b.orgA });
 }
 
