@@ -128,6 +128,7 @@ import creatorSpaceBillingRouter from './routes/creator-space-billing';
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, userKey } from './lib/security';
 import { redisRateLimit, useRedis } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
+import { canoniserChemin } from './lib/chemin-canonique';
 import { subscriptionGuard, resoudreUtilisateur } from './lib/subscription-guard';
 import { featureGuard } from './lib/feature-guard';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
@@ -148,6 +149,14 @@ app.set('trust proxy', 1);
 
 // Do not advertise Express — small reconnaissance signal removed.
 app.disable('x-powered-by');
+
+// ── Une seule écriture par chemin d'API — AVANT toute garde ──
+// Les gardes (MFA, permissions, abonnement, forfait) comparent `req.path` à
+// des tables de chemins exacts ; Express route sans tenir compte de la casse
+// ni de la barre finale. `/api/x/` ou `/API/x` passait donc toutes les gardes
+// puis était servi normalement (faille confirmée en prod le 2026-10-01).
+// Voir server/lib/chemin-canonique.ts. Ne RIEN monter au-dessus qui lise le chemin.
+app.use(canoniserChemin());
 
 // ── Canonical host redirect ──
 // The site moved to lumecrm.net (2026-07-23) but the old Railway subdomain

@@ -32,6 +32,7 @@ import { clientAnthropic, isLumiConfigured } from './llm';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AGENT_TOOLS, TOOLS_BY_NAME } from '../agent/tools';
 import { executerOutilGarde, PERMISSION_PAR_OUTIL, resoudreNumeros } from '../agent/garde';
+import { nettoyerTexteDicte } from '../agent/texte-dicte';
 import { masquerIds, demasquerIds } from '../agent/refs';
 import { CONSIGNES_COLLEGUE_LUMI } from '../agent/consignesCollegue';
 import type { Rapport } from '../agent/tools-rapports';
@@ -530,7 +531,8 @@ export async function tourLumi(opts: {
 
     for (const appel of appels) {
       const outil = TOOLS_BY_NAME[appel.name];
-      const args = demasquerIds(espaceRefs, (appel.input ?? {}) as Record<string, any>);
+      // Texte dicté entre guillemets : nettoyé ICI, avant la carte, pour que la carte montre ce qui partira.
+      const args = nettoyerTexteDicte(demasquerIds(espaceRefs, (appel.input ?? {}) as Record<string, any>));
 
       if (!outil) {
         resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: `Unknown tool: ${appel.name}` }), is_error: true });

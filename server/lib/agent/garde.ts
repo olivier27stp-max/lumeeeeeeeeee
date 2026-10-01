@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
 import { validerArgs } from './validation-args';
 import { normaliserDatesHeures } from '../lumi/temps';
+import { nettoyerTexteDicte } from './texte-dicte';
 import { getUserContext, hasPermission, type UserContext } from '../rbac';
 import { logger } from '../logger';
 import { journaliserTrace } from '../lumi/traces';
@@ -364,7 +365,8 @@ export async function executerOutilGarde(opts: {
 
   const ctx: ToolContext = { client: opts.client, orgId: opts.orgId, userId: opts.userId, accessToken: opts.accessToken, ...(opts.dryRun ? { dryRun: true } : {}) };
   // Une date-heure sans décalage (« 2026-10-01T09:00 ») est une heure de L'ENTREPRISE, pas d'UTC (audit 2026-09-30).
-  const avecDates = normaliserDatesHeures(validation.args, await fuseauDeLOrg(opts.orgId));
+  // Puis le texte dicté entre guillemets est nettoyé (texte-dicte.ts) : la carte a déjà montré la version nettoyée.
+  const avecDates = nettoyerTexteDicte(normaliserDatesHeures(validation.args, await fuseauDeLOrg(opts.orgId)));
   // Un NUMÉRO affiché (« job 33 », « INV-000017 », « devis 8 ») passé comme identifiant
   // est résolu dans l'org (audit 2026-09-30) : avant, la requête échouait (uuid
   // invalide) et Lumi répondait « souci de connexion à Lume ».
