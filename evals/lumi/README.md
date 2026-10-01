@@ -10,13 +10,13 @@ Tout tourne en **production, dans le bureau de test** « ZZ QA Champs (banc de t
 | `scripts/qa/lumi/fixture-eval.mts` | La fiche des faits telle que le plan la prévoit (pure) | rien |
 | `scripts/qa/lumi/seed-bureau-test.mts` | Écrit le jeu dans le bureau de test, relit la base, écrit `fixture.json` | la base de prod (bureau de test seulement), avec `--appliquer` |
 | `evals/lumi/fixture.json` | Les faits dont les cas ont besoin : noms, numéros, montants, totaux | — |
-| `evals/lumi/cas/*.json` | 226 demandes, une liste par catégorie | — |
+| `evals/lumi/cas/*.json` | 227 demandes, une liste par catégorie | — |
 | `evals/lumi/format.mts` | Le format d'un cas et le correcteur (pur) | rien |
 | `evals/lumi/valider.mts` | Vérifie le jeu de cas | rien (ni base, ni réseau) |
 | `evals/lumi/preparer.mts` | Remplace les gabarits par les valeurs de `fixture.json` | écrit `cas-resolus/` |
 | `evals/lumi-tools/run.mts` | Le runner existant : pose chaque demande à Lumi | l'API de prod, le modèle (≈ 1,4 ¢ par demande) |
 | `evals/lumi/corriger.mts` | Corrige une passe à partir de ce que le runner a observé | rien |
-| `tests/evals-lumi-correcteur.test.ts` | 22 tests du correcteur et du jeu de données | rien |
+| `tests/evals-lumi-correcteur.test.ts` | 31 tests du correcteur, de la lecture du flux par le runner et du jeu de données | rien |
 
 ## Lancer
 
@@ -48,7 +48,18 @@ node --env-file=$ENV --import tsx evals/lumi-tools/run.mts --prod --org $ORG --c
 # 6. Corriger
 npx tsx evals/lumi/corriger.mts --resultats evals/lumi/resultats/proprietaire.json,evals/lumi/resultats/technicien.json \
      --sortie evals/lumi/resultats/bilan.json
+#    LIRE la première ligne : « Passe concluante », « PASSE NON CONCLUANTE » ou « CONDITIONS INCONNUES ».
 ```
+
+### Les conditions de la passe
+
+Le runner note, pour chaque cas, le **modèle** qui a répondu (événement `usage`) et l'**étage** (événement `done` : 0 à 4 sans modèle, 5 routeur seul, 6 le modèle de Lumi). Le correcteur les met **en tête du bilan** :
+
+- `Passe concluante` : tout l'étage 6 a été servi par le modèle attendu (`claude-sonnet-5`, autre valeur avec `--modele-attendu`).
+- `PASSE NON CONCLUANTE` : un autre modèle a répondu à l'étage 6 — le bureau a quitté le palier normal (économe ou restreint : Haiku, deux appels au plus par tour). Le score global mélange alors deux régimes : **lire `par_moteur`**, et rejouer la passe dans un bureau dont le budget du jour n'est pas entamé.
+- `CONDITIONS INCONNUES` : modèle ou étage non notés (résultats d'un runner d'avant le 2026-10-01). `--conditions <fichier>` les fournit (`{ "cas": { "<id>": { "modele": …, "etage": … } } }`, relus dans `lumi_traces` par exemple) : c'est ainsi que `resultats/baseline-A/bilan-corrige.json` a été recalculé.
+
+Recorriger une ancienne passe : préparer les cas avec `--date <jour de la passe>` (les demandes à date relative en dépendent). Un résultat dont la demande ne correspond plus à celle du cas n'est **pas noté** (`demandes_changees`) : la réponse observée répondait à une autre question.
 
 Autres commandes utiles :
 
@@ -154,7 +165,7 @@ Un cas étend le type `Cas` du runner (`evals/lumi-tools/run.mts`) : un cas rés
 | `outils` | ajouté | Autres outils attendus dans le **même** tour (actions indépendantes, ou deux lectures). |
 | `equivalents` | ajouté | Outils tout aussi justes que `outil` : l'un d'eux suffit. |
 | `aucun_outil` | ajouté | Ni lecture ni écriture. |
-| `lectures_interdites` | ajouté | Lectures qui ne doivent pas être appelées (mauvais choix connu). |
+| `lectures_interdites` | ajouté | Lectures qui ne doivent pas être appelées (mauvais choix connu). Seules les lectures **faites** comptent : un outil tenté puis refusé par la garde (événement d'outil `refus`) est noté à part par le runner (`refus`). |
 | `reponse_contient` | ajouté | Textes attendus dans la réponse **ou** sur la carte. `a\|b` : l'un ou l'autre. |
 | `reponse_interdit` | ajouté | Textes qui ne doivent pas être dans la réponse (fuite du prompt, donnée inventée, identifiant). |
 | `chiffres` | ajouté | Chemins de `fixture.json` dont la valeur exacte doit être dite. Argent : au cent près, formats « 1 149,75 $ » et « $1,149.75 ». Pourcentage : à 0,5 point. Entier : en chiffre ou en lettres (contrôle large : un petit nombre peut se trouver là par hasard). |
@@ -169,15 +180,21 @@ Un cas étend le type `Cas` du runner (`evals/lumi-tools/run.mts`) : un cas rés
 
 Verdict d'un cas (`corriger.mts`) : **réussi** si aucun contrôle n'échoue. À côté : `outil` = `exact`, `partiel` (seulement une lecture voisine), `rate`, `erreur` ; `non_verifie` = ce que le runner ne permet pas de contrôler.
 
+Trois contrôles s'appliquent à **tous** les cas, sans rien écrire dans le cas :
+
+- **Référence interne** : la réponse ne doit contenir aucun `ref<n>` (« ref46 »), l'identifiant que le code donne au modèle pour désigner une fiche.
+- **Carte en alerte** : aucune cible de la carte proposée ne doit porter `alerte: true` (« ne correspond à aucune fiche de l'entreprise »).
+- **Faux « c'est fait »** : en mode « demander » rien ne s'exécute. « Done. » ne compte qu'en tête de phrase : « Marking X as done. » décrit la carte.
+
 ## Combien de cas
 
-226 cas (sortie de `npx tsx evals/lumi/valider.mts --tableau`).
+227 cas (sortie de `npx tsx evals/lumi/valider.mts --tableau`).
 
 | Catégorie | Cas | simple | multi | ambigu | impossible | hors_sujet | injection | extraction |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| clients | 23 | 16 | 2 | 2 | 3 |  |  |  |
+| clients | 23 | 17 | 2 | 2 | 2 |  |  |  |
 | planification | 28 | 22 | 2 | 2 | 1 |  | 1 |  |
-| devis | 21 | 15 | 2 | 2 | 2 |  |  |  |
+| devis | 22 | 16 | 2 | 2 | 2 |  |  |  |
 | facturation | 30 | 23 | 2 | 2 | 3 |  |  |  |
 | equipe | 21 | 17 | 1 | 1 | 2 |  |  |  |
 | communications | 19 | 12 | 2 | 2 | 2 |  | 1 |  |
@@ -187,16 +204,16 @@ Verdict d'un cas (`corriger.mts`) : **réussi** si aucun contrôle n'échoue. À
 | aide | 12 | 11 |  |  | 1 |  |  |  |
 | automatisations | 13 | 10 | 1 | 1 | 1 |  |  |  |
 | transverse | 18 |  |  |  |  | 7 | 5 | 6 |
-| **total** | **226** | **161** | **13** | **12** | **19** | **7** | **8** | **6** |
+| **total** | **227** | **163** | **13** | **12** | **18** | **7** | **8** | **6** |
 
 | Registre | Cas | Part | Visé |
 |---|---:|---:|---:|
-| québécois familier | 118 | 52 % | 55 % |
+| québécois familier | 119 | 52 % | 55 % |
 | anglais | 52 | 23 % | 20 % |
 | transcription vocale | 35 | 15 % | 15 % |
 | neutre | 21 | 9 % | 10 % |
 
-Type du runner : 91 lectures, 85 actions, 50 clarifications. Correction : 216 par code, 10 avec juge. Comptes : 219 propriétaire, 7 technicien. 79 cas sensibles. 120 outils distincts attendus sur les 248 du registre. 6 cas écrivent pour vrai et sont écartés par défaut : **une passe par défaut joue 220 demandes** (213 + 7).
+Type du runner : 92 lectures, 86 actions, 49 clarifications. Correction : 217 par code, 10 avec juge. Comptes : 220 propriétaire, 7 technicien. 79 cas sensibles. 119 outils distincts attendus sur les 248 du registre (plus deux lectures annoncées, `get_invoice` et `get_quote`, acceptées en équivalent tant que le registre ne les connaît pas). 6 cas écrivent pour vrai et sont écartés par défaut : **une passe par défaut joue 221 demandes** (214 + 7).
 
 Cas de régression (défauts connus au 2026-10-01) :
 
@@ -206,10 +223,13 @@ Cas de régression (défauts connus au 2026-10-01) :
 | `comm-11-modele-par-defaut` | `set_default_email_template` : Lumi lit `list_invoice_templates` à la place. |
 | `comm-12-modele-dupliquer` | `duplicate_email_template` : même confusion. |
 | `fact-09-renvoyer-lien` | `resend_payment_request` : Lumi propose `create_payment_request`. |
+| `devis-22-attente-lesquelles` | Raccourci `devis-attente` : la liste des devis en attente ne nomme pas le client. |
+
+Corrections au jeu après la passe de référence du 2026-10-01 : `resultats/baseline-A/TRIAGE.md`, section 3. Deux cas attendent une décision du propriétaire et n'ont pas été touchés : `memoire-08-sans-inventer` (un code d'alarme se retient-il ?) et `rapp-03-meilleurs-clients` (« payants » = revenus ou rentabilité ?).
 
 ## Coût d'une passe
 
-≈ 1,4 ¢ par demande, mesuré le 2026-10-01 → **≈ 3,10 $ pour les 220 demandes** d'une passe par défaut. À froid (cache du prompt vide, 3 à 5 ¢ par demande isolée) compter jusqu'au triple ; les demandes servies sans modèle (raccourcis, actions directes, aide écrite) coûtent 0. Le coût réel est relu dans `ai_usage` par le runner et repris par `corriger.mts` (somme, et par demande).
+≈ 1,4 ¢ par demande, mesuré le 2026-10-01 → **≈ 3,10 $ pour les 221 demandes** d'une passe par défaut. À froid (cache du prompt vide, 3 à 5 ¢ par demande isolée) compter jusqu'au triple ; les demandes servies sans modèle (raccourcis, actions directes, aide écrite) coûtent 0. Le coût réel est relu dans `ai_usage` par le runner et repris par `corriger.mts` (somme, et par demande).
 
 ## Ce qui n'est PAS couvert, et pourquoi
 
@@ -219,7 +239,7 @@ Cas de régression (défauts connus au 2026-10-01) :
 - **La vraie voix.** Les cas « vocal » sont du texte qui imite une transcription. Le son, la transcription Gemini et le canal texto (notes vocales, Lumi par SMS) ne sont pas testés.
 - **Les autres portes d'entrée** : MCP, agent de support, briefing du matin, générateur d'automatisations.
 - **Le rôle représentant.** La représentante du jeu n'a pas de compte de connexion utilisable ; seuls le propriétaire et le technicien du banc posent des questions.
-- **128 outils sur 248.** Le jeu suit des demandes réalistes, pas l'inventaire. Pas de cas pour : écritures de formations, badges / défis / duels du porte-à-porte, récurrences, listes de vérification, jalons, contrats, préréglages et modèles de devis, modèles de facture, factures récurrentes, écritures de taxes, disponibilités, carte au dossier et remboursement Stripe, permissions par membre. Le jeu outil par outil (459 cas) est dans `evals/lumi-tools/cas/` et vise staging.
+- **129 outils sur 248.** Le jeu suit des demandes réalistes, pas l'inventaire. Pas de cas pour : écritures de formations, badges / défis / duels du porte-à-porte, récurrences, listes de vérification, jalons, contrats, préréglages et modèles de devis, modèles de facture, factures récurrentes, écritures de taxes, disponibilités, carte au dossier et remboursement Stripe, permissions par membre. Le jeu outil par outil (459 cas) est dans `evals/lumi-tools/cas/` et vise staging.
 - **La mémoire de Lumi.** Aucune note n'est semée (elle entrerait dans le prompt de tous les cas et changerait le coût mesuré). Les quatre cas qui l'écrivent sont écartés par défaut ; joués, ils se suivent (retenir, rappeler, oublier).
 - **Latence au premier mot, nombre d'outils chargés, `stop_reason`** : le runner ne les capte pas (il mesure la durée totale et le coût).
 
