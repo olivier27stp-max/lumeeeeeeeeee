@@ -66,7 +66,7 @@ describe('câblage', () => {
   it('un 👎 fait oublier la réponse mémorisée, entreprise et partagée, et seule une réponse de Lumi se note', () => {
     expect(route).toContain("router.post('/support/:id/messages/:mid/avis'");
     expect(route).toContain("if (!m || m.author !== 'ai') return res.status(404)");
-    expect(route).toContain('oublierSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), q.body), oublierSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(ctx.langue), q.body)');
+    expect(route).toContain('oublierSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), q.body), oublierSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(langueDuMessage(q.body, ctx.langue)), q.body)');
     expect(readFileSync(resolve(racine, 'server', 'index.ts'), 'utf8')).toContain('demarrerSavoir');
     expect(readFileSync(resolve(racine, 'server', 'lib', 'support', 'ia.ts'), 'utf8')).toContain("Réponse de l'équipe Lume");
   });
