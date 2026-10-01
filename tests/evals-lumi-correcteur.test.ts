@@ -192,6 +192,15 @@ describe('correction d’un cas', () => {
     expect(corriger(lecture, obs({ lectures: ['search_clients'], reponse: 'Référence 46 : la préférence du client, facture n° 12.' })).reussi).toBe(true);
     expect(corriger(lecture, obs({ lectures: ['search_clients'], apercu: { id: 'ref46' }, reponse: 'Marie Roy, à Longueuil.' })).reussi).toBe(true);
   });
+  it('refuse un nom d’outil ou de champ dans le texte, pour tous les cas (aide-01 : « avec create_job_agreement »)', () => {
+    const lecture = cas({ type: 'lecture', outil: 'search_clients' });
+    const v = corriger(lecture, obs({ lectures: ['search_clients'], reponse: 'Tu génères son contrat avec create_job_agreement et tu l’envoies au client.' }));
+    expect(v.echecs).toEqual(['identifiant technique dans la réponse : create_job_agreement']);
+    expect(corriger(lecture, obs({ lectures: ['search_clients'], reponse: 'Le champ display_status dit « en retard ».' })).reussi).toBe(false);
+    // Un courriel, une adresse de page, un trait d'union ou un nom en majuscules ne sont pas des identifiants.
+    for (const texte of ['Son courriel : marie_roy@lume-qa.test.', 'Va dans /settings/request-form.', 'Le rendez-vous de porte-à-porte.', 'La clé API_KEY reste secrète.'])
+      expect(corriger(lecture, obs({ lectures: ['search_clients'], reponse: texte })).echecs, texte).toEqual([]);
+  });
   it('refuse une carte dont une cible est en alerte, pour tous les cas (fact-05, fact-29)', () => {
     const payer = cas({ outil: 'mark_invoice_paid' });
     const alerte = { genre: 'action', cibles: [{ libelle: { fr: 'invoice' }, valeur: '« 8888 » ne correspond à aucune fiche de l’entreprise', alerte: true }], details: [] };

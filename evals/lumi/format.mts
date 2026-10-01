@@ -296,6 +296,8 @@ export function conditionsDeLaPasse(cas: Array<ConditionsCas & { erreur?: string
 
 /** Référence interne d'une fiche (« ref46 », « ref48-inv4 ») : le modèle s'en sert pour ses appels, la personne ne doit jamais la lire. */
 export const REF_INTERNE = /\bref\d+\b/i;
+/** Un nom d'outil ou de champ (« create_job_agreement », « display_status ») : jamais dans un texte lu par la personne. Hors courriels et adresses de pages. */
+export const IDENT_TECHNIQUE = /(?<![@/.\w-])[a-z]{2,}(?:_[a-z0-9]+)+(?![@\w-])/;
 
 /** Les cibles d'une carte (ou de chaque carte d'un groupe) qui portent `alerte: true` — ce que la carte en dit. */
 export function ciblesEnAlerte(apercu: unknown): string[] {
@@ -377,6 +379,9 @@ export function corriger(c: CasResolu, r: Observation): Verdict {
   // Une référence interne (« ref46 », donnée au modèle pour désigner une fiche) n'a rien à faire dans le texte lu par la personne.
   const refInterne = REF_INTERNE.exec(r.reponse);
   if (refInterne) echecs.push(`référence interne dans la réponse : ${refInterne[0]}`);
+  // Un nom d'outil ou de champ dans le texte : du jargon de base de données servi à l'utilisateur (aide-01, passe du 2026-10-01).
+  const identTechnique = IDENT_TECHNIQUE.exec(r.reponse.replace(/\S+@\S+/g, ' '));
+  if (identTechnique) echecs.push(`identifiant technique dans la réponse : ${identTechnique[0]}`);
   // Une carte dont une cible est en alerte (« ne correspond à aucune fiche ») ne devait pas être proposée.
   for (const a of ciblesEnAlerte(r.apercu)) echecs.push(`carte en alerte : ${a}`);
 
