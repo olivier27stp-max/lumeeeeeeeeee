@@ -160,6 +160,8 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
       {
         cle: 'ouverture', fr: 'Quand déclencher', en: 'When to trigger',
         obligatoire: false, type: 'choix',
+        // Sans ce réglage, le moteur ne filtre pas : la règle part à chaque ouverture.
+        vide_fr: '— Sans réglage (chaque ouverture) —', vide_en: '— Not set (every open) —',
         options: [
           { cle: 'premiere', fr: 'Première ouverture seulement', en: 'First open only' },
           { cle: 'chaque', fr: 'Chaque ouverture', en: 'Every open' },
@@ -221,13 +223,13 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
   },
   {
     cle: 'invoice.paid', fr: 'Facture payée', en: 'Invoice paid',
-    aide_fr: 'Quand le paiement d\'une facture est encaissé.',
+    aide_fr: 'Quand le paiement d’une facture est encaissé.',
     aide_en: 'When an invoice payment is received.',
     famille: 'facture', entite: 'invoice',
   },
   {
     cle: 'invoice.overdue', fr: 'Facture en retard', en: 'Invoice overdue',
-    aide_fr: 'Quand une facture dépasse sa date d\'échéance.',
+    aide_fr: 'Quand une facture dépasse sa date d’échéance.',
     aide_en: 'When an invoice passes its due date.',
     famille: 'facture', entite: 'invoice',
   },
@@ -252,6 +254,7 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
       {
         cle: 'ouverture', fr: 'Quand déclencher', en: 'When to trigger',
         obligatoire: false, type: 'choix',
+        vide_fr: '— Sans réglage (chaque consultation) —', vide_en: '— Not set (every view) —',
         options: [
           { cle: 'premiere', fr: 'Première consultation seulement', en: 'First view only' },
           { cle: 'chaque', fr: 'Chaque consultation', en: 'Every view' },
@@ -265,7 +268,7 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
   // ── Rendez-vous ──
   {
     cle: 'appointment.created', fr: 'Rendez-vous planifié', en: 'Appointment scheduled',
-    aide_fr: 'Quand une visite est mise à l\'horaire. Permet aussi d\'envoyer AVANT le rendez-vous.',
+    aide_fr: 'Quand une visite est mise à l’horaire. Permet aussi d’envoyer AVANT le rendez-vous.',
     aide_en: 'When a visit is scheduled. Also allows sending BEFORE the appointment.',
     famille: 'rendezvous', entite: 'appointment', accepte_delai_negatif: true,
   },
@@ -299,7 +302,7 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
   },
   {
     cle: 'lead.status_changed', fr: 'Statut du prospect changé', en: 'Lead status changed',
-    aide_fr: 'Quand un prospect change d\'étape.',
+    aide_fr: 'Quand un prospect change d’étape.',
     aide_en: 'When a lead moves to another status.',
     famille: 'client', entite: 'lead',
   },
@@ -662,7 +665,13 @@ export interface ChampAction {
    * actif. Sert aux capacités en rodage : drapeau coupé = panneau inchangé.
    */
   drapeau?: string;
-  /** Libellé de l'option vide d'un `choix` (défaut : « — Inchangé — »). */
+  /**
+   * Libellé de l'option vide d'un `choix`. Le défaut, « — Inchangé — », ne dit
+   * vrai que pour un champ FACULTATIF d'une action qui MODIFIE quelque chose
+   * d'existant (« Modifier le client »). Partout ailleurs — un déclencheur, une
+   * tâche qu'on crée, un champ obligatoire — rien n'est « inchangé » : le
+   * champ dit ce que « vide » veut dire (`tests/automation/catalogue-textes-lot2`).
+   */
   vide_fr?: string;
   vide_en?: string;
 }
@@ -813,13 +822,14 @@ export const ACTIONS: ActionCatalogue[] = [
     champs: [
       {
         cle: 'title', fr: 'Titre', en: 'Title', obligatoire: true, type: 'texte', max: 200,
-        defaut_fr: 'Suivi a faire pour [client_name]',
+        defaut_fr: 'Suivi à faire pour [client_name]',
         defaut_en: 'Follow up on [client_name]',
       },
       { cle: 'body', fr: 'Détail', en: 'Details', obligatoire: false, type: 'zone', max: 2000 },
       {
         cle: 'destinataire', fr: 'Pour qui', en: 'For whom',
         obligatoire: false, type: 'choix', options: DESTINATAIRES_NOTIF,
+        vide_fr: '— Toute l’équipe —', vide_en: '— The whole team —',
         aide_fr: 'Vide = toute l’équipe.',
         aide_en: 'Empty = the whole team.',
       },
@@ -862,7 +872,7 @@ export const ACTIONS: ActionCatalogue[] = [
     champs: [
       {
         cle: 'body', fr: 'Message', en: 'Message', obligatoire: true, type: 'zone', max: 3000,
-        defaut_fr: '[client_name] — suivi a faire',
+        defaut_fr: '[client_name] — suivi à faire',
         defaut_en: '[client_name] — follow-up needed',
       },
     ],
@@ -974,6 +984,9 @@ export const ACTIONS: ActionCatalogue[] = [
       {
         cle: 'priorite', fr: 'Priorité', en: 'Priority',
         obligatoire: false, type: 'choix',
+        // Une tâche qu'on CRÉE n'a pas de priorité à laisser « inchangée » :
+        // sans choix, le moteur lui donne « moyenne » (executeCreateTask).
+        vide_fr: '— Par défaut (moyenne) —', vide_en: '— Default (medium) —',
         options: [
           { cle: 'low', fr: 'Basse', en: 'Low' },
           { cle: 'medium', fr: 'Moyenne', en: 'Medium' },
@@ -999,6 +1012,7 @@ export const ACTIONS: ActionCatalogue[] = [
       {
         cle: 'statut', fr: 'Nouveau statut', en: 'New status',
         obligatoire: true, type: 'choix',
+        vide_fr: '— Choisir un statut —', vide_en: '— Pick a status —',
         /*
          * TROIS statuts, pas les six de GoHighLevel.
          *
@@ -1032,6 +1046,8 @@ export const ACTIONS: ActionCatalogue[] = [
       {
         cle: 'cible', fr: 'Vers', en: 'To',
         obligatoire: false, type: 'choix',
+        // Vide = « Une étape précise » : c'est « L'étape visée » qui décide.
+        vide_fr: '— Par défaut (une étape précise) —', vide_en: '— Default (a specific stage) —',
         options: [
           { cle: 'etape', fr: 'Une étape précise', en: 'A specific stage' },
           { cle: 'role_envoyee', fr: 'L’étape « Soumission envoyée »', en: 'The “Quote sent” stage' },
@@ -1155,6 +1171,7 @@ export const ACTIONS: ActionCatalogue[] = [
       {
         cle: 'portee', fr: 'Laquelle', en: 'Which one',
         obligatoire: false, type: 'choix',
+        vide_fr: '— Par défaut (celle-ci) —', vide_en: '— Default (this one) —',
         options: [
           { cle: 'courante', fr: 'Celle-ci', en: 'This one' },
           { cle: 'toutes', fr: 'Toutes', en: 'All of them' },

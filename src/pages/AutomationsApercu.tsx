@@ -13,9 +13,10 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Settings, TrendingUp, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, TrendingUp, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import PermissionGate from '../components/PermissionGate';
+import SousNavigation from '../components/automations/SousNavigation';
 import {
   getAutomationRules,
   getRecentAutomationFailures,
@@ -84,34 +85,7 @@ export default function AutomationsApercu() {
       <div className="mx-auto max-w-[1400px] space-y-4">
 
         {/* Sous-navigation, identique à la liste */}
-        <div className="flex flex-wrap items-center gap-5 border-b border-border">
-          <span className="pb-3 text-[15px] font-semibold text-text-primary">
-            {fr ? 'Automatisation' : 'Automation'}
-          </span>
-          <nav className="flex items-center gap-1" aria-label={fr ? 'Sections' : 'Sections'}>
-            <button
-              type="button"
-              onClick={() => navigate('/automations')}
-              className="border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              {fr ? 'Automatisations' : 'Workflows'}
-            </button>
-            <span className="inline-flex items-center gap-1.5 border-b-2 border-primary px-3 pb-3 pt-1 text-[13px] font-semibold text-primary">
-              {fr ? 'Vue d’ensemble' : 'Overview'}
-              <span className="rounded bg-warning-light px-1 py-0.5 text-[9px] font-bold uppercase text-warning">
-                {fr ? 'Bêta' : 'Beta'}
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={() => navigate('/automations/reglages')}
-              className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Settings size={13} aria-hidden="true" />
-              {fr ? 'Réglages globaux' : 'Global settings'}
-            </button>
-          </nav>
-        </div>
+        <SousNavigation courante="apercu" fr={fr} />
 
         {chargement ? (
           <div className="section-card flex items-center justify-center py-16">

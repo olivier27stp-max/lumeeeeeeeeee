@@ -17,11 +17,19 @@
    relances pendant des jours sans comprendre pourquoi.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PauseCircle, PlayCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { confirmer } from '../ui/ConfirmDialog';
+import { confirmerSansDoubleClic } from './confirmerSansDoubleClic';
 import { lireEtatPause, basculerPause } from '../../lib/automationWebhooksApi';
+
+/**
+ * Espace insécable (U+00A0) devant « : » et « ? » dans le dialogue : avec une
+ * espace ordinaire, la ligne se coupait juste avant et le signe partait seul
+ * au début de la suivante (audit du 2026-10-01). Écrite par son code : le
+ * caractère lui-même est invisible dans un éditeur.
+ */
+const INSECABLE = String.fromCharCode(0xa0);
 
 export default function BandeauPause({
   fr,
@@ -57,21 +65,36 @@ export default function BandeauPause({
     return () => { vivant = false; };
   }, [essai]);
 
+  /** Une confirmation déjà à l'écran : une seconde activation n'en empile pas une autre. */
+  const confirmationOuverte = useRef(false);
+
   async function basculer(vers: boolean) {
     if (vers) {
-      const ok = await confirmer({
-        title: fr ? 'Arrêter toutes vos automatisations ?' : 'Pause all your automations?',
+      if (confirmationOuverte.current) return;
+      confirmationOuverte.current = true;
+      let ok = false;
+      try {
         /*
-         * On dit ce qui s'arrête ET ce qui est préservé. Sans la seconde
-         * phrase, personne n'ose cliquer en urgence — et un interrupteur
-         * qu'on n'ose pas utiliser ne sert à rien.
+         * Double clic sur « Tout arrêter » (audit du 2026-10-01) : le second
+         * clic tombait sur le fond du dialogue et l'annulait — le dialogue
+         * clignotait et rien ne se passait, sur le bouton d'urgence.
          */
-        message: fr
-          ? 'Plus aucun courriel ni texto ne partira automatiquement, et aucune tâche ne sera créée. Ce qui est déjà prévu est CONSERVÉ : en reprenant, tout repart où c’en était.'
-          : 'No automatic email or text will go out, and no task will be created. What is already scheduled is KEPT: when you resume, everything picks up where it left off.',
-        confirmLabel: fr ? 'Tout arrêter' : 'Pause everything',
-        danger: true,
-      });
+        ok = await confirmerSansDoubleClic({
+          title: fr ? `Arrêter toutes vos automatisations${INSECABLE}?` : 'Pause all your automations?',
+          /*
+           * On dit ce qui s'arrête ET ce qui est préservé. Sans la seconde
+           * phrase, personne n'ose cliquer en urgence — et un interrupteur
+           * qu'on n'ose pas utiliser ne sert à rien.
+           */
+          message: fr
+            ? `Plus aucun courriel ni texto ne partira automatiquement, et aucune tâche ne sera créée. Ce qui est déjà prévu est CONSERVÉ${INSECABLE}: en reprenant, tout repart où c’en était.`
+            : 'No automatic email or text will go out, and no task will be created. What is already scheduled is KEPT: when you resume, everything picks up where it left off.',
+          confirmLabel: fr ? 'Tout arrêter' : 'Pause everything',
+          danger: true,
+        });
+      } finally {
+        confirmationOuverte.current = false;
+      }
       if (!ok) return;
     }
 
