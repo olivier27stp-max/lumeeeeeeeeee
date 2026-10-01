@@ -188,6 +188,15 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
   const cleIdempotence = useRef('');
   /** Verrou SYNCHRONE : deux clics dans le même instant voient encore `envoi` à faux. */
   const enCours = useRef(false);
+  /**
+   * Le focus suit l'écran : la carte cliquée DISPARAÎT quand l'aperçu la
+   * remplace, et le navigateur laissait alors le focus retomber sur `body`
+   * (audit du 2026-10-01). Il va sur le titre de l'aperçu, puis revient sur
+   * la carte du modèle au retour.
+   */
+  const titreApercu = useRef<HTMLHeadingElement>(null);
+  const zoneModeles = useRef<HTMLDivElement>(null);
+  const carteARetrouver = useRef<string | null>(null);
 
   // Chargement à l'ouverture (lecture seule). Réinitialisé à la fermeture.
   useEffect(() => {
@@ -207,6 +216,15 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
     if (open) return;
     setApercu(null); setSaisie(''); setRecherche(''); setCategories(new Set()); setFiltresMobile(false);
   }, [open]);
+
+  useEffect(() => {
+    if (apercu) { titreApercu.current?.focus(); return; }
+    const id = carteARetrouver.current;
+    carteARetrouver.current = null;
+    if (!id) return;
+    const cartes = zoneModeles.current?.querySelectorAll<HTMLButtonElement>('button[data-modele]') ?? [];
+    for (const carte of cartes) if (carte.dataset.modele === id) { carte.focus(); break; }
+  }, [apercu]);
 
   // Recherche différée (~200 ms) : on ne refiltre pas à chaque lettre.
   useEffect(() => {
@@ -238,6 +256,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
 
   const ouvrirApercu = (m: ModeleAutomatisation) => {
     cleIdempotence.current = nouvelleCle();
+    carteARetrouver.current = m.id;
     setApercu(m);
   };
 
@@ -324,7 +343,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
         <ul className="divide-y divide-border rounded-xl border border-outline">
           {resultats.map((m) => (
             <li key={m.id}>
-              <button type="button" onClick={() => ouvrirApercu(m)}
+              <button type="button" data-modele={m.id} onClick={() => ouvrirApercu(m)}
                 className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-semibold text-text-primary">{fr ? m.nom.fr : m.nom.en}</p>
@@ -344,7 +363,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
     return (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {resultats.map((m) => (
-          <button key={m.id} type="button" onClick={() => ouvrirApercu(m)}
+          <button key={m.id} type="button" data-modele={m.id} onClick={() => ouvrirApercu(m)}
             className="flex flex-col rounded-xl border border-outline bg-surface-card p-3 text-left transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
             <div className="flex h-16 items-center rounded-lg bg-surface-secondary px-3">
               <Miniature modele={m} compacte />
@@ -373,7 +392,10 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
           <EtiquetteCategorie cle={m.categorie} fr={fr} />
           <Canaux canaux={m.canaux} fr={fr} />
         </div>
-        <h3 className="mt-2 text-[16px] font-bold text-text-primary">{fr ? m.nom.fr : m.nom.en}</h3>
+        <h3 ref={titreApercu} tabIndex={-1}
+          className="mt-2 rounded text-[16px] font-bold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+          {fr ? m.nom.fr : m.nom.en}
+        </h3>
         <p className="mt-1 text-[13px] text-text-secondary">{fr ? m.description.fr : m.description.en}</p>
 
         <div className="mt-4 rounded-xl border border-outline p-3">
@@ -486,7 +508,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
               </div>
             )}
 
-            <div className="mt-3">{contenu()}</div>
+            <div ref={zoneModeles} className="mt-3">{contenu()}</div>
           </div>
         </div>
       )}
