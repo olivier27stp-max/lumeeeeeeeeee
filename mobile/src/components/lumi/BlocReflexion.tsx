@@ -11,7 +11,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { DisqueLumi, TexteAnime, useAnimationsReduites } from './AnimationsLumi';
 
 import type { UsageLumi } from '@/lib/api/lumi';
-import { fmtDollars, fmtTokens, libelleOutil, nomModele } from '@/lib/lumi/libelles';
+import { fmtTokens, libelleOutil, nomModele } from '@/lib/lumi/libelles';
 import { useThemeLumi } from '@/lib/lumi/theme';
 import { IconeLumi } from './IconeLumi';
 
@@ -54,11 +54,12 @@ export function BlocReflexion({
         <TexteAnime actif={reflechit} reduit={reduit} style={{ fontSize: 12.5, fontWeight: '500', color: reflechit ? c.lumi : c.texteDoux }}>
           {reflechit ? (fr ? 'Lumi réfléchit…' : 'Lumi is thinking…') : `${fr ? 'Réflexion' : 'Thinking'}${secondes ? ` · ${secondes} s` : ''}`}
         </TexteAnime>
-        {!reflechit && !!usage && (
+        {/* Aucun montant d'IA au client (2026-09-30) : le détail technique ne
+            s'affiche que sur un compte interne, et sans coût. L'usage du client
+            se lit dans le compteur de crédits, en haut de l'écran. */}
+        {!reflechit && !!usage && interne && (
           <Text style={{ fontSize: 11, color: c.texteTenu }}>
-            {interne
-              ? `· ${nomModele(usage.model)} · ${fmtTokens(usage.input_tokens, fr)} → ${fmtTokens(usage.output_tokens, fr)} tokens · ${fmtDollars(usage.cost_cents)}`
-              : `· ${fmtDollars(usage.cost_cents)}`}
+            {`· ${nomModele(usage.model)} · ${fmtTokens(usage.input_tokens, fr)} → ${fmtTokens(usage.output_tokens, fr)} tokens`}
           </Text>
         )}
         {etapes.length > 0 && (

@@ -85,10 +85,6 @@ export function fmtMontant(cents: number): string {
   return `${v} $`;
 }
 
-export function fmtDollars(cents: number): string {
-  return `${(cents / 100).toFixed(2)} $`;
-}
-
 export function fmtTokens(n: number, fr: boolean): string {
   return n.toLocaleString(fr ? 'fr-CA' : 'en-CA');
 }

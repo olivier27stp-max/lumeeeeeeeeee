@@ -19,6 +19,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetch as fetchStream } from 'expo/fetch';
 
+import type { EtatCredits, HistoriqueCredits } from '../lumi/credits';
 import { ACTIVE_ORG_KEY } from '../membership';
 import { supabase } from '../supabase';
 
@@ -59,15 +60,19 @@ async function entetes(jeton: string): Promise<Record<string, string>> {
    Types — copiés à l'identique du web (src/lib/lumiApi.ts).
    ──────────────────────────────────────────────────────────────────────── */
 
-export interface BudgetLumi {
-  plan_slug: string | null;
-  includes_ai: boolean;
-  budget_cents: number;
-  depense_cents: number;
-  reste_cents: number;
-  epuise: boolean;
+/**
+ * Quota de Lumi (contrat serveur du 2026-09-30, PR #817/#824) : l'usage se
+ * compte en CRÉDITS, plus en dollars. L'ancien objet budget à plat
+ * (`budget_cents`, `depense_cents`, `reste_cents`, `epuise`, `includes_ai`…)
+ * n'existe plus : tout est dans `credits`, et `inclus` remplace `includes_ai`.
+ */
+export interface QuotaLumi {
+  /** false = Lumi n'est pas activé sur ce serveur (clé API absente). */
   configured?: boolean;
+  credits: EtatCredits;
 }
+
+export type { EtatCredits, HistoriqueCredits } from '../lumi/credits';
 
 export type StatutProposition = 'en_attente' | 'confirmee' | 'annulee' | 'echouee';
 
@@ -150,13 +155,16 @@ export interface RapportLumi {
   sections: SectionRapportLumi[];
 }
 
-/** Tokens et coût d'une réponse (somme des appels du tour), ou d'une conversation. */
+/**
+ * Tokens d'une réponse (somme des appels du tour), ou d'une conversation.
+ * Plus de coût : depuis le 2026-09-30 le serveur ne renvoie plus `cost_cents`,
+ * et aucun montant d'IA ne s'affiche au client.
+ */
 export interface UsageLumi {
   model: string | null;
   input_tokens: number;
   output_tokens: number;
   cache_read_input_tokens: number;
-  cost_cents: number;
   appels: number;
 }
 
@@ -193,18 +201,19 @@ export type EvenementFlux =
   | { type: 'fiches'; fiches: FicheLumi[] }
   | { type: 'executed'; tool_use_id: string; ok: boolean; fiche: FicheLumi | null; auto?: boolean }
   | { type: 'report'; tool_use_id: string; rapport: RapportLumi }
-  | { type: 'usage'; model: string; cost_cents: number; usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }
-  | { type: 'done'; conversation_id: string; cost_cents: number; budget: BudgetLumi; proposal: { tool_use_id: string; tool: string; args: Record<string, unknown> } | null }
+  | { type: 'usage'; model: string; usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }
+  | { type: 'done'; conversation_id: string; credits: EtatCredits; proposal: { tool_use_id: string; tool: string; args: Record<string, unknown> } | null }
   | { type: 'error'; message: string };
 
 export class ErreurLumi extends Error {
   code: string;
-  budget?: BudgetLumi;
-  constructor(code: string, message: string, budget?: BudgetLumi) {
+  /** 403 `plan_sans_lumi` : le serveur joint l'état des crédits (plus `budget`). */
+  credits?: EtatCredits;
+  constructor(code: string, message: string, credits?: EtatCredits) {
     super(message);
     this.name = 'ErreurLumi';
     this.code = code;
-    this.budget = budget;
+    this.credits = credits;
   }
 }
 
@@ -215,11 +224,17 @@ export class ErreurLumi extends Error {
 /** Un tour qui ne répond rien pendant deux minutes est considéré perdu. */
 const TIMEOUT_MS = 120_000;
 
-/** Lit un flux SSE et appelle `onEvent` pour chaque événement. */
-async function lireFlux(res: Response, onEvent: (e: EvenementFlux) => void, signal?: AbortSignal): Promise<void> {
+/**
+ * Lit un flux SSE et appelle `onEvent` pour chaque événement.
+ *
+ * Exporté pour les tests : c'est le point d'entrée de TOUT le contrat SSE
+ * (`done.credits`, `usage` sans coût, 403 `plan_sans_lumi`), donc l'endroit où
+ * une rupture de contrat serveur doit se voir.
+ */
+export async function lireFlux(res: Response, onEvent: (e: EvenementFlux) => void, signal?: AbortSignal): Promise<void> {
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { code?: string; error?: string; budget?: BudgetLumi };
-    throw new ErreurLumi(body?.code || `http_${res.status}`, body?.error || `HTTP ${res.status}`, body?.budget);
+    const body = (await res.json().catch(() => ({}))) as { code?: string; error?: string; credits?: EtatCredits };
+    throw new ErreurLumi(body?.code || `http_${res.status}`, body?.error || `HTTP ${res.status}`, body?.credits);
   }
   const reader = res.body?.getReader();
   if (!reader) throw new ErreurLumi('flux', 'No stream');
@@ -350,7 +365,7 @@ async function appel<T>(chemin: string, init?: { method?: string; body?: unknown
     }
   }
   const json = (await res.json().catch(() => ({}))) as any;
-  if (!res.ok) throw new ErreurLumi(json?.code || `http_${res.status}`, json?.error || `HTTP ${res.status}`, json?.budget);
+  if (!res.ok) throw new ErreurLumi(json?.code || `http_${res.status}`, json?.error || `HTTP ${res.status}`, json?.credits);
   return json as T;
 }
 
@@ -415,8 +430,18 @@ export async function definirAutorisationLumi(tool: string, actif: boolean): Pro
   return (await appel<{ tools: string[] }>('/lumi/autorisations', { method: 'PUT', body: { tool, actif } })).tools;
 }
 
-export async function quotaLumi(): Promise<BudgetLumi> {
-  return appel<BudgetLumi>('/lumi/quota');
+export async function quotaLumi(): Promise<QuotaLumi> {
+  return appel<QuotaLumi>('/lumi/quota');
+}
+
+/** État des crédits seul — même contenu que `quotaLumi().credits`. */
+export async function creditsLumi(): Promise<EtatCredits> {
+  return appel<EtatCredits>('/lumi/credits');
+}
+
+/** Historique de consommation ; `par_utilisateur` est null sans la permission. */
+export async function historiqueCreditsLumi(jours = 30): Promise<HistoriqueCredits> {
+  return appel<HistoriqueCredits>(`/lumi/credits/historique?jours=${encodeURIComponent(String(jours))}`);
 }
 
 export async function listerConversationsLumi(): Promise<ConversationLumi[]> {

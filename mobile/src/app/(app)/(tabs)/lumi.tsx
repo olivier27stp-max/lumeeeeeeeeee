@@ -5,9 +5,12 @@
  * mêmes 66 outils, mêmes permissions, MÊME historique. Cet écran ne contient
  * aucune logique d'agent — il affiche un flux SSE et propose des boutons.
  *
- * Ce qui reste au serveur, et qui ne doit JAMAIS remonter ici : le plan
- * (includes_ai), le budget mensuel, la permission `external_agent.use`, la
- * décision d'exécuter une écriture. L'écran ne fait que demander.
+ * Ce qui reste au serveur, et qui ne doit JAMAIS remonter ici : le plan, le
+ * décompte des crédits Lumi, la permission `external_agent.use`, la décision
+ * d'exécuter une écriture. L'écran ne fait que demander et afficher.
+ *
+ * Aucun montant en dollars d'IA ne s'affiche (décision du 2026-09-30) : l'usage
+ * se montre en crédits Lumi, via `src/lib/lumi/credits.ts`.
  *
  * Interface : style ChatGPT mobile, avec les conventions de l'app (nativewind
  * pour la structure, palette `lib/lumi/theme` pour le clair/sombre, SF Symbols).
@@ -42,6 +45,7 @@ import { FournisseurFiches, TexteLumi } from '@/components/lumi/TexteLumi';
 import { HistoriqueDrawer } from '@/components/lumi/HistoriqueDrawer';
 import { HaloLumi, useAnimationsReduites } from '@/components/lumi/AnimationsLumi';
 import { RobotLumi } from '@/components/lumi/RobotLumi';
+import { AvisCreditsLumi, CompteurCreditsLumi } from '@/components/lumi/CreditsLumi';
 import {
   ErreurLumi,
   chargerConversationLumi,
@@ -56,7 +60,7 @@ import {
   modeLumi,
   quotaLumi,
   supprimerConversationLumi,
-  type BudgetLumi,
+  type EtatCredits,
   type ConversationLumi,
   type EvenementFlux,
   type MessageLumi,
@@ -64,12 +68,11 @@ import {
   type OrigineMessageLumi,
   type PropositionLumi,
   type SuggestionLumi,
-  type UsageLumi,
 } from '@/lib/api/lumi';
 import { useAuth } from '@/lib/auth';
 import { useTranslation } from '@/lib/i18n';
+import { creditsBloquent, etatCredits, libelleAvis, libelleSaisieBloquee, textesCredits } from '@/lib/lumi/credits';
 import { SOURCES_OUTILS } from '@/lib/lumi/deepLinks';
-import { fmtDollars } from '@/lib/lumi/libelles';
 import { useThemeLumi } from '@/lib/lumi/theme';
 import { MAX_SECONDES, useDictee } from '@/lib/lumi/useDictee';
 import { useLectureVocale } from '@/lib/lumi/useLectureVocale';
@@ -128,14 +131,15 @@ function EcranLumi() {
   const [mode, setMode] = useState<ModeLumi>('argent');
   const [modeOuvert, setModeOuvert] = useState(false);
   const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
-  const [budget, setBudget] = useState<BudgetLumi | null>(null);
-  const [usageConversation, setUsageConversation] = useState<UsageLumi | null>(null);
+  const [credits, setCredits] = useState<EtatCredits | null>(null);
+  /** false = Lumi n'est pas activé sur ce serveur. */
+  const [configure, setConfigure] = useState(true);
   const [erreur, setErreur] = useState<{ code: string; message: string } | null>(null);
   const [horsLigne, setHorsLigne] = useState(false);
   const [suitLeFil, setSuitLeFil] = useState(true);
   const [clavierOuvert, setClavierOuvert] = useState(false);
 
-  /** Compte interne (@lume-test.ca) : voit modèle et tokens. Un client ne voit que le coût. */
+  /** Compte interne (@lume-test.ca) : voit le modèle et les tokens. Un client ne voit rien de tout ça. */
   const interne = /@lume-test\.ca$/i.test(session?.user?.email ?? '');
 
   const idRef = useRef(1);
@@ -208,7 +212,7 @@ function EcranLumi() {
     ),
   );
 
-  /* ── Démarrage : budget, conversations, préférences ─────────────────── */
+  /* ── Démarrage : crédits, conversations, préférences ────────────────── */
   const rechargerConversations = useCallback(() => {
     setChargementConvs(true);
     listerConversationsLumi()
@@ -230,13 +234,14 @@ function EcranLumi() {
       return;
     }
     quotaLumi()
-      .then((b) => {
-        setBudget(b);
+      .then((q) => {
+        setCredits(q.credits ?? null);
+        setConfigure(q.configured !== false);
         // Dire tout de suite POURQUOI Lumi est indisponible, sans attendre un envoi.
-        if (b.configured === false) setErreur({ code: 'lumi_not_configured', message: '' });
-        else if (!b.includes_ai) setErreur({ code: 'plan_sans_lumi', message: '' });
+        if (q.configured === false) setErreur({ code: 'lumi_not_configured', message: '' });
+        else if (!q.credits?.inclus) setErreur({ code: 'plan_sans_lumi', message: '' });
       })
-      .catch(() => setBudget(null));
+      .catch(() => setCredits(null));
     // Différé : `rechargerConversations` commence par un setState, et l'appeler
     // dans le corps de l'effet déclenche une cascade de rendus.
     queueMicrotask(rechargerConversations);
@@ -357,13 +362,12 @@ function EcranLumi() {
             break;
           case 'usage': {
             // Un tour = un ou plusieurs appels au modèle : on additionne.
-            const u = dernier.usage ?? { model: null, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cost_cents: 0, appels: 0 };
+            const u = dernier.usage ?? { model: null, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, appels: 0 };
             dernier.usage = {
               model: e.model || u.model,
               input_tokens: u.input_tokens + (e.usage?.input_tokens ?? 0),
               output_tokens: u.output_tokens + (e.usage?.output_tokens ?? 0),
               cache_read_input_tokens: u.cache_read_input_tokens + (e.usage?.cache_read_input_tokens ?? 0),
-              cost_cents: u.cost_cents + (e.cost_cents ?? 0),
               appels: u.appels + 1,
             };
             break;
@@ -402,7 +406,7 @@ function EcranLumi() {
             return prev;
           });
         }
-        setBudget(e.budget);
+        if (e.credits) setCredits(e.credits);
         if (!conversationIdRef.current) {
           setConversationId(e.conversation_id);
           rechargerConversations();
@@ -426,7 +430,7 @@ function EcranLumi() {
         if (ctrl.signal.aborted) return;
         const e = err as ErreurLumi;
         setErreur({ code: e.code || 'reseau', message: e.message || (fr ? 'Erreur de connexion.' : 'Connection error.') });
-        if (e.budget) setBudget(e.budget);
+        if (e.credits) setCredits(e.credits);
         // Un message assistant vide ne doit pas rester à l'écran.
         setItems((prev) => prev.filter((m) => !(m.role === 'assistant' && m.enCours && !m.text)));
       } finally {
@@ -504,7 +508,6 @@ function EcranLumi() {
       try {
         const { messages, usage } = await chargerConversationLumi(id);
         setConversationId(id);
-        setUsageConversation(usage ?? null);
         setItems(messages.map((m) => ({ ...m, id: nextId() })));
         setSuitLeFil(true);
       } catch {
@@ -517,7 +520,6 @@ function EcranLumi() {
   function nouvelleConversation() {
     abortRef.current?.abort();
     voix.arreter();
-    setUsageConversation(null);
     setConversationId(null);
     setItems([]);
     setErreur(null);
@@ -649,9 +651,12 @@ function EcranLumi() {
   }
 
   /* ── États globaux ──────────────────────────────────────────────────── */
-  const bloque = !!budget && (!budget.includes_ai || budget.epuise || budget.configured === false);
+  // Crédits épuisés, forfait sans Lumi, ou serveur sans Lumi : on bloque l'envoi.
+  const bloque = !configure || (!!credits && (!credits.inclus || creditsBloquent(credits)));
   const peutEnvoyer = !!input.trim() && !enCours && !bloque && !horsLigne;
-  const pctBudget = budget && budget.budget_cents > 0 ? Math.min(100, Math.round((budget.depense_cents / budget.budget_cents) * 100)) : 0;
+  /** Le compteur ne s'affiche que si le forfait inclut Lumi (sinon : « inclus dans Autopilot »). */
+  const montreCompteur = !!credits && etatCredits(credits) !== 'absent';
+  const saisieBloquee = libelleSaisieBloquee(credits, fr ? 'fr' : 'en');
 
   const messageErreur = (code: string, brut: string): string => {
     switch (code) {
@@ -660,9 +665,9 @@ function EcranLumi() {
       case 'http_429':
         return fr ? 'Lumi souffle deux minutes : beaucoup de demandes d’un coup. Réessaie tout à l’heure.' : 'Lumi is catching its breath: a lot of requests at once. Try again shortly.';
       case 'quota_epuise':
-        return fr ? 'Le budget IA du mois est atteint. Lumi reprend le 1er du mois prochain.' : 'This month’s AI budget is reached. Lumi resumes on the 1st of next month.';
+        return libelleAvis(credits, fr ? 'fr' : 'en') ?? textesCredits(fr ? 'fr' : 'en').exhausted;
       case 'plan_sans_lumi':
-        return fr ? 'Lumi est inclus dans le forfait Autopilot.' : 'Lumi is included in the Autopilot plan.';
+        return textesCredits(fr ? 'fr' : 'en').planIncludes;
       case 'lumi_not_configured':
         return fr ? 'Lumi n’est pas encore activé sur ce serveur.' : 'Lumi is not enabled on this server yet.';
       case 'timeout':
@@ -698,16 +703,7 @@ function EcranLumi() {
             <RobotLumi taille={22} />
             <Text style={{ fontSize: 17, fontWeight: '700', color: c.texte }}>Lumi</Text>
           </View>
-          {!!budget && budget.includes_ai && (
-            <Text style={{ fontSize: 10.5, color: pctBudget >= 90 ? c.danger : c.texteTenu, fontVariant: ['tabular-nums'] }}>
-              {fmtDollars(budget.depense_cents)} / {fmtDollars(budget.budget_cents)}
-              {usageConversation && conversationId
-                ? interne
-                  ? ` · ${fmtDollars(usageConversation.cost_cents)}`
-                  : ` · ${fr ? 'cette conversation' : 'this conversation'} ${fmtDollars(usageConversation.cost_cents)}`
-                : ''}
-            </Text>
-          )}
+          {montreCompteur && <CompteurCreditsLumi credits={credits!} langue={fr ? 'fr' : 'en'} />}
         </View>
 
         <Pressable
@@ -975,6 +971,9 @@ function EcranLumi() {
           </View>
         )}
 
+        {/* ── Avis de crédits (80 % / épuisés) ── */}
+        <AvisCreditsLumi credits={credits} langue={fr ? 'fr' : 'en'} />
+
         {/* ── Le composer ── */}
         <View style={{ paddingHorizontal: 12, paddingBottom: clavierOuvert ? 8 : Math.max(insets.bottom, 8) }}>
           <View style={{ borderRadius: 22, borderWidth: 1, borderColor: c.bordure, backgroundColor: c.carte, paddingHorizontal: 6, paddingTop: 6, paddingBottom: 6 }}>
@@ -986,9 +985,10 @@ function EcranLumi() {
               accessibilityLabel={fr ? 'Message à Lumi' : 'Message to Lumi'}
               placeholder={
                 bloque
-                  ? fr
-                    ? 'Lumi est indisponible pour le moment.'
-                    : 'Lumi is unavailable for now.'
+                  ? saisieBloquee
+                    ?? (fr
+                      ? 'Lumi est indisponible pour le moment.'
+                      : 'Lumi is unavailable for now.')
                   : horsLigne
                     ? fr
                       ? 'Hors ligne — ton texte est gardé.'
