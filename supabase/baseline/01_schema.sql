@@ -8419,7 +8419,7 @@ $$;
 --
 
 CREATE FUNCTION public.finish_job(p_org_id uuid, p_job_id uuid) RETURNS jsonb
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
@@ -14097,7 +14097,7 @@ $_$;
 --
 
 CREATE FUNCTION public.restore_client(p_org_id uuid, p_client_id uuid) RETURNS jsonb
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
@@ -14135,7 +14135,7 @@ $$;
 --
 
 CREATE FUNCTION public.restore_job(p_org_id uuid, p_job_id uuid) RETURNS jsonb
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
