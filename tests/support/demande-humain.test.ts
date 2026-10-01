@@ -96,3 +96,76 @@ describe('prix des forfaits : un article, les montants de la page Tarifs', () =>
     expect(reponseFaqPour('Combien coûte Lume ?', 'fr')?.reponse).toContain('Votre forfait actuel');
   });
 });
+
+/** Les cellules [Minimum, Scale, Autopilot] d'une ligne du tableau comparatif de la page Tarifs, par le début de son libellé anglais. */
+function cellulesDe(page: string, debut: string): string {
+  const depart = page.indexOf(`{ label: { en: '${debut}`);
+  if (depart < 0) throw new Error(`ligne « ${debut} » introuvable dans Pricing.tsx`);
+  const d = page.indexOf('cells: [', depart) + 'cells: ['.length;
+  return page.slice(d, page.indexOf('] }', d));
+}
+
+describe('contenu des forfaits : un article, les faits de la page Tarifs', () => {
+  const page = readFileSync(resolve(__dirname, '..', '..', 'src', 'pages', 'marketing', 'Pricing.tsx'), 'utf8');
+
+  it('« combien de bureaux inclus dans Autopilot ? » ne reçoit plus la grille des prix', async () => {
+    // Batterie du support, prod, 2026-10-01 : l'article de prix répondait, sans le nombre de bureaux.
+    const { reponseFaqPour } = await import('../../server/lib/support/faq');
+    const r = reponseFaqPour('Combien de bureaux sont inclus dans le forfait Autopilot ?', 'fr');
+    expect(r?.id).toBe('plan-includes');
+    expect(r?.reponse).toContain('2 bureaux');
+  });
+
+  it('« inclus dans quel forfait ? » reçoit le contenu des forfaits, en français et en anglais', async () => {
+    const { reponseFaqPour } = await import('../../server/lib/support/faq');
+    const fr = reponseFaqPour('Le module de porte-à-porte est inclus dans quel forfait ?', 'fr');
+    expect(fr?.id).toBe('plan-includes');
+    expect(fr?.reponse).toMatch(/Autopilot ajoute[^.]*porte-à-porte/);
+    expect(reponseFaqPour('Which plan includes texting?', 'en')?.id).toBe('plan-includes');
+    expect(reponseFaqPour('Quel rabais avec le forfait Autopilot payé à l’année ?', 'fr')?.reponse).toContain('30 %');
+  });
+
+  it('une question de prix garde l’article de prix', async () => {
+    const { reponseFaqPour } = await import('../../server/lib/support/faq');
+    for (const q of ["C'est combien par mois, le forfait Minimum ?", 'Le forfait Scale, ça coûte combien par mois ?', 'Quel est le prix mensuel du forfait Autopilot ?']) {
+      expect(reponseFaqPour(q, 'fr')?.id, q).toBe('pricing');
+    }
+  });
+
+  it('chaque fait de l’article est celui de la page Tarifs', async () => {
+    const { ARTICLES } = await import('../../src/components/supportArticles');
+    const a = ARTICLES.find((x) => x.id === 'plan-includes')!;
+    const ligne = (debut: string) => cellulesDe(page, debut);
+    // Bureaux inclus : 1 / 1 / 2.
+    expect([...ligne('Offices included').matchAll(/en: '(\d+)'/g)].map((m) => Number(m[1]))).toEqual([1, 1, 2]);
+    expect(a.a_fr).toMatch(/Minimum :[^.]*avec 1 bureau\./);
+    expect(a.a_fr).toMatch(/Scale ajoute[^.]*et 1 bureau\./);
+    expect(a.a_fr).toMatch(/Autopilot ajoute[^.]*et 2 bureaux\./);
+    // Utilisateurs inclus : Scale et Autopilot (Minimum : écart page / base, pas écrit).
+    const sieges = [...page.matchAll(/seats: \{ users: (\d+) \}/g)].map((m) => Number(m[1]));
+    expect(a.a_fr).toContain(`avec ${sieges[1]} utilisateurs inclus et 1 bureau`);
+    expect(a.a_fr).toContain(`avec ${sieges[2]} utilisateurs inclus et 2 bureaux`);
+    expect(a.a_fr).not.toMatch(/Minimum :[^.]*utilisateurs/);
+    // Rabais annuel : celui des données de la page.
+    const rabais = [...page.matchAll(/annualDiscount: ([\d.]+)/g)].map((m) => Math.round(Number(m[1]) * 100));
+    expect(a.a_fr).toContain(`${rabais[0]} % avec Minimum, ${rabais[1]} % avec Scale et ${rabais[2]} % avec Autopilot`);
+    expect(a.a_en).toContain(`${rabais[0]}% on Minimum, ${rabais[1]}% on Scale and ${rabais[2]}% on Autopilot`);
+    // Premier forfait de chaque fonction : [Minimum, Scale, Autopilot].
+    const premier = (debut: string) => ligne(debut).split(',').map((c) => c.trim()).findIndex((c) => c !== 'false');
+    const phrase = (forfait: string) => { const d = a.a_fr.indexOf(`${forfait} ajoute`); return a.a_fr.slice(d, a.a_fr.indexOf('.', d)); };
+    for (const [debut, mot] of [['Two-way SMS with a dedicated number', 'textos'], ['Automations & quote/invoice follow-ups', 'automatisations'], ['QuickBooks export', 'QuickBooks']] as const) {
+      expect(premier(debut), debut).toBe(1);
+      expect(phrase('Scale'), mot).toContain(mot);
+    }
+    for (const [debut, mot] of [['Lumi, the AI assistant', 'Lumi'], ['Door-to-door:', 'porte-à-porte'], ['Full API access', 'API']] as const) {
+      expect(premier(debut), debut).toBe(2);
+      expect(phrase('Autopilot'), mot).toContain(mot);
+      expect(phrase('Scale'), mot).not.toContain(mot);
+    }
+  });
+
+  it('Lumi le dit au « tu »', async () => {
+    const { reponseFaqPour } = await import('../../server/lib/support/faq');
+    expect(reponseFaqPour('Combien de bureaux sont inclus dans le forfait Autopilot ?', 'fr', 'tu')?.reponse).toContain('Ton forfait actuel');
+  });
+});

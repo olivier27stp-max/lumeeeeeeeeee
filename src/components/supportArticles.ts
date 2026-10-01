@@ -17,6 +17,13 @@ export interface Article {
   a_en: string;
   /** Extra search terms that don't appear in the question/answer text. */
   tags: string;
+  /**
+   * Source d'une expression régulière (insensible à la casse) : la réponse toute
+   * faite n'est servie par mots-clés QUE si la question la contient. Pour les
+   * articles dont le vocabulaire (« combien », « forfait ») recouvre des
+   * questions voisines. Sans effet sur la recherche du tiroir d'aide.
+   */
+  seulement?: string;
 }
 
 export const ARTICLES: Article[] = [
@@ -139,6 +146,28 @@ export const ARTICLES: Article[] = [
     a_fr: "Trois forfaits, en dollars canadiens : Minimum à 150 $ par mois, Scale à 347 $ par mois et Autopilot à 495 $ par mois. Un utilisateur de plus que ceux inclus coûte 35 $ par mois avec Minimum, 30 $ avec Scale et 25 $ avec Autopilot. Les textos, les automatisations et l'exportation QuickBooks arrivent avec Scale ; Lumi (l'assistant IA), le porte-à-porte et l'accès à l'API sont réservés à Autopilot. Votre forfait actuel se voit et se change dans Paramètres → Forfait & facturation.",
     a_en: 'Three plans, in Canadian dollars: Minimum at $150 per month, Scale at $347 per month and Autopilot at $495 per month. Each user beyond those included costs $35 per month on Minimum, $30 on Scale and $25 on Autopilot. Texting, automations and the QuickBooks export start with Scale; Lumi (the AI assistant), door-to-door and API access are Autopilot only. You can see and change your current plan under Settings → Plan & billing.',
     tags: 'prix tarif tarifs cout coute coutent combien forfait forfaits minimum scale autopilot abonnement mensuel price prices pricing cost costs plan plans much',
+    // Une question de PRIX seulement : « Combien de bureaux sont inclus dans le
+    // forfait Autopilot ? » recevait la grille des prix, sans le nombre de bureaux
+    // (batterie du support, 2026-10-01).
+    seulement: "\\b(prix|tarifs?|co[uû]t\\w*|c[’' ]?est combien|combien (par|ça|ca|c[’' ]?est|pour)|price\\w*|pricing|costs?|how much)\\b",
+  },
+  {
+    // Ce que CONTIENT chaque forfait. Sans cet article, l'assistant de l'app
+    // n'avait aucun fait écrit là-dessus et devinait : « le porte-à-porte est
+    // inclus dans Scale et Autopilot » (il est réservé à Autopilot), et « à partir
+    // de quel forfait les textos ? » ne recevait pas « Scale » (batterie du
+    // support, 2026-10-01). Chaque fait vient de la page Tarifs, confirmé par la
+    // table `plans` de la prod ; `tests/lumi-glossaire-support.test.ts` les
+    // compare un par un. Le nombre d'utilisateurs de Minimum n'y est pas : la page
+    // dit 3, la table 2 (écart remonté, non tranché).
+    id: 'plan-includes',
+    path: '/settings/billing',
+    q_fr: "Qu'est-ce qui est inclus dans chaque forfait ?",
+    q_en: 'What is included in each plan?',
+    a_fr: "Minimum : clients, soumissions, contrats, calendrier, jobs, facturation et paiements en ligne, avec 1 bureau. Scale ajoute les textos, les automatisations et relances, les feuilles de temps et la paie, le pipeline de ventes et l'exportation QuickBooks, avec 10 utilisateurs inclus et 1 bureau. Autopilot ajoute Lumi (l'assistant IA), le porte-à-porte et l'accès à l'API, avec 20 utilisateurs inclus et 2 bureaux. Payé à l'année, le rabais est de 10 % avec Minimum, 15 % avec Scale et 30 % avec Autopilot. Votre forfait actuel se voit et se change dans Paramètres → Forfait & facturation.",
+    a_en: 'Minimum: clients, quotes, contracts, calendar, jobs, invoicing and online payments, with 1 office. Scale adds texting, automations and follow-ups, timesheets and payroll, the sales pipeline and the QuickBooks export, with 10 users included and 1 office. Autopilot adds Lumi (the AI assistant), door-to-door and API access, with 20 users included and 2 offices. Paid yearly, the discount is 10% on Minimum, 15% on Scale and 30% on Autopilot. You can see and change your current plan under Settings → Plan & billing.',
+    tags: 'inclus inclut incluent compris comprend forfait forfaits minimum scale autopilot bureau bureaux utilisateurs textos sms automatisations quickbooks porte module lumi api pipeline paie annuel annee rabais difference included includes plan plans office offices users texting door discount yearly annual which',
+    seulement: "\\b(inclus\\w*|inclut|incluent|compris\\w*|comprend\\w*|quels? forfaits?|quel plan|bureaux?|rabais|included?|includes?|which plans?|what plans?|offices?|discount)\\b|diff[ée]rence",
   },
   {
     id: 'change-plan',
