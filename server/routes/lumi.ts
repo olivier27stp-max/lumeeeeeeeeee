@@ -62,6 +62,7 @@ import { maintenantPourLumi } from '../lib/lumi/temps';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
+import { assainirPourApi } from '../lib/lumi/historique';
 
 const router = Router();
 router.use(maxBodySize());
@@ -181,7 +182,9 @@ async function chargerHistorique(conversationId: string, cleRefs?: string, max =
     msgs = msgs.slice(i);
   }
   // Les vieux résultats d'outils sont allégés en mémoire seulement (voir purgerVieuxResultats).
-  return purgerVieuxResultats(msgs);
+  // Blocs d'affichage (« fiches » du briefing) et conversation commencée par
+  // Lumi : l'API refuserait l'historique tel quel (voir historique.ts).
+  return purgerVieuxResultats(assainirPourApi(msgs));
 }
 
 async function sauverMessages(conversationId: string, orgId: string, msgs: Msg[], cleRefs?: string): Promise<void> {
