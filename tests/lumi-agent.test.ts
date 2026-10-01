@@ -255,6 +255,43 @@ describe('orchestrateur', () => {
     expect(journal).toHaveLength(2);
   });
 
+  // Passe de référence du 2026-10-01 : au palier restreint (2 étapes), une question à
+  // deux lectures finissait en erreur « trop d'étapes », sans réponse (6 cas sur 115).
+  it('limite d’étapes atteinte : un appel de CONCLUSION sans outils répond, au lieu d’une erreur sans réponse', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'l1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'tool_use', id: 'l2', name: 'list_invoices', input: { status: 'overdue' } }], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Deux factures, dont une en retard.' }], stop_reason: 'end_turn', usage });
+    const emis: any[] = [];
+    const r = await tourLumi({ ...baseTour(emis, []), contexteTour: 'Il est 9 h.', reglages: { model: 'claude-haiku-4-5', effort: 'low', max_etapes: 2 } });
+    expect(r.texte).toBe('Deux factures, dont une en retard.');
+    expect(emis.some((e) => e.type === 'error')).toBe(false);
+    expect(streamSpy).toHaveBeenCalledTimes(3);
+    // Les deux étapes du palier gardent leurs outils ; seule la conclusion en est privée…
+    expect(instantanes[0].tool_choice).toBeUndefined();
+    expect(instantanes[1].tool_choice).toBeUndefined();
+    expect(instantanes[2].tool_choice).toEqual({ type: 'none' });
+    // …et le modèle le sait : la consigne suit le contexte du tour, après le point de cache.
+    const texteDe = (i: number) => JSON.stringify(instantanes[i].messages[instantanes[i].messages.length - 1]);
+    expect(texteDe(2)).toContain('tu ne peux plus appeler d’outil');
+    expect(texteDe(2)).toContain('Il est 9 h.');
+    expect(texteDe(1)).not.toContain('tu ne peux plus appeler d’outil');
+    // Le préfixe en cache ne bouge pas : mêmes outils, même système.
+    expect(instantanes[2].tools).toEqual(instantanes[1].tools);
+    expect(instantanes[2].system).toEqual(instantanes[1].system);
+  });
+
+  it('limite d’étapes : une ÉCRITURE à la dernière étape reste une carte (aucun appel de plus)', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'l1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'tool_use', id: 'w1', name: 'create_job', input: { title: 'Lavage' } }], stop_reason: 'tool_use', usage });
+    const emis: any[] = [];
+    const r = await tourLumi({ ...baseTour(emis, []), reglages: { model: 'claude-haiku-4-5', effort: 'low', max_etapes: 2 } });
+    expect(r.proposition).toMatchObject({ tool: 'create_job' });
+    expect(streamSpy).toHaveBeenCalledTimes(2);
+    expect(emis.some((e) => e.type === 'error')).toBe(false);
+  });
+
   it('LE GARDE : un outil d ÉCRITURE n est jamais exécuté — il devient une proposition', async () => {
     const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
     reponses.push({ content: [{ type: 'text', text: 'Je prépare le job.' }, { type: 'tool_use', id: 'tu_w', name: 'create_job', input: { title: 'Lavage' } }], stop_reason: 'tool_use', usage });

@@ -52,6 +52,7 @@ import {
   DECLENCHEURS,
   ACTIONS,
   trouverDeclencheur,
+  conditionsApresChangement,
   declencheurOffert,
   DELAI_NEGATIF_MAX_SECONDES,
 } from '../../src/lib/automationCatalogue';
@@ -505,9 +506,10 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
 
   const { data: existante, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('id, is_preset, is_active, trigger_event, delay_seconds, modele_id, conditions, steps, actions')
+    .select('id, is_preset, is_active, trigger_event, delay_seconds, modele_id, conditions, steps, actions, deleted_at')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
+    .is('purged_at', null)
     .maybeSingle();
 
   if (lectureErr) {
@@ -515,6 +517,19 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     return res.status(500).json({ error: 'Impossible de lire l\'automatisation.' });
   }
   if (!existante) return res.status(404).json({ error: 'Automatisation introuvable.' });
+  /*
+   * À LA CORBEILLE : on restaure d'abord. L'éditeur s'ouvrait par son adresse
+   * sur une règle supprimée et la laissait réécrire (texte d'une étape changé
+   * en base, audit du 2026-10-01) — on modifiait sans le savoir une
+   * automatisation qui ne partira plus.
+   */
+  if (existante.deleted_at) {
+    return res.status(409).json({
+      error: langueDe(req) === 'fr'
+        ? 'Cette automatisation est à la corbeille : restaurez-la pour la modifier.'
+        : 'This automation is in the bin: restore it to edit it.',
+    });
+  }
 
   const patch = { ...req.body };
   const contenuModifie = CHAMPS_CONTENU.some((k) => k in patch);
@@ -530,6 +545,18 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     return res.status(400).json({
       error: 'Le déclencheur d\'une automatisation fournie ne se change pas. Dupliquez-la pour en faire une à vous.',
     });
+  }
+
+  /*
+   * Changer de déclencheur SANS dire quoi faire des conditions : les réglages
+   * de l'ancien ne doivent pas rester (une règle qui garde « première
+   * ouverture » sur « Étiquette ajoutée » ne part jamais). L'éditeur envoie
+   * déjà les bonnes conditions ; ceci couvre tout autre client.
+   */
+  if (typeof patch.trigger_event === 'string' && patch.trigger_event !== existante.trigger_event && !('conditions' in patch)) {
+    patch.conditions = conditionsApresChangement(
+      existante.trigger_event, patch.trigger_event, (existante.conditions ?? {}) as Record<string, unknown>,
+    );
   }
 
   const fr = langueDe(req) === 'fr';

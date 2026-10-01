@@ -85,7 +85,10 @@ describe('item 10 — routeur', () => {
     expect(route).toContain("if (modeRouteur() === 'actif' && !enAttente.length && !repli)");
     // Depuis le 2026-10-01 : un ordre au vocabulaire sans ambiguïté reçoit son sujet d'une règle, sans appel au routeur.
     expect(route).toContain("routeur = sujetRegle ? resultatParRegle(sujetRegle) : await classifier(message, contexteRouteur(historique));");
-    expect(route).toContain("routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) && !ficheJobHorsSujet ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null");
+    // Depuis le 2026-10-01 : un raccourci choisi par le routeur n'est servi que si le détecteur strict le
+    // reconnaît aussi (« encaissé en septembre » recevait le chiffre du mois courant : 0,00 $ au lieu de 989,85 $).
+    expect(route).toContain("const raccourciStrict = detecterRaccourci(message)?.id ?? null;");
+    expect(route).toContain("routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) && raccourciStrict === routeur.verdict.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null");
     // Le coût du routeur est journalisé dans ai_usage (il compte dans le budget de l'org).
     expect(route).toMatch(/journaliserUsage\(ctx\.admin, \{\s*orgId: ctx\.auth\.orgId, userId: ctx\.auth\.user\.id, conversationId, model: MODELE_ROUTEUR/);
   });

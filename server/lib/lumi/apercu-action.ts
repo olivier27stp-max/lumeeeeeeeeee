@@ -298,6 +298,27 @@ async function fuseauDe(ctx: Ctx): Promise<string> {
   return txt(data?.timezone) || 'America/Toronto';
 }
 
+/**
+ * Les cibles qu'un aperçu déclare introuvables (lignes marquées `alerte`), par leur
+ * libellé. Vide = tout ce que l'action vise existe. Parcourt tout l'aperçu : chaque
+ * genre de carte (action, document, message, fusion) range ses lignes à sa façon.
+ */
+export function ciblesIntrouvables(apercu: unknown, langue: 'fr' | 'en' = 'fr'): string[] {
+  const trouvees: string[] = [];
+  const voir = (v: unknown): void => {
+    if (Array.isArray(v)) { v.forEach(voir); return; }
+    if (!v || typeof v !== 'object') return;
+    const o = v as Record<string, unknown>;
+    if (o.alerte === true && o.libelle && typeof o.libelle === 'object') {
+      const lib = o.libelle as { fr?: string; en?: string };
+      trouvees.push(String((langue === 'en' ? lib.en : lib.fr) ?? lib.fr ?? ''));
+    }
+    Object.values(o).forEach(voir);
+  };
+  voir(apercu);
+  return [...new Set(trouvees.filter(Boolean))];
+}
+
 /** L'aperçu générique : cibles nommées + détails lisibles. */
 export async function apercuAction(args: Record<string, any>, ctx: Ctx): Promise<ApercuAction> {
   const fuseau = await fuseauDe(ctx);

@@ -19,6 +19,9 @@ import { expediteurDe } from '../lib/courriels/domaines';
 import { rendreCourrielClient, montant as montantLisible, dateLisible, langueDe, MOTS, type Marque, type Langue } from '../lib/courriels/gabarit';
 import { texteDuCourriel, assainirHtmlCourriel } from '../lib/courriels/modeles';
 import { remplacerParExemples } from '../../src/lib/variablesCourriel';
+import { remplacerVariables } from '../../src/lib/emailBodyText';
+import { ENTITE_PAR_DECLENCHEUR } from '../../src/lib/automationCatalogue';
+import { texteBoutonParDefaut } from '../lib/courriels/bouton-automatisation';
 
 const router = Router();
 
@@ -820,22 +823,44 @@ router.post('/emails/apercu', async (req, res) => {
 
        `remplacerParExemples` gère les deux syntaxes, comme `applyTemplate`. */
     const type = typeof req.body?.type === 'string' ? req.body.type : undefined;
-    const avecExemples = (t: string) => remplacerParExemples(t, type, langueEntreprise(company) === 'fr');
+    /* Un courriel d'automatisation écrit ses variables autrement qu'un modèle
+       de facture ([client_first_name], [company_name]…) : sans la table des
+       automatisations, l'aperçu « réel » laissait « Bonjour [client_first_name] »
+       entre crochets alors que l'aperçu compact de la liste affichait « Marie ». */
+    const avecExemples = (t: string) => {
+      const rendu = remplacerParExemples(t, type, langueEntreprise(company) === 'fr');
+      return type ? rendu : remplacerVariables(rendu);
+    };
 
     /* Un bouton d'exemple : le gabarit en pose un à l'envoi, et sans lui
        l'aperçu montrerait un courriel plus court que le vrai — l'entreprise
        écrirait « cliquez sur le lien ci-dessous » en croyant qu'il manque. */
     const fr = langueEntreprise(company) === 'fr';
+    /*
+     * Un courriel d'AUTOMATISATION (`type` absent) n'a ni bloc de montant ni
+     * bouton de paiement : à l'envoi, il porte seulement le bouton de l'entité
+     * que son déclencheur fait arriver (« Approuver la soumission », « Payer la
+     * facture »), ou aucun (prospect, rendez-vous, job) — voir
+     * `boutonPourEntite`. L'aperçu « réel » montrait pourtant « Montant à
+     * payer — 1 220,17 $ » et « Voir et payer » sur n'importe quel courriel
+     * d'automatisation (audit du 2026-10-01), et « M'envoyer un essai »
+     * envoyait ce même rendu : on validait une image fausse.
+     */
+    const declencheur = typeof req.body?.declencheur === 'string' ? req.body.declencheur : '';
+    const automatisation = !type;
+    const texteBouton = automatisation ? texteBoutonParDefaut(ENTITE_PAR_DECLENCHEUR[declencheur], fr ? 'fr' : 'en') : null;
     const html = rendreCourrielClient({
       langue: langueEntreprise(company),
       marque: marqueDepuis(company),
       corpsHtml: avecExemples(assainirHtmlCourriel(corps)),
-      montant: { libelle: fr ? 'Montant à payer' : 'Amount due', valeur: fr ? '1 220,17 $' : '$1,220.17' },
-      bouton: {
-        texte: fr ? 'Voir et payer' : 'View and pay',
-        url: 'https://lumecrm.net/',
-        sousBouton: fr ? 'Carte de crédit · aucun compte à créer' : 'Credit card · no account needed',
-      },
+      montant: automatisation ? null : { libelle: fr ? 'Montant à payer' : 'Amount due', valeur: fr ? '1 220,17 $' : '$1,220.17' },
+      bouton: automatisation
+        ? (texteBouton ? { texte: texteBouton, url: 'https://lumecrm.net/' } : null)
+        : {
+          texte: fr ? 'Voir et payer' : 'View and pay',
+          url: 'https://lumecrm.net/',
+          sousBouton: fr ? 'Carte de crédit · aucun compte à créer' : 'Credit card · no account needed',
+        },
       signature: null,
     });
 
