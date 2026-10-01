@@ -39,7 +39,41 @@ export function assainirPourApi(messages: Msg[]): Msg[] {
     propres.push(blocs.length === m.content.length ? m : { ...m, content: blocs });
   }
   if (propres.length && propres[0].role === 'assistant') propres.unshift({ role: 'user', content: AMORCE_BRIEFING });
-  return fusionnerAssistantsConsecutifs(propres);
+  // Un message assistant suivi d'autre chose ne peut plus recevoir le résultat
+  // d'une recherche d'outil restée en suspens : on la retire (voir sansRechercheOrpheline).
+  return fusionnerAssistantsConsecutifs(propres).map((m, i, tous) => (
+    m.role === 'assistant' && i < tous.length - 1 && typeof m.content !== 'string' ? sansRechercheOrpheline(m) : m
+  ));
+}
+
+/**
+ * Retire d'un message assistant les recherches d'outil SANS résultat.
+ *
+ * Le modèle peut demander, dans la même réponse, un outil de Lume (exécuté par
+ * nous) ET une recherche d'outil (exécutée par l'API). L'API s'arrête alors
+ * pour notre outil (`stop_reason: tool_use`) sans avoir lancé la recherche : le
+ * bloc `server_tool_use` reste en fin de message, sans son résultat. Renvoyé tel
+ * quel avec le résultat de notre outil, il fait refuser l'appel suivant —
+ * « tool_search_tool_regex tool use … was found without a corresponding
+ * tool_search_tool_result block » — et la personne lit « Lumi n'a pas pu
+ * répondre ». Forme relevée en prod le 2026-10-01 :
+ *   assistant[tool_use,server_tool_use] user[tool_result]  → 400
+ *
+ * La recherche n'ayant pas eu lieu, la retirer ne perd rien : à l'étape
+ * suivante le modèle la refait s'il en a encore besoin. Un résultat d'outil
+ * serveur est un bloc dont le type n'est pas `tool_result` et qui porte le
+ * `tool_use_id` de la demande. Pure : rend le même message s'il n'y a rien à retirer.
+ */
+export function sansRechercheOrpheline(m: Msg): Msg {
+  if (typeof m.content === 'string') return m;
+  const resolues = new Set(
+    m.content
+      .filter((b) => b.type !== 'tool_result' && typeof (b as { tool_use_id?: unknown }).tool_use_id === 'string')
+      .map((b) => (b as { tool_use_id: string }).tool_use_id),
+  );
+  const orpheline = (b: Anthropic.Messages.ContentBlockParam): boolean => b.type === 'server_tool_use' && !resolues.has((b as { id: string }).id);
+  if (!m.content.some(orpheline)) return m;
+  return { ...m, content: m.content.filter((b) => !orpheline(b)) };
 }
 
 const enBlocs = (m: Msg): Anthropic.Messages.ContentBlockParam[] => (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content);
