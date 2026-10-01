@@ -34,8 +34,10 @@ describe('message du plafond de la plateforme', () => {
 
   it('la route choisit le message et la trace selon le plafond qui a arrêté le tour', () => {
     const r = readFileSync(resolve(__dirname, '..', 'server', 'routes', 'lumi.ts'), 'utf8');
-    expect(r).toContain('const texte = !plafondJour.autorise ? messagePausePlateforme(ctx.language) : messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());');
-    expect(r).toContain("resultat.plafond ? (!plafondJour.autorise ? 'plafond_plateforme' : 'budget_epuise')");
+    // Depuis le 2026-10-01, la garde de charge (file pleine) passe avant les deux plafonds ; leur ordre entre eux ne change pas.
+    expect(r).toContain('!plafondJour.autorise ? messagePausePlateforme(ctx.language) : messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());');
+    expect(r).toContain("const texte = occupe ? messageLumiOccupe(");
+    expect(r).toContain("resultat.plafond ? (occupe ? 'file_pleine' : !plafondJour.autorise ? 'plafond_plateforme' : 'budget_epuise')");
     // Chaque refus de la plateforme est journalisé en erreur : il arrête tous les clients.
     expect(r).toContain("logger.error('[lumi] tour refusé par le plafond journalier de la plateforme'");
   });

@@ -55,6 +55,7 @@ import { sousAgentDepuisVerdict, focusDuSousAgent, effortDuSousAgent, outilsDuSo
 import { indiceOutils } from '../lib/lumi/indices-outils';
 import type { IdTopic } from '../lib/lumi/topics';
 import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
+import { fileLumi, LumiOccupe, messageLumiOccupe } from '../lib/lumi/file-attente';
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
 import { journaliserTrace, normaliserEnonce, enoncePourTrace, masquerCoordonnees, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
@@ -448,7 +449,15 @@ async function executerTourSse(opts: {
     const reperage = opts.enonce && reglages.modele_autorise
       ? await repererFiches(opts.enonce, { client: ctx.auth.client, orgId: ctx.auth.orgId, espaceRefs: cleRefs, langue: ctx.language, outilsPermis })
       : null;
-    const resultat: ResultatTour = !reglages.modele_autorise ? { nouveauxMessages: [], proposition: null, texte: '', cost_cents: 0, plafond: true } : await tourLumi({
+    // Garde de charge : un nombre borné de tours d'agent en même temps (file-attente.ts).
+    // Sans place dans le délai, rien ne part au modèle : la personne lit un message clair.
+    let occupe = false;
+    let liberer: (() => void) | null = null;
+    if (reglages.modele_autorise) {
+      try { liberer = await fileLumi.prendre(); } catch (e) { if (!(e instanceof LumiOccupe)) throw e; occupe = true; }
+    }
+    if (occupe) logger.warn('[lumi] tour refusé : aucune place libre dans le délai', { orgId: ctx.auth.orgId, ...fileLumi.etat() });
+    const resultat: ResultatTour = !reglages.modele_autorise || occupe ? { nouveauxMessages: [], proposition: null, texte: '', cost_cents: 0, plafond: true } : await tourLumi({
       client: ctx.auth.client,
       orgId: ctx.auth.orgId,
       userId: ctx.auth.user.id,
@@ -487,13 +496,13 @@ async function executerTourSse(opts: {
           requestId: requestId ?? null,
         });
       },
-    });
+    }).finally(() => liberer?.());
     if (resultat.plafond) {
       // Plafond dur atteint : rien n'est parti au modèle pour cette étape ;
       // message gabarit (0 token), les actions rapides restent servies.
       // Deux plafonds, deux messages : celui de la plateforme n'a rien à voir avec
       // les crédits du client (avant, il lisait « tes crédits sont épuisés »).
-      const texte = !plafondJour.autorise ? messagePausePlateforme(ctx.language) : messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());
+      const texte = occupe ? messageLumiOccupe(ctx.language === 'en' ? 'en' : 'fr') : !plafondJour.autorise ? messagePausePlateforme(ctx.language) : messagePause(ctx.language, ctx.credits.renouvellement_le || new Date());
       if (!ferme) emettreSse('text', { type: 'text', delta: texte });
       resultat.nouveauxMessages.push({ role: 'assistant', content: [{ type: 'text', text: texte }] });
       resultat.texte = resultat.texte ? `${resultat.texte}\n\n${texte}` : texte;
@@ -515,7 +524,7 @@ async function executerTourSse(opts: {
     // Un refus du modèle, une réponse coupée ou un tour inachevé ne sont PAS des
     // succès : avant, ils étaient tracés « ok » et la qualité mesurée mentait.
     const issue = resultat.proposition ? 'proposition' : erreurModele === 'refusal' ? 'refus' : erreurModele ? 'erreur' : 'ok';
-    void tracer(issue, resultat.cost_cents, resultat.plafond ? (!plafondJour.autorise ? 'plafond_plateforme' : 'budget_epuise') : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
+    void tracer(issue, resultat.cost_cents, resultat.plafond ? (occupe ? 'file_pleine' : !plafondJour.autorise ? 'plafond_plateforme' : 'budget_epuise') : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
       stop_reason: resultat.stop_reason ?? null, appels_modele: resultat.appels_modele ?? 0, outils_charges: resultat.outils_charges ?? 0,
       premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}), ...(resultat.reprises_modele ? { reprises_modele: resultat.reprises_modele } : {}),
     });
