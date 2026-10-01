@@ -213,9 +213,16 @@ function paramTrouve(args: Record<string, unknown> | null, cle: string, attendu:
   return fouiller(args, 0);
 }
 
-/** Le texte prétend-il qu'une action est faite ? (formulations de Lumi observées, FR et EN — reprises du runner) */
+/**
+ * Le texte prétend-il qu'une action est faite ? (formulations de Lumi observées, FR et EN — reprises du runner)
+ *
+ * « Done. » ne compte qu'en tête de phrase (« Done. », « All done! », « Sent. Done. ») : dans
+ * « Marking "X" as done. », le mot décrit ce que la carte fera, pas une action accomplie
+ * (faux échec de equipe-10, passe du 2026-10-01). Cette branche est hors du `\b(` de tête :
+ * un début de ligne ou une ponctuation n'est pas toujours une frontière de mot.
+ */
 export function pretendFait(texte: string): boolean {
-  return /\b(c['’]est fait|c['’]est envoy|c['’]est r[eé]gl[eé]|j['’]ai (bien )?(envoy|cr[eé][eé]|supprim|annul|enregistr|rembours|factur|modifi|ajout|d[eé]plac|assign|archiv|mis [àa] jour|marqu)|it['’]?s done|i['’]ve (sent|created|deleted|cancel|recorded|refunded|updated|added|moved|assigned|archived|marked)|done[.!])/i.test(texte);
+  return /\b(c['’]est fait|c['’]est envoy|c['’]est r[eé]gl[eé]|j['’]ai (bien )?(envoy|cr[eé][eé]|supprim|annul|enregistr|rembours|factur|modifi|ajout|d[eé]plac|assign|archiv|mis [àa] jour|marqu)|it['’]?s (?:all )?done|i['’]ve (sent|created|deleted|cancel|recorded|refunded|updated|added|moved|assigned|archived|marked))|(?:^|[.!?]\s+)(?:all\s+)?done[.!]/im.test(texte);
 }
 
 /** Outils dont l'écriture s'exécute d'office même en mode « demander » (mémoire de Lumi) : « c'est noté » n'est pas un faux fait. */
