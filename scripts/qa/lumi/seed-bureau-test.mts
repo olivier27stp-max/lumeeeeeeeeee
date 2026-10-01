@@ -504,8 +504,12 @@ async function semerDivers(): Promise<void> {
       due_date: t.echeance, completed_at: t.statut === 'done' ? iso(t.echeance, '12:00') : null,
     }, t.titre);
   }
+  // Un seul modèle ACTIF par type (index uniq_email_templates_actif_par_type) : l'app désactive
+  // l'ancien quand on en crée un nouveau. Le modèle par défaut d'un type est l'actif ; les autres
+  // du même type existent, inactifs — c'est eux que « mets ce modèle par défaut » doit activer.
+  const modeleActif = (m: (typeof MODELES_COURRIEL)[number]) => m.parDefaut || !MODELES_COURRIEL.some((x) => x.type === m.type && x.parDefaut);
   for (const m of MODELES_COURRIEL) {
-    await assurer('email_templates', idEval(m.cle), { org_id: ORG, created_by: PROPRIO, name: m.nom, type: m.type, subject: m.sujet, body: m.corps, variables: ['client_name'], is_active: true, is_default: m.parDefaut, source: 'editeur' }, m.nom);
+    await assurer('email_templates', idEval(m.cle), { org_id: ORG, created_by: PROPRIO, name: m.nom, type: m.type, subject: m.sujet, body: m.corps, variables: ['client_name'], is_active: modeleActif(m), is_default: m.parDefaut, source: 'editeur' }, m.nom);
   }
 }
 
