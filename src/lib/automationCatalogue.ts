@@ -1011,7 +1011,14 @@ export const ACTIONS: ActionCatalogue[] = [
         aide_en: 'The “Quote sent”, “Quote opened” and “Won” options follow the stage even if renamed, and never move a deal backwards (a won or lost deal does not move).',
       },
       {
-        cle: 'stage_id', fr: 'L’étape visée', en: 'Target stage', obligatoire: true, type: 'texte', max: 40,
+        /*
+         * Un MENU des étapes du bureau, pas un champ de texte : il fallait
+         * taper l'identifiant technique de l'étape (un uuid), que personne ne
+         * connaît — l'action était inutilisable à la main (audit du
+         * 2026-10-01). La valeur enregistrée reste l'identifiant.
+         */
+        cle: 'stage_id', fr: 'L’étape visée', en: 'Target stage', obligatoire: true, type: 'etape_pipeline',
+        vide_fr: '— Choisir une étape —', vide_en: '— Pick a stage —',
         visible_si: { champ: 'cible', valeurs: ['', 'etape'] },
       },
     ],

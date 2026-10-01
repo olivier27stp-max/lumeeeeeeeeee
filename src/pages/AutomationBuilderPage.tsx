@@ -1414,7 +1414,12 @@ export default function AutomationBuilderPage() {
   }, [besoinServices]);
 
   /** Le déclencheur demande-t-il une étape de pipeline ? */
-  const besoinEtapes = !!declencheurCourant?.champs?.some((c) => c.type === 'etape_pipeline');
+  // … et dès qu'un panneau d'étape est ouvert : « Déplacer l'opportunité » y
+  // offre le menu des étapes, y compris quand on vient de changer d'action
+  // dans le panneau (le parcours enregistré ne le sait pas encore).
+  const besoinEtapes = !!declencheurCourant?.champs?.some((c) => c.type === 'etape_pipeline')
+    || etapeChoisie !== null
+    || steps.some((e) => e.type === 'action' && e.action?.type === 'move_deal_stage');
   useEffect(() => {
     if (!besoinEtapes) return;
     let vivant = true;
@@ -2412,6 +2417,7 @@ export default function AutomationBuilderPage() {
           membres={membres}
           etiquettes={etiquettes}
           automatisations={autresAutomatisations}
+          etapesPipeline={etapesPipeline}
           champsPerso={champsPerso}
           objetChamps={objetRegle}
           stats={statsEtapes?.[etapeOuverte.id] ?? null}
