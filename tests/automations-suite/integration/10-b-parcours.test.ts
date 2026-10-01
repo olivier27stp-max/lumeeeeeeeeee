@@ -487,4 +487,35 @@ describe('[B] réglages : ré-entrée, arrêt sur réponse, sortie de parcours, 
     expect(fin).toMatchObject({ status: 'cancelled', last_error: 'Automatisation en brouillon : envoi annulé.' });
     expect(await tachesTitrees(b.admin, b.orgA, `${m} relance`)).toHaveLength(0);
   });
+
+  it('[J-065] PATCH { is_active: true } sur une règle à la CORBEILLE → 422, elle reste en brouillon dans la corbeille ; restaurée, elle se publie', async () => {
+    const m = marque('J-065');
+    const id = await parcours(m, 'note.added', [tache('a1', `${m} tâche`)]);
+    expect((await api.appeler('DELETE', `/api/automations/rules/${id}`)).status).toBe(200);
+    const etat = async () => (await b.admin.from('automation_rules').select('is_active, deleted_at, name').eq('id', id).single()).data!;
+    expect(await etat()).toMatchObject({ is_active: false });
+    expect((await etat()).deleted_at).not.toBeNull();
+
+    const r = await api.appeler('PATCH', `/api/automations/rules/${id}`, { is_active: true });
+    expect(r.status, JSON.stringify(r.json)).toBe(422);
+    expect(r.json.error).toBe('Cette automatisation est à la corbeille : restaurez-la avant de la publier.');
+    // Même refus quand la publication voyage avec une autre modification.
+    const r2 = await api.appeler('PATCH', `/api/automations/rules/${id}`, { name: `${m} renommée`, is_active: true });
+    expect(r2.status, JSON.stringify(r2.json)).toBe(422);
+    const apres = await etat();
+    expect(apres).toMatchObject({ is_active: false, name: m });
+    expect(apres.deleted_at).not.toBeNull();
+
+    // Une règle publiée à la corbeille ne tournerait pas — mais elle s'afficherait « publiée » une fois restaurée.
+    const client = await creerClient(b, m);
+    await noter(client.id);
+    await new Promise((res) => setTimeout(res, 1500));
+    expect(await tachesPlanifiees(b.admin, id)).toHaveLength(0);
+
+    // Le bon chemin reste ouvert : restaurer (brouillon), puis publier.
+    expect((await api.appeler('POST', `/api/automations/rules/${id}/restaurer`)).status).toBe(200);
+    const r3 = await api.appeler('PATCH', `/api/automations/rules/${id}`, { is_active: true });
+    expect(r3.status, JSON.stringify(r3.json)).toBe(200);
+    expect(await etat()).toMatchObject({ is_active: true, deleted_at: null });
+  });
 });
