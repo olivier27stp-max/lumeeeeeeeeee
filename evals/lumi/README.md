@@ -206,6 +206,25 @@ Ce jeu a été bâti sans rien écrire en base, sans appeler le modèle et sans 
 6. **Le lien de paiement fictif** (`payment_requests`, statut « sent », sans intention Stripe) n'a jamais été relu par l'application.
 7. `npx tsc` sur les fichiers de ce dossier : aucune erreur ; les deux seules erreurs du projet sont dans `server/lib/mailer.ts`, déjà là.
 
+## Les tests critiques (sécurité et exactitude)
+
+`scripts/qa/lumi/critiques/` est une batterie à part (phase 3 de la mission) : neuf familles — isolation entre entreprises, rôles, mémoire, injection, actions sensibles, une seule exécution, exactitude, crédits, Loi 25. Chaque test dit ce qu'il a fait, ce qu'il a observé, et rend PASS, FAIL, NON COUVERT ou A RELIRE avec la preuve ; tout est jugé par du code (`jugement.mts`, éprouvé par `tests/lumi-critiques-jugement.test.ts`).
+
+```bash
+# Ce qui serait fait, sans rien appeler ni écrire
+npx tsx scripts/qa/lumi/critiques/run.mts --plan
+
+# La passe, en production, dans le bureau de test (refuse si une autre batterie tourne)
+node --env-file=$ENV --import tsx scripts/qa/lumi/critiques/run.mts [--famille roles,memoire] [--sans-balayage] [--attendre]
+#   → evals/lumi/resultats/critiques-<date>.md (le rapport) et .json (les données)
+
+# Après une passe tuée : remettre le mode Lumi des comptes, retirer les fiches [CRIT]
+node --env-file=$ENV --import tsx scripts/qa/lumi/critiques/run.mts --remettre
+node --env-file=$ENV --import tsx scripts/qa/lumi/critiques/run.mts --nettoyer
+```
+
+Elle a besoin du jeu `[EVAL]` (le seed ci-dessus), ne confirme que deux écritures anodines (une tâche `[CRIT]`, l'oubli d'une note `[CRIT]`), et ne lit du bureau B (« Grok Audit (TEST) ») que des identifiants et des faits, par SELECT.
+
 ## Ajouter un cas
 
 1. L'écrire dans `cas/<catégorie>.json` avec un nouvel `id`.
