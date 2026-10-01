@@ -116,7 +116,9 @@ export async function ouvrir(o = {}) {
     // Une seule fois par onglet : l'app rafraîchit ensuite SON jeton.
     if (sessionStorage.getItem('qa-init')) return;
     sessionStorage.setItem('qa-init', '1');
-    localStorage.setItem('lume-auth-token', s);
+    // Un second onglet du même contexte trouve la session déjà là (rafraîchie par l'app) : ne pas la
+    // remplacer par le jeton d'origine, périmé depuis — l'onglet se retrouverait déconnecté.
+    if (!localStorage.getItem('lume-auth-token')) localStorage.setItem('lume-auth-token', s);
     localStorage.setItem('lume-active-org', org);
     localStorage.setItem('lume-language', langue);
     localStorage.setItem('lume-setup-dismissed', '1');
