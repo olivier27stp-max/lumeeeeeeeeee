@@ -1474,6 +1474,11 @@ export function isTransientFailure(error?: string | null): boolean {
     'rendez-vous introuvable',
     'opportunité introuvable',
     'aucun lien public',
+    // Action posée sur la mauvaise fiche (« Envoyer la facture » sur un
+    // prospect, « Modifier le rendez-vous » sur un devis) : la fiche ne
+    // changera pas de nature d'ici 2 h. Reprise 4 fois, l'entrepreneur
+    // n'apprenait que 2 h 35 plus tard que sa règle est mal posée.
+    'ne vaut que pour',
   ];
   const lower = error.toLowerCase();
   if (definitifs.some((d) => lower.includes(d))) return false;

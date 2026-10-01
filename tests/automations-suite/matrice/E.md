@@ -19,7 +19,7 @@ et `tests/automations-suite/unitaires/cde-classement-erreurs.test.ts` (fonctions
 | E-031 | action immédiate | texto de confirmation en panne passagère | reprise planifiée OU notification | ROUGE ATTENDU (`it.fails`) — décision requise : aujourd'hui ni reprise ni notification |
 | E-032 | `sendEmail({ reessayer })` | fournisseur en panne | ligne `email_retry_queue` `pending`, 1re reprise à 5 min | PASS |
 | E-033 | courriel d'automatisation | en panne | n'entre PAS dans `email_retry_queue` (reprise par la file des tâches) | PASS — règle du code |
-| E-040 | `isTransientFailure` | 37 motifs définitifs réels | jamais repris | PASS après correctif `b73fc65f` (32 étaient repris 4 fois) |
+| E-040 | `isTransientFailure` | 41 motifs définitifs réels | jamais repris | PASS après correctif `b73fc65f` (32 étaient repris 4 fois) ; + « Cette action ne vaut que pour une facture / une soumission / un rendez-vous / une opportunité » (action posée sur la mauvaise fiche, reprise 4 fois avant) |
 | E-041 | `isTransientFailure` | 15 motifs passagers | repris (dont 408/429, délai 5 s) | PASS |
 | E-042 | webhook | DNS `EAI_AGAIN` | erreur passagère, reprise | PASS après correctif `bca09a99` (avant : « Adresse refusée », définitif) |
 | E-043 | webhook | DNS `ENOTFOUND` | reste « Adresse refusée », définitif | PASS |

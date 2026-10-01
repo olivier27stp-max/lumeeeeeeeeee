@@ -28,6 +28,11 @@ const DEFINITIVES = [
   'Aucune étiquette à ajouter.',
   'Aucune étiquette à retirer.',
   'Aucun client rattaché à cette entité.',
+  // Action posée sur la mauvaise fiche : rien ne changera d'ici 2 h.
+  'Cette action ne vaut que pour une facture.',
+  'Cette action ne vaut que pour une soumission.',
+  'Cette action ne vaut que pour un rendez-vous.',
+  'Cette action ne vaut que pour une opportunité.',
   'La note est vide.',
   'Aucune automatisation choisie.',
   'Une automatisation ne peut pas se démarrer elle-même.',
