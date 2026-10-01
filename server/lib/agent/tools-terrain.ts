@@ -29,6 +29,7 @@ import type { AgentTool, ToolContext } from './tools';
 import {
   executerIdempotent, champRequis, appelInterne, AppelInterneIncertain, traduireStatut,
 } from './tools-etendus';
+import { fuseauEntreprise, heureDeReference, premiereOccurrence } from '../recurringJobScheduler';
 
 /* ── Aides communes ────────────────────────────────────────────── */
 
@@ -279,18 +280,6 @@ function intervalleParDefaut(freq: Frequence): number {
   }
 }
 
-function prochaineOccurrence(depuis: Date, freq: Frequence, intervalJours: number): Date {
-  const next = new Date(depuis);
-  switch (freq) {
-    case 'daily': next.setUTCDate(next.getUTCDate() + 1); break;
-    case 'weekly': next.setUTCDate(next.getUTCDate() + 7); break;
-    case 'biweekly': next.setUTCDate(next.getUTCDate() + 14); break;
-    case 'monthly': next.setUTCMonth(next.getUTCMonth() + 1); break;
-    case 'custom': next.setUTCDate(next.getUTCDate() + intervalJours); break;
-  }
-  return next;
-}
-
 const createRecurrenceRuleTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -337,12 +326,14 @@ const createRecurrenceRuleTool: AgentTool = {
       if (eActive) throw eActive;
       if (active) throw new Error('Ce job a déjà une règle de récurrence active — désactive-la d’abord (deactivate_recurrence_rule).');
 
-      // next_run_at comme dans l'app : la date de début si elle est à venir,
-      // sinon la prochaine occurrence à partir de maintenant. Minuit à
-      // Montréal ≈ 05:00Z : le cron ne rate pas le jour de début.
-      const debut = new Date(`${startDate}T05:00:00Z`);
-      const maintenant = new Date();
-      const prochain = debut > maintenant ? debut : prochaineOccurrence(maintenant, freq, intervalJours);
+      // `next_run_at` EST l'heure de la visite (le passage des séries copie
+      // le job à cet instant). Il valait « date de début à 05:00Z » : minuit
+      // à Montréal, soit une visite vers 1 h du matin, chaque semaine. La
+      // série reprend l'heure LOCALE du job d'origine (ou de sa première
+      // visite) dans le fuseau de l'ENTREPRISE ; sans heure connue, 9 h.
+      const fuseau = await fuseauEntreprise(ctx.client, ctx.orgId);
+      const heure = await heureDeReference(ctx.client, ctx.orgId, jobId, fuseau);
+      const prochain = premiereOccurrence(startDate, heure, fuseau, freq, intervalJours);
 
       const { data, error } = await ctx.client
         .from('job_recurrence_rules')
@@ -356,9 +347,15 @@ const createRecurrenceRuleTool: AgentTool = {
           start_date: startDate,
           end_date: endDate,
           max_occurrences: maxOcc,
-          next_run_at: prochain.toISOString(),
+          next_run_at: prochain.instant,
           is_active: true,
-          timezone: FUSEAU_ORG,
+          // L'heure locale de la série : gardée d'une occurrence à l'autre, y
+          // compris au changement d'heure (next_recurrence_at).
+          local_time: heure,
+          // NULL = hérite du fuseau de l'entreprise (company_settings.timezone).
+          // « America/Montreal » en dur plaçait à 6 h la visite de 9 h d'une
+          // entreprise de Vancouver.
+          timezone: null,
         })
         .select('id, next_run_at')
         .single();
@@ -369,7 +366,8 @@ const createRecurrenceRuleTool: AgentTool = {
         job: { job_number: job.job_number, title: job.title },
         frequence: FREQUENCE_FR[freq],
         next_run_at: data.next_run_at,
-        note: `Récurrence créée (${FREQUENCE_FR[freq]}) : Lume créera une copie du job à chaque occurrence, la première le ${String(data.next_run_at).slice(0, 10)}.`,
+        heure_locale: heure,
+        note: `Récurrence créée (${FREQUENCE_FR[freq]}) : Lume créera une copie du job à chaque occurrence, la première le ${prochain.jour} à ${heure.replace(':', ' h ')}.`,
       };
     }),
 };

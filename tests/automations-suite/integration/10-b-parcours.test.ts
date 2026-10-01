@@ -15,7 +15,7 @@ import { NUMERO_A } from '../harnais/bureau-test';
 import { marque, attendre, traiterFile } from '../harnais/moteur';
 import {
   preparerBureau, apiEnMemoire, creerRegle, supprimerRegles, tachesTitrees, tachesPlanifiees, journaux,
-  traiterBase, creerClient, creerJob, creerFacture, drapeau, ok, smsEntrant, reserverTelephone, type Api, type Bureau,
+  traiterBase, traiterPipeline, creerClient, creerJob, creerFacture, creerDeal, pipelineParDefaut, drapeau, ok, smsEntrant, reserverTelephone, type Api, type Bureau,
 } from './10-b-outils';
 
 process.env.TWILIO_AUTH_TOKEN = 'qa_jeton_twilio_test_automatisations';
@@ -161,6 +161,100 @@ describe('[B] parcours : ordre, délais, branches', () => {
     } finally {
       await api2.fermer();
     }
+  });
+
+  /** La branche suivie par le « si » (étape s1) de CETTE fiche : on l'avance, puis on lit l'étape planifiée ensuite. */
+  async function brancheSuivie(ruleId: string, entityId: string): Promise<string[]> {
+    const duSi = async () => (await tachesPlanifiees(b.admin, ruleId)).filter((t) => t.entity_id === entityId);
+    const [si] = await attendre(duSi, (t) => t.some((x) => x.step_id === 's1'), 20_000);
+    expect(si?.step_id).toBe('s1');
+    await avancer(si.id);
+    const apres = await attendre(duSi, (t) => t.some((x) => x.step_id !== 's1'), 10_000);
+    return apres.filter((t) => t.step_id !== 's1').map((t) => String(t.step_id));
+  }
+
+  it('[A-074][J-061] si « le client a l’étiquette » : jugé sur ses étiquettes RÉELLES — sans l’étiquette → « sinon », avec → « alors »', async () => {
+    const m = marque('J-061');
+    const etiquette = `vip-${Date.now().toString(36)}`;
+    const sans = await creerClient(b, `${m} sans`);
+    const avec = await creerClient(b, `${m} avec`);
+    await ok(b.admin.from('client_tags').insert({ client_id: avec.id, tag: etiquette }), 'étiquette');
+    const id = await parcours(m, 'note.added', [
+      { id: 's1', type: 'si', conditions: { client_a_etiquette: etiquette }, alors: 'oui', sinon: 'non' },
+      tache('oui', `${m} alors`), tache('non', `${m} sinon`),
+    ]);
+    await noter(sans.id);
+    expect(await brancheSuivie(id, sans.id)).toEqual(['non']);
+    await noter(avec.id);
+    expect(await brancheSuivie(id, avec.id)).toEqual(['oui']);
+  });
+
+  it('[A-074][J-061] si « le client n’a PAS l’étiquette » : avec l’étiquette → « sinon », sans → « alors »', async () => {
+    const m = marque('J-061b');
+    const etiquette = `ne-pas-relancer-${Date.now().toString(36)}`;
+    const sans = await creerClient(b, `${m} sans`);
+    const avec = await creerClient(b, `${m} avec`);
+    await ok(b.admin.from('client_tags').insert({ client_id: avec.id, tag: etiquette }), 'étiquette');
+    const id = await parcours(m, 'note.added', [
+      { id: 's1', type: 'si', conditions: { client_sans_etiquette: etiquette }, alors: 'oui', sinon: 'non' },
+      tache('oui', `${m} alors`), tache('non', `${m} sinon`),
+    ]);
+    await noter(avec.id);
+    expect(await brancheSuivie(id, avec.id)).toEqual(['non']);
+    await noter(sans.id);
+    expect(await brancheSuivie(id, sans.id)).toEqual(['oui']);
+  });
+
+  it('[J-062] si sur un RENDEZ-VOUS (entité « schedule_event ») : jugé sur son statut ACTUEL — prévu → « alors », changé entre-temps → « sinon »', async () => {
+    const m = marque('J-062');
+    const id = await parcours(m, 'appointment.created', [
+      { id: 's1', type: 'si', conditions: { statut: 'scheduled' }, alors: 'oui', sinon: 'non' },
+      tache('oui', `${m} alors`), tache('non', `${m} sinon`),
+    ], { conditions: { title: { in: [`Visite ${m} prévue`, `Visite ${m} changée`] } } });
+    const rdv = async (suffixe: string) => {
+      const client = await creerClient(b, `${m} ${suffixe}`);
+      const job = await creerJob(b, `${m} ${suffixe}`, client.id);
+      const debut = new Date(Date.now() + 3 * JOUR * 1000);
+      return ok<{ id: string }>(b.admin.from('schedule_events').insert({
+        org_id: b.orgA, job_id: job.id, title: `Visite ${m} ${suffixe}`, status: 'scheduled', created_by: b.users.proprioA,
+        start_at: debut.toISOString(), end_at: new Date(debut.getTime() + 3600_000).toISOString(),
+      }).select('id').single(), 'visite');
+    };
+    const prevue = await rdv('prévue');
+    await traiterBase(b);
+    expect(await brancheSuivie(id, prevue.id)).toEqual(['oui']);
+
+    const changee = await rdv('changée');
+    await traiterBase(b);
+    await attendre(async () => (await tachesPlanifiees(b.admin, id)).filter((t) => t.entity_id === changee.id), (t) => t.length > 0, 20_000);
+    // Le rendez-vous change d'état APRÈS le déclenchement (pas « annulé » : l'annulation arrête déjà tout le parcours).
+    await ok(b.admin.from('schedule_events').update({ status: 'completed' }).eq('id', changee.id), 'statut changé');
+    expect(await brancheSuivie(id, changee.id)).toEqual(['non']);
+  });
+
+  it('[J-062] si sur une OPPORTUNITÉ (entité « deal ») : jugé sur son étape ACTUELLE — déplacée entre-temps → « sinon »', async () => {
+    const m = marque('J-062d');
+    const pipe = await pipelineParDefaut(b);
+    const [e1, e2] = pipe.ouvertes;
+    const id = await parcours(m, 'deal.stage_entered', [
+      { id: 's1', type: 'si', conditions: { stage_id: e1.id }, alors: 'oui', sinon: 'non' },
+      tache('oui', `${m} alors`), tache('non', `${m} sinon`),
+    ]);
+    const reste = await creerDeal(b, (await creerClient(b, `${m} reste`)).id, e1.id, pipe.id);
+    await traiterPipeline(b);
+    expect(await brancheSuivie(id, reste.id)).toEqual(['oui']);
+
+    const bouge = await creerDeal(b, (await creerClient(b, `${m} bouge`)).id, e1.id, pipe.id);
+    await traiterPipeline(b);
+    await attendre(async () => (await tachesPlanifiees(b.admin, id)).filter((t) => t.entity_id === bouge.id), (t) => t.length > 0, 20_000);
+    // L'opportunité quitte l'étape APRÈS le déclenchement, avant que le « si » soit jugé.
+    await ok(b.admin.from('deals').update({ stage_id: e2.id }).eq('id', bouge.id), 'deal déplacé');
+    expect(await brancheSuivie(id, bouge.id)).toEqual(['non']);
+    // Ménage : le déplacement a écrit des événements de pipeline. Laissés en file, ils seraient
+    // lus par le prochain test qui écoute « entrée dans une étape » (D-042 comptait 4 déplacements).
+    await ok(b.admin.from('automation_rules').update({ is_active: false }).eq('id', id), 'règle éteinte');
+    await traiterPipeline(b);
+    await ok(b.admin.from('deals').delete().in('id', [reste.id, bouge.id]), 'deals retirés');
   });
 
   it('[B-304] arrêter : rien n’est planifié après l’étape « arrêter »', async () => {
@@ -397,5 +491,36 @@ describe('[B] réglages : ré-entrée, arrêt sur réponse, sortie de parcours, 
     const [fin] = await tachesPlanifiees(b.admin, id);
     expect(fin).toMatchObject({ status: 'cancelled', last_error: 'Automatisation en brouillon : envoi annulé.' });
     expect(await tachesTitrees(b.admin, b.orgA, `${m} relance`)).toHaveLength(0);
+  });
+
+  it('[J-065] PATCH { is_active: true } sur une règle à la CORBEILLE → 422, elle reste en brouillon dans la corbeille ; restaurée, elle se publie', async () => {
+    const m = marque('J-065');
+    const id = await parcours(m, 'note.added', [tache('a1', `${m} tâche`)]);
+    expect((await api.appeler('DELETE', `/api/automations/rules/${id}`)).status).toBe(200);
+    const etat = async () => (await b.admin.from('automation_rules').select('is_active, deleted_at, name').eq('id', id).single()).data!;
+    expect(await etat()).toMatchObject({ is_active: false });
+    expect((await etat()).deleted_at).not.toBeNull();
+
+    const r = await api.appeler('PATCH', `/api/automations/rules/${id}`, { is_active: true });
+    expect(r.status, JSON.stringify(r.json)).toBe(422);
+    expect(r.json.error).toBe('Cette automatisation est à la corbeille : restaurez-la avant de la publier.');
+    // Même refus quand la publication voyage avec une autre modification.
+    const r2 = await api.appeler('PATCH', `/api/automations/rules/${id}`, { name: `${m} renommée`, is_active: true });
+    expect(r2.status, JSON.stringify(r2.json)).toBe(422);
+    const apres = await etat();
+    expect(apres).toMatchObject({ is_active: false, name: m });
+    expect(apres.deleted_at).not.toBeNull();
+
+    // Une règle publiée à la corbeille ne tournerait pas — mais elle s'afficherait « publiée » une fois restaurée.
+    const client = await creerClient(b, m);
+    await noter(client.id);
+    await new Promise((res) => setTimeout(res, 1500));
+    expect(await tachesPlanifiees(b.admin, id)).toHaveLength(0);
+
+    // Le bon chemin reste ouvert : restaurer (brouillon), puis publier.
+    expect((await api.appeler('POST', `/api/automations/rules/${id}/restaurer`)).status).toBe(200);
+    const r3 = await api.appeler('PATCH', `/api/automations/rules/${id}`, { is_active: true });
+    expect(r3.status, JSON.stringify(r3.json)).toBe(200);
+    expect(await etat()).toMatchObject({ is_active: true, deleted_at: null });
   });
 });

@@ -9,7 +9,7 @@ Fichiers : `40-iklm-prereglages.test.ts`, `40-iklm-adjacents.test.ts`. Bureau A 
 | K-003 | estimate_followup | — | mort : seul émetteur /emails/send-quote, jamais appelé par l'UI | brouillon |
 | K-010 | lead.created | — | pack_suivi_prospect complet, aucun échec, envois simulés | |
 | K-011 | quote.sent | — | pack_relance_devis + quote_sent_move_deal | temps compressé : plafond 3 messages/24 h ignoré (artefact) |
-| K-012 | quote.approved (transition en base) | drapeau auto_sortie_parcours éteint | pack_depot doit demander le dépôt | ROUGE ATTENDU — décision : la tâche s'annule elle-même (condition d'arrêt « devis approuvé ») ; test existant fige « drapeau OFF → annulée » ; correctif prêt (exception comme lead perdu) |
+| K-012 | quote.approved (transition en base) | drapeau auto_sortie_parcours éteint, puis allumé | pack_depot demande le dépôt (et le rappelle 2 jours après) dans les deux cas | CORRIGÉ — `checkStopConditions` n'arrête plus une règle déclenchée PAR la résolution (même table que `sortie-parcours.ts` : quote.approved/declined/changes_requested, invoice.paid, appointment.cancelled ; « converted » vaut « approved ») et reçoit le déclencheur de la RÈGLE pour une étape de parcours ; `40-iklm-prereglages.test.ts` (2 tests) + `tests/automation/sortie-parcours.test.ts` |
 | K-012a | quote.approved | — | quote_approved_move_deal | |
 | K-013 | invoice.sent (transition en base) | — | pack_relance_facture | |
 | K-014 | visite insérée (base) / job terminé / contrat signé | — | confirmation immédiate + rappel J-7 replanifié au bon moment ; thank_you_after_job ; agreement_signed | forcer l'échéance ne fait pas partir un rappel en avance (correct) |
@@ -22,6 +22,8 @@ Fichiers : `40-iklm-prereglages.test.ts`, `40-iklm-adjacents.test.ts`. Bureau A 
 | K-023 | Relances — négatif | payée / pas échue | rien | |
 | K-024 | Relances — panne | fournisseur en panne | log « failed » + erreur, passage non interrompu | un « failed » n'est jamais retenté par le cron (la file de reprise du mailer s'en charge) |
 | K-025 | Relances — isolation | facture de B | rien | |
+| K-026 | Relances — doublon avec une automatisation « Facture en retard » (inv-3 §5.1) | règle `invoice.overdue` publiée, sans condition | le cron ne relance pas : aucun courriel, rien dans `reminder_log` | PASS — `40-iklm-adjacents.test.ts` [K-026], `unitaires/K-relances-couverture.test.ts` (la couverture existait déjà : vérifiée) |
+| K-027 | Relances — doublon, règle conditionnée sur le retard | `days_overdue__gte: 3` ; facture à 30 j et à 1 j de retard | 30 j : couverte, le cron se tait ; 1 j : pas encore couverte, le cron relance (palier J+1) | FAIL → CORRIGÉ — `40-iklm-adjacents.test.ts` [K-027], `unitaires/K-relances-couverture.test.ts` (avant : la couverture jugeait la règle SANS `days_overdue` → fausse → cron ET automatisation relançaient, le 30e jour le même jour) |
 | — | Relances — réponse HTTP | lecture des réglages en échec | une seule réponse | corrigé dans 97048c37 (non testé : panne de lecture non provoquable proprement) |
 | K-030 | Factures récurrentes | échéance du jour | 1 brouillon, échéance +1 mois | |
 | K-031 | Factures récurrentes — double exécution | 2 passages simultanés | 1 facture | PASS (n'a pas reproduit le doublon soupçonné) |
@@ -30,7 +32,9 @@ Fichiers : `40-iklm-prereglages.test.ts`, `40-iklm-adjacents.test.ts`. Bureau A 
 | K-034 | Isolation | B | rien | |
 | K-040 | Jobs récurrents | occurrence due | 1 job + 1 visite ; règle avancée ; 2e passage rien | corrigé : la visite n'était JAMAIS créée (created_by), donc ni calendrier ni confirmation/rappels (0c668851) |
 | K-041 | Jobs récurrents — fuseau | série sans fuseau, entreprise à Vancouver | 9 h reste 9 h locale | corrigé (638ffcff) |
-| K-042 | Récurrence créée par Lumi | — | visite à une heure de jour | ROUGE ATTENDU — décision : next_run_at = date 05:00Z (~1 h du matin) ; quelle heure prendre (celle du job d'origine ?) |
+| K-042 | Récurrence créée par Lumi | job d'origine à 14 h 30 (Toronto) ; job jamais planifiée (Vancouver) | visite à l'heure LOCALE de la job d'origine ; sans heure connue 9 h locale ; `local_time` écrit, fuseau hérité de l'entreprise | CORRIGÉ — `40-iklm-adjacents.test.ts` [K-042] (2), `unitaires/K-recurrence-heure.test.ts` (FAIL avant : 1 h du matin ; 22 h à Vancouver) |
+| K-044 | Jobs récurrents — série SANS heure (créée par l'app, ou par Lumi avant le correctif) | heure de la job d'origine pas encore passée | la visite copiée prend cette heure ; la série la garde (`local_time`) | CORRIGÉ — `40-iklm-adjacents.test.ts` [K-044] (FAIL avant : visite à l'instant du passage) |
+| K-045 | Jobs récurrents — série sans heure | heure de la job d'origine déjà passée ce jour-là | jamais de visite dans le passé : cette occurrence garde son instant, les suivantes prennent l'heure de la série | `40-iklm-adjacents.test.ts` [K-045] |
 | K-043 | Isolation | B | rien | |
 | K-050 | Rapport planifié quotidien | dû | 1 courriel ; 2e passage rien | |
 | K-051 | Rapport — rattachement | entreprise en bac à sable | consigné au nom de l'entreprise | corrigé : sans `suivi`, échappait au bac à sable et à email_deliveries (36bb050f) |
@@ -38,6 +42,6 @@ Fichiers : `40-iklm-prereglages.test.ts`, `40-iklm-adjacents.test.ts`. Bureau A 
 | K-053 | Rapport — panne | fournisseur en panne | non perdu (non marqué, ou en file de reprise) | |
 | — | Rapports — UTC | hebdo/mensuel calculés en UTC | — | NON COUVERT : dépend du fuseau du processus (prod = UTC) ; signalé (inv-3 §5.4) |
 | K-060 | Dunning | impayé 8 j | suspendu + 1 courriel ; 2e passage rien | |
-| K-061 | Dunning | J+3..J+6 | une relance annoncée | ROUGE ATTENDU — décision : 4 courriels (un par jour) ; le code dit « une relance quotidienne », l'en-tête « J+3 — une relance » |
+| K-061 | Dunning | J+3..J+6 (4 passages, un par jour) ; puis nouvel épisode d'impayé | UNE relance par épisode (clé = abonnement + palier J+3 + `past_due_since`) ; l'abonnement reste `past_due` ; un nouvel épisode a sa relance | CORRIGÉ — `40-iklm-adjacents.test.ts` [K-061] (FAIL avant : 4 courriels) |
 | K-062 | Dunning — isolation | A seulement | B intact | |
 | — | Dunning — courriel de suspension sans suspension | course avec un paiement | — | NON COUVERT : course non provoquable de façon déterministe ; lu dans le code (l'UPDATE n'est pas vérifié par .select()) |

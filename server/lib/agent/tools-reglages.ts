@@ -548,6 +548,23 @@ const createAutomationFromText: AgentTool = {
         ...(seconde && !seconde.creee ? { warning: `La deuxième automatisation (« ${String(seconde.name)} ») n’a PAS été créée : il manque ${String(seconde.manque)}.` } : {}),
         note: 'Créée EN PAUSE : rien ne partira tant qu\'elle n\'est pas activée. Elle est visible dans Automatisations, où le parcours peut être ajusté. Un filtre sur le déclencheur (montant, type de job…) ne se crée pas d\'ici : il s\'ajoute dans l\'éditeur.',
       };
+    }, {
+      // « Déjà fait » ne vaut que si l'automatisation créée existe encore :
+      // supprimée (corbeille, suppression définitive) puis redemandée, elle
+      // est recréée. Lecture service_role bornée à l'entreprise : la corbeille
+      // peut être masquée au client de l'utilisateur.
+      encoreValable: async (resultat) => {
+        const id = typeof resultat.rule_id === 'string' ? resultat.rule_id : '';
+        if (!id) return true;
+        const { data, error } = await getServiceClient()
+          .from('automation_rules')
+          .select('id, deleted_at, purged_at')
+          .eq('org_id', ctx.orgId).eq('id', id)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        const regle = data as { deleted_at?: string | null; purged_at?: string | null } | null;
+        return !!regle && !regle.deleted_at && !regle.purged_at;
+      },
     }),
 };
 

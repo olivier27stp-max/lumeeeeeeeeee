@@ -338,9 +338,11 @@ describe('D — boucles entre automatisations', () => {
     const { data: deal, error } = await b.admin.from('deals').insert({ org_id: b.orgA, client_id: client, pipeline_id: s1.pipeline_id, stage_id: s1.id }).select('id').single();
     expect(error).toBeNull();
     menage.ajouter(() => b.admin.from('deals').delete().eq('id', deal!.id));
-    const { traiterEvenementsPipeline } = await import('../../../server/lib/pipelineEvenements');
+    const { traiterEvenementsPipeline, DELAI_GRACE_MS } = await import('../../../server/lib/pipelineEvenements');
     // 6 « ticks » de 5 min : chacun fait avancer la file du pipeline de NOTRE bureau.
+    // Un événement n'est lu qu'après son délai de grâce : on le laisse passer.
     for (let tick = 0; tick < 6; tick++) {
+      await pause(DELAI_GRACE_MS + 1500);
       await traiterEvenementsPipeline(b.admin, { orgId: b.orgA });
       await pause(2500);
       await vieillirJournaux(a, 5);

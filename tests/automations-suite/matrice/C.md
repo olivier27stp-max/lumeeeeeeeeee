@@ -9,10 +9,10 @@ Déclencheur de travail : `note.added` sur un client (aucun préréglage ne l'é
 | C-002 | note.added | règle à la corbeille (`deleted_at`) restée `is_active=true` | aucun effet | PASS |
 | C-003 | note.added | règle purgée (`deleted_at` + `purged_at`) | aucun effet | PASS |
 | C-004 | note.added | règle supprimée physiquement | aucun journal, aucune note | PASS |
-| C-005 | note.added | condition `canal = web`, événement `telephone` | aucun effet | PASS |
-| C-006 | note.added | condition `montant >= 100`, métadonnée absente | aucun effet (comparaison impossible = refus) | PASS |
+| C-005 | note.added | condition `canal = web`, événement `telephone` | aucune action ; une ligne de journal « Conditions non remplies : canal » (L-004) | attente mise à jour avec L-004 |
+| C-006 | note.added | condition `montant >= 100`, métadonnée absente | aucune action (comparaison impossible = refus) ; une ligne « Conditions non remplies : montant » (L-004) | attente mise à jour avec L-004 |
 | C-007 | note.added | témoin positif : condition vraie | 1 note, 1 journal réussi | PASS |
-| C-008 | note.added | `client_a_etiquette` absente du client | aucun effet | PASS |
+| C-008 | note.added | `client_a_etiquette` absente du client | aucune action ; une ligne « Conditions non remplies : étiquette du client » (L-004) | PASS |
 | C-010 | tâche différée en file | règle repassée en brouillon avant l'échéance | tâches `cancelled`, motif « Automatisation en brouillon : envoi annulé. », rien exécuté | PASS |
 | C-011 | tâche différée en file | règle mise à la corbeille | `cancelled`, « Automatisation supprimée : envoi annulé. » | PASS |
 | C-012 | tâche différée en file | règle purgée | `cancelled`, rien exécuté | PASS |

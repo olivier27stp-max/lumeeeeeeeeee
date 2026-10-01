@@ -28,6 +28,7 @@ import { requireAuthedClient } from '../lib/supabase';
 import { logger } from '../lib/logger';
 import { twilioClient } from '../lib/config';
 import { getOrgSmsChannel } from '../lib/twilioProvisioning';
+import { ACTION_REGLE_ECARTEE } from '../../src/lib/automationCatalogue';
 
 const router = Router();
 
@@ -69,6 +70,7 @@ interface LigneJournal {
   result_error: string | null;
   saute: string | null;
   created_at?: string;
+  action_type?: string | null;
 }
 
 /** Lit toutes les pages d'une requête (bornée à MAX_LIGNES). */
@@ -120,7 +122,7 @@ export async function calculerStatistiques(
   const journaux = await toutLire<LigneJournal>((de, a) => {
     let q = client
       .from('automation_execution_logs')
-      .select('automation_rule_id, entity_id, scheduled_task_id, result_success, result_error, created_at, saute:result_data->>saute')
+      .select('automation_rule_id, entity_id, scheduled_task_id, result_success, result_error, created_at, action_type, saute:result_data->>saute')
       .eq('org_id', orgId)
       .gte('created_at', depuis)
       .order('id')
@@ -145,6 +147,9 @@ export async function calculerStatistiques(
   }
   for (const l of journaux) {
     if (!l.automation_rule_id) continue;
+    // Règle ÉCARTÉE par ses conditions : la fiche ne s'est pas « déclenchée »,
+    // rien n'a été envoyé ni sauté. La trace vit dans l'onglet Journaux.
+    if (l.action_type === ACTION_REGLE_ECARTEE) continue;
     ajouter(fiches, l.automation_rule_id, l.entity_id);
     const s = (par_regle[l.automation_rule_id] ??= vide());
     const c = classerJournal(l);

@@ -15,7 +15,7 @@ import {
 } from './actions';
 import { logger } from './logger';
 import { regleDansLaChaine, conditionsEtiquettesOk } from './etiquettes';
-import { CLES_CONDITIONS_ETIQUETTES } from '../../src/lib/automationCatalogue';
+import { CLES_CONDITIONS_ETIQUETTES, ACTION_REGLE_ECARTEE, trouverDeclencheur } from '../../src/lib/automationCatalogue';
 import { conditionsChampsOk, CLE_CONDITIONS_CHAMPS } from './champs/automatisations';
 import {
   type Etape,
@@ -33,7 +33,8 @@ import { fuseauOrg, FUSEAU_DEFAUT, corrigerChangementDHeure } from './automation
 import { noterRegleTraitee } from './outbox';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
 import { typeEnvoi } from './desabonnement';
-import { verdictSortie } from './sortie-parcours';
+import { verdictSortie, DECLENCHE_PAR_RESOLUTION } from './sortie-parcours';
+import { normaliserJoursAvant } from './rappels-dates';
 
 interface AutomationRule {
   id: string;
@@ -77,6 +78,14 @@ interface AutomationRule {
  * règle que de perdre l'action sans trace.
  */
 export function regleViseCetEvenement(rule: AutomationRule, event: CRMEvent): boolean {
+  // « Date atteinte » : le balayage émet UN événement par règle (son champ,
+  // son décalage). Rejoué sur les autres règles du même déclencheur, il
+  // faisait partir une règle « le jour même » sur l'événement d'une règle
+  // « 7 jours avant » du même champ dès qu'elle ne portait pas `jours_avant`.
+  if (event.type === 'date.reached') {
+    const visee = event.metadata?.rule_id;
+    return !visee || visee === rule.id;
+  }
   if (!event.type.startsWith('deal.')) return true;
   const m = event.metadata ?? {};
   if (rule.pipeline_id && m.pipeline_id && rule.pipeline_id !== m.pipeline_id) return false;
@@ -233,7 +242,16 @@ export function evaluateConditions(
      */
     const suffixe = /^(.+)__(gt|gte|lt|lte)$/.exec(cleBrute);
     const key = suffixe ? suffixe[1] : cleBrute;
-    const expected = suffixe ? { [suffixe[2]]: attenduBrut } : attenduBrut;
+    /*
+     * « Date atteinte » : le balayage borne et tronque `jours_avant` (±365,
+     * entier) et émet CETTE valeur. Comparée à la valeur brute de la règle
+     * (« 3.5 », « 400 »), elle ne correspondait jamais : la règle restait
+     * muette, sans erreur (J-063). Même normalisation des deux côtés.
+     */
+    const attendu = event.type === 'date.reached' && cleBrute === 'jours_avant'
+      ? normaliserJoursAvant(attenduBrut)
+      : attenduBrut;
+    const expected = suffixe ? { [suffixe[2]]: attendu } : attendu;
     const actual = event.metadata[key];
 
     // Support operators
@@ -295,6 +313,113 @@ export function evaluateConditions(
     }
   }
   return true;
+}
+
+// ── Règle écartée par ses conditions : la trace ─────────────
+
+/**
+ * Les réglages qui disent QUELLE OCCURRENCE de l'événement une règle écoute —
+ * le jalon d'un balayage (« 15 jours de retard »), l'étiquette posée, le
+ * champ modifié, l'étape du pipeline, l'adresse d'appel — par opposition à un
+ * FILTRE sur la fiche (source du prospect, montant, étiquette du client…).
+ *
+ * Quand un de ces réglages ne correspond pas, la règle ne « vise » tout
+ * simplement pas cet événement : rien à expliquer, aucune ligne de journal.
+ * Sans cette distinction, chaque facture en retard écrirait « conditions non
+ * remplies » pour les quatre préréglages des AUTRES jalons, chaque étiquette
+ * posée pour toutes les règles des autres étiquettes — du bruit qui noierait
+ * la seule ligne utile.
+ */
+export const CLES_DE_CIBLAGE: Readonly<Record<string, readonly string[]>> = {
+  'invoice.overdue': ['days_overdue'],
+  'date.reached': ['champ_id', 'jours_avant'],
+  'client.inactive': ['mois', 'max_par_heure'],
+  'quote.viewed': ['ouverture'],
+  'invoice.viewed': ['ouverture'],
+  'client.tagged': ['tag'],
+  'client.untagged': ['tag'],
+  'custom_field.changed': ['field_id'],
+  'webhook.received': ['webhook_id'],
+  'lead.status_changed': ['new_status'],
+  'deal.stage_entered': ['stage_id', 'pipeline_id'],
+  'deal.stage_exited': ['stage_id', 'pipeline_id'],
+  'deal.stage_idle': ['stage_id', 'pipeline_id'],
+};
+
+/** Sépare les conditions d'une règle : ce qui CIBLE l'événement, et les filtres. */
+export function separerCiblage(
+  conditions: Record<string, any> | null | undefined,
+  typeEvenement: string,
+): { ciblage: Record<string, any>; filtres: Record<string, any> } {
+  const cles = CLES_DE_CIBLAGE[typeEvenement] ?? [];
+  const ciblage: Record<string, any> = {};
+  const filtres: Record<string, any> = {};
+  if (conditions && typeof conditions === 'object' && !Array.isArray(conditions)) {
+    for (const [cle, valeur] of Object.entries(conditions)) {
+      (cles.includes(cle) ? ciblage : filtres)[cle] = valeur;
+    }
+  }
+  return { ciblage, filtres };
+}
+
+/**
+ * Le nom de la première condition non remplie, pour le journal : le libellé
+ * du réglage quand le catalogue le connaît (« Montant minimum ($) »), sinon
+ * la clé telle qu'elle est écrite dans la règle (« source »).
+ */
+export function conditionNonRemplie(filtres: Record<string, any>, event: CRMEvent): string | null {
+  for (const [cle, valeur] of Object.entries(filtres)) {
+    if (evaluateConditions({ [cle]: valeur }, event)) continue;
+    const champ = trouverDeclencheur(event.type)?.champs?.find((c) => c.cle === cle);
+    return champ?.fr ?? cle.replace(/__(gt|gte|lt|lte)$/, '');
+  }
+  return null;
+}
+
+/**
+ * Trace d'une règle ÉCARTÉE par ses conditions (L-004).
+ *
+ * Avant, le moteur passait à la règle suivante en silence : devant « pourquoi
+ * ce prospect n'a pas reçu son message ? », rien ne distinguait « l'événement
+ * n'est jamais arrivé » de « la règle l'a vu et l'a écarté ».
+ *
+ * Une ligne, peu coûteuse :
+ *   · `action_type = 'conditions'` — ce n'est pas une action : les compteurs
+ *     (statistiques, débit de textos, « une fois par client ») l'ignorent ;
+ *   · `result_success = true` + `result_data.saute` : la convention des sauts,
+ *     lue telle quelle par l'onglet Journaux — jamais un échec ;
+ *   · au plus UNE par (règle, fiche, événement) : la clé porte l'événement de
+ *     l'outbox (un rejeu ne réécrit rien) ou, à défaut, la tranche de 2 min.
+ * Ne lève jamais : une trace perdue ne doit pas empêcher les autres règles.
+ */
+async function journaliserRegleEcartee(
+  supabase: SupabaseClient,
+  rule: AutomationRule,
+  event: CRMEvent,
+  quoi: string | null,
+): Promise<void> {
+  const repere = event.outboxId !== undefined ? `e${event.outboxId}` : `t${Math.floor(Date.now() / FENETRE_ANTI_DOUBLON_MS)}`;
+  const { error } = await supabase.from('automation_execution_logs').insert({
+    org_id: event.orgId,
+    automation_rule_id: rule.id,
+    trigger_event: event.type,
+    entity_type: event.entityType,
+    entity_id: event.entityId,
+    action_type: ACTION_REGLE_ECARTEE,
+    action_config: {},
+    result_success: true,
+    result_data: {
+      saute: quoi ? `Conditions non remplies : ${quoi}` : 'Conditions non remplies',
+      saute_code: 'conditions',
+      ...(quoi ? { condition: quoi } : {}),
+    },
+    result_error: null,
+    duration_ms: 0,
+    execution_key: `${rule.id}:${event.entityId}:conditions:${repere}`,
+  });
+  if (error && error.code !== '23505') {
+    console.error(`[automationEngine] règle écartée non journalisée (rule ${rule.id}, org ${event.orgId}):`, error.message);
+  }
 }
 
 // ── Deduplication key builder ───────────────────────────────
@@ -452,6 +577,25 @@ function shouldRespectQuietHours(actionType: string, delaySeconds: number, regla
   // Délai non nul (positif OU négatif, comme les rappels « X h avant ») =
   // message programmé, donc pas une confirmation attendue dans l'instant.
   return delaySeconds !== 0;
+}
+
+/**
+ * Cette tâche de la FILE doit-elle attendre la fenêtre d'envoi ?
+ *
+ * Tout message de la file, oui : il est par construction différé (relance,
+ * suivi). SAUF la reprise d'une action immédiate en échec passager : elle
+ * garde la règle de l'action d'origine — un courriel de confirmation qui a
+ * échoué à 22 h repart à 22 h 05, pas le lendemain à 8 h ; un texto ou une
+ * demande d'avis attend toujours la fenêtre.
+ */
+export function tacheAttendLaFenetre(
+  actionType: string,
+  actionConfig: { reprise_immediate?: unknown } | null | undefined,
+  reglages?: ReglagesRegle | null,
+): boolean {
+  if (!ACTIONS_MESSAGE.has(actionType)) return false;
+  if (actionConfig?.reprise_immediate === true) return shouldRespectQuietHours(actionType, 0, reglages);
+  return true;
 }
 
 /** Next moment inside the send window, stepping 30 min (DST-safe, no tz lib). */
@@ -896,10 +1040,17 @@ async function executeRuleActions(
           result_error: `${(e as Error).message}${EN_ATTENTE_DU_RESULTAT}`,
           duration_ms: Date.now() - startTime,
         });
+        // La reprise est posée tout de suite (l'action peut ne jamais
+        // répondre) et annulée si le vrai résultat est un succès — comme une
+        // tâche de la file coupée à 5 s.
+        const reprise = await planifierRepriseImmediate(config.supabase, rule, event, i, executionKey, (e as Error).message, startTime);
         void execution.then(
-          (tardif) => journaliserAction(config.supabase, reservation, rule, event, i, {
-            result_success: tardif.success, result_data: tardif.data || null, result_error: tardif.error || null, duration_ms: Date.now() - startTime,
-          }),
+          async (tardif) => {
+            await journaliserAction(config.supabase, reservation, rule, event, i, {
+              result_success: tardif.success, result_data: tardif.data || null, result_error: tardif.error || null, duration_ms: Date.now() - startTime,
+            });
+            if (tardif.success && reprise) await annulerRepriseImmediate(config.supabase, reprise);
+          },
           (erreur: unknown) => journaliserAction(config.supabase, reservation, rule, event, i, {
             result_success: false, result_data: null, result_error: erreur instanceof Error ? erreur.message : String(erreur), duration_ms: Date.now() - startTime,
           }),
@@ -917,6 +1068,7 @@ async function executeRuleActions(
 
       if (!result.success) {
         console.error(`[automationEngine] action ${action.type} failed for rule "${rule.name}":`, result.error);
+        await planifierRepriseImmediate(config.supabase, rule, event, i, executionKey, result.error, startTime);
       }
     } catch (err: any) {
       const durationMs = Date.now() - startTime;
@@ -928,8 +1080,97 @@ async function executeRuleActions(
         result_error: err.message,
         duration_ms: durationMs,
       });
+      await planifierRepriseImmediate(config.supabase, rule, event, i, executionKey, err?.message, startTime);
     }
   }
+}
+
+/**
+ * Les actions IMMÉDIATES dont un échec passager est repris : celles qui
+ * envoient quelque chose hors de Lume (message au client, webhook). Une
+ * écriture interne (tâche, note, étiquette) qui échoue reste dans le journal.
+ */
+const ACTIONS_REPRISE_IMMEDIATE: ReadonlySet<string> = new Set([...ACTIONS_MESSAGE, 'webhook']);
+
+/** Cet échec d'une action immédiate mérite-t-il une reprise planifiée ? */
+export function repriseImmediatePrevue(actionType: string, erreur?: string | null): boolean {
+  return ACTIONS_REPRISE_IMMEDIATE.has(actionType) && isTransientFailure(erreur);
+}
+
+/**
+ * Reprise d'une action IMMÉDIATE en échec passager (E-031).
+ *
+ * Une tâche différée en panne était reprise (5 min, 30 min, 2 h, puis
+ * notification) ; une action immédiate, non : l'échec n'allait qu'au journal.
+ * Une confirmation de rendez-vous par texto pendant une panne de dix minutes
+ * du fournisseur était donc PERDUE, et personne ne l'apprenait.
+ *
+ * On pose une tâche dans la file, qui suit le parcours normal des reprises :
+ *   · `attempts: 1` — la tentative immédiate compte : encore 3 essais (5 min,
+ *     30 min, 2 h), puis `failed` + notification à l'entreprise ;
+ *   · même `execution_key` qu'une tâche différée de cette action : l'index
+ *     unique refuse une 2e reprise pour la même (règle, fiche, action) ;
+ *   · `reprise_depuis` : avant de renvoyer, la file vérifie que le message
+ *     n'est pas déjà parti depuis la tentative immédiate (`dejaEnvoyeDepuis`) ;
+ *   · `reprise_immediate` : l'envoi garde sa nature (confirmation attendue,
+ *     pas une relance commerciale ; fenêtre d'envoi de l'action immédiate).
+ *
+ * Un échec DÉFINITIF (pas de numéro, désabonné, adresse refusée…) n'est pas
+ * repris : le retenter donnerait le même refus.
+ *
+ * @returns l'id de la tâche de reprise, ou null s'il n'y en a pas.
+ */
+async function planifierRepriseImmediate(
+  supabase: SupabaseClient,
+  rule: AutomationRule,
+  event: CRMEvent,
+  index: number,
+  executionKey: string,
+  erreur: string | null | undefined,
+  debutMs: number,
+): Promise<string | null> {
+  const action = rule.actions[index];
+  if (!repriseImmediatePrevue(action.type, erreur)) return null;
+  const etat = nextStateAfterFailure(0, erreur);
+  const { data, error } = await supabase.from('automation_scheduled_tasks').insert({
+    org_id: event.orgId,
+    automation_rule_id: rule.id,
+    entity_type: event.entityType,
+    entity_id: event.entityId,
+    action_config: {
+      ...action,
+      trigger_event: event.type,
+      event_metadata: event.metadata,
+      reprise_immediate: true,
+      // Marge : l'horloge du serveur et celle de la base ne sont pas la même.
+      reprise_depuis: new Date(debutMs - 10_000).toISOString(),
+    },
+    execute_at: etat.execute_at,
+    status: 'pending',
+    attempts: 1,
+    last_error: etat.last_error,
+    execution_key: executionKey,
+  }).select('id').maybeSingle();
+  if (error) {
+    if (error.code === '23505') {
+      logger.info(`[automationEngine] reprise déjà en file pour cette action, pas de doublon : ${executionKey}`);
+    } else {
+      console.error(`[automationEngine] reprise de l'action immédiate non planifiée (rule ${rule.id}, org ${event.orgId}):`, error.message);
+    }
+    return null;
+  }
+  logger.info(`[automationEngine] ${action.type} immédiat en échec passager — reprise dans 5 min, règle "${rule.name}"`);
+  return (data as { id: string } | null)?.id ?? null;
+}
+
+/** L'action coupée à 5 s a fini par réussir : sa reprise n'a plus lieu d'être. */
+async function annulerRepriseImmediate(supabase: SupabaseClient, tacheId: string): Promise<void> {
+  const { error } = await supabase
+    .from('automation_scheduled_tasks')
+    .update({ status: 'completed', completed_at: new Date().toISOString(), last_error: 'Terminée après le délai de 5 s : reprise annulée.' })
+    .eq('id', tacheId)
+    .eq('status', 'pending');
+  if (error) console.error(`[automationEngine] reprise ${tacheId} non annulée après un succès tardif:`, error.message);
 }
 
 // ── Resolve execution time ──────────────────────────────────
@@ -1168,13 +1409,28 @@ async function handleEvent(event: CRMEvent) {
         let aAgi = false;
         try {
         if (!regleViseCetEvenement(rule, event)) continue;
-        if (!evaluateConditions(rule.conditions, event)) continue;
+        // Ce qui dit QUELLE occurrence la règle écoute (jalon d'un balayage,
+        // étiquette posée, étape…) : pas la sienne → rien, pas même une trace.
+        const { ciblage, filtres } = separerCiblage(rule.conditions, event.type);
+        if (!evaluateConditions(ciblage, event)) continue;
+        // À partir d'ici l'événement EST celui de la règle : si un filtre
+        // l'écarte, le journal le dit (L-004).
+        if (!evaluateConditions(filtres, event)) {
+          await journaliserRegleEcartee(engineConfig.supabase, rule, event, conditionNonRemplie(filtres, event));
+          continue;
+        }
         if (!(await conditionsChampsOk(engineConfig.supabase, event.orgId, event.entityType, event.entityId,
-          rule.conditions?.[CLE_CONDITIONS_CHAMPS]))) continue;
+          rule.conditions?.[CLE_CONDITIONS_CHAMPS]))) {
+          await journaliserRegleEcartee(engineConfig.supabase, rule, event, 'champs personnalisés');
+          continue;
+        }
         // « Seulement si le client a / n'a pas l'étiquette » : sur ses étiquettes réelles.
         if (!(await conditionsEtiquettesOk(engineConfig.supabase,
           () => clientDeLEntite({ supabase: engineConfig!.supabase, orgId: event.orgId, entityType: event.entityType, entityId: event.entityId }),
-          rule.conditions))) continue;
+          rule.conditions))) {
+          await journaliserRegleEcartee(engineConfig.supabase, rule, event, 'étiquette du client');
+          continue;
+        }
         // « Une fois par client tous les N jours » : une réponse automatique
         // sur « Le client répond » ne repart pas à chaque texto.
         const jours = rule.settings?.delai_entre_passages_jours;
@@ -1331,6 +1587,8 @@ async function dejaPasseRecemment(
   const [journaux, taches] = await Promise.all([
     supabase.from('automation_execution_logs').select('id', { count: 'exact', head: true })
       .eq('org_id', event.orgId).eq('automation_rule_id', rule.id).eq('entity_id', event.entityId)
+      // Une règle ÉCARTÉE par ses conditions n'est pas « passée » pour ce client.
+      .neq('action_type', ACTION_REGLE_ECARTEE)
       .gte('created_at', depuis),
     supabase.from('automation_scheduled_tasks').select('id', { count: 'exact', head: true })
       .eq('org_id', event.orgId).eq('automation_rule_id', rule.id).eq('entity_id', event.entityId)
@@ -1456,6 +1714,11 @@ export function isTransientFailure(error?: string | null): boolean {
     'rendez-vous introuvable',
     'opportunité introuvable',
     'aucun lien public',
+    // Action posée sur la mauvaise fiche (« Envoyer la facture » sur un
+    // prospect, « Modifier le rendez-vous » sur un devis) : la fiche ne
+    // changera pas de nature d'ici 2 h. Reprise 4 fois, l'entrepreneur
+    // n'apprenait que 2 h 35 plus tard que sa règle est mal posée.
+    'ne vaut que pour',
   ];
   const lower = error.toLowerCase();
   if (definitifs.some((d) => lower.includes(d))) return false;
@@ -1728,7 +1991,10 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
     const fuseauTache = task.org_id
       ? await fuseauOrg(supabase, task.org_id)
       : FUSEAU_DEFAUT;
-    if (ACTIONS_MESSAGE.has(String(taskType)) && horsFenetre(reglagesRegle, new Date(), fuseauTache)) {
+    // (La reprise d'une action immédiate garde la fenêtre de l'action
+    // d'origine — `tacheAttendLaFenetre`.)
+    if (ACTIONS_MESSAGE.has(String(taskType)) && horsFenetre(reglagesRegle, new Date(), fuseauTache)
+      && tacheAttendLaFenetre(String(taskType), task.action_config, reglagesRegle)) {
       const prochaine = nextSendTime(new Date(), reglagesRegle, fuseauTache);
 
       /**
@@ -1843,7 +2109,11 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         // L'org de la TÂCHE, jamais celle de l'entité lue : c'est ce qui
         // empêche une tâche d'une org de conclure sur les données d'une autre.
         task.org_id,
-        actionConfig.trigger_event,
+        // Une étape de parcours ne porte pas `trigger_event` dans sa tâche :
+        // sans le déclencheur de la RÈGLE, les exceptions ci-dessous (règle
+        // déclenchée par la résolution, relance de prospect perdu) ne
+        // s'appliquaient à aucun parcours.
+        declencheurTache,
         actionConfig.event_metadata,
       );
 
@@ -1907,7 +2177,17 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
             metadata: await metadonneesFraiches(supabase, task, contexte),
           } as CRMEvent)
             && await conditionsChampsOk(supabase, task.org_id, task.entity_type, task.entity_id,
-              (etape.conditions as Record<string, unknown> | undefined)?.[CLE_CONDITIONS_CHAMPS]);
+              (etape.conditions as Record<string, unknown> | undefined)?.[CLE_CONDITIONS_CHAMPS])
+            /*
+             * « Si le client a / n'a pas l'étiquette » : jugé sur ses
+             * étiquettes RÉELLES, comme pour le déclencheur. `evaluateConditions`
+             * saute ces clés (elles ne sont pas dans les métadonnées) : sans
+             * cet appel, la condition était toujours vraie et la branche
+             * « sinon » n'était jamais prise (A-074, J-061).
+             */
+            && await conditionsEtiquettesOk(supabase,
+              () => clientDeLaTache(supabase, task.org_id, task.entity_type, task.entity_id),
+              etape.conditions as Record<string, unknown> | undefined);
 
           await planifierEtape(
             {
@@ -2050,6 +2330,8 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         // attente. Elles répondent à une demande du client (launch M10).
         commercial: !(
           actionConfig.report_heures_calmes === true
+          // Reprise d'une action immédiate : une confirmation, pas une relance.
+          || actionConfig.reprise_immediate === true
           || (task.step_id && Array.isArray(etapesRegle) && etapesDeConfirmation(etapesRegle).has(task.step_id))
         ),
         langue: await langueOrg(supabase, task.org_id),
@@ -2059,7 +2341,9 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         // délai dépassé, ou tâche récupérée après un arrêt entre l'envoi et la
         // clôture. Le message est peut-être parti — on vérifie avant de
         // renvoyer (launch M5).
-        ...(Number(task.attempts || 0) > 0 ? { dejaEnvoyeDepuis: String(task.created_at) } : {}),
+        // Reprise d'une action immédiate : la tentative d'origine PRÉCÈDE la
+        // tâche, on remonte donc à elle.
+        ...(Number(task.attempts || 0) > 0 ? { dejaEnvoyeDepuis: String(actionConfig.reprise_depuis ?? task.created_at) } : {}),
         cleIdempotence: `${task.id}:${task.step_id ?? 'action'}`,
         // Étape de séquence : la chaîne voyage dans son contexte (anti-boucle des étiquettes).
         chaine: Array.isArray((task.sequence_context as Record<string, unknown> | null)?.chaine)
@@ -2281,6 +2565,16 @@ async function metadonneesFraiches(
     lead: { table: 'clients', colonnes: 'status, lead_status, source, created_at' },
     client: { table: 'clients', colonnes: 'status, lead_status, source, created_at' },
     appointment: { table: 'schedule_events', colonnes: 'status, created_at' },
+    /*
+     * Les rendez-vous arrivent en `schedule_event` (événements écrits par la
+     * base) et les opportunités en `deal` : absents d'ici, leur « si » était
+     * jugé sur l'état d'ORIGINE — « si le rendez-vous est toujours prévu »
+     * ne lisait jamais le statut, « si l'opportunité est à l'étape X »
+     * restait vrai après son déplacement (J-062). Les colonnes du deal sont
+     * celles que porte l'événement (`pipeline_events.payload`).
+     */
+    schedule_event: { table: 'schedule_events', colonnes: 'status, created_at' },
+    deal: { table: 'deals', colonnes: 'stage_id, pipeline_id, statut, source, utm_campaign, assigned_user_id, created_at' },
   };
 
   const cible = source[task.entity_type];
@@ -2306,6 +2600,11 @@ async function metadonneesFraiches(
   // `data` est typé `unknown` par PostgREST quand les colonnes sont choisies
   // dynamiquement : la forme est garantie par `source` juste au-dessus.
   const frais: Record<string, unknown> = { ...(data as unknown as Record<string, unknown>) };
+  // Un rendez-vous sans statut est « prévu » : même convention que le trigger
+  // qui émet appointment.created (`coalesce(status, 'scheduled')`).
+  if (cible.table === 'schedule_events' && (frais.status === null || frais.status === '')) frais.status = 'scheduled';
+  // L'opportunité porte `statut` (ouvert / gagné / perdu), pas `status`.
+  if (frais.status === undefined && typeof frais.statut === 'string') frais.status = frais.statut;
   if (typeof frais.status === 'string') frais.status = statutAvecAlias(task.entity_type, frais.status);
   // Les noms français des exemples de l'éditeur (« statut = », « montant > »).
   if (frais.status !== undefined) frais.statut = frais.status;
@@ -2530,6 +2829,20 @@ async function checkStopConditions(
     return false; // ne PAS annuler
   };
 
+  /*
+   * Une règle déclenchée PAR la résolution elle-même trouve, par construction,
+   * son entité dans l'état résolu : « Soumission acceptée » + 1 h → demande de
+   * dépôt, « Facture payée » + délai → remerciement, « Rendez-vous annulé » +
+   * délai. L'arrêter sur cet état, c'est l'annuler au moment où elle devait
+   * servir : le pack « Dépôt — demande et rappel », publié d'office, n'a
+   * jamais envoyé une seule demande (K-012). L'exception existait drapeau
+   * `auto_sortie_parcours` ALLUMÉ (sortie-parcours.ts) ; la voici aussi
+   * drapeau éteint, avec la même table. Les AUTRES états résolus arrêtent
+   * toujours (soumission acceptée puis refusée, facture payée puis annulée),
+   * comme la suppression.
+   */
+  const etatsDuDeclencheur = (triggerEvent && DECLENCHE_PAR_RESOLUTION[triggerEvent]) || [];
+
   // Invoice reminders: stop if paid, cancelled, disputed, or client archived
   if (entityType === 'invoice') {
     const { data: inv, error } = await supabase
@@ -2541,7 +2854,7 @@ async function checkStopConditions(
 
     if (error) return illisible('invoices', error.message);
     if (!inv) return true; // Invoice deleted
-    if (['paid', 'cancelled', 'void'].includes(inv.status)) return true;
+    if (['paid', 'cancelled', 'void'].includes(inv.status) && !etatsDuDeclencheur.includes(inv.status)) return true;
     // Check if client is archived/deleted
     if (inv.client_id) {
       const { data: cl, error: clErr } = await supabase
@@ -2577,7 +2890,7 @@ async function checkStopConditions(
     if (error) return illisible('schedule_events', error.message);
     if (!evt) return true;
     if (evt.deleted_at) return true;
-    if (evt.status === 'cancelled') return true;
+    if (evt.status === 'cancelled' && !etatsDuDeclencheur.includes('cancelled')) return true;
   }
 
   // Quote follow-ups: stop once the client responded (approved, declined,
@@ -2593,7 +2906,8 @@ async function checkStopConditions(
     if (error) return illisible('quotes', error.message);
     if (!quote) return true; // Quote deleted
     if (quote.deleted_at) return true;
-    if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)) return true;
+    if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)
+      && !etatsDuDeclencheur.includes(quote.status)) return true;
   }
 
   // Lead: stop if archived or deleted (a lead is a client with status='lead')

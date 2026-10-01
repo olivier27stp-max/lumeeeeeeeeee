@@ -11,6 +11,7 @@ import type { PaymentInsertInput } from './helpers';
 import { sanitizeCellForDisplay } from './migration/masks';
 import { eventBus } from './eventBus';
 import { commissionsFacturePayee } from './field-sales/commission-declencheurs';
+import { typePaiement } from './type-paiement';
 
 // ── Types ──
 
@@ -1034,6 +1035,9 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
         provider: input.provider,
         client_id: input.client_id || null,
         job_id: input.job_id || null,
+        // Stripe et PayPal n'en portaient aucun : une règle « payment_type =
+        // full » ne partait jamais pour un paiement en ligne (voir type-paiement.ts).
+        payment_type: typePaiement({ soldee: facturePayee }),
       },
     });
     // Commissions de la facture soldée — tous fournisseurs, PayPal compris

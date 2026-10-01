@@ -25,8 +25,8 @@ config({ path: resolve(process.cwd(), '.env.local'), quiet: true } as never);
 // (la redirection QA supprimée était revenue).
 
 const url = process.env.VITE_SUPABASE_URL ?? '';
-if (!url || url.includes('bbzcuzqfgsdvjsymfwmr')) {
-  throw new Error('REFUS : tests d’intégration des automatisations = STAGING seulement (VITE_SUPABASE_URL).');
+if (!url || (url.includes('bbzcuzqfgsdvjsymfwmr') && process.env.QA_AUTO_PROD !== 'je-confirme-la-prod')) {
+  throw new Error('REFUS : tests d’intégration des automatisations = staging, ou la prod sur demande explicite (npm run test:automations -- --prod).');
 }
 
 // Le bac à sable lit sa liste en base (désactivé par défaut sous vitest).

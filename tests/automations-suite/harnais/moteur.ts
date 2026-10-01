@@ -8,7 +8,7 @@
  * sable, donc ses envois s'arrêtent avant eux, dans `envois_simules`.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { assurerBureauTest, NUMERO_A, type BureauTest } from './bureau-test';
+import { assurerBureauTest, type BureauTest } from './bureau-test';
 
 export interface AppelPiege { to: string; body: string; from?: string }
 
@@ -49,7 +49,9 @@ export function demarrerMoteur() {
     const { eventBus } = await import('../../../server/lib/eventBus');
     initAutomationEngine({
       supabase: bureau.admin,
-      twilio: { client: envelopperBacASable(clientTwilioPiege)!, phoneNumber: NUMERO_A },
+      // Pas de numéro partagé de plateforme (comme en prod) : un texto doit
+      // partir du numéro de l'ENTREPRISE, ou ne pas partir.
+      twilio: { client: envelopperBacASable(clientTwilioPiege)!, phoneNumber: '' },
       baseUrl: process.env.PUBLIC_URL || 'https://staging.lume-qa.test',
     } as never);
     return { ...bureau, eventBus };

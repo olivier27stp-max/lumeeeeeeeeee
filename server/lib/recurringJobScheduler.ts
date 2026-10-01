@@ -4,6 +4,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './logger';
+import { heureLocale, instantLocal, jourLocal } from './dates-locales';
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -117,7 +118,27 @@ export async function processRecurringJobs(supabase: SupabaseClient, options: { 
         }
 
         // Calculate the scheduled_at for the new job occurrence
-        const nextDate = new Date(rule.next_run_at);
+        //
+        // Une série SANS heure (`local_time` nul) : son `next_run_at` ne porte
+        // aucune heure voulue — minuit (Lumi : « date de début 05:00Z », soit
+        // ~1 h du matin) ou l'heure à laquelle on a cliqué « Activer » dans
+        // l'app. La visite prend l'heure du job d'origine dans le fuseau de
+        // l'entreprise, sinon 9 h, et la série la garde (`local_time`).
+        // Jamais une visite dans le passé : si cette heure est déjà passée ce
+        // jour-là, CETTE occurrence garde son instant et les suivantes
+        // prennent l'heure de la série.
+        //
+        // Série sans fuseau = celui de l'ENTREPRISE (colonne documentée « NULL =
+        // hériter de company_settings.timezone »). Le repli 'America/Toronto'
+        // passé en dur plaçait la visite de 9 h d'une entreprise de Vancouver à 6 h.
+        const fuseau: string = rule.timezone || await fuseauEntreprise(supabase, job.org_id);
+        let heureSerie: string | null = rule.local_time ? String(rule.local_time).slice(0, 5) : null;
+        let nextDate = new Date(rule.next_run_at);
+        if (!heureSerie) {
+          heureSerie = await heureDeReference(supabase, job.org_id, job.id, fuseau);
+          const vise = new Date(instantLocal(jourLocal(fuseau, nextDate), heureSerie, fuseau));
+          if (vise.getTime() >= Date.now()) nextDate = vise;
+        }
         const scheduledAt = nextDate.toISOString();
 
         // Create new job (clone from source)
@@ -199,11 +220,8 @@ export async function processRecurringJobs(supabase: SupabaseClient, options: { 
           nextDate,
           rule.frequency,
           rule.interval_days || 7,
-          // Série sans fuseau = celui de l'ENTREPRISE (colonne documentée « NULL =
-          // hériter de company_settings.timezone »). Le repli 'America/Toronto'
-          // passé en dur plaçait la visite de 9 h d'une entreprise de Vancouver à 6 h.
-          rule.timezone || await fuseauEntreprise(supabase, job.org_id),
-          rule.local_time,
+          fuseau,
+          heureSerie,
         );
 
         // Update rule
@@ -212,6 +230,9 @@ export async function processRecurringJobs(supabase: SupabaseClient, options: { 
           .update({
             occurrences_created: (rule.occurrences_created || 0) + 1,
             next_run_at: nextRunAt.toISOString(),
+            // L'heure retenue pour une série qui n'en avait pas : écrite une
+            // fois, elle ne dépend plus du job d'origine (ni d'un job déplacé).
+            ...(rule.local_time ? {} : { local_time: heureSerie }),
             updated_at: now,
           })
           .eq('id', rule.id);
@@ -249,8 +270,66 @@ export async function processRecurringJobs(supabase: SupabaseClient, options: { 
  * 'America/Toronto' (identifiant IANA canonique de l'Est canadien) ne sert que
  * si le tenant n'a rien configuré.
  */
+/** Heure de travail d'une visite récurrente quand aucune heure n'est connue. */
+export const HEURE_VISITE_PAR_DEFAUT = '09:00';
+
+/**
+ * L'heure LOCALE (« HH:MM ») à laquelle une série place ses visites : celle du
+ * job d'origine (`jobs.scheduled_at`), sinon de sa première visite au
+ * calendrier, lue dans le fuseau de l'entreprise. Sans heure connue — ou
+ * minuit pile, la marque d'une date saisie sans heure — : 9 h.
+ *
+ * Partagée par le passage des séries et par l'outil Lumi qui les crée
+ * (tools-terrain.ts) : les deux doivent donner la même heure.
+ */
+export async function heureDeReference(supabase: SupabaseClient, orgId: string, jobId: string, fuseau: string): Promise<string> {
+  const { data: job, error } = await supabase.from('jobs').select('scheduled_at').eq('id', jobId).eq('org_id', orgId).maybeSingle();
+  if (error) console.error(`[recurring-jobs] heure du job ${jobId} illisible, repli ${HEURE_VISITE_PAR_DEFAUT}:`, error.message);
+  let instant: string | null = (job as { scheduled_at?: string | null } | null)?.scheduled_at ?? null;
+  if (!instant) {
+    const { data: visite, error: eVisite } = await supabase.from('schedule_events').select('start_at')
+      .eq('org_id', orgId).eq('job_id', jobId).is('deleted_at', null).not('start_at', 'is', null)
+      .order('start_at', { ascending: true }).limit(1).maybeSingle();
+    if (eVisite) console.error(`[recurring-jobs] visite du job ${jobId} illisible, repli ${HEURE_VISITE_PAR_DEFAUT}:`, eVisite.message);
+    instant = (visite as { start_at?: string | null } | null)?.start_at ?? null;
+  }
+  if (!instant || Number.isNaN(new Date(instant).getTime())) return HEURE_VISITE_PAR_DEFAUT;
+  const heure = heureLocale(instant, fuseau);
+  return heure === '00:00' ? HEURE_VISITE_PAR_DEFAUT : heure;
+}
+
+/** Le jour civil suivant d'une série (« 2026-10-15 » → « 2026-10-22 » en hebdo). */
+function jourSuivant(jour: string, freq: string, intervalJours: number): string {
+  const [y, m, d] = jour.split('-').map(Number);
+  if (freq === 'monthly') {
+    // Comme Postgres (date + interval « 1 month ») : le 31 janvier donne la fin de février.
+    const dernier = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(y, m, Math.min(d, dernier))).toISOString().slice(0, 10);
+  }
+  const pas = freq === 'daily' ? 1 : freq === 'weekly' ? 7 : freq === 'biweekly' ? 14 : Math.max(1, intervalJours);
+  return new Date(Date.UTC(y, m - 1, d + pas)).toISOString().slice(0, 10);
+}
+
+/**
+ * La première visite d'une série : le jour de début à l'heure LOCALE de la
+ * série, dans le fuseau de l'entreprise ; si ce moment est passé, l'occurrence
+ * suivante sur le même rythme (jamais « maintenant + 7 jours », qui donnait à
+ * la série l'heure à laquelle on l'avait créée).
+ */
+export function premiereOccurrence(
+  jourDebut: string, heure: string, fuseau: string, freq: string, intervalJours: number, maintenant: Date = new Date(),
+): { jour: string; instant: string } {
+  let jour = jourDebut;
+  let instant = instantLocal(jour, heure, fuseau);
+  for (let garde = 0; new Date(instant) <= maintenant && garde < 5000; garde++) {
+    jour = jourSuivant(jour, freq, intervalJours);
+    instant = instantLocal(jour, heure, fuseau);
+  }
+  return { jour, instant };
+}
+
 /** Fuseau de l'entreprise (company_settings.timezone), repli America/Toronto. */
-async function fuseauEntreprise(supabase: SupabaseClient, orgId: string): Promise<string> {
+export async function fuseauEntreprise(supabase: SupabaseClient, orgId: string): Promise<string> {
   const { data, error } = await supabase.from('company_settings').select('timezone').eq('org_id', orgId).maybeSingle();
   if (error) console.error('[recurring-jobs] fuseau de l’entreprise illisible, repli America/Toronto:', error.message);
   return (data as { timezone?: string | null } | null)?.timezone || 'America/Toronto';

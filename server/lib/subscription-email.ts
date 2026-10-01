@@ -453,7 +453,7 @@ export function courrielRelanceImpaye(params: { joursRestants: number; suspensio
  */
 export async function sendDunningReminderEmail(params: {
   orgId: string;
-  /** `orgId:jour` — un seul rappel par jour de relance, même si le cron rejoue. */
+  /** `abonnement:relance-j3:épisode` — UN rappel par palier et par épisode d'impayé, même si le cron rejoue. */
   eventId: string;
   joursRestants: number;
   suspensionLe: string | null;

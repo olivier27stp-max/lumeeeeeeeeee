@@ -57,7 +57,7 @@ Statut : toutes les cellules avec un test PASSENT ; « NON COUVERT » / « NON C
 | A-071 | evaluateConditions | connu + inconnu, __proto__ | REFUSÉ |  |
 | A-072 | evaluateConditions | objet d’opérateurs vide {} | pas de filtre | documenté : Zod le refuse à l’enregistrement (A-352) |
 | A-073 | evaluateConditions | clé du prototype en nom de condition | ne lit pas Object.prototype |  |
-| A-074 | étape « si » | filtre d’étiquettes dans un si | — | NON COUVERT en unitaire : chemin asynchrone qui lit la base ; piste inv-1 §9-1, à couvrir en intégration (B) |
+| A-074 | étape « si » | filtre d’étiquettes dans un si | « alors » si le client a l’étiquette, « sinon » autrement (et l’inverse pour « n’a PAS ») | CORRIGÉ — le « si » appelle `conditionsEtiquettesOk` (avant : toujours vrai) ; couvert en intégration, `10-b-parcours.test.ts` ([A-074][J-061], 2 tests) |
 | A-080 | regleViseCetEvenement | règle sans portée | part |  |
 | A-081 | regleViseCetEvenement | même / autre étape | filtre |  |
 | A-082 | regleViseCetEvenement | autre pipeline / toutes étapes | filtre |  |
@@ -171,7 +171,7 @@ Statut : toutes les cellules avec un test PASSENT ; « NON COUVERT » / « NON C
 | A-244 | remplacerVariables (aperçu de l’éditeur) | {{client_first_name}} | « Marie » | BUG corrigé c2772a07 |
 | A-245 | remplacerParExemples (aperçu des modèles) | {{client_name}} | exemple, sans accolades | BUG corrigé c2772a07 |
 | A-246 | variablesInconnues | {{client_first_name}} / [prenom] | acceptée / signalée |  |
-| A-247 | request_review, send_email, send_sms | double rendu, prénom de repli « Bonjour Bonjour » | — | NON COUVERT ici : exécution d’action (lit la base) — catégories B / H |
+| A-247 | request_review → send_email, send_sms | prénom « Zoé [VIP] », job « Lavage [vitres] {sud} » ; `{survey_url}` en accolades | texte résolu UNE fois : crochets et accolades d’une valeur intacts, bouton du courriel présent | CORRIGÉ — `unitaires/H-contenu-messages.test.ts`, `integration/60-contenu-messages.test.ts` (FAIL avant : « Bonjour Zoé , merci… ») ; prénom de repli : voir H-022 |
 | A-260 | isQuietHours / horsFenetre | bornes 7 h 59 / 8 h / 19 h 59 / 20 h | calme ou non, heure locale |  |
 | A-261 | isQuietHours / horsFenetre | minuit, 23 h 59 | calme ou non, heure locale |  |
 | A-262 | isQuietHours / horsFenetre | 1er nov. 2026 (1 h 30 deux fois, 7 h 59 / 8 h EST) | calme ou non, heure locale |  |

@@ -260,7 +260,10 @@ describe('écritures : bornage org + note française (client factice, appelInter
       nom: 'create_recurrence_rule', args: { job_id: JOB, frequency: 'weekly', start_date: '2099-01-05', day_of_week: [1, 3] },
       verifier: ({ result, appels }) => {
         const ins = appels.find((ap) => ap.table === 'job_recurrence_rules' && a(ap, 'insert'))!;
-        expect(arg(ins, 'insert')![0]).toMatchObject({ org_id: ORG, job_id: JOB, frequency: 'weekly', interval_days: 7, day_of_week: [1, 3], start_date: '2099-01-05', next_run_at: '2099-01-05T05:00:00.000Z', is_active: true });
+        // [K-042] La première visite est à 9 h LOCALE (aucune heure connue pour ce
+        // job) dans le fuseau de l'entreprise — elle valait « 05:00Z », soit
+        // ~1 h du matin à Montréal. 9 h à Toronto en janvier = 14:00Z.
+        expect(arg(ins, 'insert')![0]).toMatchObject({ org_id: ORG, job_id: JOB, frequency: 'weekly', interval_days: 7, day_of_week: [1, 3], start_date: '2099-01-05', next_run_at: '2099-01-05T14:00:00.000Z', local_time: '09:00', timezone: null, is_active: true });
         expect(result).toMatchObject({ created: true, rule_id: ID2, frequence: 'chaque semaine' });
       },
     },

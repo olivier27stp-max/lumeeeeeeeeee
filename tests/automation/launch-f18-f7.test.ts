@@ -129,11 +129,23 @@ describe('F7 — consentement et plafond commercial', () => {
     expect(twilio.messages.create.mock.calls.length + mailer.sendEmail.mock.calls.length).toBe(0);
   });
 
-  it('sous le plafond, la demande d’avis part', async () => {
+  // Une vraie job a une date de création : c'est elle qui fonde le consentement
+  // TACITE (relation d'affaires de moins de 2 ans) d'une demande d'avis.
+  const jobRecente = { data: { id: JOB, title: 'Gouttières', client_id: 'client-a', created_at: '2026-09-14T15:00:00Z' } };
+
+  it('sous le plafond, la demande d’avis part (client de la job terminée : base tacite)', async () => {
+    const r = { ...preset('google_review'), delay_seconds: 0 };
+    const { eventBus } = await moteur({ ...monde(), jobs: jobRecente, automation_rules: { data: [r] } });
+    await eventBus.emit('job.completed', { orgId: ORG, entityType: 'job', entityId: JOB, metadata: {} });
+    await laisserTravailler();
+    expect(twilio.messages.create.mock.calls.length + mailer.sendEmail.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it('[G-015] demande d’avis IMMÉDIATE, client sans consentement exprès ni relation datée : rien ne part (elle partait, drapeau éteint)', async () => {
     const r = { ...preset('google_review'), delay_seconds: 0 };
     const { eventBus } = await moteur({ ...monde(), automation_rules: { data: [r] } });
     await eventBus.emit('job.completed', { orgId: ORG, entityType: 'job', entityId: JOB, metadata: {} });
     await laisserTravailler();
-    expect(twilio.messages.create.mock.calls.length + mailer.sendEmail.mock.calls.length).toBeGreaterThan(0);
+    expect(twilio.messages.create.mock.calls.length + mailer.sendEmail.mock.calls.length).toBe(0);
   });
 });

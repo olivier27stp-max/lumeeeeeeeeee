@@ -114,9 +114,14 @@ export async function runDunningScan(admin: SupabaseClient, options: { orgId?: s
         const fin = new Date(debut + JOURS_DE_GRACE * JOUR_MS);
         await sendDunningReminderEmail({
           orgId: sub.org_id,
-          // La clé porte le jour : le cron tourne plusieurs fois par jour, mais
-          // le client ne reçoit qu'une relance quotidienne.
-          eventId: `${sub.id}:relance:${new Date(maintenant).toISOString().slice(0, 10)}`,
+          // UNE relance par épisode d'impayé — l'en-tête l'annonce (« J+3 —
+          // une relance »). La clé portait le JOUR : de J+3 à J+6 le client
+          // recevait le même courriel quatre matins de suite, puis la
+          // suspension. Elle porte maintenant le palier et l'épisode
+          // (`past_due_since`), comme celle de la suspension : le cron peut
+          // repasser autant qu'il veut. Un envoi RATÉ n'est pas journalisé
+          // « sent » : il est retenté au passage suivant.
+          eventId: `${sub.id}:relance-j${JOUR_RELANCE}:${sub.past_due_since}`,
           joursRestants: JOURS_DE_GRACE - jours,
           suspensionLe: fin.toISOString(),
           planName,

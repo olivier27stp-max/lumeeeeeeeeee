@@ -1415,7 +1415,13 @@ app.listen(port, '0.0.0.0', () => {
 
     initAutomationEngine({
       supabase: serviceClient,
-      twilio: twilioClient && twilioPhoneNumber ? { client: twilioClient, phoneNumber: twilioPhoneNumber } : null,
+      /* Le client Twilio suffit. Un texto d'automatisation part TOUJOURS du
+         numéro de l'entreprise (getOrgSmsFromNumber), jamais d'un numéro
+         partagé : exiger en plus TWILIO_PHONE_NUMBER faisait sauter TOUS les
+         textos automatiques (« Aucun numéro texto configuré pour le bureau »)
+         sur une plateforme sans numéro partagé — y compris pour une entreprise
+         dont le numéro est actif (constaté en prod le 2026-10-01). */
+      twilio: twilioClient ? { client: twilioClient, phoneNumber: twilioPhoneNumber } : null,
       baseUrl: getBaseUrl(),
     });
 

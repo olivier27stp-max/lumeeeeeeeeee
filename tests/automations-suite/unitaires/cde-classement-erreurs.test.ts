@@ -11,7 +11,7 @@
  * (server/lib/actions/index.ts) et par la garde d'adresse (url-sortante.ts).
  */
 import { describe, it, expect } from 'vitest';
-import { isTransientFailure } from '../../../server/lib/automationEngine';
+import { isTransientFailure, repriseImmediatePrevue, tacheAttendLaFenetre } from '../../../server/lib/automationEngine';
 import { posterSansSsrf } from '../../../server/lib/url-sortante';
 
 const DEFINITIVES = [
@@ -28,6 +28,11 @@ const DEFINITIVES = [
   'Aucune étiquette à ajouter.',
   'Aucune étiquette à retirer.',
   'Aucun client rattaché à cette entité.',
+  // Action posée sur la mauvaise fiche : rien ne changera d'ici 2 h.
+  'Cette action ne vaut que pour une facture.',
+  'Cette action ne vaut que pour une soumission.',
+  'Cette action ne vaut que pour un rendez-vous.',
+  'Cette action ne vaut que pour une opportunité.',
   'La note est vide.',
   'Aucune automatisation choisie.',
   'Une automatisation ne peut pas se démarrer elle-même.',
@@ -106,5 +111,57 @@ describe('E — une panne DNS passagère n’est pas une « adresse refusée »'
     const e = await posterSansSsrf('https://hooks.exemple.com/x', {}, { resoudre: panne('ENOTFOUND') }).catch((x: Error) => x);
     expect((e as Error).message).toMatch(/^Adresse refusée/);
     expect(isTransientFailure((e as Error).message)).toBe(false);
+  });
+});
+
+describe('E — action IMMÉDIATE en échec : laquelle est reprise (E-031)', () => {
+  const PANNE = 'Fournisseur simulé en panne (bac à sable)';
+
+  it.each(['send_sms', 'send_email', 'request_review', 'envoyer_facture', 'envoyer_soumission', 'webhook'])(
+    '[E-031] %s en panne passagère → reprise planifiée', (type) => {
+      expect(repriseImmediatePrevue(type, PANNE)).toBe(true);
+      // Cause inconnue : on laisse sa chance à la reprise, comme pour une tâche de la file.
+      expect(repriseImmediatePrevue(type, null)).toBe(true);
+    });
+
+  it.each(['send_sms', 'send_email', 'request_review', 'envoyer_facture', 'envoyer_soumission', 'webhook'])(
+    '[E-035] %s en échec DÉFINITIF → pas de reprise', (type) => {
+      for (const m of ['Client has no phone number.', 'Client has no email address.', 'Recipient opted out', 'Adresse refusée : adresse interne']) {
+        expect(repriseImmediatePrevue(type, m), m).toBe(false);
+      }
+    });
+
+  it.each(['create_task', 'ajouter_note', 'ajouter_etiquette', 'create_notification', 'update_status', 'move_deal_stage', 'modifier_client', 'demarrer_automatisation'])(
+    '[E-035] %s (écriture interne) → jamais repris, même en panne passagère', (type) => {
+      expect(repriseImmediatePrevue(type, PANNE)).toBe(false);
+    });
+});
+
+describe('E — la reprise d’une action immédiate garde SA fenêtre d’envoi (E-031)', () => {
+  const reprise = { reprise_immediate: true };
+
+  it('[E-038] courriel de confirmation repris : n’attend PAS 8 h (il était parti tout de suite)', () => {
+    expect(tacheAttendLaFenetre('send_email', reprise, null)).toBe(false);
+    expect(tacheAttendLaFenetre('envoyer_facture', reprise, null)).toBe(false);
+  });
+
+  it('[E-038] texto et demande d’avis repris : attendent toujours la fenêtre', () => {
+    expect(tacheAttendLaFenetre('send_sms', reprise, null)).toBe(true);
+    expect(tacheAttendLaFenetre('request_review', reprise, null)).toBe(true);
+  });
+
+  it('[E-038] fenêtre RÉGLÉE par l’entreprise : la reprise d’un courriel la respecte aussi', () => {
+    expect(tacheAttendLaFenetre('send_email', reprise, { fenetre: { debut: 9, fin: 17 } })).toBe(true);
+    expect(tacheAttendLaFenetre('send_email', reprise, { jours_ouvrables: true })).toBe(true);
+  });
+
+  it('[E-038] une tâche DIFFÉRÉE ordinaire attend la fenêtre, comme avant ; un webhook ou une note, jamais', () => {
+    for (const type of ['send_email', 'send_sms', 'request_review', 'envoyer_facture', 'envoyer_soumission']) {
+      expect(tacheAttendLaFenetre(type, {}, null), type).toBe(true);
+      expect(tacheAttendLaFenetre(type, null, null), type).toBe(true);
+    }
+    expect(tacheAttendLaFenetre('webhook', reprise, null)).toBe(false);
+    expect(tacheAttendLaFenetre('webhook', {}, null)).toBe(false);
+    expect(tacheAttendLaFenetre('ajouter_note', {}, null)).toBe(false);
   });
 });

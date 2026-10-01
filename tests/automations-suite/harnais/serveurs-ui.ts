@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { config } from 'dotenv';
 import type { TestProject } from 'vitest/node';
-import { assurerBureauTest, COMPTES, REF_PROD } from './bureau-test';
+import { assurerBureauTest, COMPTES, REF_PROD, prodConfirmee } from './bureau-test';
 
 export const PORT_API = Number(process.env.QA_UI_PORT_API || 3071);
 export const PORT_VITE = Number(process.env.QA_UI_PORT_VITE || 5191);
@@ -109,8 +109,8 @@ export default async function setup(project: TestProject) {
   if (existsSync(fichierEnv)) config({ path: fichierEnv, quiet: true } as never);
 
   const url = process.env.VITE_SUPABASE_URL ?? '';
-  if (!url || url.includes(REF_PROD)) {
-    throw new Error('REFUS : les tests d’interface des automatisations tournent sur STAGING seulement (VITE_SUPABASE_URL).');
+  if (!url || (url.includes(REF_PROD) && !prodConfirmee())) {
+    throw new Error('REFUS : les tests d’interface des automatisations tournent sur staging, ou sur la prod sur demande explicite (-- --prod).');
   }
   if (!process.env.VITE_SUPABASE_ANON_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('VITE_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY manquants.');

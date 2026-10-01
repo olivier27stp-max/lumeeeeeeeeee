@@ -14,6 +14,7 @@ import { getServiceClient } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { eventBus } from '../lib/eventBus';
 import { commissionsFacturePayee } from '../lib/field-sales/commission-declencheurs';
+import { typePaiement } from '../lib/type-paiement';
 
 const router = Router();
 router.use(maxBodySize());
@@ -134,7 +135,7 @@ router.post('/invoices/:id/mark-paid', requireFinancialAccess('payments.create')
       entityId: invoiceId,
       actorId: ctx.userId,
       ...(inv.client_id ? { relatedEntityType: 'client', relatedEntityId: inv.client_id } : {}),
-      metadata: { amount_cents: amountCents, provider: 'manual', client_id: inv.client_id ?? null, job_id: inv.job_id ?? null, payment_type: 'full' },
+      metadata: { amount_cents: amountCents, provider: 'manual', client_id: inv.client_id ?? null, job_id: inv.job_id ?? null, payment_type: typePaiement({ soldee: true }) },
     });
 
     // Commissions : générées ICI par le serveur. Avant, le navigateur les

@@ -96,8 +96,12 @@ const RESOLUS_FACTURE = Object.keys(MOTIF_FACTURE);
  * par construction, déjà dans l'état résolu. Les arrêter sur cet état, c'est
  * annuler la règle au moment où elle devait servir (bug des rappels de dépôt).
  */
-const DECLENCHE_PAR_RESOLUTION: Record<string, string[]> = {
-  'quote.approved': ['approved'],
+export const DECLENCHE_PAR_RESOLUTION: Record<string, string[]> = {
+  // « converted » : une soumission acceptée puis transformée en job reste une
+  // soumission acceptée — la demande de dépôt prévue une heure après
+  // l'acceptation ne doit pas tomber parce que l'entrepreneur a créé le job
+  // entre-temps.
+  'quote.approved': ['approved', 'converted'],
   'quote.declined': ['declined'],
   'quote.changes_requested': ['changes_requested'],
   'invoice.paid': ['paid'],

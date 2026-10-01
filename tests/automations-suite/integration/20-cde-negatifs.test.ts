@@ -74,7 +74,10 @@ describe('C — condition fausse', () => {
     const regle = await creerRegle(b, menage, m, { actions: [note(m)], conditions: { canal: 'web' } });
     await emettreNote(b, client, { canal: 'telephone' });
     await attendreTraitement(b, client, 'note.added', DEBUT);
-    expect(await journaux(b, regle)).toEqual([]);
+    // Aucune action ; depuis L-004 le journal dit POURQUOI la règle n'est pas partie.
+    expect((await journaux(b, regle)).map((l) => [l.action_type, l.result_success, l.result_data?.saute])).toEqual([
+      ['conditions', true, 'Conditions non remplies : canal'],
+    ]);
     expect(await notesMarquees(b, m)).toEqual([]);
   });
 
@@ -84,7 +87,10 @@ describe('C — condition fausse', () => {
     const regle = await creerRegle(b, menage, m, { actions: [note(m)], conditions: { montant: { gte: 100 } } });
     await emettreNote(b, client, {});
     await attendreTraitement(b, client, 'note.added', DEBUT);
-    expect(await journaux(b, regle)).toEqual([]);
+    expect((await journaux(b, regle)).map((l) => [l.action_type, l.result_success, l.result_data?.saute])).toEqual([
+      ['conditions', true, 'Conditions non remplies : montant'],
+    ]);
+    expect(await notesMarquees(b, m)).toEqual([]);
   });
 
   it('[C-007] témoin positif : la même condition VRAIE → une note, un journal réussi', async () => {
@@ -105,7 +111,10 @@ describe('C — condition fausse', () => {
     const regle = await creerRegle(b, menage, m, { actions: [note(m)], conditions: { client_a_etiquette: `VIP-${m}` } });
     await emettreNote(b, client);
     await attendreTraitement(b, client, 'note.added', DEBUT);
-    expect(await journaux(b, regle)).toEqual([]);
+    expect((await journaux(b, regle)).map((l) => [l.action_type, l.result_success, l.result_data?.saute])).toEqual([
+      ['conditions', true, 'Conditions non remplies : étiquette du client'],
+    ]);
+    expect(await notesMarquees(b, m)).toEqual([]);
   });
 });
 

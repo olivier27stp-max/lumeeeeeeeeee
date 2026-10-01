@@ -121,13 +121,99 @@ describe('L — ce que le journal d’exécution retient', () => {
     expect((l.result_data as Record<string, unknown>).saute_code).toBe('sans_telephone');
   });
 
-  it.fails('[L-004] ROUGE ATTENDU — décision requise : une règle écartée par ses CONDITIONS ne laisse aucune trace (on ne peut pas répondre « pourquoi ça n’est pas parti ? »)', async () => {
+  /** Attend que le bus ait fini de traiter les événements `type` de la fiche (outbox cochée) et les renvoie. */
+  async function traites(entityId: string, type: string, depuis: string, n = 1) {
+    const lignes = await attendre(async () => (await b.admin.from('domain_events').select('id, type, org_id, entity_type, entity_id, metadata, processed_at, regles_traitees, attempts, created_at')
+      .eq('org_id', b.orgA).eq('entity_id', entityId).eq('type', type).gte('created_at', depuis).order('id')).data ?? [],
+    (l) => l.length >= n && l.every((x) => x.processed_at), 30_000);
+    expect(lignes.length, `événement ${type} non traité à temps`).toBeGreaterThanOrEqual(n);
+    return lignes;
+  }
+  const lignesDe = async (ruleId: string) => (await b.admin.from('automation_execution_logs').select('*').eq('automation_rule_id', ruleId).order('created_at')).data ?? [];
+
+  it('[L-004] une règle écartée par ses CONDITIONS laisse UNE trace qui dit pourquoi — ni action, ni échec, ni déclenchement compté', async () => {
     const m = marque('L-004');
+    const depuis = new Date(Date.now() - 60_000).toISOString();
     const id = await regle(m, [{ type: 'create_notification', config: { title: m } }], { source: { eq: 'site_web' } });
     const client = await nouveauClient(m);
     await b.eventBus.emit('lead.created', { orgId: b.orgA, entityType: 'client', entityId: client, metadata: { source: 'manuel' } });
     const lignes = await journal(id, 1);
-    expect(lignes.length).toBeGreaterThan(0);
+    expect(lignes).toHaveLength(1);
+    expect(lignes[0]).toMatchObject({
+      org_id: b.orgA, automation_rule_id: id, trigger_event: 'lead.created', entity_type: 'client', entity_id: client,
+      action_type: 'conditions', result_success: true, result_error: null, scheduled_task_id: null,
+      result_data: { saute: 'Conditions non remplies : source', saute_code: 'conditions', condition: 'source' },
+    });
+    // L'action de la règle n'a pas eu lieu.
+    const { data: notifs } = await b.admin.from('notifications').select('id').eq('org_id', b.orgA).eq('title', m);
+    expect(notifs).toEqual([]);
+    // Les statistiques ne comptent ni déclenchement, ni envoi, ni étape sautée, ni échec.
+    const { calculerStatistiques } = await import('../../../server/routes/automation-stats');
+    const { par_regle } = await calculerStatistiques(b.admin, b.orgA, id);
+    expect(par_regle[id] ?? { declenches: 0, envoyes: 0, sautes: 0, echecs: 0 }).toMatchObject({ declenches: 0, envoyes: 0, sautes: 0, echecs: 0 });
+
+    // Au plus UNE ligne par (règle, fiche, événement) : le même événement rejoué par l'outbox n'en écrit pas une 2e.
+    await b.admin.from('automation_rules').update({ is_active: true }).eq('id', id);
+    const [ev] = await traites(client, 'lead.created', depuis);
+    await b.admin.from('domain_events').update({ processed_at: null, attempts: (ev.attempts ?? 0) + 1 }).eq('id', ev.id);
+    await b.eventBus.rejouer(ev.id, {
+      type: ev.type, orgId: ev.org_id, entityType: ev.entity_type, entityId: ev.entity_id, metadata: ev.metadata ?? {},
+      outboxId: ev.id, reglesTraitees: [...(ev.regles_traitees ?? [])], rejoueDepuis: ev.created_at,
+    } as never);
+    await traites(client, 'lead.created', depuis);
+    expect(await lignesDe(id)).toHaveLength(1);
+    await b.admin.from('automation_rules').update({ is_active: false }).eq('id', id);
+  });
+
+  it('[L-008] écartée par le filtre « le client a l’étiquette » ou par un champ personnalisé absent : la trace nomme le filtre', async () => {
+    const m = marque('L-008');
+    const id = await regle(m, [{ type: 'create_notification', config: { title: m } }], { client_a_etiquette: `vip-${Date.now().toString(36)}` });
+    const client = await nouveauClient(m);
+    await b.eventBus.emit('lead.created', { orgId: b.orgA, entityType: 'client', entityId: client, metadata: { source: 'manuel' } });
+    const lignes = await journal(id, 1);
+    expect(lignes.map((l) => [l.action_type, l.result_success, (l.result_data as Record<string, unknown>).saute, (l.result_data as Record<string, unknown>).saute_code])).toEqual([
+      ['conditions', true, 'Conditions non remplies : étiquette du client', 'conditions'],
+    ]);
+  });
+
+  it('[L-009] une règle qui ne VISE pas l’événement (autre étiquette posée) ne laisse AUCUNE ligne ; celle qui le vise et dont un filtre échoue en laisse une', async () => {
+    const m = marque('L-009');
+    const depuis = new Date(Date.now() - 60_000).toISOString();
+    const actions = [{ type: 'create_notification', config: { title: m } }];
+    const ins = async (nom: string, conditions: Record<string, unknown>) => {
+      const { data, error } = await b.admin.from('automation_rules').insert({
+        org_id: b.orgA, name: nom, trigger_event: 'client.tagged', conditions, delay_seconds: 0, is_active: true, is_preset: false, actions,
+      }).select('id').single();
+      if (error) throw new Error(error.message);
+      regles.push(data.id as string);
+      return data.id as string;
+    };
+    const autreEtiquette = await ins(`${m} autre étiquette`, { tag: 'vip' });
+    const bonneEtiquette = await ins(`${m} bonne étiquette, mauvaise source`, { tag: 'a-rappeler', source: 'site_web' });
+    const client = await nouveauClient(m);
+    await b.eventBus.emit('client.tagged', { orgId: b.orgA, entityType: 'client', entityId: client, metadata: { tag: 'a-rappeler', source: 'manuel' } });
+    await traites(client, 'client.tagged', depuis);
+    const vues = await attendre(() => lignesDe(bonneEtiquette), (l) => l.length > 0);
+    await b.admin.from('automation_rules').update({ is_active: false }).in('id', [autreEtiquette, bonneEtiquette]);
+    expect(vues.map((l) => [l.action_type, (l.result_data as Record<string, unknown>).saute])).toEqual([['conditions', 'Conditions non remplies : source']]);
+    expect(await lignesDe(autreEtiquette)).toEqual([]);
+  });
+
+  it('[L-010] « une fois par client tous les N jours » : un passage ÉCARTÉ par les conditions ne compte pas — le bon événement suivant part', async () => {
+    const m = marque('L-010');
+    const { data, error } = await b.admin.from('automation_rules').insert({
+      org_id: b.orgA, name: m, trigger_event: 'lead.created', conditions: { source: 'site_web' }, delay_seconds: 0, is_active: true, is_preset: false,
+      actions: [{ type: 'create_notification', config: { title: m, body: 'x' } }], settings: { delai_entre_passages_jours: 7 },
+    }).select('id').single();
+    if (error) throw new Error(error.message);
+    const id = data.id as string;
+    regles.push(id);
+    const client = await nouveauClient(m);
+    await b.eventBus.emit('lead.created', { orgId: b.orgA, entityType: 'client', entityId: client, metadata: { source: 'manuel' } });
+    await attendre(() => lignesDe(id), (l) => l.length === 1);
+    await b.eventBus.emit('lead.created', { orgId: b.orgA, entityType: 'client', entityId: client, metadata: { source: 'site_web' } });
+    const lignes = await journal(id, 2);
+    expect(lignes.map((l) => [l.action_type, l.result_success])).toEqual([['conditions', true], ['create_notification', true]]);
   });
 });
 
