@@ -104,7 +104,33 @@ describe('apercuProposition', () => {
       quotes: { quote_number: 'Q-0043', total_cents: 49439, client_id: C1, title: 'Vitres' },
       clients: { first_name: 'Marie', last_name: 'Tremblay', email: 'marie@x.ca' },
     }));
-    expect(a).toMatchObject({ genre: 'email', to: 'Marie Tremblay <marie@x.ca>', subject: 'Soumission Q-0043 · 494,39 $' });
+    expect(a).toMatchObject({ genre: 'email', to: 'Marie Tremblay <marie@x.ca>' });
+    // L'objet par défaut de la route d'envoi : « Soumission N — montant », au format du courriel.
+    expect(a.subject).toMatch(/^Soumission Q-0043 — 494,39\s\$$/);
+  });
+
+  it('envoi d une facture : l objet et le texte du MODÈLE de l entreprise, pas un texte générique', async () => {
+    const { apercuProposition } = await import('../server/lib/lumi/fiches');
+    const rangees: Record<string, any> = {
+      invoices: { invoice_number: 'F-0012', balance_cents: 30000, total_cents: 45000, client_id: C1, currency: 'CAD', due_date: '2026-10-15' },
+      clients: { first_name: 'Marie', last_name: 'Tremblay', email: 'marie@x.ca' },
+      company_settings: { company_name: 'Vitres Nettes', default_language: 'fr' },
+    };
+    const client = {
+      from: (table: string) => {
+        const q: any = {};
+        q.select = () => q; q.eq = () => q; q.is = () => q; q.order = () => q;
+        q.limit = async () => ({ data: table === 'email_templates' ? [{ subject: 'Votre facture {invoice_number} de {company_name}', body: '<p>Bonjour {client_name}, voici {invoice_amount} à régler.</p>', source: 'user' }] : [], error: null });
+        q.maybeSingle = async () => ({ data: rangees[table] ?? null, error: null });
+        return q;
+      },
+    } as any;
+    const a: any = await apercuProposition('send_invoice', { invoice_id: Q1 }, { client, orgId: 'org', userId: 'u' });
+    expect(a.subject).toBe('Votre facture F-0012 de Vitres Nettes');
+    // Le SOLDE (300 $), pas le total (450 $) : c'est ce que le client doit payer.
+    expect(a.body).toMatch(/Bonjour Marie Tremblay, voici 300,00\s\$ à régler\./);
+    expect(a.body).toMatch(/Suivi du montant à payer et du bouton pour payer la facture en ligne\./);
+    expect(a.body).not.toMatch(/Courriel standard de Lume/);
   });
 
   it('fusion de doublons : les deux fiches côte à côte, avec leur volume d historique', async () => {

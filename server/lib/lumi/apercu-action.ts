@@ -12,6 +12,8 @@
  * correspond à rien dans l'entreprise est SIGNALÉ (alerte) — jamais caché.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { LIBELLES_PARAMETRES, PARAMETRES_A_CHOIX, VALEURS_TRADUITES, PARAMETRES_EN_POURCENT, PARAMETRES_JOUR_SEMAINE, JOURS_SEMAINE } from './libelles-cartes';
+import { PERMISSION_GROUPS } from '../../../src/lib/permissions';
 
 export interface LigneApercu {
   libelle: { fr: string; en: string };
@@ -36,7 +38,16 @@ export function argentEn(cents: number): string {
   const v = (Math.abs(cents) / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${cents < 0 ? '-' : ''}$${v}`;
 }
-function dateLocale(iso: string, fuseau: string, langue: 'fr' | 'en'): string {
+export function dateLocale(iso: string, fuseau: string, langue: 'fr' | 'en'): string {
+  // « 2026-10-15T09:00 » sans décalage : l'exécution la lit comme une heure de l'entreprise
+  // (normaliserDatesHeures). `new Date()` la lisait dans le fuseau du SERVEUR : la carte pouvait
+  // afficher une autre heure que celle qui serait écrite. Sans décalage, on affiche l'heure telle quelle.
+  const sansDecalage = /T\d{2}:\d{2}/.test(iso) && !/(Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  if (sansDecalage) {
+    const mur = new Date(`${iso.slice(0, 16)}:00Z`);
+    if (Number.isNaN(mur.getTime())) return iso;
+    return new Intl.DateTimeFormat(langue === 'fr' ? 'fr-CA' : 'en-CA', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(mur);
+  }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const avecHeure = /T\d{2}:\d{2}/.test(iso);
@@ -109,7 +120,14 @@ const paiement: Resolveur = async (id, { client: db, orgId }, fuseau) => {
 const membre: Resolveur = async (id, { client: db, orgId }) => {
   let { data: m } = await db.from('team_members').select('first_name, last_name, email, role').eq('org_id', orgId).eq('user_id', id).maybeSingle();
   if (!m) ({ data: m } = await db.from('team_members').select('first_name, last_name, email, role').eq('org_id', orgId).eq('id', id).maybeSingle());
-  if (!m) return introuvable(L('Membre', 'Member'));
+  if (!m) {
+    // Les outils d'équipe, de paie et de rôles valident contre `memberships` : une personne qui en fait
+    // partie sans ligne dans team_members n'est PAS introuvable (fausse alerte rouge sur la carte).
+    const { data: adhesion } = await db.from('memberships').select('role, status').eq('org_id', orgId).eq('user_id', id).maybeSingle();
+    if (!adhesion) return introuvable(L('Membre', 'Member'));
+    const role = VALEURS_TRADUITES[txt(adhesion.role)];
+    return { libelle: L('Membre', 'Member'), valeur: ['membre de l’entreprise', role ? role[0].toLowerCase() : txt(adhesion.role)].filter(Boolean).join(' · '), valeur_en: ['company member', role ? role[1].toLowerCase() : txt(adhesion.role)].filter(Boolean).join(' · ') };
+  }
   return { libelle: L('Membre', 'Member'), valeur: [nomPersonne(m), txt(m.email), txt(m.role)].filter(Boolean).join(' · ') };
 };
 const equipe: Resolveur = async (id, { client: db, orgId }) => {
@@ -283,31 +301,113 @@ const RESOLVEURS: Array<[RegExp, Resolveur]> = [
   [/^checklist_id$/, listeJob],
   [/^(report_id|scheduled_report_id)$/, rapport],
 ];
-const resolveurDe = (cle: string) => RESOLVEURS.find(([re]) => re.test(cle))?.[1] ?? null;
+// Règle de récurrence d'un JOB (job_recurrence_rules) — pas une automatisation.
+const recurrenceJob: Resolveur = async (id, ctx, fuseau) => {
+  const { data: r } = await ctx.client.from('job_recurrence_rules').select('job_id, frequency, is_active').eq('org_id', ctx.orgId).eq('id', id).maybeSingle();
+  if (!r) return introuvable(L('Récurrence du job', 'Job recurrence'));
+  const j = estUuid(r.job_id) ? await job(r.job_id, ctx, fuseau) : null;
+  const freq = VALEURS_TRADUITES[txt(r.frequency)];
+  return {
+    libelle: L('Récurrence du job', 'Job recurrence'),
+    valeur: [j?.valeur, freq ? freq[0].toLowerCase() : txt(r.frequency), r.is_active ? 'active' : 'déjà arrêtée'].filter(Boolean).join(' · '),
+    valeur_en: [j?.valeur, freq ? freq[1].toLowerCase() : txt(r.frequency), r.is_active ? 'active' : 'already stopped'].filter(Boolean).join(' · '),
+  };
+};
+// Modèle de liste de vérification (checklist_templates) — pas un modèle de courriel.
+const modeleListe: Resolveur = async (id, { client: db, orgId }) => {
+  const { data: t } = await db.from('checklist_templates').select('name').eq('org_id', orgId).eq('id', id).maybeSingle();
+  return t ? { libelle: L('Modèle de liste de vérification', 'Checklist template'), valeur: txt(t.name) } : introuvable(L('Modèle de liste de vérification', 'Checklist template'));
+};
+
+/**
+ * Un même nom de paramètre vise des tables différentes selon l'outil. Sans cette table, `rule_id`
+ * de deactivate_recurrence_rule était cherché dans les automatisations et `template_id` des listes
+ * de vérification dans les modèles de courriel : la carte affichait « introuvable » en rouge pour
+ * une fiche qui existe.
+ */
+const RESOLVEURS_PAR_OUTIL: Record<string, Record<string, Resolveur>> = {
+  deactivate_recurrence_rule: { rule_id: recurrenceJob },
+  create_job_checklist: { template_id: modeleListe },
+  update_checklist_template: { template_id: modeleListe },
+  delete_checklist_template: { template_id: modeleListe },
+};
+const resolveurDe = (cle: string, outil?: string | null) => (outil ? RESOLVEURS_PAR_OUTIL[outil]?.[cle] : undefined) ?? RESOLVEURS.find(([re]) => re.test(cle))?.[1] ?? null;
 
 /* ── Détails non identifiants ─────────────────────────────────────────── */
-const LIBELLES: Record<string, [string, string]> = {
-  message_text: ['Message', 'Message'], message: ['Message', 'Message'], body: ['Message', 'Message'], subject: ['Objet', 'Subject'],
-  reason: ['Raison', 'Reason'], status: ['Statut', 'Status'], role: ['Rôle', 'Role'], title: ['Titre', 'Title'], name: ['Nom', 'Name'],
-  note: ['Note', 'Note'], notes: ['Notes', 'Notes'], email: ['Courriel', 'Email'], to: ['À', 'To'], phone_number: ['Téléphone', 'Phone'],
-  start_at: ['Début', 'Start'], end_at: ['Fin', 'End'], date: ['Date', 'Date'], due_date: ['Échéance', 'Due date'],
-  is_active: ['Active', 'Active'], permissions: ['Permissions', 'Permissions'], rate: ['Taux', 'Rate'], method: ['Mode', 'Method'],
-};
+// Les libellés et les valeurs traduites vivent dans libelles-cartes.ts (un par paramètre d'outil d'écriture).
 const ISO = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+const nombreFr = (n: number) => String(n).replace('.', ',');
 
-function detail(cle: string, v: unknown, fuseau: string): LigneApercu | null {
-  if (v === null || v === undefined || v === '') return null;
-  const [fr, en] = LIBELLES[cle] ?? [cle.replace(/_cents$/, '').replace(/_dollars$/, '').replace(/_/g, ' '), cle.replace(/_cents$/, '').replace(/_dollars$/, '').replace(/_/g, ' ')];
-  const libelle = L(fr.charAt(0).toUpperCase() + fr.slice(1), en.charAt(0).toUpperCase() + en.slice(1));
-  if (/_cents$/.test(cle) && typeof v === 'number') return { libelle, valeur: argentFr(v), valeur_en: argentEn(v) };
-  if (/(_dollars|^amount)$/.test(cle) && typeof v === 'number') return { libelle, valeur: argentFr(Math.round(v * 100)), valeur_en: argentEn(Math.round(v * 100)) };
-  if (typeof v === 'boolean') return { libelle, valeur: v ? 'Oui' : 'Non', valeur_en: v ? 'Yes' : 'No' };
-  if (typeof v === 'string' && ISO.test(v)) return { libelle, valeur: dateLocale(v, fuseau, 'fr'), valeur_en: dateLocale(v, fuseau, 'en') };
-  if (typeof v === 'object') return { libelle, valeur: JSON.stringify(v) };
-  return { libelle, valeur: String(v) };
+/** Le libellé d'un paramètre dans les deux langues ; sans entrée, son nom en mots (jamais d'underscore). */
+export function libelleParametre(cle: string): LigneApercu['libelle'] {
+  const connu = LIBELLES_PARAMETRES[cle];
+  if (connu) return L(connu[0], connu[1]);
+  const brut = cle.replace(/_cents$/, '').replace(/_dollars$/, '').replace(/_/g, ' ');
+  return L(brut.charAt(0).toUpperCase() + brut.slice(1), brut.charAt(0).toUpperCase() + brut.slice(1));
 }
 
-async function fuseauDe(ctx: Ctx): Promise<string> {
+export function detail(cle: string, v: unknown, fuseau: string, montrerVide = false): LigneApercu | null {
+  if (v === undefined) return null;
+  const libelle = libelleParametre(cle);
+  // Sur une MODIFICATION, un champ explicitement vidé se voit : avant, la ligne disparaissait et la
+  // carte ne disait rien de l'effacement. Sur une création, un champ vide n'est que du bruit.
+  if (v === null || v === '') return montrerVide ? { libelle, valeur: '(vidé)', valeur_en: '(cleared)' } : null;
+  if (/_cents$/.test(cle) && typeof v === 'number') return { libelle, valeur: argentFr(v), valeur_en: argentEn(v) };
+  if (/(_dollars|^amount|^estimated_value)$/.test(cle) && typeof v === 'number') return { libelle, valeur: argentFr(Math.round(v * 100)), valeur_en: argentEn(Math.round(v * 100)) };
+  if (PARAMETRES_EN_POURCENT.has(cle) && typeof v === 'number') return { libelle, valeur: `${nombreFr(v)} %`, valeur_en: `${v}%` };
+  if (PARAMETRES_JOUR_SEMAINE.has(cle)) {
+    const jours = (Array.isArray(v) ? v : [v]).map((j) => JOURS_SEMAINE[Number(j)]).filter(Boolean);
+    if (jours.length) return { libelle, valeur: jours.map((j) => j[0]).join(', '), valeur_en: jours.map((j) => j[1]).join(', ') };
+  }
+  if (typeof v === 'boolean') return { libelle, valeur: v ? 'Oui' : 'Non', valeur_en: v ? 'Yes' : 'No' };
+  if (typeof v === 'string' && ISO.test(v)) return { libelle, valeur: dateLocale(v, fuseau, 'fr'), valeur_en: dateLocale(v, fuseau, 'en') };
+  if (typeof v === 'string' && PARAMETRES_A_CHOIX.has(cle)) {
+    const t = VALEURS_TRADUITES[v.trim().toLowerCase()];
+    if (t) return { libelle, valeur: t[0], valeur_en: t[1] };
+  }
+  if (Array.isArray(v) && v.every((x) => typeof x === 'string' || typeof x === 'number')) {
+    const mots = v.map((x) => (typeof x === 'string' ? VALEURS_TRADUITES[x.trim().toLowerCase()] : undefined) ?? [String(x), String(x)] as [string, string]);
+    return { libelle, valeur: mots.map((m) => m[0]).join(', ') || '(aucun)', valeur_en: mots.map((m) => m[1]).join(', ') || '(none)' };
+  }
+  if (typeof v === 'object') return { libelle, valeur: JSON.stringify(v) };
+  return { libelle, valeur: typeof v === 'number' ? nombreFr(v) : String(v), ...(typeof v === 'number' ? { valeur_en: String(v) } : {}) };
+}
+
+/* ── Listes et objets ─────────────────────────────────────────────────── */
+const LIBELLE_PERMISSION = new Map<string, [fr: string, en: string]>(
+  PERMISSION_GROUPS.flatMap((g) => g.permissions.map((perm): [string, [string, string]] => [perm.key, [perm.label_fr, perm.label_en]])),
+);
+
+/**
+ * Une ligne de soumission, de facture ou de job : « 2 × Lavage de vitres à 150,00 $ = 300,00 $ ».
+ * Avant, la carte disait « Lavage de vitres — 2 — 150,00 $ » : trois valeurs sans nom ni total.
+ */
+export function ligneDeVente(el: Record<string, unknown>): { fr: string; en: string; total: number | null } | null {
+  const nom = txt(el.name) || txt(el.description);
+  if (!nom || !('unit_price_cents' in el || 'qty' in el || 'quantity' in el)) return null;
+  const qte = Number(el.qty ?? el.quantity ?? 1) || 1;
+  const prix = typeof el.unit_price_cents === 'number' ? el.unit_price_cents : null;
+  const total = prix == null ? null : Math.round(qte * prix);
+  const precision = txt(el.name) && txt(el.description) ? ` (${txt(el.description).slice(0, 160)})` : '';
+  const option = el.is_optional === true;
+  return {
+    fr: `${nombreFr(qte)} × ${nom}${precision}${prix == null || total == null ? '' : ` à ${argentFr(prix)} = ${argentFr(total)}`}${option ? ' — en option' : ''}`,
+    en: `${qte} × ${nom}${precision}${prix == null || total == null ? '' : ` at ${argentEn(prix)} = ${argentEn(total)}`}${option ? ' — optional' : ''}`,
+    // Une ligne en option n'entre pas dans le total tant que le client ne la choisit pas.
+    total: option ? null : total,
+  };
+}
+
+/** Une carte de permissions { clé: vrai/faux } : ce qui est accordé et ce qui est retiré, dans les mots de la page Rôles. */
+export function lignesPermissions(v: Record<string, unknown>): LigneApercu[] {
+  const mots = (accorde: boolean, langue: 0 | 1) => Object.entries(v).filter(([, b]) => b === accorde).map(([k]) => LIBELLE_PERMISSION.get(k)?.[langue] ?? k);
+  const lignes: LigneApercu[] = [];
+  if (mots(true, 0).length) lignes.push({ libelle: L('Permissions accordées', 'Permissions granted'), valeur: mots(true, 0).join(', '), valeur_en: mots(true, 1).join(', ') });
+  if (mots(false, 0).length) lignes.push({ libelle: L('Permissions retirées', 'Permissions removed'), valeur: mots(false, 0).join(', '), valeur_en: mots(false, 1).join(', ') });
+  return lignes;
+}
+
+export async function fuseauDe(ctx: Ctx): Promise<string> {
   const { data } = await ctx.client.from('company_settings').select('timezone').eq('org_id', ctx.orgId).maybeSingle();
   return txt(data?.timezone) || 'America/Toronto';
 }
@@ -334,12 +434,17 @@ export function ciblesIntrouvables(apercu: unknown, langue: 'fr' | 'en' = 'fr'):
 }
 
 /** L'aperçu générique : cibles nommées + détails lisibles. */
-export async function apercuAction(args: Record<string, any>, ctx: Ctx): Promise<ApercuAction> {
+export async function apercuAction(args: Record<string, any>, ctx: Ctx, outil?: string | null): Promise<ApercuAction> {
   const fuseau = await fuseauDe(ctx);
   const cibles: LigneApercu[] = [];
   const details: LigneApercu[] = [];
   for (const [cle, v] of Object.entries(args ?? {})) {
-    const res = resolveurDe(cle);
+    const res = resolveurDe(cle, outil);
+    // La cible d'un objectif de REVENUS est en cents : « 5000000 » se lit 50 000,00 $.
+    if (cle === 'target_value' && typeof v === 'number' && args?.metric === 'revenue') {
+      details.push({ libelle: libelleParametre(cle), valeur: argentFr(v), valeur_en: argentEn(v) });
+      continue;
+    }
     if (res && estUuid(v)) { cibles.push((await res(v, ctx, fuseau)) ?? introuvable(L(cle, cle))); continue; }
     // Liste d'identifiants (task_ids…) : chaque élément nommé.
     if (Array.isArray(v) && v.every(estUuid) && v.length) {
@@ -350,18 +455,37 @@ export async function apercuAction(args: Record<string, any>, ctx: Ctx): Promise
     }
     // Liste d'objets (relances : un client + un texte chacun) : une ligne par élément.
     if (Array.isArray(v) && v.length && v.every((x) => x && typeof x === 'object' && !Array.isArray(x))) {
+      // Sur une modification, une liste fournie REMPLACE celle qui existe : la carte le dit.
+      const remplace = /^(update_|save_|set_)/.test(outil ?? '');
+      details.push({
+        libelle: libelleParametre(cle),
+        valeur: `${v.length} ${v.length > 1 ? 'éléments' : 'élément'}${remplace ? ' — remplacent la liste actuelle au complet' : ''}`,
+        valeur_en: `${v.length} ${v.length > 1 ? 'items' : 'item'}${remplace ? ' — they replace the whole current list' : ''}`,
+      });
+      let sousTotal = 0;
+      let avecPrix = false;
       for (const [i, el] of v.slice(0, 30).entries()) {
+        const vente = ligneDeVente(el as Record<string, unknown>);
+        if (vente) {
+          if (vente.total != null) { sousTotal += vente.total; avecPrix = true; }
+          details.push({ libelle: L(`${i + 1}.`, `${i + 1}.`), valeur: vente.fr, valeur_en: vente.en });
+          continue;
+        }
         const morceaux: string[] = [];
+        const morceauxEn: string[] = [];
         let alerte = false;
         for (const [k, x] of Object.entries(el as Record<string, unknown>)) {
-          const r = resolveurDe(k);
-          if (r && estUuid(x)) { const l = await r(x, ctx, fuseau); if (l?.alerte) alerte = true; if (l) morceaux.push(l.valeur); continue; }
+          const r = resolveurDe(k, outil);
+          if (r && estUuid(x)) { const l = await r(x, ctx, fuseau); if (l?.alerte) alerte = true; if (l) { morceaux.push(l.valeur); morceauxEn.push(l.valeur_en ?? l.valeur); } continue; }
+          // Un identifiant interne à la liste (élément de liste de vérification, jalon existant) ne dit rien à personne.
+          if (/(^|_)id$/.test(k)) continue;
           const d = detail(k, x, fuseau);
-          if (d) morceaux.push(d.valeur);
+          if (d) { morceaux.push(`${d.libelle.fr} : ${d.valeur}`); morceauxEn.push(`${d.libelle.en}: ${d.valeur_en ?? d.valeur}`); }
         }
-        details.push({ libelle: L(`${i + 1}.`, `${i + 1}.`), valeur: morceaux.join(' — '), ...(alerte ? { alerte: true } : {}) });
+        details.push({ libelle: L(`${i + 1}.`, `${i + 1}.`), valeur: morceaux.join(' · '), valeur_en: morceauxEn.join(' · '), ...(alerte ? { alerte: true } : {}) });
       }
       if (v.length > 30) details.push({ libelle: L('Et encore', 'And'), valeur: `${v.length - 30} autres`, valeur_en: `${v.length - 30} more` });
+      if (avecPrix && v.length <= 30) details.push({ libelle: L('Sous-total avant taxes', 'Subtotal before taxes'), valeur: argentFr(sousTotal), valeur_en: argentEn(sousTotal) });
       continue;
     }
     if (estUuid(v) || /(^|_)id$/.test(cle)) {
@@ -373,7 +497,15 @@ export async function apercuAction(args: Record<string, any>, ctx: Ctx): Promise
       else if (res && typeof v === 'string' && v.trim()) cibles.push({ ...introuvable(L(cle.replace(/_id$/, '').replace(/_/g, ' '), cle.replace(/_id$/, '').replace(/_/g, ' '))), valeur: `« ${v.slice(0, 60)} » ne correspond à aucune fiche de l'entreprise`, valeur_en: `“${v.slice(0, 60)}” matches no record in this company` });
       continue;
     }
-    const d = detail(cle, v, fuseau);
+    // Permissions : la carte montrait du JSON (« {"invoices.delete":true} »).
+    if (cle === 'permissions' && v && typeof v === 'object' && !Array.isArray(v)) { details.push(...lignesPermissions(v as Record<string, unknown>)); continue; }
+    // Réponses d'une liste de vérification : des identifiants d'éléments, illisibles ; on dit combien.
+    if (cle === 'responses' && v && typeof v === 'object' && !Array.isArray(v)) {
+      const n = Object.keys(v).length;
+      details.push({ libelle: libelleParametre(cle), valeur: `${n} ${n > 1 ? 'réponses enregistrées' : 'réponse enregistrée'}`, valeur_en: `${n} ${n > 1 ? 'answers saved' : 'answer saved'}` });
+      continue;
+    }
+    const d = detail(cle, v, fuseau, /^(update_|set_)/.test(outil ?? ''));
     if (d) details.push(d);
   }
   return { genre: 'action', cibles, details };

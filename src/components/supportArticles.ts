@@ -87,9 +87,9 @@ export const ARTICLES: Article[] = [
     path: '/settings/roles',
     q_fr: 'Comment limiter ce qu\'un employé peut voir ?',
     q_en: 'How do I limit what an employee can see?',
-    a_fr: 'Dans Paramètres → Rôles & Permissions, choisissez le rôle du membre ou créez-en un sur mesure. Vous contrôlez l\'accès module par module : finances, clients, horaire, etc.',
-    a_en: 'Under Settings → Roles & Permissions, pick the member’s role or build a custom one. You control access module by module: finances, clients, schedule, and so on.',
-    tags: 'permission role acces droit securite restreindre cacher',
+    a_fr: 'Dans Paramètres → Rôles & Permissions, choisissez le rôle du membre ou créez-en un sur mesure. Vous contrôlez l\'accès module par module : finances, clients, horaire, etc. Exception : un technicien ne voit jamais les montants (factures, soumissions, paiements). C\'est bloqué pour ce rôle et aucune case ne le débloque ; pour montrer les prix à quelqu\'un, donnez-lui le rôle Représentant ou Administrateur.',
+    a_en: 'Under Settings → Roles & Permissions, pick the member’s role or build a custom one. You control access module by module: finances, clients, schedule, and so on. One exception: a technician never sees amounts (invoices, quotes, payments). It is blocked for that role and no checkbox unlocks it; to show prices to someone, give them the Sales rep or Admin role.',
+    tags: 'permission role acces droit securite restreindre cacher technicien montant prix voir facture',
   },
   {
     id: 'schedule-job',

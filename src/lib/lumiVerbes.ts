@@ -34,8 +34,8 @@ export const VERBES_LUMI: Record<string, VerbeLumi> = {
   set_custom_field: { fr: 'changer un champ personnalisé', en: 'set a custom field' },
   add_client_tag: { fr: 'ajouter une étiquette à un client', en: 'add a tag to a client' },
   remove_client_tag: { fr: 'retirer une étiquette d’un client', en: 'remove a tag from a client' },
-  update_deal_stage: { fr: 'déplacer une carte du pipeline', en: 'move a pipeline card' },
-  delete_deal: { fr: 'retirer une carte du pipeline', en: 'remove a pipeline card' },
+  update_deal_stage: { fr: 'changer un deal d’étape', en: 'move a deal to another stage' },
+  delete_deal: { fr: 'abandonner un deal', en: 'abandon a deal' },
 
   // ── Devis ────────────────────────────────────────────────────────────────
   create_quote: { fr: 'créer une soumission', en: 'create a quote' },
