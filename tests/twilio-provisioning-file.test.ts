@@ -77,6 +77,11 @@ function forfaitAvecSms() {
   db.plans = [{ id: 'p1', includes_sms: true }];
 }
 const evenements = () => db.provisioning_events || [];
+/** Refus réel de Twilio tant que le profil Trust Hub n'est pas approuvé (prod, 2026-10-01). */
+const REFUS_KYC = () => Object.assign(
+  new Error('Primary compliance profile is not approved. Please refer to documentation and complete the KYC process in Trust Hub to gain access.'),
+  { status: 401 },
+);
 
 beforeEach(() => {
   for (const k of Object.keys(db)) delete db[k];
@@ -184,7 +189,7 @@ describe('échec → en attente, jamais un rollback', () => {
   });
 
   it('au-delà de 14 jours depuis le 1er essai : failed terminal', async () => {
-    achat.mockRejectedValue(new Error('regulatory bundle required'));
+    achat.mockRejectedValue(new Error('boom'));
     await mod.provisionSmsForNewSubscription({ orgId: ORG, subscriptionId: 's1' });
     const e = evenements()[0];
     e.metadata.premier_essai = new Date(Date.now() - 15 * 86400_000).toISOString();
@@ -192,6 +197,37 @@ describe('échec → en attente, jamais un rollback', () => {
     await mod.relancerProvisionnementsEnAttente();
     expect(e.status).toBe('failed');
     expect(await mod.etatProvisionnementSms(ORG)).toMatchObject({ statut: 'echec' });
+  });
+
+  it('conformité : jamais d’abandon, même après 14 jours (le blocage est chez nous)', async () => {
+    achat.mockRejectedValue(REFUS_KYC());
+    await mod.provisionSmsForNewSubscription({ orgId: ORG, subscriptionId: 's1' });
+    const e = evenements()[0];
+    e.metadata.premier_essai = new Date(Date.now() - 40 * 86400_000).toISOString();
+    e.metadata.prochain_essai = null;
+    await mod.relancerProvisionnementsEnAttente();
+    expect(e.status).toBe('retrying');
+    expect(await mod.etatProvisionnementSms(ORG)).toMatchObject({ statut: 'en_attente', nature: 'conformite' });
+  });
+});
+
+describe('bouton « Obtenir mon numéro » (source manuel)', () => {
+  it('un refus Twilio met la demande en file au lieu de la perdre', async () => {
+    achat.mockRejectedValueOnce(REFUS_KYC());
+    const r = await mod.provisionSmsForNewSubscription({ orgId: ORG, subscriptionId: null, source: 'manuel', areaCode: '438' });
+    expect(r).toMatchObject({ provisioned: false, nature: 'conformite' });
+    expect(evenements()[0]).toMatchObject({ status: 'retrying', subscription_id: null });
+    expect(evenements()[0].metadata).toMatchObject({ source: 'manuel', requested_area_code: '438' });
+  });
+
+  it('l’indicatif demandé est repris à la relance', async () => {
+    achat.mockRejectedValueOnce(REFUS_KYC());
+    await mod.provisionSmsForNewSubscription({ orgId: ORG, subscriptionId: null, source: 'manuel', areaCode: '438' });
+    evenements()[0].metadata.prochain_essai = null;
+    disponibles.mockClear();
+    await mod.relancerProvisionnementsEnAttente();
+    expect(disponibles.mock.calls[0][0]).toMatchObject({ areaCode: '438' });
+    expect(evenements()[0].status).toBe('success');
   });
 });
 
@@ -201,6 +237,8 @@ describe('classement et délais', () => {
     [Object.assign(new Error('Authenticate'), { code: 20003, status: 401 }), 'permissions'],
     [new Error('No SMS-capable numbers available for country=CA.'), 'inventaire'],
     [new Error('An Address is required'), 'conformite'],
+    // Message RÉEL de Twilio, relevé en prod le 2026-10-01 (statut 401 : ne pas le prendre pour un problème de clé).
+    [REFUS_KYC(), 'conformite'],
     [new Error('boom'), 'autre'],
   ])('%s → %s', (err, nature) => {
     expect(mod.classerEchecProvisionnement(err)).toBe(nature);
