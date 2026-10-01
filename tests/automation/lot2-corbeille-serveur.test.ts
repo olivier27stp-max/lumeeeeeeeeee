@@ -93,12 +93,45 @@ beforeEach(() => {
 // ─── roles-08 ───────────────────────────────────────────────────
 
 describe('roles-08 — une règle à la corbeille ne se publie par AUCUN chemin', () => {
-  it('PATCH { is_active: true } → 409, le message de la corbeille, rien n’est écrit', async () => {
+  const MESSAGE_PUBLICATION = 'Cette automatisation est à la corbeille : restaurez-la avant de la publier.';
+
+  it('PATCH { is_active: true } → le MÊME refus que la route de publication (422, même phrase), rien n’est écrit', async () => {
+    /*
+     * L'attendu du constat, et ce que vérifie déjà la suite d'intégration
+     * ([J-065], tests/automations-suite) : publier par PATCH est refusé COMME
+     * par la route de publication. Le 409 « … pour la modifier » du lot 1
+     * reste la réponse aux autres modifications (test suivant).
+     */
     const r = await appeler('PATCH', `/automations/rules/${CORBEILLE}`, { is_active: true });
-    expect(r.status).toBe(409);
-    expect(r.json.error).toBe(MESSAGE_CORBEILLE);
+    expect(r.status).toBe(422);
+    expect(r.json.error).toBe(MESSAGE_PUBLICATION);
+    expect(r.json.code).toBe('publication_refusee');
     expect(ecrituresSur(CORBEILLE)).toEqual([]);
     expect(regleEnBase(CORBEILLE)?.is_active).toBe(false);
+  });
+
+  it('PATCH qui publie ET modifie ({ name, is_active: true }) → 422 aussi, ni le nom ni le statut ne changent', async () => {
+    const r = await appeler('PATCH', `/automations/rules/${CORBEILLE}`, { name: 'Renommée', is_active: true });
+    expect(r.status).toBe(422);
+    expect(r.json.error).toBe(MESSAGE_PUBLICATION);
+    expect(ecrituresSur(CORBEILLE)).toEqual([]);
+    expect(regleEnBase(CORBEILLE)).toMatchObject({ name: 'Règle a2', is_active: false });
+  });
+
+  it('PATCH qui ne publie pas ({ name }, ou { is_active: false }) → 409 « … pour la modifier » (lot 1), rien n’est écrit', async () => {
+    for (const corps of [{ name: 'Renommée' }, { is_active: false }]) {
+      const r = await appeler('PATCH', `/automations/rules/${CORBEILLE}`, corps);
+      expect(r.status, JSON.stringify(corps)).toBe(409);
+      expect(r.json.error).toBe(MESSAGE_CORBEILLE);
+    }
+    expect(ecrituresSur(CORBEILLE)).toEqual([]);
+  });
+
+  it('restaurée, la règle se publie par PATCH', async () => {
+    expect((await appeler('POST', `/automations/rules/${CORBEILLE}/restaurer`)).status).toBe(200);
+    const r = await appeler('PATCH', `/automations/rules/${CORBEILLE}`, { is_active: true });
+    expect(r.status).toBe(200);
+    expect(regleEnBase(CORBEILLE)).toMatchObject({ is_active: true, deleted_at: null });
   });
 
   it('POST /rules/:id/publication { actif: true } → 422 « restaurez-la avant de la publier », rien n’est écrit', async () => {
@@ -129,10 +162,13 @@ describe('roles-08 — une règle à la corbeille ne se publie par AUCUN chemin'
     expect(ecrituresSur(PURGEE)).toEqual([]);
   });
 
-  it('en anglais, le refus de la corbeille est dit en anglais', async () => {
-    const r = await appeler('PATCH', `/automations/rules/${CORBEILLE}`, { is_active: true }, { 'Accept-Language': 'en' });
-    expect(r.status).toBe(409);
-    expect(r.json.error).toBe('This automation is in the bin: restore it to edit it.');
+  it('en anglais, les deux refus sont dits en anglais', async () => {
+    const publier = await appeler('PATCH', `/automations/rules/${CORBEILLE}`, { is_active: true }, { 'Accept-Language': 'en' });
+    expect(publier.status).toBe(422);
+    expect(publier.json.error).toBe('This automation is in the bin: restore it before publishing it.');
+    const modifier = await appeler('PATCH', `/automations/rules/${CORBEILLE}`, { name: 'Renamed' }, { 'Accept-Language': 'en' });
+    expect(modifier.status).toBe(409);
+    expect(modifier.json.error).toBe('This automation is in the bin: restore it to edit it.');
   });
 });
 

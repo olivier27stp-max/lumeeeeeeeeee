@@ -44,11 +44,11 @@ import { copierEtapes, nomDisponible } from '../../src/lib/automationTemplates';
 import { projeterFormatOrigine } from '../../src/lib/sequenceTypes';
 import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie } from '../lib/automatisations-bureaux';
 import { logger } from '../lib/logger';
+import { messageCorbeille, STATUT_CORBEILLE } from '../lib/automations-corbeille';
 import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
 import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee } from '../lib/automations-publication';
 import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
-import { messageCorbeille, STATUT_CORBEILLE } from '../lib/automations-corbeille';
 import {
   DECLENCHEURS,
   ACTIONS,
@@ -525,6 +525,17 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
    * automatisation qui ne partira plus.
    */
   if (existante.deleted_at) {
+    /*
+     * La PUBLIER par ce chemin : le refus de la route de publication, mot pour
+     * mot (`changerPublication` : 422, même phrase), que la publication voyage
+     * seule ou avec une autre modification. Toute autre modification : 409.
+     */
+    if (req.body.is_active === true) {
+      return res.status(422).json({
+        error: 'Cette automatisation est à la corbeille : restaurez-la avant de la publier.',
+        code: 'publication_refusee',
+      });
+    }
     return res.status(STATUT_CORBEILLE).json({ error: messageCorbeille(langueDe(req) === 'fr') });
   }
 
