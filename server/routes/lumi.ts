@@ -58,7 +58,7 @@ import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORI
 import { PERMISSION_PAR_OUTIL, outilsPermis, membreVoitLesMontants, restrictionsDe } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
-import { maintenantPourLumi } from '../lib/lumi/temps';
+import { jourPourLumi, heurePourLumi } from '../lib/lumi/temps';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
@@ -326,7 +326,7 @@ async function contexteTour(req: Request, res: Response) {
     restrictions = restrictionsDe(ctxRole, await membreVoitLesMontants(auth.user.id, auth.orgId), language);
   } catch { /* non-fatal : sans ce texte, Lumi refuse quand même, juste moins bien */ }
   // Jour ET heure dans le fuseau de l'entreprise, avec le décalage à écrire dans les dates d'outils (audit 2026-09-30).
-  const promptCtx = { companyName, userName, language, todayIso: maintenantPourLumi(fuseau, language), souvenirs, restrictions };
+  const promptCtx = { companyName, userName, language, todayIso: jourPourLumi(fuseau, language), souvenirs, restrictions };
   const systeme = promptSystemeLumi(promptCtx);
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
   // Ce que le client voit : des crédits (jamais de $) — calculé une fois par requête.
@@ -447,15 +447,16 @@ async function executerTourSse(opts: {
       orgId: ctx.auth.orgId,
       userId: ctx.auth.user.id,
       accessToken: ctx.accessToken,
-      // Bloc variable du tour : sujet du sous-agent + indices d'outils différés (code, 0 token d'API).
-      systeme: (() => {
-        const focus = [
-          opts.sousAgent ? focusDuSousAgent(opts.sousAgent, ctx.language) : null,
-          opts.enonce ? indiceOutils(opts.enonce, ctx.language, new Set(opts.sousAgent ? outilsDuSousAgent(opts.sousAgent) : OUTILS_DE_BASE)) : null,
-          reperage,
-        ].filter((x): x is string => !!x).join('\n\n');
-        return focus ? promptSystemeLumi({ ...ctx.promptCtx, focus }) : ctx.systeme;
-      })(),
+      // Bloc système variable : ce qui est STABLE pendant une conversation (entreprise,
+      // jour, souvenirs, rôle, sujet du sous-agent). Rien qui change à chaque message.
+      systeme: opts.sousAgent ? promptSystemeLumi({ ...ctx.promptCtx, focus: focusDuSousAgent(opts.sousAgent, ctx.language) }) : ctx.systeme,
+      // Ce qui change à chaque message — heure, indices d'outils différés, repérage —
+      // part APRÈS le point de cache : la conversation est relue, plus réécrite.
+      contexteTour: [
+        heurePourLumi(ctx.fuseau, ctx.language),
+        opts.enonce ? indiceOutils(opts.enonce, ctx.language, new Set(opts.sousAgent ? outilsDuSousAgent(opts.sousAgent) : OUTILS_DE_BASE)) : null,
+        reperage,
+      ].filter((x): x is string => !!x).join('\n\n'),
       sousAgent: opts.sousAgent ?? null,
       outilsPermis,
       langue: ctx.language === 'en' ? 'en' : 'fr',

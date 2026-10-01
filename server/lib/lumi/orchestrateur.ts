@@ -106,6 +106,30 @@ export function avecCacheConversation(messages: Anthropic.Messages.MessageParam[
 }
 
 /**
+ * Contexte du tour — l'heure qu'il est, les indices d'outils et le repérage,
+ * qui changent à CHAQUE message. Ajouté en dernier bloc du dernier message,
+ * donc APRÈS le point de cache glissant : il ne fait partie d'aucun préfixe
+ * mis en cache, et il n'est jamais sauvegardé dans l'historique.
+ *
+ * Avant (2026-10-01), ces trois éléments étaient dans le bloc système, qui
+ * précède les messages : dès que la minute changeait, le préfixe changeait et
+ * toute la conversation était RÉÉCRITE en cache (1,25 × le tarif d'entrée) au
+ * lieu d'être relue (0,1 ×). Mesuré en prod sur une conversation de 11 tours :
+ * 2 088 → 9 103 tokens écrits par tour.
+ */
+export function avecContexteDuTour(messages: Anthropic.Messages.MessageParam[], contexte: string | null | undefined): Anthropic.Messages.MessageParam[] {
+  const texte = contexte?.trim();
+  if (!texte || messages.length === 0) return messages;
+  const dernier = messages[messages.length - 1];
+  if (dernier.role !== 'user') return messages;
+  const blocs: Anthropic.Messages.ContentBlockParam[] = typeof dernier.content === 'string'
+    ? [{ type: 'text', text: dernier.content }]
+    : [...dernier.content];
+  blocs.push({ type: 'text', text: `<contexte_du_tour>\n${texte}\n</contexte_du_tour>` });
+  return [...messages.slice(0, -1), { role: 'user', content: blocs }];
+}
+
+/**
  * Purge des vieux résultats d'outils — le contexte ne grossit plus sans fin.
  * Une liste de 20 jobs lue au 2e tour était relue (et repayée, même au
  * dixième du prix) à CHAQUE tour suivant ; mesuré en prod : 12 000 tokens
@@ -375,6 +399,11 @@ export async function tourLumi(opts: {
   outilsPermis?: ReadonlySet<string> | null;
   /** Langue des avis rendus par gabarit (réponse coupée, refus). Français par défaut. */
   langue?: 'fr' | 'en';
+  /**
+   * Ce qui change à chaque message (heure, indices d'outils, repérage) : ajouté
+   * après le point de cache du dernier message, jamais sauvegardé. Voir avecContexteDuTour.
+   */
+  contexteTour?: string | null;
 }): Promise<ResultatTour> {
   const model = opts.reglages?.model ?? modeleLumi();
   const effort = opts.reglages?.effort ?? reglesCout().effort_defaut;
@@ -435,7 +464,7 @@ export async function tourLumi(opts: {
       max_tokens: MAX_TOKENS,
       system: opts.systeme,
       tools: outils,
-      messages: avecCacheConversation(messages),
+      messages: avecContexteDuTour(avecCacheConversation(messages), opts.contexteTour),
       // Haiku 4.5 n'accepte ni la réflexion adaptative ni l'effort (400
       // « adaptive thinking is not supported on this model ») : sans ce
       // garde, la pente économe à 60 % du plafond répondait « Lumi failed
