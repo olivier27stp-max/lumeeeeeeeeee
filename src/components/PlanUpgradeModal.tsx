@@ -292,7 +292,7 @@ export default function PlanUpgradeModal({ open, onClose, flag, requiredPlan, cu
           type="button"
           onClick={onClose}
           className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur text-white flex items-center justify-center transition-colors"
-          aria-label="Close"
+          aria-label={isFr ? 'Fermer' : 'Close'}
         >
           <X size={15} strokeWidth={2.5} />
         </button>

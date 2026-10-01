@@ -202,7 +202,7 @@ async function saisir(el: HTMLTextAreaElement | HTMLInputElement, valeur: string
 async function deplierMessages(nom = NOM_FR) {
   await cliquer(bouton(new RegExp(`^Voir les messages de ${nom}$`)));
 }
-const zoneSms = () => conteneur.querySelector('textarea[aria-label="SMS envoyé au client"]') as HTMLTextAreaElement;
+const zoneSms = () => conteneur.querySelector('textarea[aria-label="Texto envoyé au client"]') as HTMLTextAreaElement;
 
 beforeEach(() => {
   vi.clearAllMocks();

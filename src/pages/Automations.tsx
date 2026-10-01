@@ -10,9 +10,9 @@
    Payments, Follow-up, Reviews, Client
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Zap, Clock, Mail, Bell, FileText, CalendarClock, MessageSquare,
   ToggleLeft, ToggleRight, Loader2, Send, UserPlus, AlertTriangle,
@@ -24,6 +24,7 @@ import {
 import { cn } from '../lib/utils';
 import { localizeAutomationName } from '../lib/automationNames';
 import { trouverDeclencheur } from '../lib/automationCatalogue';
+import { remplacerVariables } from '../lib/emailBodyText';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
@@ -431,7 +432,16 @@ export default function Automations() {
   /** Le bureau a-t-il un numéro texto ? `false` = bandeau ; `null` = inconnu, rien. */
   const [textoConfigure, setTextoConfigure] = useState<boolean | null>(null);
   const [occupeId, setOccupeId] = useState<string | null>(null);
-  const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
+  /**
+   * La langue des messages du bureau — `null` tant qu'on ne la CONNAÎT pas.
+   *
+   * Elle valait « fr » d'office : lecture en panne sur un bureau réglé en
+   * anglais, l'écran surlignait « FR » et affirmait que les messages partaient
+   * en français (audit du 2026-10-01). Inconnue, on ne surligne rien.
+   */
+  const [orgLang, setOrgLang] = useState<'fr' | 'en' | null>(null);
+  /** La lecture a échoué : on le dit à côté de la bascule. */
+  const [langueIllisible, setLangueIllisible] = useState(false);
   const [savingLang, setSavingLang] = useState(false);
 
   /**
@@ -444,6 +454,8 @@ export default function Automations() {
     const demande = parametres.get('onglet');
     return demande === 'verifier' || demande === 'corbeille' || demande === 'modeles' ? demande : 'toutes';
   });
+  /** Relie les onglets à leur panneau (`aria-controls` / `aria-labelledby`). */
+  const idOnglets = useId();
   /** Menu « Créer » : les cinq départs de GHL. */
   const [menuCreer, setMenuCreer] = useState(false);
   const [bibliotheque, setBibliotheque] = useState(false);
@@ -518,7 +530,7 @@ export default function Automations() {
   const [page, setPage] = useState(1);
   /**
    * Tri par colonne (audit V2, A-17) : les en-têtes n'étaient pas
-   * cliquables. `null` = l'ordre du serveur (par nom), ou celui choisi dans
+   * cliquables. `null` = l'ordre des noms affichés, ou celui choisi dans
    * « Trier » des filtres avancés ; un clic sur un en-tête l'emporte.
    * Recliquer inverse.
    */
@@ -527,7 +539,14 @@ export default function Automations() {
     ? { cle, sens: t.sens === 'asc' ? 'desc' : 'asc' }
     : { cle, sens: 'asc' }));
 
-  useEffect(() => { getAutomationLanguage().then(setOrgLang).catch(() => {}); }, []);
+  useEffect(() => {
+    getAutomationLanguage()
+      .then(setOrgLang)
+      .catch((e: unknown) => {
+        console.error('[automations] langue des messages illisible', e);
+        setLangueIllisible(true);
+      });
+  }, []);
 
   const changerLangue = async (lang: 'fr' | 'en') => {
     if (lang === orgLang || savingLang) return;
@@ -536,6 +555,8 @@ export default function Automations() {
     setOrgLang(lang);
     try {
       await setAutomationLanguage(lang);
+      // Enregistrée : elle est maintenant connue, même si la lecture avait échoué.
+      setLangueIllisible(false);
       toast.success(fr
         ? (lang === 'en' ? 'Messages en anglais' : 'Messages en français')
         : (lang === 'en' ? 'Messages set to English' : 'Messages set to French'));
@@ -1000,15 +1021,28 @@ export default function Automations() {
     if (dossierActif && dossierActif !== 'racine' && r.folder_id !== dossierActif) return false;
     return true;
   });
+  /*
+   * L'ordre alphabétique se lit sur le nom AFFICHÉ (audit du 2026-10-01).
+   * Le serveur trie sur le nom stocké — en anglais pour les préréglages — et
+   * l'écran le traduit ensuite : en français la liste paraissait mélangée
+   * (« Confirmation… », « Anniversaire… », « Contrat… », « Vente croisée… »).
+   * Comparaison dans la langue de l'interface : « É » se range avec « E »,
+   * et « 3 jours » passe avant « 14 jours ».
+   */
+  const langueTri = fr ? 'fr-CA' : 'en-CA';
+  const parNomAffiche = (a: AutomationRule, b: AutomationRule) => localizeAutomationName(a.name, language)
+    .localeCompare(localizeAutomationName(b.name, language), langueTri, { sensitivity: 'base', numeric: true });
   if (triDate !== 'defaut') {
     const sens = triDate === 'recent' ? -1 : 1;
     filtrees.sort((a, b) => sens * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+  } else {
+    filtrees.sort(parNomAffiche);
   }
 
   /** La valeur comparée pour une colonne (nombres, dates en ms, texte). */
   const valeurTri = (r: AutomationRule, cle: CleTri): number | string => {
     switch (cle) {
-      case 'nom': return localizeAutomationName(r.name, language).toLocaleLowerCase(fr ? 'fr-CA' : 'en-CA');
+      case 'nom': return localizeAutomationName(r.name, language).toLocaleLowerCase(langueTri);
       case 'statut': return r.deleted_at ? 0 : r.is_active ? 2 : 1;
       case 'declenches': return stats?.[r.id]?.declenches ?? 0;
       case 'en_cours': return stats?.[r.id]?.en_cours ?? 0;
@@ -1022,10 +1056,9 @@ export default function Automations() {
       const vb = valeurTri(b, tri.cle);
       const ecart = typeof va === 'number' && typeof vb === 'number'
         ? va - vb
-        : String(va).localeCompare(String(vb), fr ? 'fr-CA' : 'en-CA');
+        : String(va).localeCompare(String(vb), langueTri, { sensitivity: 'base', numeric: true });
       // À égalité, le nom départage : un ordre stable d'un clic à l'autre.
-      return (tri.sens === 'asc' ? ecart : -ecart)
-        || localizeAutomationName(a.name, language).localeCompare(localizeAutomationName(b.name, language));
+      return (tri.sens === 'asc' ? ecart : -ecart) || parNomAffiche(a, b);
     })
     : filtrees;
 
@@ -1262,28 +1295,32 @@ export default function Automations() {
           <span className="pb-3 text-[15px] font-semibold text-text-primary">
             {fr ? 'Automatisation' : 'Automation'}
           </span>
+          {/* Des LIENS (audit du 2026-10-01) : en boutons, ni nouvel onglet, ni
+              Ctrl+clic, ni clic milieu — et rien n'annonçait la section courante. */}
           <nav className="flex items-center gap-1" aria-label={fr ? 'Sections' : 'Sections'}>
-            <span className="border-b-2 border-primary px-3 pb-3 pt-1 text-[13px] font-semibold text-primary">
+            <Link
+              to="/automations"
+              aria-current="page"
+              className="border-b-2 border-primary px-3 pb-3 pt-1 text-[13px] font-semibold text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
               {fr ? 'Automatisations' : 'Workflows'}
-            </span>
-            <button
-              type="button"
-              onClick={() => navigate('/automations/apercu')}
+            </Link>
+            <Link
+              to="/automations/apercu"
               className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               {fr ? 'Vue d’ensemble' : 'Overview'}
               <span className="rounded bg-warning-light px-1 py-0.5 text-[9px] font-bold uppercase text-warning">
                 {fr ? 'Bêta' : 'Beta'}
               </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/automations/reglages')}
+            </Link>
+            <Link
+              to="/automations/reglages"
               className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <Settings size={13} aria-hidden="true" />
               {fr ? 'Réglages globaux' : 'Global settings'}
-            </button>
+            </Link>
           </nav>
         </div>
 
@@ -1333,19 +1370,31 @@ export default function Automations() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="mr-1 flex items-center gap-2">
               <span className="text-[11px] text-text-tertiary">{fr ? 'Messages en' : 'Messages in'}</span>
-              <div className="inline-flex overflow-hidden rounded-lg border border-outline/50 text-[12px]">
+              {/* La langue active ne se devinait qu'à la couleur : un groupe
+                  nommé, et l'état de chaque bouton exposé (`aria-pressed`). */}
+              <div
+                role="group"
+                aria-label={fr ? 'Langue des messages' : 'Message language'}
+                className="inline-flex overflow-hidden rounded-lg border border-outline/50 text-[12px]"
+              >
                 {(['fr', 'en'] as const).map((l) => (
                   <button
                     key={l}
                     type="button"
                     onClick={() => changerLangue(l)}
                     disabled={savingLang}
+                    aria-pressed={orgLang === l}
                     className={`px-2.5 py-1 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary'}`}
                   >
                     {l === 'fr' ? 'FR' : 'EN'}
                   </button>
                 ))}
               </div>
+              {langueIllisible && orgLang === null && (
+                <span role="status" className="text-[11px] text-text-tertiary">
+                  {fr ? 'Langue actuelle inconnue' : 'Current language unknown'}
+                </span>
+              )}
             </div>
 
             {saisieDossier ? (
@@ -1399,14 +1448,22 @@ export default function Automations() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent/5 px-3 py-1.5 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <Sparkles size={14} aria-hidden="true" />
-              {fr ? 'Construire avec Lumi' : 'Build using AI'}
+              {/* Le même nom que dans le menu « Créer » (c'était « Build using AI »). */}
+              {fr ? 'Construire avec Lumi' : 'Build with Lumi'}
             </button>
 
             <div className="relative">
               <button
                 type="button"
                 ref={boutonCreer}
-                onClick={(e) => { e.stopPropagation(); setMenuCreer((m) => !m); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Un seul menu à la fois : ce clic n'atteint pas le « clic
+                  // ailleurs » du document, le menu « ⋮ » d'une ligne restait ouvert.
+                  setMenuLigne(null);
+                  setSousMenuDossier(null);
+                  setMenuCreer((m) => !m);
+                }}
                 aria-haspopup="menu"
                 aria-expanded={menuCreer}
                 className="glass-button-primary inline-flex items-center gap-1.5"
@@ -1452,6 +1509,8 @@ export default function Automations() {
                 key={o.cle}
                 type="button"
                 role="tab"
+                id={`${idOnglets}-${o.cle}`}
+                aria-controls={`${idOnglets}-panneau`}
                 aria-selected={onglet === o.cle}
                 onClick={() => setOnglet(o.cle)}
                 className={cn(
@@ -1706,7 +1765,8 @@ export default function Automations() {
           </div>
         )}
 
-        {/* ══ 6. Le tableau ══ */}
+        {/* ══ 6. Le tableau ══ — le panneau des onglets du haut. */}
+        <div role="tabpanel" id={`${idOnglets}-panneau`} aria-labelledby={`${idOnglets}-${onglet}`}>
         {loading ? (
           <div className="section-card flex items-center justify-center py-16">
             <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" aria-hidden="true" />
@@ -1768,7 +1828,9 @@ export default function Automations() {
                       );
                     })}
                     <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Stats' : 'Stats'}</th>
-                    <th scope="col" className="w-24 px-3 py-3" />
+                    <th scope="col" className="w-24 px-3 py-3">
+                      <span className="sr-only">{fr ? 'Actions' : 'Actions'}</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1953,6 +2015,9 @@ export default function Automations() {
                                     setPosMenuLigne(versLeHaut
                                       ? { bottom: window.innerHeight - r.top + 4, right: window.innerWidth - r.right }
                                       : { top: r.bottom + 4, right: window.innerWidth - r.right });
+                                    // Un seul menu à la fois (voir le bouton « Créer »).
+                                    setMenuCreer(false);
+                                    setSousMenuDossier(null);
                                     setMenuLigne((m) => (m === rule.id ? null : rule.id));
                                   }}
                                   aria-haspopup="menu"
@@ -2170,11 +2235,14 @@ export default function Automations() {
                                               ? (fr ? 'Courriel envoyé au client' : 'Email sent to client')
                                               : (fr ? 'Texto envoyé au client' : 'Text sent to client')}
                                           </p>
+                                          {/* Variables remplacées par un exemple, comme dans
+                                              l'éditeur de l'ancien format (« Le client lira : … ») :
+                                              on montre ce que le client lira, pas « [client_first_name] ». */}
                                           {e.action?.type === 'send_email' && e.action.config?.subject ? (
-                                            <p className="mt-1 text-[12px] font-medium text-text-primary">{String(e.action.config.subject)}</p>
+                                            <p className="mt-1 text-[12px] font-medium text-text-primary">{remplacerVariables(String(e.action.config.subject))}</p>
                                           ) : null}
                                           <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[12px] text-text-secondary">
-                                            {String(e.action?.config?.body ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+                                            {remplacerVariables(String(e.action?.config?.body ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
                                               || (fr ? '(vide)' : '(empty)')}
                                           </p>
                                         </div>
@@ -2222,8 +2290,12 @@ export default function Automations() {
               </table>
             </div>
 
-            {/* ══ 7. Pagination ══ */}
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-outline/30 px-4 py-3 text-[12px]">
+            {/* ══ 7. Pagination ══
+                `pr-20` : la place de la bulle « Aide et support » (fixe, à
+                20 px du bord, 48 px de large). Quand la pagination est en bas
+                de la fenêtre, la bulle recouvrait la flèche de « 10 / page »
+                (audit du 2026-10-01). */}
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-outline/30 py-3 pl-4 pr-20 text-[12px]">
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -2264,6 +2336,7 @@ export default function Automations() {
             </div>
           </div>
         )}
+        </div>
       </div>
       {copieVers && (
         <CopierVersBureauxModal
