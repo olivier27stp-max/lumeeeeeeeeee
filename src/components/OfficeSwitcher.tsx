@@ -60,7 +60,7 @@ export function OfficeSwitcher() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0">
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2 pl-2 pr-1.5 py-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-tertiary transition-all max-w-[220px]"

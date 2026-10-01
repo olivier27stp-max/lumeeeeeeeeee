@@ -410,7 +410,7 @@ export default function GlobalSearch() {
   const showDropdown = open && normalizedQuery.length > 0;
 
   return (
-    <div ref={rootRef} className="relative w-48 md:w-56 transition-[width] duration-300 ease-out focus-within:w-[20rem] md:focus-within:w-[28rem]" onBlur={handleBlur}>
+    <div ref={rootRef} className="relative w-48 lg:w-56 transition-[width] duration-300 ease-out focus-within:w-[20rem] lg:focus-within:w-[28rem]" onBlur={handleBlur}>
       {/* Search Input */}
       <div className="relative group">
         <Search size={15} strokeWidth={1.75} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary transition-colors duration-150 group-focus-within:text-text-secondary" />
