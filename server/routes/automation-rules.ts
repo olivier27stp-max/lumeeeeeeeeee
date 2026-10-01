@@ -52,6 +52,7 @@ import {
   DECLENCHEURS,
   ACTIONS,
   trouverDeclencheur,
+  conditionsApresChangement,
   declencheurOffert,
   DELAI_NEGATIF_MAX_SECONDES,
 } from '../../src/lib/automationCatalogue';
@@ -530,6 +531,18 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     return res.status(400).json({
       error: 'Le déclencheur d\'une automatisation fournie ne se change pas. Dupliquez-la pour en faire une à vous.',
     });
+  }
+
+  /*
+   * Changer de déclencheur SANS dire quoi faire des conditions : les réglages
+   * de l'ancien ne doivent pas rester (une règle qui garde « première
+   * ouverture » sur « Étiquette ajoutée » ne part jamais). L'éditeur envoie
+   * déjà les bonnes conditions ; ceci couvre tout autre client.
+   */
+  if (typeof patch.trigger_event === 'string' && patch.trigger_event !== existante.trigger_event && !('conditions' in patch)) {
+    patch.conditions = conditionsApresChangement(
+      existante.trigger_event, patch.trigger_event, (existante.conditions ?? {}) as Record<string, unknown>,
+    );
   }
 
   const fr = langueDe(req) === 'fr';

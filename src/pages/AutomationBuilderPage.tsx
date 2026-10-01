@@ -78,6 +78,7 @@ import {
   ACTIONS,
   CASE_SORTIE,
   DECLENCHEURS,
+  conditionsApresChangement,
   FAMILLES_ACTIONS,
   FAMILLES_DECLENCHEURS,
   actionCompatible,
@@ -486,12 +487,12 @@ export default function AutomationBuilderPage() {
     setTiroirDeclencheur(false);
     if (cle === regle.trigger_event) return;
     try {
-      // Réglages posés d'office par ce déclencheur (ex. « première ouverture
-      // seulement ») — sans écraser ce que la règle portait déjà.
-      const defaut = DECLENCHEURS.find((d) => d.cle === cle)?.conditions_defaut;
-      const maj = await ecrire(defaut
-        ? { trigger_event: cle, conditions: { ...defaut, ...((regle.conditions ?? {}) as Record<string, unknown>) } }
-        : { trigger_event: cle });
+      // Les réglages de l'ANCIEN déclencheur partent avec lui ; ceux du
+      // nouveau sont posés d'office (voir `conditionsApresChangement`).
+      const maj = await ecrire({
+        trigger_event: cle,
+        conditions: conditionsApresChangement(regle.trigger_event, cle, (regle.conditions ?? {}) as Record<string, unknown>),
+      });
       setRegle(maj);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -560,7 +561,12 @@ export default function AutomationBuilderPage() {
          * l'écran montrait le déclencheur de Lumi, la base gardait l'ancien.
          * On le dit, et l'écran revient à ce que la base contient.
          */
-        ecrire({ trigger_event: propose.trigger_event }).catch((e: unknown) => {
+        // Un déclencheur CHANGÉ par Lumi emporte les réglages de l'ancien, comme au tiroir.
+        const conditionsLumi = propose.trigger_event !== declencheurEnBase
+          ? conditionsApresChangement(declencheurEnBase, propose.trigger_event, (regle.conditions ?? {}) as Record<string, unknown>)
+          : null;
+        if (conditionsLumi) setRegle((r) => (r ? { ...r, conditions: conditionsLumi } : r));
+        ecrire({ trigger_event: propose.trigger_event, ...(conditionsLumi ? { conditions: conditionsLumi } : {}) }).catch((e: unknown) => {
           console.error('[builder] déclencheur proposé par Lumi non enregistré', e);
           captureClientException(e, { where: 'AutomationBuilderPage.construireAvecLumi' });
           setRegle((r) => (r ? { ...r, trigger_event: declencheurEnBase } : r));

@@ -505,6 +505,40 @@ export const FAMILLES_DECLENCHEURS: Array<{ cle: string; fr: string; en: string 
   { cle: 'vente', fr: 'Pipeline de ventes', en: 'Sales pipeline' },
 ];
 
+/**
+ * Les `conditions` d'une règle qui CHANGE de déclencheur.
+ *
+ * Les réglages d'un déclencheur vivent dans `conditions` (« première
+ * ouverture seulement », le champ date à surveiller, l'étiquette visée…).
+ * En changer en gardant tout laissait ceux de l'ancien en base, invisibles :
+ * passer par « Devis ouvert par le client » puis choisir un autre déclencheur
+ * gardait `{ ouverture: 'premiere' }`, que le moteur compare à un événement
+ * qui n'a pas d'« ouverture » — l'automatisation, même publiée, ne partait
+ * JAMAIS, sans un mot (audit du 2026-10-01).
+ *
+ * On garde donc seulement ce qui a le MÊME sens des deux côtés :
+ *  · un réglage que l'ancien ET le nouveau déclencheur déclarent tous deux
+ *    (les filtres d'étiquettes du client, par exemple) ;
+ *  · les filtres sur les champs de la fiche, si la fiche est de même nature ;
+ * et on pose les réglages d'office du nouveau déclencheur.
+ */
+export function conditionsApresChangement(
+  ancien: string,
+  nouveau: string,
+  conditions: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const source = trouverDeclencheur(ancien);
+  const cible = trouverDeclencheur(nouveau);
+  const sortie: Record<string, unknown> = { ...(cible?.conditions_defaut ?? {}) };
+  if (!source || !cible) return sortie;
+  const communs = new Set((cible.champs ?? []).map((c) => c.cle).filter((cle) => (source.champs ?? []).some((c) => c.cle === cle)));
+  for (const [cle, valeur] of Object.entries(conditions ?? {})) {
+    if (communs.has(cle)) sortie[cle] = valeur;
+  }
+  if (source.entite === cible.entite && Array.isArray(conditions?.champs_perso)) sortie.champs_perso = conditions.champs_perso;
+  return sortie;
+}
+
 export function trouverDeclencheur(cle: string): DeclencheurCatalogue | undefined {
   return DECLENCHEURS.find((d) => d.cle === cle);
 }
