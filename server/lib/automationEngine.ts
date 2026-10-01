@@ -746,12 +746,26 @@ async function variablesDeLEvenement(event: CRMEvent, config: EngineConfig): Pro
   return { ...(await promesse) };
 }
 
+/**
+ * Actions dont l'exécuteur n'utilise AUCUNE variable (paramètre `_vars`
+ * dans server/lib/actions/index.ts — vérifié par
+ * tests/automations-suite/unitaires/perf-actions-sans-variables.test.ts).
+ * Une règle faite seulement de ces actions ne lit pas les variables de
+ * l'événement : ≈ 10 requêtes de moins par événement (charge M-003 : 19 → 9).
+ */
+export const ACTIONS_SANS_VARIABLES: ReadonlySet<string> = new Set([
+  'update_status', 'log_activity', 'move_deal_stage', 'assigner_responsable',
+  'modifier_statut_rendezvous', 'assigner_deal', 'arreter_automatisation', 'demarrer_automatisation',
+]);
+
 async function executeRuleActions(
   rule: AutomationRule,
   event: CRMEvent,
   config: EngineConfig,
 ) {
-  const vars = await variablesDeLEvenement(event, config);
+  const vars = rule.actions.length > 0 && rule.actions.every((a) => ACTIONS_SANS_VARIABLES.has(a.type))
+    ? {}
+    : await variablesDeLEvenement(event, config);
 
   const ctx: ActionContext = {
     supabase: config.supabase,
