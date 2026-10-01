@@ -6,13 +6,18 @@
  * équipe, heures, commissions, dépenses), puis relit la base et écrit la fiche
  * des faits `evals/lumi/fixture.json`.
  *
+ * Un AUTRE bureau d'évaluation (créé par bureaux-eval.mts) : `--org <id> --prefixe eval2`.
+ * Le préfixe donne à ce bureau ses propres comptes (`eval2.prenom.nom@lume-qa.test`),
+ * ses propres identifiants de fiches (dérivés de l'org) et sa fiche des faits
+ * (`evals/lumi/fixture-eval2.json`). Le banc d'origine n'est pas touché.
+ *
  * PAR DÉFAUT IL N'ÉCRIT RIEN : il lit le bureau et dit ce qu'il ferait.
  *
  *   node --env-file=<chemin>/.env.local --import tsx scripts/qa/lumi/seed-bureau-test.mts            simulation (lecture seule)
  *   … seed-bureau-test.mts --appliquer            écrit ce qui manque, replace les visites relatives, écrit la fiche des faits
  *   … seed-bureau-test.mts --fixture-seulement    relit la base et réécrit la fiche des faits (aucune écriture en base)
  *   npx tsx scripts/qa/lumi/seed-bureau-test.mts --hors-ligne    ni base ni réseau : vérifie le jeu, écrit la fiche PRÉVISIONNELLE
- *   [--org <id>] [--ancre AAAA-MM-JJ] [--fixture <fichier>]
+ *   [--org <id> --prefixe eval2] [--ancre AAAA-MM-JJ] [--fixture <fichier>]
  *
  * Garde-fous (tous vérifiés AVANT la première lecture de fiche) :
  *  - le nom du bureau doit dire QA, TEST ou « banc » ;
@@ -36,11 +41,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  CLIENTS, COMMISSION, DEVIS, EQUIPES, FACTURES, FUSEAU, JOBS, MARQUEUR, MEMBRES, MODELES_COURRIEL, ORG_TEST_DEFAUT, PROPRIETES, TACHES, VALABLE_JUSQU_AU,
-  adresseClient, ajouterJours, clientDe, idEval, membreDe, instantLocal, jourDe, jourLocal, nomClient, sousTotal, taxesQc, verifierJeu,
+  CLIENTS, COMMISSION, DEVIS, DOMAINE_COURRIEL, EQUIPES, FACTURES, FUSEAU, JOBS, MARQUEUR, MEMBRES, MODELES_COURRIEL, ORG_TEST_DEFAUT, PREFIXE_DEFAUT, PROPRIETES, TACHES, VALABLE_JUSQU_AU,
+  adresseClient, ajouterJours, clientDe, courrielEval, idEval as idEvalDuJeu, membreDe, instantLocal, jourDe, jourLocal, nomClient, sousTotal, taxesQc, verifierJeu,
   type JobEval,
 } from './jeu-eval.mts';
-import { fixturePrevisionnelle, rentabiliteDe, type Fixture, type MesureVisites } from './fixture-eval.mts';
+import { VARIANTE_DEFAUT, fixturePrevisionnelle, rentabiliteDe, type Fixture, type MesureVisites, type VarianteBureau } from './fixture-eval.mts';
 
 const drapeau = (k: string): boolean => process.argv.includes(k);
 const arg = (k: string, d = ''): string => {
@@ -54,8 +59,23 @@ const HORS_LIGNE = drapeau('--hors-ligne');
 const FIXTURE_SEULE = drapeau('--fixture-seulement');
 const ORG = arg('--org', ORG_TEST_DEFAUT);
 const ANCRE = arg('--ancre', jourLocal(new Date()));
+const PREFIXE = arg('--prefixe', PREFIXE_DEFAUT);
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const FICHIER_FIXTURE = arg('--fixture', join(RACINE, 'evals', 'lumi', 'fixture.json'));
+const FICHIER_FIXTURE = arg('--fixture', join(RACINE, 'evals', 'lumi', PREFIXE === PREFIXE_DEFAUT ? 'fixture.json' : `fixture-${PREFIXE}.json`));
+
+if (!/^eval\d*$/.test(PREFIXE)) throw new Error(`--prefixe : « eval », « eval2 », « eval3 »… attendu (reçu « ${PREFIXE} »).`);
+// Un compte n'appartient qu'à un bureau, et un identifiant de fiche est unique dans toute la base :
+// le banc d'origine garde le préfixe « eval », tout autre bureau doit avoir le sien.
+if ((ORG === ORG_TEST_DEFAUT) !== (PREFIXE === PREFIXE_DEFAUT)) {
+  throw new Error(ORG === ORG_TEST_DEFAUT
+    ? `--prefixe ${PREFIXE} sans --org : le banc d’origine garde le préfixe « ${PREFIXE_DEFAUT} ».`
+    : `--org ${ORG} sans --prefixe : un autre bureau que le banc d’origine exige son préfixe (ex. --prefixe eval2), sinon il prendrait les comptes du banc.`);
+}
+const VARIANTE: VarianteBureau = PREFIXE === PREFIXE_DEFAUT
+  ? VARIANTE_DEFAUT
+  : { prefixe: PREFIXE, comptes: { proprietaire: `${PREFIXE}.proprio1@${DOMAINE_COURRIEL}`, technicien: `${PREFIXE}.tech@${DOMAINE_COURRIEL}` } };
+/** Identifiant d'une fiche du jeu DANS ce bureau. */
+const idEval = (cle: string): string => idEvalDuJeu(cle, ORG);
 
 if (!/^\d{4}-\d{2}-\d{2}$/.test(ANCRE)) throw new Error(`--ancre : date attendue au format AAAA-MM-JJ (reçu « ${ANCRE} »).`);
 if (APPLIQUER && (HORS_LIGNE || FIXTURE_SEULE)) throw new Error('--appliquer ne se combine ni avec --hors-ligne ni avec --fixture-seulement.');
@@ -89,7 +109,7 @@ if (HORS_LIGNE) {
     + `${FACTURES.reduce((n, f) => n + (f.paiements?.length ?? 0), 0)} paiements, ${MEMBRES.length} membres, ${EQUIPES.length} équipes, `
     + `${JOBS.reduce((n, j) => n + (j.pointages?.length ?? 0), 0)} pointages, ${JOBS.filter((j) => j.commissionCents).length} commissions, `
     + `${JOBS.filter((j) => j.depenses).length} jobs avec dépenses, ${TACHES.length} tâches, ${MODELES_COURRIEL.length} modèles de courriel.`);
-  ecrireFixture(fixturePrevisionnelle(ANCRE, ORG));
+  ecrireFixture(fixturePrevisionnelle(ANCRE, ORG, VARIANTE));
   process.exit(0);
 }
 
@@ -137,8 +157,9 @@ const AVEC_CORBEILLE = new Set(['clients', 'properties', 'jobs', 'job_line_items
 /** Crée la fiche si elle n'existe pas. Rend true si elle existe à la sortie (donc false en simulation quand elle manque). */
 async function assurer(table: string, id: string, ligne: Ligne, libelle: string): Promise<boolean> {
   const corbeille = AVEC_CORBEILLE.has(table);
-  const deja = await lire<{ id: string; deleted_at?: string | null } | null>(
-    db.from(table).select(corbeille ? 'id, deleted_at' : 'id').eq('id', id).maybeSingle(), `${table} « ${libelle} »`);
+  const deja = await lire<{ id: string; org_id: string; deleted_at?: string | null } | null>(
+    db.from(table).select(corbeille ? 'id, org_id, deleted_at' : 'id, org_id').eq('id', id).maybeSingle(), `${table} « ${libelle} »`);
+  if (deja && deja.org_id !== ORG) throw new Error(`${table} « ${libelle} » : l’identifiant ${id} appartient à un AUTRE bureau (${deja.org_id}) — arrêt, rien n’est écrit ailleurs que dans ${ORG}.`);
   if (deja) {
     if (corbeille && deja.deleted_at) {
       if (!APPLIQUER) { dire('~', `${table} « ${libelle} » : à la corbeille, serait restaurée`); return true; }
@@ -178,22 +199,26 @@ async function semerEquipe(): Promise<void> {
   }
   for (const m of MEMBRES) {
     const nomComplet = `${m.prenom} ${m.nom}`;
+    const courriel = courrielEval(m.courriel, PREFIXE);
     const fiche = await lire<Array<{ id: string; user_id: string | null }>>(
-      db.from('team_members').select('id, user_id').eq('org_id', ORG).eq('email', m.courriel).limit(1), `membre ${nomComplet}`);
+      db.from('team_members').select('id, user_id').eq('org_id', ORG).eq('email', courriel).limit(1), `membre ${nomComplet}`);
     let userId = fiche[0]?.user_id ?? null;
     if (!userId) {
-      if (!APPLIQUER) { compte.a_creer += 1; dire('+', `compte ${m.courriel} (${nomComplet}, ${m.role}) : à créer, avec son adhésion au bureau`); continue; }
+      if (!APPLIQUER) { compte.a_creer += 1; dire('+', `compte ${courriel} (${nomComplet}, ${m.role}) : à créer, avec son adhésion au bureau`); continue; }
       // email_confirm : aucun courriel de confirmation ne part. Mot de passe aléatoire, jamais affiché.
-      const cree = await db.auth.admin.createUser({ email: m.courriel, password: randomBytes(24).toString('base64url'), email_confirm: true, user_metadata: { full_name: nomComplet } });
+      const cree = await db.auth.admin.createUser({ email: courriel, password: randomBytes(24).toString('base64url'), email_confirm: true, user_metadata: { full_name: nomComplet } });
       userId = cree.data?.user?.id ?? null;
       if (!userId) {
         // Compte déjà là (seed interrompu avant l'adhésion) : generateLink le retrouve sans rien envoyer.
-        const lien = await db.auth.admin.generateLink({ type: 'magiclink', email: m.courriel });
+        const lien = await db.auth.admin.generateLink({ type: 'magiclink', email: courriel });
         userId = lien.data?.user?.id ?? null;
-        if (!userId) throw new Error(`compte ${m.courriel} : ${cree.error?.message ?? '?'} / ${lien.error?.message ?? '?'}`);
+        if (!userId) throw new Error(`compte ${courriel} : ${cree.error?.message ?? '?'} / ${lien.error?.message ?? '?'}`);
+        // Un compte retrouvé ne doit appartenir à aucun autre bureau : on n'y rattache jamais le compte de quelqu'un.
+        const ailleurs = await lire<Array<{ org_id: string }>>(db.from('memberships').select('org_id').eq('user_id', userId).neq('org_id', ORG).limit(1), `adhésions de ${courriel}`);
+        if (ailleurs.length) throw new Error(`compte ${courriel} : déjà membre d’un autre bureau (${ailleurs[0].org_id}) — refus de le rattacher à ${ORG}.`);
       } else {
         compte.creees += 1;
-        dire('+', `compte ${m.courriel} : créé`);
+        dire('+', `compte ${courriel} : créé`);
       }
     }
     idMembre.set(m.cle, userId);
@@ -215,7 +240,7 @@ async function semerEquipe(): Promise<void> {
       db.from('team_members').select('id, first_name, last_name, phone, role, status, hourly_rate_cents, compensation_mode, team_id').eq('org_id', ORG).eq('user_id', userId).limit(1), `fiche d'équipe ${nomComplet}`);
     if (!tm.length) {
       if (!APPLIQUER) { compte.a_creer += 1; dire('+', `fiche d'équipe de ${nomComplet} : à créer`); continue; }
-      await ecrire(db.from('team_members').insert({ org_id: ORG, user_id: userId, email: m.courriel, ...voulu }), `fiche d'équipe ${nomComplet}`);
+      await ecrire(db.from('team_members').insert({ org_id: ORG, user_id: userId, email: courriel, ...voulu }), `fiche d'équipe ${nomComplet}`);
       compte.creees += 1;
     } else if (Object.entries(voulu).some(([k, v]) => tm[0][k] !== v)) {
       if (!APPLIQUER) dire('~', `fiche d'équipe de ${nomComplet} : nom, taux ou équipe à poser`);
@@ -324,6 +349,7 @@ async function semerJobs(): Promise<void> {
 
 /** Champs « montant » du dossier système Dépenses : clé du champ → id. */
 const CHAMPS_DEPENSES = { carburant: 'depense_carburant', outils: 'depense_outils' } as const;
+const LIBELLES_DEPENSES = { carburant: 'Carburant', outils: 'Outils' } as const;
 const idChampDepense = new Map<string, string>();
 
 async function semerDepenses(): Promise<void> {
@@ -334,8 +360,21 @@ async function semerDepenses(): Promise<void> {
     db.from('custom_fields').select('id, key, label, archived_at').eq('org_id', ORG).eq('object_type', 'job').eq('field_type', 'monetary')
       .in('folder_id', dossiers.map((d) => d.id)).in('key', Object.values(CHAMPS_DEPENSES)), 'champs Dépenses');
   for (const [nom, cle] of Object.entries(CHAMPS_DEPENSES)) {
-    const champ = champs.find((x) => x.key === cle);
-    if (!champ) { avertir(`Champ « ${cle} » absent du dossier Dépenses : les dépenses « ${nom} » ne seront pas écrites.`); continue; }
+    let champ = champs.find((x) => x.key === cle);
+    if (!champ) {
+      // Une entreprise récente n'a plus que trois champs de base (carburant, sous-traitance, autres) :
+      // « Outils », que le banc d'origine tient de l'ancienne liste, est créé comme un champ maison du dossier.
+      const libelle = LIBELLES_DEPENSES[nom as keyof typeof CHAMPS_DEPENSES];
+      if (!APPLIQUER) { compte.a_creer += 1; dire('+', `champ « ${libelle} » (${cle}) du dossier Dépenses : à créer`); continue; }
+      const id = idEval(`champ:${cle}`);
+      await ecrire(db.from('custom_fields').insert({
+        id, org_id: ORG, object_type: 'job', folder_id: dossiers[0].id, key: cle, label: libelle, field_type: 'monetary',
+        config: { currency: 'CAD', masque_creation: true }, position: 4, created_by: PROPRIO,
+      }), `champ ${cle}`);
+      compte.creees += 1;
+      dire('+', `champ « ${libelle} » (${cle}) du dossier Dépenses : créé`);
+      champ = { id, key: cle, label: libelle, archived_at: null };
+    }
     idChampDepense.set(nom, champ.id);
     // La rentabilité ne compte que les champs NON archivés (server/lib/rentabilite/charger.ts).
     if (champ.archived_at) {
@@ -518,7 +557,7 @@ async function semerDivers(): Promise<void> {
 const nombre = (v: unknown): number => Math.round(Number(v) || 0);
 
 async function fixtureReelle(): Promise<Fixture> {
-  const f = fixturePrevisionnelle(ANCRE, ORG);
+  const f = fixturePrevisionnelle(ANCRE, ORG, VARIANTE);
   f.etat = 'reel';
   f.org.nom = NOM_ORG;
   f.mesures.portee = 'bureau_entier';
@@ -587,7 +626,7 @@ async function fixtureReelle(): Promise<Fixture> {
     db.from('time_entries').select('job_id, employee_id, punch_in_at, punch_out_at, breaks').eq('org_id', ORG).eq('status', 'completed').gte('date', '2026-09-01').lte('date', '2026-09-30').limit(5000), 'pointages de septembre');
   const equipe = await lire<Array<{ user_id: string | null; email: string; hourly_rate_cents: number; labour_cost_hourly: number | null; compensation_mode: string }>>(
     db.from('team_members').select('user_id, email, hourly_rate_cents, labour_cost_hourly, compensation_mode').eq('org_id', ORG), 'équipe');
-  const cleDe = (userId: string | null): string => MEMBRES.find((m) => equipe.some((e) => e.user_id === userId && e.email === m.courriel))?.cle ?? 'autres';
+  const cleDe = (userId: string | null): string => MEMBRES.find((m) => equipe.some((e) => e.user_id === userId && e.email === courrielEval(m.courriel, PREFIXE)))?.cle ?? 'autres';
   const heures: Record<string, number> = { total_heures: 0 };
   for (const t of pointages) {
     const h = heuresDe(t);

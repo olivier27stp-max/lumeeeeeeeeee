@@ -28,9 +28,26 @@ export const DOMAINE_COURRIEL = 'lume-qa.test';
 /** Après cette date, les factures « envoyées, non échues » deviennent en retard : régénérer le jeu. */
 export const VALABLE_JUSQU_AU = '2026-12-31';
 
-/** Identifiant stable d'une fiche : UUID (forme v5) dérivé de sa clé. */
-export function idEval(cle: string): string {
-  const h = createHash('sha1').update(`lume-eval-lumi:${cle}`).digest();
+/** Préfixe des courriels des membres du jeu dans le banc d'origine (`eval.prenom.nom@…`). */
+export const PREFIXE_DEFAUT = 'eval';
+
+/**
+ * Le courriel d'un membre du jeu dans un bureau donné. Un compte d'authentification
+ * n'appartient qu'à UN bureau : chaque doublure du banc (bureaux-eval.mts) a son
+ * préfixe (`eval2.prenom.nom@…`), donc ses propres comptes.
+ */
+export function courrielEval(courriel: string, prefixe = PREFIXE_DEFAUT): string {
+  return prefixe === PREFIXE_DEFAUT ? courriel : courriel.replace(/^eval\./, `${prefixe}.`);
+}
+
+/**
+ * Identifiant stable d'une fiche : UUID (forme v5) dérivé de sa clé.
+ * L'identifiant est une clé primaire, donc unique dans TOUTE la base : hors du
+ * banc d'origine, le bureau entre dans la dérivation (sinon le seed d'un second
+ * bureau « retrouverait » les fiches du premier et n'écrirait rien).
+ */
+export function idEval(cle: string, org: string = ORG_TEST_DEFAUT): string {
+  const h = createHash('sha1').update(org === ORG_TEST_DEFAUT ? `lume-eval-lumi:${cle}` : `lume-eval-lumi:${org}:${cle}`).digest();
   h[6] = (h[6] & 0x0f) | 0x50;
   h[8] = (h[8] & 0x3f) | 0x80;
   const x = h.subarray(0, 16).toString('hex');
