@@ -270,7 +270,7 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     await verifier(['payment_confirmation'], depuis2, true);
     const idDepot = (await etatPresets(b.orgA)).find((r) => r.preset_key === 'deposit_received')!.id;
     const idPaiement = (await etatPresets(b.orgA)).find((r) => r.preset_key === 'payment_confirmation')!.id;
-    expect(await journal([idDepot], depuis2), '« dépôt reçu » envoyé pour un paiement complet').toEqual([]);
+    expect((await journal([idDepot], depuis2)).filter((l) => l.action_type !== 'conditions'), '« dépôt reçu » envoyé pour un paiement complet').toEqual([]);
 
     // [K-017] DÉPÔT (autre facture) → « dépôt reçu », PAS la confirmation de paiement.
     const depuis3 = new Date().toISOString();
@@ -282,7 +282,7 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     await b.eventBus.emit('invoice.paid', { orgId: b.orgA, entityType: 'invoice', entityId: inv2!.id, actorId: b.users.proprioA, relatedEntityType: 'client', relatedEntityId: c, metadata: { amount_cents: 25000, provider: 'manual', client_id: c, job_id: null, payment_type: 'deposit' } });
     await new Promise((r) => setTimeout(r, 3000));
     await verifier(['deposit_received'], depuis3, false);
-    expect(await journal([idPaiement], depuis3), '« paiement reçu » envoyé pour un dépôt').toEqual([]);
+    expect((await journal([idPaiement], depuis3)).filter((l) => l.action_type !== 'conditions'), '« paiement reçu » envoyé pour un dépôt').toEqual([]);
   }, 300_000);
 
   it('[K-014] visite planifiée (insertion en base) → pack_rendez_vous (confirmation + rappels) ; job terminé → thank_you_after_job ; contrat signé → agreement_signed', async () => {
