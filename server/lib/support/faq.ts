@@ -35,6 +35,7 @@
  */
 import { ARTICLES } from '../../../src/components/supportArticles';
 import { normaliser } from '../lumi/normaliser';
+import { REPONSES_TU, type Voix } from './faq-tutoiement';
 
 const cle = (s: string): string => normaliser(s).join(' ');
 
@@ -184,19 +185,20 @@ export function porteSurLesDonnees(message: string): boolean {
   return MARQUES_DONNEES.some((r) => r.test(message));
 }
 
-function rendre(a: (typeof ARTICLES)[number], langue: 'fr' | 'en'): ReponseFaq {
-  const reponse = langue === 'fr' ? a.a_fr : a.a_en;
+function rendre(a: (typeof ARTICLES)[number], langue: 'fr' | 'en', voix: Voix): ReponseFaq {
+  // Lumi tutoie, le support vouvoie : même article, deux voix (faq-tutoiement.ts).
+  const reponse = langue === 'fr' ? (voix === 'tu' ? REPONSES_TU[a.id] ?? a.a_fr : a.a_fr) : a.a_en;
   const page = a.path ? (langue === 'fr' ? ` (page : ${a.path})` : ` (page: ${a.path})`) : '';
   return { id: a.id, reponse: `${reponse}${page}`, path: a.path ?? null };
 }
 
-export function reponseFaqPour(message: string, langue: 'fr' | 'en'): ReponseFaq | null {
+export function reponseFaqPour(message: string, langue: 'fr' | 'en', voix: Voix = 'vous'): ReponseFaq | null {
   const k = cle(message);
   if (!k) return null;
 
   // 1. Correspondance exacte — inchangée.
   for (const a of ARTICLES) {
-    if (cle(a.q_fr) === k || cle(a.q_en) === k) return rendre(a, langue);
+    if (cle(a.q_fr) === k || cle(a.q_en) === k) return rendre(a, langue, voix);
   }
 
   // 2. Correspondance par mots-clés, sous conditions strictes.
@@ -217,5 +219,5 @@ export function reponseFaqPour(message: string, langue: 'fr' | 'en'): ReponseFaq
 
   if (!meilleur || meilleur.score < SCORE_MINIMUM) return null;
   if (meilleur.score - second < MARGE_MINIMUM) return null;
-  return rendre(meilleur.article, langue);
+  return rendre(meilleur.article, langue, voix);
 }

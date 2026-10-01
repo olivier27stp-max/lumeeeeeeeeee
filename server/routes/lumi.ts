@@ -611,12 +611,12 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // référence du 2026-10-01). Une lecture reconnue passe avant un article.
     const raccourciReconnu = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
     if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message) && !raccourciReconnu) {
-      const aide = reponseFaqPour(message, ctx.language) ?? null;
-      const article = aide ? null : reponseAideDirecte(message, ctx.language, { premierMessage: true });
+      const aide = reponseFaqPour(message, ctx.language, 'tu') ?? null;
+      const article = aide ? null : reponseAideDirecte(message, ctx.language, { premierMessage: true, voix: 'tu' });
       // Plusieurs questions collées d'un coup : chacune a sa réponse écrite,
       // mais le bloc entier ne ressemble à rien de connu et partait au modèle
       // (2,65 ¢ mesuré en prod le 2026-09-22). Tout ou rien — voir aide-multi.
-      const multi = aide || article ? null : reponseAideMulti(message, ctx.language);
+      const multi = aide || article ? null : reponseAideMulti(message, ctx.language, 'tu');
       const texteAide = aide?.reponse ?? article?.texte ?? multi?.texte ?? null;
       if (texteAide) {
         const debut = Date.now();
