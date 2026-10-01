@@ -82,6 +82,14 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   // ── Lumi (assistant IA dans l'app) — même clé que l'agent externe ──
   'POST /api/lumi/chat': 'external_agent.use',
   'POST /api/lumi/execute': 'external_agent.use',
+  // Actions rapides (boutons, « Optimiser la journée ») et réglages personnels de
+  // Lumi : sans entrée, un membre à qui on a RETIRÉ Lumi sur la page Rôles pouvait
+  // encore s'en servir par ces portes (LUMI_INVENTORY, risque S4).
+  'POST /api/lumi/action': 'external_agent.use',
+  'GET /api/lumi/mode': 'external_agent.use',
+  'PUT /api/lumi/mode': 'external_agent.use',
+  'GET /api/lumi/autorisations': 'external_agent.use',
+  'PUT /api/lumi/autorisations': 'external_agent.use',
   'GET /api/lumi/quota': 'external_agent.use',
   'GET /api/lumi/conversations': 'external_agent.use',
   'GET /api/lumi/conversations/:id': 'external_agent.use',
