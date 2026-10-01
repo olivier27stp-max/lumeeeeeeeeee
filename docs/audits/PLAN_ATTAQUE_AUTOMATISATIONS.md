@@ -28,7 +28,14 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | **#764** | **Stripe compté deux fois** (Critique, latent) ; `invoice.paid` sur acompte ; `execute-action` retirée (écriture inter-bureaux) ; cron de staging qui appelait la prod ; « Envoyer dans Slack » qui publiait dans NOTRE canal de support | banc staging avant/après ; 4 tests rouges sur main | **20261003100200** — ⚠️ poser `app_base_url` en prod AVANT |
 | **#771** | Construire avec Lumi : L-1 à L-10 (tâches, « la veille », variables, refus expliqués, garde-fous, budget, double clic, brouillon vide) | 14/17 tests rouges sur la base ; 30 demandes rejouées sur le vrai modèle | non — **après #756/#757** |
 
-## Vague 2 — moteur : ce qui envoie faux, en double, ou perd un message
+## Vague 2 — moteur : ce qui envoie faux, en double, ou perd un message — ✅ FAIT le 2026-09-30
+
+**#792** mergée ; migrations **20261004200000** (D-03), **20261004200100** (D-09) et **20261004200200** (C29/C30 : 3 jobs pg_cron) appliquées staging puis prod et vérifiées. Arriéré mesuré avant d'allumer les crons : 0 webhook dû, 0 facture récurrente due, 0 règle « date atteinte ». 1er passage de `lume_webhook_retries` en prod à 16:50 UTC : HTTP 200, 0 erreur. Test de fumée en prod (bureau « Grok Audit (TEST) », ménage vérifié) : 2 appels simultanés au même webhook entrant → 2 reçus, 2 exécutions, 2 tâches (D-02 vivant sur lumecrm.net).
+
+- **C20** : déjà corrigé par une autre session (20261002900000, `payments.refunded_cents` — présent en prod ET staging, vérifié).
+- **D-14 / « Demander un avis »** : #780 (autre session) a retiré le champ texte que le moteur ignorait ; on garde SA solution, le test la verrouille.
+- Trouvé avant le merge par `check:schema-refs --prod` : le paiement manuel de Lumi écrivait `payments.notes`, colonne absente → toute l'insertion aurait échoué. Retiré.
+
 
 | id | Problème | Preuve | Correction | Fichiers | Test d'acceptation | Effort | Risque | Migration |
 |---|---|---|---|---|---|---|---|---|
@@ -48,7 +55,12 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | D-12 / D-13 / D-11 / D-10 Moyenne-Faible | Réentrée ignorée pour un parcours ; fenêtre d'envoi ignorée par les courriels immédiats ; exemples de Si sur des clés absentes ; `smsSent: true` pour un texto sauté | 12-moteur | voir 12-moteur | automationSequences.ts, automationEngine.ts, actions | un test par point | S chacun | faible | non |
 | Lumi-bis | Liaison Lumi : les outils Lumi enregistrent un paiement **sans ligne `payments`** : un paiement Stripe ultérieur recalcule et l'efface | lecture (tools-argent.ts:1232, tools-etendus.ts:2877) | insérer un paiement manuel (le trigger recalcule) | tools-argent.ts, tools-etendus.ts | Lumi enregistre 40 $, Stripe 60 $ → payée 100 $ | S | moyen | non |
 
-## Vague 3 — conformité texto et courriel (**bloquante avant d'ouvrir Twilio**)
+## Vague 3 — conformité texto et courriel — ✅ FAIT le 2026-09-30
+
+**#784** mergée ; migrations **20261004100000** (journaux) puis **20261004100100** (clé de webhook non choisie) appliquées staging puis prod, vérifiées (`api_key` ni insérable ni modifiable par `authenticated`). F11 est livré dans la vague 2 (étalement 30 textos/min par bureau, jamais de plafond).
+
+⚠️ **Effet de L8 à connaître** : 7 bureaux sur 9 n'ont pas d'adresse dans Réglages → leurs courriels **commerciaux** sont sautés (avec motif dans les journaux) tant qu'elle manque. Les courriels transactionnels (facture, devis, rendez-vous) partent normalement.
+
 
 | id | Problème | Correction | Effort | Migration |
 |---|---|---|---|---|
@@ -61,7 +73,8 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | Journaux Moyenne | Un membre sans droit sur les automatisations lit 94 journaux (31 destinataires) via `leads.read` | limiter aux entités prospect ou masquer `to` | S | **oui** |
 | F11 (décision) | Rafale : 200 textos partent d'un coup ; plafond **écarté** le 23 sept. — le webhook entrant (#644) crée le chemin de rafale | **étaler** (tout part, lentement), pas plafonner | M | non |
 
-## Vague 4 — interface (éditeur et liste)
+## Vague 4 — interface (éditeur et liste) — ✅ FAIT le 2026-09-30 (#782) ; ligne « Tests » faite le 2026-10-01
+
 
 | id | Problème | Correction | Effort |
 |---|---|---|---|
@@ -71,9 +84,10 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | A-04 → A-09 Moyenne | Retour du navigateur perd le travail ; « Ajouter » au milieu ; texto vidé accepté ; « FR/EN » ment ; « Aucune erreur » quand les journaux sont illisibles ; erreurs serveur en français pour l'anglais | voir 11-interface | S chacun |
 | A-10 → A-17 Faible | textes, libellés, tri des colonnes | voir 11-interface | XS-S |
 | PERF-1/2 | La liste télécharge toutes les règles 2 fois ; l'éditeur charge 400 règles pour en montrer une | 1 seule lecture ; lecture par id | S |
-| Tests | 13 tests `front-automations` écrits pour l'ancienne page (dont F22 : variable inconnue, nom brut) | les réécrire sur l'écran actuel | M |
+| Tests ✅ | 13 tests `front-automations` écrits pour l'ancienne page (dont F22 : variable inconnue, nom brut) | réécrits sur l'écran actuel : `tests/automation/front-automations-ecran.test.tsx`, **57 tests, en CI**. Preuve par mutation : retirer l'avertissement de variable inconnue et le compteur d'échecs fait tomber 4 tests. Deux défauts du produit trouvés au passage, gardés en quarantaine (voir « Constats hors backlog ») | M |
 
-## Vague 5 — performance et charge
+## Vague 5 — performance et charge — T6.2 fait (#792 : 30 → 22 requêtes par `lead.created`, 3 règles = lectures d'une seule) ; outbox prod saine (0 bloqué, 0 erreur au 2026-09-30) ; **D-17 reste à faire**
+
 
 | id | Problème | Correction | Effort |
 |---|---|---|---|
@@ -81,14 +95,37 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | D-17 | Sous saturation : 8/144 écritures sans événement | **refaire la charge sur un environnement isolé** avant de conclure (staging était partagé) | M |
 | Outbox prod | Aucun événement dans `domain_events` depuis le 28 à 22:14 (≈ 26 h) | vérifier si c'est normal (types consignés) ou une panne | XS |
 
+## Livré après les vagues (2026-09-30, soir)
+
+| PR | Quoi | Preuve |
+|---|---|---|
+| **#802** | Corbeille : « Supprimer définitivement » (ligne et lot, avec confirmation). La règle sort de la corbeille pour de bon, et l'**historique d'envois est gardé** (`purged_at`, migration 20261004400000) | 7 tests rouges sans la fonctionnalité ; bout en bout sur staging avec RLS réelle |
+| **#799** | Construire avec Lumi **montre le nouveau texte** sous sa phrase et dit franchement quand rien n'a changé. Sonnet 5 au lieu de Haiku. `update_automation_message` réécrit l'étape réellement exécutée | conversation réelle de Rafba rejouée sur le vrai modèle |
+| **#805** | Réponses coupées (`max_tokens`), régression anglaise, questions sans réponse, textos > 160 caractères ; second essai sur un JSON illisible. Batterie `npm run qa:construire-lumi` : 12 conversations, 107 contrôles | 1re passe 90 % → **107/107** |
+| **#806** | Surveillance des vraies conversations : `npm run qa:surveiller-construire-lumi -- --prod`, en lecture seule | a repéré la conversation qui a déclenché #799 |
+
+**Leçon** : changer de modèle oblige à remesurer `max_tokens`. Tout changement de `generer-parcours.ts` passe par la batterie avant le merge.
+
 ## Ce qui t'attend (décisions, pas du code)
 
 1. ~~Merges vague 0 et 1~~ — fait.
 2. ~~Migrations~~ — faites (staging puis prod).
-3. **Railway** : `CRON_SECRET` de prod à changer (staging le partage) ; y a-t-il des crons pour `rappels-dates`, `recurring-invoices`, `webhook-retries` ?
-4. **F11** : étalement des rafales, oui ou non ?
+3. **Railway** : `CRON_SECRET` de prod à changer (le secret de staging est déjà différent) — il faut changer Railway ET le vault de prod en même temps (`railway login` requis). Les 3 crons manquants : faits en pg_cron (vague 2).
+4. ~~**F11**~~ — étalement livré (vague 2).
 5. **Cache Haiku** de Lumi (< 4 096 tokens, rien n'est mis en cache) : accepter (0,49 ¢/génération) ou allonger le prompt ?
-6. Le message Slack de test « [QA-V2-B] slack » publié dans notre canal de support : à supprimer.
+6. ~~Messages Slack de test~~ — 6 supprimés, 0 restant ; le support (Slack + courriel) n'a pas été touché.
+7. **Adresse des bureaux** (effet L8) : 7/9 bureaux sans adresse = courriels commerciaux sautés.
+
+## Constats hors backlog (notés, **pas** corrigés ici)
+
+| Constat | Preuve | À qui |
+|---|---|---|
+| ~~Sauvegardes prod en échec depuis le 2026-09-26~~ — **réparé le 2026-10-01** (mot de passe réinitialisé, sauvegarde complète `prod-20261001-0010.dump`, 268 tables). Reste : la tâche planifiée ne tourne que si la session Windows est ouverte ; PITR toujours désactivée | `../lume-backups/` | Rafba |
+| **D1 — éditeur plein écran : une variable inconnue n'est pas signalée.** Écrire « Bonjour [prenom] » dans le panneau d'étape ne montre aucun avertissement ; le client reçoit « Bonjour , ». La liste, elle, avertit. Régression de #523 : l'avertissement vivait dans `AutomationBuilder.tsx`, que plus rien n'importe | `tests/quarantaine/automation/front-automations-defauts.unit.test.tsx` (rouge attendu) | à trancher — correction S |
+| **D2 — éditeur plein écran : le nombre de textos facturés n'est pas affiché.** Au-delà de 160 caractères, le panneau montre « 200 / 1600 » sans dire « 2 SMS » ; la liste le dit | même fichier (rouge attendu) | à trancher — correction XS |
+| Migration fantôme **20260928120000** : `payments.reference` / `payments.notes` absentes en prod ET staging | `information_schema` des deux bases ; « Marquer payée » s'en sort par un repli | chantier paiements |
+| `check:db-coherence` : 3 fonctions QuickBooks non exécutables par `authenticated` | sortie du script | chantier QuickBooks |
+| Préréglage `estimate_followup` sur `estimate.sent` : événement jamais émis | audit V2 | à trancher |
 
 ## Parité GHL (phase 2)
 
@@ -105,3 +142,5 @@ En attente de `docs/audits/AUDIT_GHL_WORKFLOWS.md` (absent au 2026-09-29). Rien 
 | F11 — plafond de textos obligatoire | **écarté par décision** (2026-09-23) — revu en étalement (vague 3) |
 | Relances de paiement envoyées 2 fois par le cron de staging | **faux** : idempotentes (`reminder_log` UNIQUE + verrou) ; le vrai défaut est le cron qui appelle la prod (#764) |
 | L-7 réparable dans l'éditeur | la règle §6.3 interdit toute suppression dans l'éditeur : corrigé côté serveur (#771) |
+| C20 à corriger dans la vague 2 | **déjà fait** ailleurs (20261002900000), vérifié en prod et staging |
+| « Demander un avis » doit lire le texte de l'action | **remplacé** par la décision de #780 (champ retiré, 0 étape réelle n'en portait un) |

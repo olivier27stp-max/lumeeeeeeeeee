@@ -44,6 +44,7 @@ code le 2026-09-19 :
 | **F6** — interrupteur d'arrêt | `AUTOMATIONS_ENABLED=false` → aucun événement traité, la file reste intacte | **CORRIGÉ le 2026-09-23** — `server/lib/automations-interrupteur.ts`, branché dans `handleEvent` et `processScheduledTasks`. Les deux tests T12.3 sont passés au VERT. |
 | **F11/F13** — plafonds | Au-delà du plafond quotidien, les SMS sont retenus et reportés, jamais envoyés ; à 80 % une notification prévient l'administrateur | **ÉCARTÉ le 2026-09-23** — le scénario testé n'existe pas dans le produit, et le plafond serait un mauvais produit. Voir ci-dessous. |
 | **F3, F5, F9, F18** — idempotence, reprise, outbox, destinataire | Voir les intitulés des tests | **non vérifié** |
+| **F22** — écran des automatisations | Déclencheur et nom en français, variable inconnue signalée, raison d'échec lisible | **CORRIGÉ dans la liste** — l'ancien `front-automations.unit.test.tsx` (écrit pour la page d'avant la refonte #523) est remplacé le 2026-09-30 par `tests/automation/front-automations-ecran.test.tsx`, **en CI**. Reste en quarantaine `automation/front-automations-defauts.unit.test.tsx` : le panneau d'étape de l'éditeur plein écran ne signale pas une variable inconnue (régression : l'avertissement vivait dans `AutomationBuilder.tsx`, plus monté depuis #523) ni le nombre de SMS facturés. |
 
 `AUTOMATIONS_AUDIT.md` annonce plusieurs de ces failles comme « corrigé (M2) /
 (M5) ». **Ce n'est pas le cas dans le code de `main`** au 2026-09-19 : ces
