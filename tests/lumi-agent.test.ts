@@ -772,3 +772,66 @@ describe('recherche d’outil en pause : la suite du tour reste dans le même me
     expect(route).toContain("typeof e?.forme_messages === 'string' ? { forme_messages: e.forme_messages }");
   });
 });
+
+// ── Recherche d'outil restée en suspens à côté d'un outil de Lume ────────
+// Après le correctif de la pause (ci-dessus), « texte à Nathalie pis mets sa job en
+// cours » plantait encore en prod. La forme envoyée, relevée dans la trace le
+// 2026-10-01 à 22 h 02 UTC :
+//   5:assistant[tool_use,server_tool_use] 6:user[tool_result]  → 400
+// Le modèle demande un de nos outils ET une recherche d'outil dans la même réponse ;
+// l'API s'arrête pour le nôtre, la recherche n'a jamais lieu, sa demande reste là.
+describe('recherche d’outil en suspens à côté d’un outil de Lume : retirée avant l’appel suivant', () => {
+  const orpheline = { type: 'server_tool_use', id: 'srvtoolu_9', name: 'tool_search_tool_regex', input: { pattern: 'job.*status' } };
+  const faite = { type: 'server_tool_use', id: 'srvtoolu_1', name: 'tool_search_tool_regex', input: { pattern: 'invoice' } };
+  const resultat = { type: 'tool_search_tool_result', tool_use_id: 'srvtoolu_1', content: { type: 'tool_search_tool_search_result', tool_references: [{ type: 'tool_reference', tool_name: 'list_invoices' }] } };
+  const lecture = { type: 'tool_use', id: 'tu_1', name: 'list_invoices', input: {} };
+  const forme = (msgs: any[]) => msgs.map((m) => `${m.role}[${typeof m.content === 'string' ? 'texte' : m.content.map((b: any) => b.type).join(',')}]`).join(' ');
+
+  it('la forme qui plantait en prod : l’appel suivant part sans la recherche en suspens', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [lecture, orpheline], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Une facture en retard.' }], stop_reason: 'end_turn', usage });
+    const r = await tourLumi(baseTour([], []));
+    expect(forme(instantanes[1].messages)).toBe('user[texte] assistant[tool_use] user[tool_result]');
+    expect(forme(r.nouveauxMessages)).toBe('assistant[tool_use] user[tool_result] assistant[text]');
+    expect(outilsExecutes.map((o) => o.name)).toEqual(['list_invoices']);
+    expect(r.texte).toBe('Une facture en retard.');
+  });
+
+  it('une recherche qui a EU son résultat reste, la réflexion aussi ; seule celle en suspens part', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'thinking', thinking: '…', signature: 's' }, faite, resultat, lecture, orpheline], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Voilà.' }], stop_reason: 'end_turn', usage });
+    await tourLumi(baseTour([], []));
+    expect(forme(instantanes[1].messages)).toBe('user[texte] assistant[thinking,server_tool_use,tool_search_tool_result,tool_use] user[tool_result]');
+    const assistant = instantanes[1].messages[1].content;
+    expect(assistant.find((b: any) => b.type === 'server_tool_use').id).toBe('srvtoolu_1');
+  });
+
+  it('en pause (pause_turn), la recherche en suspens est renvoyée telle quelle : l’API l’attend', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [orpheline], stop_reason: 'pause_turn', usage });
+    reponses.push({ content: [{ type: 'tool_search_tool_result', tool_use_id: 'srvtoolu_9', content: { type: 'tool_search_tool_search_result', tool_references: [] } }, { type: 'text', text: 'Rien trouvé.' }], stop_reason: 'end_turn', usage });
+    const r = await tourLumi(baseTour([], []));
+    expect(forme(instantanes[1].messages)).toBe('user[texte] assistant[server_tool_use]');
+    expect(forme(r.nouveauxMessages)).toBe('assistant[server_tool_use,tool_search_tool_result,text]');
+  });
+
+  it('une conversation enregistrée dans cette forme est réparée à la relecture ; le dernier message n’est jamais touché', async () => {
+    const { assainirPourApi, sansRechercheOrpheline } = await import('../server/lib/lumi/historique');
+    const cassee: any[] = [
+      { role: 'user', content: 'Mes factures en retard' },
+      { role: 'assistant', content: [lecture, orpheline] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_1', content: '{}' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Une facture.' }] },
+      { role: 'user', content: 'Merci' },
+    ];
+    expect(forme(assainirPourApi(cassee))).toBe('user[texte] assistant[tool_use] user[tool_result] assistant[text] user[texte]');
+    // Un message sans recherche en suspens revient TEL QUEL (même objet).
+    const sain = { role: 'assistant', content: [faite, resultat, lecture] } as any;
+    expect(sansRechercheOrpheline(sain)).toBe(sain);
+    // En dernière position (reprise d'une pause), rien n'est retiré.
+    const enPause: any[] = [{ role: 'user', content: 'a' }, { role: 'assistant', content: [orpheline] }];
+    expect(forme(assainirPourApi(enPause))).toBe('user[texte] assistant[server_tool_use]');
+  });
+});

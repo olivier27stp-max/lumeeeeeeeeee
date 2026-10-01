@@ -49,7 +49,7 @@ import { validerArgs, type SchemaSimple } from '../agent/validation-args';
 import { executerEcriture, type ReçuExecution } from './execution';
 import { signalerAppelLumi } from './cache-chaud';
 import { allegerSchema } from './alleger-outils';
-import { suiteDuMemeTour } from './historique';
+import { suiteDuMemeTour, sansRechercheOrpheline } from './historique';
 import { ECRITURES_ANODINES, JAMAIS_D_OFFICE } from '../agent/registre';
 
 const MAX_ETAPES = 8;
@@ -706,13 +706,20 @@ export async function tourLumi(opts: {
     // En deux messages, la demande de recherche d'outil et son résultat sont
     // séparés et l'API refuse l'appel suivant (400) — voir fusionnerAssistantsConsecutifs.
     const precedent = messages[messages.length - 1];
-    if (precedent?.role === 'assistant' && nouveaux.length > 0 && nouveaux[nouveaux.length - 1] === precedent) {
-      const fusion = suiteDuMemeTour(precedent, assistant);
-      messages[messages.length - 1] = fusion;
-      nouveaux[nouveaux.length - 1] = fusion;
+    const suite = precedent?.role === 'assistant' && nouveaux.length > 0 && nouveaux[nouveaux.length - 1] === precedent;
+    let duTour = suite ? suiteDuMemeTour(precedent, assistant) : assistant;
+    // Le modèle a demandé un de nos outils ET une recherche d'outil dans la même
+    // réponse : l'API s'arrête pour le nôtre sans avoir lancé la recherche, dont
+    // la demande reste en suspens. Renvoyée avec notre résultat, elle fait refuser
+    // l'appel suivant (400, prod, 2026-10-01). On la retire — sauf en `pause_turn`,
+    // où l'API attend justement qu'on la lui renvoie pour finir.
+    if (reponse.stop_reason !== 'pause_turn' && reponse.content.some((bl) => bl.type === 'tool_use')) duTour = sansRechercheOrpheline(duTour);
+    if (suite) {
+      messages[messages.length - 1] = duTour;
+      nouveaux[nouveaux.length - 1] = duTour;
     } else {
-      messages.push(assistant);
-      nouveaux.push(assistant);
+      messages.push(duTour);
+      nouveaux.push(duTour);
     }
     // pause_turn : l'API a interrompu le tour après un outil serveur (recherche
     // d'outils) ; on relance avec l'historique tel quel, sans message utilisateur.
