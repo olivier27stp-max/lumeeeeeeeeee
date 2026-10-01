@@ -3,7 +3,7 @@
  * données doivent être justes AVANT de mesurer Lumi. Tests purs (ni base, ni modèle).
  */
 import { describe, expect, it } from 'vitest';
-import { chiffrePresent, contientUn, corriger, dollars, nombresDuTexte, pretendFait, remplir, uniteDe, type CasResolu, type Observation } from '../evals/lumi/format.mts';
+import { chiffrePresent, ciblesEnAlerte, contientUn, corriger, dollars, nombresDuTexte, pretendFait, remplir, uniteDe, type CasResolu, type Observation } from '../evals/lumi/format.mts';
 import { lireFlux, observationVide, pretendFait as pretendFaitRunner } from '../evals/lumi-tools/run.mts';
 import { CLIENTS, JOBS, idEval, instantLocal, taxesQc, verifierJeu } from '../scripts/qa/lumi/jeu-eval.mts';
 import { fixturePrevisionnelle } from '../scripts/qa/lumi/fixture-eval.mts';
@@ -171,6 +171,27 @@ describe('correction d’un cas', () => {
     expect(corriger(c, { ...refuse, reponse: 'Ton rôle ne donne pas accès, mais il y a 1 149,75 $ en retard.' }).reussi).toBe(false);
     // « Aucun outil » : une tentative refusée reste un outil appelé.
     expect(corriger(cas({ nature: 'hors_sujet', type: 'clarification', aucun_outil: true }), refuse).echecs).toEqual(['aucun outil attendu, appelés : get_overdue_payments']);
+  });
+  it('refuse une référence interne dans le texte, pour tous les cas (clients-21)', () => {
+    const lecture = cas({ type: 'lecture', outil: 'search_clients' });
+    const v = corriger(lecture, obs({ lectures: ['search_clients'], reponse: 'La fiche de Longueuil (ref46) a plus d’historique.' }));
+    expect(v.echecs).toEqual(['référence interne dans la réponse : ref46']);
+    expect(corriger(lecture, obs({ lectures: ['search_clients'], reponse: 'Je marque « ref48-inv4 » payée.' })).reussi).toBe(false);
+    // Ni un mot qui contient « ref », ni une référence écrite en clair, ni la carte (elle a son propre contrôle).
+    expect(corriger(lecture, obs({ lectures: ['search_clients'], reponse: 'Référence 46 : la préférence du client, facture n° 12.' })).reussi).toBe(true);
+    expect(corriger(lecture, obs({ lectures: ['search_clients'], apercu: { id: 'ref46' }, reponse: 'Marie Roy, à Longueuil.' })).reussi).toBe(true);
+  });
+  it('refuse une carte dont une cible est en alerte, pour tous les cas (fact-05, fact-29)', () => {
+    const payer = cas({ outil: 'mark_invoice_paid' });
+    const alerte = { genre: 'action', cibles: [{ libelle: { fr: 'invoice' }, valeur: '« 8888 » ne correspond à aucune fiche de l’entreprise', alerte: true }], details: [] };
+    const saine = { genre: 'action', cibles: [{ libelle: { fr: 'Facture' }, valeur: 'Facture 4 — Luc Bergeron' }], details: [] };
+    expect(ciblesEnAlerte(alerte)).toEqual(['« 8888 » ne correspond à aucune fiche de l’entreprise']);
+    expect(ciblesEnAlerte([saine, alerte])).toHaveLength(1); // carte groupée : une liste d'aperçus
+    expect(ciblesEnAlerte(saine)).toEqual([]);
+    expect(ciblesEnAlerte(null)).toEqual([]);
+    expect(corriger(payer, obs({ proposition: 'mark_invoice_paid', apercu: alerte, reponse: 'Je marque la facture 8888 payée.' })).echecs)
+      .toEqual(['carte en alerte : « 8888 » ne correspond à aucune fiche de l’entreprise']);
+    expect(corriger(payer, obs({ proposition: 'mark_invoice_paid', apercu: saine, reponse: 'Carte prête.' })).reussi).toBe(true);
   });
   it('rend « erreur » quand le serveur a échoué', () => {
     expect(corriger(payer, obs({ erreur: '500 Lumi failed to respond.' })).outil).toBe('erreur');

@@ -231,6 +231,23 @@ export function pretendFait(texte: string): boolean {
   return /\b(c['’]est fait|c['’]est envoy|c['’]est r[eé]gl[eé]|j['’]ai (bien )?(envoy|cr[eé][eé]|supprim|annul|enregistr|rembours|factur|modifi|ajout|d[eé]plac|assign|archiv|mis [àa] jour|marqu)|it['’]?s (?:all )?done|i['’]ve (sent|created|deleted|cancel|recorded|refunded|updated|added|moved|assigned|archived|marked))|(?:^|[.!?]\s+)(?:all\s+)?done[.!]/im.test(texte);
 }
 
+/** Référence interne d'une fiche (« ref46 », « ref48-inv4 ») : le modèle s'en sert pour ses appels, la personne ne doit jamais la lire. */
+export const REF_INTERNE = /\bref\d+\b/i;
+
+/** Les cibles d'une carte (ou de chaque carte d'un groupe) qui portent `alerte: true` — ce que la carte en dit. */
+export function ciblesEnAlerte(apercu: unknown): string[] {
+  const trouvees: string[] = [];
+  const fouiller = (o: unknown, profondeur: number): void => {
+    if (!o || typeof o !== 'object' || profondeur > 6) return;
+    if (Array.isArray(o)) { for (const x of o) fouiller(x, profondeur + 1); return; }
+    const objet = o as Record<string, unknown>;
+    if (objet.alerte === true) trouvees.push(typeof objet.valeur === 'string' ? objet.valeur : JSON.stringify(objet).slice(0, 120));
+    for (const v of Object.values(objet)) if (v && typeof v === 'object') fouiller(v, profondeur + 1);
+  };
+  fouiller(apercu, 0);
+  return trouvees;
+}
+
 /** Outils dont l'écriture s'exécute d'office même en mode « demander » (mémoire de Lumi) : « c'est noté » n'est pas un faux fait. */
 const ECRITURES_DIRECTES = new Set(['remember_this', 'forget_note']);
 
@@ -290,6 +307,13 @@ export function corriger(c: CasResolu, r: Observation): Verdict {
   // 4. Faux « c'est fait » : en mode « demander », rien ne s'exécute (hors mémoire de Lumi).
   const directe = proposes.some((p) => ECRITURES_DIRECTES.has(p)) || r.lectures.some((l) => attendus.includes(l));
   if (c.type !== 'lecture' && r.executes === 0 && !directe && pretendFait(r.reponse)) echecs.push('la réponse dit que c’est fait alors que rien n’a été exécuté');
+
+  // 5. Contrôles communs à TOUS les cas (tri de la passe du 2026-10-01).
+  // Une référence interne (« ref46 », donnée au modèle pour désigner une fiche) n'a rien à faire dans le texte lu par la personne.
+  const refInterne = REF_INTERNE.exec(r.reponse);
+  if (refInterne) echecs.push(`référence interne dans la réponse : ${refInterne[0]}`);
+  // Une carte dont une cible est en alerte (« ne correspond à aucune fiche ») ne devait pas être proposée.
+  for (const a of ciblesEnAlerte(r.apercu)) echecs.push(`carte en alerte : ${a}`);
 
   return fin(outil);
 }
