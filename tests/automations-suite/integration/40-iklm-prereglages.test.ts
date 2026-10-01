@@ -57,6 +57,17 @@ async function journal(regles: string[], depuis: string) {
   return data ?? [];
 }
 
+/** Une soumission « en attente de réponse » du bureau A. */
+async function devisEnvoye(m: string): Promise<string> {
+  const c = await client(m);
+  const { data, error } = await b.admin.from('quotes').insert({
+    org_id: b.orgA, client_id: c, created_by: b.users.proprioA, quote_number: `QA-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, status: 'awaiting_response', total_cents: 150000, title: m,
+  }).select('id').single();
+  if (error) throw new Error(error.message);
+  nettoyer.push(() => b.admin.from('quotes').delete().eq('id', data.id));
+  return data.id as string;
+}
+
 async function client(m: string): Promise<string> {
   const { data, error } = await b.admin.from('clients').insert({
     org_id: b.orgA, created_by: b.users.proprioA, first_name: 'Préréglage', last_name: m, status: 'lead',
@@ -169,7 +180,7 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     await verifier(['pack_suivi_prospect'], depuis, true);
   }, 240_000);
 
-  it('[K-011][K-012] soumission envoyée → pack_relance_devis + quote_sent_move_deal ; acceptée → pack_depot + quote_approved_move_deal', async () => {
+  it('[K-011] soumission envoyée → pack_relance_devis + quote_sent_move_deal', async () => {
     const depuis = new Date().toISOString();
     const m = marque('K-011');
     const c = await client(m);
@@ -182,13 +193,29 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
     await new Promise((r) => setTimeout(r, 3000));
     await verifier(['pack_relance_devis', 'quote_sent_move_deal'], depuis, true);
 
-    // [K-012] soumission ACCEPTÉE (transition en base) → pack_depot + quote_approved_move_deal
-    const depuis2 = new Date().toISOString();
-    await b.admin.from('quotes').update({ status: 'approved' }).eq('id', q!.id);
-    await evenementsBase();
-    await new Promise((r) => setTimeout(r, 3000));
-    await verifier(['pack_depot', 'quote_approved_move_deal'], depuis2, true);
   }, 300_000);
+
+  it('[K-012a] soumission ACCEPTÉE (transition en base) → quote_approved_move_deal', async () => {
+    const depuis = new Date().toISOString();
+    const q = await devisEnvoye(marque('K-012a'));
+    await b.admin.from('quotes').update({ status: 'approved' }).eq('id', q);
+    await evenementsBase();
+    await verifier(['quote_approved_move_deal'], depuis, false);
+  }, 240_000);
+
+  it.fails('[K-012] ROUGE ATTENDU — décision requise : « Dépôt — demande et rappel » (pack_depot, publié d’office) s’annule lui-même quand le drapeau auto_sortie_parcours est éteint — la demande de dépôt ne part jamais', async () => {
+    // checkStopConditions (moteur, drapeau éteint = défaut) arrête toute tâche
+    // d'un devis au statut « approved » — y compris celles d'une règle
+    // déclenchée PAR l'acceptation. sortie-parcours.ts (drapeau allumé) a
+    // l'exception ; tests/automation/sortie-parcours.test.ts fige « drapeau
+    // OFF → annulée comme avant ». Correctif prêt (même exception que le lead
+    // perdu), non appliqué : il change un comportement volontairement lié au drapeau.
+    const depuis = new Date().toISOString();
+    const q = await devisEnvoye(marque('K-012'));
+    await b.admin.from('quotes').update({ status: 'approved' }).eq('id', q);
+    await evenementsBase();
+    await verifier(['pack_depot'], depuis, true);
+  }, 240_000);
 
   it('[K-013][K-016][K-017] facture envoyée (transition en base) → pack_relance_facture ; payée → payment_confirmation seulement ; dépôt → deposit_received seulement', async () => {
     const depuis = new Date().toISOString();
