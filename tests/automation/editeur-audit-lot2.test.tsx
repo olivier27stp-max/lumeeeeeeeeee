@@ -314,6 +314,100 @@ describe('declencheurs-03 — pendant que le changement de déclencheur s’enre
   });
 });
 
+// ─── EDITEUR-04 ─────────────────────────────────────────────────
+
+/** La carte d'une étape du canevas (son bouton principal). */
+const carteEtape = (texte: string) => boutons().find((b) => b.textContent?.includes(texte) && b.parentElement?.className.includes('w-[260px]'));
+const PANNEAU_ETAPE = 'Modifier l’étape';
+const PANNEAU_DECLENCHEUR = 'Réglages du déclencheur';
+
+describe('EDITEUR-04 — un seul panneau à droite à la fois', () => {
+  it('la carte « Quand » cliquée pendant qu’une étape est ouverte : les réglages du déclencheur REMPLACENT le panneau d’étape', async () => {
+    await ouvrir(`/automations/${ID}`);
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    expect(panneaux()).toEqual([PANNEAU_ETAPE]);
+    cliquer(carteQuand());
+    await attendre(2);
+    expect(panneaux()).toEqual([PANNEAU_DECLENCHEUR]);
+    // Rien n'était modifié : aucune question posée.
+    expect(confirmerMock).not.toHaveBeenCalled();
+    // Plus qu'un seul « Enregistrer » à l'écran.
+    expect(boutons().filter((b) => b.textContent?.trim() === 'Enregistrer')).toHaveLength(1);
+  });
+
+  it('une étape cliquée pendant que les réglages du déclencheur sont ouverts : le panneau d’étape les remplace', async () => {
+    await ouvrir(`/automations/${ID}`);
+    cliquer(carteQuand());
+    await attendre(2);
+    expect(panneaux()).toEqual([PANNEAU_DECLENCHEUR]);
+    cliquer(carteEtape('Créer une tâche'));
+    await attendre(2);
+    expect(panneaux()).toEqual([PANNEAU_ETAPE]);
+    expect(confirmerMock).not.toHaveBeenCalled();
+  });
+
+  it('étape modifiée sans enregistrer : « Quand » demande avant de jeter la saisie — refus = rien ne bouge', async () => {
+    await ouvrir(`/automations/${ID}`);
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    saisir(container.querySelector(`aside[aria-label="${PANNEAU_ETAPE}"] input[type="text"]`), 'Texto de relance');
+    confirmerMock.mockImplementationOnce(async () => false);
+    cliquer(carteQuand());
+    await attendre();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(String((confirmerMock.mock.calls[0][0] as { message: string }).message)).toContain('ne sont pas enregistrées');
+    expect(panneaux()).toEqual([PANNEAU_ETAPE]);
+    expect(container.querySelector<HTMLInputElement>(`aside[aria-label="${PANNEAU_ETAPE}"] input[type="text"]`)?.value).toBe('Texto de relance');
+
+    // Accepté : le déclencheur prend la place.
+    cliquer(carteQuand());
+    await attendre();
+    expect(confirmerMock).toHaveBeenCalledTimes(2);
+    expect(panneaux()).toEqual([PANNEAU_DECLENCHEUR]);
+  });
+
+  it('réglages du déclencheur modifiés sans enregistrer : ouvrir une étape demande aussi', async () => {
+    await ouvrir(`/automations/${ID}`);
+    cliquer(carteQuand());
+    await attendre(2);
+    saisir(container.querySelector(`aside[aria-label="${PANNEAU_DECLENCHEUR}"] input[type="text"]`), 'VIP');
+    confirmerMock.mockImplementationOnce(async () => false);
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre();
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(String((confirmerMock.mock.calls[0][0] as { message: string }).message)).toContain('réglages du déclencheur');
+    expect(panneaux()).toEqual([PANNEAU_DECLENCHEUR]);
+
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre();
+    expect(panneaux()).toEqual([PANNEAU_ETAPE]);
+  });
+
+  it('« + » pendant que les réglages du déclencheur sont ouverts : le tiroir « Actions » s’ouvre (il ne se passait rien)', async () => {
+    await ouvrir(`/automations/${ID}`);
+    cliquer(carteQuand());
+    await attendre(2);
+    cliquer(container.querySelector('button[aria-label="Ajouter une étape ici"]'));
+    await attendre(2);
+    expect(panneaux()).toEqual(['Actions']);
+  });
+
+  it('« Publier » refusé à cause d’une étape : elle s’ouvre SEULE, même si les réglages du déclencheur étaient ouverts', async () => {
+    etat.regles = [regle({
+      steps: [{ id: 'e1', type: 'action', nom: null, action: { type: 'create_task', config: { title: '' } }, suivant: null }],
+    })];
+    await ouvrir(`/automations/${ID}`);
+    cliquer(carteQuand());
+    await attendre(2);
+    expect(panneaux()).toEqual([PANNEAU_DECLENCHEUR]);
+    cliquer(container.querySelector('button[role="switch"]'));
+    await attendre();
+    expect(toasts.erreur.join('\n')).toContain('Titre de la tâche');
+    expect(panneaux()).toEqual([PANNEAU_ETAPE]);
+  });
+});
+
 // ─── actions-07 (côté écran) ────────────────────────────────────
 
 /** Changer la valeur d'un champ comme l'utilisateur (setter natif). */

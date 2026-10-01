@@ -280,24 +280,9 @@ export default function AutomationBuilderPage() {
   /** Le panneau ouvert a-t-il un brouillon non enregistré ? (PanneauEtape.onModifie) */
   const brouillonEtapeModifie = useRef(false);
   const signalerBrouillonEtape = useCallback((m: boolean) => { brouillonEtapeModifie.current = m; }, []);
-  /**
-   * Ouvrir une AUTRE carte : si l'étape ouverte a des modifications non
-   * enregistrées, on demande avant de les jeter (audit 2026-09-28).
-   */
-  const ouvrirEtape = useCallback(async (idEtape: string) => {
-    if (etapeChoisie && idEtape !== etapeChoisie && brouillonEtapeModifie.current) {
-      const ok = await confirmer({
-        title: language === 'fr' ? 'Changer d’étape sans enregistrer ?' : 'Switch step without saving?',
-        message: language === 'fr'
-          ? 'Les modifications de l’étape ouverte ne sont pas enregistrées : elles seront perdues.'
-          : 'The open step’s changes are not saved: they will be lost.',
-        confirmLabel: language === 'fr' ? 'Changer d’étape' : 'Switch step',
-        danger: true,
-      });
-      if (!ok) return;
-    }
-    setEtapeChoisie(idEtape);
-  }, [etapeChoisie, language]);
+  /** Même chose pour les réglages du déclencheur (PanneauDeclencheur.onModifie). */
+  const brouillonDeclencheurModifie = useRef(false);
+  const signalerBrouillonDeclencheur = useCallback((m: boolean) => { brouillonDeclencheurModifie.current = m; }, []);
 
   // ── De quoi remplir les menus du panneau ──
   // Les membres (pour « assigner a ») et les etiquettes deja utilisees.
@@ -335,6 +320,71 @@ export default function AutomationBuilderPage() {
   const [tiroirDeclencheur, setTiroirDeclencheur] = useState(false);
   /** Le panneau de RÉGLAGE du déclencheur (« quelle date surveiller ? »). */
   const [reglageDeclencheur, setReglageDeclencheur] = useState(false);
+
+  /*
+   * UN SEUL PANNEAU À DROITE À LA FOIS (audit du 2026-10-01). Cliquer la
+   * carte « Quand » pendant qu'une étape était ouverte posait deux panneaux
+   * de 380 px côte à côte (trois « Annuler », deux « Enregistrer ») ; et
+   * « + » pendant que les réglages du déclencheur étaient ouverts ne faisait
+   * rien. Ouvrir l'un ferme l'autre — après avoir demandé, si une saisie non
+   * enregistrée s'y perdrait (la règle du changement d'étape, audit
+   * 2026-09-28).
+   *
+   * Rien à confirmer : la suite s'exécute TOUT DE SUITE, dans le même geste.
+   */
+  const quandPanneauLibre = useCallback((suite: () => void, versEtape?: string) => {
+    const enFrancais = language === 'fr';
+    const questions: Array<Parameters<typeof confirmer>[0]> = [];
+    if (etapeChoisie && versEtape !== etapeChoisie && brouillonEtapeModifie.current) {
+      questions.push(versEtape
+        ? {
+          title: enFrancais ? 'Changer d’étape sans enregistrer ?' : 'Switch step without saving?',
+          message: enFrancais
+            ? 'Les modifications de l’étape ouverte ne sont pas enregistrées : elles seront perdues.'
+            : 'The open step’s changes are not saved: they will be lost.',
+          confirmLabel: enFrancais ? 'Changer d’étape' : 'Switch step',
+          danger: true,
+        }
+        : {
+          title: enFrancais ? 'Fermer l’étape sans enregistrer ?' : 'Close the step without saving?',
+          message: enFrancais
+            ? 'Les modifications de l’étape ouverte ne sont pas enregistrées : elles seront perdues.'
+            : 'The open step’s changes are not saved: they will be lost.',
+          confirmLabel: enFrancais ? 'Fermer sans enregistrer' : 'Close without saving',
+          danger: true,
+        });
+    }
+    if (reglageDeclencheur && brouillonDeclencheurModifie.current) {
+      questions.push({
+        title: enFrancais ? 'Fermer les réglages sans enregistrer ?' : 'Close the settings without saving?',
+        message: enFrancais
+          ? 'Les réglages du déclencheur ne sont pas enregistrés : ils seront perdus.'
+          : 'The trigger settings are not saved: they will be lost.',
+        confirmLabel: enFrancais ? 'Fermer sans enregistrer' : 'Close without saving',
+        danger: true,
+      });
+    }
+    if (questions.length === 0) { suite(); return; }
+    void (async () => {
+      for (const question of questions) {
+        if (!(await confirmer(question))) return;
+      }
+      suite();
+    })();
+  }, [etapeChoisie, reglageDeclencheur, language]);
+
+  /** Affiche le panneau d'une étape — SEUL : tiroirs et réglages du déclencheur se ferment. */
+  const montrerEtape = useCallback((idEtape: string) => {
+    setTiroirDeclencheur(false);
+    setReglageDeclencheur(false);
+    setAjoutEnCours(null);
+    setEtapeChoisie(idEtape);
+  }, []);
+
+  /** Ouvrir une carte du canevas, à la demande de l'utilisateur. */
+  const ouvrirEtape = useCallback((idEtape: string) => {
+    quandPanneauLibre(() => montrerEtape(idEtape), idEtape);
+  }, [quandPanneauLibre, montrerEtape]);
   /**
    * Les champs personnalisés actifs de l'entreprise (tous objets) : « quel
    * champ ? » de « Champ modifié », « Mettre à jour un champ », les filtres
@@ -409,7 +459,13 @@ export default function AutomationBuilderPage() {
 
   /** Ouvre le choix du type d'étape à insérer. */
   const ouvrirAjout = (apresId: string | null, branche?: 'alors' | 'sinon') => {
-    setAjoutEnCours({ apresId, branche });
+    quandPanneauLibre(() => {
+      // Le tiroir « Actions » prend la place des réglages du déclencheur :
+      // resté ouvert, leur panneau le cachait et « + » ne faisait rien.
+      setTiroirDeclencheur(false);
+      setReglageDeclencheur(false);
+      setAjoutEnCours({ apresId, branche });
+    });
   };
 
   /**
@@ -439,8 +495,7 @@ export default function AutomationBuilderPage() {
       // brouillon, envoyable tel quel et réécrit en un clic.
       : { ...etapeVierge('action', id), action: { type: cle, config: configParDefaut(cle, fr) } };
     memoriser(insererEtape(steps, nouvelle, ajoutEnCours.apresId, ajoutEnCours.branche));
-    setEtapeChoisie(nouvelle.id);
-    setAjoutEnCours(null);
+    montrerEtape(nouvelle.id);
   };
 
   /**
@@ -925,8 +980,8 @@ export default function AutomationBuilderPage() {
     }
     memoriser(insererEtape(steps, copie, idEtape));
     setMenuEtape(null);
-    setEtapeChoisie(copie.id);
-  }, [steps, memoriser, fr]);
+    montrerEtape(copie.id);
+  }, [steps, memoriser, fr, montrerEtape]);
 
   /**
    * Supprimer cette étape ET tout ce qui la suit.
@@ -1187,7 +1242,7 @@ export default function AutomationBuilderPage() {
       const bloquants = problemes.filter((p) => p.gravite === 'bloquant');
       if (bloquants.length > 0) {
         const premier = bloquants[0];
-        if (premier.etapeId) setEtapeChoisie(premier.etapeId);
+        if (premier.etapeId) montrerEtape(premier.etapeId);
         toast.error(
           bloquants.length === 1
             ? premier.message
@@ -1346,14 +1401,14 @@ export default function AutomationBuilderPage() {
       const maj = await modifierAutomatisation(regle.id, { steps: conversion.etapes });
       setRegle(maj);
       setSteps((maj.steps as Etape[] | undefined) ?? []);
-      if (ouvrir) setEtapeChoisie(ouvrir);
+      if (ouvrir) montrerEtape(ouvrir);
       toast.success(fr ? 'Parcours converti — il est modifiable' : 'Journey converted — it is editable');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
       setConversionEnCours(false);
     }
-  }, [regle, conversion, fr]);
+  }, [regle, conversion, fr, montrerEtape]);
 
   /**
    * Y a-t-il du travail NON ENREGISTRÉ ?
@@ -1614,6 +1669,26 @@ export default function AutomationBuilderPage() {
       if (!estIntrouvable(e)) toast.error(e instanceof Error ? e.message : String(e));
     }
   }, [regle, fr, ecrire]);
+
+  /** Les réglages du déclencheur sont-ils à l'écran ? */
+  const panneauDeclencheurAffiche = reglageDeclencheur && !!declencheurCourant && declencheurReglable;
+
+  /**
+   * Un clic sur la carte « Quand » ouvre ses RÉGLAGES quand il y en a
+   * (« quelle date surveiller ? »), et le tiroir de changement sinon. C'est
+   * le geste de GHL : on règle d'abord, on change de déclencheur depuis le
+   * tiroir que le panneau propose. Le panneau d'étape ouvert lui cède la
+   * place (un seul panneau à droite).
+   */
+  const ouvrirDeclencheur = () => {
+    if (panneauDeclencheurAffiche || tiroirDeclencheur) return;
+    quandPanneauLibre(() => {
+      setEtapeChoisie(null);
+      setAjoutEnCours(null);
+      if (declencheurReglable) setReglageDeclencheur(true);
+      else setTiroirDeclencheur(true);
+    });
+  };
 
   if (chargement) {
     return (
@@ -2214,17 +2289,7 @@ export default function AutomationBuilderPage() {
                       onSelection={(idEtape) => (formatOrigine ? void convertirParcours(idEtape) : void ouvrirEtape(idEtape))}
                       onAjouter={ouvrirAjout}
                       onMenu={setMenuEtape}
-                      /*
-                       * Un clic sur la carte « Quand » ouvre ses RÉGLAGES
-                       * quand il y en a (« quelle date surveiller ? »), et
-                       * le tiroir de changement sinon. C'est le geste de
-                       * GHL : on règle d'abord, on change de déclencheur
-                       * depuis le tiroir que le panneau propose.
-                       */
-                      onDeclencheur={() => {
-                        if (declencheurReglable) setReglageDeclencheur(true);
-                        else setTiroirDeclencheur(true);
-                      }}
+                      onDeclencheur={ouvrirDeclencheur}
                       declencheurDetail={declencheurDetail}
                       etapesEnErreur={etapesEnErreur}
                     />
@@ -2520,6 +2585,7 @@ export default function AutomationBuilderPage() {
           onChanger={() => { setReglageDeclencheur(false); setTiroirDeclencheur(true); }}
           onEnregistrer={enregistrerDeclencheur}
           onFermer={() => setReglageDeclencheur(false)}
+          onModifie={signalerBrouillonDeclencheur}
         />
       )}
 
@@ -2538,8 +2604,9 @@ export default function AutomationBuilderPage() {
         />
       )}
 
-      {/* Le panneau d'edition — la moitie qui manquait. */}
-      {onglet === 'parcours' && !tiroirDeclencheur && !ajoutEnCours && etapeOuverte && (
+      {/* Le panneau d'edition — la moitie qui manquait. Jamais À CÔTÉ des
+          réglages du déclencheur : un seul panneau à droite. */}
+      {onglet === 'parcours' && !tiroirDeclencheur && !panneauDeclencheurAffiche && !ajoutEnCours && etapeOuverte && (
         <PanneauEtape
           etape={etapeOuverte}
           fr={fr}
