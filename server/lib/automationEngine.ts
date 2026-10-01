@@ -28,8 +28,8 @@ import {
   echeanceAvantDate,
 } from './automationSequences';
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
-import { orgEnPause } from './automations-pause-org';
-import { fuseauOrg, FUSEAU_DEFAUT } from './automations-fuseau-org';
+import { orgEnPause, orgsEnPause } from './automations-pause-org';
+import { fuseauOrg, FUSEAU_DEFAUT, corrigerChangementDHeure } from './automations-fuseau-org';
 import { noterRegleTraitee } from './outbox';
 import { drapeauActif, DRAPEAUX_AUTOMATISATIONS } from './automations-drapeaux';
 import { typeEnvoi } from './desabonnement';
@@ -81,6 +81,11 @@ export function regleViseCetEvenement(rule: AutomationRule, event: CRMEvent): bo
   const m = event.metadata ?? {};
   if (rule.pipeline_id && m.pipeline_id && rule.pipeline_id !== m.pipeline_id) return false;
   if (rule.stage_id && m.stage_id && rule.stage_id !== m.stage_id) return false;
+  // « Sans mouvement depuis N jours » : la détection (pipeline_detecter_stagnation)
+  // écrit UNE alerte par règle, avec le seuil de CETTE règle. Rejouée sur les
+  // autres règles du même déclencheur, une règle « 7 jours » partait dès
+  // l'alerte d'une règle « 3 jours » de la même étape.
+  if (event.type === 'deal.stage_idle' && m.rule_id && m.rule_id !== rule.id) return false;
   return true;
 }
 
@@ -120,6 +125,18 @@ function memeValeur(a: unknown, b: unknown): boolean {
   if (Array.isArray(a)) return a.some((x) => memeValeur(x, b));
   if (a === null || a === undefined || b === null || b === undefined) return false;
   if (typeof a === 'object' || typeof b === 'object') return false;
+  /*
+   * Un NOMBRE d'un côté : on compare des nombres. `montant` vaut
+   * total_cents / 100 (1250.5) ; la condition écrite « 1250.50 » ne le
+   * reconnaissait pas (« 1250.5 » ≠ « 1250.50 » en texte). Deux TEXTES
+   * restent comparés en texte : un code « 007 » n'est pas 7.
+   */
+  if (typeof a === 'number' || typeof b === 'number') {
+    const nombre = (x: unknown) => (typeof x === 'number' ? x
+      : typeof x === 'string' && /^\s*-?\d+(\.\d+)?\s*$/.test(x) ? Number(x) : Number.NaN);
+    const [x, y] = [nombre(a), nombre(b)];
+    if (Number.isFinite(x) && Number.isFinite(y)) return x === y;
+  }
   return String(a) === String(b);
 }
 
@@ -135,29 +152,47 @@ function memeValeur(a: unknown, b: unknown): boolean {
  * de nombres suffit ensuite. On essaie le nombre D'ABORD, sinon
  * `Date.parse('5')` interpréterait « 5 » comme une année.
  */
-function versNombreComparable(v: unknown): number | null {
+/*
+ * Une DATE, c'est une date ISO (« 2026-09-30 », « 2026-09-30T10:00:00Z »,
+ * « 2026-09-30 10:00:00+00 » de Postgres) — rien d'autre. `Date.parse` seul
+ * lit n'importe quoi : « 1500$ » devient l'an 1500, « Montant 5 » mai 2001,
+ * « 2026-02-30 » le 2 mars. Une borne « montant ≥ 1500$ » laissait alors
+ * passer TOUS les montants (comparés à une date de l'an 1500).
+ */
+const DATE_ISO = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?$/i;
+
+function versNombreComparable(v: unknown): { valeur: number; nature: 'nombre' | 'date' } | null {
   if (v === null || v === undefined || v === '') return null;
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.getTime();
+  if (typeof v === 'number') return Number.isFinite(v) ? { valeur: v, nature: 'nombre' } : null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : { valeur: v.getTime(), nature: 'date' };
   if (typeof v !== 'string') return null;
 
   const texte = v.trim();
   if (texte === '') return null;
 
   // Un nombre pur reste un nombre (montants en cents, quantités…).
-  if (/^-?\d+(\.\d+)?$/.test(texte)) return Number(texte);
+  if (/^-?\d+(\.\d+)?$/.test(texte)) return { valeur: Number(texte), nature: 'nombre' };
 
+  const iso = DATE_ISO.exec(texte);
+  if (!iso) return null;
+  // Le jour doit exister : « 2026-02-30 » n'est pas « roulé » au 2 mars.
+  const [a, m, j] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  const jour = new Date(Date.UTC(a, m - 1, j));
+  if (jour.getUTCFullYear() !== a || jour.getUTCMonth() !== m - 1 || jour.getUTCDate() !== j) return null;
   const t = Date.parse(texte);
-  return Number.isNaN(t) ? null : t;
+  return Number.isNaN(t) ? null : { valeur: t, nature: 'date' };
 }
 
 /**
- * `a OP b` sur des dates ou des nombres. `null` = incomparable.
+ * `a OP b` sur des dates ou des nombres. `null` = incomparable — y compris
+ * un nombre comparé à une date (« montant ≤ 2026-01-01 » n'a pas de sens).
  */
 function comparer(a: unknown, b: unknown, op: 'gt' | 'gte' | 'lt' | 'lte'): boolean | null {
-  const x = versNombreComparable(a);
-  const y = versNombreComparable(b);
-  if (x === null || y === null) return null;
+  const ga = versNombreComparable(a);
+  const gb = versNombreComparable(b);
+  if (ga === null || gb === null || ga.nature !== gb.nature) return null;
+  const x = ga.valeur;
+  const y = gb.valeur;
   switch (op) {
     case 'gt': return x > y;
     case 'gte': return x >= y;
@@ -213,6 +248,15 @@ export function evaluateConditions(
         console.warn(
           `[automationEngine] condition ignorée — opérateur(s) non supporté(s) sur « ${key} » : ${inconnus.join(', ')}`,
         );
+        return false;
+      }
+
+      // « l'un de » sans LISTE : illisible. Ignoré, il laissait tout passer
+      // (une règle écrite hors de l'éditeur — Lumi, préréglage — ne passe
+      // pas par Zod).
+      const listeIllisible = (['in', 'not_in'] as const).find((op) => op in expected && !Array.isArray(expected[op]));
+      if (listeIllisible) {
+        console.warn(`[automationEngine] condition ignorée — « ${key} » : « ${listeIllisible} » attend une liste`);
         return false;
       }
 
@@ -347,8 +391,21 @@ export function horsFenetre(
   d: Date = new Date(),
   tz: string = QUIET_TZ,
 ): boolean {
-  const debut = reglages?.fenetre?.debut ?? SEND_START_HOUR;
-  const fin = reglages?.fenetre?.fin ?? SEND_END_HOUR;
+  /*
+   * Une fenêtre IMPOSSIBLE (inversée, vide, hors 0-24, illisible) n'arrive
+   * pas par l'éditeur (Zod), mais par un préréglage, Lumi ou une vieille
+   * règle. Elle valait « toujours hors fenêtre » : nextSendTime ne trouvait
+   * rien et rendait l'heure de départ, la file repoussait la tâche « à
+   * maintenant » à chaque passage — le message ne partait jamais, sans trace.
+   * Réglage invalide = fenêtre par défaut, comme un réglage absent.
+   */
+  const f = reglages?.fenetre;
+  const lisible = !!f && Number.isInteger(f.debut ?? SEND_START_HOUR) && Number.isInteger(f.fin ?? SEND_END_HOUR);
+  const d0 = lisible ? (f?.debut ?? SEND_START_HOUR) : SEND_START_HOUR;
+  const f0 = lisible ? (f?.fin ?? SEND_END_HOUR) : SEND_END_HOUR;
+  const valide = d0 >= 0 && f0 <= 24 && d0 < f0;
+  const debut = valide ? d0 : SEND_START_HOUR;
+  const fin = valide ? f0 : SEND_END_HOUR;
   const h = localHour(d, tz);
   if (h < debut || h >= fin) return true;
 
@@ -361,36 +418,8 @@ export function horsFenetre(
   return false;
 }
 
-/** Décalage UTC (en minutes) du fuseau local à cet instant — +/- selon l'heure avancée. */
-function decalageLocalMin(t: number, tz: string = QUIET_TZ): number {
-  const d = new Date(t);
-  // Une date formatée dans le fuseau cible, relue comme si elle était UTC :
-  // l'écart avec l'instant d'origine EST le décalage.
-  const p = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).formatToParts(d).reduce<Record<string, string>>((a, x) => (a[x.type] = x.value, a), {});
-  const commeUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
-  return Math.round((commeUtc - d.getTime()) / 60000);
-}
-
-/**
- * Cale un rappel sur l'HEURE LOCALE voulue, même à cheval sur un changement
- * d'heure.
- *
- * Un « rappel 7 jours avant » se calcule en 604 800 secondes absolues. Si le
- * retour à l'heure normale tombe entre les deux, l'heure locale glisse d'une
- * heure : un rendez-vous à 10 h donnait un rappel à 11 h. Mesuré sur le cas
- * réel du 1er novembre 2026.
- *
- * On compare le décalage UTC aux deux instants et on rattrape la différence.
- * Rien à faire le reste de l'année : les deux décalages sont égaux, la
- * correction vaut zéro.
- */
-function corrigerChangementDHeure(reference: number, cible: number, tz: string = QUIET_TZ): number {
-  const ecart = decalageLocalMin(reference, tz) - decalageLocalMin(cible, tz);
-  return ecart === 0 ? cible : cible + ecart * 60000;
-}
+/* `decalageLocalMin` / `corrigerChangementDHeure` : dans automations-fuseau-org.ts
+   (partagés avec les parcours, automationSequences.ts). */
 
 /**
  * Cette action doit-elle respecter la fenêtre 8h–20h ?
@@ -717,12 +746,26 @@ async function variablesDeLEvenement(event: CRMEvent, config: EngineConfig): Pro
   return { ...(await promesse) };
 }
 
+/**
+ * Actions dont l'exécuteur n'utilise AUCUNE variable (paramètre `_vars`
+ * dans server/lib/actions/index.ts — vérifié par
+ * tests/automations-suite/unitaires/perf-actions-sans-variables.test.ts).
+ * Une règle faite seulement de ces actions ne lit pas les variables de
+ * l'événement : ≈ 10 requêtes de moins par événement (charge M-003 : 19 → 9).
+ */
+export const ACTIONS_SANS_VARIABLES: ReadonlySet<string> = new Set([
+  'update_status', 'log_activity', 'move_deal_stage', 'assigner_responsable',
+  'modifier_statut_rendezvous', 'assigner_deal', 'arreter_automatisation', 'demarrer_automatisation',
+]);
+
 async function executeRuleActions(
   rule: AutomationRule,
   event: CRMEvent,
   config: EngineConfig,
 ) {
-  const vars = await variablesDeLEvenement(event, config);
+  const vars = rule.actions.length > 0 && rule.actions.every((a) => ACTIONS_SANS_VARIABLES.has(a.type))
+    ? {}
+    : await variablesDeLEvenement(event, config);
 
   const ctx: ActionContext = {
     supabase: config.supabase,
@@ -1379,9 +1422,54 @@ export function isTransientFailure(error?: string | null): boolean {
     // Webhook vers une adresse interne ou non publique (garde SSRF) : la
     // même adresse sera refusée à chaque essai (audit V2, C25).
     'adresse refusée',
+    /*
+     * Configuration ou données de l'entité : rien ne changera d'ici 2 h.
+     * Ces motifs étaient repris 4 fois — la notification qui dit à
+     * l'entrepreneur d'agir arrivait 2 h 35 plus tard, et chaque reprise
+     * d'une demande d'avis créait un nouveau sondage (tests E-040).
+     */
+    'no google or facebook review link',
+    'client has no email address',
+    'client has no phone number',
+    'already sent to this client',
+    'table not allowed',
+    'unknown action type',
+    'no org owner found',
+    'aucune étiquette à',
+    'aucun client rattaché',
+    'la note est vide',
+    'aucune automatisation choisie',
+    'ne peut pas se démarrer elle-même',
+    'automatisation introuvable',
+    'rien à démarrer',
+    'n\'a aucune action',
+    "s'applique à un deal ou à une soumission",
+    'stage_id (ou vers_role) manquant',
+    'introuvable dans cette organisation',
+    'appartient à un autre pipeline',
+    'est archivée',
+    'statut inconnu',
+    'valeur invalide',
+    'rien à modifier',
+    'aucun statut choisi',
+    'client introuvable',
+    'rendez-vous introuvable',
+    'opportunité introuvable',
+    'aucun lien public',
   ];
   const lower = error.toLowerCase();
-  return !definitifs.some((d) => lower.includes(d));
+  if (definitifs.some((d) => lower.includes(d))) return false;
+  /*
+   * Webhook refusé par son destinataire (4xx) : la même requête sera refusée
+   * à chaque essai. Sauf 408 (délai), 425 (trop tôt) et 429 (trop de
+   * requêtes), qui demandent justement de revenir plus tard.
+   */
+  const http = /le serveur distant a répondu (\d{3})/.exec(lower);
+  if (http) {
+    const code = Number(http[1]);
+    if (code >= 400 && code < 500 && ![408, 425, 429].includes(code)) return false;
+  }
+  return true;
 }
 
 /**
@@ -1436,7 +1524,8 @@ async function prevenirEchecDefinitif(
       org_id: task.org_id,
       type: 'automation_failed',
       title: `Échec d'envoi — ${nom}`,
-      body: `Le ${canal} n'est pas parti et ne partira pas : ${cause}.`,
+      // Sans le point final du motif : « …phone number.. » (vu dans le filet de régression).
+      body: `Le ${canal} n'est pas parti et ne partira pas : ${cause.replace(/[.\s]+$/, '')}.`,
       reference_id: task.id,
     });
     if (error) throw new Error(error.message);
@@ -1522,12 +1611,19 @@ async function recupererTachesFigees(supabase: SupabaseClient, orgId?: string): 
  * sans toucher aux tâches des autres entreprises de staging. Le serveur,
  * lui, appelle toujours sans filtre.
  */
-export async function processScheduledTasks(supabase: SupabaseClient, options: { orgId?: string } = {}) {
-  if (!engineConfig) return;
+/** Tâches lues par passage de la file. */
+export const TACHES_PAR_LOT = 50;
+
+/**
+ * Renvoie le nombre de tâches LUES : un lot plein (= TACHES_PAR_LOT) dit au
+ * planificateur qu'il en reste peut-être d'autres à dépiler tout de suite.
+ */
+export async function processScheduledTasks(supabase: SupabaseClient, options: { orgId?: string; orgIds?: string[] } = {}): Promise<number> {
+  if (!engineConfig) return 0;
   // Interrupteur d'arrêt (F6) : AVANT la récupération des tâches figées.
   // Remettre des tâches en file serait déjà y toucher, et l'arrêt doit
   // laisser la file exactement dans l'état où il l'a trouvée.
-  if (!automatisationsActivesAvecTrace()) return;
+  if (!automatisationsActivesAvecTrace()) return 0;
 
   // Avant tout : libérer ce qu'un arrêt brutal aurait laissé coincé.
   await recupererTachesFigees(supabase, options.orgId);
@@ -1547,15 +1643,20 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
     .eq('status', 'pending')
     .lte('execute_at', now);
   if (options.orgId) requeteTaches = requeteTaches.eq('org_id', options.orgId);
+  if (options.orgIds) requeteTaches = requeteTaches.in('org_id', options.orgIds);
+  // Les entreprises en pause ne sont pas DÉPILÉES : leurs tâches restent en
+  // file sans occuper le lot (sinon 50 tâches en pause bloquaient tout le monde).
+  const enPause = await orgsEnPause(supabase);
+  if (enPause.length) requeteTaches = requeteTaches.not('org_id', 'in', `(${enPause.join(',')})`);
   const { data: tasks, error } = await requeteTaches
     .order('execute_at', { ascending: true })
-    .limit(50);
+    .limit(TACHES_PAR_LOT);
 
   if (error) {
     console.error('[automationEngine] failed to fetch scheduled tasks:', error.message);
-    return;
+    return 0;
   }
-  if (!tasks || tasks.length === 0) return;
+  if (!tasks || tasks.length === 0) return 0;
 
   for (const task of tasks as any[]) {
     /*
@@ -1700,6 +1801,23 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
       const actionConfig = task.action_config;
       const actionType = actionConfig.type as ActionType;
       const config = actionConfig.config || {};
+
+      /*
+       * Le CLIENT de la tâche a été supprimé (corbeille ou pour de bon) entre
+       * l'événement et l'échéance : rien ne part, quelle que soit l'action.
+       * Avant, seul le prospect était vérifié (checkStopConditions) : une
+       * tâche sur un client à la corbeille ajoutait encore sa note, appelait
+       * son webhook, et — désabonnement par canal actif — lui envoyait un
+       * texto transactionnel (tests C-024, C-025, C-028).
+       */
+      if (await clientDeLaTacheSupprime(supabase, task.org_id, task.entity_type, task.entity_id)) {
+        const { error: cancelError } = await supabase
+          .from('automation_scheduled_tasks')
+          .update({ status: 'cancelled', completed_at: new Date().toISOString(), last_error: 'Annulée : le client a été supprimé.' })
+          .eq('id', task.id);
+        if (cancelError) console.error(`[automationEngine] annulation (client supprimé) impossible pour la tâche ${task.id}:`, cancelError.message);
+        continue;
+      }
 
       // Sortie automatique du parcours (drapeau par entreprise) : la
       // vérification connaît le déclencheur, suit la case de la règle et
@@ -2109,6 +2227,7 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
       }
     }
   }
+  return tasks.length;
 }
 
 // ── Stop condition checker ──────────────────────────────────
@@ -2367,6 +2486,31 @@ async function clientARepondu(
     return false;
   }
   return Boolean(courriels && courriels.length > 0);
+}
+
+/**
+ * L'entité de la tâche est-elle un client (ou prospect) supprimé — mis à la
+ * corbeille, ou effacé ? Lecture en erreur : on ne conclut rien (false), la
+ * tâche suit son cours, comme pour `checkStopConditions`.
+ */
+async function clientDeLaTacheSupprime(
+  supabase: SupabaseClient,
+  orgId: string,
+  entityType: string,
+  entityId: string,
+): Promise<boolean> {
+  if (entityType !== 'client' && entityType !== 'lead') return false;
+  const { data, error } = await supabase
+    .from('clients')
+    .select('deleted_at')
+    .eq('id', entityId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (error) {
+    console.error(`[automationEngine] client de la tâche illisible (${entityId}) — tâche conservée:`, error.message);
+    return false;
+  }
+  return !data || Boolean((data as { deleted_at: string | null }).deleted_at);
 }
 
 async function checkStopConditions(

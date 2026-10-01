@@ -24,6 +24,16 @@
    },
    {
     "moment": "immediat",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "activity_log",
     "op": "insert",
     "valeur": {
@@ -692,9 +702,19 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "client_id": null,
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "job_id": null,
      "token": "<jeton>"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "email_unsubscribes",
+    "op": "insert",
+    "valeur": {
+     "org_id": "11111111-1111-4111-8111-111111111111",
+     "email": "marie.tremblay@example.test",
+     "category": "pending"
     }
    },
    {
@@ -734,7 +754,7 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "client_id": null,
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "job_id": null,
      "survey_id": "sondage-1",
      "subject_sent": "Votre avis compte pour nous",
@@ -751,7 +771,7 @@
      "entity_type": "client",
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "related_entity_type": "client",
-     "related_entity_id": null,
+     "related_entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "event_type": "review_requested",
      "metadata": {
       "client_name": "Marie",
@@ -883,7 +903,7 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "client_id": null,
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "job_id": null,
      "token": "<jeton>"
     }
@@ -963,7 +983,7 @@
     "op": "insert",
     "valeur": {
      "org_id": "11111111-1111-4111-8111-111111111111",
-     "client_id": null,
+     "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "job_id": null,
      "survey_id": "sondage-1",
      "subject_sent": "Votre avis compte pour nous",
@@ -980,7 +1000,7 @@
      "entity_type": "client",
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "related_entity_type": "client",
-     "related_entity_id": null,
+     "related_entity_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "event_type": "review_requested",
      "metadata": {
       "client_name": "Marie",
@@ -1216,7 +1236,7 @@
      "org_id": "11111111-1111-4111-8111-111111111111",
      "type": "automation_failed",
      "title": "Échec d'envoi — regle-note.added-envoyer_slack-86400",
-     "body": "Le message n'est pas parti et ne partira pas : Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié..",
+     "body": "Le message n'est pas parti et ne partira pas : Envoyer dans Slack n’est pas encore disponible : la connexion à votre Slack n’existe pas. Rien n’a été publié.",
      "reference_id": "tache-1"
     }
    }

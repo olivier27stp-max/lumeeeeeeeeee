@@ -57,6 +57,19 @@ router.post('/automations/events/appointment-rescheduled', validate(automationEv
     const { eventId, jobId, clientId, startTime } = req.body;
     if (!eventId) return res.status(400).json({ error: 'eventId is required' });
 
+    const admin = getServiceClient();
+    // Le rendez-vous doit être de CE bureau : l'identifiant vient du
+    // navigateur, et sans cette lecture on ré-émettait `appointment.created`
+    // sur l'objet d'une autre entreprise (les règles du bureau tournaient
+    // dessus). Le job et le client viennent de la base, jamais du corps.
+    const { data: rdv } = await admin
+      .from('schedule_events')
+      .select('id, job_id, start_at, job:jobs!schedule_events_job_id_fkey(client_id)')
+      .eq('id', eventId)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+    if (!rdv) return res.status(404).json({ error: 'Rendez-vous introuvable.' });
+
     // ── 1. Annuler les rappels calés sur l'ANCIENNE date ──
     //
     // Les rappels sont planifiés à partir de la date du rendez-vous
@@ -68,7 +81,6 @@ router.post('/automations/events/appointment-rescheduled', validate(automationEv
     // (org_id, execution_key) parmi les tâches `pending` ET `running`. Si on
     // ré-émettait d'abord, la nouvelle planification serait rejetée en 23505
     // et il ne resterait que les anciennes tâches — pire que le bug d'origine.
-    const admin = getServiceClient();
     const { data: annulees, error: cancelErr } = await admin
       .from('automation_scheduled_tasks')
       .update({
@@ -105,9 +117,9 @@ router.post('/automations/events/appointment-rescheduled', validate(automationEv
       entityId: eventId,
       actorId: auth.user.id,
       metadata: {
-        job_id: jobId || null,
-        client_id: clientId || null,
-        start_time: startTime || null,
+        job_id: (rdv as { job_id?: string | null }).job_id || jobId || null,
+        client_id: ((rdv as { job?: { client_id?: string | null } | null }).job?.client_id) || clientId || null,
+        start_time: (rdv as { start_at?: string | null }).start_at || startTime || null,
         rescheduled: true,
       },
     });
@@ -295,11 +307,16 @@ router.post('/automations/events/quote-sent', validate(automationEventSchema), a
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const { quoteId, leadId, channel } = req.body;
+    if (!quoteId) return res.status(400).json({ error: 'quoteId is required' });
+    const { data: devis } = await getServiceClient()
+      .from('quotes').select('id').eq('id', quoteId).eq('org_id', auth.orgId).maybeSingle();
+    // Identifiant venu du navigateur : un devis d'un autre bureau n'émet rien.
+    if (!devis) return res.status(404).json({ error: 'Soumission introuvable.' });
 
     await eventBus.emit('quote.sent', {
       orgId: auth.orgId,
       entityType: 'quote',
-      entityId: quoteId || '',
+      entityId: quoteId,
       actorId: auth.user.id,
       metadata: { lead_id: leadId || null, channel: channel || 'email' },
     });
@@ -343,6 +360,9 @@ router.post('/automations/events/lead-created', validate(automationEventSchema),
       .eq('id', leadId)
       .eq('org_id', auth.orgId)
       .maybeSingle();
+    // Identifiant venu du navigateur : un prospect d'un autre bureau (ou
+    // inexistant) n'émet rien — les règles de CE bureau tournaient dessus.
+    if (!lead) return res.status(404).json({ error: 'Prospect introuvable.' });
 
     await eventBus.emit('lead.created', {
       orgId: auth.orgId,
@@ -378,6 +398,7 @@ router.post('/automations/events/lead-status-changed', validate(automationEventS
       .eq('id', leadId)
       .eq('org_id', auth.orgId)
       .maybeSingle();
+    if (!lead) return res.status(404).json({ error: 'Prospect introuvable.' });
 
     await eventBus.emit('lead.status_changed', {
       orgId: auth.orgId,

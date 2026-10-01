@@ -1485,6 +1485,12 @@ const runRecurringInvoiceNowTool: AgentTool = {
         .maybeSingle();
       if (error) throw error;
       if (!sched || sched.org_id !== ctx.orgId) throw new Error('Facturation récurrente introuvable.');
+      // Arrêtée (delete_recurring_invoice la désactive en promettant « plus
+      // aucune facture ne sera générée ») ou échue : on ne génère plus rien.
+      if (!sched.is_active) throw new Error('Cette facturation récurrente est arrêtée : réactive-la d’abord pour générer une facture.');
+      if (sched.end_date && String(sched.end_date) < new Date().toISOString().slice(0, 10)) {
+        throw new Error('Cette facturation récurrente est terminée (date de fin passée).');
+      }
       verifierPlafond(sommeLignes(Array.isArray(sched.items) ? sched.items : []));
       const r = await runOneSchedule(getServiceClient(), sched as RecurringSchedule, { advance: false });
       return {

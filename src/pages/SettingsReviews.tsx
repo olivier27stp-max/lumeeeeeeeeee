@@ -36,7 +36,7 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { cn } from '../lib/utils';
 import { PageHeader } from '../components/ui';
 import { useTranslation } from '../i18n';
-import { getAutomationRules, toggleAutomationRule, updateRuleSmsBody, type AutomationRule } from '../lib/automationRulesApi';
+import { getAutomationRules, toggleAutomationRule, updateRuleSmsBody, texteDuMessage, avecTexteDuMessage, type AutomationRule } from '../lib/automationRulesApi';
 
 // Miroir de server/lib/reviews.ts (texte par défaut affiché au client).
 const DEFAULT_INVITE_FR =
@@ -306,16 +306,15 @@ export default function SettingsReviews() {
   }
 
   function smsBodyOf(rule: AutomationRule): string {
-    return String(rule.actions.find((a) => a.type === 'send_sms')?.config?.body || '');
+    // Le texte qui PART : celui des étapes quand la règle en a.
+    return texteDuMessage(rule, 'send_sms');
   }
 
   async function handleSaveRuleSms(rule: AutomationRule) {
     setSavingRule(true);
     try {
       await updateRuleSmsBody(rule.id, ruleDraft.trim());
-      setRules((prev) => prev.map((r) => (r.id === rule.id
-        ? { ...r, actions: r.actions.map((a) => (a.type === 'send_sms' ? { ...a, config: { ...a.config, body: ruleDraft.trim() } } : a)) }
-        : r)));
+      setRules((prev) => prev.map((r) => (r.id === rule.id ? avecTexteDuMessage(r, 'send_sms', ruleDraft.trim()) : r)));
       setEditingRuleId(null);
       toast.success(isFr ? 'SMS de rappel enregistré.' : 'Reminder SMS saved.');
     } catch (e: any) {

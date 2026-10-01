@@ -2,7 +2,8 @@
  * Rapport de `npm run test:automations`, lisible par un humain (RAPPORT.md) et
  * par QA Smoke (synthese.json).
  *
- * La matrice vient d'AUTOMATIONS_TEST_MATRIX.md : chaque ligne de tableau dont
+ * La matrice vient des fragments tests/automations-suite/matrice/<LETTRE>.md
+ * (assemblés dans AUTOMATIONS_TEST_MATRIX.md) : chaque ligne de tableau dont
  * la 1re colonne est un identifiant de cellule (`B-012`, `F-003`…) est une
  * cellule. Un test la couvre quand son intitulé contient `[B-012]`.
  *   PASS         tous les tests qui la citent ont réussi
@@ -10,14 +11,18 @@
  *   NON COUVERT  aucun test ne la cite (ou tous ignorés) — la raison est dans
  *                la dernière colonne de la matrice
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 
 const DOSSIER = 'rapports/automatisations';
-const brut = existsSync(`${DOSSIER}/resultats.json`) ? JSON.parse(readFileSync(`${DOSSIER}/resultats.json`, 'utf8')) : null;
-if (!brut) {
-  console.error(`Aucun ${DOSSIER}/resultats.json : la suite n'a pas tourné.`);
+// Un JSON par projet (resultats-unitaires.json, …), fusionnés ici.
+const fichiersResultats = existsSync(DOSSIER)
+  ? readdirSync(DOSSIER).filter((f) => /^resultats.*\.json$/.test(f)).sort()
+  : [];
+if (fichiersResultats.length === 0) {
+  console.error(`Aucun ${DOSSIER}/resultats-*.json : la suite n'a pas tourné.`);
   process.exit(1);
 }
+const brut = { testResults: fichiersResultats.flatMap((f) => JSON.parse(readFileSync(`${DOSSIER}/${f}`, 'utf8')).testResults ?? []) };
 
 const tests = [];
 for (const fichier of brut.testResults ?? []) {
@@ -38,8 +43,14 @@ for (const fichier of brut.testResults ?? []) {
 
 // ── Matrice ─────────────────────────────────────────────────────────────
 const cellules = [];
-if (existsSync('AUTOMATIONS_TEST_MATRIX.md')) {
-  for (const ligne of readFileSync('AUTOMATIONS_TEST_MATRIX.md', 'utf8').split(/\r?\n/)) {
+// Les fragments par catégorie (tests/automations-suite/matrice/<LETTRE>.md) :
+// AUTOMATIONS_TEST_MATRIX.md n'en est que l'assemblage pour la lecture.
+const DOSSIER_MATRICE = 'tests/automations-suite/matrice';
+const sourcesMatrice = existsSync(DOSSIER_MATRICE)
+  ? readdirSync(DOSSIER_MATRICE).filter((f) => f.endsWith('.md')).sort().map((f) => `${DOSSIER_MATRICE}/${f}`)
+  : [];
+for (const source of sourcesMatrice) {
+  for (const ligne of readFileSync(source, 'utf8').split(/\r?\n/)) {
     const m = ligne.match(/^\|\s*([A-M]-\d{3})\s*\|(.*)\|\s*$/);
     if (!m) continue;
     const colonnes = m[2].split('|').map((c) => c.trim());

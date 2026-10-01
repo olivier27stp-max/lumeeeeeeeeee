@@ -70,42 +70,58 @@ describe('lecture des automatisations déjà publiées', () => {
 
 describe('la note sous la réponse de Lumi', () => {
   it('rien de publié sur ce déclencheur : aucune note', () => {
-    expect(noteDejaPubliees([], 'quote.viewed', 'fr')).toBe('');
+    expect(noteDejaPubliees([], 'quote.viewed', 'fr', ['create_notification'])).toBe('');
   });
 
   it('le cas de prod : le nom de l’automatisation, ce qu’elle fait, et quoi vérifier', () => {
-    const note = noteDejaPubliees([{ nom: 'Me notifier quand un client ouvre sa soumission', actions: ['create_notification'] }], 'quote.viewed', 'fr');
-    expect(note).toContain('À savoir : tu as déjà une automatisation publiée sur ce même déclencheur («');
+    const note = noteDejaPubliees([{ nom: 'Me notifier quand un client ouvre sa soumission', actions: ['create_notification'] }], 'quote.viewed', 'fr', ['create_notification']);
+    expect(note).toContain('À savoir : tu as déjà une automatisation publiée qui fait la même chose sur ce déclencheur («');
     expect(note).toContain('• « Me notifier quand un client ouvre sa soumission » — Notifier l’équipe');
-    expect(note).toContain('Vérifie qu’elles ne font pas double emploi avant de publier celle-ci.');
+    expect(note).toContain('Vérifie qu’elle ne fait pas double emploi avant de publier celle-ci.');
     // Le déclencheur est nommé comme à l'écran, jamais par sa clé technique.
     expect(note).not.toContain('quote.viewed');
   });
 
   it('plusieurs : le pluriel, une ligne chacune, et « … et d’autres » au-delà de cinq', () => {
     const six = Array.from({ length: 6 }, (_, i) => ({ nom: `Relance ${i + 1}`, actions: ['send_sms'] }));
-    const note = noteDejaPubliees(six, 'quote.sent', 'fr');
-    expect(note).toContain('tu as déjà des automatisations publiées');
+    const note = noteDejaPubliees(six, 'quote.sent', 'fr', ['send_sms']);
+    expect(note).toContain('tu as déjà des automatisations publiées qui font la même chose');
+    expect(note).toContain('Vérifie qu’elles ne font pas double emploi');
     expect(note.match(/• « Relance \d »/g)).toHaveLength(5);
     expect(note).toContain('• … et d’autres.');
     expect(note).toContain('— Envoyer un texto');
   });
 
   it('en anglais', () => {
-    const note = noteDejaPubliees([{ nom: 'Notify me', actions: ['create_notification'] }], 'quote.viewed', 'en');
-    expect(note).toContain('Good to know: you already have a published automation on this same trigger');
+    const note = noteDejaPubliees([{ nom: 'Notify me', actions: ['create_notification'] }], 'quote.viewed', 'en', ['create_notification']);
+    expect(note).toContain('Good to know: you already have a published automation that does the same thing on this trigger');
     expect(note).toContain('• « Notify me » — Notify the team');
   });
 
   it('un type d’action inconnu du catalogue n’affiche pas sa clé brute', () => {
-    expect(noteDejaPubliees([{ nom: 'X', actions: ['action_inconnue'] }], 'quote.viewed', 'fr')).toContain('• « X »\n');
+    expect(noteDejaPubliees([{ nom: 'X', actions: ['action_inconnue'] }], 'quote.viewed', 'fr', ['action_inconnue'])).toContain('• « X »\n');
+  });
+
+  it('seules les automatisations qui font LA MÊME CHOSE sont citées — vu sur lumecrm.net : 5 relances par texto et courriel listées pour une simple notification', () => {
+    const relances = [
+      { nom: 'Suivi de devis — 1 jour', actions: ['send_sms', 'send_email'] },
+      { nom: 'Suivi de devis — 7 jours', actions: ['send_email'] },
+      { nom: 'Suivi de devis — 21 jours (final)', actions: ['send_email', 'create_notification'] },
+    ];
+    // Le nouveau parcours ne fait qu'une notification interne : une seule fait la même chose.
+    const note = noteDejaPubliees(relances, 'quote.sent', 'fr', ['create_notification']);
+    expect(note).toContain('• « Suivi de devis — 21 jours (final) »');
+    expect(note).not.toContain('Suivi de devis — 1 jour');
+    expect(note).not.toContain('Suivi de devis — 7 jours');
+    // Aucune ne fait la même chose : aucune note, plutôt qu'une fausse alerte de doublon.
+    expect(noteDejaPubliees(relances.slice(0, 2), 'quote.sent', 'fr', ['create_notification'])).toBe('');
   });
 });
 
 describe('branchement dans la route', () => {
   const route = readFileSync(resolve(__dirname, '..', 'server/routes/automation-rules.ts'), 'utf8');
   it('la note n’est ajoutée qu’au PREMIER tour d’une conversation (ensuite ce serait du bruit)', () => {
-    expect(route).toMatch(/if \(!echanges\?\.length\) \{\s+const dejaLa = await lireDejaPubliees\(auth\.client, auth\.orgId, resultat\.parcours\.trigger_event, ruleIdEnvoye, langue\);\s+resultat\.parcours\.resume \+= noteDejaPubliees\(/);
+    expect(route).toMatch(/if \(!echanges\?\.length\) \{\s+const dejaLa = await lireDejaPubliees\(auth\.client, auth\.orgId, resultat\.parcours\.trigger_event, ruleIdEnvoye, langue\);\s+resultat\.parcours\.resume \+= noteDejaPubliees\(dejaLa, resultat\.parcours\.trigger_event, langue, typesDAction\(\{ steps: verdict\.data \}\)\);/);
   });
   it('elle est lue avec le client de l’UTILISATEUR (la RLS borne au bureau), jamais en service_role', () => {
     expect(route).not.toMatch(/lireDejaPubliees\(getServiceClient\(\)/);

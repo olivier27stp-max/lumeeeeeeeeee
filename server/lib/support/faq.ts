@@ -88,6 +88,14 @@ const MARQUES_DONNEES = [
   // Les formes conjuguées comptent aussi : « ta supprimer le tm8 » est une
   // correction en cours de conversation, pas une question sur le produit.
   /\b(annule|supprim\w*|efface\w*|envoie|envoy\w*|cree|creer|creé\w*|marque|ajoute|ajout\w*|planifie|deplace|relance)\b/i,
+  // Le message arrive NON normalisé : « Crée » (é puis e) échappait à la
+  // règle ci-dessus, et « Crée un rappel automatique par texto la veille de
+  // chaque rendez-vous » recevait l'article « SMS » au lieu de l'automatisation
+  // demandée (40-iklm-lumi-demandes, I-002). Même garde pour l'anglais.
+  // Sauf si la phrase est une QUESTION sur la marche à suivre (« Comment
+  // configurer mes taxes », « How do I set up taxes for Quebec? ») : celle-là
+  // garde sa réponse d'aide.
+  /^(?!\s*(comment|how|o[uù]|where|pourquoi|why|est-ce|can\s+i|puis-je|peut-on)(?![\p{L}]))(?=.*(^|[^\p{L}])(cr[eé][eé]\w*|automatis\w*|programme|configure|mets en place|create|set up|automate|make)(?![\p{L}]))/iu,
   // Renvois au contenu réel du compte.
   /\b(chez|pour le client|de mon client)\b/i,
   // « C'est quoi MES préréglages », « montre-moi mes modèles », « what checklist

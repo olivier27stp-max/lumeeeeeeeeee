@@ -88,7 +88,18 @@ export async function resolutionPublique(hote: string, resoudre: Resolveur = res
   try {
     const adresses = await resoudre(hote);
     return adresses.length > 0 && adresses.every((a) => !ipNonPublique(a.address));
-  } catch {
+  } catch (e) {
+    /*
+     * Résolveur indisponible (EAI_AGAIN, délai, SERVFAIL) : une panne
+     * PASSAGÈRE, pas une adresse refusée. Traitée comme refusée, elle rendait
+     * l'échec définitif (aucune reprise) pour un hoquet DNS de quelques
+     * secondes (test E-042). Levée ici, elle devient « Appel impossible : … »,
+     * repris à 5 min, 30 min, 2 h. Un nom qui n'existe pas reste refusé.
+     */
+    const code = String((e as { code?: unknown } | null)?.code ?? '');
+    if (['EAI_AGAIN', 'ETIMEOUT', 'ESERVFAIL', 'ECONNREFUSED', 'ETIMEDOUT'].includes(code)) {
+      throw new Error(`résolution DNS momentanément impossible (${code}) pour ${hote}`);
+    }
     return false;
   }
 }
