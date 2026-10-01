@@ -82,7 +82,8 @@ describe('repli', () => {
     // faire passer une lecture reconnue avant l'aide écrite) ; la garde est la même.
     expect(r).toContain('const raccourciReconnu = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);');
     expect(r).toContain('const raccourci = raccourciReconnu;');
-    expect(r).toContain("action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) }");
+    // Le candidat est toujours tracé ; depuis le 2026-10-01 il l'est sans courriel ni téléphone (Loi 25).
+    expect(r).toContain("action: 'repli', params: { candidat_retrait: enoncePourTrace(enoncePrecedent) }");
     expect(r).toContain("'pas ca', 'non pas ca', 'c est pas ca'");
     // L'étage reconnu (1 ou 2) est celui qui part dans la trace.
     expect(r).toContain('etage: raccourci.etage ?? ETAGE.raccourci');
