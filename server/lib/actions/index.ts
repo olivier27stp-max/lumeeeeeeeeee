@@ -10,7 +10,8 @@ import { annoncerEtiquette } from '../etiquettes';
 import { executerMajChamp } from '../champs/automatisations';
 import { variablesChamps } from '../champs/service';
 import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
-import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
+import { isReviewPreset, reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
+import { MOTIF_CLIENT_SANS_AVIS, clientRefuseAvis } from '../reviewOptOut';
 import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegale } from '../consentement/base-legale';
 import { motifSaut } from '../desabonnement';
 import { avecMentionCommerciale } from '../desabonnement/mention-sms';
@@ -80,6 +81,11 @@ export interface ActionContext {
    * moteur) = `commercial`.
    */
   marketing?: boolean;
+  /**
+   * preset_key de la règle en cours. Une automatisation d'avis
+   * (google_review, review_reminder_7d) saute les clients « noreview ».
+   */
+  presetKey?: string | null;
 }
 
 /** Envoi commercial au sens de la LCAP (contenu exigé : identification, retrait). */
@@ -133,7 +139,8 @@ export type CodeSaut =
   | 'desabonne'
   | 'deja_envoye'
   | 'boucle'
-  | 'identite_manquante';
+  | 'identite_manquante'
+  | 'client_sans_avis';
 
 /** Un envoi volontairement non fait : le parcours continue, le motif est journalisé. */
 function saute(motif: string, code: CodeSaut = 'desabonne'): ActionResult {
@@ -1865,9 +1872,10 @@ export async function executeUpdateStatus(
 // ── Action: Request Review ──────────────────────────────────
 //
 // Workflow « Avis clients » : envoyé DÈS que la job est terminée (règle
-// google_review, délai 0). Le client reçoit le lien du sondage d'étoiles par
-// courriel ET par SMS (selon ce qu'on a de lui). La suite (4-5 étoiles →
-// Google/Facebook, 1-3 → commentaires internes) se joue sur /survey/:token.
+// google_review, délai 0) à TOUS les clients sauf ceux dont le champ
+// personnalisé « noreview » est coché. Le lien part par courriel ET par SMS
+// (selon ce qu'on a de lui) et mène tout le monde au choix Google / Facebook
+// sur /survey/:token — aucune note préalable, aucun filtrage.
 
 export async function executeRequestReview(
   _config: Record<string, any>,
@@ -1910,6 +1918,16 @@ export async function executeRequestReview(
       .maybeSingle();
     clientId = inv?.client_id || null;
     jobId = inv?.job_id || null;
+  }
+
+  // 2b. Client exclu des avis (champ personnalisé « noreview » coché) : un
+  // saut voulu, pas un échec — le parcours continue.
+  try {
+    if (await clientRefuseAvis(ctx.supabase, ctx.orgId, clientId)) {
+      return saute(MOTIF_CLIENT_SANS_AVIS, 'client_sans_avis');
+    }
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
   }
 
   // 3. Il faut au moins un canal
@@ -3013,6 +3031,18 @@ async function aiguillerAction(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
+  // Rappel d'avis (et tout envoi d'une automatisation d'avis) : même règle
+  // que request_review, le client « noreview » ne reçoit rien.
+  if ((actionType === 'send_sms' || actionType === 'send_email') && isReviewPreset(ctx.presetKey)) {
+    try {
+      const clientId = await clientDeLEntite(ctx);
+      if (await clientRefuseAvis(ctx.supabase, ctx.orgId, clientId)) {
+        return saute(MOTIF_CLIENT_SANS_AVIS, 'client_sans_avis');
+      }
+    } catch (e) {
+      return { success: false, error: (e as Error).message };
+    }
+  }
   switch (actionType) {
     case 'send_email':
       return executeSendEmail(config as any, vars, ctx);

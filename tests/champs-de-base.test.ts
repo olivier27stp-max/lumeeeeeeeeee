@@ -10,15 +10,17 @@ import { SECTIONS_SYSTEME, clesStandard } from '../src/lib/champs/standard';
 import { MODELES_CHAMPS } from '../src/lib/champs/modeles';
 import { TYPES_CHAMP } from '../src/lib/champs/types';
 
-// Le trigger des nouvelles entreprises vit dans la migration d'origine ; le catalogue COURANT dans
-// celle du ménage (31 → 8 champs, 2026-09-30).
+// Le trigger des nouvelles entreprises vit dans la migration d'origine ; le ménage (31 → 8 champs,
+// 2026-09-30) archive les champs retirés.
 const MIG = readFileSync(resolve(__dirname, '../supabase/migrations/20261003520000_champs_de_base.sql'), 'utf8');
 const MENAGE = readFileSync(resolve(__dirname, '../supabase/migrations/20261005400000_menage_champs_de_base.sql'), 'utf8');
+// Le catalogue COURANT : celui du ménage + noreview (avis clients, 2026-09-30).
+const NOREVIEW = readFileSync(resolve(__dirname, '../supabase/migrations/20261005500000_champ_noreview.sql'), 'utf8');
 const sqlTexte = (s: string) => s.replace(/''/g, "'");
 
 // Une ligne du VALUES : ('objet', 'dossier', 'cle', 'fr', 'en', 'type', 'config', options|null, position)
 const LIGNE = /\('(\w+)', '(\w+)', '(\w+)', '((?:[^']|'')*)', '((?:[^']|'')*)', '(\w+)', '([^']*)',\s*(null|'((?:[^']|'')*)'), (\d+)\)/g;
-const lignesSql = [...MENAGE.slice(0, MENAGE.indexOf('create or replace function public.cf_depenses_champs_base')).matchAll(LIGNE)].map((m) => ({
+const lignesSql = [...NOREVIEW.matchAll(LIGNE)].map((m) => ({
   objet: m[1], dossier: m[2], cle: m[3], fr: sqlTexte(m[4]), en: sqlTexte(m[5]), type: m[6],
   config: JSON.parse(m[7]), options: m[8] === 'null' ? undefined : JSON.parse(sqlTexte(m[9])), position: Number(m[10]),
 }));
