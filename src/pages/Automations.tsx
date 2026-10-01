@@ -2208,6 +2208,7 @@ export default function Automations() {
                                       subject={a.config?.subject ? String(a.config.subject) : undefined}
                                       fr={fr}
                                       onSaved={load}
+                                      declencheur={rule.trigger_event}
                                     />
                                   ))
                               )}

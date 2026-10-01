@@ -44,6 +44,8 @@ interface Props {
    * une automatisation, qui garde la liste générique.
    */
   typeCourriel?: string;
+  /** Le déclencheur de l'automatisation : l'aperçu montre le bouton que CE courriel portera (ou aucun). */
+  declencheur?: string;
   /**
    * Rendre à ce courriel son texte d'origine. Absent quand l'entreprise n'a
    * rien écrit : il n'y a alors rien à défaire.
@@ -146,7 +148,7 @@ function blocsEnTexte(blocs: Bloc[]): string {
 }
 
 export default function EmailPreviewEditor({
-  ruleId, ruleName, body, subject, fr, onClose, onSaved, enregistrerTexte, typeCourriel,
+  ruleId, ruleName, body, subject, fr, onClose, onSaved, enregistrerTexte, typeCourriel, declencheur,
   revenirAuDefaut,
 }: Props) {
   const [blocs, setBlocs] = useState<Bloc[]>(() => texteEnBlocs(htmlVersTexte(body)));
@@ -181,7 +183,7 @@ export default function EmailPreviewEditor({
   const envoyerEssai = async () => {
     setEssaiEnCours(true);
     try {
-      const adresse = await envoyerEssaiCourriel(texteVersHtml(blocsEnTexte(blocs)), objet, typeCourriel);
+      const adresse = await envoyerEssaiCourriel(texteVersHtml(blocsEnTexte(blocs)), objet, typeCourriel, declencheur);
       if (adresse) toast.success(fr ? `Essai envoyé à ${adresse}` : `Test sent to ${adresse}`);
       else toast.error(fr ? 'Envoi impossible' : 'Could not send');
     } finally {
@@ -193,7 +195,7 @@ export default function EmailPreviewEditor({
     if (!ongletApercu) return;
     let vivant = true;
     setChargementApercu(true);
-    void apercuCourriel(texteVersHtml(blocsEnTexte(blocs)), typeCourriel)
+    void apercuCourriel(texteVersHtml(blocsEnTexte(blocs)), typeCourriel, declencheur)
       .then((h) => { if (vivant) setHtmlReel(h); })
       .finally(() => { if (vivant) setChargementApercu(false); });
     return () => { vivant = false; };
