@@ -55,7 +55,7 @@ async function appeler(methode: string, chemin: string, corps?: unknown, entetes
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer x', ...entetes },
     body: corps === undefined ? undefined : JSON.stringify(corps),
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- corps JSON libre, lu par les assertions
+  // `any` : corps JSON libre, lu par les assertions (même harnais que automatisations-publication-serveur).
   return { status: res.status, json: await res.json().catch(() => null) as any };
 }
 
@@ -112,7 +112,8 @@ describe('roles-08 — une règle à la corbeille ne se publie par AUCUN chemin'
   it('publication EN LOT : la règle à la corbeille est refusée et nommée, la vivante est publiée', async () => {
     const r = await appeler('POST', '/automations/rules/publication', { actif: true, ids: [CORBEILLE, VIVANTE] });
     expect(r.status).toBe(200);
-    const parId = Object.fromEntries((r.json.resultats as Array<{ id: string }>).map((x) => [x.id, x])) as Record<string, { ok: boolean; erreur?: string }>;
+    const resultats = r.json.resultats as Array<{ id: string; ok: boolean; erreur?: string }>;
+    const parId = Object.fromEntries(resultats.map((x) => [x.id, x]));
     expect(parId[CORBEILLE].ok).toBe(false);
     expect(parId[CORBEILLE].erreur).toMatch(/à la corbeille/);
     expect(parId[VIVANTE].ok).toBe(true);

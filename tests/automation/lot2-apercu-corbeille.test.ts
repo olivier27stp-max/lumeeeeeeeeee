@@ -47,7 +47,7 @@ afterAll(async () => { await new Promise((ok) => serveur.close(ok)); });
 
 async function tester(id: string, entetes: Record<string, string> = {}) {
   const res = await fetch(`${base}/automations/rules/${id}/apercu`, { method: 'POST', headers: { Authorization: 'Bearer x', ...entetes } });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- corps JSON libre, lu par les assertions
+  // `any` : corps JSON libre, lu par les assertions (même harnais que automatisations-publication-serveur).
   return { status: res.status, json: await res.json().catch(() => null) as any };
 }
 

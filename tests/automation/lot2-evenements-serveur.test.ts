@@ -81,7 +81,7 @@ async function appeler(chemin: string, corps: unknown) {
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer x' },
     body: JSON.stringify(corps),
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- corps JSON libre, lu par les assertions
+  // `any` : corps JSON libre, lu par les assertions (même harnais que automatisations-publication-serveur).
   return { status: res.status, json: await res.json().catch(() => null) as any };
 }
 
