@@ -13,6 +13,7 @@
  *                    prod ; rafale de charge réduite). Jamais par défaut : exige
  *                    SUPABASE_URL_PROD, SUPABASE_SERVICE_ROLE_KEY_PROD,
  *                    SUPABASE_PROJECT_REF_PROD et SUPABASE_ACCESS_TOKEN dans .env.local.
+ *   <fichiers…>      seulement ces fichiers de tests (après le canari)
  *   --canari         seulement le bureau de test et le canari (premier contact
  *                    avec une nouvelle cible)
  *   --ui             seulement les tests d'interface (Playwright ; le projet
@@ -24,9 +25,13 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:f
 import { parse } from 'dotenv';
 
 const args = process.argv.slice(2);
+// Des chemins de fichiers en argument = seulement ceux-là (projet « integration »
+// par défaut) : revérifier un correctif sans relancer toute la suite.
+const fichiers = args.filter((a) => !a.startsWith('--'));
 const projets = args.includes('--unitaires') ? ['unitaires']
   : args.includes('--integration') ? ['integration']
   : args.includes('--ui') ? ['ui']
+  : fichiers.length ? ['integration']
   : ['unitaires', 'integration', 'ui'];
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const envFichier = existsSync('.env.local') ? ['--env-file=.env.local'] : [];
@@ -119,7 +124,7 @@ for (const f of readdirSync('rapports/automatisations')) {
 }
 let code = 0;
 for (const p of projets) {
-  const v = spawnSync(npx, ['vitest', 'run', '--config', 'vitest.automations.config.ts', '--project', p, `--outputFile.json=rapports/automatisations/resultats-${p}.json`], {
+  const v = spawnSync(npx, ['vitest', 'run', '--config', 'vitest.automations.config.ts', '--project', p, `--outputFile.json=rapports/automatisations/resultats-${p}.json`, ...fichiers], {
     stdio: 'inherit', shell: process.platform === 'win32', env: envCible,
   });
   if ((v.status ?? 1) !== 0) code = v.status ?? 1;
