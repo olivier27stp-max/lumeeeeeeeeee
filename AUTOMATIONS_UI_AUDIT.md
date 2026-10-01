@@ -34,12 +34,11 @@ Ce qui manque pour dire « prêt » :
 
 | Script | Ce qu'il vérifie | Avant déploiement | Après |
 |---|---|---|---|
-| `p4-lot1` | menus, Échap, palette « Insérer », aperçu réel, écran neuf, étape visée | 1/6 | 6/6 |
-| `p5-lot1b` | diagnostic sans identifiants, fausse alerte de variable | — | 2/2 |
-| `p6-lot2` | ordre de la liste, un seul menu, sous-navigation, modèles, tiroir, Ctrl+Z, refus lisibles | 1/8 | 8/8 |
-| `p8` `p9` `p10` (tablette) | liste, barre du haut, éditeur sur iPad paysage et portrait | 1/3, 1/2, 19/24 | 3/3, 2/2, 24/24 |
+| `10-menus-apercu-editeur` | menus, Échap, palette « Insérer », aperçu réel, écran neuf, étape visée | 1/6 | 6/6 |
+| `11-diagnostic-variables` | diagnostic sans identifiants, fausse alerte de variable | — | 2/2 |
+| `20-liste-editeur-modeles` | ordre de la liste, un seul menu, sous-navigation, modèles, tiroir, Ctrl+Z, refus lisibles | 1/8 | 8/8 |
+| `30` `31` `32` (tablette) | liste, barre du haut, éditeur sur iPad paysage et portrait | 1/3, 1/2, 19/24 | 3/3, 2/2, 24/24 |
 | `40-roles-api` | technicien et vendeur refusés sur les 32 routes de l’API (403 avec une phrase lisible), y compris barre finale, majuscules et double barre ; sans session : 401 ; propriétaire et admin lisent | — | 9/9 |
-
 | `50-comportements-navigateur` | éditeur : rechargement, retour arrière et avancer, lien direct vers une règle inexistante (« introuvable ») ou à la corbeille, modification hors ligne (l’écran dit « Modifié », rien n’est écrit, puis ça s’enregistre au retour du réseau), règle supprimée dans un autre onglet (« n’existe plus ») | — | 6/6 |
 
 Ces scripts sont maintenant dans le dépôt (`scripts/qa/automations-prod/`) et se lancent d’une commande : **`npm run test:automations:e2e`** — 60 vérifications sur 60 réussies le 2026-10-01 à 19 h 45 UTC, sortie en JSON et en markdown. C’est une passe **après déploiement** : elle juge ce qui est en ligne. Ce qui bloque un merge avant déploiement reste la CI.
