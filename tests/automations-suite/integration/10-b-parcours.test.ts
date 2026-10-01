@@ -250,6 +250,11 @@ describe('[B] parcours : ordre, délais, branches', () => {
     // L'opportunité quitte l'étape APRÈS le déclenchement, avant que le « si » soit jugé.
     await ok(b.admin.from('deals').update({ stage_id: e2.id }).eq('id', bouge.id), 'deal déplacé');
     expect(await brancheSuivie(id, bouge.id)).toEqual(['non']);
+    // Ménage : le déplacement a écrit des événements de pipeline. Laissés en file, ils seraient
+    // lus par le prochain test qui écoute « entrée dans une étape » (D-042 comptait 4 déplacements).
+    await ok(b.admin.from('automation_rules').update({ is_active: false }).eq('id', id), 'règle éteinte');
+    await traiterPipeline(b);
+    await ok(b.admin.from('deals').delete().in('id', [reste.id, bouge.id]), 'deals retirés');
   });
 
   it('[B-304] arrêter : rien n’est planifié après l’étape « arrêter »', async () => {
