@@ -525,8 +525,13 @@ export async function tourLumi(opts: {
     // et une écriture tronquée pouvait réapparaître comme carte à confirmer.
     // On ne garde donc QUE le texte complet, on n'exécute et ne propose rien,
     // et on le DIT : jamais un faux « c'est fait », jamais un silence.
-    if (reponse.stop_reason === 'max_tokens' || reponse.stop_reason === 'refusal' || reponse.content.length === 0) {
-      const coupee = reponse.stop_reason === 'max_tokens';
+    // `model_context_window_exceeded` : la fenêtre de contexte est pleine, la
+    // génération s'arrête au milieu — même traitement qu'une coupe par max_tokens
+    // (avant, elle passait pour une fin normale : texte tronqué, sans un mot).
+    const stop = reponse.stop_reason as string | null;
+    const contexteDepasse = stop === 'model_context_window_exceeded';
+    if (reponse.stop_reason === 'max_tokens' || contexteDepasse || reponse.stop_reason === 'refusal' || reponse.content.length === 0) {
+      const coupee = reponse.stop_reason === 'max_tokens' || contexteDepasse;
       const refusee = reponse.stop_reason === 'refusal';
       const textes = reponse.content.filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text' && b.text.trim().length > 0);
       const actionCoupee = reponse.content.some((b) => b.type === 'tool_use');
