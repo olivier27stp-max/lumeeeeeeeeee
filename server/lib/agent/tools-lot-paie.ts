@@ -558,11 +558,15 @@ const listTimeEntriesTool: AgentTool = {
         entries: entrees.map((e) => {
           const { debut, fin } = bornesLocales(e, fuseau);
           const note = String(e.notes || '').replace(/^\[APPROVED\]\s*/, '').trim();
+          const jourLocal = e.punch_in_at ? toLocalDate(e.punch_in_at, fuseau) : e.date;
           return {
             id: e.id,
             user_id: e.employee_id,
             name: nomEntree(e),
-            date: e.punch_in_at ? toLocalDate(e.punch_in_at, fuseau) : e.date,
+            date: jourLocal,
+            // Le jour de la semaine est DONNÉ : sans lui, le modèle le devinait (vu en prod le 2026-10-01 :
+            // « lundi 24 septembre » pour un jeudi).
+            weekday: JOURS_FR[new Date(`${jourLocal}T00:00:00Z`).getUTCDay()],
             clock_in_at: debut,
             clock_out_at: fin,
             hours: heuresEntree(e),

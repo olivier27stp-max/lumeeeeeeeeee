@@ -33,7 +33,9 @@ function clientFactice(tables: Record<string, Array<Record<string, any>>>, journ
         ilike: (col: string, motif: string) => { const fin = motif.replace(/^%/, ''); lignes = lignes.filter((l) => String(l[col]).toLowerCase().endsWith(fin.toLowerCase())); return q; },
         or: (filtre: string) => {
           const paires = [...filtre.matchAll(/first_name\.ilike\."([^"]+)",last_name\.ilike\."([^"]+)"/g)].map((m) => [m[1].toLowerCase(), m[2].toLowerCase()]);
-          lignes = lignes.filter((l) => paires.some(([a, b]) => String(l.first_name).toLowerCase() === a && String(l.last_name).toLowerCase() === b));
+          // Comme ILIKE : « _ » vaut un caractère quelconque (le repérage envoie un motif sans accent, sans-accent.ts).
+          const comme = (motif: string, valeur: unknown) => new RegExp(`^${motif.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/_/g, '.')}$`, 'i').test(String(valeur));
+          lignes = lignes.filter((l) => paires.some(([a, b]) => comme(a, l.first_name) && comme(b, l.last_name)));
           return q;
         },
         then: (ok: (r: { data: unknown[]; error: null }) => unknown, ko?: (e: unknown) => unknown) => { journal.push(table); return Promise.resolve({ data: lignes, error: null }).then(ok, ko); },
@@ -88,6 +90,16 @@ describe('pairesDeNoms', () => {
 });
 
 describe('repererFiches', () => {
+  it('un nom écrit sans ses accents repère la fiche accentuée, pas un nom voisin', async () => {
+    const client = clientFactice({ clients: [
+      { id: '11111111-1111-4111-8111-111111111111', org_id: 'o', first_name: 'Nathalie', last_name: 'Côté', city: 'Laval', status: 'active', deleted_at: null },
+      { id: '22222222-2222-4222-8222-222222222222', org_id: 'o', first_name: 'Nathalia', last_name: 'Cuta', city: 'Laval', status: 'active', deleted_at: null },
+    ] });
+    const bloc = await repererFiches('Texte à Nathalie Coté qu’on arrive dans dix minutes', { client, orgId: 'o', espaceRefs: 'o:test-accent', langue: 'fr' } as never);
+    expect(bloc).toMatch(/Nathalie Côté/);
+    expect(bloc).not.toMatch(/Cuta/);
+  });
+
   it('une soumission citée par son numéro arrive avec sa référence, son client et son statut', async () => {
     const bloc = await repererFiches('La soumission 19 est acceptée : fais-en une job.', opts());
     expect(bloc).toContain('soumission n° 19');

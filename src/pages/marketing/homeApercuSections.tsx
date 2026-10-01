@@ -100,27 +100,87 @@ function LogoMarquee({ fr }: { fr: boolean }) {
   );
 }
 
-/* ── Quatre fonctions, texte et capture en alternance. Le contenu vient de
-   fonctionsData (mêmes textes et captures que les pages « En savoir plus »),
-   dans l'ordre d'une job : demande → soumission → dispatch → facture. ── */
-const FEATURE_SLUGS = ['clients', 'soumissions', 'calendrier', 'finances'];
+/* ── Quatre fonctions, texte et capture en alternance, dans l'ordre d'une
+   job : demande → pipeline → dispatch → facture. Les deux premières rangées
+   sont propres à l'accueil (formulaire de demande intégré au site du client,
+   pipeline et ses automatisations par étape) ; les deux autres reprennent
+   fonctionsData (mêmes textes et captures que les pages « En savoir plus »). ── */
+type FeatureRow = { slug: string; to: string; job: Bi; title: Bi; lead: Bi; points: Bi[]; shot: string; alt: Bi; w: number; h: number };
+const REQUEST_FORM_ROW: FeatureRow = {
+  slug: 'clients',
+  to: '/fonctions/clients',
+  job: { fr: 'Formulaire de demande', en: 'Request form' },
+  title: { fr: 'Ton formulaire de demande, branché sur ton site.', en: 'Your request form, plugged into your own website.' },
+  lead: {
+    fr: "Garde ton site actuel. Colle le code d'intégration dans ta page et le formulaire Lume y apparaît. Chaque demande crée le client et le lead dans ton pipeline, sans rien retaper.",
+    en: 'Keep your current website. Paste the embed code into your page and the Lume form shows up there. Every request creates the client and the lead in your pipeline, with nothing retyped.',
+  },
+  points: [
+    { fr: "Intégration par script, iframe ou lien direct", en: 'Embed with a script, an iframe or a direct link' },
+    { fr: 'Ton logo, ton titre et ton message de remerciement', en: 'Your logo, your title and your thank-you message' },
+    { fr: 'Tes questions : texte, liste déroulante, cases à cocher, nombre, paragraphe', en: 'Your questions: text, dropdown, checkboxes, number, paragraph' },
+    { fr: 'Champs obligatoires, réponses rangées dans la fiche du client', en: "Required fields, answers saved to the client's record" },
+    { fr: "Avis par courriel et dans l'app à chaque nouvelle demande", en: 'Email and in-app alert on every new request' },
+  ],
+  shot: '/landing/apercu-formulaire-zoom.webp',
+  alt: { fr: 'Constructeur du formulaire de demande dans Lume', en: 'Request form builder in Lume' },
+  w: 720,
+  h: 740,
+};
+/* Étapes et pipelines : PipelineDetail ; déclencheurs par étape
+   deal.stage_entered / stage_exited / stage_idle (eventBus). Pas de capture du
+   pipeline dans /public/landing : on montre la liste des automatisations. */
+const PIPELINE_ROW: FeatureRow = {
+  slug: 'pipeline',
+  to: '/features#pipeline',
+  job: { fr: 'Pipeline de vente', en: 'Sales pipeline' },
+  title: { fr: 'Ton pipeline, tes étapes, tes automatisations.', en: 'Your pipeline, your stages, your automations.' },
+  lead: {
+    fr: "Monte ton pipeline comme tu vends : tes étapes, dans ton ordre. Chaque étape a ses propres automatisations : un texto, un courriel ou une tâche part quand un lead y entre, en sort ou y dort trop longtemps.",
+    en: 'Build your pipeline the way you sell: your stages, in your order. Each stage has its own automations: a text, an email or a task goes out when a lead enters it, leaves it or sits there too long.',
+  },
+  points: [
+    { fr: 'Plusieurs pipelines, étapes à ton nom, réordonnées en les glissant', en: 'Several pipelines, stages named your way, reordered by dragging' },
+    { fr: "Automatisations par étape : à l'entrée, à la sortie, ou quand un lead dort", en: 'Automations per stage: on entry, on exit, or when a lead goes idle' },
+    { fr: 'SMS, courriel, tâche ou notification, avec le délai de ton choix', en: 'Text, email, task or notification, with the delay you choose' },
+    { fr: 'Probabilité de vente et conseil au vendeur pour chaque étape', en: 'Win probability and rep guidance for every stage' },
+  ],
+  shot: '/landing/apercu-automatisations-zoom.webp',
+  alt: { fr: 'Automatisations par étape dans Lume', en: 'Per-stage automations in Lume' },
+  w: 938,
+  h: 819,
+};
+/* Captures recadrées sur la fonction (*-zoom.webp, tirées des captures
+   pleine page) : en pleine page, le texte de l'app devenait illisible une fois
+   réduit dans la colonne. */
+const ZOOM_SHOTS: Record<string, { shot: string; alt: Bi; w: number; h: number }> = {
+  calendrier: { shot: '/landing/apercu-calendrier-zoom.webp', alt: { fr: 'Calendrier des jobs dans Lume', en: 'Job calendar in Lume' }, w: 1110, h: 585 },
+  finances: { shot: '/landing/apercu-finances-zoom.webp', alt: { fr: 'Factures payées, en attente et en retard dans Lume', en: 'Paid, pending and overdue invoices in Lume' }, w: 970, h: 675 },
+};
+const FEATURE_ROWS: FeatureRow[] = [
+  REQUEST_FORM_ROW,
+  PIPELINE_ROW,
+  ...['calendrier', 'finances'].flatMap((slug) => {
+    const f = FONCTIONS.find((x) => x.slug === slug);
+    return f ? [{ slug, to: `/fonctions/${slug}`, job: f.job, title: f.title, lead: f.lead, points: f.points.slice(0, 3).map((pt) => pt.t), ...ZOOM_SHOTS[slug] }] : [];
+  }),
+];
 
 export function FeatureRows({ fr }: { fr: boolean }) {
-  const rows = FEATURE_SLUGS.map((slug) => FONCTIONS.find((f) => f.slug === slug)).filter((f) => f !== undefined);
   return (
     <section className="hs-feat">
       <p className="ha-kicker">{fr ? 'Les fonctions' : 'The features'}</p>
       <h2>{fr ? 'De la demande au paiement, sans rien retaper.' : 'From request to payment, with nothing retyped.'}</h2>
-      {rows.map((f) => (
+      {FEATURE_ROWS.map((f) => (
         <div key={f.slug} className="hs-frow">
           <div className="hs-ftxt">
             <em>{pick(fr, f.job)}</em>
             <h3>{pick(fr, f.title)}</h3>
             <p>{pick(fr, f.lead)}</p>
-            <ul>{f.points.slice(0, 3).map((pt) => <li key={pt.t.en}>{pick(fr, pt.t)}</li>)}</ul>
-            <Link to={`/fonctions/${f.slug}`} className="hs-link">{fr ? 'En savoir plus →' : 'Learn more →'}</Link>
+            <ul>{f.points.map((pt) => <li key={pt.en}>{pick(fr, pt)}</li>)}</ul>
+            <Link to={f.to} className="hs-link">{fr ? 'En savoir plus →' : 'Learn more →'}</Link>
           </div>
-          <img src={f.shot} alt={pick(fr, f.shotAlt)} loading="lazy" decoding="async" width={1800} height={f.slug === 'clients' ? 967 : 1125} />
+          <img src={f.shot} alt={pick(fr, f.alt)} loading="lazy" decoding="async" width={f.w} height={f.h} />
         </div>
       ))}
     </section>

@@ -161,8 +161,28 @@ Conséquence pratique : **une passe propre par bureau de test et par jour**. Tro
 - Le correcteur donne le score par moteur et refuse de conclure si un autre modèle que prévu a répondu.
 - Entre les deux passes, 9 attentes ont été corrigées (le tri les détaille : `evals/lumi/resultats/baseline-A/TRIAGE.md`, branche `mission/lumi-evals`) : toujours pour juger le fond de la réponse plutôt que l'appel d'un outil, jamais pour faire passer un cas.
 
+## Troisième passe — 22 h 13 UTC, reprise après la panne
+
+La passe lancée à 20 h 25 a été coupée par la panne de la base de production (20 h 36 → 21 h 41). 145 demandes étaient jouées ; les 80 autres (et les 4 plantées) ont été rejouées de 22 h 01 à 22 h 13, une seule à la fois. Bureau « [TEST] QA Lumi éval 3 », jeu d'outils d'avant #875.
+
+| | Passe de 18 h 42 | Passe de 22 h 13 |
+|---|---:|---:|
+| Réussite | 90,5 % | **93,7 %** (207 sur 221) |
+| Réussite quand Sonnet répond | 92,5 % | **95,8 %** (191 demandes) |
+| Réponses sans modèle | 90,0 % | 90,5 % |
+| Bon outil appelé | 94,1 % | 95,0 % |
+| Actions sensibles (78 cas) | 92,3 % | 96,2 % |
+| Injection, extraction, hors-sujet | 100 % | 100 % |
+| Plusieurs actions dans une phrase (13 cas) | 69,2 % | 69,2 % |
+| Tours plantés | 4 | 4 |
+
+- Les 4 tours plantés des deux passes ont la même cause, qui n'était pas la surcharge du modèle d'abord supposée : le modèle demande un outil de Lume et une recherche d'outil dans la même réponse, et la recherche restée en suspens fait refuser l'appel suivant (`6a8b2ffa`). Rejoués en prod après ce correctif et celui du plafond à cache froid (`84505af8`) : aucun plantage, 3 réussites sur 4.
+- Par catégorie : clients, équipe, mémoire, transverse 100 % ; devis 95,5 % ; communications 94,7 % ; facturation 93,3 % ; planification 92,9 % ; automatisations 92,3 % ; terrain 91,7 % ; rapports 84,2 % ; aide 75,0 %.
+- Résultats : `evals/lumi/resultats/apres-lot8-eval3-composite/` (passe), `apres-lot11-rejeu/` et `apres-lot12-rejeu/` (rejeux).
+
 ## Ce qui n'est pas encore mesuré
 
-- La passe après le lot 6 et les cartes (#874), puis après les nouveaux outils de la session voisine.
-- La robustesse des conversations (phase 4) : batterie écrite (40 tests), à jouer.
-- L'agent de support en production : batterie en cours d'écriture.
+- Une passe d'un seul tenant après les correctifs du soir (`6a8b2ffa`, `84505af8`, `d41372ab`) et avec les 30 outils de #875 : à jouer un lot à la fois, la base de production ne supportant pas cinq flux.
+- Les tests critiques avec le modèle principal (joués avec le modèle de repli le 2026-10-01).
+
+Mesurés depuis : la robustesse des conversations (37 PASS, 0 FAIL, 3 non couverts) et l'agent de support (93 tests : 85 PASS, 2 FAIL, 6 à relire) — voir `LUMI_READINESS.md`.
