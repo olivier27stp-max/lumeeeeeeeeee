@@ -24,6 +24,7 @@ import {
 import { cn } from '../lib/utils';
 import { localizeAutomationName } from '../lib/automationNames';
 import { trouverDeclencheur } from '../lib/automationCatalogue';
+import { remplacerVariables } from '../lib/emailBodyText';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
@@ -2182,11 +2183,14 @@ export default function Automations() {
                                               ? (fr ? 'Courriel envoyé au client' : 'Email sent to client')
                                               : (fr ? 'Texto envoyé au client' : 'Text sent to client')}
                                           </p>
+                                          {/* Variables remplacées par un exemple, comme dans
+                                              l'éditeur de l'ancien format (« Le client lira : … ») :
+                                              on montre ce que le client lira, pas « [client_first_name] ». */}
                                           {e.action?.type === 'send_email' && e.action.config?.subject ? (
-                                            <p className="mt-1 text-[12px] font-medium text-text-primary">{String(e.action.config.subject)}</p>
+                                            <p className="mt-1 text-[12px] font-medium text-text-primary">{remplacerVariables(String(e.action.config.subject))}</p>
                                           ) : null}
                                           <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[12px] text-text-secondary">
-                                            {String(e.action?.config?.body ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+                                            {remplacerVariables(String(e.action?.config?.body ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
                                               || (fr ? '(vide)' : '(empty)')}
                                           </p>
                                         </div>

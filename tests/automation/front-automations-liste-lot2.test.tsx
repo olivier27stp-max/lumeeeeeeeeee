@@ -118,6 +118,15 @@ async function rendre(langue: 'fr' | 'en' = 'fr') {
   await laisser(); await laisser();
   return conteneur;
 }
+const texte = () => conteneur.textContent || '';
+// Dans la page entière : le menu « ⋮ » d'une ligne est rendu dans document.body.
+const boutons = () => Array.from(document.body.querySelectorAll('button'));
+const bouton = (motif: RegExp) => boutons().find((b) => motif.test((b.textContent || '').trim()) || motif.test(b.getAttribute('aria-label') || ''));
+async function cliquer(el: Element | undefined | null) {
+  if (!el) throw new Error('élément introuvable');
+  await act(async () => { (el as HTMLElement).click(); });
+  await laisser();
+}
 /** Les noms des lignes du tableau, dans l'ordre affiché. */
 const ordre = () => Array.from(conteneur.querySelectorAll('tbody tr td:nth-child(2) button span span:first-child'))
   .map((s) => (s.textContent || '').trim());
@@ -180,5 +189,43 @@ describe('liste-13 — sans tri choisi, la liste suit l’ordre alphabétique de
       'Quote Follow-Up — 3 Days',
       'Quote Follow-Up — 14 Days',
     ]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+describe('liste-10 — l’aperçu d’un parcours à étapes montre ce que le client lira', () => {
+  const parcours = () => regle({
+    name: 'Zoé',
+    steps: [
+      { id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Texto [client_first_name]' } }, suivant: 'e2' },
+      { id: 'e2', type: 'action', action: { type: 'send_email', config: { subject: 'Merci [client_first_name]', body: '<p>Bonjour [client_name], facture [invoice_number]</p>' } }, suivant: null },
+    ],
+  } as Partial<api.AutomationRule>);
+
+  it('texto : la variable est remplacée par un exemple, comme dans « Le client lira : … »', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([parcours()]);
+    await rendre();
+    await cliquer(bouton(/^Voir les messages de Zoé$/));
+    expect(texte()).toContain('Texto Marie');
+    expect(texte()).not.toContain('[client_first_name]');
+  });
+
+  it('courriel : objet et corps aussi', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([parcours()]);
+    await rendre();
+    await cliquer(bouton(/^Voir les messages de Zoé$/));
+    expect(texte()).toContain('Merci Marie');
+    expect(texte()).toContain('Bonjour Marie Tremblay, facture FAC-1042');
+    expect(texte()).not.toMatch(/\[client_name\]|\[invoice_number\]/);
+  });
+
+  it('une variable inconnue reste visible telle quelle (elle partirait vide : on ne la maquille pas)', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({
+      name: 'Zoé',
+      steps: [{ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Bonjour [prenom]' } }, suivant: null }],
+    } as Partial<api.AutomationRule>)]);
+    await rendre();
+    await cliquer(bouton(/^Voir les messages de Zoé$/));
+    expect(texte()).toContain('Bonjour [prenom]');
   });
 });
