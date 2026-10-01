@@ -211,6 +211,9 @@ export function reponseFaqPour(message: string, langue: 'fr' | 'en', voix: Voix 
   let meilleur: { article: (typeof ARTICLES)[number]; score: number } | null = null;
   let second = 0;
   for (const a of ARTICLES) {
+    // Un article à vocabulaire large (prix, contenu des forfaits) ne concourt que
+    // si la question porte bien sur son sujet (Article.seulement).
+    if (a.seulement && !new RegExp(a.seulement, 'i').test(message)) continue;
     const vocab = vocabulaireArticle(a);
     let score = 0;
     for (const m of mots) if (vocab.has(m)) score++;
