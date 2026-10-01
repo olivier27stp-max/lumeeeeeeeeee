@@ -15,6 +15,7 @@ import { ChevronDown, FileText, Mail, MessageSquare, Briefcase, CheckSquare, Use
 import { cn } from '../../lib/utils';
 import { getCompanySettings } from '../../lib/invoicesApi';
 import type { ApercuDocumentLumi, ApercuLumi, FicheLumi, LigneApercuLumi, PropositionLumi } from '../../lib/lumiApi';
+import { verbeLumi } from '../../lib/lumiVerbes';
 
 /* ── Libellés : ce que Lumi veut faire, en mots courants ─────────────────── */
 type Verbe = { fr: string; en: string; type: string; typeEn: string; icone: React.ComponentType<{ size?: number; className?: string }> };
@@ -43,7 +44,11 @@ const VERBES: Record<string, Verbe> = {
 
 function verbe(p: PropositionLumi, fr: boolean): Verbe {
   const v = VERBES[p.tool];
-  if (v) return v;
+  // Le verbe exact de l'action (lumiVerbes.ts) : chaque outil d'écriture en a un, et il suit
+  // l'argument quand celui-ci change le sens (archiver / désarchiver, activer / mettre en pause).
+  const exact = verbeLumi(p.tool, p.args);
+  if (v) return exact ? { ...v, fr: exact.fr, en: exact.en } : v;
+  if (exact) return { fr: exact.fr, en: exact.en, type: 'ce type d’action', typeEn: 'this kind of action', icone: Pencil };
   const humain = p.capacite || p.tool.replace(/_/g, ' ');
   return { fr: humain, en: humain, type: humain, typeEn: humain, icone: Pencil };
 }
