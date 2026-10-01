@@ -30,21 +30,21 @@ const COPY = {
   },
   fr: {
     kicker: 'Contact',
-    title: 'Réservez une démo',
-    subtitle: 'Nous vous présentons la plateforme de A à Z — sans aucun engagement.',
-    getInTouch: 'Contactez-nous',
+    title: 'Réserve une démo',
+    subtitle: 'On te présente la plateforme de A à Z — sans aucun engagement.',
+    getInTouch: 'Contacte-nous',
     email: 'Courriel',
     location: 'Emplacement',
     locationValue: 'Québec, Canada',
-    whatToExpect: 'À quoi vous attendre',
+    whatToExpect: 'À quoi t\'attendre',
     expectations: [
       'Une visite guidée de Lume de 20 à 30 minutes',
-      'Adaptée à votre industrie',
+      'Adaptée à ton industrie',
       'Sans engagement, sans pression',
       'Une réponse d\'ici 24 heures',
     ],
     readyToTalk: 'Prêt à discuter ?',
-    readyDesc: 'Cliquez ci-dessous pour ouvrir le formulaire de réservation. Nous vous répondrons d\'ici 24 heures.',
+    readyDesc: 'Clique ci-dessous pour ouvrir le formulaire de réservation. On te répond d\'ici 24 heures.',
     bookDemo: 'Réserver une démo',
   },
 } as const;
@@ -60,7 +60,7 @@ export default function Contact() {
   const [open, setOpen] = useState(true);
   const { language } = useTranslation();
   usePageMeta(language === 'fr'
-    ? { title: 'Réserver une démo', description: 'Trente minutes avec notre équipe : vos vraies questions, la plateforme en direct, aucun engagement.', path: '/contact' }
+    ? { title: 'Réserver une démo', description: 'Trente minutes avec notre équipe : tes vraies questions, la plateforme en direct, aucun engagement.', path: '/contact' }
     : { title: 'Book a demo', description: 'Thirty minutes with our team: your real questions, the platform live, no commitment.', path: '/contact' });
   const c = COPY[language];
 

@@ -35,19 +35,19 @@ const ROLES: Role[] = [
       en: 'Owners & Managers',
     },
     subtitle: {
-      fr: 'Votre entreprise, sous contrôle total',
+      fr: 'Ton entreprise, sous contrôle total',
       en: 'Your business, fully under control',
     },
     desc: {
-      fr: 'En tant que propriétaire, vous avez besoin de voir l\'ensemble du portrait sans perdre de temps. Lume vous donne un dashboard exécutif avec les métriques qui comptent : revenus, pipeline, performance de l\'équipe, et opérations — en un seul endroit.',
+      fr: 'En tant que propriétaire, tu as besoin de voir l\'ensemble du portrait sans perdre de temps. Lume te donne un dashboard exécutif avec les métriques qui comptent : revenus, pipeline, performance de l\'équipe, et opérations — en un seul endroit.',
       en: 'As an owner, you need the full picture without wasting time. Lume gives you an executive dashboard with the metrics that matter: revenue, pipeline, team performance, and operations — all in one place.',
     },
     pain: {
-      fr: 'Le problème : vous jonglez entre 5 outils pour avoir une vue d\'ensemble de votre business.',
+      fr: 'Le problème : tu jongles entre 5 outils pour avoir une vue d\'ensemble de ta business.',
       en: 'The problem: you juggle 5 different tools just to get an overview of your business.',
     },
     solution: {
-      fr: 'Avec Lume : un seul dashboard qui vous montre tout ce qui se passe dans votre entreprise.',
+      fr: 'Avec Lume : un seul dashboard qui te montre tout ce qui se passe dans ton entreprise.',
       en: 'With Lume: one dashboard that shows you everything happening in your company.',
     },
     cta: {
@@ -71,15 +71,15 @@ const ROLES: Role[] = [
       en: 'Sales Teams',
     },
     subtitle: {
-      fr: 'Fermez plus de deals, plus vite',
+      fr: 'Ferme plus de deals, plus vite',
       en: 'Close more deals, faster',
     },
     desc: {
-      fr: 'Vos vendeurs ont besoin d\'un pipeline clair, de savoir quand relancer, et d\'être poussés à performer. Lume leur donne exactement ça — sans la complexité d\'un CRM entreprise.',
+      fr: 'Tes vendeurs ont besoin d\'un pipeline clair, de savoir quand relancer, et d\'être poussés à performer. Lume leur donne exactement ça — sans la complexité d\'un CRM entreprise.',
       en: 'Your salespeople need a clear pipeline, to know when to follow up, and to be pushed to perform. Lume gives them exactly that — without the complexity of an enterprise CRM.',
     },
     pain: {
-      fr: 'Le problème : vos vendeurs perdent du temps sur la paperasse au lieu de vendre.',
+      fr: 'Le problème : tes vendeurs perdent du temps sur la paperasse au lieu de vendre.',
       en: 'The problem: your salespeople waste time on paperwork instead of selling.',
     },
     solution: {
@@ -111,11 +111,11 @@ const ROLES: Role[] = [
       en: 'Every door, every territory, mastered',
     },
     desc: {
-      fr: 'Vos reps terrain ont besoin d\'un outil mobile, rapide et intuitif. La carte D2D de Lume leur montre exactement où aller, quelles portes revisiter, et comment maximiser leur couverture.',
+      fr: 'Tes reps terrain ont besoin d\'un outil mobile, rapide et intuitif. La carte D2D de Lume leur montre exactement où aller, quelles portes revisiter, et comment maximiser leur couverture.',
       en: 'Your field reps need a mobile tool that is fast and intuitive. Lume\'s D2D map shows them exactly where to go, which doors to revisit, and how to maximize their coverage.',
     },
     pain: {
-      fr: 'Le problème : vos reps terrain travaillent à l\'aveugle, sans data sur les portes visitées.',
+      fr: 'Le problème : tes reps terrain travaillent à l\'aveugle, sans data sur les portes visitées.',
       en: 'The problem: your field reps work blind, with no data on the doors they visit.',
     },
     solution: {
@@ -185,7 +185,7 @@ const COPY = {
     kicker: 'Solutions',
     titleLine1: 'Un outil adapté',
     titleLine2: 'à chaque rôle',
-    subtitle: 'Que vous soyez propriétaire, vendeur, rep terrain ou répartiteur — Lume s\'adapte à votre façon de travailler.',
+    subtitle: 'Que tu sois propriétaire, vendeur, rep terrain ou répartiteur — Lume s\'adapte à ta façon de travailler.',
     solutionLabel: 'Solution',
   },
 } as const;

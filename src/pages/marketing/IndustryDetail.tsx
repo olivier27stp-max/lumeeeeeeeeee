@@ -16,7 +16,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/hvac.webp',
     description: {
       en: 'Manage your heating and cooling jobs from lead to invoice. Lume helps HVAC companies streamline scheduling, dispatch technicians, and keep customers coming back season after season.',
-      fr: 'Gérez vos jobs de chauffage et de climatisation, du lead à la facture. Lume aide les entreprises en CVAC à simplifier la planification, à répartir les techniciens et à fidéliser leur clientèle saison après saison.',
+      fr: 'Gère tes jobs de chauffage et de climatisation, du lead à la facture. Lume aide les entreprises en CVAC à simplifier la planification, à répartir les techniciens et à fidéliser leur clientèle saison après saison.',
     },
   },
   'window-cleaning': {
@@ -24,7 +24,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/window.jpg',
     description: {
       en: 'Run your routes, manage recurring clients, and send quotes in seconds. Lume is built for window cleaners who want to spend less time on admin and more time on the job.',
-      fr: 'Gérez vos routes et vos clients récurrents, et envoyez des soumissions en quelques secondes. Lume est conçu pour les laveurs de vitres qui veulent passer moins de temps dans la paperasse et plus de temps sur le terrain.',
+      fr: 'Gère tes routes et tes clients récurrents, et envoie des soumissions en quelques secondes. Lume est conçu pour les laveurs de vitres qui veulent passer moins de temps dans la paperasse et plus de temps sur le terrain.',
     },
   },
   'roofing': {
@@ -32,7 +32,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/roofing.webp',
     description: {
       en: 'From inspection to final payment, manage every roofing project with clarity. Lume handles your long sales cycles, multi-crew coordination, and detailed estimates all in one place.',
-      fr: 'De l\'inspection au paiement final, gérez chaque projet de toiture en toute clarté. Lume prend en charge vos longs cycles de vente, la coordination de plusieurs équipes et vos estimations détaillées, au même endroit.',
+      fr: 'De l\'inspection au paiement final, gère chaque projet de toiture en toute clarté. Lume prend en charge tes longs cycles de vente, la coordination de plusieurs équipes et tes estimations détaillées, au même endroit.',
     },
   },
   'paver': {
@@ -40,7 +40,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/paver.webp',
     description: {
       en: 'Structure your season and maximize every lead. Lume gives paving companies the tools to prioritize high-value jobs, dispatch crews by zone, and close more deals.',
-      fr: 'Structurez votre saison et maximisez chaque lead. Lume donne aux entreprises de pavé uni les outils pour prioriser les jobs payantes, répartir les équipes par zone et conclure plus de ventes.',
+      fr: 'Structure ta saison et maximise chaque lead. Lume donne aux entreprises de pavé uni les outils pour prioriser les jobs payantes, répartir les équipes par zone et conclure plus de ventes.',
     },
   },
   'power-washing': {
@@ -56,7 +56,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/leds.webp',
     description: {
       en: 'Light up your business operations. Lume helps LED lighting installers manage projects, track leads, and automate follow-ups so you can focus on delivering stunning results.',
-      fr: 'Illuminez vos opérations. Lume aide les installateurs d\'éclairage DEL à gérer leurs projets, à suivre leurs leads et à automatiser les relances, pour que vous puissiez vous concentrer sur des résultats éclatants.',
+      fr: 'Illumine tes opérations. Lume aide les installateurs d\'éclairage DEL à gérer leurs projets, à suivre leurs leads et à automatiser les relances, pour que tu puisses te concentrer sur des résultats éclatants.',
     },
   },
   'lawn-care': {
@@ -72,7 +72,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/landscaping.webp',
     description: {
       en: 'From design proposals to project completion, manage your landscaping business end to end. Lume handles quoting, scheduling, crew dispatch, and client communication seamlessly.',
-      fr: 'De la proposition de design à la fin des travaux, gérez votre entreprise d\'aménagement paysager de bout en bout. Lume s\'occupe des soumissions, de la planification, de la répartition des équipes et des communications avec vos clients, sans friction.',
+      fr: 'De la proposition de design à la fin des travaux, gère ton entreprise d\'aménagement paysager de bout en bout. Lume s\'occupe des soumissions, de la planification, de la répartition des équipes et des communications avec tes clients, sans friction.',
     },
   },
   'painting': {
@@ -80,7 +80,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/painting.webp',
     description: {
       en: 'Estimate faster, schedule smarter, and get paid on time. Lume gives painting contractors the tools to manage jobs from quote to completion without the paperwork headache.',
-      fr: 'Estimez plus vite, planifiez mieux et soyez payé à temps. Lume donne aux entrepreneurs en peinture les outils pour gérer chaque job, de la soumission à la fin des travaux, sans casse-tête de paperasse.',
+      fr: 'Estime plus vite, planifie mieux et sois payé à temps. Lume donne aux entrepreneurs en peinture les outils pour gérer chaque job, de la soumission à la fin des travaux, sans casse-tête de paperasse.',
     },
   },
   'fencing': {
@@ -88,7 +88,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/fencing.webp',
     description: {
       en: 'From door knocking to installation day — one continuous flow. Lume powers your field sales with D2D mapping, leaderboards, and a pipeline that tracks every deal to close.',
-      fr: 'Du porte-à-porte au jour de l\'installation — un seul flux continu. Lume propulse vos ventes terrain avec la carte D2D, les leaderboards et un pipeline qui suit chaque deal jusqu\'à la conclusion.',
+      fr: 'Du porte-à-porte au jour de l\'installation — un seul flux continu. Lume propulse tes ventes terrain avec la carte D2D, les leaderboards et un pipeline qui suit chaque deal jusqu\'à la conclusion.',
     },
   },
   'auto-detailing': {
@@ -96,7 +96,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/detailing.webp',
     description: {
       en: 'Manage appointments, packages, and client loyalty effortlessly. Lume helps auto detailing businesses book more jobs, send reminders, and build a five-star reputation.',
-      fr: 'Gérez vos rendez-vous, vos forfaits et la fidélité de vos clients sans effort. Lume aide les entreprises d\'esthétique automobile à décrocher plus de jobs, à envoyer des rappels et à bâtir une réputation 5 étoiles.',
+      fr: 'Gère tes rendez-vous, tes forfaits et la fidélité de tes clients sans effort. Lume aide les entreprises d\'esthétique automobile à décrocher plus de jobs, à envoyer des rappels et à bâtir une réputation 5 étoiles.',
     },
   },
   'pest-control': {
@@ -104,7 +104,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/pestcontrol.webp',
     description: {
       en: 'Stay on top of recurring treatments and new leads. Lume helps pest control businesses manage seasonal demand, automate follow-ups, and keep customers on a regular service schedule.',
-      fr: 'Gardez le contrôle sur vos traitements récurrents et vos nouveaux leads. Lume aide les entreprises d\'extermination à gérer la demande saisonnière, à automatiser les relances et à garder leurs clients sur un horaire de service régulier.',
+      fr: 'Garde le contrôle sur tes traitements récurrents et tes nouveaux leads. Lume aide les entreprises d\'extermination à gérer la demande saisonnière, à automatiser les relances et à garder leurs clients sur un horaire de service régulier.',
     },
   },
   'plumbing': {
@@ -112,7 +112,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/plumbing.webp',
     description: {
       en: 'Dispatch the right plumber to the right job, every time. Lume helps plumbing companies manage emergency calls, scheduled maintenance, and invoicing from one platform.',
-      fr: 'Envoyez le bon plombier sur la bonne job, chaque fois. Lume aide les entreprises de plomberie à gérer les appels d\'urgence, l\'entretien planifié et la facturation à partir d\'une seule plateforme.',
+      fr: 'Envoie le bon plombier sur la bonne job, chaque fois. Lume aide les entreprises de plomberie à gérer les appels d\'urgence, l\'entretien planifié et la facturation à partir d\'une seule plateforme.',
     },
   },
   'electrician': {
@@ -120,7 +120,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/electrician.webp',
     description: {
       en: 'Wire your business for growth. Lume helps electrical contractors manage leads, schedule jobs, track crew performance, and send professional quotes that win more work.',
-      fr: 'Branchez votre entreprise sur la croissance. Lume aide les entrepreneurs électriciens à gérer leurs leads, à planifier leurs jobs, à suivre la performance des équipes et à envoyer des soumissions professionnelles qui décrochent plus de contrats.',
+      fr: 'Branche ton entreprise sur la croissance. Lume aide les entrepreneurs électriciens à gérer leurs leads, à planifier leurs jobs, à suivre la performance des équipes et à envoyer des soumissions professionnelles qui décrochent plus de contrats.',
     },
   },
   'cleaning': {
@@ -128,7 +128,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/cleaning.webp',
     description: {
       en: 'Keep your cleaning business spotless from the inside out. Lume manages your recurring clients, team schedules, and billing so you can scale without the chaos.',
-      fr: 'Une entreprise d\'entretien impeccable, de l\'intérieur comme de l\'extérieur. Lume gère vos clients récurrents, les horaires de votre équipe et la facturation, pour que vous puissiez grandir sans chaos.',
+      fr: 'Une entreprise d\'entretien impeccable, de l\'intérieur comme de l\'extérieur. Lume gère tes clients récurrents, les horaires de ton équipe et la facturation, pour que tu puisses grandir sans chaos.',
     },
   },
   'junk-removal': {
@@ -136,7 +136,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/junkremoval.webp',
     description: {
       en: 'Turn every pickup into a five-star experience. Lume helps junk removal companies manage bookings, optimize routes, and follow up with customers automatically.',
-      fr: 'Transformez chaque collecte en expérience 5 étoiles. Lume aide les entreprises de ramassage de débris à gérer les réservations, à optimiser les routes et à relancer les clients automatiquement.',
+      fr: 'Transforme chaque collecte en expérience 5 étoiles. Lume aide les entreprises de ramassage de débris à gérer les réservations, à optimiser les routes et à relancer les clients automatiquement.',
     },
   },
   'construction': {
@@ -144,7 +144,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/construction.webp',
     description: {
       en: 'Manage crews, timelines, and budgets with confidence. Lume gives construction companies a clear pipeline from bid to completion with real-time visibility on every project.',
-      fr: 'Gérez vos équipes, vos échéanciers et vos budgets en toute confiance. Lume donne aux entreprises de construction un pipeline clair, de la soumission à la livraison, avec une visibilité en temps réel sur chaque projet.',
+      fr: 'Gère tes équipes, tes échéanciers et tes budgets en toute confiance. Lume donne aux entreprises de construction un pipeline clair, de la soumission à la livraison, avec une visibilité en temps réel sur chaque projet.',
     },
   },
   'renovation': {
@@ -152,7 +152,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/renovation.webp',
     description: {
       en: 'From estimate to final walkthrough — manage every renovation with clarity. Lume handles multi-phase projects, client communication, and subcontractor coordination all in one place.',
-      fr: 'De l\'estimation à la visite finale — gérez chaque rénovation en toute clarté. Lume prend en charge les projets à phases multiples, les communications avec vos clients et la coordination des sous-traitants, au même endroit.',
+      fr: 'De l\'estimation à la visite finale — gère chaque rénovation en toute clarté. Lume prend en charge les projets à phases multiples, les communications avec tes clients et la coordination des sous-traitants, au même endroit.',
     },
   },
   'pool-maintenance': {
@@ -168,7 +168,7 @@ const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> 
     img: '/industries/excavation.webp',
     description: {
       en: 'Dig into better operations. Lume helps excavation companies manage project pipelines, coordinate heavy equipment scheduling, and track leads from first call to job completion.',
-      fr: 'Creusez vers de meilleures opérations. Lume aide les entreprises d\'excavation à gérer leur pipeline de projets, à coordonner la machinerie lourde et à suivre leurs leads du premier appel à la fin des travaux.',
+      fr: 'Creuse vers de meilleures opérations. Lume aide les entreprises d\'excavation à gérer leur pipeline de projets, à coordonner la machinerie lourde et à suivre leurs leads du premier appel à la fin des travaux.',
     },
   },
 };
@@ -188,7 +188,7 @@ const COPY = {
     kicker: 'Industrie',
     bookDemo: 'Réserver une démo',
     mobileTitleLine1: 'Tout le système,',
-    mobileTitleLine2: 'directement dans votre poche.',
+    mobileTitleLine2: 'directement dans ta poche.',
   },
 } as const;
 

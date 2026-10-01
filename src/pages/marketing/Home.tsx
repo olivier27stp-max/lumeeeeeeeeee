@@ -21,7 +21,7 @@ function Hero({ onBookDemo }: { onBookDemo: () => void }) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="text-[clamp(1.75rem,4vw,3.5rem)] font-extrabold tracking-[-0.03em] leading-[1.12] text-text-primary"
+            className="text-[clamp(1.625rem,3.6vw,3.125rem)] font-extrabold tracking-[-0.03em] leading-[1.12] text-text-primary"
           >
             <span>{h.titleStopManaging}{' '}
               <span className="relative inline-block">
@@ -615,7 +615,7 @@ function FeatureBlocks() {
                           <div className="bg-primary/10 border border-primary/20 rounded-xl rounded-tl-sm px-3.5 py-2 max-w-[70%]">
                             <p className="text-[10px] text-primary font-medium">
                               {fr
-                                ? 'Voulez-vous que j\'envoie cette soumission au client maintenant ?'
+                                ? 'Veux-tu que j\'envoie cette soumission au client maintenant ?'
                                 : 'Want me to send this quote to the client now?'}
                             </p>
                           </div>
@@ -629,7 +629,7 @@ function FeatureBlocks() {
                           <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                           <line x1="12" y1="19" x2="12" y2="22" />
                         </svg>
-                        <span className="text-[10px] text-[#aaa] flex-1">{fr ? 'Dictez une commande ou écrivez ici...' : 'Speak a command or type here...'}</span>
+                        <span className="text-[10px] text-[#aaa] flex-1">{fr ? 'Dicte une commande ou écris ici...' : 'Speak a command or type here...'}</span>
                         <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
                             <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />

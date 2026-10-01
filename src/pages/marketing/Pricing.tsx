@@ -71,7 +71,7 @@ const PLANS: Plan[] = [
     annualDiscount: 0.10,
     desc: {
       en: 'Everything you need to run the business solo or with a small crew.',
-      fr: 'Tout ce qu\'il faut pour rouler votre entreprise seul ou avec une petite équipe.',
+      fr: 'Tout ce qu\'il faut pour rouler ton entreprise seul ou avec une petite équipe.',
     },
     cta: { en: 'Book a demo', fr: 'Réserver une démo' },
     featured: false,
@@ -97,7 +97,7 @@ const PLANS: Plan[] = [
     badge: { en: 'Most Popular', fr: 'Le plus populaire' },
     desc: {
       en: 'For growing teams — stop being the dispatcher and let the system run the day.',
-      fr: 'Pour les équipes en croissance — arrêtez d\'être le répartiteur et laissez le système gérer la journée.',
+      fr: 'Pour les équipes en croissance — arrête d\'être le répartiteur et laisse le système gérer la journée.',
     },
     cta: { en: 'Book a demo', fr: 'Réserver une démo' },
     featured: true,
@@ -229,28 +229,28 @@ const FAQS: { q: Bi; a: Bi }[] = [
     q: { en: 'Is there a commitment?', fr: 'Y a-t-il un engagement ?' },
     a: {
       en: 'Monthly plans have no commitment — cancel anytime. Annual plans are a one-year commitment, billed upfront at a 15% discount.',
-      fr: 'Les forfaits mensuels sont sans engagement — annulez en tout temps. Les forfaits annuels représentent un engagement d\'un an, facturé d\'avance avec un rabais de 15 %.',
+      fr: 'Les forfaits mensuels sont sans engagement — annule en tout temps. Les forfaits annuels représentent un engagement d\'un an, facturé d\'avance avec un rabais de 15 %.',
     },
   },
   {
     q: { en: 'Can I switch plans?', fr: 'Puis-je changer de forfait ?' },
     a: {
       en: 'Yes. You can upgrade or downgrade at any time. Changes take effect on the next billing cycle.',
-      fr: 'Oui. Vous pouvez passer à un forfait supérieur ou inférieur en tout temps. Les changements prennent effet au prochain cycle de facturation.',
+      fr: 'Oui. Tu peux passer à un forfait supérieur ou inférieur en tout temps. Les changements prennent effet au prochain cycle de facturation.',
     },
   },
   {
     q: { en: 'Can I see a demo first?', fr: 'Puis-je voir une démo d\'abord ?' },
     a: {
       en: 'Yes! Book a demo with our team and we\'ll walk you through the platform live.',
-      fr: 'Oui ! Réservez une démo avec notre équipe et nous vous ferons visiter la plateforme en direct.',
+      fr: 'Oui ! Réserve une démo avec notre équipe et on te fera visiter la plateforme en direct.',
     },
   },
   {
     q: { en: 'How does billing work?', fr: 'Comment fonctionne la facturation ?' },
     a: {
       en: 'Billing is monthly by credit card. You receive a detailed invoice each month.',
-      fr: 'La facturation est mensuelle, par carte de crédit. Vous recevez une facture détaillée chaque mois.',
+      fr: 'La facturation est mensuelle, par carte de crédit. Tu reçois une facture détaillée chaque mois.',
     },
   },
   {
@@ -380,15 +380,15 @@ const COPY = {
     kicker: 'Tarifs',
     titleLine1: 'Des prix simples,',
     titleUnderlined: 'sans surprises',
-    subtitle: 'Trois forfaits qui s\'emboîtent. Choisissez l\'étape où votre entreprise est aujourd\'hui, passez à la suivante quand vous serez prêt.',
+    subtitle: 'Trois forfaits qui s\'emboîtent. Choisis l\'étape où ton entreprise est aujourd\'hui, passe à la suivante quand tu seras prêt.',
     monthly: 'Mensuel',
     annual: 'Annuel',
     perMonth: '/mois',
-    billedMonthly: 'Facturé mensuellement · annulez en tout temps',
-    billedAnnually: (yr: string, pct: number) => `${yr} facturés annuellement · économisez ${pct} %`,
+    billedMonthly: 'Facturé mensuellement · annule en tout temps',
+    billedAnnually: (yr: string, pct: number) => `${yr} facturés annuellement · économise ${pct} %`,
     upTo: (pct: number) => `jusqu'à −${pct} %`,
     mostPopular: 'Le plus choisi',
-    recommended: 'Recommandé pour vous',
+    recommended: 'Recommandé pour toi',
     seats: (u: number) => `${u} utilisateurs inclus`,
     seatExtras: (u: string) => `+${u} par utilisateur supplémentaire`,
     extrasUser: 'Utilisateur supplémentaire :',
@@ -397,27 +397,27 @@ const COPY = {
     cornerTitle: 'Tous les forfaits incluent',
     cornerPoints: ['Une intégration guidée avec notre équipe', 'Annulation en tout temps en mensuel', 'Un soutien en français et en anglais'],
     finderKicker: 'Pas certain ?',
-    finderTitle: 'Cochez ce dont vous avez besoin, le forfait se trouve tout seul.',
-    finderLead: 'Dites la taille de l\'équipe et ce que Lume doit faire pour vous. Le forfait recommandé et son vrai prix pour votre équipe se calculent à droite.',
+    finderTitle: 'Coche ce dont tu as besoin, le forfait se trouve tout seul.',
+    finderLead: 'Dis la taille de l\'équipe et ce que Lume doit faire pour toi. Le forfait recommandé et son vrai prix pour ton équipe se calculent à droite.',
     usersLabel: 'Personnes qui utilisent Lume',
     usersHint: 'bureau et terrain',
     less: 'Moins',
     more: 'Plus',
     nFeatures: (n: number) => `${n} fonctions`,
     because: 'Parce que :',
-    becauseSeats: (u: number, cheaper: string) => `votre équipe (${u} personne${u > 1 ? 's' : ''}) dépasse ce que ${cheaper} inclut`,
+    becauseSeats: (u: number, cheaper: string) => `ton équipe (${u} personne${u > 1 ? 's' : ''}) dépasse ce que ${cheaper} inclut`,
     tooManyUsers: (u: number, inc: number) => `${u} personnes, ${inc} incluses`,
     withExtras: 'Avec suppléments :',
-    verdictKicker: 'Le forfait qu\'il vous faut',
-    verdictLine: (n: number, u: number) => n > 0 ? `Couvre vos ${n} besoin${n > 1 ? 's' : ''} et ${u} personne${u > 1 ? 's' : ''}.` : `Pour ${u} personne${u > 1 ? 's' : ''}. Cochez des fonctions pour préciser.`,
-    coverage: (c: number, n: number) => `${c} / ${n} de vos besoins`,
+    verdictKicker: 'Le forfait qu\'il te faut',
+    verdictLine: (n: number, u: number) => n > 0 ? `Couvre tes ${n} besoin${n > 1 ? 's' : ''} et ${u} personne${u > 1 ? 's' : ''}.` : `Pour ${u} personne${u > 1 ? 's' : ''}. Coche des fonctions pour préciser.`,
+    coverage: (c: number, n: number) => `${c} / ${n} de tes besoins`,
     missing: 'Manque :',
-    gotoCompare: 'Voir vos besoins dans la comparaison complète ↓',
-    finderNote: 'Prix mensuels. Le forfait recommandé est le moins cher qui inclut chaque fonction cochée et toute votre équipe. Au-delà de ce qu\'Autopilot inclut, les utilisateurs s\'ajoutent au prix.',
+    gotoCompare: 'Voir tes besoins dans la comparaison complète ↓',
+    finderNote: 'Prix mensuels. Le forfait recommandé est le moins cher qui inclut chaque fonction cochée et toute ton équipe. Au-delà de ce qu\'Autopilot inclut, les utilisateurs s\'ajoutent au prix.',
     detailKicker: 'Dans le détail',
     detailTitle: 'Tout ce que chaque forfait comprend.',
     compareSummary: 'Voir la comparaison complète de toutes les fonctions',
-    compareHint: (n: number) => `Vos ${n} besoin${n > 1 ? 's' : ''} y ${n > 1 ? 'sont' : 'est'} surligné${n > 1 ? 's' : ''}`,
+    compareHint: (n: number) => `Tes ${n} besoin${n > 1 ? 's' : ''} y ${n > 1 ? 'sont' : 'est'} surligné${n > 1 ? 's' : ''}`,
     expand: 'Déplier',
     collapse: 'Replier',
     checked: 'coché',
@@ -444,7 +444,7 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
   const { language } = useTranslation();
   const c = COPY[language];
   usePageMeta(language === 'fr'
-    ? { title: 'Tarifs', description: 'Trois forfaits qui s\'emboîtent : Minimum, Scale et Autopilot. Prix simples, sans surprises, en CAD ou USD. Cochez ce dont vous avez besoin, le forfait se trouve tout seul.', path: '/pricing' }
+    ? { title: 'Tarifs', description: 'Trois forfaits qui s\'emboîtent : Minimum, Scale et Autopilot. Prix simples, sans surprises, en CAD ou USD. Coche ce dont tu as besoin, le forfait se trouve tout seul.', path: '/pricing' }
     : { title: 'Pricing', description: 'Three plans that build on each other: Minimum, Scale and Autopilot. Simple pricing, no surprises, in CAD or USD. Check what you need, the plan picks itself.', path: '/pricing' });
   const { currency } = useRegion();
   const money = (n: number) => (language === 'fr' ? `${n.toLocaleString('fr-CA')} $` : `$${n.toLocaleString('en-CA')}`);

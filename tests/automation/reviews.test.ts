@@ -11,34 +11,53 @@ import {
   reviewEmail,
   reviewSmsBody,
   surveyTexts,
-  isPositiveRating,
-  isValidRating,
+  isReviewPlatform,
+  isReviewPreset,
+  NO_REVIEW_FIELD_KEY,
   normalizeReviewUrl,
   reviewDestinations,
   reviewInviteMessage,
-  surveyNextStep,
+  reviewLanding,
 } from '../../server/lib/reviews';
+import { CHAMPS_DE_BASE } from '../../src/lib/champs/base';
 
-describe('Avis clients — seuil de note', () => {
-  it('5 étoiles seulement = avis public', () => {
-    expect(isPositiveRating(5)).toBe(true);
-    expect(isPositiveRating(4)).toBe(false);
+describe('Avis clients — aucun filtrage par note (review gating interdit)', () => {
+  it('la page publique ne demande plus de note d’étoiles', () => {
+    const src = readFileSync(resolve(__dirname, '../../src/pages/SatisfactionSurvey.tsx'), 'utf8');
+    expect(src).not.toMatch(/rating/i);
+    expect(src).not.toContain('<Star');
   });
 
-  it('1 à 4 étoiles = commentaires internes', () => {
-    expect(isPositiveRating(1)).toBe(false);
-    expect(isPositiveRating(2)).toBe(false);
-    expect(isPositiveRating(3)).toBe(false);
-    expect(isPositiveRating(4)).toBe(false);
+  it('la route publique ne branche plus selon la note', () => {
+    const src = readFileSync(resolve(__dirname, '../../server/routes/surveys.ts'), 'utf8');
+    expect(src).not.toMatch(/isPositiveRating|feedback_form|insatisfait/);
+    expect(src).toContain("'/survey/:token/choice'");
   });
 
-  it('valide une note entière de 1 à 5 seulement', () => {
-    expect(isValidRating(3)).toBe(true);
-    expect(isValidRating('5')).toBe(true);
-    expect(isValidRating(0)).toBe(false);
-    expect(isValidRating(6)).toBe(false);
-    expect(isValidRating(2.5)).toBe(false);
-    expect(isValidRating(undefined)).toBe(false);
+  it('plateformes reconnues', () => {
+    expect(isReviewPlatform('google')).toBe(true);
+    expect(isReviewPlatform('facebook')).toBe(true);
+    expect(isReviewPlatform('yelp')).toBe(false);
+    expect(isReviewPlatform(undefined)).toBe(false);
+  });
+});
+
+describe('Avis clients — exclusion « noreview »', () => {
+  it('le champ client noreview (case à cocher) est posé d’office dans chaque entreprise', () => {
+    const champ = CHAMPS_DE_BASE.find((c) => c.cle === NO_REVIEW_FIELD_KEY);
+    expect(champ?.objet).toBe('client');
+    expect(champ?.type).toBe('checkbox');
+  });
+
+  it('la demande ET le rappel d’avis respectent noreview', () => {
+    expect(isReviewPreset('google_review')).toBe(true);
+    expect(isReviewPreset('review_reminder_7d')).toBe(true);
+    expect(isReviewPreset('job_reminder_1d')).toBe(false);
+    expect(isReviewPreset(null)).toBe(false);
+    const actions = readFileSync(resolve(__dirname, '../../server/lib/actions/index.ts'), 'utf8');
+    expect(actions.split('clientRefuseAvis(').length - 1).toBeGreaterThanOrEqual(2);
+    const moteur = readFileSync(resolve(__dirname, '../../server/lib/automationEngine.ts'), 'utf8');
+    expect(moteur.split('presetKey: ').length - 1).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -63,46 +82,25 @@ describe('Avis clients — liens de redirection', () => {
   });
 });
 
-describe('Avis clients — prochaine étape du sondage', () => {
+describe('Avis clients — page d’avis (tout le monde)', () => {
   const both = {
     google_review_url: 'https://g.page/r/abc/review',
     facebook_review_url: 'https://www.facebook.com/lume/reviews',
   };
 
-  it('note basse → formulaire de commentaires d abord, liens publics quand même, aucune redirection', () => {
-    // Politique Google (« review gating ») : on ne filtre jamais qui peut
-    // laisser un avis. La note basse change l'ORDRE (formulaire privé d'abord),
-    // pas l'accès au lien public.
-    const next = surveyNextStep(4, both);
-    expect(next.step).toBe('feedback_form');
-    expect(next.destinations).toHaveLength(2);
-    expect(next.auto_redirect_url).toBeNull();
+  it('une seule plateforme → redirection automatique', () => {
+    const l = reviewLanding({ google_review_url: both.google_review_url });
+    expect(l.auto_redirect_url).toBe(both.google_review_url);
   });
 
-  it('la page publique montre le lien public sous le formulaire et sur l écran de fin', () => {
-    const src = readFileSync(resolve(__dirname, '../../src/pages/SatisfactionSurvey.tsx'), 'utf8');
-    expect(src).toContain('const liensPublics');
-    // Une fois dans le formulaire (note basse), une fois sur « Terminé ».
-    expect(src.split('{liensPublics}').length - 1).toBe(2);
+  it('deux plateformes → choix, pas de redirection automatique', () => {
+    const l = reviewLanding(both);
+    expect(l.destinations).toHaveLength(2);
+    expect(l.auto_redirect_url).toBeNull();
   });
 
-  it('note haute + une seule plateforme → redirection automatique', () => {
-    const next = surveyNextStep(5, { google_review_url: both.google_review_url });
-    expect(next.step).toBe('public_review');
-    expect(next.auto_redirect_url).toBe(both.google_review_url);
-  });
-
-  it('note haute + deux plateformes → choix, pas de redirection automatique', () => {
-    const next = surveyNextStep(5, both);
-    expect(next.step).toBe('public_review');
-    expect(next.destinations).toHaveLength(2);
-    expect(next.auto_redirect_url).toBeNull();
-  });
-
-  it('note haute sans lien configuré → aucune destination', () => {
-    const next = surveyNextStep(5, {});
-    expect(next.step).toBe('public_review');
-    expect(next.destinations).toEqual([]);
+  it('sans lien configuré → aucune destination', () => {
+    expect(reviewLanding({}).destinations).toEqual([]);
   });
 });
 
@@ -138,20 +136,21 @@ describe('Avis clients — messages personnalisables', () => {
     expect(body).toBe('Salut Marie, une note pour Vision Lavage ? https://lumecrm.net/survey/abc');
   });
 
-  it('courriel par défaut : objet résolu + bouton vers le sondage', () => {
+  it('courriel par défaut : objet résolu + bouton vers la page d’avis', () => {
     const mail = reviewEmail({}, vars);
     // L'objet ne répète plus le nom : l'expéditeur l'affiche déjà.
-    expect(mail.subject).toBe("Comment s'est passé notre service ?");
+    expect(mail.subject).toBe('Votre avis compte pour nous');
     expect(mail.html).toContain(`href="${vars.survey_url}"`);
-    expect(mail.html).toContain('Noter mon expérience');
+    expect(mail.html).toContain('Laisser un avis');
+    expect(mail.html).not.toMatch(/[Nn]ote/);
     expect(mail.html).toContain('Lavage de vitres');
     expect(mail.html).toContain('Le bouton ne fonctionne pas ?');
   });
 
   it('courriel par défaut en anglais, bouton à la couleur de l’entreprise', () => {
     const mail = reviewEmail({}, vars, { langue: 'en', couleur: '#0a7d4f' });
-    expect(mail.subject).toBe('How did we do?');
-    expect(mail.html).toContain('Rate my experience');
+    expect(mail.subject).toBe('Your review means a lot to us');
+    expect(mail.html).toContain('Leave a review');
     expect(mail.html).toContain('background:#0a7d4f');
     expect(mail.html).not.toMatch(/Bonjour|Noter mon/);
     // Une couleur illisible retombe sur le noir, jamais une injection de style.
@@ -166,16 +165,15 @@ describe('Avis clients — messages personnalisables', () => {
     expect(mail.subject).toBe('Votre avis, Marie ?');
     expect(mail.html).toContain('<p style="margin:0 0 16px;">Bonjour Marie,</p>');
     expect(mail.html).toContain('Merci &lt;3 pour votre confiance.');
-    expect(mail.html.indexOf('Noter mon expérience')).toBeGreaterThan(mail.html.indexOf('confiance'));
+    expect(mail.html.indexOf('Laisser un avis')).toBeGreaterThan(mail.html.indexOf('confiance'));
     expect(mail.text.endsWith(vars.survey_url)).toBe(true);
   });
 
   it('textes de la page : défauts FR/EN puis personnalisés', () => {
     expect(surveyTexts({}, 'fr').question).toBe(DEFAULT_SURVEY_QUESTION_FR);
-    expect(surveyTexts({}, 'en').question).toBe('How did we do?');
-    const t = surveyTexts({ review_survey_question: 'Alors, content ?', review_thank_you_message: 'Merci !' }, 'fr');
-    expect(t.question).toBe('Alors, content ?');
-    expect(t.thank_you_message).toBe('Merci !');
-    expect(t.low_rating_message.length).toBeGreaterThan(10);
+    expect(surveyTexts({}, 'en').question).toBe('Thank you for trusting us!');
+    const t = surveyTexts({ review_survey_question: 'Un petit avis ?' }, 'fr');
+    expect(t.question).toBe('Un petit avis ?');
+    expect(t.invite_message).toBe(DEFAULT_REVIEW_INVITE_MESSAGE_FR);
   });
 });

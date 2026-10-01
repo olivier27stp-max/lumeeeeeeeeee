@@ -116,7 +116,7 @@ export function pageSubtitle(page: WorkspacePageId, fr: boolean): string {
     case 'company': return fr ? 'Ces informations personnalisent votre CRM.' : 'These details personalize your CRM.';
     case 'contact': return fr ? 'Affichées sur vos devis et factures. La province sert à installer les bonnes taxes.' : 'Shown on your quotes and invoices. The province sets up the right taxes.';
     case 'preferences': return fr ? 'Devise, fuseau horaire et objectif annuel.' : 'Currency, timezone and annual goal.';
-    case 'reviews': return fr ? 'À la fin d’une job, Lume envoie un sondage d’étoiles. Les notes 4-5 sont dirigées vers votre page Google ou Facebook ; les notes basses restent internes.' : 'When a job ends, Lume sends a star survey. 4-5 star ratings go to your Google or Facebook page; low ratings stay internal.';
+    case 'reviews': return fr ? 'À la fin d’une job, Lume envoie une demande d’avis : le client choisit Google ou Facebook. Les clients marqués « noreview » ne la reçoivent pas.' : 'When a job ends, Lume sends a review request: the client picks Google or Facebook. Clients marked “noreview” don’t get it.';
     case 'team': return fr ? 'Invitez jusqu’à 5 personnes maintenant. Vous pourrez en ajouter d’autres dans Réglages → Membres.' : 'Invite up to 5 people now. You can add more later in Settings → Members.';
     case 'review': return fr ? 'Vérifiez avant de terminer.' : 'Check before finishing.';
   }

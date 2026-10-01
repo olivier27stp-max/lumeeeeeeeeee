@@ -1,6 +1,7 @@
 /**
  * Champs personnalisés DE BASE (migration 20261005400000_menage_champs_de_base,
- * qui a réduit la liste de 20261003520000 : 31 → 8, demande de Rafba) : posés
+ * qui a réduit la liste de 20261003520000 : 31 → 8, demande de Rafba ; puis
+ * 20261005500000_champ_noreview, +noreview pour les avis clients) : posés
  * d\'office dans chaque entreprise, rangés dans les dossiers système (sections
  * du formulaire). Recopie EXACTE de cf_champs_base() — tests/champs-de-base.test.ts
  * compare les deux. Les dépenses (Carburant, Sous-traitance, Autres) sont dans
@@ -27,6 +28,8 @@ export interface ChampDeBase {
 
 export const CHAMPS_DE_BASE: ChampDeBase[] = [
   { objet: 'client', dossier: 'coordonnees', cle: 'courriel_facturation', fr: 'Courriel de facturation', en: 'Billing email', type: 'email', config: { masque_creation: true } },
+  // Avis clients : cochée = aucune demande ni rappel d'avis (server/lib/reviewOptOut.ts).
+  { objet: 'client', dossier: 'coordonnees', cle: 'noreview', fr: 'Aucune demande d\'avis (noreview)', en: 'No review request (noreview)', type: 'checkbox' },
   { objet: 'client', dossier: 'lead', cle: 'refere_par', fr: 'Référé par', en: 'Referred by', type: 'single_line' },
   { objet: 'client', dossier: 'adresse', cle: 'code_acces', fr: 'Code d\'accès', en: 'Access code', type: 'single_line' },
   { objet: 'client', dossier: 'adresse', cle: 'instructions_acces', fr: 'Instructions d\'accès', en: 'Access instructions', type: 'multi_line', config: { masque_creation: true } },

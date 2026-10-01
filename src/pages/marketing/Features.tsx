@@ -36,10 +36,10 @@ const FEATURES: Feature[] = [
     shot: '/landing/apercu-lumi.webp',
     icon: Mic,
     title: { en: 'AI Voice Assistant', fr: 'Assistant vocal IA' },
-    subtitle: { en: 'Speak. Lume acts.', fr: 'Parlez. Lume s\'exécute.' },
+    subtitle: { en: 'Speak. Lume acts.', fr: 'Parle. Lume s\'exécute.' },
     bullets: {
       en: ['Create leads by voice', 'Send quotes instantly', 'Smart daily summaries', 'Hands-free productivity'],
-      fr: ['Créez des leads à la voix', 'Envoyez des soumissions instantanément', 'Résumés quotidiens intelligents', 'Productivité mains libres'],
+      fr: ['Crée des leads à la voix', 'Envoie des soumissions instantanément', 'Résumés quotidiens intelligents', 'Productivité mains libres'],
     },
   },
   {
@@ -47,10 +47,10 @@ const FEATURES: Feature[] = [
     shot: '/landing/apercu-quotes.webp',
     icon: Kanban,
     title: { en: 'Visual Pipeline', fr: 'Pipeline visuel' },
-    subtitle: { en: 'Never lose a lead again', fr: 'Ne perdez plus jamais un lead' },
+    subtitle: { en: 'Never lose a lead again', fr: 'Ne perds plus jamais un lead' },
     bullets: {
       en: ['Drag-and-drop Kanban board', 'Filter by stage or assignee', 'Complete lead history', 'Bulk actions'],
-      fr: ['Tableau kanban en glisser-déposer', 'Filtrez par étape ou par assigné', 'Historique complet de chaque lead', 'Actions en lot'],
+      fr: ['Tableau kanban en glisser-déposer', 'Filtre par étape ou par assigné', 'Historique complet de chaque lead', 'Actions en lot'],
     },
   },
   {
@@ -58,7 +58,7 @@ const FEATURES: Feature[] = [
     shot: '/landing/apercu-formulaire.webp',
     icon: FileText,
     title: { en: 'Request Forms', fr: 'Formulaires de demande' },
-    subtitle: { en: 'Capture leads 24/7', fr: 'Captez des leads 24/7' },
+    subtitle: { en: 'Capture leads 24/7', fr: 'Capte des leads 24/7' },
     bullets: {
       en: ['Embeddable web form', 'Auto-creates leads in pipeline', 'Instant notifications', 'Custom fields and branding'],
       fr: ['Formulaire web intégrable', 'Création automatique des leads dans le pipeline', 'Notifications instantanées', 'Champs personnalisés et image de marque'],
@@ -69,7 +69,7 @@ const FEATURES: Feature[] = [
     shot: '/landing/apercu-porte-a-porte.webp',
     icon: Map,
     title: { en: 'D2D Map', fr: 'Carte porte-à-porte' },
-    subtitle: { en: 'Your territory, mastered', fr: 'Votre territoire, maîtrisé' },
+    subtitle: { en: 'Your territory, mastered', fr: 'Ton territoire, maîtrisé' },
     bullets: {
       en: ['Color-coded pins by status', 'Real-time GPS tracking', 'Assignable territory zones', 'Offline mode'],
       fr: ['Punaises colorées selon le statut', 'Suivi GPS en temps réel', 'Zones de territoire assignables', 'Mode hors ligne'],
@@ -91,10 +91,10 @@ const FEATURES: Feature[] = [
     shot: '/landing/apercu-messages.webp',
     icon: BellRing,
     title: { en: 'Quote Notifications', fr: 'Notifications de soumission' },
-    subtitle: { en: 'Follow up at the right time', fr: 'Relancez au bon moment' },
+    subtitle: { en: 'Follow up at the right time', fr: 'Relance au bon moment' },
     bullets: {
       en: ['Know when quotes are opened', 'Auto reminders', 'View count tracking', 'Push and email alerts'],
-      fr: ['Sachez quand vos soumissions sont ouvertes', 'Rappels automatiques', 'Suivi du nombre de consultations', 'Alertes push et par courriel'],
+      fr: ['Sache quand tes soumissions sont ouvertes', 'Rappels automatiques', 'Suivi du nombre de consultations', 'Alertes push et par courriel'],
     },
   },
   {
@@ -102,7 +102,7 @@ const FEATURES: Feature[] = [
     shot: '/landing/apercu-avis.webp',
     icon: Star,
     title: { en: 'Google Reviews', fr: 'Avis Google' },
-    subtitle: { en: 'Build reputation on autopilot', fr: 'Bâtissez votre réputation en pilote automatique' },
+    subtitle: { en: 'Build reputation on autopilot', fr: 'Bâtis ta réputation en pilote automatique' },
     bullets: {
       en: ['Auto review requests post-service', 'Satisfaction filter', 'Track reviews generated', 'Direct Google integration'],
       fr: ['Demandes d\'avis automatiques après le service', 'Filtre de satisfaction', 'Suivi des avis générés', 'Intégration directe à Google'],
@@ -124,7 +124,7 @@ const FEATURES: Feature[] = [
     shot: '/landing/apercu-automatisations.webp',
     icon: Zap,
     title: { en: 'Automations', fr: 'Automatisations' },
-    subtitle: { en: 'Eliminate repetitive work', fr: 'Éliminez le travail répétitif' },
+    subtitle: { en: 'Eliminate repetitive work', fr: 'Élimine le travail répétitif' },
     bullets: {
       en: ['No-code workflows', 'Auto follow-ups', 'Status-based triggers', 'Quote reminders'],
       fr: ['Workflows sans code', 'Relances automatiques', 'Déclencheurs selon le statut', 'Rappels de soumission'],
@@ -135,10 +135,10 @@ const FEATURES: Feature[] = [
     shot: '/landing/apercu-finances.webp',
     icon: CreditCard,
     title: { en: 'Lume Payments', fr: 'Lume Payments' },
-    subtitle: { en: 'Get paid faster, every time', fr: 'Soyez payé plus vite, chaque fois' },
+    subtitle: { en: 'Get paid faster, every time', fr: 'Sois payé plus vite, chaque fois' },
     bullets: {
       en: ['Accept cards on-site or online', 'Auto-invoice after job completion', 'Payment tracking per client'],
-      fr: ['Acceptez les cartes sur place ou en ligne', 'Facturation automatique à la fin de la job', 'Suivi des paiements par client'],
+      fr: ['Accepte les cartes sur place ou en ligne', 'Facturation automatique à la fin de la job', 'Suivi des paiements par client'],
     },
   },
 ];
@@ -156,10 +156,10 @@ const COPY = {
   fr: {
     kicker: 'Fonctionnalités',
     titleLine1: 'Une seule plateforme.',
-    titleLine2: 'Tous les outils dont votre entreprise a besoin.',
-    subtitle: 'De la capture de leads aux avis 5 étoiles — gérez vos ventes, vos opérations, votre horaire, vos automatisations et la performance de votre équipe au même endroit.',
+    titleLine2: 'Tous les outils dont ton entreprise a besoin.',
+    subtitle: 'De la capture de leads aux avis 5 étoiles — gère tes ventes, tes opérations, ton horaire, tes automatisations et la performance de ton équipe au même endroit.',
     ctaHeading: 'Prêt à voir Lume en action ?',
-    ctaDesc: 'Réservez une démo personnalisée et découvrez comment Lume peut transformer vos opérations.',
+    ctaDesc: 'Réserve une démo personnalisée et découvre comment Lume peut transformer tes opérations.',
     bookDemo: 'Réserver une démo',
   },
 } as const;

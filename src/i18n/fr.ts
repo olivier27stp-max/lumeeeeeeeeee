@@ -3814,15 +3814,15 @@ const fr: TranslationKeys = {
       viewAllIndustries: 'Voir toutes les industries',
     },
     featureItems: {
-      pipeline: { label: 'Pipeline visuel', desc: 'Suivez chaque opportunité d\'un coup d\'œil' },
-      requestForms: { label: 'Formulaires de demande', desc: 'Captez vos prospects automatiquement' },
-      d2dMap: { label: 'Carte porte-à-porte', desc: 'Planifiez vos territoires' },
-      leaderboard: { label: 'Classement', desc: 'Motivez votre équipe' },
-      aiVoice: { label: 'Assistant vocal IA', desc: 'Dites-le, Lume le fait' },
-      notifications: { label: 'Notifications de soumission', desc: 'Sachez quand une soumission est ouverte' },
-      reviews: { label: 'Avis Google', desc: 'Générez plus d\'avis 5 étoiles' },
+      pipeline: { label: 'Pipeline visuel', desc: 'Suis chaque opportunité d\'un coup d\'œil' },
+      requestForms: { label: 'Formulaires de demande', desc: 'Capte tes prospects automatiquement' },
+      d2dMap: { label: 'Carte porte-à-porte', desc: 'Planifie tes territoires' },
+      leaderboard: { label: 'Classement', desc: 'Motive ton équipe' },
+      aiVoice: { label: 'Assistant vocal IA', desc: 'Dis-le, Lume le fait' },
+      notifications: { label: 'Notifications de soumission', desc: 'Sache quand une soumission est ouverte' },
+      reviews: { label: 'Avis Google', desc: 'Génère plus d\'avis 5 étoiles' },
       scheduling: { label: 'Planification', desc: 'Répartition intelligente et calendrier' },
-      automation: { label: 'Automatisations', desc: 'Éliminez les tâches répétitives' },
+      automation: { label: 'Automatisations', desc: 'Élimine les tâches répétitives' },
       team: { label: 'Performance d\'équipe', desc: 'Visibilité totale sur chaque représentant' },
     },
     industryItems: {
@@ -3837,15 +3837,15 @@ const fr: TranslationKeys = {
       demolition: 'Démolition',
     },
     hero: {
-      titleStopManaging: 'Arrêtez de gérer',
+      titleStopManaging: 'Arrête de gérer',
       titleManually: 'manuellement,',
-      titleStartScaling: 'commencez à croître',
+      titleStartScaling: 'commence à croître',
       titleAutomatically: 'automatiquement',
       // Décrit explicitement le produit ET le nomme : exigé par la validation
       // du branding Google OAuth (la page d'accueil doit expliquer l'objectif
       // de l'application et porter le même nom que l'écran de consentement).
       subtitle:
-        'Lume CRM, le logiciel tout-en-un des entreprises de services résidentiels et de rénovation : un pipeline de vente clair et des automatisations qui relancent vos clients à votre place.',
+        'Lume CRM, le logiciel tout-en-un des entreprises de services résidentiels et de rénovation : un pipeline de vente clair et des automatisations qui relancent tes clients à ta place.',
       bookDemo: 'Réserver une démo',
     },
     trust: {
@@ -3871,22 +3871,22 @@ const fr: TranslationKeys = {
       d2d: {
         heading: 'La fonctionnalité préférée des équipes porte-à-porte',
         bullets: [
-          'Voyez chaque punaise sur la carte',
-          'Suivez la position de vos représentants en temps réel',
-          'Assignez des territoires à vos cogneurs',
+          'Vois chaque punaise sur la carte',
+          'Suis la position de tes représentants en temps réel',
+          'Assigne des territoires à tes cogneurs',
         ],
       },
       voice: {
-        heading: 'Gérez toute votre entreprise à la voix',
+        heading: 'Gère toute ton entreprise à la voix',
         bullets: [
-          'Créez des tâches à la voix',
-          'Envoyez des soumissions instantanément',
+          'Crée des tâches à la voix',
+          'Envoie des soumissions instantanément',
           'Relances automatisées',
           'Aucune saisie manuelle de données',
         ],
       },
       pipeline: {
-        heading: 'Vous gérez encore vos ventes dans des feuilles de calcul ?',
+        heading: 'Tu gères encore tes ventes dans des feuilles de calcul ?',
         bullets: [
           'Suivi des KPI en temps réel',
           'Pipeline de ventes visuel',
@@ -3895,12 +3895,12 @@ const fr: TranslationKeys = {
       },
     },
     middleCta: {
-      heading: 'Prêt à faire croître votre entreprise ?',
-      desc: 'Rejoignez des centaines d\'entreprises de services qui utilisent déjà Lume pour automatiser leurs opérations.',
+      heading: 'Prêt à faire croître ton entreprise ?',
+      desc: 'Rejoins des centaines d\'entreprises de services qui utilisent déjà Lume pour automatiser leurs opérations.',
       bookDemo: 'Réserver une démo',
     },
     footer: {
-      demoTitle: 'Voyez Lume en action',
+      demoTitle: 'Vois Lume en action',
       fullNamePlaceholder: 'Nom complet *',
       emailPlaceholder: 'Courriel *',
       phonePlaceholder: 'Téléphone *',
@@ -3909,11 +3909,11 @@ const fr: TranslationKeys = {
       sending: 'Envoi…',
       bookDemo: 'Réserver une démo',
       requestSent: 'Demande envoyée !',
-      requestSentDesc: 'Notre équipe vous contactera d\'ici 24 heures.',
+      requestSentDesc: 'Notre équipe te contactera d\'ici 24 heures.',
       submissionFailed: 'Échec de l\'envoi.',
-      genericError: 'Une erreur est survenue — veuillez réessayer.',
-      imageOverlayTitle: 'Réservez une démo gratuite — nous vous montrerons exactement comment Lume s\'intègre à votre entreprise en quelques minutes.',
-      imageOverlayDesc: 'Aucun engagement, aucune pression. Simplement un survol rapide adapté à votre industrie.',
+      genericError: 'Une erreur est survenue — réessaie.',
+      imageOverlayTitle: 'Réserve une démo gratuite — on te montrera exactement comment Lume s\'intègre à ton entreprise en quelques minutes.',
+      imageOverlayDesc: 'Aucun engagement, aucune pression. Simplement un survol rapide adapté à ton industrie.',
       tagline: 'Le système d\'exploitation moderne pour les entreprises de services résidentiels.',
       colProduct: 'Produit',
       colCompany: 'Entreprise',

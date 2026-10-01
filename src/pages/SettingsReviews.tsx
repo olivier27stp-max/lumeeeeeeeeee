@@ -1,14 +1,15 @@
 /* ═══════════════════════════════════════════════════════════════
    SettingsReviews — Réglages « Avis clients » (/settings/reviews)
 
-   Workflow : job terminée → sondage d'étoiles envoyé tout de suite
-     • 5 étoiles → redirection Google / Facebook + message d'invitation
-     • 4 étoiles ou moins → formulaire de commentaires interne + tâche de suivi
+   Workflow (2026-09-30) : job terminée → lien envoyé tout de suite à TOUS
+   les clients, sauf ceux dont le champ personnalisé « noreview » est coché.
+   Le lien mène tout le monde au choix Google / Facebook : aucune note
+   d'étoiles avant, aucun filtrage (« review gating » interdit).
 
    Cette page possède les liens de redirection, l'interrupteur principal et
-   TOUS les textes vus par le client (colonnes review_* de company_settings :
-   SMS, courriel, question, message note basse, remerciement, invitation),
-   plus le SMS de rappel de l'automatisation review_reminder_7d.
+   les textes vus par le client (colonnes review_* de company_settings :
+   SMS, courriel, titre de la page, invitation), plus le SMS de rappel de
+   l'automatisation review_reminder_7d.
    ═══════════════════════════════════════════════════════════════ */
 
 import { useEffect, useId, useRef, useState } from 'react';
@@ -16,12 +17,12 @@ import { Link } from 'react-router-dom';
 import {
   Star,
   Check,
+  UserX,
   Loader2,
   ExternalLink,
   MessageSquareText,
   Send,
   ThumbsUp,
-  ThumbsDown,
   Zap,
   Facebook,
   Globe,
@@ -48,23 +49,16 @@ const DEFAULT_INVITE_EN =
 // Défauts des messages (miroir de server/lib/reviews.ts).
 const DEFAULT_SMS_FR =
   "Bonjour [client_first_name], merci d'avoir choisi [company_name] ! "
-  + "Comment s'est passé notre service ? Notez-nous en 10 secondes : [survey_url]";
-const DEFAULT_EMAIL_SUBJECT_FR = "[company_name] — Comment s'est passé notre service ?";
+  + 'Un avis Google ou Facebook nous aiderait énormément : [survey_url]';
+const DEFAULT_EMAIL_SUBJECT_FR = 'Votre avis compte pour nous';
 const DEFAULT_EMAIL_BODY_FR =
   'Bonjour [client_first_name],\n\n'
   + 'Nous venons de terminer [job_name] et votre opinion compte pour nous.\n\n'
-  + 'Notez votre expérience en 10 secondes :\n\n'
+  + 'Prendriez-vous 30 secondes pour nous laisser un avis sur Google ou Facebook ?\n\n'
   + '[survey_url]\n\n'
   + "Merci d'avoir choisi [company_name] !";
-const DEFAULT_QUESTION_FR = "Comment s'est passé notre service ?";
-const DEFAULT_QUESTION_EN = 'How did we do?';
-const DEFAULT_LOW_RATING_FR =
-  "Nous sommes désolés que ce ne soit pas à la hauteur. Dites-nous ce qui n'a pas fonctionné : "
-  + "votre message est envoyé directement à l'équipe, il n'est pas publié.";
-const DEFAULT_LOW_RATING_EN =
-  "We're sorry it wasn't up to par. Tell us what went wrong: your message goes straight to the team, it is not published.";
-const DEFAULT_THANK_YOU_FR = "Merci pour votre franchise. Un membre de l'équipe vous contactera rapidement.";
-const DEFAULT_THANK_YOU_EN = 'Thank you for your honesty. A team member will reach out to you shortly.';
+const DEFAULT_QUESTION_FR = 'Merci de nous avoir fait confiance !';
+const DEFAULT_QUESTION_EN = 'Thank you for trusting us!';
 
 const TEMPLATE_VARIABLES = ['client_first_name', 'client_name', 'company_name', 'job_name', 'survey_url'] as const;
 
@@ -95,8 +89,6 @@ interface ReviewSettings {
   review_email_subject: string;
   review_email_body: string;
   review_survey_question: string;
-  review_low_rating_message: string;
-  review_thank_you_message: string;
   company_name: string;
 }
 
@@ -109,8 +101,6 @@ const EMPTY: ReviewSettings = {
   review_email_subject: '',
   review_email_body: '',
   review_survey_question: '',
-  review_low_rating_message: '',
-  review_thank_you_message: '',
   company_name: '',
 };
 
@@ -125,7 +115,7 @@ function isValidUrl(url: string): boolean {
 }
 
 function humanDelay(seconds: number, isFr: boolean): string {
-  if (seconds === 0) return isFr ? 'immédiatement' : 'immediately';
+  if (seconds === 0) return isFr ? 'dès' : 'right at';
   if (seconds >= 86400) {
     const d = Math.round(seconds / 86400);
     return isFr ? `${d} jour${d > 1 ? 's' : ''} après` : `${d} day${d > 1 ? 's' : ''} after`;
@@ -167,7 +157,7 @@ export default function SettingsReviews() {
       const [{ data, error }, allRules] = await Promise.all([
         supabase
           .from('company_settings')
-          .select('id, company_name, review_enabled, google_review_url, facebook_review_url, review_invite_message, review_sms_body, review_email_subject, review_email_body, review_survey_question, review_low_rating_message, review_thank_you_message')
+          .select('id, company_name, review_enabled, google_review_url, facebook_review_url, review_invite_message, review_sms_body, review_email_subject, review_email_body, review_survey_question')
           .eq('org_id', orgId)
           .limit(1)
           .maybeSingle(),
@@ -185,8 +175,6 @@ export default function SettingsReviews() {
           review_email_subject: data.review_email_subject || '',
           review_email_body: data.review_email_body || '',
           review_survey_question: data.review_survey_question || '',
-          review_low_rating_message: data.review_low_rating_message || '',
-          review_thank_you_message: data.review_thank_you_message || '',
           company_name: data.company_name || '',
         });
       }
@@ -238,8 +226,6 @@ export default function SettingsReviews() {
         review_email_subject: form.review_email_subject.trim() || null,
         review_email_body: form.review_email_body.trim() || null,
         review_survey_question: form.review_survey_question.trim() || null,
-        review_low_rating_message: form.review_low_rating_message.trim() || null,
-        review_thank_you_message: form.review_thank_you_message.trim() || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -345,8 +331,6 @@ export default function SettingsReviews() {
   const emailSubjectPreview = resolveSample(form.review_email_subject.trim() || DEFAULT_EMAIL_SUBJECT_FR, form.company_name);
   const emailBodyPreview = resolveSample(form.review_email_body.trim() || DEFAULT_EMAIL_BODY_FR, form.company_name);
   const questionDefault = isFr ? DEFAULT_QUESTION_FR : DEFAULT_QUESTION_EN;
-  const lowRatingDefault = isFr ? DEFAULT_LOW_RATING_FR : DEFAULT_LOW_RATING_EN;
-  const thankYouDefault = isFr ? DEFAULT_THANK_YOU_FR : DEFAULT_THANK_YOU_EN;
 
   const variablesHint = (
     <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-text-tertiary">
@@ -370,8 +354,8 @@ export default function SettingsReviews() {
       <PageHeader
         title={isFr ? 'Avis clients' : 'Customer reviews'}
         subtitle={isFr
-          ? 'Sondage d’étoiles envoyé dès la fin de la job, puis redirection vers vos pages d’avis.'
-          : 'Star survey sent as soon as the job is done, then redirect to your review pages.'}
+          ? 'Demande d’avis envoyée dès la fin de la job, puis choix entre Google et Facebook.'
+          : 'Review request sent as soon as the job is done, then a choice between Google and Facebook.'}
         icon={Star}
         iconColor="amber"
       />
@@ -390,32 +374,32 @@ export default function SettingsReviews() {
             </div>
             <p className="text-text-secondary">
               {isFr
-                ? 'Le client reçoit tout de suite, par courriel et SMS, un lien pour noter de 1 à 5 étoiles.'
-                : 'The client immediately gets an email and SMS link to rate from 1 to 5 stars.'}
+                ? 'Le client reçoit tout de suite, par courriel et SMS, un lien pour laisser un avis.'
+                : 'The client immediately gets an email and SMS link to leave a review.'}
             </p>
           </li>
           <li className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20 p-4 space-y-1.5">
             <div className="flex items-center gap-2 font-semibold text-text-primary">
               <span className="h-6 w-6 rounded-full bg-emerald-600 text-white text-[12px] flex items-center justify-center">2</span>
               <ThumbsUp size={14} />
-              {isFr ? '5 étoiles' : '5 stars'}
+              {isFr ? 'Google ou Facebook' : 'Google or Facebook'}
             </div>
             <p className="text-text-secondary">
               {isFr
-                ? 'Votre message d’invitation s’affiche, puis le client est redirigé vers Google ou Facebook pour laisser son avis.'
-                : 'Your invite message shows, then the client is redirected to Google or Facebook to leave a review.'}
+                ? 'Votre message d’invitation s’affiche et le client choisit où laisser son avis. Tout le monde a accès aux deux, sans note préalable.'
+                : 'Your invite message shows and the client picks where to leave a review. Everyone gets both, no rating first.'}
             </p>
           </li>
           <li className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/20 p-4 space-y-1.5">
             <div className="flex items-center gap-2 font-semibold text-text-primary">
               <span className="h-6 w-6 rounded-full bg-amber-500 text-white text-[12px] flex items-center justify-center">3</span>
-              <ThumbsDown size={14} />
-              {isFr ? '4 étoiles ou moins' : '4 stars or less'}
+              <UserX size={14} />
+              {isFr ? 'Exclusions' : 'Exclusions'}
             </div>
             <p className="text-text-secondary">
               {isFr
-                ? 'Aucune redirection publique : un formulaire de commentaires interne s’ouvre et une tâche de suivi est créée pour vous.'
-                : 'No public redirect: an internal feedback form opens and a follow-up task is created for you.'}
+                ? 'Cochez le champ personnalisé « noreview » sur la fiche d’un client : il ne recevra ni la demande ni le rappel d’avis.'
+                : 'Check the “noreview” custom field on a client’s record: they will get neither the review request nor the reminder.'}
             </p>
           </li>
         </ol>
@@ -430,8 +414,8 @@ export default function SettingsReviews() {
             </p>
             <p className="text-[12px] text-text-tertiary">
               {isFr
-                ? 'Interrupteur principal. Désactivé, aucun sondage ni rappel d’avis ne part.'
-                : 'Master switch. When off, no survey or review reminder is sent.'}
+                ? 'Interrupteur principal. Désactivé, aucune demande ni rappel d’avis ne part.'
+                : 'Master switch. When off, no review request or reminder is sent.'}
             </p>
           </div>
           <button
@@ -460,8 +444,8 @@ export default function SettingsReviews() {
           <div className="mt-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
             <p className="text-[12px] text-amber-700 dark:text-amber-300">
               {isFr
-                ? 'Aucun lien configuré : les clients satisfaits n’auront nulle part où laisser leur avis. Ajoutez Google, Facebook ou les deux ci-dessous.'
-                : 'No link configured: happy clients will have nowhere to leave a review. Add Google, Facebook or both below.'}
+                ? 'Aucun lien configuré : vos clients n’auront nulle part où laisser leur avis. Ajoutez Google, Facebook ou les deux ci-dessous.'
+                : 'No link configured: your clients will have nowhere to leave a review. Add Google, Facebook or both below.'}
             </p>
           </div>
         )}
@@ -470,7 +454,7 @@ export default function SettingsReviews() {
       {/* ── Liens de redirection ── */}
       <div className="section-card p-6 space-y-5">
         <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
-          <ExternalLink size={12} /> {isFr ? 'Pages d’avis (5 étoiles)' : 'Review pages (5 stars)'}
+          <ExternalLink size={12} /> {isFr ? 'Pages d’avis' : 'Review pages'}
         </h3>
 
         <div>
@@ -511,6 +495,7 @@ export default function SettingsReviews() {
           </p>
         </div>
 
+        {hasDestination && (
         <p className="text-[12px] text-text-secondary rounded-lg bg-surface-subtle border border-outline px-3 py-2">
           {google && facebook
             ? (isFr
@@ -520,17 +505,36 @@ export default function SettingsReviews() {
               ? 'Un seul lien configuré : le client y est redirigé automatiquement après votre message.'
               : 'One link configured: the client is redirected there automatically after your message.')}
         </p>
+        )}
       </div>
 
       {/* ── Message d'invitation ── */}
       <div className="section-card p-6 space-y-4">
         <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
-          <MessageSquareText size={12} /> {isFr ? 'Message d’invitation (5 étoiles)' : 'Invite message (5 stars)'}
+          <MessageSquareText size={12} /> {isFr ? 'Page d’avis : titre et message' : 'Review page: title and message'}
         </h3>
+        <div className="space-y-1">
+          <label htmlFor={`${id}-question`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+            {isFr ? 'Titre' : 'Title'}
+          </label>
+          <input
+            id={`${id}-question`}
+            type="text"
+            value={form.review_survey_question}
+            onChange={(e) => update('review_survey_question', e.target.value)}
+            maxLength={160}
+            placeholder={questionDefault}
+            className="glass-input w-full"
+          />
+          <p className="text-[12px] text-text-tertiary">{isFr ? 'Précédé de « Bonjour Prénom, » quand le prénom est connu.' : 'Preceded by “Hi First name,” when the first name is known.'}</p>
+        </div>
+        <label htmlFor={`${id}-invite`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+          {isFr ? 'Message d’invitation' : 'Invite message'}
+        </label>
         <textarea
+          id={`${id}-invite`}
           value={form.review_invite_message}
           onChange={(e) => update('review_invite_message', e.target.value)}
-          aria-label={isFr ? 'Message d’invitation (5 étoiles)' : 'Invite message (5 stars)'}
           rows={3}
           maxLength={400}
           placeholder={inviteDefault}
@@ -544,9 +548,7 @@ export default function SettingsReviews() {
         {/* Aperçu côté client */}
         <div className="rounded-2xl border border-outline bg-surface-subtle p-5 text-center space-y-3">
           <p className="text-[11px] uppercase tracking-wider text-text-tertiary">{isFr ? 'Aperçu client' : 'Client preview'}</p>
-          <div className="flex justify-center gap-0.5">
-            {[1, 2, 3, 4, 5].map((s) => <Star key={s} size={18} className="text-yellow-400 fill-yellow-400" />)}
-          </div>
+          <p className="text-sm font-semibold text-text-primary">{form.review_survey_question.trim() || questionDefault}</p>
           <p className="text-sm text-text-primary">{invitePreview}</p>
           <div className="flex flex-wrap justify-center gap-2">
             {google && (
@@ -622,7 +624,7 @@ export default function SettingsReviews() {
             className="glass-input w-full resize-y"
           />
           <div className="flex items-center justify-between text-[12px] text-text-tertiary">
-            <span>{isFr ? 'Texte simple. Une ligne vide = nouveau paragraphe. [survey_url] devient le bouton « Noter mon expérience ».' : 'Plain text. A blank line = new paragraph. [survey_url] becomes the “Rate my experience” button.'}</span>
+            <span>{isFr ? 'Texte simple. Une ligne vide = nouveau paragraphe. [survey_url] devient le bouton « Laisser un avis ».' : 'Plain text. A blank line = new paragraph. [survey_url] becomes the “Leave a review” button.'}</span>
             <span>{form.review_email_body.length}/2000</span>
           </div>
           <div className="rounded-2xl border border-outline bg-surface-subtle p-4 space-y-3">
@@ -634,76 +636,20 @@ export default function SettingsReviews() {
                   para.trim() === SAMPLE_VARS.survey_url
                     ? (
                       <div key={i} className="flex justify-center py-1">
-                        <span className="rounded-lg bg-neutral-900 text-white text-[13px] font-bold px-8 py-3">{isFr ? 'Noter mon expérience' : 'Rate my experience'}</span>
+                        <span className="rounded-lg bg-neutral-900 text-white text-[13px] font-bold px-8 py-3">{isFr ? 'Laisser un avis' : 'Leave a review'}</span>
                       </div>
                     )
                     : <p key={i} className="whitespace-pre-line">{para}</p>
                 ))}
                 {!emailBodyPreview.includes(SAMPLE_VARS.survey_url) && (
                   <div className="flex justify-center py-1">
-                    <span className="rounded-lg bg-neutral-900 text-white text-[13px] font-bold px-8 py-3">{isFr ? 'Noter mon expérience' : 'Rate my experience'}</span>
+                    <span className="rounded-lg bg-neutral-900 text-white text-[13px] font-bold px-8 py-3">{isFr ? 'Laisser un avis' : 'Leave a review'}</span>
                   </div>
                 )}
               </div>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* ── Textes de la page du sondage ── */}
-      <div className="section-card p-6 space-y-5">
-        <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
-          <Star size={12} /> {isFr ? 'Textes de la page du sondage' : 'Survey page texts'}
-        </h3>
-
-        <div className="space-y-1">
-          <label htmlFor={`${id}-question`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
-            {isFr ? 'Question au-dessus des étoiles' : 'Question above the stars'}
-          </label>
-          <input
-            id={`${id}-question`}
-            type="text"
-            value={form.review_survey_question}
-            onChange={(e) => update('review_survey_question', e.target.value)}
-            maxLength={160}
-            placeholder={questionDefault}
-            className="glass-input w-full"
-          />
-          <p className="text-[12px] text-text-tertiary">{isFr ? 'Précédée de « Bonjour Prénom, » quand le prénom est connu.' : 'Preceded by “Hi First name,” when the first name is known.'}</p>
-        </div>
-
-        <div className="space-y-1">
-          <label htmlFor={`${id}-low`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
-            {isFr ? 'Message note basse (4 étoiles ou moins)' : 'Low rating message (4 stars or less)'}
-          </label>
-          <textarea
-            id={`${id}-low`}
-            value={form.review_low_rating_message}
-            onChange={(e) => update('review_low_rating_message', e.target.value)}
-            rows={3}
-            maxLength={400}
-            placeholder={lowRatingDefault}
-            className="glass-input w-full resize-none"
-          />
-          <p className="text-[12px] text-text-tertiary">{isFr ? 'Affiché au-dessus du formulaire de commentaires.' : 'Shown above the feedback form.'}</p>
-        </div>
-
-        <div className="space-y-1">
-          <label htmlFor={`${id}-thanks`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
-            {isFr ? 'Remerciement après les commentaires' : 'Thank-you after feedback'}
-          </label>
-          <textarea
-            id={`${id}-thanks`}
-            value={form.review_thank_you_message}
-            onChange={(e) => update('review_thank_you_message', e.target.value)}
-            rows={2}
-            maxLength={300}
-            placeholder={thankYouDefault}
-            className="glass-input w-full resize-none"
-          />
-        </div>
-
-        <p className="text-[12px] text-text-tertiary">{isFr ? 'Vide = texte par défaut affiché en gris.' : 'Empty = the default text shown in grey.'}</p>
       </div>
 
       {/* ── Automatisations liées ── */}
@@ -723,13 +669,13 @@ export default function SettingsReviews() {
                 <div>
                   <p className="text-sm font-medium text-text-primary">
                     {rule.preset_key === 'google_review'
-                      ? (isFr ? 'Sondage d’étoiles' : 'Star survey')
+                      ? (isFr ? 'Demande d’avis' : 'Review request')
                       : (isFr ? 'Rappel d’avis' : 'Review reminder')}
                   </p>
                   <p className="text-[12px] text-text-tertiary">
                     {rule.preset_key === 'google_review'
                       ? (isFr ? 'Courriel + SMS, ' : 'Email + SMS, ')
-                      : (isFr ? 'SMS avec le lien de votre page d’avis, ' : 'SMS with your review page link, ')}
+                      : (isFr ? 'SMS avec le lien vers le choix Google / Facebook, ' : 'SMS with the link to the Google / Facebook choice, ')}
                     {humanDelay(rule.delay_seconds, isFr)} {isFr ? 'la fin de la job' : 'job completion'}
                   </p>
                 </div>

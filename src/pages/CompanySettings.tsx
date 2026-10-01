@@ -827,8 +827,8 @@ export default function CompanySettings() {
             </h3>
             <p className="text-[12px] text-text-tertiary mt-1">
               {language === 'fr'
-                ? 'Sondage d\'étoiles après la job, liens Google / Facebook et message d\'invitation.'
-                : 'Post-job star survey, Google / Facebook links and invite message.'}
+                ? 'Demande d\'avis après la job, liens Google / Facebook et message d\'invitation.'
+                : 'Post-job review request, Google / Facebook links and invite message.'}
             </p>
           </div>
           <Link to="/settings/reviews" className="glass-button inline-flex items-center gap-1.5 text-[12px] shrink-0">
