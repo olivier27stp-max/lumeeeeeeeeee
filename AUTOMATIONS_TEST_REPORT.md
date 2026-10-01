@@ -4,11 +4,11 @@ Mission du 30 septembre au 1er octobre 2026 : prouver que tout ce qui touche aux
 
 ## En bref
 
-- **La suite existe et tourne** : `npm run test:automations`, environ 3 400 tests. Elle fait tourner le vrai moteur, contre staging ou contre la prod, sans qu'aucun texto, courriel ou webhook réel ne puisse partir.
-- **Résultat contre la prod** : 3 388 tests réussis sur 3 398 à la dernière passe complète (1er octobre, 18 h 22 UTC). Les 10 échecs ont été repris un par un : 4 étaient des attentes de test à corriger, rejouées vertes contre la prod ; 6 étaient des tests unitaires sensibles à la charge du poste, verts quand ils tournent seuls. Aucun n'était un défaut du produit.
-- **Matrice** : 709 cas. 696 PASS, 0 FAIL, 13 NON COUVERT.
-- **79 défauts corrigés**, un commit chacun, chacun avec un test qui échoue sans le correctif. Tout est sur `main` et déployé (#813, #842, #861, #873).
-- **Aucun envoi réel** pendant toute la mission, vérifié en base sur staging et en prod.
+- **La suite existe et tourne** : `npm run test:automations`, environ 3 500 tests. Elle fait tourner le vrai moteur, contre staging ou contre la prod, sans qu'aucun texto, courriel ou webhook réel ne puisse partir.
+- **Résultat contre la prod** : dernière passe complète après le dernier déploiement (1er octobre, 19 h 13 à 20 h 01 UTC) : 3 484 tests réussis sur 3 505, 11 échecs, 10 sautés. Aucun n'était un défaut du moteur. Neuf échecs et les dix sautés venaient d'une base de prod saturée pendant la passe (trois redéploiements d'autres sessions) ; un était un défaut de robustesse de Lumi, corrigé (#879) ; un était un test qui ne se rejouait pas plus de trois fois par jour, corrigé. Les sept fichiers concernés, rejoués seuls contre la prod : 142 sur 142.
+- **Matrice** : 710 cas. 697 PASS, 0 FAIL, 13 NON COUVERT.
+- **80 défauts corrigés**, un commit chacun, chacun avec un test qui échoue sans le correctif. Tout est sur `main` et déployé (#813, #842, #861, #873, #879).
+- **Aucun envoi réel** pendant toute la mission, vérifié en base sur staging et en prod. En prod, sur les 30 dernières heures : 301 courriels et 82 textos des bureaux de test, tous simulés.
 - **Deux décisions de produit** restent à prendre (mascot, adresse d'expédition), plus deux décisions d'exploitation (voir « Ce qui attend ta décision »).
 
 ## Ce qui a été livré
@@ -20,7 +20,7 @@ Mission du 30 septembre au 1er octobre 2026 : prouver que tout ce qui touche aux
 | Rapport de chaque passe | `rapports/automatisations/RAPPORT.md` (lisible) et `synthese.json` (pour QA Smoke) |
 | Inventaire tiré du code | `AUTOMATIONS_INVENTORY.md` |
 | Matrice | `AUTOMATIONS_TEST_MATRIX.md` — le statut de chaque cas est recalculé à chaque passe |
-| Job CI | « Automatisations (npm run test:automations) » dans `.github/workflows/ci.yml` |
+| Job CI | « Automatisations (npm run test:automations) » dans `.github/workflows/ci.yml` : tests unitaires de la suite sur chaque PR ; suite complète contre staging à la demande (Actions → CI → Run workflow) |
 | Bac à sable des envois | `server/lib/bac-a-sable.ts`, tables `orgs_envois_simules` et `envois_simules` (staging et prod) |
 
 ### Comment la suite reste sans danger
@@ -54,14 +54,14 @@ Dernière passe complète, contre la production. Le détail cas par cas est dans
 | F | Sécurité, multi-bureaux, RLS, RBAC, injection | 54 | 1 |
 | G | Conformité LCAP / Loi 25 | 17 | 0 |
 | H | Langue et contenu | 13 | 1 |
-| I | Lumi | 39 | 0 |
+| I | Lumi | 40 | 0 |
 | J | Interface (Playwright) | 33 | 1 |
 | K | Préréglages et systèmes adjacents | 37 | 1 |
 | L | Observabilité | 10 | 0 |
 | M | Charge | 6 | 0 |
-| **Total** | | **696** | **13** |
+| **Total** | | **697** | **13** |
 
-Ces chiffres viennent de la passe complète du 1er octobre à 18 h 22 UTC (688 PASS, 5 FAIL, 14 NON COUVERT), plus la reprise ciblée des 5 cas en échec contre la prod après correction des attentes de test : B-407, B-408, J-065, K-014 et I-021 sont repassés verts. Trois cas se sont ajoutés avec les derniers correctifs (K-004, I-036, et D-044 qui n'était pas couvert), joués verts contre la prod. Il n'y a pas eu de seconde passe complète contre la prod après ces corrections ; la passe complète suivante est celle du job CI de la PR de finition.
+Ces chiffres combinent la passe complète du 1er octobre (19 h 13 à 20 h 01 UTC : 674 PASS, 13 FAIL, 22 NON COUVERT sur 709 cas, base saturée) et la reprise, seuls et contre la prod, des sept fichiers touchés : les 13 cas en échec et les 9 cas sautés sont repassés verts. Le 710e cas (I-037) est arrivé avec le dernier correctif. Il n'y a pas eu de passe complète verte d'un seul tenant contre la prod : les deux passes complètes ont chacune été perturbées, l'une par la charge du poste, l'autre par la charge de la base.
 
 ### Performance mesurée (rafale de 1 000 événements, staging)
 
@@ -78,7 +78,7 @@ En prod, la rafale est réduite à 200 événements : la même rafale de 1 000 a
 
 ## Défauts trouvés et corrigés
 
-79 commits, tous sur `main`. Le titre de chaque commit dit ce qui était faux ; son message donne la cause, le correctif et le test qui le prouve (`git show <commit>`).
+80 commits, tous sur `main`. Le titre de chaque commit dit ce qui était faux ; son message donne la cause, le correctif et le test qui le prouve (`git show <commit>`).
 
 Les plus graves :
 
@@ -183,7 +183,7 @@ Les plus graves :
 | `b7d8daa5` | Le parcours « Dépôt — demande et rappel » s'annulait lui-même, drapeau de sortie éteint |
 | `098dd153` | « Estimate Follow-Up » s'affichait publié alors qu'il ne peut jamais partir |
 
-### Lumi (10)
+### Lumi (11)
 
 | Commit | Ce qui était faux |
 |---|---|
@@ -197,6 +197,7 @@ Les plus graves :
 | `8630d9ef` | Lumi enregistrait un déclencheur inventé et oubliait la 2e automatisation |
 | `8f2ce578` | Redemander à Lumi une automatisation qu'on vient de supprimer répondait « c'est fait » sans rien créer |
 | `d03ea20d` | Lumi et l'API créaient une automatisation sur un déclencheur pas encore offert à l'entreprise |
+| `6cb59cf0` | Une étape sans son enveloppe `config` faisait refuser tout le parcours (« Reformule ta demande ») |
 
 ### Interface (6)
 
@@ -238,21 +239,22 @@ Deux choix de produit. Chacun est documenté par un test marqué « ROUGE ATTEND
 Deux choix d'exploitation.
 
 3. **Bloquer le déploiement quand un test échoue.** Le job CI existe, mais `main` n'exige aucun check : une PR rouge peut être fusionnée, et Railway déploie à chaque poussée. Pour bloquer vraiment, il faut rendre les checks obligatoires sur `main` et activer « Wait for CI » sur Railway. Je ne l'ai pas fait seul : cela change la façon de travailler de toutes les sessions.
-4. **Cible du job CI : staging ou prod.** Il vise staging. Tu as dit « en prod, jamais en staging » ; je les y ai fait tourner à la main (`npm run test:automations -- --prod`). Pour que la CI vise la prod, il faudrait mettre la clé de service de prod dans les secrets GitHub, ce que `CLAUDE.md` interdit par défaut (règle 7). Sur staging, le job est fragile quand plusieurs sessions chargent la base en même temps : elle est tombée une fois le 1er octobre.
+4. **Où et quand jouer la suite complète.** Depuis le 1er octobre au soir, chaque PR ne joue plus que les tests unitaires de la suite (aucune base touchée) ; la suite complète part à la demande, contre staging. Je l'ai retirée des PR après deux pannes le même soir : la prod, puis staging, chacune sous plusieurs charges de test à la fois. Tu avais dit « en prod, jamais en staging » ; je déconseille la suite complète contre la prod que tes clients utilisent. Le plus sûr serait un projet Supabase réservé aux tests, ou une instance plus grosse.
 
 ## Risques restants avant le 26 octobre
 
 - **Aucun numéro texto actif en prod.** L'achat de numéros attend l'approbation du dossier Trust Hub chez Twilio. Tant que ce n'est pas fait, aucun texto automatique ne part, pour personne. Le code est prêt ; à vérifier par un vrai envoi dès le premier numéro obtenu.
 - **Sauvegardes.** Celles de la prod étaient en panne du 26 au 30 septembre (mot de passe Postgres périmé) ; une autre session les a réparées le 30 au soir, et le dernier dump date du 1er octobre (`../lume-backups/prod-20261001-1438.dump`, 9,5 Mo). Au début de la mission, faute de mot de passe, le filet a été un export complet par l'API (prod : 265 tables, 59 649 lignes, vérifié sans écart). Le mot de passe staging de `.env.local` est toujours refusé : `npm run db:diff` ne tourne pas.
 - **Tests unitaires sensibles à la charge du poste.** Quand plusieurs sessions saturent la machine, 2 à 6 tests unitaires à vraies minuteries échouent, jamais les mêmes (`tests/automation/launch-*`, `vague2-*`, `desabonnement-canal`). Rejoués seuls, ils passent tous (61 sur 61). Sur la CI, qui a sa propre machine, ils sont verts. Je n'ai ajouté ni réessai automatique ni délai plus long : cela masquerait un vrai test instable.
-- **Staging est une petite instance partagée.** Elle a saturé puis est tombée sous la charge de plusieurs sessions. Le job CI en dépend.
+- **Staging est une petite instance partagée.** Elle a saturé le 1er octobre vers 16 h 35 UTC, puis elle est tombée à 22 h 08 UTC : le job CI jouait alors la suite complète sur chaque PR, et six PR de plusieurs sessions l'enchaînaient. Ce job ne joue plus que les tests unitaires sur les PR.
 - **Le verrou des passages planifiés est un bail de 10 minutes.** Un passage plus long peut se chevaucher avec le suivant. La file passe désormais jusqu'à 1 000 tâches en 3 minutes au plus, ce qui reste dans le bail, mais les autres passages (rappels sur date, relances) n'ont pas tous de verrou propre. Les rappels sur date restent protégés par la clé d'exécution du moteur : rejoués trois fois le même jour, ils n'agissent qu'une fois (D-044).
 - **Les drapeaux `auto_*` sont encore éteints** pour les vraies entreprises (désabonnement par canal, sortie de parcours, paiement échoué, client inactif). La suite les éprouve allumés et éteints ; les allumer reste une décision. Tant qu'ils sont éteints, l'éditeur cache ces déclencheurs, et Lumi comme l'API refusent d'y bâtir une automatisation.
 - **Pas de plafond d'envois par automatisation** (ta décision du 23 septembre, maintenue). Une étiquette posée sur 5 000 clients envoie toujours 5 000 textos, à 30 par minute ; la différence est que le propriétaire reçoit une notification dès le début, avec « Tout arrêter ».
 - **13 lignes « Estimate Follow-Up » restent en base en prod**, inertes et cachées. Les retirer demande une migration sur les données des entreprises ; je ne l'ai pas faite.
 - **Ancien système d'automatisations** (`server/lib/scheduler.ts`, table `automations`) : il tourne encore, ignore la pause et l'arrêt global, et aucun écran n'écrit plus dans sa table. À retirer.
 - **« Arrêt quand le client répond » par courriel** n'est pas prouvé : il faut une vraie boîte Gmail connectée. Par texto, c'est prouvé.
-- **Les tests qui parlent à Lumi coûtent** environ 0,30 $ par passe et dépendent du modèle : une formulation différente de Lumi peut faire rougir un test sans défaut réel. C'est arrivé une fois (I-021).
+- **Panne de la base de prod le 1er octobre, de 20 h 36 à 21 h 41 UTC** (lumecrm.net injoignable environ une heure, réglée par un redémarrage du projet Supabase). Cause non prouvée. La base est petite (160 Mo, 26 connexions sur 60 au retour) et tourne sur l'instance de calcul par défaut ; la même panne avait eu lieu le 28 septembre. Dans l'heure qui a précédé, ma passe complète (19 h 13 à 20 h 01 UTC) a chargé cette base en même temps que les mesures d'autres sessions et trois redéploiements : trois « statement timeout » et deux actions de plus de 5 s y ont été vus. Je n'avais plus rien en cours depuis 19 minutes quand la base est tombée, mais je ne peux pas exclure que cette charge cumulée y ait contribué. À retenir : ne pas lancer la suite complète contre la prod pendant qu'autre chose la charge, prendre une instance plus grosse avant le lancement, et poser une alerte de disponibilité.
+- **Les tests qui parlent à Lumi coûtent** environ 0,30 $ par passe et dépendent du modèle : une formulation différente de Lumi peut faire rougir un test sans défaut réel. C'est arrivé deux fois : I-021 (formulation, le test a été assoupli) et I-018 (une étape mal formée par le modèle, corrigé dans le produit).
 
 ## Ménage
 

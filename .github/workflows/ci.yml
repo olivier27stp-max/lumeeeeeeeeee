@@ -8,6 +8,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Lancement À LA DEMANDE (Actions → CI → Run workflow) : c'est le seul chemin
+  # qui joue la suite COMPLÈTE des automatisations contre staging (voir le job
+  # `automatisations`).
+  workflow_dispatch:
 
 # Cancel superseded runs on the same branch/PR to save minutes.
 concurrency:
@@ -106,26 +110,36 @@ jobs:
           fi
           npm run check:schema-refs
 
-  # Suite des automatisations (npm run test:automations) : fonctions pures du
-  # moteur + VRAI moteur contre staging, sur un bureau de test en bac à sable
-  # (aucun envoi réel possible : voir tests/automations-suite/harnais/).
-  # BLOQUANT : un seul test rouge fait échouer le job. Jamais deux exécutions à
-  # la fois sur le même bureau de test : la suite prend un verrou en base.
+  # Suite des automatisations (npm run test:automations).
+  #
+  # Sur CHAQUE PR et chaque poussée : les tests UNITAIRES de la suite seulement
+  # (fonctions pures du moteur, aucune base touchée).
+  # À LA DEMANDE (workflow_dispatch) : la suite COMPLÈTE — le VRAI moteur contre
+  # staging, sur un bureau de test en bac à sable (aucun envoi réel possible :
+  # voir tests/automations-suite/harnais/), un verrou en base l'empêchant de
+  # tourner deux fois à la fois.
+  #
+  # Pourquoi plus la suite complète sur chaque PR : le 2026-10-01, six PR de
+  # plusieurs sessions l'ont enchaînée contre staging toute la soirée (≈ 1 h
+  # chacune, les autres interrogeant le verrou toutes les 20 s). Staging — une
+  # petite instance partagée — est tombé à 22:08 UTC, une heure après une
+  # panne de la prod sous une charge de tests comparable. Une base partagée ne
+  # porte pas une suite d'intégration par PR.
+  # BLOQUANT : un seul test rouge fait échouer le job.
   automatisations:
     name: Automatisations (npm run test:automations)
     runs-on: ubuntu-latest
-    # 150 min : ~30 min de suite, le double sur un staging chargé, plus
-    # l'attente de son tour quand une autre PR tient le verrou de la suite.
-    timeout-minutes: 150
+    # Unitaires : quelques minutes. Suite complète (à la demande) : ~30 min, le
+    # double sur un staging chargé, plus l'attente du verrou de la suite.
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 150 || 30 }}
     # Groupe PAR PR (une nouvelle poussée remplace la précédente). L'exclusion
-    # entre PR se fait dans la suite elle-même, par un verrou en base
-    # (scripts/qa/verrou-suite-automatisations.mts) : un groupe unique faisait
-    # ANNULER le job des autres PR — GitHub ne garde qu'une exécution en attente.
+    # entre deux suites complètes se fait dans la suite elle-même, par un
+    # verrou en base (scripts/qa/verrou-suite-automatisations.mts).
     concurrency:
       group: automatisations-${{ github.ref }}
       cancel-in-progress: true
     env:
-      SECRET_ATTENDU: ${{ github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+      SUITE_COMPLETE: ${{ github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -136,9 +150,14 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Tests unitaires de la suite (aucune base)
+        if: env.SUITE_COMPLETE != 'true'
+        run: npm run test:automations:unitaires
       - name: Navigateur des tests d'interface
+        if: env.SUITE_COMPLETE == 'true'
         run: npx playwright install --with-deps chromium
-      - name: Suite des automatisations
+      - name: Suite complète contre staging (à la demande)
+        if: env.SUITE_COMPLETE == 'true'
         env:
           VITE_SUPABASE_URL: ${{ secrets.LUMI_EVAL_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.LUMI_EVAL_SUPABASE_ANON_KEY }}
@@ -146,13 +165,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            if [ "$SECRET_ATTENDU" = "true" ]; then
-              echo "::error::Secrets staging LUMI_EVAL_* absents alors que ce contexte y a droit — la suite des automatisations ne tourne pas."
-              exit 1
-            fi
-            echo "::warning::Secrets staging absents (fork / Dependabot) — tests unitaires seulement."
-            npm run test:automations:unitaires
-            exit $?
+            echo "::error::Secrets staging LUMI_EVAL_* absents — la suite complète des automatisations ne peut pas tourner."
+            exit 1
           fi
           npm run test:automations
       - name: Rapport
