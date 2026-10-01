@@ -166,7 +166,8 @@ function Connecteur({
           type="button"
           onClick={onAjouter}
           aria-label={fr ? 'Ajouter une étape ici' : 'Add a step here'}
-          className="my-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface-primary text-text-tertiary transition-colors hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          // Au doigt (tablette), 20 px se ratent : 32 px quand le pointeur est grossier.
+          className="my-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface-primary text-text-tertiary transition-colors hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent pointer-coarse:h-8 pointer-coarse:w-8"
         >
           <Plus className="h-3 w-3" aria-hidden="true" />
         </button>
@@ -254,7 +255,7 @@ function Carte({
           type="button"
           onClick={(e) => { e.stopPropagation(); onMenu(etape.id); }}
           aria-label={fr ? `Options de l’étape ${titreEtape(etape, fr)}` : `Options for ${titreEtape(etape, fr)}`}
-          className="absolute right-2 top-2.5 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="absolute right-2 top-2.5 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent pointer-coarse:right-1 pointer-coarse:top-1.5 pointer-coarse:p-2"
         >
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </button>

@@ -187,7 +187,9 @@ export default function BandeauPause({
         type="button"
         onClick={() => basculer(true)}
         disabled={occupe}
-        className="inline-flex items-center gap-1.5 text-[12px] text-text-tertiary transition-colors hover:text-danger disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        // Au doigt (tablette), 18 px de haut se ratent : le bouton d'urgence
+        // gagne de la marge quand le pointeur est grossier, rien ne change à la souris.
+        className="inline-flex items-center gap-1.5 rounded text-[12px] text-text-tertiary transition-colors hover:text-danger disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent pointer-coarse:px-2 pointer-coarse:py-2"
       >
         <PauseCircle size={13} aria-hidden="true" />
         {fr ? 'Tout arrêter' : 'Pause everything'}
