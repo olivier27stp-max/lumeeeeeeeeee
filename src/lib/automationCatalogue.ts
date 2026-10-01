@@ -791,7 +791,7 @@ export const ACTIONS: ActionCatalogue[] = [
     champs: [
       {
         cle: 'title', fr: 'Titre', en: 'Title', obligatoire: true, type: 'texte', max: 200,
-        defaut_fr: 'Suivi a faire pour [client_name]',
+        defaut_fr: 'Suivi à faire pour [client_name]',
         defaut_en: 'Follow up on [client_name]',
       },
       { cle: 'body', fr: 'Détail', en: 'Details', obligatoire: false, type: 'zone', max: 2000 },
@@ -841,7 +841,7 @@ export const ACTIONS: ActionCatalogue[] = [
     champs: [
       {
         cle: 'body', fr: 'Message', en: 'Message', obligatoire: true, type: 'zone', max: 3000,
-        defaut_fr: '[client_name] — suivi a faire',
+        defaut_fr: '[client_name] — suivi à faire',
         defaut_en: '[client_name] — follow-up needed',
       },
     ],

@@ -14,7 +14,7 @@ vi.mock('../../src/hooks/useModuleAccess', () => ({ useModuleAccess: () => ({ is
 import ChampActionUI from '../../src/components/automations/ChampAction';
 import {
   ACTIONS, CASE_SORTIE, DECLENCHEURS, FAMILLES_ACTIONS, FAMILLES_DECLENCHEURS,
-  trouverAction, trouverDeclencheur, type ChampAction,
+  configParDefaut, trouverAction, trouverDeclencheur, type ChampAction,
 } from '../../src/lib/automationCatalogue';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -161,5 +161,29 @@ describe('declencheurs-09 — une seule apostrophe, la typographique (’), dans
   it('l’anglais n’est pas touché : il garde ses propres textes', () => {
     expect(trouverDeclencheur('invoice.paid')?.aide_en).toBe('When an invoice payment is received.');
     expect(trouverDeclencheur('lead.status_changed')?.aide_en).toBe('When a lead moves to another status.');
+  });
+});
+
+// ─── actions-02 ─────────────────────────────────────────────────
+
+describe('actions-02 — les textes que Lume propose lui-même sont en bon français', () => {
+  it('« Notifier l’équipe » naît avec « Suivi à faire pour [client_name] » (avec l’accent)', () => {
+    // Ce que l'éditeur pose dans l'étape qu'on vient d'ajouter — et qui part
+    // tel quel dans la notification si on ne le retouche pas.
+    expect(configParDefaut('create_notification', true)).toEqual({ title: 'Suivi à faire pour [client_name]' });
+  });
+
+  it('« Envoyer dans Slack » : même faute, même correction', () => {
+    expect(configParDefaut('envoyer_slack', true)).toEqual({ body: '[client_name] — suivi à faire' });
+  });
+
+  it('l’anglais ne change pas', () => {
+    expect(configParDefaut('create_notification', false)).toEqual({ title: 'Follow up on [client_name]' });
+    expect(configParDefaut('envoyer_slack', false)).toEqual({ body: '[client_name] — follow-up needed' });
+  });
+
+  it('nulle part dans le catalogue : « a faire » sans accent', () => {
+    const fautifs = textesFrancais().filter((t) => ` ${t.texte.toLowerCase()} `.includes(' a faire '));
+    expect(fautifs.map((t) => `${t.ou} : ${t.texte}`)).toEqual([]);
   });
 });

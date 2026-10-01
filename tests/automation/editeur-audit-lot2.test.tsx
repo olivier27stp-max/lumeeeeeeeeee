@@ -408,6 +408,21 @@ describe('EDITEUR-04 — un seul panneau à droite à la fois', () => {
   });
 });
 
+// ─── actions-02 ─────────────────────────────────────────────────
+
+describe('actions-02 — une étape « Notifier l’équipe » qu’on vient d’ajouter', () => {
+  it('sa carte porte « Suivi à faire pour [client_name] », avec l’accent', async () => {
+    await ouvrir(`/automations/${ID}`);
+    cliquer(boutonExact('Ajouter'));
+    await attendre(2);
+    const tiroir = container.querySelector('aside[aria-label="Actions"]');
+    cliquer(Array.from(tiroir?.querySelectorAll('button') ?? []).find((b) => b.textContent?.includes('Notifier l’équipe')));
+    await attendre(2);
+    expect(carteEtape('Notifier l’équipe')?.textContent).toContain('Suivi à faire pour [client_name]');
+    expect(container.textContent).not.toContain('Suivi a faire');
+  });
+});
+
 // ─── declencheurs-06 ────────────────────────────────────────────
 
 describe('declencheurs-06 — un déclencheur que le bureau n’a pas (drapeau éteint) garde son NOM sur la carte', () => {
