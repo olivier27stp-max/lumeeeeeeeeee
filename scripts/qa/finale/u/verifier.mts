@@ -29,6 +29,26 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     verifier((await etapes(regle.id)).length === 2, 'après « Enregistrer » dans le panneau : l’étape est en base');
     await page.context().close();
   },
+
+  /** Ligne 2 — la version anglaise d'un texto est visible, modifiable, et ne reste pas périmée en silence. */
+  async l2() {
+    const regle = await creerRegle({ steps: [action('send_sms', { body: 'Rabais de 10 % jusqu’au 1er mai.', body_en: '10% off until May 1st.' })] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    await carte(page, 'Envoyer un texto').click();
+    const p = panneau(page);
+    const anglais = p.getByLabel('Texte du message — version anglaise (facultatif)', { exact: true });
+    verifier(await anglais.inputValue() === '10% off until May 1st.', 'le texte anglais est dans un champ du panneau');
+    await p.getByLabel('Texte du message *', { exact: true }).fill('Rabais de 20 % jusqu’au 1er juin.');
+    verifier(await enregistrer(page).isDisabled(), 'français corrigé, anglais intact : « Enregistrer » est refusé');
+    verifier(await p.getByText('a changé, pas sa version anglaise').first().isVisible(), 'le panneau dit pourquoi');
+    await anglais.fill('20% off until June 1st.');
+    await enregistrer(page).click();
+    await pause(6000);
+    const config = (await etapes(regle.id))[0]?.action?.config ?? {};
+    verifier(config.body === 'Rabais de 20 % jusqu’au 1er juin.' && config.body_en === '20% off until June 1st.', 'les deux textes sont en base');
+    await page.context().close();
+  },
 };
 
 const demandes = process.argv.slice(2);

@@ -27,7 +27,7 @@
    rien annuler du tout.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import { X, Trash2, BarChart3, Pencil } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
@@ -37,6 +37,7 @@ import {
   champVisible,
   trouverAction,
 } from '../../lib/automationCatalogue';
+import type { ChampAction as ModeleChamp } from '../../lib/automationCatalogue';
 import type { Etape, EtapeAction, EtapeAttendre, EtapeSi } from '../../lib/sequenceTypes';
 import ChampActionUI from './ChampAction';
 import {
@@ -118,6 +119,43 @@ function analyserConditions(texte: string): Record<string, unknown> {
 function champsPersoDe(etape: Etape): Record<string, unknown> {
   const liste = etape.type === 'si' ? etape.conditions?.champs_perso : undefined;
   return Array.isArray(liste) ? { champs_perso: liste } : {};
+}
+
+/**
+ * LA VERSION ANGLAISE D'UN TEXTE (`<cle>_en`) — triage actions, ligne 2.
+ *
+ * Le moteur l'envoie À LA PLACE du texte français quand la langue du bureau
+ * est l'anglais (`champLocalise`, server/lib/actions). Les automatisations
+ * fournies en portent une, et « Convertir » la garde. Le panneau ne montrait
+ * que le français : on corrigeait « 20 % jusqu'au 1er juin » pendant que
+ * « 10% off until May 1st. », invisible, continuait de partir.
+ *
+ * Elle est donc un champ comme un autre — même contrôle, même compteur, mêmes
+ * variables — affiché dès que l'étape en porte une.
+ */
+const cleAnglaise = (cle: string): string => `${cle}_en`;
+const aVersionAnglaise = (champ: ModeleChamp): boolean => champ.type === 'zone' || champ.type === 'texte';
+function champAnglais(champ: ModeleChamp): ModeleChamp {
+  return {
+    ...champ,
+    cle: cleAnglaise(champ.cle),
+    fr: `${champ.fr} — version anglaise`,
+    en: `${champ.en} — English version`,
+    obligatoire: false,
+    defaut_fr: undefined,
+    defaut_en: undefined,
+    aide_fr: 'Part à la place du texte français quand la langue du bureau est l’anglais. Vide = le texte français part à tout le monde.',
+    aide_en: 'Sent instead of the French text when the office language is English. Empty = the French text goes to everyone.',
+  };
+}
+
+/** L'étape telle qu'on l'enregistre : une version anglaise VIDÉE disparaît, au lieu de rester en `""`. */
+function sansAnglaisVide(etape: Etape): Etape {
+  if (etape.type !== 'action') return etape;
+  const config = Object.fromEntries(
+    Object.entries(etape.action.config).filter(([cle, v]) => !(cle.endsWith('_en') && (v ?? '').trim() === '')),
+  );
+  return { ...etape, action: { ...etape.action, config } };
 }
 
 /** Les variables offertes, insérables d'un clic dans un champ de texte. */
@@ -210,6 +248,8 @@ export default function PanneauEtape({
    * qu'au moment d'enregistrer.
    */
   const [conditionsTexte, setConditionsTexte] = useState(() => texteDesConditions(etape));
+  /** Champs dont la version anglaise, inchangée, a été déclarée « toujours valable ». */
+  const [anglaisConfirme, setAnglaisConfirme] = useState<string[]>([]);
 
   /*
    * Changer de CARTE remet le panneau sur la nouvelle étape, et ramène
@@ -225,6 +265,7 @@ export default function PanneauEtape({
   useEffect(() => {
     setBrouillon(etape);
     setConditionsTexte(texteDesConditions(etape));
+    setAnglaisConfirme([]);
     setOnglet('edition');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- voir ci-dessus : suivre `etape` rendrait le panneau fragile à une optimisation du parent.
   }, [etape.id]);
@@ -273,6 +314,29 @@ export default function PanneauEtape({
   /** L'étape technique « note dans l'historique » (`log_activity`) : rien à régler. */
   const journal = brouillon.type === 'action' && brouillon.action.type === 'log_activity';
 
+  /**
+   * Les textes de l'étape qui portent une version anglaise, et celles qui
+   * sont PÉRIMÉES : le français a changé dans ce panneau, pas l'anglais, et
+   * personne n'a dit qu'il restait valable. Une version périmée empêche
+   * d'enregistrer — sinon elle partirait telle quelle, en silence.
+   */
+  const versionsAnglaises = useMemo(() => {
+    if (brouillon.type !== 'action' || !modele) return [];
+    const config = brouillon.action.config as Record<string, string | undefined>;
+    const origine = (etape.type === 'action' ? etape.action.config : {}) as Record<string, string | undefined>;
+    return modele.champs
+      .filter((c) => aVersionAnglaise(c) && config[cleAnglaise(c.cle)] !== undefined && champVisible(c, config))
+      .map((c) => {
+        const cleEn = cleAnglaise(c.cle);
+        const anglais = config[cleEn] ?? '';
+        /** Le français a changé ici, l'anglais non : à revoir, ou à confirmer. */
+        const aRevoir = (config[c.cle] ?? '') !== (origine[c.cle] ?? '')
+          && anglais.trim() !== ''
+          && anglais === (origine[cleEn] ?? '');
+        return { champ: c, modeleAnglais: champAnglais(c), cleEn, aRevoir, perimee: aRevoir && !anglaisConfirme.includes(c.cle) };
+      });
+  }, [brouillon, etape, modele, anglaisConfirme]);
+
   /** Ce qui empêche d'enregistrer, dit avant de cliquer. */
   const problemes = useMemo(() => {
     const out: string[] = [];
@@ -315,8 +379,14 @@ export default function PanneauEtape({
           : `“${champ.label}” is not a field of the record this trigger brings.`);
       }
     }
+    for (const v of versionsAnglaises) {
+      if (!v.perimee) continue;
+      out.push(fr
+        ? `« ${v.champ.fr} » a changé, pas sa version anglaise : mettez-la à jour, videz-la, ou confirmez qu’elle reste valable.`
+        : `“${v.champ.en}” changed, not its English version: update it, empty it, or confirm it still holds.`);
+    }
     return out;
-  }, [brouillon, modele, fr, declencheur, objetChamps, champsPerso]);
+  }, [brouillon, modele, fr, declencheur, objetChamps, champsPerso, versionsAnglaises]);
 
   /** Variables écrites dans les textes de l'action que le serveur ne saura pas remplir. */
   const inconnues = useMemo(() => {
@@ -327,6 +397,8 @@ export default function PanneauEtape({
       if (champ.type !== 'zone' && champ.type !== 'texte') continue;
       if (!champVisible(champ, config)) continue;
       for (const v of variablesInconnues(config[champ.cle] ?? '')) trouvees.add(v);
+      // La version anglaise part aux clients comme l'autre : mêmes variables, même contrôle.
+      for (const v of variablesInconnues(config[cleAnglaise(champ.cle)] ?? '')) trouvees.add(v);
     }
     return [...trouvees];
   }, [brouillon, modele]);
@@ -346,8 +418,13 @@ export default function PanneauEtape({
       // le reste ne l'est pas (un objet de courriel sur un texto ferait
       // refuser l'enregistrement par la validation serveur).
       const texte = b.action.config.body;
+      // … et sa version anglaise le suit : la laisser tomber ici l'effacerait
+      // sans que personne le voie.
+      const anglais = b.action.config[cleAnglaise('body')];
       const cible = trouverAction(type);
-      const garde = cible?.champs?.some((c) => c.cle === 'body') && texte ? { body: texte } : {};
+      const garde: Record<string, string | undefined> = cible?.champs?.some((c) => c.cle === 'body') && texte
+        ? { body: texte, ...(anglais?.trim() ? { [cleAnglaise('body')]: anglais } : {}) }
+        : {};
       return { ...b, action: { type, config: garde } };
     });
   };
@@ -542,20 +619,58 @@ export default function PanneauEtape({
                 {/* Les champs de l'action choisie. */}
                 {modele?.cle !== 'update_custom_field' && modele?.champs
                   .filter((champ) => champVisible(champ, brouillon.action.config as Record<string, unknown>))
-                  .map((champ) => (
-                    <ChampActionUI
-                      key={champ.cle}
-                      champ={champ}
-                      valeur={(brouillon.action.config as Record<string, string | undefined>)[champ.cle] ?? ''}
-                      onChange={(v) => majConfig(champ.cle, v)}
-                      fr={fr}
-                      membres={membres}
-                      etiquettes={etiquettes}
-                      automatisations={automatisations}
-                      etapesPipeline={etapesPipeline}
-                      sms={modele.cle === 'send_sms' && champ.cle === 'body'}
-                    />
-                  ))}
+                  .map((champ) => {
+                    const anglais = versionsAnglaises.find((v) => v.champ.cle === champ.cle);
+                    return (
+                      <React.Fragment key={champ.cle}>
+                        <ChampActionUI
+                          champ={champ}
+                          valeur={(brouillon.action.config as Record<string, string | undefined>)[champ.cle] ?? ''}
+                          onChange={(v) => majConfig(champ.cle, v)}
+                          fr={fr}
+                          membres={membres}
+                          etiquettes={etiquettes}
+                          automatisations={automatisations}
+                          etapesPipeline={etapesPipeline}
+                          sms={modele.cle === 'send_sms' && champ.cle === 'body'}
+                        />
+                        {/* Sa version anglaise, quand l'étape en porte une : le
+                            même champ, juste en dessous. */}
+                        {anglais && (
+                          <div>
+                            <ChampActionUI
+                              champ={anglais.modeleAnglais}
+                              valeur={(brouillon.action.config as Record<string, string | undefined>)[anglais.cleEn] ?? ''}
+                              onChange={(v) => majConfig(anglais.cleEn, v)}
+                              fr={fr}
+                              sms={modele.cle === 'send_sms' && champ.cle === 'body'}
+                            />
+                            {anglais.aRevoir && (
+                              <div className="mt-1.5 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                                <p>
+                                  {fr
+                                    ? 'Le texte français a changé, pas cette version anglaise. Mettez-la à jour — ou videz-la pour que le français parte à tout le monde.'
+                                    : 'The French text changed, not this English version. Update it — or empty it so the French goes to everyone.'}
+                                </p>
+                                <label htmlFor={`${ids}-anglais-${champ.cle}`} className="mt-1.5 flex cursor-pointer items-center gap-2">
+                                  <input
+                                    id={`${ids}-anglais-${champ.cle}`}
+                                    type="checkbox"
+                                    checked={anglaisConfirme.includes(champ.cle)}
+                                    onChange={(e) => setAnglaisConfirme((liste) => (e.target.checked
+                                      ? [...liste, champ.cle]
+                                      : liste.filter((c) => c !== champ.cle)))}
+                                    className="h-4 w-4 rounded border-border text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                  />
+                                  <span>{fr ? 'La version anglaise reste valable telle quelle' : 'The English version still holds as is'}</span>
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
 
                 {/* Une variable que le serveur ne connaît pas part VIDE :
                     « Bonjour [prenom], » devient « Bonjour , ». La liste le
@@ -840,7 +955,7 @@ export default function PanneauEtape({
           onClick={() => onEnregistrer(brouillon.type === 'si'
             // Une ligne de champ incomplète bloquerait la branche pour toujours.
             ? { ...brouillon, conditions: sansConditionsIncompletes((brouillon.conditions ?? {}) as Record<string, unknown>) }
-            : brouillon)}
+            : sansAnglaisVide(brouillon))}
           disabled={problemes.length > 0}
           className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
