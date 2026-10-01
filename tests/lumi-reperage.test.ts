@@ -14,6 +14,7 @@ const Q19 = '11111111-1111-4111-8111-111111111111';
 const C1 = '22222222-2222-4222-8222-222222222222';
 const C2 = '33333333-3333-4333-8333-333333333333';
 const C3 = '44444444-4444-4444-8444-444444444444';
+const C4 = '88888888-8888-4888-8888-888888888888';
 const M1 = '55555555-5555-4555-8555-555555555555';
 const M2 = '66666666-6666-4666-8666-666666666666';
 const F17 = '77777777-7777-4777-8777-777777777777';
@@ -47,7 +48,8 @@ const TABLES = {
   invoices: [{ id: F17, invoice_number: 'INV-000017', status: 'sent', client_name_snapshot: 'Sophie Bouchard' }],
   jobs: [],
   clients: [
-    { id: C1, first_name: 'Sophie', last_name: 'Bouchard', company: null, city: 'Lévis', status: 'active', created_at: '2026-08-05T10:00:00Z' },
+    { id: C1, first_name: 'Sophie', last_name: 'Bouchard', company: null, city: 'Lévis', status: 'active', created_at: '2026-08-05T10:00:00Z', email: 'sophie@exemple.invalid', phone: '418-555-0101' },
+    { id: C4, first_name: 'Julie', last_name: 'Dupuis', company: null, city: null, status: 'lead', created_at: '2026-09-01T10:00:00Z', email: null, phone: null },
     { id: C2, first_name: 'Luc', last_name: 'Lavoie', company: null, city: 'Québec', status: 'active', created_at: '2026-08-05T10:00:00Z' },
     { id: C3, first_name: 'Luc', last_name: 'Lavoie', company: null, city: null, status: 'active', created_at: '2026-09-10T10:00:00Z' },
   ],
@@ -103,14 +105,21 @@ describe('repererFiches', () => {
 
   it('un client cité par prénom et nom arrive avec sa référence', async () => {
     const bloc = await repererFiches('Fais une facture à Sophie Bouchard pour un lavage de vitres.', opts());
-    expect(bloc).toMatch(/- client Sophie Bouchard → client_id « ref\d+ »/);
+    expect(bloc).toMatch(/- fiche client Sophie Bouchard → client_id « ref\d+ » · courriel sophie@exemple\.invalid · tél\. 418-555-0101/);
+  });
+
+  it('trouvé en prod : un prospect reste une « fiche client » (le statut est une information), et l’absence de courriel est dite', async () => {
+    const bloc = await repererFiches('Envoie un courriel à Julie Dupuis pour confirmer jeudi.', opts());
+    expect(bloc).toMatch(/- fiche client Julie Dupuis, au statut prospect → client_id « ref\d+ » \(la même référence sert de lead_id\) · aucun courriel au dossier/);
+    expect(bloc).not.toMatch(/- prospect /); // ce libellé faisait proposer delete_lead pour « supprime le client »
+    expect(bloc).toContain('ne la demande pas à l’utilisateur quand un outil peut la donner');
   });
 
   it('deux fiches du même nom : le code le dit et ne choisit pas', async () => {
     const bloc = await repererFiches('Envoie un courriel à Luc Lavoie.', opts());
     expect(bloc).toContain('ATTENTION : 2 fiches portent le nom Luc Lavoie');
     expect(bloc).toContain('demande laquelle');
-    expect(bloc).not.toMatch(/- client Luc Lavoie →/);
+    expect(bloc).not.toMatch(/- fiche client Luc Lavoie/);
   });
 
   it('un membre cité par son prénom (majuscule, hors début de phrase) est repéré', async () => {
