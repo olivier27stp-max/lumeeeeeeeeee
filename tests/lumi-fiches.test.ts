@@ -204,6 +204,27 @@ describe('rendreMessages : le reçu survit à la relecture', () => {
   });
 });
 
+describe('remettreApercuEnAttente : la carte rouverte dit encore ce qu elle fait', () => {
+  it('une proposition en attente retrouve son aperçu ; une carte déjà décidée n en reçoit pas', async () => {
+    const { rendreMessages, remettreApercuEnAttente } = await import('../server/routes/lumi');
+    const enAttente: any[] = [
+      { role: 'user', content: 'Supprime ce client' },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'delete_client', input: { client_id: C1 } }] },
+    ];
+    const rendus = rendreMessages(enAttente);
+    expect(rendus[1].proposal?.apercu).toBeUndefined();
+    await remettreApercuEnAttente(rendus, 'org:u', ctx({ clients: { first_name: 'Marie', last_name: 'Tremblay', status: 'active' } }));
+    const apercu: any = rendus[1].proposal?.apercu;
+    expect(apercu?.genre).toBe('action');
+    expect(apercu.cibles[0].valeur).toMatch(/Marie Tremblay/);
+    expect(apercu.drapeaux).toBeDefined();
+
+    const decidee = rendreMessages([...enAttente, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu1', content: '{"cancelled":true}' }] }, { role: 'assistant', content: [{ type: 'text', text: 'Annulé.' }] }]);
+    await remettreApercuEnAttente(decidee, 'org:u', ctx());
+    expect(decidee.find((m) => m.proposal)?.proposal?.apercu).toBeUndefined();
+  });
+});
+
 describe('carte : identifiant inventé', () => {
   it('une fiche désignée par un nom (« jean-pierre-gagnon ») est signalée, jamais cachée', async () => {
     const { apercuProposition } = await import('../server/lib/lumi/fiches');
