@@ -1450,7 +1450,8 @@ export default function AutomationBuilderPage() {
    */
   // « en cours » compte aussi : fermer l'onglet pendant l'enregistrement
   // peut couper la requête avant que le serveur l'ait reçue (P2-13).
-  const travailNonEnregistre = etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours' || declencheurEnVol;
+  // … et un changement de déclencheur dont le serveur n'a pas encore répondu.
+  const travailNonEnregistre = declencheurEnVol || etatSauvegarde === 'modifie' || etatSauvegarde === 'incomplet' || etatSauvegarde === 'en_cours';
 
   /**
    * Prévenir avant de FERMER l'onglet.
