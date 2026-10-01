@@ -290,9 +290,9 @@ export const SECTIONS_CSS = `
 .hs-mlabel { margin:0 0 14px; text-align:center; font-size:11px; letter-spacing:.14em; text-transform:uppercase; font-weight:700; color:#8a8a84; }
 .hs-mtrack { display:flex; width:max-content; animation:hs-marquee 32s linear infinite; }
 .hs-marquee:hover .hs-mtrack { animation-play-state:paused; }
-.hs-logos { list-style:none; margin:0; padding:0 12px 0 0; display:flex; gap:12px; }
-.hs-logos li { display:flex; align-items:center; gap:10px; padding:12px 20px; background:#fff; border:1px solid #e4e4df; border-radius:999px; font-size:15px; font-weight:700; letter-spacing:-.01em; color:#111; white-space:nowrap; }
-.hs-logos svg { width:22px; height:22px; flex:none; }
+.hs-logos { list-style:none; margin:0; padding:0 56px 0 0; display:flex; gap:56px; }
+.hs-logos li { display:flex; align-items:center; gap:12px; padding:8px 0; font-size:22px; font-weight:700; letter-spacing:-.015em; color:#111; white-space:nowrap; }
+.hs-logos svg { width:34px; height:34px; flex:none; }
 @keyframes hs-marquee { to { transform:translateX(-50%); } }
 .hs-pgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:20px; }
 .hs-pc { display:flex; flex-direction:column; background:#fff; border:1px solid rgba(11,92,173,.12); border-radius:18px; padding:22px; text-decoration:none; color:inherit; transition:transform .2s, box-shadow .2s; }
