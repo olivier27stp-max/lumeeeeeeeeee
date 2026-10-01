@@ -1,0 +1,649 @@
+{
+ "etat": "previsionnel",
+ "genere_le": "2026-10-01T15:26:13.017Z",
+ "ancre": "2026-10-01",
+ "valable_jusqu_au": "2026-12-31",
+ "org": {
+  "id": "93daa0c7-b749-4200-9755-dbeee62ce32d",
+  "nom": null
+ },
+ "comptes": {
+  "proprietaire": "qa.map.owner@lume.test",
+  "technicien": "qa.lumi.tech@lume.test"
+ },
+ "clients": {
+  "roy_longueuil": {
+   "id": "96b20c8e-514f-52f9-b868-bc64cf173e09",
+   "nom": "Marie Roy",
+   "prenom": "Marie",
+   "nom_famille": "Roy",
+   "entreprise": null,
+   "courriel": "marie.roy@lume-qa.test",
+   "telephone": "514-555-0110",
+   "ville": "Longueuil",
+   "adresse": "845 rue Saint-Laurent Ouest, Longueuil, QC J4K 1C5",
+   "statut": "active"
+  },
+  "roy_brossard": {
+   "id": "700823ea-3513-5d90-9cd3-d862a4a4ea56",
+   "nom": "Marie Roy",
+   "prenom": "Marie",
+   "nom_famille": "Roy",
+   "entreprise": null,
+   "courriel": "marie.roy.brossard@lume-qa.test",
+   "telephone": "514-555-0111",
+   "ville": "Brossard",
+   "adresse": "3120 boulevard de Rome, Brossard, QC J4Y 1V9",
+   "statut": "active"
+  },
+  "pelletier": {
+   "id": "bd035c37-3dfc-5df9-9365-5ed520d491e2",
+   "nom": "Jean-François Pelletier",
+   "prenom": "Jean-François",
+   "nom_famille": "Pelletier",
+   "entreprise": null,
+   "courriel": "jf.pelletier@lume-qa.test",
+   "telephone": "514-555-0112",
+   "ville": "Saint-Lambert",
+   "adresse": "212 avenue Victoria, Saint-Lambert, QC J4P 2H7",
+   "statut": "active"
+  },
+  "cote": {
+   "id": "09b4b76c-ce45-5661-86a7-0bb9e8275025",
+   "nom": "Nathalie Côté",
+   "prenom": "Nathalie",
+   "nom_famille": "Côté",
+   "entreprise": null,
+   "courriel": null,
+   "telephone": "514-555-0113",
+   "ville": "Boucherville",
+   "adresse": "67 rue De Montbrun, Boucherville, QC J4B 4T8",
+   "statut": "active"
+  },
+  "bergeron": {
+   "id": "88a3ba3b-44bf-5000-8751-e830a93e4785",
+   "nom": "Luc Bergeron",
+   "prenom": "Luc",
+   "nom_famille": "Bergeron",
+   "entreprise": "Dépanneur Bergeron",
+   "courriel": "depanneur.bergeron@lume-qa.test",
+   "telephone": "514-555-0114",
+   "ville": "Longueuil",
+   "adresse": "1590 chemin de Chambly, Longueuil, QC J4J 3X5",
+   "statut": "active"
+  },
+  "fournier": {
+   "id": "39e04133-fd40-5bd4-942a-4f3033a1ade3",
+   "nom": "Isabelle Fournier",
+   "prenom": "Isabelle",
+   "nom_famille": "Fournier",
+   "entreprise": null,
+   "courriel": "isabelle.fournier@lume-qa.test",
+   "telephone": "514-555-0115",
+   "ville": "Montréal",
+   "adresse": "5480 13e Avenue, Montréal, QC H1X 2Y1",
+   "statut": "active"
+  },
+  "girard": {
+   "id": "e1f6423a-981d-5757-a150-60f27011be73",
+   "nom": "Patrick Girard",
+   "prenom": "Patrick",
+   "nom_famille": "Girard",
+   "entreprise": null,
+   "courriel": "patrick.girard@lume-qa.test",
+   "telephone": "514-555-0116",
+   "ville": "Laval",
+   "adresse": "1975 boulevard des Laurentides, Laval, QC H7M 2R2",
+   "statut": "active"
+  },
+  "leblanc": {
+   "id": "bb7fefcb-02d6-5b80-9e82-4149ca1c8884",
+   "nom": "Sylvie Leblanc",
+   "prenom": "Sylvie",
+   "nom_famille": "Leblanc",
+   "entreprise": "Clinique dentaire Leblanc",
+   "courriel": "clinique.leblanc@lume-qa.test",
+   "telephone": "514-555-0117",
+   "ville": "Brossard",
+   "adresse": "7250 boulevard Taschereau, Brossard, QC J4W 1M9",
+   "statut": "active"
+  },
+  "ouellet": {
+   "id": "1659f357-7308-563c-9f5f-d6edd1b7b55e",
+   "nom": "André Ouellet",
+   "prenom": "André",
+   "nom_famille": "Ouellet",
+   "entreprise": null,
+   "courriel": "andre.ouellet@lume-qa.test",
+   "telephone": "514-555-0118",
+   "ville": "Saint-Bruno-de-Montarville",
+   "adresse": "33 rue Montarville, Saint-Bruno-de-Montarville, QC J3V 3T6",
+   "statut": "active"
+  },
+  "levesque": {
+   "id": "98614e4b-1528-5d84-9203-86c1fc31c288",
+   "nom": "Chantal Lévesque",
+   "prenom": "Chantal",
+   "nom_famille": "Lévesque",
+   "entreprise": null,
+   "courriel": "chantal.levesque@lume-qa.test",
+   "telephone": "514-555-0119",
+   "ville": "Candiac",
+   "adresse": "14 rue Montcalm Nord, Candiac, QC J5R 3L5",
+   "statut": "active"
+  },
+  "poirier": {
+   "id": "9689fffc-d4d1-5edd-809e-4311117224c4",
+   "nom": "Guillaume Poirier",
+   "prenom": "Guillaume",
+   "nom_famille": "Poirier",
+   "entreprise": "Restaurant Chez Poirier",
+   "courriel": "chez.poirier@lume-qa.test",
+   "telephone": "514-555-0120",
+   "ville": "Montréal",
+   "adresse": "4310 rue Ontario Est, Montréal, QC H1V 1K5",
+   "statut": "active"
+  },
+  "simard": {
+   "id": "6fd39718-8675-59e9-b2c3-28946f43eccd",
+   "nom": "Mélanie Simard",
+   "prenom": "Mélanie",
+   "nom_famille": "Simard",
+   "entreprise": null,
+   "courriel": "melanie.simard@lume-qa.test",
+   "telephone": "514-555-0121",
+   "ville": "Chambly",
+   "adresse": "1250 avenue Bourgogne, Chambly, QC J3L 1X9",
+   "statut": "lead"
+  }
+ },
+ "homonymes": {
+  "nom": "Marie Roy",
+  "ville_a": "Longueuil",
+  "ville_b": "Brossard"
+ },
+ "equipe": {
+  "lavoie": {
+   "nom": "Mathieu Lavoie",
+   "prenom": "Mathieu",
+   "nom_famille": "Lavoie",
+   "role": "technician",
+   "courriel": "eval.mathieu.lavoie@lume-qa.test",
+   "taux_horaire_cents": 2400
+  },
+  "belanger": {
+   "nom": "Karine Bélanger",
+   "prenom": "Karine",
+   "nom_famille": "Bélanger",
+   "role": "technician",
+   "courriel": "eval.karine.belanger@lume-qa.test",
+   "taux_horaire_cents": 2250
+  },
+  "gauthier": {
+   "nom": "Olivier Gauthier",
+   "prenom": "Olivier",
+   "nom_famille": "Gauthier",
+   "role": "technician",
+   "courriel": "eval.olivier.gauthier@lume-qa.test",
+   "taux_horaire_cents": 2600
+  },
+  "morin": {
+   "nom": "Stéphanie Morin",
+   "prenom": "Stéphanie",
+   "nom_famille": "Morin",
+   "role": "sales_rep",
+   "courriel": "eval.stephanie.morin@lume-qa.test",
+   "taux_horaire_cents": 0
+  }
+ },
+ "equipes": {
+  "vitres": {
+   "nom": "[EVAL] Équipe Vitres"
+  },
+  "pression": {
+   "nom": "[EVAL] Équipe Pression"
+  }
+ },
+ "jobs": {
+  "roy_vitres": {
+   "numero": null,
+   "titre": "Lavage de vitres intérieur et extérieur",
+   "client": "Marie Roy",
+   "ville": "Longueuil",
+   "statut": "completed",
+   "jour": "2026-09-09",
+   "sous_total_cents": 40000,
+   "taxes_cents": 5990,
+   "total_cents": 45990
+  },
+  "pelletier_pression": {
+   "numero": null,
+   "titre": "Lavage à pression — entrée et patio",
+   "client": "Jean-François Pelletier",
+   "ville": "Saint-Lambert",
+   "statut": "completed",
+   "jour": "2026-09-16",
+   "sous_total_cents": 60000,
+   "taxes_cents": 8985,
+   "total_cents": 68985
+  },
+  "bergeron_vitrine": {
+   "numero": null,
+   "titre": "Lavage de vitrine commerciale",
+   "client": "Luc Bergeron",
+   "ville": "Longueuil",
+   "statut": "completed",
+   "jour": "2026-09-22",
+   "sous_total_cents": 20000,
+   "taxes_cents": 2995,
+   "total_cents": 22995
+  },
+  "fournier_gouttieres": {
+   "numero": null,
+   "titre": "Nettoyage de gouttières",
+   "client": "Isabelle Fournier",
+   "ville": "Montréal",
+   "statut": "completed",
+   "jour": "2026-09-24",
+   "sous_total_cents": 32000,
+   "taxes_cents": 4792,
+   "total_cents": 36792
+  },
+  "leblanc_clinique": {
+   "numero": null,
+   "titre": "Lavage de vitres — clinique",
+   "client": "Sylvie Leblanc",
+   "ville": "Brossard",
+   "statut": "completed",
+   "jour": "2026-09-29",
+   "sous_total_cents": 36000,
+   "taxes_cents": 5391,
+   "total_cents": 41391
+  },
+  "ouellet_retard": {
+   "numero": null,
+   "titre": "Lavage de vitres extérieur",
+   "client": "André Ouellet",
+   "ville": "Saint-Bruno-de-Montarville",
+   "statut": "scheduled",
+   "jour": "2026-09-30",
+   "sous_total_cents": 20000,
+   "taxes_cents": 2995,
+   "total_cents": 22995
+  },
+  "poirier_encours": {
+   "numero": null,
+   "titre": "Entretien des vitres — restaurant",
+   "client": "Guillaume Poirier",
+   "ville": "Montréal",
+   "statut": "in_progress",
+   "jour": "2026-10-01",
+   "sous_total_cents": 16000,
+   "taxes_cents": 2396,
+   "total_cents": 18396
+  },
+  "cote_aujourdhui": {
+   "numero": null,
+   "titre": "Nettoyage de gouttières",
+   "client": "Nathalie Côté",
+   "ville": "Boucherville",
+   "statut": "scheduled",
+   "jour": "2026-10-01",
+   "sous_total_cents": 24000,
+   "taxes_cents": 3594,
+   "total_cents": 27594
+  },
+  "girard_demain": {
+   "numero": null,
+   "titre": "Lavage de vitres extérieur",
+   "client": "Patrick Girard",
+   "ville": "Laval",
+   "statut": "scheduled",
+   "jour": "2026-10-02",
+   "sous_total_cents": 20000,
+   "taxes_cents": 2995,
+   "total_cents": 22995
+  },
+  "bergeron_demain": {
+   "numero": null,
+   "titre": "Lavage de vitrine commerciale",
+   "client": "Luc Bergeron",
+   "ville": "Longueuil",
+   "statut": "scheduled",
+   "jour": "2026-10-02",
+   "sous_total_cents": 20000,
+   "taxes_cents": 2995,
+   "total_cents": 22995
+  },
+  "roy_brossard_semaine": {
+   "numero": null,
+   "titre": "Lavage de vitres extérieur",
+   "client": "Marie Roy",
+   "ville": "Brossard",
+   "statut": "scheduled",
+   "jour": "2026-10-04",
+   "sous_total_cents": 20000,
+   "taxes_cents": 2995,
+   "total_cents": 22995
+  },
+  "fournier_semaine": {
+   "numero": null,
+   "titre": "Lavage à pression — entrée",
+   "client": "Isabelle Fournier",
+   "ville": "Montréal",
+   "statut": "scheduled",
+   "jour": "2026-10-05",
+   "sous_total_cents": 24000,
+   "taxes_cents": 3594,
+   "total_cents": 27594
+  },
+  "pelletier_brouillon": {
+   "numero": null,
+   "titre": "Lavage de vitres — automne",
+   "client": "Jean-François Pelletier",
+   "ville": "Saint-Lambert",
+   "statut": "draft",
+   "jour": null,
+   "sous_total_cents": 28000,
+   "taxes_cents": 4193,
+   "total_cents": 32193
+  }
+ },
+ "devis": {
+  "brouillon": {
+   "numero": null,
+   "titre": "Lavage de vitres et gouttières",
+   "client": "Mélanie Simard",
+   "statut": "draft",
+   "sous_total_cents": 45000,
+   "taxes_cents": 6739,
+   "total_cents": 51739
+  },
+  "envoye": {
+   "numero": null,
+   "titre": "Lavage de vitres — deux étages",
+   "client": "Patrick Girard",
+   "statut": "awaiting_response",
+   "sous_total_cents": 52000,
+   "taxes_cents": 7787,
+   "total_cents": 59787
+  },
+  "accepte": {
+   "numero": null,
+   "titre": "Lavage à pression — terrasse",
+   "client": "Chantal Lévesque",
+   "statut": "approved",
+   "sous_total_cents": 28000,
+   "taxes_cents": 4193,
+   "total_cents": 32193
+  },
+  "refuse": {
+   "numero": null,
+   "titre": "Lavage à pression — maison complète",
+   "client": "Nathalie Côté",
+   "statut": "declined",
+   "sous_total_cents": 95000,
+   "taxes_cents": 14226,
+   "total_cents": 109226
+  }
+ },
+ "factures": {
+  "payee": {
+   "numero": null,
+   "client": "Marie Roy",
+   "sujet": "Lavage de vitres intérieur et extérieur",
+   "statut": "paid",
+   "echeance": "2026-10-09",
+   "sous_total_cents": 40000,
+   "taxes_cents": 5990,
+   "total_cents": 45990,
+   "paye_cents": 45990,
+   "solde_cents": 0
+  },
+  "partielle": {
+   "numero": null,
+   "client": "Jean-François Pelletier",
+   "sujet": "Lavage à pression — entrée et patio",
+   "statut": "partial",
+   "echeance": "2026-12-31",
+   "sous_total_cents": 60000,
+   "taxes_cents": 8985,
+   "total_cents": 68985,
+   "paye_cents": 30000,
+   "solde_cents": 38985
+  },
+  "en_retard": {
+   "numero": null,
+   "client": "Luc Bergeron",
+   "sujet": "Lavage de vitrine commerciale",
+   "statut": "sent",
+   "echeance": "2026-09-25",
+   "sous_total_cents": 20000,
+   "taxes_cents": 2995,
+   "total_cents": 22995,
+   "paye_cents": 0,
+   "solde_cents": 22995
+  },
+  "envoyee": {
+   "numero": null,
+   "client": "Isabelle Fournier",
+   "sujet": "Nettoyage de gouttières",
+   "statut": "sent",
+   "echeance": "2026-12-31",
+   "sous_total_cents": 32000,
+   "taxes_cents": 4792,
+   "total_cents": 36792,
+   "paye_cents": 0,
+   "solde_cents": 36792
+  },
+  "en_retard_ancienne": {
+   "numero": null,
+   "client": "Patrick Girard",
+   "sujet": "Lavage à pression — stationnement",
+   "statut": "sent",
+   "echeance": "2026-08-31",
+   "sous_total_cents": 80000,
+   "taxes_cents": 11980,
+   "total_cents": 91980,
+   "paye_cents": 0,
+   "solde_cents": 91980
+  },
+  "payee_cheque": {
+   "numero": null,
+   "client": "Chantal Lévesque",
+   "sujet": "Lavage de vitres extérieur",
+   "statut": "paid",
+   "echeance": "2026-10-15",
+   "sous_total_cents": 20000,
+   "taxes_cents": 2995,
+   "total_cents": 22995,
+   "paye_cents": 22995,
+   "solde_cents": 0
+  },
+  "brouillon": {
+   "numero": null,
+   "client": "André Ouellet",
+   "sujet": "Lavage de vitres extérieur",
+   "statut": "draft",
+   "echeance": null,
+   "sous_total_cents": 20000,
+   "taxes_cents": 2995,
+   "total_cents": 22995,
+   "paye_cents": 0,
+   "solde_cents": 22995
+  }
+ },
+ "paiements": {
+  "paiement_roy": {
+   "client": "Marie Roy",
+   "facture": "payee",
+   "montant_cents": 45990,
+   "methode": "e-transfer",
+   "jour": "2026-09-12"
+  },
+  "paiement_pelletier": {
+   "client": "Jean-François Pelletier",
+   "facture": "partielle",
+   "montant_cents": 30000,
+   "methode": "cash",
+   "jour": "2026-09-20"
+  },
+  "paiement_levesque": {
+   "client": "Chantal Lévesque",
+   "facture": "payee_cheque",
+   "montant_cents": 22995,
+   "methode": "check",
+   "jour": "2026-09-18"
+  }
+ },
+ "taches": {
+  "rappel_girard": {
+   "titre": "Rappeler Patrick Girard pour sa facture en retard",
+   "statut": "open",
+   "echeance": "2026-10-02"
+  },
+  "raclettes": {
+   "titre": "Commander des raclettes neuves",
+   "statut": "open",
+   "echeance": "2026-10-09"
+  },
+  "assurance": {
+   "titre": "Renouveler l’assurance du camion",
+   "statut": "done",
+   "echeance": "2026-09-25"
+  }
+ },
+ "modeles_courriel": {
+  "merci": {
+   "nom": "[EVAL] Merci après la job",
+   "type": "generic",
+   "par_defaut": false
+  },
+  "rappel_doux": {
+   "nom": "[EVAL] Rappel de facture — ton doux",
+   "type": "invoice_reminder",
+   "par_defaut": true
+  },
+  "rappel_ferme": {
+   "nom": "[EVAL] Rappel de facture — ton ferme",
+   "type": "invoice_reminder",
+   "par_defaut": false
+  }
+ },
+ "rentabilite": {
+  "roy_vitres": {
+   "revenus_cents": 40000,
+   "main_oeuvre_cents": 7200,
+   "commissions_cents": 4000,
+   "depenses_cents": 1850,
+   "couts_cents": 13050,
+   "profit_cents": 26950,
+   "marge_pct": 67.4,
+   "total_heures": 3
+  },
+  "pelletier_pression": {
+   "revenus_cents": 60000,
+   "main_oeuvre_cents": 11700,
+   "commissions_cents": 6000,
+   "depenses_cents": 7700,
+   "couts_cents": 25400,
+   "profit_cents": 34600,
+   "marge_pct": 57.7,
+   "total_heures": 4.5
+  },
+  "bergeron_vitrine": {
+   "revenus_cents": 20000,
+   "main_oeuvre_cents": 5625,
+   "commissions_cents": 0,
+   "depenses_cents": 0,
+   "couts_cents": 5625,
+   "profit_cents": 14375,
+   "marge_pct": 71.9,
+   "total_heures": 2.5
+  },
+  "fournier_gouttieres": {
+   "revenus_cents": 32000,
+   "main_oeuvre_cents": 9300,
+   "commissions_cents": 0,
+   "depenses_cents": 7200,
+   "couts_cents": 16500,
+   "profit_cents": 15500,
+   "marge_pct": 48.4,
+   "total_heures": 4
+  },
+  "leblanc_clinique": {
+   "revenus_cents": 36000,
+   "main_oeuvre_cents": 7800,
+   "commissions_cents": 0,
+   "depenses_cents": 0,
+   "couts_cents": 7800,
+   "profit_cents": 28200,
+   "marge_pct": 78.3,
+   "total_heures": 3
+  }
+ },
+ "mesures": {
+  "portee": "jeu_seul",
+  "factures_en_retard": {
+   "nombre": 2,
+   "solde_cents": 114975
+  },
+  "factures_impayees": {
+   "nombre": 4,
+   "solde_cents": 190752
+  },
+  "factures_brouillon": {
+   "nombre": 1
+  },
+  "encaisse_septembre_2026": {
+   "nombre": 3,
+   "total_cents": 98985
+  },
+  "heures_septembre_2026": {
+   "total_heures": 17,
+   "lavoie_heures": 5,
+   "gauthier_heures": 7.5,
+   "belanger_heures": 4.5
+  },
+  "visites": {
+   "aujourd_hui": {
+    "nombre": 2,
+    "clients": [
+     "Guillaume Poirier",
+     "Nathalie Côté"
+    ]
+   },
+   "demain": {
+    "nombre": 2,
+    "clients": [
+     "Patrick Girard",
+     "Luc Bergeron"
+    ]
+   },
+   "sept_jours": {
+    "nombre": 6,
+    "clients": [
+     "Guillaume Poirier",
+     "Nathalie Côté",
+     "Patrick Girard",
+     "Luc Bergeron",
+     "Marie Roy",
+     "Isabelle Fournier"
+    ]
+   }
+  },
+  "devis": {
+   "brouillon_nombre": 1,
+   "en_attente_nombre": 1,
+   "acceptes_nombre": 1,
+   "refuses_nombre": 1
+  },
+  "clients": {
+   "nombre": 11
+  },
+  "prospects": {
+   "nombre": 1
+  }
+ },
+ "ecarts": []
+}
