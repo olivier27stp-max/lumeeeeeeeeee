@@ -808,6 +808,24 @@ export async function relanceFactureDejaPartie(supabase: SupabaseClient, orgId: 
   }
 }
 
+/** Le texte provisoire d'une ligne de journal RÉSERVÉE, avant l'exécution. */
+const RESERVATION_EN_COURS = 'en cours';
+
+/**
+ * Âge au-delà duquel une réservation « en cours » est ORPHELINE : aucun
+ * traitement vivant ne la porte encore. Une action est coupée à
+ * DELAI_MAX_ACTION_MS (5 s) et sa ligne est alors réécrite ; une minute
+ * laisse une marge large, et reste sous le délai de grâce de l'outbox (3 min).
+ */
+export const RESERVATION_ORPHELINE_MS = 60_000;
+
+/** Cette réservation « en cours » a-t-elle été abandonnée par un processus mort ? */
+export function reservationOrpheline(creeeLe: string | null | undefined, maintenant: number = Date.now()): boolean {
+  const t = Date.parse(String(creeeLe ?? ''));
+  // Date illisible : on ne sait pas — on la tient pour vivante (pas de doublon).
+  return Number.isFinite(t) && maintenant - t > RESERVATION_ORPHELINE_MS;
+}
+
 /**
  * Réserve l'exécution d'une action immédiate.
  *
@@ -843,7 +861,7 @@ async function reserverActionImmediate(
       .eq('org_id', event.orgId)
       .like('execution_key', `${base}@%`)
       .gte('created_at', event.rejoueDepuis)
-      .or('result_success.eq.true,result_error.eq."en cours"')
+      .eq('result_success', true)
       .limit(1)
       .maybeSingle();
     if (errRejeu) {
@@ -851,6 +869,56 @@ async function reserverActionImmediate(
     } else if (faite) {
       logger.info(`[automationEngine] rejeu : action déjà exécutée depuis ${event.rejoueDepuis}, pas refaite : ${base}`);
       return null;
+    }
+
+    /*
+     * Une réservation restée « en cours » (B-13). Elle était tenue pour une
+     * action faite : si le processus est mort ENTRE la réservation et
+     * l'exécution (déploiement), le rejeu passait son tour et la confirmation
+     * ne partait jamais — 1 à 2 sur 12 à chaque processus tué.
+     *   · récente : un autre traitement est peut-être encore en vol → on
+     *     laisse (une action est coupée à 5 s, sa ligne est alors réécrite) ;
+     *   · ancienne : orpheline. Le rejeu la REPREND (même ligne de journal)
+     *     et exécute. Le courriel et le texto vérifient « déjà parti depuis
+     *     l'heure du rejeu » avant d'envoyer : pas de doublon.
+     */
+    if (!errRejeu) {
+      const { data: enCours, error: errEnCours } = await supabase
+        .from('automation_execution_logs')
+        .select('id, created_at')
+        .eq('org_id', event.orgId)
+        .like('execution_key', `${base}@%`)
+        .gte('created_at', event.rejoueDepuis)
+        .eq('result_error', RESERVATION_EN_COURS)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const ligne = enCours as { id?: string; created_at?: string } | null;
+      if (errEnCours) {
+        console.error(`[automationEngine] rejeu : réservation illisible (${base}) — exécution quand même:`, errEnCours.message);
+      } else if (ligne?.id) {
+        if (!reservationOrpheline(ligne.created_at, maintenant)) {
+          logger.info(`[automationEngine] rejeu : action encore en cours ailleurs, pas refaite : ${base}`);
+          return null;
+        }
+        // Reprise atomique : la ligne est redatée à maintenant, seulement si
+        // personne ne l'a touchée depuis la lecture. Zéro ligne = un autre
+        // rejeu l'a prise.
+        const { data: reprise, error: errReprise } = await supabase
+          .from('automation_execution_logs')
+          .update({ created_at: new Date(maintenant).toISOString() })
+          .eq('id', ligne.id)
+          .eq('result_error', RESERVATION_EN_COURS)
+          .eq('created_at', ligne.created_at)
+          .select('id');
+        if (errReprise) {
+          console.error(`[automationEngine] rejeu : réservation orpheline non reprise (${base}) — exécution quand même:`, errReprise.message);
+          return undefined;
+        }
+        if (!reprise?.length) return null;
+        logger.warn(`[automationEngine] rejeu : réservation orpheline reprise (le processus est mort avant d'exécuter) : ${base}`);
+        return ligne.id;
+      }
     }
   }
 
@@ -880,7 +948,7 @@ async function reserverActionImmediate(
       action_type: action.type,
       action_config: action.config,
       result_success: false,
-      result_error: 'en cours',
+      result_error: RESERVATION_EN_COURS,
       execution_key: `${base}@${tranche}`,
     })
     .select('id')
