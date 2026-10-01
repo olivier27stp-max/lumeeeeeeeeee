@@ -641,12 +641,25 @@ export async function tourLumi(opts: {
 
     const cout = coutEnCents(model, reponse.usage);
     coutTotal += cout;
-    // Le plafond par tour vise les boucles, pas le démarrage à froid du préfixe
-    // (écriture 1 h, une fois par heure creuse pour toute la plateforme) : il
-    // se mesure hors écriture 1 h. Sans détail, tout est compté (jamais sous-compté).
+    // Le plafond par tour vise les boucles, pas le démarrage à froid : il se
+    // mesure hors écriture du cache au PREMIER appel du tour (le préfixe du sujet
+    // et la conversation, écrits une fois puis relus), et hors écriture 1 h aux
+    // appels suivants.
+    //
+    // Avant (2026-10-01) seule l'écriture 1 h était écartée. Or le cache est en
+    // 5 minutes depuis #810 : un démarrage à froid — 13 000 à 21 000 tokens écrits,
+    // 4 à 6 ¢ — comptait en entier, et atteignait le plafond du tour (6 ¢) à lui
+    // seul. Dès la 2e étape, Lumi n'avait plus ses outils : « assigne la job de
+    // Marie Roy » finissait par « confirme-moi au prochain message » au lieu d'une
+    // carte (rejeu en prod, juste après un déploiement). À cache froid, c'est-à-dire
+    // après chaque pause de plus de cinq minutes, aucune action en deux étapes
+    // ne pouvait aboutir dans les sujets les plus lourds.
     const usageAppel = reponse.usage;
+    const premierAppel = appelsModele === 1;
     const ecrit1h = usageAppel.cache_creation ? usageAppel.cache_creation.ephemeral_1h_input_tokens : 0;
-    coutHorsCacheFroid += coutEnCents(model, { ...usageAppel, cache_creation_input_tokens: Math.max(0, (usageAppel.cache_creation_input_tokens ?? 0) - ecrit1h), cache_creation: usageAppel.cache_creation ? { ...usageAppel.cache_creation, ephemeral_1h_input_tokens: 0 } : undefined });
+    coutHorsCacheFroid += premierAppel
+      ? coutEnCents(model, { ...usageAppel, cache_creation_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } })
+      : coutEnCents(model, { ...usageAppel, cache_creation_input_tokens: Math.max(0, (usageAppel.cache_creation_input_tokens ?? 0) - ecrit1h), cache_creation: usageAppel.cache_creation ? { ...usageAppel.cache_creation, ephemeral_1h_input_tokens: 0 } : undefined });
     await opts.journaliser(reponse.usage, model, cout, reponse.id);
     if (reservation && opts.budget) await opts.budget.regler(reservation.id, cout);
     // Tokens seulement : aucun montant en $ ne part vers le navigateur (crédits Lumi, 2026-09-30).
