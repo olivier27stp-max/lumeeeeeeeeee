@@ -70,9 +70,18 @@ const CANAL_DE_L_ACTION: Record<string, CanalModele> = {
   move_deal_stage: 'pipeline',
 };
 
-/** Actions de journal interne : invisibles pour l'entreprise, jamais comptées. */
+/**
+ * Actions de journal interne (« note dans l'historique ») : absentes du
+ * catalogue de l'éditeur, on ne peut ni les ajouter ni les régler.
+ *
+ * Elles sont pourtant COMPTÉES et montrées dans l'aperçu : la copie les garde
+ * et l'éditeur en fait une carte (« Note dans l'historique — étape technique,
+ * automatique »). Les retirer du compte annonçait « 3 étapes » pour une copie
+ * qui en montrait 4, sur 33 modèles (audit du 2026-10-01).
+ */
 const ACTIONS_INTERNES = new Set(['log_activity']);
 
+/** L'action figure-t-elle au catalogue de l'éditeur (faux = étape technique) ? */
 export function actionVisible(type: string): boolean {
   return !ACTIONS_INTERNES.has(type);
 }
@@ -142,7 +151,7 @@ export function etapesApercu(m: Pick<ModeleAutomatisation, 'steps' | 'actions' |
         vues.add(id);
         const cote = branche ? { branche } : {};
         if (e.type === 'action') {
-          if (actionVisible(e.action.type)) out.push({ genre: 'action', type: e.action.type, config: e.action.config, ...cote });
+          out.push({ genre: 'action', type: e.action.type, config: e.action.config, ...cote });
           id = e.suivant ?? undefined;
         } else if (e.type === 'attendre') {
           const mode = e.mode ?? 'duree';
@@ -173,7 +182,7 @@ export function etapesApercu(m: Pick<ModeleAutomatisation, 'steps' | 'actions' |
   }
   const out: EtapeApercu[] = [];
   if (m.delai_secondes !== 0) out.push({ genre: 'attente', secondes: m.delai_secondes, mode: 'duree' });
-  for (const a of m.actions) if (actionVisible(a.type)) out.push({ genre: 'action', type: a.type, config: a.config });
+  for (const a of m.actions) out.push({ genre: 'action', type: a.type, config: a.config });
   return out;
 }
 

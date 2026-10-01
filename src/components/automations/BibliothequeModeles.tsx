@@ -20,6 +20,7 @@ import { cn } from '../../lib/utils';
 import { fetchModelesAutomatisation, utiliserModele } from '../../lib/automationBuilderApi';
 import type { AutomationRule } from '../../lib/automationRulesApi';
 import { trouverAction, trouverDeclencheur } from '../../lib/automationCatalogue';
+import { ACTION_JOURNAL } from '../../lib/sequenceTypes';
 import {
   CATEGORIES_MODELES, etapesApercu, filtrerModeles, texteSansHtml, trierModeles,
   type CanalModele, type CategorieModele, type EtapeApercu, type ModeleAutomatisation, type TriModeles,
@@ -73,8 +74,12 @@ function libelleAttente(e: Extract<EtapeApercu, { genre: 'attente' }>, fr: boole
 }
 
 function libelleAction(type: string, fr: boolean): string {
+  // L'étape technique que la copie garde : les mots de la carte de l'éditeur
+  // (SequenceCanvas), pour qu'on la reconnaisse des deux côtés.
+  if (type === ACTION_JOURNAL) return fr ? 'Note dans l’historique' : 'History note';
   const a = trouverAction(type);
-  return a ? (fr ? a.fr : a.en) : type;
+  if (a) return fr ? a.fr : a.en;
+  return fr ? 'Étape technique' : 'Technical step';
 }
 
 function libelleDeclencheur(cle: string, fr: boolean): string {
@@ -221,7 +226,7 @@ function Miniature({ modele, compacte = false }: { modele: ModeleAutomatisation;
         <Zap size={12} />
       </span>
       {visibles.map((e, i) => {
-        const Icone = e.genre === 'action' ? (CANAUX[CANAL_ACTION[e.type]]?.icone ?? Zap)
+        const Icone = e.genre === 'action' ? (CANAUX[CANAL_ACTION[e.type]]?.icone ?? (e.type === ACTION_JOURNAL ? FileText : Zap))
           : e.genre === 'attente' ? CalendarClock : GitBranch;
         return (
           <span key={i} className="inline-flex items-center gap-1">
@@ -638,6 +643,9 @@ function ContenuAction({ type, config, fr }: { type: string; config: Record<stri
     const v = (fr ? config[cle] : config[`${cle}_en`] ?? config[cle]);
     return typeof v === 'string' ? v : '';
   };
+  if (type === ACTION_JOURNAL) {
+    return <p className="mt-2 text-[12px] text-text-tertiary">{fr ? 'Étape technique, automatique' : 'Technical step, automatic'}</p>;
+  }
   if (type === 'send_sms' || type === 'request_review') {
     const corps = lire('body');
     if (!corps) return null;

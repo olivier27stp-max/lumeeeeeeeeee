@@ -229,6 +229,39 @@ describe('modeles-01 — les conditions se lisent en clair, dans la langue de l�
 const etapesAffichees = () => [...fenetre().querySelectorAll('ol > li')];
 const canauxAnnonces = (dans: Element) => [...dans.querySelectorAll('svg[aria-label]')].map((s) => s.getAttribute('aria-label'));
 
+describe('modeles-07 — autant d’étapes annoncées que de cartes dans l’éditeur', () => {
+  it('« Prospect — Bienvenue » : la carte dit 4 étapes, l’aperçu en liste 4, la 4e est la note technique', async () => {
+    await monter();
+    expect(carte('welcome_new_lead').textContent).toContain('4 étapes');
+    cliquer(carte('welcome_new_lead'));
+    const etapes = etapesAffichees();
+    expect(etapes.length).toBe(4);
+    // Les mots de l'éditeur, pour qu'on reconnaisse la même étape des deux côtés.
+    expect(etapes[3].textContent).toContain('Note dans l’historique');
+    expect(etapes[3].textContent).toContain('Étape technique, automatique');
+    expect(fenetre().textContent).not.toContain('log_activity');
+  });
+
+  it('en anglais : « History note — Technical step, automatic »', async () => {
+    await monter(false);
+    expect(carte('welcome_new_lead').textContent).toContain('4 steps');
+    cliquer(carte('welcome_new_lead'));
+    const etapes = etapesAffichees();
+    expect(etapes[3].textContent).toContain('History note');
+    expect(etapes[3].textContent).toContain('Technical step, automatic');
+  });
+
+  it('chaque carte annonce le nombre d’étapes que son aperçu liste', async () => {
+    await monter();
+    for (const m of MODELES_AUTOMATISATION) {
+      const annonce = Number(/(\d+) étapes?$/.exec((carte(m.id).textContent ?? '').trim())?.[1]);
+      cliquer(carte(m.id));
+      expect(etapesAffichees().length, m.id).toBe(annonce);
+      cliquer(bouton(/^Retour$/));
+    }
+  });
+});
+
 describe('modeles-08 — la carte et l’aperçu montrent toutes les branches', () => {
   it('« Relance de devis » : 23 étapes et l’icône Courriel sur la carte et sur la ligne', async () => {
     await monter();

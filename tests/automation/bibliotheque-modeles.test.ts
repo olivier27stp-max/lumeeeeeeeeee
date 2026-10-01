@@ -32,7 +32,8 @@ describe('catalogue de modèles', () => {
   for (const m of MODELES_AUTOMATISATION) {
     it(`${m.id} passe la validation du moteur`, () => {
       expect(trouverDeclencheur(m.declencheur), `déclencheur ${m.declencheur}`).toBeDefined();
-      // `log_activity` = journal interne, invisible dans l'éditeur comme dans l'aperçu.
+      // `log_activity` = journal interne, hors du catalogue de l'éditeur (étape
+      // technique : comptée et montrée, jamais proposée).
       for (const a of m.actions) if (actionVisible(a.type)) expect(trouverAction(a.type), `action ${a.type}`).toBeDefined();
       // Le parcours passe la validation de graphe du moteur (étapes reliées,
       // bornes). Le schéma de l'ÉDITEUR, lui, est volontairement plus strict

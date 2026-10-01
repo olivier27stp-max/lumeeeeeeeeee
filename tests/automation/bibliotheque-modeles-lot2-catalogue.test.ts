@@ -16,7 +16,7 @@ vi.mock('../../server/lib/supabase', async (orig) => ({
 import router from '../../server/routes/automation-rules';
 import { MODELES_AUTOMATISATION, trouverModele } from '../../server/lib/automationTemplates';
 import { etapesApercu, type CanalModele, type ModeleAutomatisation } from '../../src/lib/automationTemplates';
-import type { Etape } from '../../src/lib/sequenceTypes';
+import { projeterFormatOrigine, type Etape } from '../../src/lib/sequenceTypes';
 
 const app = express();
 app.use(express.json());
@@ -53,6 +53,36 @@ function atteignables(steps: Etape[]): Etape[] {
   }
   return steps.filter((e) => vues.has(e.id));
 }
+
+describe('modeles-07 — le nombre d’étapes annoncé est celui que l’éditeur montrera', () => {
+  /** Les étapes de la COPIE, telles que la route « Utiliser ce modèle » les crée : une carte chacune dans l'éditeur. */
+  const cartesDeLaCopie = (m: ModeleAutomatisation) => atteignables(
+    m.steps ?? projeterFormatOrigine({ actions: m.actions, delay_seconds: m.delai_secondes }),
+  ).filter((e) => e.type !== 'arreter');
+
+  it('« Prospect — Bienvenue » : 4 étapes (texto, courriel, notification, note dans l’historique), pas 3', async () => {
+    const m = (await catalogueServi()).find((x) => x.id === 'welcome_new_lead')!; // présent : préréglage du socle
+    expect(cartesDeLaCopie(m).map((e) => (e.type === 'action' ? e.action.type : e.type)))
+      .toEqual(['send_sms', 'send_email', 'create_notification', 'log_activity']);
+    expect(m.nb_etapes).toBe(4);
+  });
+
+  it('« Rappel de rendez-vous — la veille » : l’attente compte aussi (4 étapes)', async () => {
+    const m = (await catalogueServi()).find((x) => x.id === 'job_reminder_1d')!; // présent : préréglage du socle
+    expect(cartesDeLaCopie(m).map((e) => (e.type === 'action' ? e.action.type : e.type)))
+      .toEqual(['attendre', 'send_sms', 'send_email', 'log_activity']);
+    expect(m.nb_etapes).toBe(4);
+  });
+
+  it('pour CHAQUE modèle servi : nb_etapes = le nombre de cartes de la copie, et l’aperçu en liste autant', async () => {
+    const servis = await catalogueServi();
+    expect(servis.length).toBe(MODELES_AUTOMATISATION.length);
+    const ecarts = servis
+      .map((m) => ({ id: m.id, annonce: m.nb_etapes, apercu: etapesApercu(m).filter((e) => e.genre !== 'fin').length, cartes: cartesDeLaCopie(m).length }))
+      .filter((x) => x.annonce !== x.cartes || x.apercu !== x.cartes);
+    expect(ecarts).toEqual([]);
+  });
+});
 
 describe('modeles-08 — le décompte et les canaux suivent TOUTES les branches', () => {
   it('« Relance de devis » : 23 étapes et le courriel, pas 18 étapes sans courriel', async () => {
