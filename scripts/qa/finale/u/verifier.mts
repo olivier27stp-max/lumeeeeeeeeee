@@ -13,7 +13,84 @@ const etapes = async (id: string): Promise<Etapes> => ((await lireRegle(id)).ste
 const enregistrer = (page: Page) => panneau(page).getByRole('button', { name: /^(Enregistrer|Save|Save action)$/ });
 const action = (type: string, config: Record<string, unknown>, id = 'e1', suivant: string | null = null) => ({ id, type: 'action', action: { type, config }, suivant });
 
+const EXEMPLE = 'Bonjour [client_name], c’est [company_name]. Merci !';
+const DE_LUMI = 'Bonjour [client_first_name], votre facture [invoice_number] est en retard. Réglez-la ici : [invoice_link]. [company_name]';
+/** La réponse de Lumi, fixe (route interceptée, sans modèle) : le même parcours, le texto réécrit. */
+async function lumiReecritLeTexto(page: Page): Promise<void> {
+  await page.route('**/api/automations/rules/generer', async (route) => {
+    const corps = JSON.parse(route.request().postData() ?? '{}') as { parcours_actuel?: { trigger_event?: string; steps?: Array<Record<string, unknown>> } };
+    const steps = (corps.parcours_actuel?.steps ?? []).map((e) => (e.type === 'action' ? { ...e, action: { type: 'send_sms', config: { body: DE_LUMI } } } : e));
+    await route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ nom: 'Relance', trigger_event: corps.parcours_actuel?.trigger_event ?? 'invoice.overdue', resume: `J’ai remplacé le texte d’exemple.\n\nNouveau texte :\n• Texto : « ${DE_LUMI} »`, steps, autre: null }),
+    });
+  });
+}
+async function demanderALumi(page: Page, demande: string): Promise<void> {
+  await page.getByLabel('Décris ton automatisation').fill(demande);
+  await page.getByRole('button', { name: /^(Construire|Envoyer)$/ }).click();
+  await page.getByText('Nouveau texte', { exact: false }).first().waitFor({ timeout: 30_000 });
+}
+/** Une automatisation « Facture en retard » sans étape, puis « Envoyer un texto » : le panneau est ouvert. */
+async function texteDExempleOuvert(page: Page): Promise<string> {
+  const regle = await creerRegle({ trigger_event: 'invoice.overdue', steps: null, actions: [{ type: 'send_sms', config: { body: 'À compléter' } }] });
+  await ouvrirEditeur(page, regle.id);
+  await page.getByRole('button', { name: /Ajouter une première étape/ }).click();
+  await tiroir(page).getByRole('button', { name: /Envoyer un texto/ }).click();
+  await panneau(page).waitFor();
+  return regle.id;
+}
+const zoneTexto = (page: Page) => panneau(page).getByLabel('Texte du message *', { exact: true });
+
 const SCENARIOS: Record<string, () => Promise<void>> = {
+  /** A-01 — le bug n° 1 : Lumi change le message, le panneau resté ouvert le montre. */
+  async a01() {
+    const page = await ouvrirPage();
+    await lumiReecritLeTexto(page);
+    const id = await texteDExempleOuvert(page);
+    verifier(await zoneTexto(page).inputValue() === EXEMPLE, 'au départ : le texte d’exemple dans le panneau');
+    await demanderALumi(page, 'change le message de l’automatisation');
+    verifier(await zoneTexto(page).inputValue() === DE_LUMI, 'le panneau resté ouvert montre le texte de Lumi');
+    await pause(5000);
+    verifier((await etapes(id))[0]?.action?.config?.body === DE_LUMI, 'la base porte le texte de Lumi (enregistrement automatique)');
+    await panneau(page).getByRole('button', { name: 'Fermer le panneau' }).click();
+    await pause(700);
+    verifier(await page.getByRole('dialog').count() === 0, 'fermer le panneau sans y avoir rien tapé ne demande rien');
+    await page.context().close();
+  },
+
+  /** A-01 — « Enregistrer » dans le panneau resté ouvert n'écrase pas le texte de Lumi. */
+  async a01b() {
+    const page = await ouvrirPage();
+    await lumiReecritLeTexto(page);
+    const id = await texteDExempleOuvert(page);
+    await demanderALumi(page, 'change le message de l’automatisation');
+    await enregistrer(page).click();
+    await panneau(page).waitFor({ state: 'hidden' });
+    await pause(6000);
+    verifier((await etapes(id))[0]?.action?.config?.body === DE_LUMI, 'après « Enregistrer » du panneau : la base garde le texte de Lumi');
+    await page.context().close();
+  },
+
+  /** A-01 — une saisie en cours quand Lumi répond : bandeau, deux choix, rien d'écrasé. */
+  async a01c() {
+    const page = await ouvrirPage();
+    await lumiReecritLeTexto(page);
+    const regle = await creerRegle({ trigger_event: 'invoice.overdue', steps: [action('send_sms', { body: 'Texte d’origine' })] });
+    await ouvrirEditeur(page, regle.id);
+    await carte(page, 'Envoyer un texto').click();
+    await zoneTexto(page).fill('Mon texte à moi.');
+    await demanderALumi(page, 'change le message de l’automatisation');
+    verifier(await zoneTexto(page).inputValue() === 'Mon texte à moi.', 'la saisie en cours n’est pas écrasée');
+    verifier(await panneau(page).getByText('Lumi a modifié cette étape pendant que vous l’éditiez.').isVisible(), 'le bandeau nomme Lumi');
+    verifier(await enregistrer(page).isDisabled(), '« Enregistrer » attend le choix');
+    await panneau(page).getByRole('button', { name: 'Garder ma version' }).click();
+    await enregistrer(page).click();
+    await pause(6000);
+    verifier((await etapes(regle.id))[0]?.action?.config?.body === 'Mon texte à moi.', '« Garder ma version » puis « Enregistrer » : la base porte ma version');
+    await page.context().close();
+  },
+
   /** Ligne 1 — publiée : une étape choisie dans le tiroir n'est pas écrite avant d'être enregistrée. */
   async l1() {
     const regle = await creerRegle({ trigger_event: 'client.untagged', steps: [action('create_task', { title: 'Tâche existante' })], is_active: true });

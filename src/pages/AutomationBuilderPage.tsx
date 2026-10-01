@@ -291,6 +291,12 @@ export default function AutomationBuilderPage() {
    * panneau. Fermer le panneau l'abandonne.
    */
   const [etapeEnAttente, setEtapeEnAttente] = useState<{ etape: Etape; apresId: string | null; branche?: 'alors' | 'sinon' } | null>(null);
+  /**
+   * Qui a modifié le parcours en dernier, HORS du panneau d'étape : Lumi, ou
+   * autre chose (annuler / rétablir). Le panneau resté ouvert s'en sert pour
+   * dire « Lumi a modifié cette étape… » quand une saisie y est en cours.
+   */
+  const [modifieePar, setModifieePar] = useState<'lumi' | 'autre' | null>(null);
   /** Le panneau ouvert a-t-il un brouillon non enregistré ? (PanneauEtape.onModifie) */
   const brouillonEtapeModifie = useRef(false);
   const signalerBrouillonEtape = useCallback((m: boolean) => { brouillonEtapeModifie.current = m; }, []);
@@ -692,6 +698,9 @@ export default function AutomationBuilderPage() {
   const construireAvecLumi = async () => {
     const demande = prompt.trim();
     if (demande.length < 10 || genere) return;
+    const parcoursALEcran = ajoutEnAttente
+      ? insererEtape(steps, ajoutEnAttente.etape, ajoutEnAttente.apresId, ajoutEnAttente.branche)
+      : steps;
     setGenere(true);
     try {
       /*
@@ -713,10 +722,14 @@ export default function AutomationBuilderPage() {
         // l'historique complet gonflerait le prompt sans rien apporter.
         echanges: echangesLumi.slice(-6),
         ruleId: idReel.current,
-        parcoursActuel: steps.length > 0
-          ? { trigger_event: regle?.trigger_event, steps }
+        // « Le parcours à l'écran » compte l'étape en cours d'ajout : c'est
+        // d'elle que parle « change le message » juste après l'avoir choisie.
+        parcoursActuel: parcoursALEcran.length > 0
+          ? { trigger_event: regle?.trigger_event, steps: parcoursALEcran }
           : null,
       });
+      // Le panneau d'étape resté ouvert saura QUI vient de changer son étape.
+      setModifieePar('lumi');
       memoriser(propose.steps as Etape[]);
       setResumeLumi(propose.resume || null);
       // Le nom et le déclencheur suivent la proposition — c'est ce que
@@ -960,6 +973,7 @@ export default function AutomationBuilderPage() {
 
   const annuler = () => {
     if (position <= 0) return;
+    setModifieePar('autre');
     setPosition((p) => p - 1);
     setSteps(historique[position - 1]);
     setEtatSauvegarde('modifie');
@@ -967,6 +981,7 @@ export default function AutomationBuilderPage() {
 
   const refaire = () => {
     if (position >= historique.length - 1) return;
+    setModifieePar('autre');
     setPosition((p) => p + 1);
     setSteps(historique[position + 1]);
     setEtatSauvegarde('modifie');
@@ -2748,6 +2763,7 @@ export default function AutomationBuilderPage() {
           objetChamps={objetRegle}
           stats={statsEtapes?.[etapeOuverte.id] ?? null}
           nouvelle={ajoutEnAttente?.etape.id === etapeOuverte.id}
+          modifieePar={modifieePar}
           onEnregistrer={enregistrerEtape}
           onSupprimer={supprimerEtape}
           onFermer={() => { setEtapeChoisie(null); setEtapeEnAttente(null); }}

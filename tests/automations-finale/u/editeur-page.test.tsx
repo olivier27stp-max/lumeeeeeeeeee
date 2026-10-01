@@ -44,6 +44,7 @@ const api = vi.hoisted(() => ({
   modifier: vi.fn(),
   publier: vi.fn(),
   stats: vi.fn(),
+  lumi: vi.fn(),
 }));
 const confirmerMock = vi.hoisted(() => vi.fn(async (_o: unknown) => true));
 const toasts = vi.hoisted(() => ({ erreur: [] as string[], succes: [] as string[], info: [] as string[] }));
@@ -60,7 +61,7 @@ vi.mock('../../../src/lib/automationBuilderApi', async (orig) => ({
   chargerEditeur: (id: string | null) => api.editeur(id),
   creerAutomatisation: (b: unknown) => api.creer(b),
   modifierAutomatisation: (id: string, p: unknown) => api.modifier(id, p),
-  genererParcoursAvecLumi: vi.fn(),
+  genererParcoursAvecLumi: (...a: unknown[]) => api.lumi(...a),
   chargerMembres: vi.fn(async () => { if (etat.membres instanceof Error) throw etat.membres; return etat.membres; }),
   chargerEtiquettes: vi.fn(async () => []),
   apercuAutomatisation: vi.fn(async () => ({ client: null, message: 'Aucun client', apercu: [] })),
@@ -136,6 +137,7 @@ beforeEach(() => {
   api.publier.mockImplementation(async () => undefined);
   api.stats.mockReset();
   api.stats.mockImplementation(async () => ({ par_regle: {}, par_etape: {} }));
+  api.lumi.mockReset();
   confirmerMock.mockReset();
   confirmerMock.mockImplementation(async () => true);
   toasts.erreur = []; toasts.succes = []; toasts.info = [];
@@ -210,6 +212,121 @@ async function ajouterParLeTiroir(titre: string) {
 }
 /** Les `steps` du dernier enregistrement parti au serveur. */
 const derniersSteps = () => (api.modifier.mock.calls.at(-1)?.[1] as { steps?: Array<Record<string, unknown>> } | undefined)?.steps ?? null;
+
+// ─── Priorité — bug n° 1 (constat A-01) ─────────────────────────
+
+describe('A-01 — Lumi modifie l’étape dont le panneau est ouvert : le panneau montre SON texte', () => {
+  const EXEMPLE = 'Bonjour [client_name], c’est [company_name]. Merci !';
+  const DE_LUMI = 'Bonjour [client_first_name], votre facture [invoice_number] est en retard. Réglez-la ici : [invoice_link]. [company_name]';
+  /** Une automatisation « Facture en retard » sans étape encore (action provisoire de l'éditeur). */
+  const vide = () => regle({ trigger_event: 'invoice.overdue', actions: [{ type: 'send_sms', config: { body: 'À compléter' } }], steps: [] });
+  const zone = () => panneauEtape()?.querySelector('textarea') ?? null;
+
+  /** Lumi rend le même parcours, le texto réécrit (même identifiant d'étape, comme le vrai modèle). */
+  function lumiReecritLeTexto() {
+    api.lumi.mockImplementation(async (_demande: string, _langue: string, contexte: { parcoursActuel?: { steps?: Array<Record<string, unknown>> } | null }) => ({
+      nom: 'Relance devis', trigger_event: 'invoice.overdue',
+      resume: `J’ai remplacé le texte d’exemple.\n\nNouveau texte :\n• Texto : « ${DE_LUMI} »`,
+      steps: (contexte.parcoursActuel?.steps ?? []).map((e) => (e.type === 'action' ? { ...e, action: { type: 'send_sms', config: { body: DE_LUMI } } } : e)),
+      autre: null,
+    }));
+  }
+  async function demanderALumi(demande: string) {
+    saisir(container.querySelector('textarea[id$="-prompt"]'), demande);
+    cliquer(boutonExact('Construire') ?? boutonExact('Envoyer'));
+    await attendre(12);
+  }
+
+  it('le geste du propriétaire : « Envoyer un texto », puis « change le message » — le panneau resté ouvert montre le texte de Lumi', async () => {
+    etat.regles = [vide()];
+    lumiReecritLeTexto();
+    await ouvrir();
+    vi.useFakeTimers();
+    cliquer(bouton('Ajouter une première étape'));
+    await attendre(2);
+    cliquer(bouton('Envoyer un texto', tiroirActions() ?? undefined));
+    await attendre(2);
+    expect(zone()?.value).toBe(EXEMPLE);
+
+    await demanderALumi('change le message de l’automatisation');
+    // Lumi a bien reçu l'étape qu'on venait de choisir (elle est « le parcours à l'écran »).
+    const contexte = api.lumi.mock.calls[0][2] as { parcoursActuel: { steps: Array<{ id: string }> } };
+    expect(contexte.parcoursActuel.steps.map((e) => e.id)).toEqual(['e1']);
+
+    // À l'écran : la carte ET le panneau disent la même chose.
+    expect(zone()?.value).toBe(DE_LUMI);
+    expect(carteEtape('Envoyer un texto')?.textContent).toContain('Bonjour [client_first_name]');
+    expect(panneauEtape()?.querySelector('[role="alert"]')).toBeNull();
+
+    // Fermer le panneau sans y avoir rien tapé ne demande rien.
+    cliquer(panneauEtape()?.querySelector('button[aria-label="Fermer le panneau"]'));
+    await attendre();
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(panneaux()).not.toContain(PANNEAU_ETAPE);
+
+    // L'enregistrement automatique écrit le texte de Lumi.
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    expect((derniersSteps() ?? [])[0]).toMatchObject({ id: 'e1', action: { type: 'send_sms', config: { body: DE_LUMI } } });
+  });
+
+  it('« Enregistrer » dans le panneau resté ouvert n’écrase PAS le texte de Lumi', async () => {
+    etat.regles = [vide()];
+    lumiReecritLeTexto();
+    await ouvrir();
+    vi.useFakeTimers();
+    cliquer(bouton('Ajouter une première étape'));
+    await attendre(2);
+    cliquer(bouton('Envoyer un texto', tiroirActions() ?? undefined));
+    await attendre(2);
+    await demanderALumi('change le message de l’automatisation');
+    cliquer(boutonExact('Enregistrer', panneauEtape() ?? undefined));
+    await attendre(2);
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    const ecrits = api.modifier.mock.calls.map((c) => (c[1] as { steps?: Array<{ action?: { config?: { body?: string } } }> }).steps?.[0]?.action?.config?.body).filter(Boolean);
+    expect(ecrits.length).toBeGreaterThan(0);
+    expect(new Set(ecrits)).toEqual(new Set([DE_LUMI]));
+  });
+
+  it('une étape DÉJÀ dans le parcours, panneau ouvert : même chose', async () => {
+    lumiReecritLeTexto();
+    await ouvrir();
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    expect(zone()?.value).toBe('Bonjour [client_first_name]');
+    await demanderALumi('change le message de l’automatisation');
+    expect(zone()?.value).toBe(DE_LUMI);
+  });
+
+  it('une saisie en cours dans le panneau quand Lumi répond : bandeau, et rien n’est écrasé dans un sens ni dans l’autre', async () => {
+    lumiReecritLeTexto();
+    await ouvrir();
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    saisir(zone(), 'Mon texte à moi.');
+    await demanderALumi('change le message de l’automatisation');
+    expect(zone()?.value).toBe('Mon texte à moi.');
+    expect(panneauEtape()?.querySelector('[role="alert"]')?.textContent).toContain('Lumi a modifié cette étape pendant que vous l’éditiez.');
+    expect(boutonExact('Enregistrer', panneauEtape() ?? undefined)?.disabled).toBe(true);
+    // Le canevas, lui, porte bien la version de Lumi.
+    expect(carteEtape('Envoyer un texto')?.textContent).toContain('votre facture');
+    cliquer(boutonExact('Voir la version de Lumi'));
+    expect(zone()?.value).toBe(DE_LUMI);
+  });
+
+  it('« Annuler » (flèche du haut) pendant que le panneau est ouvert et intact : le panneau suit le canevas', async () => {
+    lumiReecritLeTexto();
+    await ouvrir();
+    await demanderALumi('change le message de l’automatisation');
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    expect(zone()?.value).toBe(DE_LUMI);
+    cliquer(container.querySelector('button[aria-label="Annuler"]'));
+    await attendre(2);
+    expect(zone()?.value).toBe('Bonjour [client_first_name]');
+  });
+});
 
 // ─── Ligne 1 du triage « actions » ──────────────────────────────
 

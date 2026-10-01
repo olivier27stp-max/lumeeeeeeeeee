@@ -45,11 +45,9 @@ let racine: Root | null = null;
 /** Ce que « Enregistrer » a renvoyé au parent. */
 let enregistrees: Etape[] = [];
 
-async function monterEtape(etape: Etape, props: Proprietes = {}) {
-  conteneur = document.createElement('div');
-  document.body.appendChild(conteneur);
-  racine = createRoot(conteneur);
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+/** Rend (ou RE-rend, sur la même racine : c'est le parent qui change l'étape) le panneau. */
+async function rendre(etape: Etape, props: Proprietes = {}) {
   await act(async () => {
     racine!.render(
       <QueryClientProvider client={qc}>
@@ -62,6 +60,12 @@ async function monterEtape(etape: Etape, props: Proprietes = {}) {
     );
   });
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+}
+async function monterEtape(etape: Etape, props: Proprietes = {}) {
+  conteneur = document.createElement('div');
+  document.body.appendChild(conteneur);
+  racine = createRoot(conteneur);
+  await rendre(etape, props);
 }
 const monter = (type: string, config: Record<string, string>, props: Proprietes = {}) =>
   monterEtape({ id: 'e1', type: 'action', action: { type, config }, suivant: null }, props);
@@ -97,6 +101,116 @@ const configEnregistree = () => {
   const e = enregistrees.at(-1);
   return e?.type === 'action' ? e.action.config : null;
 };
+
+// ─── Priorité — bug n° 1 (constat A-01) ─────────────────────────
+
+describe('A-01 — l’étape ouverte change par ailleurs (Lumi, annuler / rétablir) : le panneau ne garde pas un brouillon périmé', () => {
+  const EXEMPLE = 'Bonjour [client_name], c’est [company_name]. Merci !';
+  const DE_LUMI = 'Bonjour [client_first_name], votre facture [invoice_number] est en retard. Réglez-la ici : [invoice_link]. [company_name]';
+  const texto = (body: string): Etape => ({ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body } }, suivant: null });
+  const zone = () => champ<HTMLTextAreaElement>('Texte du message *');
+  const alerte = () => conteneur.querySelector('[role="alert"]')?.textContent ?? null;
+
+  it('rien de tapé dans le panneau : il prend aussitôt le texte de Lumi, sans question', async () => {
+    const onModifie = vi.fn();
+    await monterEtape(texto(EXEMPLE), { declencheur: 'invoice.overdue', onModifie });
+    expect(zone()?.value).toBe(EXEMPLE);
+    // Lumi rend la MÊME étape (e1), avec un autre texte.
+    await rendre(texto(DE_LUMI), { declencheur: 'invoice.overdue', onModifie, modifieePar: 'lumi' });
+    expect(zone()?.value).toBe(DE_LUMI);
+    expect(alerte()).toBeNull();
+    // Le panneau ne se croit pas « modifié » : le fermer ne demande rien.
+    expect(onModifie).toHaveBeenLastCalledWith(false);
+    cliquer(boutonExact('Annuler'));
+    await act(async () => { await Promise.resolve(); });
+    expect(confirmerMock).not.toHaveBeenCalled();
+  });
+
+  it('… et « Enregistrer » renvoie le texte de Lumi, jamais l’ancien', async () => {
+    await monterEtape(texto(EXEMPLE), { declencheur: 'invoice.overdue' });
+    await rendre(texto(DE_LUMI), { declencheur: 'invoice.overdue', modifieePar: 'lumi' });
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual({ body: DE_LUMI });
+  });
+
+  it('une étape qui vient du tiroir, que Lumi fait entrer dans le parcours avec un autre texte : même chose', async () => {
+    await monterEtape(texto(EXEMPLE), { declencheur: 'invoice.overdue', nouvelle: true });
+    await rendre(texto(DE_LUMI), { declencheur: 'invoice.overdue', nouvelle: false, modifieePar: 'lumi' });
+    expect(zone()?.value).toBe(DE_LUMI);
+    expect(alerte()).toBeNull();
+  });
+
+  it('une saisie en cours : rien n’est écrasé — un bandeau nomme Lumi, et « Enregistrer » attend le choix', async () => {
+    await monterEtape(texto(EXEMPLE), { declencheur: 'invoice.overdue' });
+    saisir(zone(), 'Mon texte à moi, en cours de frappe.');
+    await rendre(texto(DE_LUMI), { declencheur: 'invoice.overdue', modifieePar: 'lumi' });
+    expect(zone()?.value).toBe('Mon texte à moi, en cours de frappe.');
+    expect(alerte()).toContain('Lumi a modifié cette étape pendant que vous l’éditiez.');
+    expect(boutonExact('Voir la version de Lumi')).toBeDefined();
+    expect(boutonExact('Garder ma version')).toBeDefined();
+    expect(enregistrer().disabled).toBe(true);
+    expect(texte()).toContain('Choisissez d’abord quelle version garder.');
+    cliquer(enregistrer());
+    expect(enregistrees).toEqual([]);
+  });
+
+  it('« Voir la version de Lumi » : le panneau prend son texte, le brouillon est abandonné', async () => {
+    await monterEtape(texto(EXEMPLE), { declencheur: 'invoice.overdue' });
+    saisir(zone(), 'Mon texte à moi.');
+    await rendre(texto(DE_LUMI), { declencheur: 'invoice.overdue', modifieePar: 'lumi' });
+    cliquer(boutonExact('Voir la version de Lumi'));
+    expect(zone()?.value).toBe(DE_LUMI);
+    expect(alerte()).toBeNull();
+    expect(enregistrer().disabled).toBe(false);
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual({ body: DE_LUMI });
+  });
+
+  it('« Garder ma version » : le brouillon reste, et « Enregistrer » l’applique — en connaissance de cause', async () => {
+    await monterEtape(texto(EXEMPLE), { declencheur: 'invoice.overdue' });
+    saisir(zone(), 'Mon texte à moi.');
+    await rendre(texto(DE_LUMI), { declencheur: 'invoice.overdue', modifieePar: 'lumi' });
+    cliquer(boutonExact('Garder ma version'));
+    expect(zone()?.value).toBe('Mon texte à moi.');
+    expect(alerte()).toBeNull();
+    expect(enregistrer().disabled).toBe(false);
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual({ body: 'Mon texte à moi.' });
+  });
+
+  it('un changement qui ne vient pas de Lumi (annuler / rétablir) : le bandeau ne l’accuse pas', async () => {
+    await monterEtape(texto(EXEMPLE), { declencheur: 'invoice.overdue' });
+    saisir(zone(), 'Mon texte à moi.');
+    await rendre(texto('Version d’avant'), { declencheur: 'invoice.overdue', modifieePar: 'autre' });
+    expect(alerte()).toContain('Cette étape a été modifiée ailleurs pendant que vous l’éditiez.');
+    expect(boutonExact('Voir l’autre version')).toBeDefined();
+  });
+
+  it('le parent rend un objet NEUF au contenu identique (chaque modification du parcours) : la saisie en cours ne bouge pas', async () => {
+    await monterEtape(texto(EXEMPLE), { declencheur: 'invoice.overdue' });
+    saisir(zone(), 'Mon texte à moi.');
+    await rendre(texto(EXEMPLE), { declencheur: 'invoice.overdue' });
+    expect(zone()?.value).toBe('Mon texte à moi.');
+    expect(alerte()).toBeNull();
+  });
+
+  it('une attente : même règle (3 jours ailleurs → le panneau montre 3 jours)', async () => {
+    const attente = (jours: number): Etape => ({ id: 'e2', type: 'attendre', delai_secondes: jours * 86400, suivant: null });
+    await monterEtape(attente(1));
+    await rendre(attente(3), { modifieePar: 'lumi' });
+    expect(champ('Attendre')?.value).toBe('3');
+  });
+
+  it('en anglais', async () => {
+    await monterEtape(texto(EXEMPLE), { fr: false });
+    saisir(champ('Message text *'), 'My own text.');
+    await rendre(texto(DE_LUMI), { fr: false, modifieePar: 'lumi' });
+    expect(alerte()).toContain('Lumi changed this step while you were editing it.');
+    expect(boutonExact('See Lumi’s version')).toBeDefined();
+    expect(boutonExact('Keep my version')).toBeDefined();
+    expect(texte()).toContain('First choose which version to keep.');
+  });
+});
 
 // ─── Ligne 3 du triage « actions » ──────────────────────────────
 

@@ -27,7 +27,7 @@
    rien annuler du tout.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { X, Trash2, BarChart3, Pencil } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
@@ -246,6 +246,12 @@ interface Props {
    * ce qui se demande, comme toute saisie non enregistrée.
    */
   nouvelle?: boolean;
+  /**
+   * Qui vient de modifier le parcours HORS de ce panneau : Lumi, ou autre
+   * chose (annuler / rétablir, rechargement). Sert à nommer l'auteur quand
+   * l'étape ouverte change pendant une saisie.
+   */
+  modifieePar?: 'lumi' | 'autre' | null;
   onEnregistrer: (etape: Etape) => void;
   onSupprimer: (id: string) => void;
   onFermer: () => void;
@@ -272,7 +278,7 @@ function decomposer(secondes: number): { valeur: number; unite: string } {
 
 export default function PanneauEtape({
   etape, fr, declencheur, membres, etiquettes, automatisations = [], etapesPipeline = [], champsPerso = [], objetChamps = null, stats,
-  nouvelle = false, onEnregistrer, onSupprimer, onFermer, onModifie,
+  nouvelle = false, modifieePar = null, onEnregistrer, onSupprimer, onFermer, onModifie,
 }: Props) {
   const ids = useId();
   const [onglet, setOnglet] = useState<'edition' | 'stats'>('edition');
@@ -301,24 +307,63 @@ export default function PanneauEtape({
   /** Champs dont la version anglaise, inchangée, a été déclarée « toujours valable ». */
   const [anglaisConfirme, setAnglaisConfirme] = useState<string[]>([]);
 
+  /**
+   * LA VERSION DE L'ÉTAPE DONT LE BROUILLON EST PARTI (constat A-01, le bug
+   * n° 1 du propriétaire : « Lumi dit avoir changé le message, rien ne
+   * change »).
+   *
+   * Le brouillon n'était rechargé que si l'IDENTIFIANT de l'étape changeait.
+   * Or Lumi rend la MÊME étape (`e1`) avec un autre texte : le canevas
+   * changeait, le panneau resté ouvert gardait l'ancien texte, se croyait
+   * « modifié », et son « Enregistrer » remettait l'ancien texte par-dessus
+   * celui de Lumi.
+   *
+   * On retient donc de quelle version le brouillon est parti. Quand l'étape
+   * reçue change PAR AILLEURS (Lumi, annuler / rétablir, rechargement) :
+   *   · rien n'a été tapé ici → le panneau prend aussitôt la nouvelle version ;
+   *   · une saisie est en cours → rien n'est écrasé, ni dans un sens ni dans
+   *     l'autre : un bandeau le dit et laisse choisir (`conflit`).
+   */
+  const [base, setBase] = useState<Etape>(reference.etape);
+  /** L'étape a changé ailleurs pendant une saisie : qui l'a changée, tant que le choix n'est pas fait. */
+  const [conflit, setConflit] = useState<'lumi' | 'autre' | null>(null);
+  /** Le brouillon et le texte des conditions du dernier rendu, lus par l'effet ci-dessous. */
+  const saisie = useRef({ brouillon, conditionsTexte });
+  saisie.current = { brouillon, conditionsTexte };
+
+  const prendre = (version: Etape) => {
+    setBase(version);
+    setBrouillon(version);
+    setConditionsTexte(texteDesConditions(version));
+    setAnglaisConfirme([]);
+    setConflit(null);
+  };
+
   /*
    * Changer de CARTE remet le panneau sur la nouvelle étape, et ramène
    * l'onglet d'édition — on ouvre une étape pour la modifier, pas pour lire
    * les statistiques de la précédente.
    *
-   * La dépendance est `etape.id`, PAS `etape` : le jour où le parent cessera
-   * de mémoriser l'étape (`useMemo` sur `steps`), un objet neuf à chaque
-   * rendu rejouerait cet effet en boucle et effacerait la saisie en cours.
-   * Suivre l'identifiant décrit ce qu'on veut vraiment — « une AUTRE carte a
-   * été ouverte » — au lieu de dépendre d'un détail du parent.
+   * Même carte : on compare le CONTENU, jamais l'identité de l'objet — le
+   * parent rend un objet neuf à chaque modification du parcours, et s'y fier
+   * effacerait la saisie en cours à chaque rendu.
    */
   useEffect(() => {
-    setBrouillon(reference.etape);
-    setConditionsTexte(texteDesConditions(etape));
-    setAnglaisConfirme([]);
-    setOnglet('edition');
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- voir ci-dessus : suivre `etape` rendrait le panneau fragile à une optimisation du parent.
-  }, [etape.id]);
+    const recue = reference.etape;
+    if (recue.id !== base.id) {
+      prendre(recue);
+      setOnglet('edition');
+      return;
+    }
+    if (JSON.stringify(recue) === JSON.stringify(base)) return;
+    const brouillonActuel = JSON.stringify(saisie.current.brouillon);
+    const intact = brouillonActuel === JSON.stringify(base)
+      && saisie.current.conditionsTexte === texteDesConditions(base);
+    // Rien de tapé ici — ou exactement ce qui vient d'arriver : la nouvelle version, sans question.
+    if (intact || brouillonActuel === JSON.stringify(recue)) prendre(recue);
+    else setConflit(modifieePar === 'lumi' ? 'lumi' : 'autre');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ne réagit qu'à l'étape REÇUE : `base` et `modifieePar` sont lus au moment où elle change.
+  }, [reference]);
 
   /*
    * UN BROUILLON NON ENREGISTRÉ NE SE JETTE PAS SANS PRÉVENIR (audit
@@ -329,9 +374,9 @@ export default function PanneauEtape({
    */
   const modifie = useMemo(
     // Une étape NEUVE est tout entière une saisie non enregistrée.
-    () => nouvelle || (brouillon.id === etape.id
-      && (JSON.stringify(brouillon) !== JSON.stringify(reference.etape) || conditionsTexte !== texteDesConditions(etape))),
-    [brouillon, etape, reference, conditionsTexte, nouvelle],
+    () => nouvelle || (brouillon.id === base.id
+      && (JSON.stringify(brouillon) !== JSON.stringify(base) || conditionsTexte !== texteDesConditions(base))),
+    [brouillon, base, conditionsTexte, nouvelle],
   );
   useEffect(() => { onModifie?.(modifie); }, [modifie, onModifie]);
   useEffect(() => () => onModifie?.(false), [onModifie]);
@@ -373,7 +418,7 @@ export default function PanneauEtape({
   const versionsAnglaises = useMemo(() => {
     if (brouillon.type !== 'action' || !modele) return [];
     const config = brouillon.action.config as Record<string, string | undefined>;
-    const origine = (reference.etape.type === 'action' ? reference.etape.action.config : {}) as Record<string, string | undefined>;
+    const origine = (base.type === 'action' ? base.action.config : {}) as Record<string, string | undefined>;
     return modele.champs
       .filter((c) => aVersionAnglaise(c) && config[cleAnglaise(c.cle)] !== undefined && champVisible(c, config))
       .map((c) => {
@@ -385,7 +430,7 @@ export default function PanneauEtape({
           && anglais === (origine[cleEn] ?? '');
         return { champ: c, modeleAnglais: champAnglais(c), cleEn, aRevoir, perimee: aRevoir && !anglaisConfirme.includes(c.cle) };
       });
-  }, [brouillon, reference, modele, anglaisConfirme]);
+  }, [brouillon, base, modele, anglaisConfirme]);
 
   /** Ce qui empêche d'enregistrer, dit avant de cliquer. */
   const problemes = useMemo(() => {
@@ -587,6 +632,40 @@ export default function PanneauEtape({
           </div>
         ) : (
           <div className="space-y-4">
+            {/* L'étape a changé AILLEURS pendant qu'on la modifiait ici : on
+                ne choisit pas à la place de l'utilisateur. */}
+            {conflit && (
+              <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                <p className="font-medium">
+                  {conflit === 'lumi'
+                    ? (fr ? 'Lumi a modifié cette étape pendant que vous l’éditiez.' : 'Lumi changed this step while you were editing it.')
+                    : (fr ? 'Cette étape a été modifiée ailleurs pendant que vous l’éditiez.' : 'This step was changed elsewhere while you were editing it.')}
+                </p>
+                <p className="mt-0.5 text-[11px]">
+                  {fr
+                    ? 'Rien n’est écrasé : choisissez la version à garder.'
+                    : 'Nothing is overwritten: choose which version to keep.'}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => prendre(reference.etape)}
+                    className="rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-semibold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    {conflit === 'lumi'
+                      ? (fr ? 'Voir la version de Lumi' : 'See Lumi’s version')
+                      : (fr ? 'Voir l’autre version' : 'See the other version')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setBase(reference.etape); setConflit(null); }}
+                    className="rounded-md border border-amber-400 px-2.5 py-1.5 text-[11px] font-medium transition-colors hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-amber-700 dark:hover:bg-amber-900/40"
+                  >
+                    {fr ? 'Garder ma version' : 'Keep my version'}
+                  </button>
+                </div>
+              </div>
+            )}
             {/* ── Étape « action » ────────────────────────────── */}
             {journal && (
               <p className="rounded-lg bg-surface-secondary p-3 text-[13px] text-text-secondary">
@@ -988,9 +1067,11 @@ export default function PanneauEtape({
           Les problèmes sont déjà calculés en clair juste au-dessus : il
           suffisait de les dire.
         */}
-        {problemes.length > 0 && (
+        {(conflit || problemes.length > 0) && (
           <span className="max-w-[55%] text-right text-[11px] leading-tight text-danger">
-            {problemes[0]}
+            {conflit
+              ? (fr ? 'Choisissez d’abord quelle version garder.' : 'First choose which version to keep.')
+              : problemes[0]}
           </span>
         )}
         <button
@@ -1006,7 +1087,7 @@ export default function PanneauEtape({
             // Une ligne de champ incomplète bloquerait la branche pour toujours.
             ? { ...brouillon, conditions: sansConditionsIncompletes((brouillon.conditions ?? {}) as Record<string, unknown>) }
             : versEnregistrement(sansAnglaisVide(brouillon), reference.html))}
-          disabled={problemes.length > 0}
+          disabled={problemes.length > 0 || conflit !== null}
           className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {fr ? 'Enregistrer' : 'Save action'}
