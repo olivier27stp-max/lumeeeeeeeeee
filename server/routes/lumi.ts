@@ -38,6 +38,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 // a deux assistants (2026-09-22). Mêmes réponses, mêmes garde-fous, 0 token.
 import { reponseFaqPour } from '../lib/support/faq';
 import { estDemandeDAction } from '../lib/lumi/demande-action';
+import { langueDuMessage } from '../lib/lumi/langue-message';
 import { repererFiches } from '../lib/lumi/reperage';
 import { sujetParRegle } from '../lib/lumi/sujet-par-regle';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
@@ -585,9 +586,14 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     const repli = origine === 'repli' || estUnRepli(message);
     const enoncePrecedent = repli ? dernierEnonceUtilisateur(historique) : null;
     // Jamais un courriel en guise de prénom (« Bonjour will@… »).
+    // Les étages sans modèle répondent dans la langue du MESSAGE, comme le modèle :
+    // « How many invoices are overdue? » sur un compte en français recevait un
+    // article en français (passe de référence du 2026-10-01). Dans le doute, la
+    // langue du compte (langue-message.ts).
+    const langueTour = langueDuMessage(message, ctx.language);
     const ctxRaccourci = {
       client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
-      language: ctx.language, fuseau: ctx.fuseau,
+      language: langueTour, fuseau: ctx.fuseau,
       prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
     };
     // Étage « aide » : une question SUR LE PRODUIT (« comment je change de
@@ -611,12 +617,12 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // référence du 2026-10-01). Une lecture reconnue passe avant un article.
     const raccourciReconnu = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
     if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message) && !raccourciReconnu) {
-      const aide = reponseFaqPour(message, ctx.language, 'tu') ?? null;
-      const article = aide ? null : reponseAideDirecte(message, ctx.language, { premierMessage: true, voix: 'tu' });
+      const aide = reponseFaqPour(message, langueTour, 'tu') ?? null;
+      const article = aide ? null : reponseAideDirecte(message, langueTour, { premierMessage: true, voix: 'tu' });
       // Plusieurs questions collées d'un coup : chacune a sa réponse écrite,
       // mais le bloc entier ne ressemble à rien de connu et partait au modèle
       // (2,65 ¢ mesuré en prod le 2026-09-22). Tout ou rien — voir aide-multi.
-      const multi = aide || article ? null : reponseAideMulti(message, ctx.language, 'tu');
+      const multi = aide || article ? null : reponseAideMulti(message, langueTour, 'tu');
       const texteAide = aide?.reponse ?? article?.texte ?? multi?.texte ?? null;
       if (texteAide) {
         const debut = Date.now();
