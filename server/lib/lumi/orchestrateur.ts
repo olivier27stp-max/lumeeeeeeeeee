@@ -120,6 +120,16 @@ export function avecCacheConversation(messages: Anthropic.Messages.MessageParam[
  * lieu d'être relue (0,1 ×). Mesuré en prod sur une conversation de 11 tours :
  * 2 088 → 9 103 tokens écrits par tour.
  */
+/**
+ * Glissée dans le contexte du tour à l'appel de conclusion : le modèle n'a plus
+ * d'outil, il doit le savoir — sinon il annonce « je vérifie » et s'arrête là.
+ */
+export function consigneDeConclusion(fr: boolean): string {
+  return fr
+    ? 'Dernière étape de ce tour : tu ne peux plus appeler d’outil. Réponds maintenant avec ce que tu as déjà lu. S’il reste une vérification ou une action à faire, dis précisément laquelle et propose de la faire au prochain message. N’affirme rien que tu n’as pas lu.'
+    : 'Last step of this turn: you can no longer call a tool. Answer now with what you have already read. If a check or an action is still needed, say exactly which one and offer to do it in the next message. Do not state anything you have not read.';
+}
+
 export function avecContexteDuTour(messages: Anthropic.Messages.MessageParam[], contexte: string | null | undefined): Anthropic.Messages.MessageParam[] {
   const texte = contexte?.trim();
   if (!texte || messages.length === 0) return messages;
@@ -438,7 +448,13 @@ export async function tourLumi(opts: {
   // dans ce contenu ne peut donc jamais agir sans qu'un humain voie la carte.
   let contenuExterneLu = aLuDuContenuExterne(opts.historique);
 
-  for (let etape = 0; etape < maxEtapes; etape++) {
+  // `<=` : après la dernière étape AVEC outils, un appel de CONCLUSION sans outils.
+  // Avant (passe de référence du 2026-10-01) : au palier restreint (2 étapes), une
+  // question qui demandait deux lectures finissait en erreur « trop d'étapes »,
+  // sans réponse, après avoir payé les deux appels — 6 cas sur 115. Le modèle
+  // conclut maintenant avec ce qu'il a lu, comme au plafond de coût du tour.
+  for (let etape = 0; etape <= maxEtapes; etape++) {
+    const conclusionFinale = etape === maxEtapes;
     // Un tour qui coûte cher ne doit PAS être coupé en plein milieu :
     // l'utilisateur verrait son assistant s'arrêter sans réponse, et c'est
     // perdre une fonction pour économiser des cents (2026-09-22).
@@ -450,6 +466,7 @@ export async function tourLumi(opts: {
     // au double du plafond, où il est acquis que le tour est parti en vrille.
     const plafondTour = reglesCout().plafond_cout_tour_cents;
     const doitConclure = coutHorsCacheFroid >= plafondTour;
+    const sansOutils = doitConclure || conclusionFinale;
     if (coutHorsCacheFroid >= plafondTour * 2) {
       opts.emettre({ type: 'error', message: 'plafond_tour' });
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, ...mesure() };
@@ -467,7 +484,7 @@ export async function tourLumi(opts: {
       max_tokens: MAX_TOKENS,
       system: opts.systeme,
       tools: outils,
-      messages: avecContexteDuTour(avecCacheConversation(messages), opts.contexteTour),
+      messages: avecContexteDuTour(avecCacheConversation(messages), [opts.contexteTour, conclusionFinale ? consigneDeConclusion(fr) : null].filter(Boolean).join('\n') || null),
       // Haiku 4.5 n'accepte ni la réflexion adaptative ni l'effort (400
       // « adaptive thinking is not supported on this model ») : sans ce
       // garde, la pente économe à 60 % du plafond répondait « Lumi failed
@@ -476,7 +493,7 @@ export async function tourLumi(opts: {
       // Passé le plafond : plus d'outils, le modèle conclut avec ce qu'il a.
       // `tools` reste envoyé (il est en cache : le retirer changerait le
       // préfixe et coûterait une réécriture, exactement ce qu'on veut éviter).
-      ...(doitConclure ? { tool_choice: { type: 'none' as const } } : {}),
+      ...(sansOutils ? { tool_choice: { type: 'none' as const } } : {}),
     });
     stream.on('text', (delta) => {
       if (premierTokenMs === null) premierTokenMs = Date.now() - debutTour;
