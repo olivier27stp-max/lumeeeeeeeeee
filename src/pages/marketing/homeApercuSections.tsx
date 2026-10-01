@@ -15,12 +15,17 @@ const pick = (fr: boolean, b: Bi) => (fr ? b.fr : b.en);
 /* ── Ce que tu arrêtes de faire ── */
 export function StopList({ fr }: { fr: boolean }) {
   const items: Bi[] = [
-    { fr: "Retaper l'adresse du client dans trois outils.", en: "Retyping the client's address in three tools." },
-    { fr: 'Faire les factures le soir, à la table de cuisine.', en: 'Doing invoices at night, at the kitchen table.' },
-    { fr: 'Reconstituer les heures de chacun le vendredi.', en: "Rebuilding everyone's hours on Friday." },
-    { fr: 'Recevoir les textos des clients sur ton cell.', en: 'Getting client texts on your personal phone.' },
-    { fr: 'Deviner qui est où, et rappeler pour savoir.', en: 'Guessing who is where, and calling to find out.' },
-    { fr: 'Oublier de relancer la soumission de lundi.', en: "Forgetting to follow up on Monday's quote." },
+    { fr: 'Appeler tes vendeurs pour savoir quelles portes ils ont cognées.', en: 'Calling your reps to find out which doors they knocked.' },
+    { fr: "Relancer une soumission sans savoir si le client l'a ouverte.", en: 'Following up on a quote without knowing if the client opened it.' },
+    { fr: 'Gérer ta compagnie à partir de ton numéro de cell perso.', en: 'Running your company from your personal cell number.' },
+    { fr: 'Payer des pubs Facebook, puis perdre la trace des prospects.', en: 'Paying for Facebook ads, then losing track of the leads.' },
+    { fr: 'Demander des avis Google un client à la fois, quand tu y penses.', en: 'Asking for Google reviews one client at a time, when you remember.' },
+    { fr: 'Compter les ventes de chacun à la main pour payer les primes.', en: "Tallying everyone's sales by hand to pay bonuses." },
+    { fr: 'Former chaque nouvelle recrue toi-même, de A à Z.', en: 'Training every new hire yourself, from A to Z.' },
+    { fr: "Envoyer ta preuve d'assurance en photo floue par texto.", en: 'Texting a blurry photo of your proof of insurance.' },
+    { fr: 'Retaper dans le CRM chaque demande reçue sur ton site.', en: 'Retyping every website request into your CRM.' },
+    { fr: 'Fouiller cinq menus pour une tâche de deux minutes.', en: 'Digging through five menus for a two-minute task.' },
+    { fr: 'Arriver chez un client qui avait oublié ton passage.', en: 'Showing up at a client who forgot you were coming.' },
   ];
   return (
     <section className="hs-stop">
