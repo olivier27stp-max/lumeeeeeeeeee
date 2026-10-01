@@ -1,0 +1,612 @@
+{
+ "date": "2026-10-01T15:04:17.241Z",
+ "api": "https://lumecrm.net",
+ "bilan": {
+  "global": {
+   "cas": 10,
+   "exactitude_outil_pct": 90,
+   "partiels": 0,
+   "rates": 1,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 25.36,
+   "cout_par_1000_dollars": 25.36
+  },
+  "sensibles": {
+   "cas": 5,
+   "exactitude_outil_pct": 100,
+   "partiels": 0,
+   "rates": 0,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 12.4,
+   "cout_par_1000_dollars": 24.79
+  },
+  "par_type": {
+   "action": {
+    "cas": 8,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 18.61,
+    "cout_par_1000_dollars": 23.26
+   },
+   "lecture": {
+    "cas": 2,
+    "exactitude_outil_pct": 50,
+    "partiels": 0,
+    "rates": 1,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 6.75,
+    "cout_par_1000_dollars": 33.76
+   },
+   "clarification": {
+    "cas": 0,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 0,
+    "cout_par_1000_dollars": 0
+   }
+  },
+  "par_section": {
+   "clients": {
+    "cas": 5,
+    "exactitude_outil_pct": 80,
+    "partiels": 0,
+    "rates": 1,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 8.98,
+    "cout_par_1000_dollars": 17.96
+   },
+   "communications": {
+    "cas": 1,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 2.62,
+    "cout_par_1000_dollars": 26.21
+   },
+   "devis": {
+    "cas": 1,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 3.41,
+    "cout_par_1000_dollars": 34.12
+   },
+   "facturation": {
+    "cas": 2,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 5.64,
+    "cout_par_1000_dollars": 28.19
+   },
+   "planification": {
+    "cas": 1,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 4.71,
+    "cout_par_1000_dollars": 47.08
+   }
+  }
+ },
+ "resultats": [
+  {
+   "id": "prod-search_clients",
+   "section": "clients",
+   "outil": "search_clients",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "C’est quoi le courriel de Julie Dupuis ?",
+   "verdict_outil": "rate",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Le courriel de Julie Dupuis est qa1@lume.test (et son téléphone est le 514-555-0101).",
+   "cout_cents": 3.8682,
+   "conversation_id": "6db0a347-f98f-44c2-9ff5-c567f4b222dc",
+   "duree_ms": 11723
+  },
+  {
+   "id": "prod-get_client_profile",
+   "section": "clients",
+   "outil": "get_client_profile",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Parle-moi de Sophie Tremblay : ses jobs, ce qu’elle nous doit.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_client_profile"
+   ],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "Sophie Tremblay est cliente active depuis le 26 septembre, chez Tremblay Déneigement à Longueuil. Elle a 9 jobs au total, dont plusieurs sont actuellement en retard (jobs 3, 4, 7, 8, 9), tous à 0 $ facturé jusqu'à présent. Côté argent, elle ne nous doit rien : aucune facture impayée ni en retard. Elle a aussi 3 devis à 100,00 $ chacun, encore en brouillon (pas envoyés).",
+   "cout_cents": 2.8833,
+   "conversation_id": "3f00f3c9-3be6-4d73-a849-84ebdb53140f",
+   "duree_ms": 17171
+  },
+  {
+   "id": "prod-create_job",
+   "section": "planification",
+   "outil": "create_job",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Crée une job « Lavage de vitres » pour Marc Gagnon : 2 heures à 75 $ de l’heure. Pas de date pour l’instant.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_job",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "title": "Lavage de vitres",
+    "client_id": "95a4f047-c8d6-4313-919d-7d454430adac",
+    "line_items": [
+     {
+      "name": "Lavage de vitres",
+      "qty": 2,
+      "unit_price_cents": 7500
+     }
+    ]
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Prospect",
+       "en": "Lead"
+      },
+      "valeur": "Marc Gagnon · 34 av. du Banc, Laval · 514-555-0102 · qa2@lume.test"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Titre",
+       "en": "Title"
+      },
+      "valeur": "Lavage de vitres"
+     },
+     {
+      "libelle": {
+       "fr": "1.",
+       "en": "1."
+      },
+      "valeur": "Lavage de vitres — 2 — 75,00 $"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 4.7077,
+   "conversation_id": "60473c1d-38f0-4d61-9912-aac083c2a015",
+   "duree_ms": 6156
+  },
+  {
+   "id": "prod-create_invoice",
+   "section": "facturation",
+   "outil": "create_invoice",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Fais une facture à Marc Gagnon pour une tonte de pelouse à 120 $.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "create_invoice",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "client_id": "95a4f047-c8d6-4313-919d-7d454430adac",
+    "items": [
+     {
+      "description": "Tonte de pelouse",
+      "unit_price_cents": 12000
+     }
+    ]
+   },
+   "apercu": {
+    "genre": "invoice",
+    "client": {
+     "name": "Marc Gagnon",
+     "company": "[QA] Gagnon Paysagement",
+     "email": "qa2@lume.test",
+     "phone": "514-555-0102",
+     "address": "34 av. du Banc, Laval"
+    },
+    "title": "",
+    "lignes": [
+     {
+      "name": "",
+      "description": "Tonte de pelouse",
+      "quantity": 1,
+      "unit_price_cents": 12000,
+      "total_cents": 12000
+     }
+    ],
+    "subtotal_cents": 12000,
+    "taxes": [
+     {
+      "label": "TPS",
+      "rate": 5,
+      "amount_cents": 600
+     },
+     {
+      "label": "TVQ",
+      "rate": 9.975,
+      "amount_cents": 1197
+     }
+    ],
+    "total_cents": 13797,
+    "valid_days": null,
+    "notes": null,
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 4.8406,
+   "conversation_id": "8adfae00-10cd-482e-8500-536528a5a60c",
+   "duree_ms": 5744
+  },
+  {
+   "id": "prod-add_note",
+   "section": "clients",
+   "outil": "add_note",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Ajoute une note au dossier de Sophie Tremblay : elle préfère qu’on l’appelle le matin.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "add_note",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "entity_type": "client",
+    "entity_id": "b3759523-58b1-4a3e-9da6-d5e3ab95b372",
+    "note": "Préfère qu'on l'appelle le matin."
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Élément visé",
+       "en": "Target"
+      },
+      "valeur": "entity"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Entity type",
+       "en": "Entity type"
+      },
+      "valeur": "client"
+     },
+     {
+      "libelle": {
+       "fr": "Note",
+       "en": "Note"
+      },
+      "valeur": "Préfère qu'on l'appelle le matin."
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7608,
+   "conversation_id": "340956ff-199c-4469-98d3-69ff3327ee3b",
+   "duree_ms": 6053
+  },
+  {
+   "id": "prod-update_client",
+   "section": "clients",
+   "outil": "update_client",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Julie Dupuis a changé de courriel : c’est julie.dupuis@lume.test maintenant, mets sa fiche à jour.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "update_client",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "client_id": "e1eed2e5-53bd-4e42-a8bb-76ff244cc19c",
+    "email": "julie.dupuis@lume.test"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Prospect",
+       "en": "Lead"
+      },
+      "valeur": "Julie Dupuis · 12 rue des Essais, Montréal · 514-555-0101 · qa1@lume.test"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Courriel",
+       "en": "Email"
+      },
+      "valeur": "julie.dupuis@lume.test"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7403,
+   "conversation_id": "afd56a98-6d5f-4d36-a8f4-f0b0ae0fbed6",
+   "duree_ms": 5284
+  },
+  {
+   "id": "prod-delete_client",
+   "section": "clients",
+   "outil": "delete_client",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Supprime le client E2E Run625, c’était un test.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "delete_client",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "client_id": "a1b55bf5-e915-4073-8bcf-d946d0ec76d6"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Prospect",
+       "en": "Lead"
+      },
+      "valeur": "E2E Run625"
+     }
+    ],
+    "details": [],
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.726,
+   "conversation_id": "0bc1511b-a500-4e90-bfec-a02e710cf701",
+   "duree_ms": 6630
+  },
+  {
+   "id": "prod-send_quote",
+   "section": "devis",
+   "outil": "send_quote",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Envoie la soumission 1 à Sophie Tremblay par courriel.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "send_quote",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "quote_id": "0c601588-0186-453b-ad84-d434aef84cdf"
+   },
+   "apercu": {
+    "genre": "email",
+    "to": "Sophie Tremblay <qa3@lume.test>",
+    "subject": "Soumission 1 · 100,00 $",
+    "body": "Courriel standard de Lume avec le lien pour consulter et accepter la soumission en ligne.",
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": true,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "Je t'envoie le devis « Devis pour Sophie Tremblay » par courriel à Sophie Tremblay (qa3@lume.test).",
+   "cout_cents": 3.4124,
+   "conversation_id": "42f8b8d7-7314-4e1d-9870-21f0f4ba888e",
+   "duree_ms": 9051
+  },
+  {
+   "id": "prod-send_email",
+   "section": "communications",
+   "outil": "send_email",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Envoie un courriel à Julie Dupuis, objet « Passage jeudi », message « Bonjour Julie, on passe jeudi matin pour la toiture. »",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "send_email",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "to": "qa1@lume.test",
+    "subject": "Passage jeudi",
+    "message": "Bonjour Julie, on passe jeudi matin pour la toiture."
+   },
+   "apercu": {
+    "genre": "email",
+    "to": "qa1@lume.test",
+    "subject": "Passage jeudi",
+    "body": "Bonjour Julie, on passe jeudi matin pour la toiture.",
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": true,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 2.6212,
+   "conversation_id": "c7f2488a-8c3c-404f-b461-fae36a05d59d",
+   "duree_ms": 10689
+  },
+  {
+   "id": "prod-mark_invoice_paid",
+   "section": "facturation",
+   "outil": "mark_invoice_paid",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "Le client m’a payé la facture n° 1 au complet en argent comptant.",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "mark_invoice_paid",
+   "groupe": [],
+   "lectures": [],
+   "executes": 0,
+   "args": {
+    "invoice_id": "83acac4a-cbf1-42f0-b51b-d57b4362cf60",
+    "method": "cash"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Facture",
+       "en": "Invoice"
+      },
+      "valeur": "#1 · Sophie Tremblay · total 95,00 $ · solde 95,00 $ · draft",
+      "valeur_en": "#1 · Sophie Tremblay · total $95.00 · balance $95.00 · draft"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Mode",
+       "en": "Method"
+      },
+      "valeur": "cash"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": true,
+     "vers_client": false,
+     "jamais_d_office": true
+    }
+   },
+   "reponse": "",
+   "cout_cents": 0.7964,
+   "conversation_id": "7846b57a-1dcd-4084-88fe-22045a86fd13",
+   "duree_ms": 9353
+  }
+ ]
+}

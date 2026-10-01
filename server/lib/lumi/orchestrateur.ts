@@ -33,7 +33,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { AGENT_TOOLS, TOOLS_BY_NAME } from '../agent/tools';
 import { executerOutilGarde, PERMISSION_PAR_OUTIL, resoudreNumeros } from '../agent/garde';
 import { masquerIds, demasquerIds } from '../agent/refs';
-import { CONSIGNES_COLLEGUE } from '../agent/consignesCollegue';
+import { CONSIGNES_COLLEGUE_LUMI } from '../agent/consignesCollegue';
 import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 import { estimationCoutAppel, type Reservation } from './budget';
@@ -272,7 +272,7 @@ Une à trois phrases par défaut, comme un collègue à l'oral : le fait d'abord
 Seulement quand on demande un DOCUMENT (« un rapport », « un PDF », « un document pour mon comptable », « sors-moi mon mois ») → build_report (financier, retards, jobs ou client ; période = du 1er du mois à aujourd'hui sauf précision). Une question de chiffres (« quel genre de job rapporte le plus ? ») se répond en phrases avec l'outil de lecture qui convient (top services, revenus, rentabilité), jamais par un rapport. La carte s'affiche SOUS ton message (dis « ci-dessous ») avec le bouton de téléchargement ; toi, tu résumes deux ou trois faits saillants sans recopier les tableaux.
 
 # Comment tu parles à l'utilisateur (s'applique aussi en anglais)
-${CONSIGNES_COLLEGUE}`;
+${CONSIGNES_COLLEGUE_LUMI}`;
   // Les souvenirs vont dans la partie VARIABLE (hors cache) : ils changent
   // quand Lumi apprend, et ils pèsent peu (plafonnés à 30 lignes courtes).
   const souvenirs = (ctx.souvenirs ?? []).slice(0, 30).map((s) => `- ${s.key} : ${s.value.replace(/\s+/g, ' ').slice(0, 240)}`);
