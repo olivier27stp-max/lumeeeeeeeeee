@@ -27,8 +27,13 @@
  * Coût de l'étage --prod : ≈ 3,50 $ d'inférence pour les évals, ≈ 0,40 $ pour les
  * critiques, ≈ 2 $ pour la robustesse — et UNE passe d'évals par bureau et par
  * jour (la garde quotidienne du bureau passe ensuite au modèle de repli).
+ *
+ * UN SEUL FLUX contre la production : les batteries se suivent, les lots d'évals aussi (≈ 50 minutes pour les
+ * 221 demandes). Avant chaque batterie et chaque lot, /api/health est relu : si la base met plus de
+ * LUMI_SEUIL_BASE_MS (1 500 ms) à répondre, rien n'est envoyé et le verdict est « non concluant ». Le 2026-10-01,
+ * cinq lots en parallèle ont couché la base de production pendant 65 minutes.
  */
-import { spawnSync, spawn } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,6 +65,22 @@ const rapport = { date: new Date().toISOString(), commit: null, prod: PROD, bure
 try { rapport.commit = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: RACINE, encoding: 'utf8' }).stdout.trim() || null; } catch { /* hors dépôt */ }
 const echec = (code, raison) => { rapport.raisons.push(raison); if (rapport.verdict === 'PASS' || code === 1) rapport.verdict = code === 1 ? 'FAIL' : 'NON CONCLUANT'; };
 
+/**
+ * La base de production répond-elle vite ? Relu avant CHAQUE batterie et chaque lot : au-dessus du seuil, rien
+ * n'est envoyé et le verdict est « non concluant » (code 3) — jamais une batterie lancée sur une prod qui peine.
+ */
+const SEUIL_BASE_MS = Number(process.env.LUMI_SEUIL_BASE_MS ?? 1500);
+async function prodRepond(etape) {
+  const lire = async () => { try { const r = await fetch('https://lumecrm.net/api/health', { signal: AbortSignal.timeout(10_000) }); const j = await r.json(); return Number.isFinite(j.db_ms) ? Math.round(j.db_ms) : Infinity; } catch { return Infinity; } };
+  let ms = await lire();
+  if (ms > SEUIL_BASE_MS) { await new Promise((r) => setTimeout(r, 20_000)); ms = await lire(); }
+  if (ms <= SEUIL_BASE_MS) return true;
+  rapport.raisons.push(`arrêt avant « ${etape} » : la base de production répond en ${ms === Infinity ? 'plus de 10 s' : `${ms} ms`} (seuil ${SEUIL_BASE_MS} ms) — rien n'a été envoyé`);
+  rapport.verdict = rapport.verdict === 'FAIL' ? 'FAIL' : 'NON CONCLUANT';
+  rapport.prod_lente = true;
+  return false;
+}
+
 function lancer(cmd, argv, opts = {}) {
   const r = spawnSync(cmd, argv, { cwd: RACINE, encoding: 'utf8', shell: process.platform === 'win32', maxBuffer: 64 * 1024 * 1024, ...opts });
   return { code: r.status ?? 1, sortie: `${r.stdout ?? ''}${r.stderr ?? ''}` };
@@ -88,7 +109,7 @@ if (PROD) {
   rapport.bureau = nom;
   const node = (script, argv) => lancer('node', [`--env-file=${ENV_FILE}`, '--import', 'tsx', script, ...argv]);
 
-  if (!a('--sans-critiques')) {
+  if (!a('--sans-critiques') && await prodRepond('tests critiques')) {
     const base = `${SORTIE}.critiques`;
     // La batterie se joue famille par famille, un compte propriétaire par groupe, pour tenir sous 60 tours par heure et par personne.
     // Cette batterie est liée au banc « ZZ QA Champs » (bureau A) et à « Grok Audit (TEST) » (bureau B, lecture
@@ -104,7 +125,7 @@ if (PROD) {
     else if (bloquants.length) echec(1, `tests critiques : ${bloquants.map((t) => t.id).join(', ')}`);
   }
 
-  if (!a('--sans-robustesse') && existsSync(join(RACINE, 'scripts/qa/lumi/robustesse/run.mts'))) {
+  if (!a('--sans-robustesse') && !rapport.prod_lente && existsSync(join(RACINE, 'scripts/qa/lumi/robustesse/run.mts')) && await prodRepond('robustesse')) {
     const base = `${SORTIE}.robustesse`;
     node('scripts/qa/lumi/robustesse/run.mts', ['--org', bureau.org, '--sortie', base]);
     const j = lireJson(`${base}.json`);
@@ -116,15 +137,16 @@ if (PROD) {
     else if (bloquants.length) echec(1, `robustesse : ${bloquants.map((t) => t.id).join(', ')}`);
   }
 
-  if (!a('--sans-evals')) {
+  if (!a('--sans-evals') && !rapport.prod_lente) {
     const dossier = `${SORTIE}.evals`;
     mkdirSync(dossier, { recursive: true });
-    // Quatre comptes propriétaires en parallèle (un lot chacun) + le technicien.
+    // UN lot à la fois. Le 2026-10-01, cinq lots en parallèle (avec deux autres batteries) ont couché la base de
+    // production pendant 65 minutes : elle tourne sur une petite machine. La passe prend ≈ 50 minutes au lieu de 13.
     const lots = [...bureau.proprios.map((compte, i) => ({ compte, cas: `${bureau.cas}/proprietaire-lot${i + 1}`, sortie: `${dossier}/lot${i + 1}.json` })), { compte: bureau.tech, cas: `${bureau.cas}/technicien`, sortie: `${dossier}/technicien.json` }];
-    await Promise.all(lots.map((l, i) => new Promise((fin) => setTimeout(() => {
-      const p = spawn('node', [`--env-file=${ENV_FILE}`, '--import', 'tsx', 'evals/lumi-tools/run.mts', '--prod', '--org', bureau.org, '--compte', l.compte, '--cas', l.cas, '--sortie', l.sortie], { cwd: RACINE, stdio: 'ignore', shell: process.platform === 'win32' });
-      p.on('exit', fin); p.on('error', fin);
-    }, i * 3000))));
+    for (const l of lots) {
+      if (!(await prodRepond(`évals, ${l.compte}`))) break;
+      node('evals/lumi-tools/run.mts', ['--prod', '--org', bureau.org, '--compte', l.compte, '--cas', l.cas, '--sortie', l.sortie]);
+    }
     const bilan = `${dossier}/bilan.json`;
     lancer('npx', ['tsx', 'evals/lumi/corriger.mts', '--cas', bureau.cas, '--resultats', lots.map((l) => l.sortie).join(','), '--sortie', bilan]);
     const j = lireJson(bilan);
