@@ -465,6 +465,20 @@ function secondaire(x: any, fr: boolean): string {
   if (typeof x?.is_active === 'boolean') parts.push(x.is_active ? (fr ? 'active' : 'active') : (fr ? 'en pause' : 'paused'));
   return parts.join(' · ');
 }
+/**
+ * Le canal d'une relance tel que l'écran le dit (LUMI_GLOSSARY.md) : la base
+ * range « email », « sms » ou « both » ; l'utilisateur lisait ces mots bruts
+ * (« 14 jour(s) après l’échéance · both »). Un canal inconnu reste tel quel.
+ */
+const CANAL_RELANCE: Record<string, { fr: string; en: string }> = {
+  email: { fr: 'courriel', en: 'email' },
+  sms: { fr: 'texto', en: 'text' },
+  both: { fr: 'courriel et texto', en: 'email and text' },
+};
+const canalRelance = (canal: unknown, fr: boolean): string => {
+  const c = CANAL_RELANCE[String(canal ?? '').toLowerCase()];
+  return c ? (fr ? c.fr : c.en) : String(canal ?? '—');
+};
 /** « 2 modèles de devis », « 2 quote templates » : le pluriel porte sur le premier mot en français, le dernier en anglais. */
 const pluriel = (n: number, nom: string, fr: boolean) => {
   if (fr) { const [tete, ...reste] = nom.split(' '); const t = n > 1 && !tete.endsWith('s') && !tete.endsWith('x') ? `${tete}s` : tete; return `${n} ${[t, ...reste].join(' ')}`; }
@@ -511,7 +525,7 @@ export function rendreActionDirecte(a: ActionDirecte, resultat: any, opts: { fr:
     const r = resultat ?? {};
     const etapes: any[] = Array.isArray(r.schedule) ? r.schedule : [];
     const etat = r.enabled === false ? (fr ? 'désactivées' : 'off') : (fr ? 'actives' : 'on');
-    const lignes = etapes.map((e) => `• ${fr ? `${e.jours_apres_echeance ?? e.days_after_due} jour(s) après l’échéance` : `${e.jours_apres_echeance ?? e.days_after_due} day(s) after due`} · ${e.canal ?? e.channel}`);
+    const lignes = etapes.map((e) => `• ${fr ? `${e.jours_apres_echeance ?? e.days_after_due} jour(s) après l’échéance` : `${e.jours_apres_echeance ?? e.days_after_due} day(s) after due`} · ${canalRelance(e.canal ?? e.channel, fr)}`);
     return `${fr ? `Relances automatiques ${etat}` : `Automatic reminders ${etat}`}${lignes.length ? ` :\n${lignes.join('\n')}` : '.'}`;
   }
   if (a.id === 'client-jobs') {
