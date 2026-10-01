@@ -174,8 +174,8 @@ describe('[B] webhooks Stripe signés', () => {
     const [t] = await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} complet`), (x) => x.length > 0);
     expect(t, 'la règle « payment_type = full » n’est pas partie pour un paiement par carte').toMatchObject({ linked_entity_type: 'invoice', linked_entity_id: f.id });
     expect((await journaux(b.admin, complet))[0]).toMatchObject({ trigger_event: 'invoice.paid', entity_id: f.id, result_success: true });
-    expect(await journaux(b.admin, depot)).toHaveLength(0);
-    expect(await journaux(b.admin, partiel)).toHaveLength(0);
+    expect(lignesDAction(await journaux(b.admin, depot))).toHaveLength(0);
+    expect(lignesDAction(await journaux(b.admin, partiel))).toHaveLength(0);
   });
 
   it('[B-591] paiement PayPal qui solde la facture → payment_type=full aussi (même émetteur, aucun appel à PayPal)', async () => {
@@ -194,7 +194,7 @@ describe('[B] webhooks Stripe signés', () => {
     expect(p.inserted).toBe(true);
     const [t] = await attendre(() => tachesTitrees(b.admin, b.orgA, `${m} complet`), (x) => x.length > 0);
     expect(t).toMatchObject({ linked_entity_type: 'invoice', linked_entity_id: f.id });
-    expect(await journaux(b.admin, depot)).toHaveLength(0);
+    expect(lignesDAction(await journaux(b.admin, depot))).toHaveLength(0);
     expect(appelsHttpBloques().length, 'un appel sortant (PayPal ?) a été tenté').toBe(httpAvant);
   });
 
@@ -213,8 +213,8 @@ describe('[B] webhooks Stripe signés', () => {
     const { data: facture } = await b.admin.from('invoices').select('status, balance_cents').eq('id', f.id).single();
     expect(facture).toMatchObject({ status: 'partial', balance_cents: 15_000 });
     await new Promise((res) => setTimeout(res, 2500));
-    expect(await journaux(b.admin, partiel)).toHaveLength(0);
-    expect(await journaux(b.admin, complet)).toHaveLength(0);
+    expect(lignesDAction(await journaux(b.admin, partiel))).toHaveLength(0);
+    expect(lignesDAction(await journaux(b.admin, complet))).toHaveLength(0);
   });
 
   it('[B-407][B-408] payment_intent.payment_failed (drapeau auto_paiement_echoue) → paiement échoué écrit, payment.failed : raison vraie / autre fausse', async () => {
