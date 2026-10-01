@@ -18,6 +18,7 @@ process.env.EMAIL_FROM = 'Lume CRM <noreply@lumecrm.net>';
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { demarrerMoteur, marque, envoisSimules, attendre } from '../harnais/moteur';
+import { journalDefinitif } from '../harnais/moteur';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
 const m = marque('G');
@@ -67,7 +68,7 @@ async function journaux(regle: string) {
     .select('action_type, result_success, result_data, result_error, created_at').eq('automation_rule_id', regle).order('created_at');
   return data ?? [];
 }
-const termine = (l: Array<{ result_error: string | null }>, nb = 1) => l.length >= nb && l.every((x) => x.result_error !== 'en cours');
+const termine = (l: Array<{ result_error: string | null }>, nb = 1) => l.length >= nb && l.every((x) => journalDefinitif(x.result_error));
 
 async function drapeauParCanal(actif: boolean) {
   await ok(b.admin.from('org_features').upsert({ org_id: b.orgA, feature: 'auto_desabonnement_canal', enabled: actif }, { onConflict: 'org_id,feature' }).select('id'), 'drapeau');

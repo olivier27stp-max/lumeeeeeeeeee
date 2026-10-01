@@ -19,6 +19,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { demarrerMoteur, marque, traiterFile, envoisSimules, attendre } from '../harnais/moteur';
+import { journalDefinitif } from '../harnais/moteur';
 import { NUMERO_A } from '../harnais/bureau-test';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
@@ -152,7 +153,7 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
       return ids.every((id) => vues.has(id));
     }, (ok) => ok, 40_000, 1000);
     await derouler(ids);
-    const lignes = await attendre(() => journal(ids, depuis), (l) => l.every((x) => x.result_error !== 'en cours'), 20_000, 500);
+    const lignes = await attendre(() => journal(ids, depuis), (l) => l.every((x) => journalDefinitif(x.result_error)), 20_000, 500);
     const diag = JSON.stringify(lignes.map((l) => [etat.find((r) => r.id === l.automation_rule_id)?.preset_key, l.action_type, l.result_success, l.result_error, (l.result_data as Record<string, unknown> | null)?.saute ?? null]));
     for (const r of regles) {
       const siennes = lignes.filter((l) => l.automation_rule_id === r.id);
@@ -160,7 +161,7 @@ describe('K — chaque préréglage publié fonctionne sans configuration', () =
       // Le temps est COMPRESSÉ ici (J+1, J+2, J+5… en une minute) : le plafond
       // de 3 messages commerciaux par 24 h s'applique à des envois qui, en vrai,
       // seraient espacés de plusieurs jours. Ce refus-là est un artefact du test.
-      const echecs = siennes.filter((l) => !l.result_success && l.result_error !== 'en cours' && !/Frequency cap reached/.test(String(l.result_error)));
+      const echecs = siennes.filter((l) => !l.result_success && journalDefinitif(l.result_error) && !/Frequency cap reached/.test(String(l.result_error)));
       expect(echecs, `${r.preset_key} en échec — ${diag}`).toEqual([]);
     }
     const messages = lignes.filter((l) => ['send_sms', 'send_email'].includes(l.action_type as string) && l.result_success && !(l.result_data as Record<string, unknown> | null)?.saute);

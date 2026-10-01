@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { demarrerMoteur, marque, envoisSimules, attendre } from '../harnais/moteur';
+import { journalDefinitif } from '../harnais/moteur';
 import { COMPTES } from '../harnais/bureau-test';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
@@ -55,7 +56,7 @@ async function journaux(regle: string) {
     .select('action_type, result_success, result_data, result_error').eq('automation_rule_id', regle);
   return data ?? [];
 }
-const termine = (l: Array<{ result_error: string | null }>, nb = 1) => l.length >= nb && l.every((x) => x.result_error !== 'en cours');
+const termine = (l: Array<{ result_error: string | null }>, nb = 1) => l.length >= nb && l.every((x) => journalDefinitif(x.result_error));
 
 async function declencher(org: string, regle: string, entite: { type: string; id: string }, nb = 1, evenement = 'client.tagged') {
   const depuis = new Date().toISOString();
@@ -123,7 +124,9 @@ describe('H — la langue de l’entreprise pour chaque message', () => {
     const courriel = envois.find((e) => e.destinataire === client.email);
     const texto = envois.find((e) => e.destinataire === client.phone);
     expect(courriel, JSON.stringify(logs)).toBeTruthy();
-    expect(courriel!.sujet).toBe('How did we do?');
+    const { DEFAULT_REVIEW_EMAIL_SUBJECT_EN } = await import('../../../server/lib/reviews');
+    expect(courriel!.sujet).toBe(DEFAULT_REVIEW_EMAIL_SUBJECT_EN);
+    expect(courriel!.sujet).not.toMatch(/avis|Votre/i);
     expect(texto, JSON.stringify(logs)).toBeTruthy();
     expect(String(texto!.corps), 'texto de demande d’avis en français dans une entreprise anglaise').not.toMatch(/Bonjour|merci d'avoir|Notez-nous|Répondez/);
     expect(String(texto!.corps)).toMatch(/^Hi Harry, thanks for choosing Nettoyage Test B!/);
@@ -134,7 +137,13 @@ describe('H — la langue de l’entreprise pour chaque message', () => {
     const client = await unClient(b.orgB);
     const job = await ok(b.admin.from('jobs').insert({ org_id: b.orgB, created_by: b.users.proprioB, client_id: client.id, title: `Visit ${m}`, status: 'scheduled', job_number: `H-${Date.now().toString(36)}` }).select('id').single(), 'job');
     nettoyer.push(() => b.admin.from('jobs').delete().eq('id', job.id));
-    // 18:00 UTC le 15 octobre 2026 = 14:00 à Toronto (heure avancée).
+    // 18:00 UTC le 15 octobre 2026 = 14:00 à Toronto (heure avancée). Le harnais
+    // met les bureaux « en journée » (fuseau variable) : ce test pose Toronto.
+    const { viderCacheFuseau } = await import('../../../server/lib/automations-fuseau-org');
+    const { fuseauEnJournee } = await import('../harnais/moteur');
+    await b.admin.from('company_settings').update({ timezone: 'America/Toronto' }).eq('org_id', b.orgB);
+    viderCacheFuseau();
+    nettoyer.push(async () => { await b.admin.from('company_settings').update({ timezone: fuseauEnJournee() }).eq('org_id', b.orgB); viderCacheFuseau(); });
     const rdv = await ok(b.admin.from('schedule_events').insert({ org_id: b.orgB, created_by: b.users.proprioB, job_id: job.id, title: `Visit ${m}`, start_at: '2026-10-15T18:00:00Z', end_at: '2026-10-15T19:00:00Z' }).select('id').single(), 'rdv');
     nettoyer.push(() => b.admin.from('schedule_events').delete().eq('id', rdv.id));
     const { resolveEntityVariables } = await import('../../../server/lib/actions');

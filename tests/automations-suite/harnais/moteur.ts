@@ -81,6 +81,18 @@ export function fuseauEnJournee(maintenant = new Date()): string {
   return decalage === 0 ? 'Etc/GMT' : `Etc/GMT${decalage > 0 ? '-' : '+'}${Math.abs(decalage)}`;
 }
 
+/**
+ * Une ligne du journal d'exécution est-elle DÉFINITIVE ? Le moteur écrit
+ * « en cours » à la réservation, et « … résultat en attente (l'action
+ * continue) » quand une action dépasse 5 s — puis complète la MÊME ligne avec
+ * le vrai résultat. Sur un staging lent, un test qui lisait trop tôt prenait
+ * l'état provisoire pour le résultat (E-030 rouge dans la suite complète).
+ */
+export function journalDefinitif(resultError: string | null | undefined): boolean {
+  const e = String(resultError ?? '');
+  return e !== 'en cours' && !e.includes('résultat en attente');
+}
+
 /** Marque unique d'un test : tout ce qu'il crée la porte, le ménage la cherche. */
 export function marque(prefixe: string): string {
   return `[QA-AUTO ${prefixe} ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}]`;

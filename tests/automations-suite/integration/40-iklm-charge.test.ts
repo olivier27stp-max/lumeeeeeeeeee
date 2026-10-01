@@ -110,8 +110,10 @@ describe('M — rafale de 1 000 événements', () => {
     const type = `qa_file_${m.slice(-13, -1)}`;
     const id = await regle(m, type, 3600);
     const N = 120;
+    // Entité « job » : une tâche différée dont le CLIENT n'existe pas est
+    // annulée (correctif C-024) — ici on mesure le débit, pas ce garde.
     await enParallele(Array.from({ length: N }, () => async () => {
-      await b.eventBus.emit('note.added', { orgId: b.orgA, entityType: 'client', entityId: randomUUID(), metadata: {} });
+      await b.eventBus.emit('note.added', { orgId: b.orgA, entityType: 'job', entityId: randomUUID(), metadata: {} });
     }), 30);
     const taches = await attendre(
       async () => (await b.admin.from('automation_scheduled_tasks').select('id', { count: 'exact', head: true }).eq('automation_rule_id', id).eq('status', 'pending')).count ?? 0,
@@ -124,7 +126,8 @@ describe('M — rafale de 1 000 événements', () => {
     const dureePassage = Date.now() - t0;
     const faites = await compterEffets(type);
     console.info(`[M-004] un passage de la file : ${faites} tâches sur ${N} dues, en ${dureePassage} ms — au rythme d'un passage / 5 min : ${faites * 12}/h pour TOUTES les entreprises.`);
-    // Le plafond mesuré : 50 tâches par passage (limit(50)), soit 600/h avec le tick de 5 min.
+    // UN appel = UN lot de 50. Le plafond de 600/h venait d'un seul lot par
+    // tick ; le tick enchaîne maintenant les lots (viderFile, voir M-005).
     expect(faites).toBe(50);
   }, 300_000);
 });

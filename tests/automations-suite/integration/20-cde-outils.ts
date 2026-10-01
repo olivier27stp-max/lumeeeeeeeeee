@@ -12,6 +12,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { attendre, envoisSimules, traiterFile } from '../harnais/moteur';
+import { journalDefinitif } from '../harnais/moteur';
 
 export type Bureau = { admin: SupabaseClient; orgA: string; orgB: string; users: Record<string, string> };
 
@@ -129,7 +130,7 @@ export async function emettreNote(b: Bureau & { eventBus: { emit: (t: any, d: an
 }
 
 export async function attendreJournaux(b: Bureau, ruleId: string, n: number, delaiMs = 15_000) {
-  return attendre(() => journaux(b, ruleId), (j) => j.length >= n && j.every((l) => l.result_error !== 'en cours'), delaiMs);
+  return attendre(() => journaux(b, ruleId), (j) => j.length >= n && j.every((l) => journalDefinitif(l.result_error)), delaiMs);
 }
 
 /**

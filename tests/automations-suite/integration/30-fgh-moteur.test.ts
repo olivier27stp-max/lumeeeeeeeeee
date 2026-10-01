@@ -20,6 +20,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { sessionDe, COMPTES } from '../harnais/bureau-test';
 import { demarrerMoteur, marque, envoisSimules, attendre, traiterFile, appelsTwilio, appelsHttpBloques } from '../harnais/moteur';
+import { journalDefinitif } from '../harnais/moteur';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
 const m = marque('F-moteur');
@@ -126,7 +127,7 @@ describe('F — isolation du moteur entre bureaux', () => {
     });
     const depuis = new Date().toISOString();
     await b.eventBus.emit('deal.stage_entered', { orgId: b.orgA, entityType: 'deal', entityId: deal.id, metadata: {} });
-    await attendre(() => journaux(regleA), (l) => l.length >= 1 && l[0].result_error !== 'en cours');
+    await attendre(() => journaux(regleA), (l) => l.length >= 1 && journalDefinitif(l[0].result_error));
     const versB = (await envoisSimules(b.admin, b.orgA, depuis)).filter((e) => e.destinataire === clientB.email);
     expect(versB, 'un courriel de A est parti vers le client de B').toHaveLength(0);
   });
@@ -136,7 +137,7 @@ describe('F — isolation du moteur entre bureaux', () => {
     const regleB = await uneRegle(b.orgB, { trigger_event: 'client.tagged', actions: [{ type: 'create_task', config: { title: `B démarrée par A ${m}` } }] });
     const regleA = await uneRegle(b.orgA, { trigger_event: 'client.tagged', actions: [{ type: 'demarrer_automatisation', config: { rule_id: regleB } }] });
     await b.eventBus.emit('client.tagged', { orgId: b.orgA, entityType: 'client', entityId: clientA.id, metadata: { tag: 'qa-secu' } });
-    const [log] = await attendre(() => journaux(regleA), (l) => l.length >= 1 && l[0].result_error !== 'en cours');
+    const [log] = await attendre(() => journaux(regleA), (l) => l.length >= 1 && journalDefinitif(l[0].result_error));
     expect(log.result_success).toBe(false);
     expect(await journaux(regleB)).toHaveLength(0);
     const { data: taches } = await b.admin.from('tasks').select('id').ilike('title', `%B démarrée par A ${m}%`);
@@ -153,7 +154,7 @@ describe('F — isolation du moteur entre bureaux', () => {
     const regleA = await uneRegle(b.orgA, { trigger_event: 'client.tagged', actions: [{ type: 'arreter_automatisation', config: { portee: 'toutes' } }] });
     // Même identifiant d'entité que la tâche de B : seule l'org les distingue.
     await b.eventBus.emit('client.tagged', { orgId: b.orgA, entityType: 'client', entityId: clientB.id, metadata: { tag: 'qa-secu' } });
-    await attendre(() => journaux(regleA), (l) => l.length >= 1 && l[0].result_error !== 'en cours');
+    await attendre(() => journaux(regleA), (l) => l.length >= 1 && journalDefinitif(l[0].result_error));
     const { data } = await b.admin.from('automation_scheduled_tasks').select('status').eq('id', tacheB.id).single();
     expect(data!.status).toBe('pending');
   });
@@ -305,7 +306,7 @@ describe('F — anti-spam : plafonds', () => {
     nettoyer.push(() => b.admin.from('automation_execution_logs').delete().eq('automation_rule_id', regle));
     const depuis = new Date().toISOString();
     await b.eventBus.emit('client.tagged', { orgId: b.orgA, entityType: 'client', entityId: client.id, metadata: { tag: 'qa-secu' } });
-    await attendre(async () => (await journaux(regle)).filter((l) => l.created_at > depuis), (l) => l.length >= 1 && l[0].result_error !== 'en cours');
+    await attendre(async () => (await journaux(regle)).filter((l) => l.created_at > depuis), (l) => l.length >= 1 && journalDefinitif(l[0].result_error));
     const envoye = (await envoisSimules(b.admin, b.orgA, depuis)).some((e) => e.destinataire === client.phone);
     const { data: taches } = await b.admin.from('automation_scheduled_tasks').select('status, execute_at, action_config').eq('automation_rule_id', regle);
     etatGlobal = { envoye, journal: { logs: (await journaux(regle)).filter((l) => l.created_at > depuis), taches } };

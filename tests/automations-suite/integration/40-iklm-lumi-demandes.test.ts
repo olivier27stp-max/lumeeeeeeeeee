@@ -171,7 +171,9 @@ const CAS: Cas[] = [
   {
     id: 'I-001', langue: 'fr',
     demande: 'Crée une automatisation : quand j’envoie une soumission, attends 3 jours puis envoie un texto de relance au client s’il n’a pas encore répondu.',
-    declencheur: 'quote.sent', ordre: [`attente:${3 * JOUR}`, 'send_sms'],
+    // La demande dit « s’il n’a pas encore répondu » : un délai de 3 jours, ou une
+    // attente de réponse bornée à 3 jours — les deux honorent l'intention.
+    declencheur: 'quote.sent', ordre: [new RegExp(`^(attente|reponse):${3 * JOUR}$`), 'send_sms'],
   },
   {
     id: 'I-002', langue: 'fr',

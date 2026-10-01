@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { demarrerMoteur, marque, attendre } from '../harnais/moteur';
+import { journalDefinitif } from '../harnais/moteur';
 import { sessionDe, COMPTES } from '../harnais/bureau-test';
 
 let b: Awaited<ReturnType<typeof demarrerMoteur>>;
@@ -54,7 +55,7 @@ async function regle(m: string, actions: unknown[], conditions: Record<string, u
 async function journal(ruleId: string, n = 1) {
   const lignes = await attendre(
     async () => (await b.admin.from('automation_execution_logs').select('*').eq('automation_rule_id', ruleId).order('created_at')).data ?? [],
-    (l) => l.length >= n && l.every((x) => x.result_error !== 'en cours'),
+    (l) => l.length >= n && l.every((x) => journalDefinitif(x.result_error)),
   );
   // Une règle ne sert qu'à son test : elle ne doit pas réagir aux prospects des suivants.
   await b.admin.from('automation_rules').update({ is_active: false }).eq('id', ruleId);

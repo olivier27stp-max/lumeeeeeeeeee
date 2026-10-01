@@ -74,7 +74,7 @@ export const DEFAULT_REVIEW_SMS_BODY_FR =
    langue). ASCII seulement : il reste en GSM-7 (160 caractères / segment). */
 export const DEFAULT_REVIEW_SMS_BODY_EN =
   'Hi [client_first_name], thanks for choosing [company_name]! '
-  + 'How did we do? Rate us in 10 seconds: [survey_url]';
+  + 'A Google or Facebook review would help us a lot: [survey_url]';
 
 /* L'objet ne répète pas le nom de l'entreprise : l'expéditeur l'affiche déjà
    (audit des courriels du 2026-09-29 — et un nom vide donnait « — Comment… »). */
