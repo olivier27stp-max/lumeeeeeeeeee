@@ -14,7 +14,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { companyOrgIds } from '../supabase';
 import { fuseauOrg } from '../automations-fuseau-org';
 import {
-  bornesPeriode, debutDuMoisLocal, enCents, totauxCommissions, repartirParts, baseAvantTaxesCents,
+  bornesPeriode, debutDuMoisLocal, enCents, totauxCommissions, repartirParts, baseAvantTaxesCents, type TotauxCommissions,
 } from './commission-periode';
 import { toLocalDate } from '../reports/dates';
 import { dateDeRattachement } from './commission-verrou';
@@ -740,14 +740,14 @@ function requeteEntrees(supabase: SupabaseClient, orgId: string, colonnes: strin
  * 100 000 commissions). Lire la période en tranches parallèles a été essayé
  * et mesuré SANS gain (15 s contre 14-18 s) : sans index de période, chaque
  * page parcourt toute la table de l'org et les tranches se disputent le même
- * processeur. Le vrai levier est l'index (migration proposée M3).
+ * processeur. Le vrai levier est l'index de période (migration 20261005600200).
  */
 export async function toutesLesEntrees(supabase: SupabaseClient, orgId: string, colonnes: string, o: FiltreEntrees): Promise<any[]> {
   const out: any[] = [];
   const bornes = await bornesDuFiltre(supabase, orgId, o);
   const cols = colonnes.trim() === '*' ? colonnes : `id, triggered_at, ${colonnes}`;
   // Clé (triggered_at, id) par PLAGE (`triggered_at >= dernier`) : suit
-  // l'index de période proposé (M3). Un OR « (t > x) ou (t = x et id > y) »
+  // l'index de période (20261005600200). Un OR « (t > x) ou (t = x et id > y) »
   // faisait relire la plage depuis le début à chaque page (36 ms/page contre
   // 0,9 ms mesurés). Les lignes déjà vues à l'instant-frontière sont écartées.
   const lire = async (filtre: (q: any) => any) => {
@@ -852,6 +852,86 @@ export async function enrichirEntrees(supabase: SupabaseClient, orgId: string, r
 // entrées (paginé), + ventilation par rep et par jour pour les graphiques.
 // ---------------------------------------------------------------------------
 
+export interface TotauxRep extends TotauxCommissions { user_id: string; base_cents: number }
+export interface AgregatPeriode {
+  tz: string;
+  count: number;
+  totaux: TotauxCommissions;
+  par_rep: TotauxRep[];
+  par_jour: Array<{ date: string; du_cents: number }>;
+  flagged_ids: string[];
+  source: 'sql' | 'js';
+}
+
+const sommeTotaux = (l: TotauxCommissions[], ventes: number): TotauxCommissions => {
+  const t = { du_cents: 0, en_attente_cents: 0, approuve_cents: 0, verse_cents: 0, repris_cents: 0, estime_cents: 0, ventes };
+  for (const x of l) {
+    t.en_attente_cents += x.en_attente_cents; t.approuve_cents += x.approuve_cents; t.verse_cents += x.verse_cents;
+    t.repris_cents += x.repris_cents; t.estime_cents += x.estime_cents;
+  }
+  t.du_cents = t.en_attente_cents + t.approuve_cents + t.verse_cents;
+  return t;
+};
+
+/**
+ * Totaux d'une période : en SQL (fonction commissions_totaux_periode, une
+ * requête) quand elle existe, sinon en lisant toutes les lignes (paginé).
+ * Mêmes règles des deux côtés (commission-periode.ts) — un test les compare.
+ */
+export async function totauxPeriode(
+  supabase: SupabaseClient, orgId: string, o: { userId?: string | null; from: string; to: string },
+): Promise<AgregatPeriode> {
+  const tz = await fuseauOrg(supabase, orgId);
+  const { debut, finExclusive } = bornesPeriode(o.from, o.to, tz);
+  const { data, error } = await supabase.rpc('commissions_totaux_periode', {
+    p_org: orgId, p_debut: debut, p_fin: finExclusive, p_user: o.userId ?? null, p_tz: tz,
+  });
+  if (!error && data) {
+    const r = data as { count: number; ventes: number; par_rep: any[]; par_jour: any[]; flagged_ids: string[] };
+    const par_rep: TotauxRep[] = (r.par_rep ?? []).map((x) => ({
+      user_id: x.user_id, base_cents: Number(x.base_cents), en_attente_cents: Number(x.en_attente_cents),
+      approuve_cents: Number(x.approuve_cents), verse_cents: Number(x.verse_cents), repris_cents: Number(x.repris_cents),
+      estime_cents: Number(x.estime_cents), ventes: Number(x.ventes),
+      du_cents: Number(x.en_attente_cents) + Number(x.approuve_cents) + Number(x.verse_cents),
+    }));
+    return {
+      tz, count: Number(r.count), totaux: sommeTotaux(par_rep, Number(r.ventes)), par_rep,
+      par_jour: (r.par_jour ?? []).map((j) => ({ date: j.date, du_cents: Number(j.du_cents) })),
+      flagged_ids: r.flagged_ids ?? [], source: 'sql',
+    };
+  }
+  // Fonction absente (migration pas encore appliquée) : lecture paginée. Toute
+  // AUTRE erreur est une vraie panne : on ne la masque pas.
+  if (error && !/commissions_totaux_periode|PGRST202|42883/.test(`${error.code} ${error.message}`)) {
+    throw new Error(`commission totals failed: ${error.message}`);
+  }
+  const entries = await toutesLesEntrees(supabase, orgId,
+    'id, user_id, invoice_id, job_id, status, amount, base_amount, triggered_at, reverse_reason',
+    { userId: o.userId, dateRange: { from: o.from, to: o.to } });
+  const parRep = new Map<string, any[]>();
+  for (const e of entries) {
+    const liste = parRep.get(e.user_id);
+    if (liste) liste.push(e); else parRep.set(e.user_id, [e]);
+  }
+  const par_rep: TotauxRep[] = [...parRep.entries()].map(([uid, lignes]) => ({
+    user_id: uid,
+    base_cents: lignes.filter((e) => e.invoice_id && e.status !== 'reversed').reduce((s, e) => s + enCents(e.base_amount), 0),
+    ...totauxCommissions(lignes),
+  }));
+  const jours = new Map<string, number>();
+  for (const e of entries) {
+    if (!e.invoice_id || e.status === 'reversed') continue;
+    const j = toLocalDate(e.triggered_at, tz);
+    jours.set(j, (jours.get(j) ?? 0) + enCents(e.amount));
+  }
+  return {
+    tz, count: entries.length, totaux: totauxCommissions(entries), par_rep,
+    par_jour: [...jours.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, du_cents]) => ({ date, du_cents })),
+    flagged_ids: entries.filter((e) => e.reverse_reason && e.status !== 'reversed').map((e) => e.id as string),
+    source: 'js',
+  };
+}
+
 export async function getPayrollPreview(
   supabase: SupabaseClient,
   orgId: string,
@@ -859,35 +939,16 @@ export async function getPayrollPreview(
   periodStart: string,
   periodEnd: string
 ) {
-  const tz = await fuseauOrg(supabase, orgId);
-  const entries = await toutesLesEntrees(supabase, orgId,
-    'id, user_id, invoice_id, job_id, status, amount, base_amount, triggered_at, reverse_reason',
-    { userId, dateRange: { from: periodStart, to: periodEnd } });
-  const t = totauxCommissions(entries);
-
-  const parRep = new Map<string, any[]>();
-  for (const e of entries) {
-    const liste = parRep.get(e.user_id);
-    if (liste) liste.push(e); else parRep.set(e.user_id, [e]);
-  }
-  const ids = [...parRep.keys()];
+  const a = await totauxPeriode(supabase, orgId, { userId, from: periodStart, to: periodEnd });
+  const t = a.totaux;
+  const ids = a.par_rep.map((r) => r.user_id);
   const { data: noms } = ids.length
     ? await supabase.from('memberships').select('user_id, full_name').eq('org_id', orgId).in('user_id', ids)
     : { data: [] as any[] };
   const nomDe = new Map((noms ?? []).map((m: any) => [m.user_id, m.full_name]));
-  const par_rep = ids.map((uid) => {
-    const lignes = parRep.get(uid)!;
-    const base_cents = lignes.filter((e) => e.invoice_id && e.status !== 'reversed').reduce((s, e) => s + enCents(e.base_amount), 0);
-    return { user_id: uid, rep_name: nomDe.get(uid) || null, base_cents, ...totauxCommissions(lignes) };
-  }).sort((a, b) => b.du_cents - a.du_cents);
-
-  const jours = new Map<string, number>();
-  for (const e of entries) {
-    if (!e.invoice_id || e.status === 'reversed') continue;
-    const j = toLocalDate(e.triggered_at, tz);
-    jours.set(j, (jours.get(j) ?? 0) + enCents(e.amount));
-  }
-  const par_jour = [...jours.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, du_cents]) => ({ date, du_cents }));
+  const par_rep = a.par_rep.map((r) => ({ ...r, rep_name: nomDe.get(r.user_id) || null })).sort((x, y) => y.du_cents - x.du_cents);
+  const par_jour = a.par_jour;
+  const tz = a.tz;
 
   return {
     // Dollars (contrat historique de l'API) — dérivés des cents exacts.
@@ -899,14 +960,14 @@ export async function getPayrollPreview(
     paid: t.verse_cents / 100,
     reversed: t.repris_cents / 100,
     estimated: t.estime_cents / 100,
-    count: entries.length,
+    count: a.count,
     sales: t.ventes,
     timezone: tz,
     totals_cents: t,
     par_rep,
     par_jour,
     /** Commissions versées dont la facture a été remboursée depuis. */
-    flagged_ids: entries.filter((e) => e.reverse_reason && e.status !== 'reversed').map((e) => e.id as string),
+    flagged_ids: a.flagged_ids,
   };
 }
 

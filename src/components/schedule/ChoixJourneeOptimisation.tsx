@@ -93,7 +93,7 @@ export default function ChoixJourneeOptimisation({ fuseau, teams, jourAffiche, e
     : fr ? `${n} visite${n > 1 ? 's' : ''}` : `${n} visit${n > 1 ? 's' : ''}`);
 
   return (
-    <div data-testid="choix-journee" className="w-80 rounded-xl border border-border bg-surface p-3 shadow-xl">
+    <div data-testid="choix-journee" className="w-[22rem] rounded-xl border border-border bg-surface p-3 shadow-xl">
       <p className="mb-2 text-[13px] font-semibold text-text-primary">{fr ? 'Quelle journée optimiser ?' : 'Which day should we optimize?'}</p>
 
       {teams.length > 1 && (
@@ -124,9 +124,9 @@ export default function ChoixJourneeOptimisation({ fuseau, teams, jourAffiche, e
                 onClick={() => onChoisir(jour, equipe)}
                 className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors enabled:hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-45"
               >
-                <span className="truncate text-text-primary">
-                  {libelleJour(jour)}
-                  {jour === jourAffiche && <span className="ml-1.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{fr ? 'affiché' : 'shown'}</span>}
+                <span className="flex min-w-0 items-center gap-1.5 text-text-primary">
+                  <span className="truncate">{libelleJour(jour)}</span>
+                  {jour === jourAffiche && <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{fr ? 'affiché' : 'shown'}</span>}
                 </span>
                 <span className="shrink-0 text-[12px] text-text-tertiary">{chargement ? '…' : libelleVisites(n)}</span>
               </button>

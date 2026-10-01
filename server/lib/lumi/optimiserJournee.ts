@@ -74,7 +74,11 @@ export function texteProposition(p: PropositionJournee, fr: boolean): string {
   const jour = new Intl.DateTimeFormat(fr ? 'fr-CA' : 'en-CA', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${p.date}T12:00:00Z`));
   const km = (n: number) => `${new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { maximumFractionDigits: 1 }).format(n)} km`;
   const l: string[] = [];
-  if (p.deja_optimisee) {
+  // Journée vide : « déjà optimisée » laissait croire qu'il y avait une tournée.
+  const aucuneVisite = !p.sans_adresse.length && p.equipes.every((e) => !e.avant.ordre.length && !e.fixes.length);
+  if (aucuneVisite) {
+    l.push(fr ? `Aucune visite planifiée le ${jour} : rien à optimiser.` : `No visits scheduled on ${jour}: nothing to optimize.`);
+  } else if (p.deja_optimisee) {
     l.push(fr ? `Ta journée du ${jour} est déjà optimisée : rien à gagner d’au moins 10 minutes.` : `Your day (${jour}) is already optimized: nothing to gain of at least 10 minutes.`);
   } else {
     l.push(fr ? `Proposition pour le ${jour} : ${p.gain_total_minutes} min de route en moins. Rien n’a bougé — confirme ci-dessous pour appliquer.` : `Proposal for ${jour}: ${p.gain_total_minutes} fewer minutes of driving. Nothing has moved — confirm below to apply.`);
