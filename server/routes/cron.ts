@@ -95,7 +95,12 @@ router.post('/cron/rappels-dates', async (req, res) => {
   if (!checkCronAuth(req, res)) return;
   try {
     const svc = getServiceClient();
-    const resume = await balayerRappelsDates(svc);
+    // Sous le même verrou que le filet horaire du tick (scheduler.ts) :
+    // l'anti-doublon du balayage relit ce qui est déjà parti, deux passages
+    // simultanés ne se verraient pas (B-18).
+    const verrou = await withAdvisoryLock('cron-rappels-dates', () => balayerRappelsDates(svc));
+    if (!verrou.acquired || !verrou.result) return res.status(200).json({ ok: true, skipped: 'already_running' });
+    const resume = verrou.result;
     logger.info('[cron] rappels-dates:', { ...resume });
     return res.status(200).json({ ok: true, ...resume });
   } catch (err: any) {

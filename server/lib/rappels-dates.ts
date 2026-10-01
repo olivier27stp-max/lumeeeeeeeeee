@@ -19,16 +19,30 @@
    planifiée six mois plus tôt parle d'un monde qui n'existe plus.
 
    ── L'anti-doublon ─────────────────────────────────────────────
-   Le balayage peut être rejoué (reprise, double cron, réessai manuel).
-   `execution_key` porte la règle, l'entité ET LE JOUR : rejouer le même
-   jour ne produit rien, et l'index unique de `automation_scheduled_tasks`
-   fait le reste. C'est la même protection que le reste du moteur.
+   Le balayage est rejoué : par le cron quotidien ET par le tick du
+   planificateur (une fois par heure, en journée), plus les reprises. Une
+   date n'est émise qu'UNE fois par (règle, fiche, date) : avant d'émettre,
+   le balayage relit `activity_log`, où le bus écrit chaque `date.reached`
+   AVANT de le diffuser (voir eventBus.ts). Lecture impossible = on n'émet
+   pas (le passage suivant réessaie) : un rappel en retard d'une heure vaut
+   mieux qu'un rappel envoyé deux fois.
+
+   ── Le rattrapage (B-18) ───────────────────────────────────────
+   Le balayage ne lisait que la date du jour visé : un jour sans passage
+   (déploiement à la minute du cron, base saturée, serveur arrêté) et les
+   rappels de ce jour-là ne partaient JAMAIS — le lendemain, on cherchait
+   les dates du lendemain. Chaque passage relit maintenant aussi les
+   JOURS_DE_RATTRAPAGE jours précédents, pour les seuls jours où la règle
+   était déjà active (une règle activée aujourd'hui ne rattrape rien :
+   point 10 de la mission, voir automations-activation.ts).
    ═══════════════════════════════════════════════════════════════ */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { eventBus } from './eventBus';
 import { logger } from './logger';
 import { fuseauOrg } from './automations-fuseau-org';
+import { dateActivation, ignoreLesCasExistants, type RegleDatee } from './automations-activation';
+import { orgEnPause } from './automations-pause-org';
 
 /** Fuseau de repli, quand celui de l'entreprise est illisible. */
 const FUSEAU = 'America/Toronto';
@@ -59,6 +73,40 @@ export interface ResumeRappels {
   regles: number;
   emis: number;
   erreurs: number;
+  /** Parmi `emis` : les dates d'un balayage manqué, rattrapées à ce passage. */
+  rattrapes?: number;
+}
+
+/**
+ * Jusqu'à combien de jours de retard un rappel sur date est encore envoyé.
+ * Deux jours couvrent une fin de semaine de panne sans envoyer « votre
+ * contrat se termine dans 7 jours » une semaine trop tard.
+ */
+export const JOURS_DE_RATTRAPAGE = 2;
+
+/** Plage où le TICK balaie (heure de l'entreprise) : aucun rappel créé la nuit. */
+export const HEURE_DEBUT_BALAYAGE = 8;
+export const HEURE_FIN_BALAYAGE = 20;
+
+function heureLocale(d: Date, fuseau: string): number {
+  return Number(new Intl.DateTimeFormat('en-GB', { timeZone: fuseau, hour: '2-digit', hour12: false }).format(d)) % 24;
+}
+
+/**
+ * Les jours à balayer pour une règle, en jours de RETARD : 0 (aujourd'hui),
+ * puis les balayages manqués des jours précédents — seulement ceux où la
+ * règle était déjà active. Date d'activation inconnue : aujourd'hui seulement.
+ */
+export function retardsABalayer(regle: RegleDatee, maintenant: Date, fuseau: string = FUSEAU): number[] {
+  const retards = [0];
+  const activation = dateActivation(regle);
+  const filtrer = ignoreLesCasExistants(regle);
+  if (filtrer && activation === null) return retards;
+  const jourActivation = activation === null ? '' : jourLocal(new Date(activation), fuseau);
+  for (let k = 1; k <= JOURS_DE_RATTRAPAGE; k++) {
+    if (!filtrer || jourDecale(-k, maintenant, fuseau) >= jourActivation) retards.push(k);
+  }
+  return retards;
 }
 
 /** Borne de `jours_avant`, des deux côtés (avant / après la date). */
@@ -119,7 +167,9 @@ export async function balayerRappelsDates(
   supabase: SupabaseClient,
   maintenant: Date = new Date(),
   // `options.orgId` : une seule entreprise (suite d'intégration, bureau de test).
-  options: { orgId?: string } = {},
+  // `options.enJournee` : le passage du TICK — ne balaie que les entreprises
+  // pour qui il est entre 8 h et 20 h (le cron quotidien, lui, balaie tout).
+  options: { orgId?: string; enJournee?: boolean } = {},
 ): Promise<ResumeRappels> {
   const resume: ResumeRappels = { regles: 0, emis: 0, erreurs: 0 };
 
@@ -127,7 +177,9 @@ export async function balayerRappelsDates(
   // en brouillon ne doit rien envoyer.
   let requete = supabase
     .from('automation_rules')
-    .select('id, org_id, conditions')
+    // `*` : la date d'activation (`activee_le`) n'existe qu'une fois sa
+    // migration appliquée ; la nommer ferait échouer TOUTE la lecture avant.
+    .select('*')
     .eq('trigger_event', 'date.reached')
     .eq('is_active', true)
     // Une règle à la corbeille ne balaie plus rien.
@@ -144,6 +196,10 @@ export async function balayerRappelsDates(
 
   for (const regle of regles) {
     try {
+      // Bureau en pause (« Tout arrêter ») : le moteur ignorerait l'événement
+      // et la date serait marquée « déjà émise ». On n'émet rien ; à la
+      // reprise, le rattrapage reprend les dates des derniers jours.
+      if (await orgEnPause(supabase, regle.org_id)) continue;
       const conditions = (regle.conditions ?? {}) as Record<string, unknown>;
       const champId = conditions.champ_id ? String(conditions.champ_id) : null;
       if (!champId) {
@@ -212,7 +268,14 @@ export async function balayerRappelsDates(
        */
       const decalage = decalageDeLaRegle(conditions);
       const fuseau = await fuseauOrg(supabase, regle.org_id);
-      const jourVise = jourDecale(decalage, maintenant, fuseau);
+      if (options.enJournee) {
+        const h = heureLocale(maintenant, fuseau);
+        if (h < HEURE_DEBUT_BALAYAGE || h >= HEURE_FIN_BALAYAGE) continue;
+      }
+
+      // Aujourd'hui (retard 0), puis les balayages manqués — rattrapage, B-18.
+      for (const retard of retardsABalayer(regle as RegleDatee, maintenant, fuseau)) {
+      const jourVise = jourDecale(decalage - retard, maintenant, fuseau);
 
       /*
        * Les valeurs qui tombent sur le jour visé.
@@ -238,6 +301,37 @@ export async function balayerRappelsDates(
       }
       if (!valeurs || valeurs.length === 0) continue;
 
+      // Ce que CETTE règle a déjà émis pour CETTE date (passage précédent du
+      // jour, cron + tick, rattrapage déjà fait). Illisible = on n'émet rien :
+      // le passage suivant réessaiera.
+      const { data: dejaEmis, error: errDeja } = await supabase
+        .from('activity_log')
+        .select('entity_id')
+        .eq('org_id', regle.org_id)
+        .eq('event_type', 'date_reached')
+        .eq('metadata->>rule_id', regle.id)
+        .eq('metadata->>date', jourVise)
+        .limit(1000);
+      if (errDeja) {
+        logger.error('[rappels-dates] anti-doublon illisible — rien n’est émis à ce passage', {
+          rule_id: regle.id, message: errDeja.message,
+        });
+        resume.erreurs += 1;
+        continue;
+      }
+      const dejaFait = new Set(((dejaEmis ?? []) as Array<{ entity_id: string }>).map((l) => l.entity_id));
+      const aEmettre = (id: string | null | undefined): id is string => {
+        if (!id || dejaFait.has(id)) return false;
+        dejaFait.add(id);
+        return true;
+      };
+      const compter = () => {
+        resume.emis += 1;
+        if (retard > 0) resume.rattrapes = (resume.rattrapes ?? 0) + 1;
+      };
+      // Dit dans l'événement : cette date vient d'un balayage manqué.
+      const rattrapage = retard > 0 ? { rattrapage_jours: retard } : {};
+
       for (const v of valeurs) {
         /*
          * Sur un champ du DEAL, l'entité est le deal (ses actions et ses
@@ -246,7 +340,7 @@ export async function balayerRappelsDates(
          * faire. Le client du message se résout depuis le deal (moteur).
          */
         if (surDeal) {
-          if (!v.deal_id) continue;
+          if (!aEmettre(v.deal_id)) continue;
           const { data: deal } = await supabase
             .from('deals')
             .select('id, deleted_at, pipeline_stages!deals_stage_same_org(kind)')
@@ -272,11 +366,12 @@ export async function balayerRappelsDates(
               // une règle « 3 jours avant » ne partait jamais.
               jours_avant: decalage,
               date: v.value_date,
-              // Même anti-doublon que pour un client : le jour du balayage.
+              // (rule_id, date) : la clé de l'anti-doublon relu plus haut.
               jour: jourLocal(maintenant, fuseau),
+              ...rattrapage,
             },
           });
-          resume.emis += 1;
+          compter();
           continue;
         }
 
@@ -288,7 +383,7 @@ export async function balayerRappelsDates(
          * une date peut survivre à son client, et écrire à quelqu'un qui a
          * demandé son effacement serait une faute.
          */
-        if (!v.client_id) continue;
+        if (!aEmettre(v.client_id)) continue;
         const { data: client } = await supabase
           .from('clients')
           .select('id, deleted_at')
@@ -307,12 +402,14 @@ export async function balayerRappelsDates(
             // Voir plus haut : la règle porte `jours_avant`, l'événement aussi.
             jours_avant: decalage,
             date: v.value_date,
-            // Le jour du balayage entre dans l'anti-doublon du moteur :
-            // rejouer le cron le même jour ne renvoie rien.
+            // (rule_id, date) : la clé de l'anti-doublon relu plus haut —
+            // rejouer le balayage le même jour ne renvoie rien.
             jour: jourLocal(maintenant, fuseau),
+            ...rattrapage,
           },
         });
-        resume.emis += 1;
+        compter();
+      }
       }
     } catch (e: unknown) {
       logger.error('[rappels-dates] règle en erreur — les autres continuent', {

@@ -198,7 +198,16 @@ const TYPES_DEJA_DURABLES = new Set<CRMEventType>([
  * diffusé. Ainsi un redéploiement ou une 2e instance ne peut plus répéter
  * « Facture en retard J+x » dans l'historique.
  */
-const TYPES_UNIQUES = new Set<CRMEventType>(['invoice.overdue']);
+const TYPES_UNIQUES = new Set<CRMEventType>(['invoice.overdue', 'date.reached']);
+
+/**
+ * Types dont le journal EST l'anti-doublon de leur balayage : « Date
+ * atteinte » est rebalayée chaque heure (rattrapage, B-18) et relit
+ * `activity_log` pour savoir ce qui est déjà parti. Si l'écriture du journal
+ * échoue, on n'émet PAS — sinon le passage suivant ne verrait rien et le même
+ * rappel repartirait d'heure en heure. Le passage suivant réessaiera.
+ */
+const TYPES_JOURNAL_OBLIGATOIRE = new Set<CRMEventType>(['date.reached']);
 
 // ── Bus singleton ───────────────────────────────────────────────
 
@@ -217,7 +226,9 @@ class CRMEventBus extends EventEmitter {
     // plus souvent) n'attend pas une écriture de plus qu'avant.
     let outboxId: number | null = null;
     if (this.supabase && TYPES_UNIQUES.has(event)) {
-      if ((await this.journaliser(this.supabase, fullEvent)) === 'doublon') return false;
+      const ecrit = await this.journaliser(this.supabase, fullEvent);
+      if (ecrit === 'doublon') return false;
+      if (ecrit === 'echec' && TYPES_JOURNAL_OBLIGATOIRE.has(event)) return false;
       outboxId = await this.consigner(this.supabase, fullEvent);
     } else if (this.supabase) {
       [, outboxId] = await Promise.all([
@@ -288,7 +299,7 @@ class CRMEventBus extends EventEmitter {
     return { aDesEcouteurs: ecouteurs.length > 0, fin };
   }
 
-  private async journaliser(supabase: SupabaseClient, fullEvent: CRMEvent): Promise<'ok' | 'doublon'> {
+  private async journaliser(supabase: SupabaseClient, fullEvent: CRMEvent): Promise<'ok' | 'doublon' | 'echec'> {
     const event = fullEvent.type;
     // supabase-js retourne l'erreur, il ne la lève pas : le try/catch seul
     // laissait passer toute écriture refusée sans une ligne de log.
@@ -308,9 +319,11 @@ class CRMEventBus extends EventEmitter {
       if (error?.code === '23505') return 'doublon';
       if (error) {
         console.error(`[eventBus] activity_log insert failed for ${event} (org ${fullEvent.orgId}, ${fullEvent.entityType} ${fullEvent.entityId}):`, error.message);
+        return 'echec';
       }
     } catch (err: any) {
       console.error('[eventBus] activity_log insert threw:', err.message);
+      return 'echec';
     }
     return 'ok';
   }

@@ -712,6 +712,42 @@ export async function detectOverdueInvoices(supabase: SupabaseClient, options: {
 }
 
 // ---------------------------------------------------------------------------
+// « Date atteinte » — filet horaire du balayage quotidien (B-18)
+// ---------------------------------------------------------------------------
+
+/** Le tick rebalaie les dates au plus une fois par heure. */
+export const INTERVALLE_BALAYAGE_DATES_MS = 60 * 60 * 1000;
+let dernierBalayageDates = 0;
+
+/**
+ * Verrou partagé avec `POST /api/cron/rappels-dates` : le cron et le tick ne
+ * balaient jamais en même temps (l'anti-doublon du balayage LIT ce qui est
+ * déjà parti — deux passages simultanés ne se verraient pas).
+ */
+export const VERROU_RAPPELS_DATES = 'cron-rappels-dates';
+
+async function balayerDatesSiDu(supabase: SupabaseClient, maintenant: number = Date.now()): Promise<void> {
+  if (maintenant - dernierBalayageDates < INTERVALLE_BALAYAGE_DATES_MS) return;
+  const { automatisationsActives } = await import('./automations-interrupteur');
+  // Arrêt global : rien n'est émis (les événements seraient perdus). Les
+  // dates de ces jours-là seront rattrapées à la reprise.
+  if (!automatisationsActives()) return;
+  dernierBalayageDates = maintenant;
+  const { balayerRappelsDates } = await import('./rappels-dates');
+  const { withAdvisoryLock } = await import('./advisory-lock');
+  const { acquired, result } = await withAdvisoryLock(VERROU_RAPPELS_DATES, () =>
+    balayerRappelsDates(supabase, new Date(maintenant), { enJournee: true }));
+  if (!acquired) {
+    // Le cron (ou une autre instance) balaie en ce moment : on repassera au tick suivant.
+    dernierBalayageDates = 0;
+    return;
+  }
+  if (result && (result.emis > 0 || result.erreurs > 0)) {
+    logger.info('[scheduler] rappels sur date (filet horaire)', { ...result });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Auto-expire quotes past valid_until
 // ---------------------------------------------------------------------------
 
@@ -812,6 +848,15 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
       await detectOverdueInvoices(supabase);
     } catch (err: any) {
       console.error('[scheduler] overdue invoice detection failed:', err.message);
+    }
+
+    // « Date atteinte » : filet du cron quotidien (B-18). Le balayage est
+    // idempotent (une émission par règle, fiche et date) : le rejouer chaque
+    // heure rattrape un passage que pg_cron a manqué, sans rien doubler.
+    try {
+      await balayerDatesSiDu(supabase);
+    } catch (err: any) {
+      console.error('[scheduler] balayage des dates échoué:', err.message);
     }
 
     // Auto-expire quotes past valid_until
