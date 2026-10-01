@@ -54,11 +54,17 @@ interface Props {
   /** `arreterSiResolu` n'est fourni que si la case est affichée. */
   onEnregistrer: (conditions: Record<string, unknown>, arreterSiResolu?: boolean) => void;
   onFermer: () => void;
+  /**
+   * Quelque chose a-t-il été touché depuis l'ouverture ? Le parent s'en sert
+   * pour demander confirmation avant de remplacer ce panneau par un autre
+   * (un seul panneau à droite à la fois).
+   */
+  onModifie?: (modifie: boolean) => void;
 }
 
 export default function PanneauDeclencheur({
   declencheur, conditions, reglages, fr, champsDate, etapesPipeline = [], etiquettes = [], services = [],
-  champsPerso = [], onChanger, onEnregistrer, onFermer,
+  champsPerso = [], onChanger, onEnregistrer, onFermer, onModifie,
 }: Props) {
   const idCase = useId();
   const idChamp = useId();
@@ -102,6 +108,15 @@ export default function PanneauDeclencheur({
    * endroit que la validation — jamais à chaque frappe.
    */
   const [brouillon, setBrouillon] = useState<Record<string, string>>({});
+  /*
+   * « Touché » plutôt que « différent » : les valeurs relues changent de forme
+   * en route (un montant en cents affiché en dollars, les champs qui arrivent
+   * après le premier rendu) — comparer donnerait de faux « modifié ». Une
+   * saisie de l'utilisateur, elle, ne trompe pas.
+   */
+  const [touche, setTouche] = useState(false);
+  useEffect(() => { onModifie?.(touche); }, [touche, onModifie]);
+  useEffect(() => () => onModifie?.(false), [onModifie]);
 
   // Clé sur `cle` du déclencheur, PAS sur l'objet : dépendre de l'objet
   // relancerait l'effet à chaque rendu du parent et effacerait la saisie
@@ -115,6 +130,7 @@ export default function PanneauDeclencheur({
     setBrouillon(init);
     setChampId(champSurveille(conditions));
     setFiltres(Array.isArray(conditions?.champs_perso) ? { champs_perso: conditions?.champs_perso } : {});
+    setTouche(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [declencheur.cle]);
 
@@ -236,7 +252,7 @@ export default function PanneauDeclencheur({
                 valeur={champId}
                 champs={champsPerso}
                 fr={fr}
-                onChange={(v) => { setChampId(v); setDevient(''); }}
+                onChange={(v) => { setChampId(v); setDevient(''); setTouche(true); }}
                 className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               />
               <p className="mt-1 text-[11px] text-text-tertiary">
@@ -265,7 +281,7 @@ export default function PanneauDeclencheur({
                     id={`${idChamp}-devient`}
                     champ={champ}
                     valeur={devient}
-                    onChange={setDevient}
+                    onChange={(v) => { setDevient(v); setTouche(true); }}
                     fr={fr}
                     libelleVide={fr ? '— N’importe quelle valeur —' : '— Any value —'}
                   />
@@ -286,7 +302,7 @@ export default function PanneauDeclencheur({
               key={champ.cle}
               champ={champ}
               valeur={brouillon[champ.cle] ?? ''}
-              onChange={(v) => setBrouillon((p) => ({ ...p, [champ.cle]: v }))}
+              onChange={(v) => { setBrouillon((p) => ({ ...p, [champ.cle]: v })); setTouche(true); }}
               fr={fr}
               champsDate={champsDate}
               etapesPipeline={etapesPipeline}
@@ -325,7 +341,7 @@ export default function PanneauDeclencheur({
                   ? `Seulement si les champs de la fiche (${LIBELLES_OBJET[objet].fr}) remplissent ces conditions au moment de l’événement.`
                   : `Only if the record’s fields (${LIBELLES_OBJET[objet].en}) meet these conditions when the event happens.`}
               </p>
-              <ConditionsChampsEtape conditions={filtres} onChange={setFiltres} champs={champsPerso} objet={objet} fr={fr} />
+              <ConditionsChampsEtape conditions={filtres} onChange={(c) => { setFiltres(c); setTouche(true); }} champs={champsPerso} objet={objet} fr={fr} />
             </section>
           );
         })()}
@@ -337,7 +353,7 @@ export default function PanneauDeclencheur({
                 id={idCase}
                 type="checkbox"
                 checked={arreterSiResolu}
-                onChange={(e) => setArreterSiResolu(e.target.checked)}
+                onChange={(e) => { setArreterSiResolu(e.target.checked); setTouche(true); }}
                 className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
               />
               <span className="min-w-0">

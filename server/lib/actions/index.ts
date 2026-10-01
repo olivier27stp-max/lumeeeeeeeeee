@@ -1805,16 +1805,28 @@ export async function executeCreateNotification(
   const body = accorderPluriels(resolveTemplate(config.body ?? '', vars));
   const lien = config.lien ? resolveTemplate(config.lien, vars) : null;
   const entityId = config.reference_id || ctx.entityId;
+  /*
+   * La version ANGLAISE, quand elle est écrite (`title_en`). Elle n'était lue
+   * que pour le courriel : la cloche restait en français pour un membre
+   * anglophone (audit du 2026-10-01). Une seule langue par notification : avec
+   * un titre anglais, le corps est l'anglais ou rien — jamais un corps français
+   * sous un titre anglais. Sans titre anglais, tout le monde reçoit le français.
+   */
+  const brute = config as Record<string, unknown>;
+  const anglaise = typeof brute.title_en === 'string' && brute.title_en.trim()
+    ? {
+        title: accorderPluriels(resolveTemplate(brute.title_en, vars), 'en'),
+        body: accorderPluriels(resolveTemplate(String(brute.body_en ?? ''), vars), 'en'),
+      }
+    : null;
+  const texteEn = (langue: 'fr' | 'en' | undefined) => (langue === 'en' && anglaise ? anglaise : { title, body });
   // « Aussi par courriel » : les mêmes personnes que la cloche, à leur adresse
   // de connexion. Le téléphone, lui, suit la notification (relais push web).
   const parCourriel = async (destinataires: Map<string, 'fr' | 'en'>): Promise<number> => {
     if (config.par_courriel !== 'true' || destinataires.size === 0) return 0;
     const { getServiceClient } = await import('../supabase');
     const { envoyerNotificationParCourriel } = await import('../notificationCourriel');
-    const cfg = config as Record<string, unknown>;
-    const en = typeof cfg.title_en === 'string' && cfg.title_en.trim()
-      ? { title: accorderPluriels(resolveTemplate(cfg.title_en, vars), 'en'), body: accorderPluriels(resolveTemplate(String(cfg.body_en ?? ''), vars), 'en') }
-      : null;
+    const en = anglaise;
     // « Bon moment pour appeler » sans le numéro obligeait à ouvrir l'app pour
     // le trouver : le courriel porte le lien tel: quand l'alerte parle d'appeler.
     const appeler = /\bappel|\bcall\b/i.test(`${title} ${body}`) && vars.client_phone
@@ -1829,11 +1841,13 @@ export async function executeCreateNotification(
   // destinataire (« Nouveau prospect »…) continuent de prévenir les mêmes
   // personnes qu'avant.
   if (!config.destinataire) {
+    // Une seule ligne pour toute l'équipe : la langue du BUREAU.
+    const pourLeBureau = texteEn(ctx.langue);
     const { error } = await ctx.supabase.from('notifications').insert({
       org_id: ctx.orgId,
       type: 'automation',
-      title,
-      body,
+      title: pourLeBureau.title,
+      body: pourLeBureau.body,
       reference_id: config.reference_id || ctx.entityId,
       link: lien,
     });
@@ -1859,7 +1873,8 @@ export async function executeCreateNotification(
     ctx.supabase,
     ctx.orgId,
     destinataires,
-    () => ({ title, body }),
+    // Chacun dans SA langue (`memberships.language`).
+    (langue) => texteEn(langue),
     {
       type: 'automation',
       entityType: ctx.entityType,
@@ -1885,8 +1900,17 @@ export async function executeCreateTask(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  const title = resolveTemplate(config.title, vars);
-  const brut = config.body ?? config.description ?? '';
+  /*
+   * Dans la langue du BUREAU quand le texte existe en anglais (`title_en`,
+   * `body_en`) : une tâche n'a pas de destinataire unique dont suivre la
+   * langue. Les modèles ont leurs deux langues ; le moteur ne lisait que le
+   * français (audit du 2026-10-01). Même règle que la notification : avec un
+   * titre anglais, le détail est l'anglais ou rien.
+   */
+  const brute = config as Record<string, unknown>;
+  const enAnglais = ctx.langue === 'en' && typeof brute.title_en === 'string' && brute.title_en.trim() !== '';
+  const title = resolveTemplate(enAnglais ? String(brute.title_en) : config.title, vars);
+  const brut = enAnglais ? String(brute.body_en ?? '') : (config.body ?? config.description ?? '');
   const description = brut ? resolveTemplate(brut, vars) : '';
 
   // tasks.created_by is NOT NULL and automations run without a user —

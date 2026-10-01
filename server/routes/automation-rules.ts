@@ -44,6 +44,7 @@ import { copierEtapes, nomDisponible } from '../../src/lib/automationTemplates';
 import { projeterFormatOrigine } from '../../src/lib/sequenceTypes';
 import { bureauxCibles, copierVersBureaux, propagerAuxCopies, type ResultatCopie } from '../lib/automatisations-bureaux';
 import { logger } from '../lib/logger';
+import { messageCorbeille, STATUT_CORBEILLE } from '../lib/automations-corbeille';
 import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
 import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee } from '../lib/automations-publication';
@@ -535,11 +536,18 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
    * automatisation qui ne partira plus.
    */
   if (existante.deleted_at) {
-    return res.status(409).json({
-      error: langueDe(req) === 'fr'
-        ? 'Cette automatisation est à la corbeille : restaurez-la pour la modifier.'
-        : 'This automation is in the bin: restore it to edit it.',
-    });
+    /*
+     * La PUBLIER par ce chemin : le refus de la route de publication, mot pour
+     * mot (`changerPublication` : 422, même phrase), que la publication voyage
+     * seule ou avec une autre modification. Toute autre modification : 409.
+     */
+    if (req.body.is_active === true) {
+      return res.status(422).json({
+        error: 'Cette automatisation est à la corbeille : restaurez-la avant de la publier.',
+        code: 'publication_refusee',
+      });
+    }
+    return res.status(STATUT_CORBEILLE).json({ error: messageCorbeille(langueDe(req) === 'fr') });
   }
 
   const patch = { ...req.body };
@@ -584,16 +592,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
   // Publier par ce chemin passe par les mêmes vérifications que la route de
   // publication (M8), sur la règle telle qu'elle SERA après modification.
   if (patch.is_active === true) {
-    // Une règle à la corbeille ne se publie pas : même refus que la route de
-    // publication (`changerPublication`). Sans lui, ce chemin écrivait
-    // `is_active: true` sur une règle supprimée — invisible dans la liste, et
-    // affichée « publiée » dès sa restauration (J-065).
-    if (existante.deleted_at) {
-      return res.status(422).json({
-        error: 'Cette automatisation est à la corbeille : restaurez-la avant de la publier.',
-        code: 'publication_refusee',
-      });
-    }
+    // (Une règle à la corbeille a déjà été refusée plus haut — J-065.)
     const problemes = problemesBloquants({ ...existante, ...patch }, fr);
     if (problemes.length) return res.status(422).json({ error: messageRefus(problemes, fr), code: 'publication_refusee', problemes });
   }
@@ -629,6 +628,13 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     if (error.code === '42501') {
       return res.status(403).json({ error: 'Votre rôle ne permet pas de modifier une automatisation.' });
     }
+    /*
+     * PGRST116 = zéro ligne modifiée : la règle a disparu entre la lecture et
+     * l'écriture (supprimée pendant que l'éditeur était ouvert). Ce n'est pas
+     * une panne : répondre 500 faisait réessayer sans fin un enregistrement
+     * qui ne pouvait jamais réussir (audit du 2026-10-01).
+     */
+    if (error.code === 'PGRST116') return res.status(404).json({ error: 'Automatisation introuvable.' });
     logger.error('[automation-rules] modification échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de modifier l\'automatisation.' });
   }
@@ -757,9 +763,12 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
 
   const { data: source, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('name, description, trigger_event, conditions, delay_seconds, actions, steps, settings')
+    .select('name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, deleted_at')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
+    // Supprimée DÉFINITIVEMENT : elle n'existe plus pour l'utilisateur. La
+    // dupliquer la faisait renaître en « … (copie) » (audit du 2026-10-01).
+    .is('purged_at', null)
     .maybeSingle();
 
   if (lectureErr) {
@@ -767,6 +776,11 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
     return res.status(500).json({ error: 'Impossible de lire l\'automatisation.' });
   }
   if (!source) return res.status(404).json({ error: 'Automatisation introuvable.' });
+  // À LA CORBEILLE : la corbeille n'offre pas « Dupliquer » (restaurer, ou
+  // supprimer définitivement). Même refus que pour la modifier.
+  if (source.deleted_at) {
+    return res.status(STATUT_CORBEILLE).json({ error: messageCorbeille(langueDe(req) === 'fr') });
+  }
 
   const { data, error } = await auth.client
     .from('automation_rules')
@@ -813,6 +827,8 @@ router.delete('/automations/rules/:id', async (req, res) => {
     .select('id, is_preset')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
+    // Supprimée DÉFINITIVEMENT : elle n'existe plus, on ne la « resupprime » pas.
+    .is('purged_at', null)
     .maybeSingle();
 
   if (!existante) return res.status(404).json({ error: 'Automatisation introuvable.' });
@@ -868,11 +884,13 @@ router.delete('/automations/rules/:id', async (req, res) => {
    * Les envois déjà prévus ont été annulés juste au-dessus : une règle en
    * corbeille ne doit plus rien envoyer, même restaurable.
    */
-  const { error } = await auth.client
+  const { data: supprimees, error } = await auth.client
     .from('automation_rules')
     .update({ deleted_at: new Date().toISOString(), is_active: false })
     .eq('id', req.params.id)
-    .eq('org_id', auth.orgId);
+    .eq('org_id', auth.orgId)
+    .is('purged_at', null)
+    .select('id');
 
   if (error) {
     if (error.code === '42501') {
@@ -881,6 +899,9 @@ router.delete('/automations/rules/:id', async (req, res) => {
     logger.error('[automation-rules] suppression échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de supprimer l\'automatisation.' });
   }
+  // Zéro ligne (règle disparue entre-temps, ou écartée par la RLS) : ne pas
+  // répondre « ok » pour une suppression qui n'a rien supprimé.
+  if (!supprimees?.length) return res.status(404).json({ error: 'Automatisation introuvable.' });
 
   return res.json({ ok: true });
 });

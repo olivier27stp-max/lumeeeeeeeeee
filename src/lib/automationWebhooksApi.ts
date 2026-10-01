@@ -15,6 +15,7 @@ import { supabase } from './supabase';
 import { getCurrentOrgId } from './orgApi';
 import { interfaceEnFrancais } from './champs/messages';
 import { appelServeur } from './appelServeur';
+import { messageDuServeur } from './messageDuServeur';
 
 export interface AdresseDAppel {
   id: string;
@@ -50,7 +51,8 @@ async function entetes(): Promise<HeadersInit> {
 async function erreur(reponse: Response): Promise<Error> {
   try {
     const corps = await reponse.json();
-    if (corps?.error && typeof corps.error === 'string') return new Error(corps.error);
+    const texte = messageDuServeur(corps);
+    if (texte) return new Error(texte);
   } catch {
     // Réponse sans JSON : le repli ci-dessous suffit.
   }

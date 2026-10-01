@@ -304,9 +304,10 @@ describe('déclencheur proposé par Lumi : un échec d’écriture n’est plus 
     cliquer(bouton('Construire'));
     await attendre(10);
     expect(toasts.erreur.join('\n')).toContain('Le déclencheur proposé par Lumi n’a pas pu être enregistré');
-    // Le catalogue du test est vide : le libellé affiché est la clé brute.
-    expect(container.textContent).toContain('quote.sent');
-    expect(container.textContent).not.toContain('invoice.sent');
+    // Le catalogue servi au test est vide : le NOM vient du catalogue complet
+    // (audit du 2026-10-01 — la carte n'affiche plus la clé technique).
+    expect(container.textContent).toContain('Devis envoyé');
+    expect(container.textContent).not.toContain('Facture envoyée');
   });
 });
 

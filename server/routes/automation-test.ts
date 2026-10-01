@@ -23,6 +23,8 @@ import { Router } from 'express';
 import { requireAuthedClient, isOrgAdminOrOwner, getServiceClient } from '../lib/supabase';
 import { eventBus } from '../lib/eventBus';
 import { resolveEntityVariables, resolveTemplate } from '../lib/actions';
+import { langueDe } from '../lib/automations-langue';
+import { messageCorbeille, STATUT_CORBEILLE } from '../lib/automations-corbeille';
 
 const router = Router();
 
@@ -334,11 +336,21 @@ router.post('/automations/rules/:id/apercu', async (req, res) => {
     const admin = getServiceClient();
     const { data: regle } = await auth.client
       .from('automation_rules')
-      .select('id, name, trigger_event, actions, steps')
+      .select('id, name, trigger_event, actions, steps, deleted_at')
       .eq('id', req.params.id)
       .eq('org_id', auth.orgId)
+      // Supprimée DÉFINITIVEMENT : elle n'existe plus pour l'utilisateur.
+      .is('purged_at', null)
       .maybeSingle();
     if (!regle) return res.status(404).json({ error: 'Automatisation introuvable.' });
+    /*
+     * À LA CORBEILLE : rien à tester — elle ne part plus — et aucune raison de
+     * sortir le nom, le courriel et le téléphone d'un client (audit du
+     * 2026-10-01). On la restaure d'abord ; même refus que pour la modifier.
+     */
+    if (regle.deleted_at) {
+      return res.status(STATUT_CORBEILLE).json({ error: messageCorbeille(langueDe(req) === 'fr') });
+    }
 
     /*
      * Le client servant d'exemple : le plus récent qui a de quoi être

@@ -285,6 +285,12 @@ export function can(
   return checkScope(ctx, resource);
 }
 
+// ── Refus lisibles ──────────────────────────────────────────────────
+
+// Dans un module à part : la table des routes (`route-permissions.ts`) répond la même chose.
+import { corpsRefusPermission } from './refus-permission';
+export { corpsRefusPermission, type CorpsRefusPermission } from './refus-permission';
+
 // ── Express middleware ───────────────────────────────────────────────
 
 /**
@@ -303,7 +309,7 @@ export function requirePermission(permissionKey: PermissionKey) {
     }
 
     if (!hasPermission(ctx, permissionKey)) {
-      res.status(403).json({ error: `Permission denied: ${permissionKey}` });
+      res.status(403).json(corpsRefusPermission(permissionKey));
       return;
     }
 
@@ -358,7 +364,7 @@ export function requireFinancialAccess(permissionKey?: PermissionKey) {
     }
 
     if (permissionKey && !hasPermission(ctx, permissionKey)) {
-      res.status(403).json({ error: `Permission denied: ${permissionKey}` });
+      res.status(403).json(corpsRefusPermission(permissionKey));
       return;
     }
 

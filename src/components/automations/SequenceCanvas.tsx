@@ -340,6 +340,11 @@ export default function SequenceCanvas({
             une règle au format d'origine comme sur une autre. Seules les
             ÉTAPES sont gelées.
         */}
+        {/*
+            Le libellé et le résumé sont COUPÉS à 260 px (« Opportunité entre
+            dans … ») : l'attribut title donne le texte entier au survol
+            (audit du 2026-10-01).
+        */}
         {onDeclencheur ? (
           <button
             type="button"
@@ -354,9 +359,9 @@ export default function SequenceCanvas({
                 <span className="block text-[10px] font-semibold uppercase tracking-wide text-accent">
                   {fr ? 'Quand' : 'When'}
                 </span>
-                <span className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
+                <span title={declencheurLabel} className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
                 {declencheurDetail && (
-                  <span className="mt-0.5 block truncate text-[11px] text-text-secondary">{declencheurDetail}</span>
+                  <span title={declencheurDetail} className="mt-0.5 block truncate text-[11px] text-text-secondary">{declencheurDetail}</span>
                 )}
               </span>
               <Pencil className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
@@ -372,9 +377,9 @@ export default function SequenceCanvas({
                 <span className="block text-[10px] font-semibold uppercase tracking-wide text-accent">
                   {fr ? 'Quand' : 'When'}
                 </span>
-                <span className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
+                <span title={declencheurLabel} className="block truncate text-sm font-medium text-text-primary">{declencheurLabel}</span>
                 {declencheurDetail && (
-                  <span className="mt-0.5 block truncate text-[11px] text-text-secondary">{declencheurDetail}</span>
+                  <span title={declencheurDetail} className="mt-0.5 block truncate text-[11px] text-text-secondary">{declencheurDetail}</span>
                 )}
               </span>
             </div>

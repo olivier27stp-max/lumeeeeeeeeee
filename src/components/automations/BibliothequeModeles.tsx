@@ -20,6 +20,7 @@ import { cn } from '../../lib/utils';
 import { fetchModelesAutomatisation, utiliserModele } from '../../lib/automationBuilderApi';
 import type { AutomationRule } from '../../lib/automationRulesApi';
 import { trouverAction, trouverDeclencheur } from '../../lib/automationCatalogue';
+import { ACTION_JOURNAL } from '../../lib/sequenceTypes';
 import {
   CATEGORIES_MODELES, etapesApercu, filtrerModeles, texteSansHtml, trierModeles,
   type CanalModele, type CategorieModele, type EtapeApercu, type ModeleAutomatisation, type TriModeles,
@@ -73,8 +74,12 @@ function libelleAttente(e: Extract<EtapeApercu, { genre: 'attente' }>, fr: boole
 }
 
 function libelleAction(type: string, fr: boolean): string {
+  // L'étape technique que la copie garde : les mots de la carte de l'éditeur
+  // (SequenceCanvas), pour qu'on la reconnaisse des deux côtés.
+  if (type === ACTION_JOURNAL) return fr ? 'Note dans l’historique' : 'History note';
   const a = trouverAction(type);
-  return a ? (fr ? a.fr : a.en) : type;
+  if (a) return fr ? a.fr : a.en;
+  return fr ? 'Étape technique' : 'Technical step';
 }
 
 function libelleDeclencheur(cle: string, fr: boolean): string {
@@ -82,16 +87,120 @@ function libelleDeclencheur(cle: string, fr: boolean): string {
   return d ? (fr ? d.fr : d.en) : cle;
 }
 
-/** Conditions du déclencheur, en clair (« source ≠ request_form »). */
-function libellesConditions(conditions: Record<string, unknown>): string[] {
-  return Object.entries(conditions).map(([cle, v]) => {
-    if (v && typeof v === 'object') {
-      const [op, val] = Object.entries(v as Record<string, unknown>)[0] ?? ['', ''];
-      const symbole = op === 'neq' ? '≠' : op === 'gt' ? '>' : op === 'lt' ? '<' : op === 'in' ? '∈' : '=';
-      return `${cle} ${symbole} ${String(val)}`;
+/* ── Les conditions, en clair ────────────────────────────────
+   L'aperçu affichait « source ≠ request_form » et « Si channel = sms » : la
+   clé et la valeur de la base, telles quelles (audit du 2026-10-01). Trois
+   sources, dans l'ordre :
+     1. la table ci-dessous — elle couvre TOUTES les conditions des modèles
+        servis (un test parcourt le catalogue et échoue si une clé passe) ;
+     2. les réglages du déclencheur que le catalogue de l'éditeur sait déjà
+        nommer (« Première ouverture seulement ») ;
+     3. un repli lisible, sans symbole ni tiret bas, pour une condition que
+        personne n'a encore nommée.
+   Deux formes : la phrase de la ligne « Conditions » sous le déclencheur, et
+   la proposition qui suit « Si » dans une étape. */
+
+type Bilingue = { fr: string; en: string };
+type FormeCondition = 'seule' | 'apresSi';
+
+const CONDITIONS_CONNUES: Record<string, Record<FormeCondition, Bilingue>> = {
+  'source|neq|request_form': {
+    seule: { fr: 'Sauf les demandes venues du formulaire de demande', en: 'Except requests that came from the request form' },
+    apresSi: { fr: 'la demande ne vient pas du formulaire de demande', en: 'the request did not come from the request form' },
+  },
+  'source|eq|request_form': {
+    seule: { fr: 'Seulement les demandes venues du formulaire de demande', en: 'Only requests that came from the request form' },
+    apresSi: { fr: 'la demande vient du formulaire de demande', en: 'the request came from the request form' },
+  },
+  'payment_type|eq|deposit': {
+    seule: { fr: 'Seulement pour un paiement de dépôt', en: 'Only for a deposit payment' },
+    apresSi: { fr: 'le paiement est un dépôt', en: 'the payment is a deposit' },
+  },
+  'payment_type|neq|deposit': {
+    seule: { fr: 'Sauf pour un paiement de dépôt', en: 'Except for a deposit payment' },
+    apresSi: { fr: 'le paiement n’est pas un dépôt', en: 'the payment is not a deposit' },
+  },
+  'new_status|eq|lost': {
+    seule: { fr: 'Seulement quand le prospect passe à « Perdu »', en: 'Only when the lead is marked “Lost”' },
+    apresSi: { fr: 'le prospect passe à « Perdu »', en: 'the lead is marked “Lost”' },
+  },
+  // `channel` = le canal par lequel le devis ou la facture est PARTI (pas une préférence du client).
+  'channel|eq|sms': {
+    seule: { fr: 'Seulement si l’envoi s’est fait par texto', en: 'Only if it was sent by text message' },
+    apresSi: { fr: 'l’envoi s’est fait par texto', en: 'it was sent by text message' },
+  },
+  'channel|neq|sms': {
+    seule: { fr: 'Sauf si l’envoi s’est fait par texto', en: 'Unless it was sent by text message' },
+    apresSi: { fr: 'l’envoi ne s’est pas fait par texto', en: 'it was not sent by text message' },
+  },
+  'channel|eq|email': {
+    seule: { fr: 'Seulement si l’envoi s’est fait par courriel', en: 'Only if it was sent by email' },
+    apresSi: { fr: 'l’envoi s’est fait par courriel', en: 'it was sent by email' },
+  },
+  'channel|neq|email': {
+    seule: { fr: 'Sauf si l’envoi s’est fait par courriel', en: 'Unless it was sent by email' },
+    apresSi: { fr: 'l’envoi ne s’est pas fait par courriel', en: 'it was not sent by email' },
+  },
+};
+
+const OPERATEURS_EN_CLAIR: Record<string, Bilingue> = {
+  eq: { fr: 'est', en: 'is' },
+  neq: { fr: 'n’est pas', en: 'is not' },
+  in: { fr: 'est parmi', en: 'is one of' },
+  not_in: { fr: 'n’est pas parmi', en: 'is not one of' },
+  gt: { fr: 'est supérieur à', en: 'is greater than' },
+  gte: { fr: 'est d’au moins', en: 'is at least' },
+  lt: { fr: 'est inférieur à', en: 'is less than' },
+  lte: { fr: 'est d’au plus', en: 'is at most' },
+};
+
+/** Les réglages du déclencheur dont la valeur se lit telle quelle (les autres sont des identifiants). */
+const REGLAGES_LISIBLES: ReadonlySet<string> = new Set(['texte', 'zone', 'nombre', 'url']);
+
+const sansTiretBas = (s: string) => s.replace(/_+/g, ' ').trim();
+
+function valeurEnClair(v: unknown, fr: boolean): string {
+  if (Array.isArray(v)) return v.map((x) => valeurEnClair(x, fr)).join(', ');
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'boolean') return v ? (fr ? 'oui' : 'yes') : (fr ? 'non' : 'no');
+  const texte = sansTiretBas(String(v ?? ''));
+  return fr ? `« ${texte} »` : `“${texte}”`;
+}
+
+/** Un réglage du déclencheur, nommé par le catalogue de l'éditeur ; null s'il ne le connaît pas. */
+function reglageEnClair(declencheur: string, cle: string, valeur: unknown, fr: boolean): string | null {
+  const champ = trouverDeclencheur(declencheur)?.champs?.find((c) => c.cle === cle);
+  if (!champ) return null;
+  const option = champ.options?.find((o) => o.cle === String(valeur));
+  if (option) return fr ? option.fr : option.en;
+  const nom = fr ? champ.fr : champ.en;
+  return REGLAGES_LISIBLES.has(champ.type) ? `${nom}${fr ? ' : ' : ': '}${String(valeur)}` : nom;
+}
+
+function conditionsEnClair(
+  conditions: Record<string, unknown>, fr: boolean, forme: FormeCondition, declencheur?: string,
+): string[] {
+  const out: string[] = [];
+  for (const [cle, v] of Object.entries(conditions)) {
+    if (cle === 'champs_perso') {
+      const n = Array.isArray(v) ? v.length : 0;
+      if (n > 0) out.push(fr ? `${n} condition${n > 1 ? 's' : ''} sur les champs de la fiche` : `${n} condition${n > 1 ? 's' : ''} on the record’s fields`);
+      continue;
     }
-    return `${cle} = ${String(v)}`;
-  });
+    // `{ gte: 500, lt: 2000 }` porte DEUX conditions ; une valeur à plat est une égalité.
+    const paires: Array<[string, unknown]> = v !== null && typeof v === 'object' && !Array.isArray(v)
+      ? Object.entries(v as Record<string, unknown>)
+      : [['eq', v]];
+    for (const [op, valeur] of paires) {
+      const connue = CONDITIONS_CONNUES[`${cle}|${op}|${String(valeur)}`];
+      if (connue) { out.push(fr ? connue[forme].fr : connue[forme].en); continue; }
+      const reglage = op === 'eq' && declencheur ? reglageEnClair(declencheur, cle, valeur, fr) : null;
+      if (reglage) { out.push(reglage); continue; }
+      const operateur = OPERATEURS_EN_CLAIR[op];
+      out.push(`${sansTiretBas(cle)} ${operateur ? (fr ? operateur.fr : operateur.en) : sansTiretBas(op)} ${valeurEnClair(valeur, fr)}`);
+    }
+  }
+  return out;
 }
 
 /** Les variables ([client_first_name], {{deal.title}}) en surbrillance. */
@@ -117,7 +226,7 @@ function Miniature({ modele, compacte = false }: { modele: ModeleAutomatisation;
         <Zap size={12} />
       </span>
       {visibles.map((e, i) => {
-        const Icone = e.genre === 'action' ? (CANAUX[CANAL_ACTION[e.type]]?.icone ?? Zap)
+        const Icone = e.genre === 'action' ? (CANAUX[CANAL_ACTION[e.type]]?.icone ?? (e.type === ACTION_JOURNAL ? FileText : Zap))
           : e.genre === 'attente' ? CalendarClock : GitBranch;
         return (
           <span key={i} className="inline-flex items-center gap-1">
@@ -188,6 +297,15 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
   const cleIdempotence = useRef('');
   /** Verrou SYNCHRONE : deux clics dans le même instant voient encore `envoi` à faux. */
   const enCours = useRef(false);
+  /**
+   * Le focus suit l'écran : la carte cliquée DISPARAÎT quand l'aperçu la
+   * remplace, et le navigateur laissait alors le focus retomber sur `body`
+   * (audit du 2026-10-01). Il va sur le titre de l'aperçu, puis revient sur
+   * la carte du modèle au retour.
+   */
+  const titreApercu = useRef<HTMLHeadingElement>(null);
+  const zoneModeles = useRef<HTMLDivElement>(null);
+  const carteARetrouver = useRef<string | null>(null);
 
   // Chargement à l'ouverture (lecture seule). Réinitialisé à la fermeture.
   useEffect(() => {
@@ -208,6 +326,15 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
     setApercu(null); setSaisie(''); setRecherche(''); setCategories(new Set()); setFiltresMobile(false);
   }, [open]);
 
+  useEffect(() => {
+    if (apercu) { titreApercu.current?.focus(); return; }
+    const id = carteARetrouver.current;
+    carteARetrouver.current = null;
+    if (!id) return;
+    const cartes = zoneModeles.current?.querySelectorAll<HTMLButtonElement>('button[data-modele]') ?? [];
+    for (const carte of cartes) if (carte.dataset.modele === id) { carte.focus(); break; }
+  }, [apercu]);
+
   // Recherche différée (~200 ms) : on ne refiltre pas à chaque lettre.
   useEffect(() => {
     const t = setTimeout(() => setRecherche(saisie), 200);
@@ -222,7 +349,12 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
 
   // Une catégorie sans modèle n'est pas affichée.
   const categoriesAffichees = CATEGORIES_MODELES.filter((c) => (compteParCategorie.get(c.cle) ?? 0) > 0);
-  const categoriesVisibles = toutesCategories ? categoriesAffichees : categoriesAffichees.slice(0, CATEGORIES_VISIBLES_PAR_DEFAUT);
+  // Repliée, la liste garde ses premières catégories ET celles qui sont
+  // cochées : une case qui filtre encore ne disparaît jamais (sinon la liste
+  // reste réduite sans que rien ne dise pourquoi).
+  const categoriesVisibles = toutesCategories
+    ? categoriesAffichees
+    : categoriesAffichees.filter((c, i) => i < CATEGORIES_VISIBLES_PAR_DEFAUT || categories.has(c.cle));
 
   const resultats = useMemo(
     () => trierModeles(filtrerModeles(modeles ?? [], { recherche, categories, fr }), tri, fr),
@@ -235,9 +367,12 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
     return s;
   });
   const reinitialiser = () => { setSaisie(''); setRecherche(''); setCategories(new Set()); };
+  /** « Tous les modèles » n'est enfoncé que si RIEN ne réduit la liste : ni catégorie, ni recherche. */
+  const aucunFiltre = categories.size === 0 && recherche.trim() === '';
 
   const ouvrirApercu = (m: ModeleAutomatisation) => {
     cleIdempotence.current = nouvelleCle();
+    carteARetrouver.current = m.id;
     setApercu(m);
   };
 
@@ -324,7 +459,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
         <ul className="divide-y divide-border rounded-xl border border-outline">
           {resultats.map((m) => (
             <li key={m.id}>
-              <button type="button" onClick={() => ouvrirApercu(m)}
+              <button type="button" data-modele={m.id} onClick={() => ouvrirApercu(m)}
                 className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-semibold text-text-primary">{fr ? m.nom.fr : m.nom.en}</p>
@@ -344,7 +479,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
     return (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {resultats.map((m) => (
-          <button key={m.id} type="button" onClick={() => ouvrirApercu(m)}
+          <button key={m.id} type="button" data-modele={m.id} onClick={() => ouvrirApercu(m)}
             className="flex flex-col rounded-xl border border-outline bg-surface-card p-3 text-left transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
             <div className="flex h-16 items-center rounded-lg bg-surface-secondary px-3">
               <Miniature modele={m} compacte />
@@ -366,14 +501,17 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
 
   const vueApercu = (m: ModeleAutomatisation) => {
     const etapes = etapesApercu(m).filter((e) => e.genre !== 'fin');
-    const conditions = libellesConditions(m.conditions);
+    const conditions = conditionsEnClair(m.conditions, fr, 'seule', m.declencheur);
     return (
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <EtiquetteCategorie cle={m.categorie} fr={fr} />
           <Canaux canaux={m.canaux} fr={fr} />
         </div>
-        <h3 className="mt-2 text-[16px] font-bold text-text-primary">{fr ? m.nom.fr : m.nom.en}</h3>
+        <h3 ref={titreApercu} tabIndex={-1}
+          className="mt-2 rounded text-[16px] font-bold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+          {fr ? m.nom.fr : m.nom.en}
+        </h3>
         <p className="mt-1 text-[13px] text-text-secondary">{fr ? m.description.fr : m.description.en}</p>
 
         <div className="mt-4 rounded-xl border border-outline p-3">
@@ -384,17 +522,23 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
           <p className="mt-1 text-[12px] text-text-tertiary">
             {conditions.length === 0
               ? (fr ? 'Aucune condition.' : 'No conditions.')
-              : `${fr ? 'Conditions' : 'Conditions'} : ${conditions.join(' · ')}`}
+              : `${fr ? 'Conditions :' : 'Conditions:'} ${conditions.join(' · ')}`}
           </p>
         </div>
 
         <ol className="mt-3 space-y-2">
           {etapes.map((e, i) => (
-            <li key={i} className="rounded-xl border border-outline p-3">
+            // Une étape d'une branche est décalée et dit son côté du « Si » — les mots de l'éditeur.
+            <li key={i} className={cn('rounded-xl border border-outline p-3', e.branche && 'ml-6')}>
               <div className="flex items-center gap-2 text-[13px]">
                 <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-secondary text-[11px] font-semibold tabular-nums text-text-secondary">{i + 1}</span>
+                {e.branche && (
+                  <span className="shrink-0 rounded-md bg-surface-secondary px-1.5 py-0.5 text-[11px] font-medium text-text-secondary">
+                    {e.branche === 'alors' ? (fr ? 'si oui' : 'if yes') : (fr ? 'si non' : 'if no')}
+                  </span>
+                )}
                 {e.genre === 'attente' && <span className="text-text-secondary">{libelleAttente(e, fr)}</span>}
-                {e.genre === 'condition' && <span className="text-text-secondary">{fr ? 'Si' : 'If'} {libellesConditions(e.conditions).join(' · ')}</span>}
+                {e.genre === 'condition' && <span className="text-text-secondary">{fr ? 'Si' : 'If'} {conditionsEnClair(e.conditions, fr, 'apresSi').join(fr ? ' et ' : ' and ')}</span>}
                 {e.genre === 'action' && <span className="font-medium text-text-primary">{libelleAction(e.type, fr)}</span>}
               </div>
               {e.genre === 'action' && <ContenuAction type={e.type} config={e.config} fr={fr} />}
@@ -423,9 +567,9 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
         <div className="flex flex-col gap-4 md:flex-row">
           {/* Colonne gauche (tablette et ordinateur). */}
           <nav className="hidden w-56 shrink-0 md:block" aria-label={fr ? 'Filtres' : 'Filters'}>
-            <button type="button" onClick={reinitialiser} aria-pressed={categories.size === 0}
+            <button type="button" onClick={reinitialiser} aria-pressed={aucunFiltre}
               className={cn('w-full rounded-lg px-2 py-1.5 text-left text-[13px] font-medium',
-                categories.size === 0 ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary hover:bg-surface-secondary')}>
+                aucunFiltre ? 'bg-surface-secondary text-text-primary' : 'text-text-secondary hover:bg-surface-secondary')}>
               {fr ? 'Tous les modèles' : 'All templates'}
             </button>
             <div className="mt-3 border-t border-border pt-3">
@@ -486,7 +630,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
               </div>
             )}
 
-            <div className="mt-3">{contenu()}</div>
+            <div ref={zoneModeles} className="mt-3">{contenu()}</div>
           </div>
         </div>
       )}
@@ -499,6 +643,9 @@ function ContenuAction({ type, config, fr }: { type: string; config: Record<stri
     const v = (fr ? config[cle] : config[`${cle}_en`] ?? config[cle]);
     return typeof v === 'string' ? v : '';
   };
+  if (type === ACTION_JOURNAL) {
+    return <p className="mt-2 text-[12px] text-text-tertiary">{fr ? 'Étape technique, automatique' : 'Technical step, automatic'}</p>;
+  }
   if (type === 'send_sms' || type === 'request_review') {
     const corps = lire('body');
     if (!corps) return null;

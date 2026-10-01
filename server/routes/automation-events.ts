@@ -15,8 +15,49 @@ import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { eventBus } from '../lib/eventBus';
 import { annoncerEtiquette } from '../lib/etiquettes';
 import { validate, automationEventSchema } from '../lib/validation';
+import { logger } from '../lib/logger';
 
 const router = Router();
+
+/** Ce qu'on lit d'une tâche du moteur pour savoir à quelle heure de visite elle se rapporte. */
+interface TachePrevue {
+  status: string;
+  action_config: { event_metadata?: Record<string, unknown> | null } | null;
+  sequence_context: Record<string, unknown> | null;
+}
+
+/**
+ * L'heure de début de la visite pour laquelle une tâche a été planifiée (en
+ * millisecondes), ou `null` si la tâche ne la porte pas. Le moteur la garde
+ * dans `action_config.event_metadata` (règle simple) et dans
+ * `sequence_context` (parcours).
+ */
+function debutPlanifie(tache: TachePrevue): number | null {
+  const meta = tache.action_config?.event_metadata;
+  const brut = meta?.start_time ?? meta?.start_at ?? tache.sequence_context?.start_time ?? tache.sequence_context?.start_at;
+  if (typeof brut !== 'string' || !brut) return null;
+  const instant = Date.parse(brut);
+  return Number.isFinite(instant) ? instant : null;
+}
+
+/**
+ * Ce qui est prévu pour cette visite l'est-il DÉJÀ pour `debutActuel` ?
+ * `taches` : les tâches de la visite, de la plus récente à la plus ancienne.
+ *
+ * Vrai seulement si, depuis la dernière planification faite pour une AUTRE
+ * heure, il y en a eu une pour l'heure actuelle qui tient toujours (en
+ * attente, en cours ou partie), et qu'aucun rappel en attente n'est resté
+ * calé sur une autre heure. Tout le reste répond faux : on replanifie.
+ */
+function dejaPlanifiePour(taches: TachePrevue[], debutActuel: number): boolean {
+  const datees = taches
+    .map((t) => ({ statut: t.status, debut: debutPlanifie(t) }))
+    .filter((t): t is { statut: string; debut: number } => t.debut !== null);
+  if (datees.some((t) => t.statut === 'pending' && t.debut !== debutActuel)) return false;
+  const autreHeure = datees.findIndex((t) => t.debut !== debutActuel);
+  const depuis = autreHeure === -1 ? datees : datees.slice(0, autreHeure);
+  return depuis.some((t) => t.statut === 'pending' || t.statut === 'running' || t.statut === 'completed');
+}
 
 // ── POST /automations/events/appointment-created ──
 // Called after a schedule_event is created
@@ -69,6 +110,36 @@ router.post('/automations/events/appointment-rescheduled', validate(automationEv
       .eq('org_id', auth.orgId)
       .maybeSingle();
     if (!rdv) return res.status(404).json({ error: 'Rendez-vous introuvable.' });
+
+    // ── 0. La visite a-t-elle VRAIMENT bougé ? ──
+    //
+    // Cette route est appelée par le navigateur : rien ne garantit que la
+    // visite annoncée « déplacée » l'a été. Appelée pour une visite restée à
+    // la même heure, elle annulait puis replanifiait tout, et la confirmation
+    // immédiate repartait : le client recevait un deuxième « Votre rendez-vous
+    // est confirmé » pour rien (audit du 2026-10-01, deux courriels retenus).
+    //
+    // Le moteur garde, avec chaque tâche, l'heure de début pour laquelle il
+    // l'a planifiée. Si ce qui est prévu pour cette visite l'est DÉJÀ pour
+    // l'heure actuelle, il n'y a rien à refaire. Au moindre doute (aucune
+    // trace, lecture ratée, un rappel resté calé sur une autre heure, tout a
+    // été annulé), on replanifie comme avant : un rappel en double vaut mieux
+    // qu'un rappel resté à l'ancienne date.
+    const debutActuel = Date.parse(String((rdv as { start_at?: string | null }).start_at ?? ''));
+    if (Number.isFinite(debutActuel)) {
+      const { data: connues, error: lectureErr } = await admin
+        .from('automation_scheduled_tasks')
+        .select('status, action_config, sequence_context')
+        .eq('org_id', auth.orgId)
+        .eq('entity_id', eventId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (lectureErr) {
+        logger.error('[automation-events] lecture des rappels prévus échouée — replanification par prudence', { message: lectureErr.message });
+      } else if (dejaPlanifiePour((connues ?? []) as TachePrevue[], debutActuel)) {
+        return res.json({ ok: true, cancelled: 0, inchange: true });
+      }
+    }
 
     // ── 1. Annuler les rappels calés sur l'ANCIENNE date ──
     //
@@ -130,6 +201,26 @@ router.post('/automations/events/appointment-rescheduled', validate(automationEv
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+/**
+ * La notification « job prêt à facturer », dans la langue de qui la reçoit.
+ * Elle n'existait qu'en anglais : dans un bureau francophone, le centre
+ * d'activités affichait « Job ready for invoicing: … » (audit du 2026-10-01).
+ */
+function textePretAFacturer(langue: 'fr' | 'en', titreJob: string | null, nomClient: string): { title: string; body: string } {
+  if (langue === 'en') {
+    return {
+      title: `Job ready for invoicing: ${titreJob || 'Untitled'}`,
+      body: `${nomClient || 'A job'} has been completed by a technician and is ready for invoicing.`,
+    };
+  }
+  return {
+    title: `Job prêt à facturer : ${titreJob || 'Sans titre'}`,
+    body: nomClient
+      ? `Le job de ${nomClient} a été terminé par un technicien et est prêt à être facturé.`
+      : 'Un job a été terminé par un technicien et est prêt à être facturé.',
+  };
+}
 
 // ── POST /automations/events/job-completed ──
 // Called when a job status is changed to "completed"
@@ -202,7 +293,10 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
       try {
         const { data: admins, error: adminsError } = await admin
           .from('memberships')
-          .select('user_id')
+          // `language` : chaque destinataire lit la notification dans SA
+          // langue (memberships.language, français par défaut), comme les
+          // autres notifications ciblées (server/lib/notificationHelpers.ts).
+          .select('user_id, language')
           .eq('org_id', auth.orgId)
           .eq('status', 'active')
           .in('role', ['owner', 'admin']);
@@ -212,12 +306,11 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
         }
 
         if (admins && admins.length > 0) {
-          const notifications = admins.map((m: { user_id: string }) => ({
+          const notifications = admins.map((m: { user_id: string; language?: string | null }) => ({
             org_id: auth.orgId,
             user_id: m.user_id,
             type: 'job_ready_for_invoicing',
-            title: `Job ready for invoicing: ${job.title || 'Untitled'}`,
-            body: `${clientName || 'A job'} has been completed by a technician and is ready for invoicing.`,
+            ...textePretAFacturer(m.language === 'en' ? 'en' : 'fr', job.title, clientName),
             entity_type: 'job',
             entity_id: jobId,
             is_read: false,
