@@ -127,7 +127,7 @@ describe('I — create_automation_from_text : les gardes de la route « Construi
 });
 
 describe('I — idempotence des écritures de Lumi', () => {
-  it.fails('[I-035] ROUGE ATTENDU — décision requise : redemander la MÊME automatisation après l’avoir supprimée (moins de 24 h) répond « c’est fait » sans rien créer', async () => {
+  it('[I-035] redemander la MÊME automatisation après l’avoir supprimée (moins de 24 h) la RECRÉE — plus de « c’est fait » sur une règle qui n’existe plus', async () => {
     const description = `Relance mes soumissions après un jour ${marque('I-035')}`;
     reponsesModele.push(PARCOURS_SIMPLE('quote.sent'));
     const r1 = await outil('create_automation_from_text', { description });
@@ -136,11 +136,51 @@ describe('I — idempotence des écritures de Lumi', () => {
     const depuis = new Date().toISOString();
     reponsesModele.push(PARCOURS_SIMPLE('quote.sent'));
     const r2 = await outil('create_automation_from_text', { description });
-    // Aujourd'hui : r2 = { deja_fait: true, ...r1 } — l'empreinte (org, outil,
-    // arguments) vit 24 h dans agent_actions (purge oauth_menage), alors que la
-    // migration 20260903090000 dit que « la fenêtre utile est de quelques minutes ».
+    // Avant : r2 = { deja_fait: true, ...r1 } — l'empreinte (org, outil,
+    // arguments) vit 24 h dans agent_actions et resservait un résultat dont la
+    // règle n'existait plus.
     expect(r2.deja_fait).toBeUndefined();
-    expect((await reglesDepuis(depuis)).length).toBe(1);
+    expect(r2.created, JSON.stringify(r2)).toBe(true);
+    expect(r2.rule_id).not.toBe(r1.rule_id);
+    const crees = await reglesDepuis(depuis);
+    expect(crees.map((x) => x.id)).toEqual([r2.rule_id]);
+    expect(crees[0].is_active).toBe(false);
+  });
+
+  it('[I-035] supprimée par la CORBEILLE (deleted_at) puis redemandée : recréée aussi ; la règle en corbeille reste en corbeille', async () => {
+    const description = `Relance mes soumissions après un jour ${marque('I-035c')}`;
+    reponsesModele.push(PARCOURS_SIMPLE('quote.sent'));
+    const r1 = await outil('create_automation_from_text', { description });
+    expect(r1.created, JSON.stringify(r1)).toBe(true);
+    regles.push(r1.rule_id);
+    const { error } = await b.admin.from('automation_rules').update({ deleted_at: new Date().toISOString() }).eq('id', r1.rule_id);
+    expect(error).toBeNull();
+    const depuis = new Date().toISOString();
+    reponsesModele.push(PARCOURS_SIMPLE('quote.sent'));
+    const r2 = await outil('create_automation_from_text', { description });
+    expect(r2.deja_fait).toBeUndefined();
+    expect(r2.created, JSON.stringify(r2)).toBe(true);
+    expect((await reglesDepuis(depuis)).map((x) => x.id)).toEqual([r2.rule_id]);
+    const { data: ancienne } = await b.admin.from('automation_rules').select('deleted_at').eq('id', r1.rule_id).single();
+    expect(ancienne!.deleted_at).not.toBeNull();
+  });
+
+  it('[I-035] témoin : la même demande rejouée alors que l’automatisation EXISTE toujours ne crée pas de doublon (« déjà fait »)', async () => {
+    const description = `Relance mes soumissions après un jour ${marque('I-035t')}`;
+    reponsesModele.push(PARCOURS_SIMPLE('quote.sent'));
+    const r1 = await outil('create_automation_from_text', { description });
+    expect(r1.created, JSON.stringify(r1)).toBe(true);
+    regles.push(r1.rule_id);
+    const depuis = new Date().toISOString();
+    const reponsesAvant = reponsesModele.length;
+    reponsesModele.push(PARCOURS_SIMPLE('quote.sent'));
+    const r2 = await outil('create_automation_from_text', { description });
+    expect(r2.deja_fait).toBe(true);
+    expect(r2.rule_id).toBe(r1.rule_id);
+    expect(await reglesDepuis(depuis)).toEqual([]);
+    // Le modèle n'a pas été rappelé : la réponse préparée est toujours là.
+    expect(reponsesModele.length).toBe(reponsesAvant + 1);
+    reponsesModele.length = reponsesAvant;
   });
 });
 

@@ -38,7 +38,7 @@ Vrai chemin : `POST /api/lumi/chat` (orchestrateur, routeur actif, vrai modèle)
 | I-032 | Outil : 2e automatisation (client.replied) | 1×/7 j par client | créée en pause, delai_entre_passages_jours 7 | corrigé (54dabf74) |
 | I-033 | Outil : langue de l'entreprise = en | — | consignes anglaises au générateur | corrigé (46a9fc92) |
 | I-034 | list_automations | corbeille / purgée | non listées | corrigé (d6b41e5b) |
-| I-035 | Redemander la même automatisation < 24 h après l'avoir supprimée | — | doit créer | ROUGE ATTENDU — décision : empreinte d'idempotence 24 h (agent_actions) → « c'est fait » sans rien créer ; touche toutes les écritures de Lumi |
+| I-035 | Redemander la même automatisation < 24 h après l'avoir supprimée | suppression définitive ; corbeille (`deleted_at`) ; témoin : la règle existe toujours | recréée (nouvelle règle, en pause) ; témoin : « déjà fait », aucun doublon, modèle non rappelé | CORRIGÉ — `40-iklm-lumi-outils.test.ts` [I-035] (3) : `executerIdempotent` accepte `encoreValable` ; les autres écritures de Lumi gardent l'empreinte de 24 h telle quelle |
 | I-040 | « Crée … » / « Create … » | — | jamais de réponse FAQ | corrigé (a78e61f7) |
 | I-041 | Vraie question produit | — | garde sa FAQ | |
 | I-042 | « crée un parcours / automatise / workflow » | — | indice → create_automation_from_text | corrigé (9d0abe1c) |

@@ -264,11 +264,25 @@ function messageHumainErreur(e: any, contexte?: string): string {
 /** Deux demandes identiques de la même personne à moins de 10 min = un doublon (double clic, retentative). */
 export const FENETRE_DOUBLON_MS = 10 * 60_000;
 
+/**
+ * `encoreValable` : ce que l'action a créé existe-t-il TOUJOURS ? Pendant la
+ * fenêtre de doublon, redemander à Lumi une automatisation qu'on vient de
+ * supprimer répondait « c'est déjà fait » — avec l'identifiant d'une règle qui
+ * n'existe plus — et rien n'était créé. Quand la réponse est non, l'empreinte
+ * périmée est libérée et l'action est refaite. Dans le doute (vérification
+ * impossible, action encore en cours), on NE refait PAS : un doublon vaut
+ * moins qu'un « déjà fait » de trop.
+ */
+export interface OptionsIdempotence {
+  encoreValable?: (resultat: Record<string, any>) => Promise<boolean>;
+}
+
 export async function executerIdempotent(
   ctx: ToolContext,
   outil: string,
   args: Record<string, any>,
   action: () => Promise<Record<string, any>>,
+  options: OptionsIdempotence = {},
 ): Promise<Record<string, any>> {
   // À blanc : rien n'est écrit, pas même l'empreinte. On dit ce qui partirait.
   if (ctx.dryRun) {
@@ -311,6 +325,21 @@ export async function executerIdempotent(
       // La première exécution n'a pas encore rendu son résultat : ce n'est pas
       // « fait ». Dire l'état réel plutôt qu'un succès qui pourrait échouer.
       return { error: 'Cette action est déjà en cours d\'exécution (double clic ?). Attends son résultat avant de la redemander.' };
+    }
+    if (options.encoreValable) {
+      let valable = true;
+      try {
+        valable = await options.encoreValable(resultat);
+      } catch (e: any) {
+        console.error(`[agent-tool:${outil}:dedup] validité du résultat mémorisé invérifiable — on ne refait pas`, e?.message || e);
+      }
+      if (!valable) {
+        // Ce que l'action avait créé n'existe plus : l'empreinte est périmée.
+        // On libère CETTE ligne-là et on repose la nôtre (la boucle borne les reprises).
+        await admin.from('agent_actions').delete().eq('id', existante.id).eq('created_at', existante.created_at);
+        ({ data: posee, error: insErr } = await poser());
+        continue;
+      }
     }
     return {
       ...resultat,
