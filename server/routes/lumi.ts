@@ -817,8 +817,15 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       // La fiche d'un job (job-numero) seulement si la question porte sur LE JOB lui-même
       // (même motif strict que le raccourci) : « la liste de vérification de la job 24 »,
       // « le contrat du job 30 » recevaient la fiche, qui ne montre ni l'une ni l'autre.
-      const ficheJobHorsSujet = routeur.verdict?.action === 'job-numero' && detecterRaccourci(message)?.id !== 'job-numero';
-      const r = routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) && !ficheJobHorsSujet ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
+      //
+      // TOUT raccourci choisi par le routeur doit être reconnu AUSSI par le détecteur
+      // strict (passe de référence du 2026-10-01). Le routeur est un modèle : sur
+      // « combien j'ai encaissé en septembre », il a rendu l'action `revenu-mois`, et le
+      // raccourci — dont la période est figée au mois courant — a répondu 0,00 $ au lieu
+      // de 989,85 $. Un chiffre faux, gratuit, donné avec assurance. Sans l'accord du
+      // détecteur strict, le modèle prend la demande, avec le sujet trouvé par le routeur.
+      const raccourciStrict = detecterRaccourci(message)?.id ?? null;
+      const r = routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) && raccourciStrict === routeur.verdict.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
       const reponse = r ? await repondreRaccourci(r, ctxRaccourci) : null;
       if (r && reponse) {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
