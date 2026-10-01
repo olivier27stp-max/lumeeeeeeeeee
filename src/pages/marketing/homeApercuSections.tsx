@@ -13,25 +13,65 @@ type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
 type Bi = { fr: string; en: string };
 const pick = (fr: boolean, b: Bi) => (fr ? b.fr : b.en);
 
-/* ── Ce que tu arrêtes de faire ── */
+/* ── Ce que tu arrêtes de faire : Sans Lume / Avec Lume face à face.
+   Les deux cartes partagent les rangées de .hs-vs (subgrid) : la ligne N du
+   problème est à la hauteur de la ligne N de sa solution. ── */
+type VsCard = { key: 'sans' | 'avec'; label: Bi; sub: Bi; items: Bi[]; stats: { label: Bi; value: Bi }[] };
+const VS_CARDS: VsCard[] = [
+  {
+    key: 'sans',
+    label: { fr: 'Sans Lume', en: 'Without Lume' },
+    sub: { fr: 'Des textos partout, des soumissions oubliées, des soirées au bureau.', en: 'Texts everywhere, forgotten quotes, evenings at the kitchen table.' },
+    items: [
+      { fr: 'Retaper à la main les demandes reçues sur ton site', en: 'Retyping website requests by hand' },
+      { fr: 'Recevoir les textos des clients sur ton cell perso', en: 'Getting client texts on your personal cell' },
+      { fr: 'Relancer une soumission sans savoir si elle a été ouverte', en: 'Following up on a quote without knowing if it was opened' },
+      { fr: 'Quémander des avis Google, un client à la fois', en: 'Begging for Google reviews, one client at a time' },
+      { fr: 'Arriver chez un client qui avait oublié ton passage', en: 'Showing up at a client who forgot you were coming' },
+    ],
+    stats: [{ label: { fr: 'Soirées au bureau', en: 'Evenings at the office' }, value: { fr: 'Toutes', en: 'All of them' } }],
+  },
+  {
+    key: 'avec',
+    label: { fr: 'Avec Lume', en: 'With Lume' },
+    sub: { fr: "Une seule app, et des automatisations qui travaillent pendant que t'es sur la job.", en: "One app, with automations that work while you're on the job." },
+    items: [
+      { fr: 'La demande sur ton site crée le client et la fiche toute seule', en: 'Website requests create the client and the record on their own' },
+      { fr: 'Les textos arrivent dans Lume, sur un numéro dédié à ta business', en: 'Texts land in Lume, on a number dedicated to your business' },
+      { fr: 'Tu vois quand la soumission est ouverte, et la relance part toute seule', en: 'You see when the quote is opened, and the follow-up sends itself' },
+      { fr: 'La demande d\'avis part automatiquement quand la job est terminée', en: 'Review requests go out automatically when the job is done' },
+      { fr: 'Le rappel SMS part la veille, le client t\'attend', en: 'The SMS reminder goes out the day before, the client is ready' },
+    ],
+    stats: [
+      { label: { fr: 'Relances', en: 'Follow-ups' }, value: { fr: '24/7', en: '24/7' } },
+      { label: { fr: 'Rappels clients', en: 'Client reminders' }, value: { fr: 'Automatiques', en: 'Automatic' } },
+    ],
+  },
+];
+
 export function StopList({ fr }: { fr: boolean }) {
-  const items: Bi[] = [
-    { fr: 'Retaper à la main les demandes reçues sur ton site.', en: 'Retyping the requests from your website by hand.' },
-    { fr: 'Recevoir les textos des clients sur ton cell.', en: 'Getting client texts on your personal phone.' },
-    { fr: 'Relancer une soumission sans savoir si elle a été ouverte.', en: 'Following up on a quote without knowing if it was opened.' },
-    { fr: 'Quémander des avis Google, un client à la fois.', en: 'Begging for Google reviews, one client at a time.' },
-    { fr: 'Arriver chez un client qui avait oublié ton passage.', en: 'Showing up at a client who forgot you were coming.' },
-  ];
   return (
     <section className="hs-stop">
       <p className="ha-kicker">{fr ? 'Ce que tu arrêtes de faire' : 'What you stop doing'}</p>
-      <h2>{fr ? 'Le soir, tu fermes le camion. Pas le bureau.' : 'At night you close the truck. Not the office.'}</h2>
-      <ul className="hs-stoplist">
-        {items.map((it, i) => (
-          <li key={it.en} style={{ ['--i' as string]: i }}><span>{pick(fr, it)}</span></li>
+      <h2>{fr ? 'Le soir, tu fermes le camion. Pas le bureau.' : 'At night, you close the truck. Not the office.'}</h2>
+      <div className="hs-vs">
+        {VS_CARDS.map((c) => (
+          <div key={c.key} className={`hs-vscard ${c.key}`}>
+            <h3>{pick(fr, c.label)}</h3>
+            <p className="hs-vssub">{pick(fr, c.sub)}</p>
+            <ul>
+              {c.items.map((it) => (
+                <li key={it.en}><span className="hs-vsic" aria-hidden="true">{c.key === 'avec' ? '✓' : '✕'}</span>{pick(fr, it)}</li>
+              ))}
+            </ul>
+            <dl className="hs-vsstats">
+              {c.stats.map((st) => (
+                <div key={st.label.en}><dt>{pick(fr, st.label)}</dt><dd>{pick(fr, st.value)}</dd></div>
+              ))}
+            </dl>
+          </div>
         ))}
-      </ul>
-      <p className="hs-stopnote">{fr ? "Tout ça, c'est Lume qui le fait maintenant. Le reste de la page montre comment." : 'Lume does all of that now. The rest of the page shows how.'}</p>
+      </div>
       <LogoMarquee fr={fr} />
     </section>
   );
@@ -279,13 +319,22 @@ export const SECTIONS_CSS = `
 .home-apercu .hs-sub { margin:10px 0 0; font-size:15px; line-height:1.55; color:#333; max-width:70ch; }
 .home-apercu .hs-link { display:inline-block; margin-top:16px; font-weight:700; font-size:13.5px; color:var(--forest); background:none; border:0; padding:0; cursor:pointer; text-decoration:none; font-family:inherit; }
 .hs-stop, .hs-pillars, .hs-roles, .hs-lumi, .hs-flow, .hs-plans, .hs-secu { max-width:1180px; margin:0 auto; padding:52px 24px 8px; }
-.hs-stoplist { list-style:none; margin:22px 0 0; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:6px 40px; }
-.hs-stoplist li { font-size:clamp(17px,1.6vw,22px); font-weight:600; letter-spacing:-.01em; line-height:1.3; color:#0a0a0a; padding:14px 0; border-top:1px solid #d9d9d4; }
-/* Trait en arrière-plan découpé par ligne (box-decoration-break) : une phrase sur
-   deux lignes est barrée sur CHAQUE ligne, pas entre les deux. */
-.hs-stoplist li span { display:inline; background-image:linear-gradient(#ef4444,#ef4444); background-repeat:no-repeat; background-position:0 58%; background-size:0% 3px; -webkit-box-decoration-break:clone; box-decoration-break:clone; animation:hs-strike .6s cubic-bezier(.2,.8,.2,1) forwards; animation-delay:calc(.35s + var(--i) * .28s); }
-@keyframes hs-strike { to { background-size:100% 3px; } }
-.hs-stopnote { margin:22px 0 0; font-size:14.5px; color:#171717; }
+.hs-vs { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:repeat(8,auto); column-gap:16px; margin-top:22px; }
+.hs-vscard { grid-row:span 8; display:grid; grid-template-rows:subgrid; border-radius:18px; padding:22px; }
+.hs-vscard.sans { background:#f1f1ef; border:1px solid #e4e4df; }
+.hs-vscard.avec { background:#fff; border:2px solid var(--forest); box-shadow:0 24px 40px -28px rgba(31,95,79,.45); }
+.hs-vscard h3 { margin:0; font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:800; color:#555; }
+.hs-vscard.avec h3 { color:var(--forest); }
+.hs-vssub { margin:8px 0 0; font-size:19px; font-weight:700; letter-spacing:-.015em; line-height:1.3; color:#111; }
+.hs-vscard ul { grid-row:span 5; display:grid; grid-template-rows:subgrid; list-style:none; margin:14px 0 0; padding:0; }
+.hs-vscard li { display:flex; gap:10px; align-items:flex-start; font-size:14.5px; line-height:1.45; color:#333; padding:11px 0; border-top:1px solid #e4e4df; }
+.hs-vscard.avec li { color:#171717; border-top-color:#ececea; }
+.hs-vsic { flex:none; width:20px; height:20px; margin-top:1px; border-radius:50%; display:grid; place-items:center; font-size:11px; font-weight:800; background:#e4e4df; color:#8a8a84; }
+.hs-vscard.avec .hs-vsic { background:var(--mint-soft); color:var(--forest); }
+.hs-vsstats { display:flex; gap:28px; margin:6px 0 0; padding-top:16px; border-top:1px solid #d9d9d4; align-self:end; }
+.hs-vsstats dt { font-size:12px; color:#555; } .hs-vscard.avec .hs-vsstats { border-top-color:rgba(31,95,79,.25); }
+.hs-vsstats dd { margin:4px 0 0; font-size:28px; font-weight:800; letter-spacing:-.03em; line-height:1; color:#111; }
+.hs-vscard.avec .hs-vsstats dd { color:var(--forest); }
 .hs-marquee { margin:34px 0 0; overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent); mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent); }
 .hs-mlabel { margin:0 0 14px; text-align:center; font-size:11px; letter-spacing:.14em; text-transform:uppercase; font-weight:700; color:#8a8a84; }
 .hs-mtrack { display:flex; width:max-content; animation:hs-marquee 32s linear infinite; }
@@ -339,11 +388,13 @@ export const SECTIONS_CSS = `
 .hs-faq summary { cursor:pointer; font-weight:700; font-size:15.5px; color:#111; list-style:none; display:flex; justify-content:space-between; align-items:center; } .hs-faq summary::-webkit-details-marker { display:none; } .hs-faq summary::after { content:"+"; font-size:20px; color:#888; } .hs-faq details[open] summary::after { content:"–"; }
 .hs-faq p { margin:10px 0 0; font-size:14px; line-height:1.55; color:#333; max-width:68ch; }
 @media (max-width: 900px) {
-  .hs-stoplist, .hs-pgrid, .hs-rp, .hs-lgrid, .hs-band, .hs-steps, .hs-plgrid, .hs-sgrid { grid-template-columns:1fr; }
+  .hs-vs { grid-template-columns:1fr; grid-template-rows:none; row-gap:16px; }
+  .hs-vscard, .hs-vscard ul { grid-row:auto; display:flex; flex-direction:column; }
+  .hs-vsstats { align-self:stretch; }
+  .hs-pgrid, .hs-rp, .hs-lgrid, .hs-band, .hs-steps, .hs-plgrid, .hs-sgrid { grid-template-columns:1fr; }
   .hs-steps::before { display:none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hs-stoplist li span { animation:none; background-size:100% 3px; }
   .hs-mtrack { animation:none; width:auto; justify-content:center; } .hs-logos { flex-wrap:wrap; justify-content:center; } .hs-logos[aria-hidden] { display:none; }
 }
 `;
