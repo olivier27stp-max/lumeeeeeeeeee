@@ -21,7 +21,7 @@ function Hero({ onBookDemo }: { onBookDemo: () => void }) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="text-[clamp(1.75rem,4vw,3.5rem)] font-extrabold tracking-[-0.03em] leading-[1.12] text-text-primary"
+            className="text-[clamp(1.625rem,3.6vw,3.125rem)] font-extrabold tracking-[-0.03em] leading-[1.12] text-text-primary"
           >
             <span>{h.titleStopManaging}{' '}
               <span className="relative inline-block">
