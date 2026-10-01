@@ -229,3 +229,44 @@ describe('liste-10 — l’aperçu d’un parcours à étapes montre ce que le c
     expect(texte()).toContain('Bonjour [prenom]');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+describe('liste-07 — un seul menu ouvert à la fois (« Créer » et « ⋮ »)', () => {
+  const menus = () => Array.from(document.body.querySelectorAll('[role="menu"]'));
+  const items = () => Array.from(document.body.querySelectorAll('[role="menuitem"]')).map((b) => (b.textContent || '').trim());
+
+  it('menu « ⋮ » ouvert, clic sur « Créer » : le menu de la ligne se referme, seul « Créer » reste', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Alpha' })]);
+    await rendre();
+    await cliquer(bouton(/^Actions pour Alpha$/));
+    expect(menus()).toHaveLength(1);
+    await cliquer(bouton(/^Créer$/));
+    expect(menus(), 'deux menus ouverts en même temps').toHaveLength(1);
+    expect(items().some((t) => t.startsWith('Partir de zéro'))).toBe(true);
+    expect(items()).not.toContain('Dupliquer');
+    expect(bouton(/^Actions pour Alpha$/)!.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('menu « Créer » ouvert, clic sur « ⋮ » : « Créer » se referme, seul le menu de la ligne reste', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Alpha' })]);
+    await rendre();
+    await cliquer(bouton(/^Créer$/));
+    expect(menus()).toHaveLength(1);
+    await cliquer(bouton(/^Actions pour Alpha$/));
+    expect(menus(), 'deux menus ouverts en même temps').toHaveLength(1);
+    expect(items()).toContain('Dupliquer');
+    expect(items().some((t) => t.startsWith('Partir de zéro'))).toBe(false);
+    expect(bouton(/^Créer$/)!.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('Échap ferme encore celui qui est ouvert, et rend le focus à son bouton (liste-06, déjà couvert au lot 1)', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue([regle({ name: 'Alpha' })]);
+    await rendre();
+    await cliquer(bouton(/^Actions pour Alpha$/));
+    await cliquer(bouton(/^Créer$/));
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    await laisser();
+    expect(menus()).toHaveLength(0);
+    expect(document.activeElement).toBe(bouton(/^Créer$/));
+  });
+});

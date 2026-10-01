@@ -1419,7 +1419,14 @@ export default function Automations() {
               <button
                 type="button"
                 ref={boutonCreer}
-                onClick={(e) => { e.stopPropagation(); setMenuCreer((m) => !m); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Un seul menu à la fois : ce clic n'atteint pas le « clic
+                  // ailleurs » du document, le menu « ⋮ » d'une ligne restait ouvert.
+                  setMenuLigne(null);
+                  setSousMenuDossier(null);
+                  setMenuCreer((m) => !m);
+                }}
                 aria-haspopup="menu"
                 aria-expanded={menuCreer}
                 className="glass-button-primary inline-flex items-center gap-1.5"
@@ -1966,6 +1973,9 @@ export default function Automations() {
                                     setPosMenuLigne(versLeHaut
                                       ? { bottom: window.innerHeight - r.top + 4, right: window.innerWidth - r.right }
                                       : { top: r.bottom + 4, right: window.innerWidth - r.right });
+                                    // Un seul menu à la fois (voir le bouton « Créer »).
+                                    setMenuCreer(false);
+                                    setSousMenuDossier(null);
                                     setMenuLigne((m) => (m === rule.id ? null : rule.id));
                                   }}
                                   aria-haspopup="menu"
