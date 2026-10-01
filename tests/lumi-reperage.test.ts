@@ -164,3 +164,10 @@ describe('repererFiches', () => {
     expect(await repererFiches('Supprime la soumission 19.', { ...opts(), client: casse })).toBeNull();
   });
 });
+
+describe('possessif anglais', () => {
+  it('« Sophie Bouchard’s quote » repère Sophie Bouchard', async () => {
+    const bloc = await repererFiches('Turn Sophie Bouchard’s accepted quote into a job.', { ...opts(), langue: 'en' });
+    expect(bloc).toMatch(/client record Sophie Bouchard → client_id « ref\d+ »/);
+  });
+});

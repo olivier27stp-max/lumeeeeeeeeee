@@ -283,7 +283,8 @@ describe('écritures : bornage org + note française (client factice, appelInter
     },
     {
       nom: 'schedule_job', args: { job_id: JOB, start_at: '2026-10-01T13:00:00Z', team_id: ID },
-      reponses: { 'rpc:rpc_schedule_job': () => ({ data: { event: { id: ID2, start_at: '2026-10-01T13:00:00.000Z', end_at: '2026-10-01T14:00:00.000Z' } } }) },
+      // Un job SANS visite : seul cas où « planifier » a un sens.
+      reponses: { schedule_events: () => ({ data: [] }), 'rpc:rpc_schedule_job': () => ({ data: { event: { id: ID2, start_at: '2026-10-01T13:00:00.000Z', end_at: '2026-10-01T14:00:00.000Z' } } }) },
       verifier: ({ result, rpcs }) => {
         expect(rpcs[0].fn).toBe('rpc_schedule_job');
         expect(rpcs[0].args).toMatchObject({ p_job_id: JOB, p_start_at: '2026-10-01T13:00:00.000Z', p_end_at: '2026-10-01T14:00:00.000Z', p_team_id: ID });
@@ -484,6 +485,29 @@ describe('écritures : bornage org + note française (client factice, appelInter
       expect(adminFactice.journal.some(([op]) => op === 'agent_actions.delete')).toBe(false);
     });
   }
+});
+
+describe('schedule_job ne déplace plus une visite en silence (constat ouvert de l’audit 2026-09-30)', () => {
+  it('un job qui a déjà une visite : refus lisible, la RPC n’est pas appelée', async () => {
+    const { result, rpcs } = await executer('schedule_job', { job_id: JOB, start_at: '2026-10-01T13:00:00Z' });
+    expect(result.error).toMatch(/déjà une visite au calendrier : rien n'a été changé/);
+    expect(result.error).toMatch(/reschedule_job/);
+    expect(result.error).toMatch(/add_visit/);
+    expect(result.scheduled).toBeUndefined();
+    expect(rpcs).toEqual([]);
+  });
+  it('deux visites : même refus, avec le compte', async () => {
+    const { result, rpcs } = await executer('schedule_job', { job_id: JOB, start_at: '2026-10-01T13:00:00Z' }, { schedule_events: () => ({ data: [{ id: ID }, { id: ID2 }] }) });
+    expect(result.error).toMatch(/déjà 2 visites au calendrier/);
+    expect(rpcs).toEqual([]);
+  });
+  it('la RPC signale qu’elle a déplacé une visite apparue entre-temps : la note le dit', async () => {
+    const { result } = await executer('schedule_job', { job_id: JOB, start_at: '2026-10-01T13:00:00Z' }, {
+      schedule_events: () => ({ data: [] }),
+      'rpc:rpc_schedule_job': () => ({ data: { updated: true, event: { id: ID2, start_at: '2026-10-01T13:00:00.000Z', end_at: '2026-10-01T14:00:00.000Z' } } }),
+    });
+    expect(result.note).toMatch(/Une visite existait déjà : elle a été déplacée/);
+  });
 });
 
 describe('erreurs et garde-fous', () => {

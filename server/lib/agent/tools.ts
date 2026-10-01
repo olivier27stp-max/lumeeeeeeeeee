@@ -306,7 +306,7 @@ const listJobs: AgentTool = {
             "Optional filter. Accepts what the user sees ('late', 'upcoming', 'action_required', "
             + "'requires_invoicing', 'archived') or a raw status ('scheduled', 'completed', 'draft', 'in_progress').",
         },
-        query: { type: 'string', description: 'Search text (number, title, address, client). Omit it to count ALL jobs.' },
+        query: { type: 'string', description: 'Search words (number, title, address, client or company name — each word must match). Omit it to count ALL jobs.' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
     },
@@ -329,8 +329,8 @@ const listJobs: AgentTool = {
     }
     const term = String(args.query || '').trim();
     if (term) {
-      const t = term.replace(/[%,()]/g, ' ');
-      q = q.or(`job_number.ilike.%${t}%,title.ilike.%${t}%,property_address.ilike.%${t}%,client_name.ilike.%${t}%`);
+      // Chaque mot : numéro, titre, adresse, nom affiché, OU client de la fiche (prénom, nom, entreprise).
+      for (const f of await filtresParMots(ctx, term, ['job_number', 'title', 'property_address', 'client_name'], ['client_id'])) q = q.or(f);
     }
     const { data, error, count } = await q;
     if (error) return toolError('db', error);
@@ -354,11 +354,51 @@ const listJobs: AgentTool = {
   },
 };
 
+/**
+ * Recherche par MOTS, nom du client compris (2026-10-01).
+ * ─────────────────────────────────────────────────────────────────────────
+ * Mesuré sur la passe de référence en prod : « Duplique la soumission de Girard » →
+ * « je ne trouve aucune soumission au nom de Girard » (elle existait : list_quotes ne
+ * cherchait que dans le numéro et le titre) ; « la job de la clinique Leblanc » → rien
+ * (list_jobs ne connaissait pas le nom d'entreprise) ; « Marie Roy Brossard » → rien
+ * (toute la phrase cherchée comme UNE sous-chaîne).
+ * Ici : chaque mot doit se trouver quelque part — dans les colonnes de la fiche, ou dans
+ * le prénom, le nom ou l'entreprise du client de la fiche. Même découpage que search_clients.
+ */
+const MOTS_CREUX = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'un', 'une', 'au', 'aux', 'chez', 'pour', 'et', 'the', 'of', 'for', 'and', 'at', 'a', 'à']);
+
+export function motsDeRecherche(terme: string): string[] {
+  return String(terme || '')
+    .replace(/[’']s\b/gi, ' ') // « Lévesque's » → « Lévesque »
+    .replace(/[%,()"'’`\\*]/g, ' ')
+    .split(/\s+/)
+    .map((m) => m.trim())
+    .filter((m) => m.length >= 2 && !MOTS_CREUX.has(m.toLowerCase()))
+    .slice(0, 5);
+}
+
+/** Les clients (et prospects) dont le prénom, le nom ou l'entreprise contient ce mot. */
+async function idsClientsParMot(ctx: ToolContext, mot: string): Promise<string[]> {
+  const { data } = await ctx.client.from('clients').select('id').eq('org_id', ctx.orgId).is('deleted_at', null)
+    .or(`first_name.ilike.%${mot}%,last_name.ilike.%${mot}%,company.ilike.%${mot}%`).limit(40);
+  return ((data ?? []) as Array<{ id: string }>).map((c) => c.id);
+}
+
+/** Un filtre `or` par mot (PostgREST les combine en ET) : colonnes de la fiche OU client de la fiche. */
+export async function filtresParMots(ctx: ToolContext, terme: string, colonnes: string[], colonnesClient: string[]): Promise<string[]> {
+  const mots = motsDeRecherche(terme);
+  const ids = await Promise.all(mots.map((m) => idsClientsParMot(ctx, m).catch(() => [] as string[])));
+  return mots.map((m, i) => [
+    ...colonnes.map((c) => `${c}.ilike.%${m}%`),
+    ...(ids[i].length ? colonnesClient.map((c) => `${c}.in.(${ids[i].join(',')})`) : []),
+  ].join(','));
+}
+
 const getJob: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'get_job',
-    description: 'Get the full details of a single job (with its visits and their visit_id) by its id OR its displayed number (« job 26 »).',
+    description: 'Get the full details of a single job (with its visits and their visit_id) by its id OR its displayed number (« job 26 »). Does NOT include job expenses, clocked hours, labour cost or margin: for those, use analyze_profitability on this job — never conclude there are none from this result.',
     parameters: {
       type: 'object',
       properties: { job_id: { type: 'string', description: 'The job id, or the job number shown in Lume.' } },
@@ -427,6 +467,9 @@ const getJob: AgentTool = {
     const factureDe = new Map((facturesJalons || []).filter((f: any) => !['void', 'cancelled'].includes(String(f.status))).map((f: any) => [f.billing_milestone_id, f.invoice_number]));
     return {
       ...job, line_items: items || [],
+      // Lu en prod (passe de référence) : « aucune dépense sur la job 19 » alors qu'il y en avait 77,00 $, et
+      // « 2 h pointées » (la durée de la visite) au lieu de 4 h. Ce résultat ne les contient pas : il le dit.
+      non_inclus: 'Dépenses du job, heures pointées, coût de main-d’œuvre et marge ne sont PAS dans ce résultat (la durée d’une visite n’est pas le temps pointé). Pour ces chiffres : analyze_profitability sur ce job.',
       visits: (visites || []).map((v: any) => ({ visit_id: v.id, start_at: v.start_at, end_at: v.end_at, status: v.status })),
       ...(jalons && jalons.length ? { billing_milestones: jalons.map((j: any) => ({ milestone_id: j.id, label: j.label, amount_cents: j.amount_cents, due_date: j.due_date, facture: factureDe.get(j.id) ?? null })) } : {}),
     };
@@ -543,7 +586,7 @@ const listQuotes: AgentTool = {
       type: 'object',
       properties: {
         status: { type: 'string', description: "Optional status filter. One of: 'draft', 'awaiting_response', 'changes_requested', 'approved', 'declined', 'expired', 'converted', 'archived'." },
-        query: { type: 'string', description: 'Search text (number or title). Omit it to count ALL quotes.' },
+        query: { type: 'string', description: 'Search words (number, title, client or company name — each word must match). Omit it to count ALL quotes.' },
         client_id: { type: 'string', description: 'Optional: only this client\'s (or lead\'s) quotes (id from a client search).' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
@@ -567,8 +610,8 @@ const listQuotes: AgentTool = {
     }
     const term = String(args.query || '').trim();
     if (term) {
-      const t = term.replace(/[%,()]/g, ' ');
-      q = q.or(`quote_number.ilike.%${t}%,title.ilike.%${t}%`);
+      // Chaque mot : numéro, titre, OU client (ou prospect) du devis — « la soumission de Girard ».
+      for (const f of await filtresParMots(ctx, term, ['quote_number', 'title'], ['client_id', 'lead_id'])) q = q.or(f);
     }
     const { data, error, count } = await q;
     if (error) return toolError('db', error);
