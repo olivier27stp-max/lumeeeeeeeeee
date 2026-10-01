@@ -20,7 +20,7 @@ import {
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
   Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
   Plus, Pencil, Copy, Trash2, RotateCcw, X, EllipsisVertical,
-  Settings, FolderPlus, Filter, Building2, Link2, Eye, Trophy, ArrowUp, ArrowDown, } from 'lucide-react';
+  FolderPlus, Filter, Building2, Link2, Eye, Trophy, ArrowUp, ArrowDown, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { localizeAutomationName } from '../lib/automationNames';
 import { trouverDeclencheur } from '../lib/automationCatalogue';
@@ -29,6 +29,7 @@ import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
 import BandeauPause from '../components/automations/BandeauPause';
+import SousNavigation from '../components/automations/SousNavigation';
 import BibliothequeModeles from '../components/automations/BibliothequeModeles';
 import MessageEditor from '../components/automations/MessageEditor';
 import InterrupteurPublication from '../components/automations/InterrupteurPublication';
@@ -1291,38 +1292,7 @@ export default function Automations() {
       <div className="mx-auto max-w-[1400px] space-y-4">
 
         {/* ══ 1. Sous-navigation ══ */}
-        <div className="flex flex-wrap items-center gap-5 border-b border-border pb-0">
-          <span className="pb-3 text-[15px] font-semibold text-text-primary">
-            {fr ? 'Automatisation' : 'Automation'}
-          </span>
-          {/* Des LIENS (audit du 2026-10-01) : en boutons, ni nouvel onglet, ni
-              Ctrl+clic, ni clic milieu — et rien n'annonçait la section courante. */}
-          <nav className="flex items-center gap-1" aria-label={fr ? 'Sections' : 'Sections'}>
-            <Link
-              to="/automations"
-              aria-current="page"
-              className="border-b-2 border-primary px-3 pb-3 pt-1 text-[13px] font-semibold text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              {fr ? 'Automatisations' : 'Workflows'}
-            </Link>
-            <Link
-              to="/automations/apercu"
-              className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              {fr ? 'Vue d’ensemble' : 'Overview'}
-              <span className="rounded bg-warning-light px-1 py-0.5 text-[9px] font-bold uppercase text-warning">
-                {fr ? 'Bêta' : 'Beta'}
-              </span>
-            </Link>
-            <Link
-              to="/automations/reglages"
-              className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Settings size={13} aria-hidden="true" />
-              {fr ? 'Réglages globaux' : 'Global settings'}
-            </Link>
-          </nav>
-        </div>
+        <SousNavigation courante="liste" fr={fr} />
 
         {/*
           L'interrupteur du client, AVANT la liste : on le cherche en

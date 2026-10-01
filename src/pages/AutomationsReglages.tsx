@@ -15,10 +15,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Loader2, Info } from 'lucide-react';
+import { Loader2, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import PermissionGate from '../components/PermissionGate';
+import SousNavigation from '../components/automations/SousNavigation';
 import AdressesDAppel from '../components/automations/AdressesDAppel';
 import { getAutomationLanguage } from '../lib/automationRulesApi';
 
@@ -66,31 +67,7 @@ export default function AutomationsReglages() {
       <div className="mx-auto max-w-[900px] space-y-4">
 
         {/* Sous-navigation */}
-        <div className="flex flex-wrap items-center gap-5 border-b border-border">
-          <span className="pb-3 text-[15px] font-semibold text-text-primary">
-            {fr ? 'Automatisation' : 'Automation'}
-          </span>
-          <nav className="flex items-center gap-1" aria-label={fr ? 'Sections' : 'Sections'}>
-            <button
-              type="button"
-              onClick={() => navigate('/automations')}
-              className="border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              {fr ? 'Automatisations' : 'Workflows'}
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/automations/apercu')}
-              className="border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              {fr ? 'Vue d’ensemble' : 'Overview'}
-            </button>
-            <span className="inline-flex items-center gap-1.5 border-b-2 border-primary px-3 pb-3 pt-1 text-[13px] font-semibold text-primary">
-              <Settings size={13} aria-hidden="true" />
-              {fr ? 'Réglages globaux' : 'Global settings'}
-            </span>
-          </nav>
-        </div>
+        <SousNavigation courante="reglages" fr={fr} />
 
         <h1 className="text-[22px] font-bold tracking-tight text-text-primary">
           {fr ? 'Réglages globaux' : 'Global workflow settings'}
