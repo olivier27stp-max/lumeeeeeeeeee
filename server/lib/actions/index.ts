@@ -695,6 +695,26 @@ async function resolveSignedContractVars(
   };
 }
 
+/** Lien /survey/:token de la dernière demande d'avis de la job ; vide sinon. */
+async function lienPageAvisDuJob(supabase: SupabaseClient, orgId: string, jobId: string): Promise<string> {
+  let base = '';
+  try {
+    base = resolvePublicBaseUrl();
+  } catch {
+    return '';
+  }
+  const { data } = await supabase
+    .from('satisfaction_surveys')
+    .select('token')
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const token = (data as { token?: string | null } | null)?.token;
+  return token ? `${base}/survey/${token}` : '';
+}
+
 export async function resolveEntityVariables(
   supabase: SupabaseClient,
   orgId: string,
@@ -734,8 +754,8 @@ export async function resolveEntityVariables(
     vars.company_phone = company.phone || '';
     vars.google_review_url = company.google_review_url || '';
     vars.facebook_review_url = company.facebook_review_url || '';
-    // Première plateforme configurée (Google d'abord) : utilisable dans les SMS
-    // de rappel quel que soit le réseau choisi par l'entreprise.
+    // Première plateforme configurée (Google d'abord). Pour une job qui a déjà
+    // reçu sa demande d'avis, remplacé plus bas par la page de choix.
     vars.review_page_url = reviewDestinations(company)[0]?.url || '';
   }
 
@@ -893,6 +913,10 @@ export async function resolveEntityVariables(
       .maybeSingle();
     if (job) {
       vars.job_name = job.title || '';
+      // Rappel d'avis : le lien mène à la page de choix Google / Facebook de
+      // CETTE job (même jeton que la demande), pas directement à Google.
+      const lienAvis = await lienPageAvisDuJob(supabase, orgId, entityId);
+      if (lienAvis) vars.review_page_url = lienAvis;
       if (job.client_id) {
         const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', job.client_id).eq('org_id', orgId).maybeSingle();
         if (c) {

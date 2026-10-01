@@ -11376,7 +11376,7 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000002",
      "action_config": {
       "type": "send_sms",
-      "config": "#5a9bb13f3a96",
+      "config": "#f528843b213d",
       "trigger_event": "job.completed",
       "event_metadata": {
        "job_name": "Nettoyage de gouttières",
@@ -11478,7 +11478,7 @@
      "client_id": "aaaaaaaa-0000-4000-8000-000000000001",
      "phone_number": "+15145550142",
      "direction": "outbound",
-     "message_text": "Bonjour Marie, un avis Google nous aiderait énormément : https://g.page/r/plomberie-tremblay/review Merci encore! — Plomberie Tremblay inc.\nRépondez STOP pour ne plus recevoir.",
+     "message_text": "Bonjour Marie, petit rappel : un avis Google ou Facebook nous aiderait énormément : https://g.page/r/plomberie-tremblay/review Merci encore! — Plomberie Tremblay inc.\nRépondez STOP pour ne plus recevoir.",
      "status": "sent",
      "provider_message_id": "SM_filet"
     }
@@ -11496,13 +11496,13 @@
      "entity_id": "aaaaaaaa-0000-4000-8000-000000000002",
      "action_type": "send_sms",
      "action_config": {
-      "body": "Bonjour [client_first_name], un avis Google nous aiderait énormément : [google_review_url] Merci encore! — [company_name]",
-      "body_en": "Hi [client_first_name], a Google review would help us out a lot: [google_review_url] Thanks again! — [company_name]"
+      "body": "Bonjour [client_first_name], petit rappel : un avis Google ou Facebook nous aiderait énormément : [review_page_url] Merci encore! — [company_name]",
+      "body_en": "Hi [client_first_name], a quick reminder: a Google or Facebook review would help us out a lot: [review_page_url] Thanks again! — [company_name]"
      },
      "result_success": true,
      "result_data": {
       "to": "+15145550142",
-      "body": "Bonjour Marie, un avis Google nous aiderait énormément : https://g.page/r/plomberie-tremblay/review Merci encore! — Plomberie Tremblay inc.\nRépondez STOP pour ne plus recevoir."
+      "body": "Bonjour Marie, petit rappel : un avis Google ou Facebook nous aiderait énormément : https://g.page/r/plomberie-tremblay/review Merci encore! — Plomberie Tremblay inc.\nRépondez STOP pour ne plus recevoir."
      },
      "result_error": null,
      "duration_ms": "<ms>"
@@ -11624,7 +11624,7 @@
     "moment": "differe:send_sms",
     "canal": "sms",
     "to": "+15145550142",
-    "texte": "Bonjour Marie, un avis Google nous aiderait énormément : https://g.page/r/plomberie-tremblay/review Merci encore! — Plomberie Tremblay inc.\nRépondez STOP pour ne plus recevoir."
+    "texte": "Bonjour Marie, petit rappel : un avis Google ou Facebook nous aiderait énormément : https://g.page/r/plomberie-tremblay/review Merci encore! — Plomberie Tremblay inc.\nRépondez STOP pour ne plus recevoir."
    }
   ],
   "annulees": []

@@ -115,7 +115,7 @@ function isValidUrl(url: string): boolean {
 }
 
 function humanDelay(seconds: number, isFr: boolean): string {
-  if (seconds === 0) return isFr ? 'immédiatement' : 'immediately';
+  if (seconds === 0) return isFr ? 'dès' : 'right at';
   if (seconds >= 86400) {
     const d = Math.round(seconds / 86400);
     return isFr ? `${d} jour${d > 1 ? 's' : ''} après` : `${d} day${d > 1 ? 's' : ''} after`;
@@ -414,8 +414,8 @@ export default function SettingsReviews() {
             </p>
             <p className="text-[12px] text-text-tertiary">
               {isFr
-                ? 'Interrupteur principal. Désactivé, aucun sondage ni rappel d’avis ne part.'
-                : 'Master switch. When off, no survey or review reminder is sent.'}
+                ? 'Interrupteur principal. Désactivé, aucune demande ni rappel d’avis ne part.'
+                : 'Master switch. When off, no review request or reminder is sent.'}
             </p>
           </div>
           <button
@@ -495,6 +495,7 @@ export default function SettingsReviews() {
           </p>
         </div>
 
+        {hasDestination && (
         <p className="text-[12px] text-text-secondary rounded-lg bg-surface-subtle border border-outline px-3 py-2">
           {google && facebook
             ? (isFr
@@ -504,6 +505,7 @@ export default function SettingsReviews() {
               ? 'Un seul lien configuré : le client y est redirigé automatiquement après votre message.'
               : 'One link configured: the client is redirected there automatically after your message.')}
         </p>
+        )}
       </div>
 
       {/* ── Message d'invitation ── */}
@@ -673,7 +675,7 @@ export default function SettingsReviews() {
                   <p className="text-[12px] text-text-tertiary">
                     {rule.preset_key === 'google_review'
                       ? (isFr ? 'Courriel + SMS, ' : 'Email + SMS, ')
-                      : (isFr ? 'SMS avec le lien de votre page d’avis, ' : 'SMS with your review page link, ')}
+                      : (isFr ? 'SMS avec le lien vers le choix Google / Facebook, ' : 'SMS with the link to the Google / Facebook choice, ')}
                     {humanDelay(rule.delay_seconds, isFr)} {isFr ? 'la fin de la job' : 'job completion'}
                   </p>
                 </div>
