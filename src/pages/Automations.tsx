@@ -11,6 +11,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Zap, Clock, Mail, Bell, FileText, CalendarClock, MessageSquare,
@@ -450,6 +451,17 @@ export default function Automations() {
   const boutonCreer = useRef<HTMLButtonElement>(null);
   /** Menu « … » ouvert sur quelle ligne ? */
   const [menuLigne, setMenuLigne] = useState<string | null>(null);
+  /**
+   * Où dessiner le menu « ⋮ » d'une ligne, en coordonnées de la FENÊTRE.
+   *
+   * Le menu était en `absolute` dans la carte du tableau, qui est en
+   * `overflow-hidden` (et son conteneur en `overflow-x-auto`, donc coupé aussi
+   * en hauteur) : sur les dernières lignes, ou dans une liste de 1 à 3 lignes,
+   * on n'en voyait qu'un liseré (audit du 2026-10-01). Il est maintenant rendu
+   * dans `document.body`, ancré au bouton, et s'ouvre VERS LE HAUT quand la
+   * place manque en bas.
+   */
+  const [posMenuLigne, setPosMenuLigne] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
 
   // ── Dossiers ──
   // Le bouton existait depuis #525 et ne faisait qu'afficher « bientôt ».
@@ -727,9 +739,16 @@ export default function Automations() {
     };
     document.addEventListener('click', fermer);
     document.addEventListener('keydown', auClavier);
+    // Le menu d'une ligne est ancré à la fenêtre : il ne suivrait pas un
+    // défilement ou un redimensionnement. On le ferme plutôt que de le laisser flotter.
+    const auDefilement = () => { if (menuLigne) fermer(); };
+    window.addEventListener('scroll', auDefilement, true);
+    window.addEventListener('resize', auDefilement);
     return () => {
       document.removeEventListener('click', fermer);
       document.removeEventListener('keydown', auClavier);
+      window.removeEventListener('scroll', auDefilement, true);
+      window.removeEventListener('resize', auDefilement);
     };
   }, [menuCreer, menuLigne]);
 
@@ -1926,7 +1945,16 @@ export default function Automations() {
                               <div className="relative">
                                 <button
                                   type="button"
-                                  onClick={(e) => { e.stopPropagation(); setMenuLigne((m) => (m === rule.id ? null : rule.id)); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const r = e.currentTarget.getBoundingClientRect();
+                                    // ~260 px : la hauteur du menu avec son sous-menu de dossiers.
+                                    const versLeHaut = window.innerHeight - r.bottom < 260 && r.top > 260;
+                                    setPosMenuLigne(versLeHaut
+                                      ? { bottom: window.innerHeight - r.top + 4, right: window.innerWidth - r.right }
+                                      : { top: r.bottom + 4, right: window.innerWidth - r.right });
+                                    setMenuLigne((m) => (m === rule.id ? null : rule.id));
+                                  }}
                                   aria-haspopup="menu"
                                   aria-expanded={menuLigne === rule.id}
                                   aria-label={fr ? `Actions pour ${localizeAutomationName(rule.name, language)}` : `Actions for ${localizeAutomationName(rule.name, language)}`}
@@ -1937,12 +1965,13 @@ export default function Automations() {
                                     : <EllipsisVertical size={14} aria-hidden="true" />}
                                 </button>
 
-                                {menuLigne === rule.id && (
+                                {menuLigne === rule.id && posMenuLigne && createPortal(
                                   <div
                                     role="menu"
                                     tabIndex={-1}
                                     onClick={(e) => e.stopPropagation()}
-                                    className="absolute right-0 z-30 mt-1 w-[210px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
+                                    style={posMenuLigne}
+                                    className="fixed z-[60] max-h-[70vh] w-[210px] overflow-y-auto rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
                                   >
                                     {/*
                                       À la corbeille : restaurer, ou supprimer
@@ -2063,7 +2092,8 @@ export default function Automations() {
                                     )}
                                     </>
                                     )}
-                                  </div>
+                                  </div>,
+                                  document.body,
                                 )}
                               </div>
                             </div>
