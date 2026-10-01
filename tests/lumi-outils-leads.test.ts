@@ -47,7 +47,7 @@ function fauxClient(reponses: Record<string, any> = {}) {
   };
   const from = vi.fn((table: string) => {
     const q: any = {};
-    for (const m of ['select', 'update', 'insert', 'upsert', 'delete', 'eq', 'is', 'in', 'ilike', 'order', 'limit']) {
+    for (const m of ['select', 'update', 'insert', 'upsert', 'delete', 'eq', 'is', 'in', 'ilike', 'or', 'order', 'limit']) {
       q[m] = (...args: any[]) => { appels.push({ table, op: m, args }); return q; };
     }
     q.single = async () => { appels.push({ table, op: 'single', args: [] }); return reponse(table); };
@@ -408,55 +408,116 @@ describe('champs personnalisés', () => {
 
 /* ── 8. Pipeline ─────────────────────────────────────────────── */
 
-describe('pipeline', () => {
-  it('list_deals : filtré org, étape normalisée, statut traduit, montant sous un nom masquable (_amount)', async () => {
-    const f = fauxClient({ pipeline_deals: { data: [{ id: 'D1', title: 'Vitres', stage: 'quote_sent', value: 350, lead: { first_name: 'Marie', last_name: 'Tremblay' } }], error: null, count: 1 } });
-    const r = await outil('list_deals').handler!({ stage: 'devis envoyé' }, ctxAvec(f.client));
-    expect(filtreOrg(f.appels, 'pipeline_deals')).toBe(true);
-    expect(f.appels).toContainEqual({ table: 'pipeline_deals', op: 'eq', args: ['stage', 'quote_sent'] });
-    expect(r).toMatchObject({ total_matching: 1, deals: [{ id: 'D1', prospect: 'Marie Tremblay', statut: 'devis envoyé', value_amount: 350 }] });
+describe('pipeline (le vrai : deals, pipelines_ventes, pipeline_stages)', () => {
+  const PIPELINE = { id: 'P1', name: 'Ventes', is_default: true, position: 1 };
+  const ETAPES = [
+    { id: 'E1', name_fr: 'Nouveau', name_en: 'New', kind: 'open', position: 1 },
+    { id: 'E2', name_fr: 'Soumission envoyée', name_en: 'Quote sent', kind: 'open', position: 2 },
+    { id: 'E3', name_fr: 'Gagné', name_en: 'Won', kind: 'won', position: 3 },
+    { id: 'E4', name_fr: 'Perdu', name_en: 'Lost', kind: 'lost', position: 4 },
+  ];
+  const DEAL = { id: 'D1', title: null, stage_id: 'E1', pipeline_id: 'P1', client_id: 'C1', assigned_user_id: 'U9', source: 'manuel', expected_close_date: '2026-11-01', stage_entered_at: '2026-09-28T12:00:00Z', last_activity_at: '2026-09-30T12:00:00Z', lost_reason: null, client: { first_name: 'Marie', last_name: 'Tremblay', company: null, display_as_company: false } };
+
+  it('plus aucun outil du pipeline ne lit l’ancien tableau pipeline_deals', async () => {
+    for (const [nom, args] of [['list_deals', {}], ['update_deal_stage', { deal_id: 'D1', stage: 'Gagné' }], ['delete_deal', { deal_id: 'D1' }]] as const) {
+      const f = fauxClient({ pipelines_ventes: { data: [PIPELINE], error: null }, pipeline_stages: { data: ETAPES, error: null }, deals: [{ data: DEAL, error: null }, { data: [{ id: 'D1' }], error: null }] });
+      await outil(nom).handler!(args, ctxAvec(f.client)).catch(() => null);
+      expect(f.appels.some((x) => x.table === 'pipeline_deals'), nom).toBe(false);
+      expect(f.rpc.mock.calls.some(([fn]) => fn === 'set_deal_stage'), nom).toBe(false);
+    }
+    expect(appel).not.toHaveBeenCalledWith(expect.anything(), '/deals/soft-delete', expect.anything());
+  });
+
+  it('list_deals : les étapes de l’entreprise avec leur compte, les deals avec client, étape, vendeur et montant masquable', async () => {
+    const f = fauxClient({
+      pipelines_ventes: { data: [PIPELINE], error: null },
+      pipeline_stages: { data: ETAPES, error: null },
+      deals: [{ data: [DEAL], error: null, count: 1 }, { data: [{ stage_id: 'E1' }, { stage_id: 'E1' }, { stage_id: 'E3' }], error: null }],
+      team_members: { data: [{ user_id: 'U9', first_name: 'Karim', last_name: 'Haddad' }], error: null },
+      'rpc:pipeline_montants': { data: [{ deal_id: 'D1', cents: 35000, provenance: 'devis' }], error: null },
+    });
+    const r: any = await outil('list_deals').handler!({}, ctxAvec(f.client));
+    for (const t of ['pipelines_ventes', 'pipeline_stages', 'deals']) expect(filtreOrg(f.appels, t), t).toBe(true);
+    expect(r.pipeline).toBe('Ventes');
+    expect(r.etapes).toEqual([
+      { stage_id: 'E1', nom: 'Nouveau', name_en: 'New', nature: 'ouvert', deals: 2 },
+      { stage_id: 'E2', nom: 'Soumission envoyée', name_en: 'Quote sent', nature: 'ouvert', deals: 0 },
+      { stage_id: 'E3', nom: 'Gagné', name_en: 'Won', nature: 'gagné', deals: 1 },
+      { stage_id: 'E4', nom: 'Perdu', name_en: 'Lost', nature: 'perdu', deals: 0 },
+    ]);
+    expect(r.deals[0]).toMatchObject({ id: 'D1', title: 'Marie Tremblay', client: 'Marie Tremblay', etape: 'Nouveau', nature: 'ouvert', amount_cents: 35000, vendeur: 'Karim Haddad', expected_close_date: '2026-11-01' });
     expect(outil('list_deals').needsIdentity).toBe(true);
   });
 
-  it('update_deal_stage : carte lue dans l org, RPC set_deal_stage, événement signalé ; même étape = rien', async () => {
-    const f = fauxClient({ pipeline_deals: { data: { id: 'D1', title: 'Vitres', stage: 'no_response', lead_id: 'L1', job_id: null }, error: null } });
-    const r = await outil('update_deal_stage').handler!({ deal_id: 'D1', stage: 'gagné' }, ctxAvec(f.client));
-    expect(filtreOrg(f.appels, 'pipeline_deals')).toBe(true);
-    expect(f.rpc).toHaveBeenCalledWith('set_deal_stage', { p_deal_id: 'D1', p_stage: 'closed_won' });
-    expect(appel).toHaveBeenCalledWith(expect.anything(), '/automations/events/deal-stage-changed', { dealId: 'D1', leadId: 'L1', oldStage: 'no_response', newStage: 'closed_won' });
-    expect(r).toMatchObject({ updated: true, changed: true, deal: { title: 'Vitres' }, statut: 'gagné' });
-    expect(r.note).toBe('Carte déplacée à l’étape « gagné ».');
-
-    const f2 = fauxClient({ pipeline_deals: { data: { id: 'D1', title: 'Vitres', stage: 'closed_won' }, error: null } });
-    const rien = await outil('update_deal_stage').handler!({ deal_id: 'D1', stage: 'closed_won' }, ctxAvec(f2.client));
-    expect(rien).toMatchObject({ changed: false });
-    expect(f2.rpc).not.toHaveBeenCalled();
+  it('list_deals : filtre par nom d’étape, ou par nature (« gagné ») ; étape inconnue = la liste des vraies étapes', async () => {
+    const base = { pipelines_ventes: { data: [PIPELINE], error: null }, pipeline_stages: { data: ETAPES, error: null } };
+    const f = fauxClient({ ...base, deals: { data: [], error: null, count: 0 } });
+    await outil('list_deals').handler!({ stage: 'soumission envoyee' }, ctxAvec(f.client));
+    expect(f.appels).toContainEqual({ table: 'deals', op: 'in', args: ['stage_id', ['E2']] });
+    const g = fauxClient({ ...base, deals: { data: [], error: null, count: 0 } });
+    await outil('list_deals').handler!({ stage: 'gagné' }, ctxAvec(g.client));
+    expect(g.appels).toContainEqual({ table: 'deals', op: 'in', args: ['stage_id', ['E3']] });
+    const h = fauxClient({ ...base });
+    const r: any = await outil('list_deals').handler!({ stage: 'négociation' }, ctxAvec(h.client));
+    expect(r.error).toMatch(/Aucune étape « négociation ».*« Nouveau », « Soumission envoyée », « Gagné », « Perdu »/);
   });
 
-  it('update_deal_stage : automatisations injoignables = avertissement dans la note, jamais une erreur', async () => {
-    const f = fauxClient({ pipeline_deals: { data: { id: 'D1', title: 'Vitres', stage: 'no_response' }, error: null } });
-    appel.mockResolvedValue({ ok: false, status: 500, json: {} });
-    const r = await outil('update_deal_stage').handler!({ deal_id: 'D1', stage: 'closed_lost' }, ctxAvec(f.client));
-    expect(r).toMatchObject({ updated: true, statut: 'perdu' });
-    expect(r.note).toMatch(/automatisations non déclenchées/);
+  it('list_deals : une entreprise sans pipeline le dit, sans erreur', async () => {
+    const f = fauxClient({ pipelines_ventes: { data: [], error: null } });
+    const r: any = await outil('list_deals').handler!({}, ctxAvec(f.client));
+    expect(r).toMatchObject({ total_matching: 0, deals: [] });
+    expect(r.note).toMatch(/pas encore de pipeline/);
   });
 
-  it('delete_deal : carte vérifiée dans l org puis POST /deals/soft-delete (alsoDeleteLead relayé)', async () => {
-    const f = fauxClient({ pipeline_deals: { data: { id: 'D1', title: 'Vitres' }, error: null } });
-    appel.mockResolvedValue({ ok: true, status: 200, json: { ok: true, deal_deleted: true, lead_deleted: true } });
-    const r = await outil('delete_deal').handler!({ deal_id: 'D1', also_delete_lead: true }, ctxAvec(f.client));
-    expect(filtreOrg(f.appels, 'pipeline_deals')).toBe(true);
-    expect(appel).toHaveBeenCalledWith(expect.anything(), '/deals/soft-delete', { dealId: 'D1', alsoDeleteLead: true });
-    expect(r).toMatchObject({ deleted: true, lead_deleted: true, note: 'Carte retirée du pipeline et prospect supprimé.' });
+  it('update_deal_stage : déplace par NOM d’étape, comme l’écran (mise à jour de deals dans l’org) ; même étape = rien', async () => {
+    const f = fauxClient({ pipeline_stages: { data: ETAPES, error: null }, deals: [{ data: DEAL, error: null }, { data: [{ id: 'D1' }], error: null }] });
+    const r: any = await outil('update_deal_stage').handler!({ deal_id: 'D1', stage: 'Soumission envoyée' }, ctxAvec(f.client));
+    expect(filtreOrg(f.appels, 'deals')).toBe(true);
+    expect(aFait(f.appels, 'deals', 'update')[0].args[0]).toEqual({ stage_id: 'E2' });
+    expect(r).toMatchObject({ updated: true, changed: true, de: 'Nouveau', etape: 'Soumission envoyée' });
+    expect(r.note).toMatch(/déplacé de « Nouveau » à « Soumission envoyée »/);
+
+    const f2 = fauxClient({ pipeline_stages: { data: ETAPES, error: null }, deals: { data: DEAL, error: null } });
+    const rien: any = await outil('update_deal_stage').handler!({ deal_id: 'D1', stage: 'Nouveau' }, ctxAvec(f2.client));
+    expect(rien).toMatchObject({ updated: true, changed: false });
+    expect(aFait(f2.appels, 'deals', 'update')).toEqual([]);
   });
 
-  it('delete_deal + also_delete_lead : refusé si la fiche est un client actif ou a un historique (audit 2026-09-30)', async () => {
-    appel.mockClear();
-    const actif = fauxClient({ pipeline_deals: { data: { id: 'D1', title: 'Vitres', lead_id: 'C1' }, error: null }, clients: { data: { id: 'C1', status: 'active' }, error: null } });
-    await expect(outil('delete_deal').handler!({ deal_id: 'D1', also_delete_lead: true }, ctxAvec(actif.client))).rejects.toThrow(/client actif/);
-    const avecJobs = fauxClient({ pipeline_deals: { data: { id: 'D1', title: 'Vitres', lead_id: 'C1' }, error: null }, clients: { data: { id: 'C1', status: 'lead' }, error: null }, jobs: { count: 2, error: null } });
-    await expect(outil('delete_deal').handler!({ deal_id: 'D1', also_delete_lead: true }, ctxAvec(avecJobs.client))).rejects.toThrow(/déjà des jobs/);
+  it('update_deal_stage : une étape de perte exige la raison ; avec la raison, elle est écrite', async () => {
+    const f = fauxClient({ pipeline_stages: { data: ETAPES, error: null }, deals: { data: DEAL, error: null } });
+    await expect(outil('update_deal_stage').handler!({ deal_id: 'D1', stage: 'Perdu' }, ctxAvec(f.client))).rejects.toThrow(/étape de perte.*lost_reason/s);
+    expect(aFait(f.appels, 'deals', 'update')).toEqual([]);
+    const g = fauxClient({ pipeline_stages: { data: ETAPES, error: null }, deals: [{ data: DEAL, error: null }, { data: [{ id: 'D1' }], error: null }] });
+    await outil('update_deal_stage').handler!({ deal_id: 'D1', stage: 'Perdu', lost_reason: 'Trop cher' }, ctxAvec(g.client));
+    expect(aFait(g.appels, 'deals', 'update')[0].args[0]).toEqual({ stage_id: 'E4', lost_reason: 'Trop cher' });
+  });
+
+  it('update_deal_stage : étape inconnue ou ambiguë = refus qui nomme les vraies étapes ; RLS qui refuse = pas de faux « c’est fait »', async () => {
+    const f = fauxClient({ pipeline_stages: { data: ETAPES, error: null }, deals: { data: DEAL, error: null } });
+    await expect(outil('update_deal_stage').handler!({ deal_id: 'D1', stage: 'closed_won_xyz' }, ctxAvec(f.client))).rejects.toThrow(/Aucune étape/);
+    // Deux étapes « gagnées » dont aucune ne s'appelle « gagné » : la nature seule ne suffit pas à trancher.
+    const double = [...ETAPES.filter((e) => e.id !== 'E3'), { id: 'E3', name_fr: 'Conclu', name_en: 'Closed', kind: 'won', position: 3 }, { id: 'E5', name_fr: 'Conclu récurrent', name_en: 'Closed recurring', kind: 'won', position: 5 }];
+    const g = fauxClient({ pipeline_stages: { data: double, error: null }, deals: { data: DEAL, error: null } });
+    await expect(outil('update_deal_stage').handler!({ deal_id: 'D1', stage: 'gagné' }, ctxAvec(g.client))).rejects.toThrow(/plusieurs étapes/);
+    const h = fauxClient({ pipeline_stages: { data: ETAPES, error: null }, deals: [{ data: DEAL, error: null }, { data: [], error: null }] });
+    await expect(outil('update_deal_stage').handler!({ deal_id: 'D1', stage: 'Gagné' }, ctxAvec(h.client))).rejects.toThrow(/n’a pas été déplacé/);
+  });
+
+  it('delete_deal : abandonne le deal par la fonction de l’app, avec la raison ; la fiche du client n’est pas touchée', async () => {
+    const f = fauxClient({ pipeline_stages: { data: ETAPES, error: null }, deals: { data: DEAL, error: null } });
+    const r: any = await outil('delete_deal').handler!({ deal_id: 'D1', reason: 'ne répond plus' }, ctxAvec(f.client));
+    expect(filtreOrg(f.appels, 'deals')).toBe(true);
+    expect(f.rpc).toHaveBeenCalledWith('pipeline_abandonner_deal', { p_deal_id: 'D1', p_raison: 'ne répond plus' });
+    expect(r).toMatchObject({ deleted: true, abandonne: true, deal: { title: 'Marie Tremblay' } });
+    expect(r.note).toMatch(/abandonné.*fiche du client n’est pas touchée/s);
+    expect(aFait(f.appels, 'clients', 'update')).toEqual([]);
     expect(appel).not.toHaveBeenCalled();
+  });
+
+  it('delete_deal : un deal d’une autre entreprise est introuvable, rien n’est appelé', async () => {
+    const f = fauxClient({ deals: { data: null, error: null } });
+    await expect(outil('delete_deal').handler!({ deal_id: 'D9' }, ctxAvec(f.client))).rejects.toThrow(/introuvable/);
+    expect(f.rpc).not.toHaveBeenCalledWith('pipeline_abandonner_deal', expect.anything());
   });
 });
 
