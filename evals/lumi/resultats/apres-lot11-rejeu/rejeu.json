@@ -1,0 +1,315 @@
+{
+ "date": "2026-10-01T22:33:30.870Z",
+ "api": "https://lumecrm.net",
+ "bilan": {
+  "global": {
+   "cas": 4,
+   "exactitude_outil_pct": 50,
+   "partiels": 1,
+   "rates": 1,
+   "erreurs": 0,
+   "exactitude_params_pct": 100,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 15.77,
+   "cout_par_1000_dollars": 39.44
+  },
+  "sensibles": {
+   "cas": 1,
+   "exactitude_outil_pct": 0,
+   "partiels": 0,
+   "rates": 1,
+   "erreurs": 0,
+   "exactitude_params_pct": null,
+   "clarification_pct": null,
+   "faux_fait": 0,
+   "interdits_proposes": 0,
+   "cout_cents": 5.11,
+   "cout_par_1000_dollars": 51.07
+  },
+  "par_type": {
+   "action": {
+    "cas": 3,
+    "exactitude_outil_pct": 33.3,
+    "partiels": 1,
+    "rates": 1,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 13.85,
+    "cout_par_1000_dollars": 46.17
+   },
+   "lecture": {
+    "cas": 1,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 1.92,
+    "cout_par_1000_dollars": 19.24
+   },
+   "clarification": {
+    "cas": 0,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 0,
+    "cout_par_1000_dollars": 0
+   }
+  },
+  "par_section": {
+   "communications": {
+    "cas": 1,
+    "exactitude_outil_pct": 0,
+    "partiels": 0,
+    "rates": 1,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 5.11,
+    "cout_par_1000_dollars": 51.07
+   },
+   "facturation": {
+    "cas": 2,
+    "exactitude_outil_pct": 100,
+    "partiels": 0,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": 100,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 3.73,
+    "cout_par_1000_dollars": 18.66
+   },
+   "planification": {
+    "cas": 1,
+    "exactitude_outil_pct": 0,
+    "partiels": 1,
+    "rates": 0,
+    "erreurs": 0,
+    "exactitude_params_pct": null,
+    "clarification_pct": null,
+    "faux_fait": 0,
+    "interdits_proposes": 0,
+    "cout_cents": 6.93,
+    "cout_par_1000_dollars": 69.35
+   }
+  }
+ },
+ "resultats": [
+  {
+   "id": "comm-19-texto-et-statut-vocal",
+   "section": "communications",
+   "outil": "send_sms",
+   "type": "action",
+   "langue": "fr",
+   "sensible": true,
+   "q": "texte à nathalie coté qu'on arrive dans dix minutes pis mets sa job en cours",
+   "verdict_outil": "rate",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "update_job_status",
+   "groupe": [],
+   "lectures": [
+    "search_clients",
+    "list_jobs"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "job_id": "3f98042e-e799-50c9-ad82-782915b0fd96",
+    "status": "in_progress"
+   },
+   "apercu": {
+    "genre": "action",
+    "cibles": [
+     {
+      "libelle": {
+       "fr": "Job",
+       "en": "Job"
+      },
+      "valeur": "#8 · Nettoyage de gouttières · Nathalie Côté"
+     }
+    ],
+    "details": [
+     {
+      "libelle": {
+       "fr": "Statut",
+       "en": "Status"
+      },
+      "valeur": "En cours",
+      "valeur_en": "In progress"
+     }
+    ],
+    "drapeaux": {
+     "irreversible": false,
+     "vers_client": false,
+     "jamais_d_office": false
+    }
+   },
+   "reponse": "",
+   "cout_cents": 5.1074,
+   "conversation_id": "b0268265-1ab3-4ce6-9f8b-abf22c06ca35",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 13988
+  },
+  {
+   "id": "planif-12-assigner",
+   "section": "planification",
+   "outil": "assign_job",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Assigne la job de Marie Roy à Brossard à l'équipe Pression.",
+   "verdict_outil": "partiel",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "list_jobs",
+    "list_teams"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "J'ai bien trouvé le job de Marie Roy à Brossard (job #11, lavage de vitres extérieur) et l'équipe Pression. Je vais l'assigner à l'équipe Pression — confirme-moi juste au prochain message pour que je lance l'action.",
+   "cout_cents": 6.9347,
+   "conversation_id": "9b3273cd-0dfe-4305-bafb-c269c385e275",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 11175
+  },
+  {
+   "id": "planif-19-finir-et-facturer",
+   "section": "facturation",
+   "outil": "create_invoice_from_job",
+   "type": "action",
+   "langue": "fr",
+   "sensible": false,
+   "q": "La job de Poirier est finie : marque-la terminée pis prépare la facture.",
+   "verdict_outil": "exact",
+   "verdict_params": "exact",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": "update_job_status",
+   "groupe": [
+    "create_invoice_from_job"
+   ],
+   "lectures": [
+    "list_jobs"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": {
+    "job_id": "7193ccdd-3766-5cbb-b288-a693030d1fa6",
+    "status": "completed"
+   },
+   "apercu": [
+    {
+     "genre": "action",
+     "cibles": [
+      {
+       "libelle": {
+        "fr": "Job",
+        "en": "Job"
+       },
+       "valeur": "#7 · Entretien des vitres — restaurant · Guillaume Poirier"
+      }
+     ],
+     "details": [
+      {
+       "libelle": {
+        "fr": "Statut",
+        "en": "Status"
+       },
+       "valeur": "Terminé",
+       "valeur_en": "Completed"
+      }
+     ],
+     "drapeaux": {
+      "irreversible": false,
+      "vers_client": false,
+      "jamais_d_office": false
+     }
+    },
+    {
+     "genre": "action",
+     "cibles": [
+      {
+       "libelle": {
+        "fr": "Job",
+        "en": "Job"
+       },
+       "valeur": "#7 · Entretien des vitres — restaurant · Guillaume Poirier"
+      }
+     ],
+     "details": [],
+     "drapeaux": {
+      "irreversible": false,
+      "vers_client": false,
+      "jamais_d_office": false
+     }
+    }
+   ],
+   "reponse": "",
+   "cout_cents": 1.8088,
+   "conversation_id": "a0f7ed78-a537-4220-9562-c92bbf8603dd",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 13825
+  },
+  {
+   "id": "rapp-19-encaisse-et-retards",
+   "section": "facturation",
+   "outil": "get_revenue_summary",
+   "type": "lecture",
+   "langue": "fr",
+   "sensible": false,
+   "q": "Combien j'ai encaissé en septembre 2026, pis c'est qui qui me doit encore de l'argent en retard ?",
+   "verdict_outil": "exact",
+   "verdict_params": "sans_objet",
+   "faux_fait": false,
+   "interdit_propose": null,
+   "params_manquants": [],
+   "proposition": null,
+   "groupe": [],
+   "lectures": [
+    "get_overdue_payments",
+    "get_revenue_summary"
+   ],
+   "refus": [],
+   "executes": 0,
+   "args": null,
+   "apercu": null,
+   "reponse": "En septembre, tu as encaissé 989,85 $. Côté retards, deux clients te doivent de l'argent : Luc Bergeron, 229,95 $ (6 jours de retard) et Patrick Girard, 919,80 $ (31 jours de retard) — un total de 1 149,75 $. Veux-tu que je prépare des rappels pour les deux?",
+   "cout_cents": 1.9236,
+   "conversation_id": "aa7e8384-f31d-4f09-b3ca-2668f967c4b0",
+   "modele": "claude-sonnet-5",
+   "etage": 6,
+   "duree_ms": 12808
+  }
+ ]
+}

@@ -1,0 +1,2878 @@
+{
+ "date": "2026-10-01T20:27:18.394Z",
+ "api": "https://lumecrm.net",
+ "org": "5930d318-b207-40f3-9e14-f8898a02e240",
+ "nom_org": "[TEST] QA Lumi éval 2 — ne pas utiliser",
+ "forfait": "Autopilot",
+ "jeu_present": true,
+ "selection": {
+  "familles": [],
+  "tests": [
+   "kb.taxes-region",
+   "kb.commissions-voir",
+   "kb.roles-permissions",
+   "kb.temps-approuver",
+   "kb.gps-activer",
+   "kb.formations-creer",
+   "kb.terrain-pin",
+   "kb.terrain-pipeline",
+   "kb.terrain-classement",
+   "kb.terrain-rapports",
+   "kb.stats-revenus",
+   "kb.profil-langue",
+   "kb.entreprise-logo",
+   "kb.bureaux-nouveau",
+   "kb.produits-service",
+   "kb.automatisations-pause",
+   "kb.avis-google",
+   "kb.formulaire-site",
+   "kb.securite-2fa",
+   "kb.connexion-mdp",
+   "kb.pages-clients-devis",
+   "kb.hors-lume",
+   "kb.compte-forfait",
+   "kb.compte-paiements",
+   "kb.ambigu-taches",
+   "cout.releve"
+  ]
+ },
+ "lancements": [
+  {
+   "date": "2026-10-01T20:27:18.394Z",
+   "familles": [
+    "kb",
+    "cout"
+   ],
+   "comptes": {
+    "proprio1": "eval2.proprio1@lume-qa.test",
+    "proprio2": "eval2.proprio2@lume-qa.test",
+    "proprio3": "eval2.proprio3@lume-qa.test",
+    "proprio4": "eval2.proprio4@lume-qa.test",
+    "tech": "eval2.tech@lume-qa.test"
+   },
+   "appels": {
+    "proprio1": 6,
+    "proprio2": 6,
+    "proprio3": 6,
+    "proprio4": 5,
+    "tech": 5
+   }
+  },
+  {
+   "date": "2026-10-01T22:34:46.619Z",
+   "familles": [
+    "kb",
+    "cout"
+   ],
+   "comptes": {
+    "proprio2": "eval2.proprio2@lume-qa.test"
+   },
+   "appels": {
+    "proprio2": 26
+   }
+  }
+ ],
+ "appels": {
+  "proprio1": 6,
+  "proprio2": 32,
+  "proprio3": 6,
+  "proprio4": 5,
+  "tech": 5
+ },
+ "tours": [
+  {
+   "test": "kb.taches-supprimer",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment je fais pour effacer une tache que j'ai pu besoin",
+   "ticket_id": "b1d7a893-7155-4a5c-aa85-9196270956cd",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.4160000000000001,
+   "duree_ms": 5411,
+   "debut": "2026-10-01T20:27:30.272Z",
+   "fin": "2026-10-01T20:27:35.683Z"
+  },
+  {
+   "test": "kb.jobs-supprimer",
+   "compte": "proprio3",
+   "user_id": "a608b7bf-875b-43ca-9503-f3542b1943ca",
+   "question": "c'est où pour supprimer une job au complet",
+   "ticket_id": "2f24eca8-e184-4776-89e1-0fc851add1ae",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 0.8248,
+   "duree_ms": 4823,
+   "debut": "2026-10-01T20:27:39.324Z",
+   "fin": "2026-10-01T20:27:44.147Z"
+  },
+  {
+   "test": "kb.calendrier-creer",
+   "compte": "proprio4",
+   "user_id": "90089844-650e-4821-95ce-6c53579194f3",
+   "question": "comment je cree une job direct dans le calendrier",
+   "ticket_id": "feb35364-795b-47e4-ab9e-43324fee6eed",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 0.8528,
+   "duree_ms": 5244,
+   "debut": "2026-10-01T20:27:47.396Z",
+   "fin": "2026-10-01T20:27:52.640Z"
+  },
+  {
+   "test": "kb.repartition-map",
+   "compte": "tech",
+   "user_id": "28fd989a-3b6e-4f61-8a4e-a269ccec2f95",
+   "question": "c'est où que je vois mes gars sur la map en temps réel",
+   "ticket_id": "58e4e128-7093-4105-9d37-89b29d653bf3",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 0.8466,
+   "duree_ms": 4616,
+   "debut": "2026-10-01T20:27:55.834Z",
+   "fin": "2026-10-01T20:28:00.450Z"
+  },
+  {
+   "test": "kb.clients-archiver",
+   "compte": "proprio1",
+   "user_id": "352ddde1-0be7-4d12-8e8d-2ae7db8b0014",
+   "question": "mon client a fermé sa shop, comment je l'archive",
+   "ticket_id": "ae9267e0-f107-4bf1-b0fa-d5ac1f6b07b6",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 0.9414,
+   "duree_ms": 4852,
+   "debut": "2026-10-01T20:28:03.683Z",
+   "fin": "2026-10-01T20:28:08.535Z"
+  },
+  {
+   "test": "kb.demandes-convertir",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "j'ai recu une demande par mon formulaire, comment je la change en soumission",
+   "ticket_id": "2c03cc32-0fc1-4d94-97f8-4344aed30895",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 2.4022,
+   "duree_ms": 4653,
+   "debut": "2026-10-01T20:28:14.560Z",
+   "fin": "2026-10-01T20:28:19.213Z"
+  },
+  {
+   "test": "kb.devis-modele",
+   "compte": "proprio3",
+   "user_id": "a608b7bf-875b-43ca-9503-f3542b1943ca",
+   "question": "comment je fais un modèle de soumission pour pas tout retaper à chaque fois",
+   "ticket_id": "19941895-acd6-4056-a6f9-2214ebebf439",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 2.0066,
+   "duree_ms": 6243,
+   "debut": "2026-10-01T20:28:23.196Z",
+   "fin": "2026-10-01T20:28:29.439Z"
+  },
+  {
+   "test": "kb.devis-mesure",
+   "compte": "proprio4",
+   "user_id": "90089844-650e-4821-95ce-6c53579194f3",
+   "question": "est-ce que je peux mesurer le terrain sur une carte pour ma soumission",
+   "ticket_id": "25cdc758-b09f-4e3f-9232-0c51fe2b2516",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.5596,
+   "duree_ms": 5649,
+   "debut": "2026-10-01T20:28:33.996Z",
+   "fin": "2026-10-01T20:28:39.645Z"
+  },
+  {
+   "test": "kb.devis-depot",
+   "compte": "tech",
+   "user_id": "28fd989a-3b6e-4f61-8a4e-a269ccec2f95",
+   "question": "je veux demander un dépot de 30% sur mes soumissions, c'est où",
+   "ticket_id": "ea6e1fcb-b163-4f60-99c2-a773d663993f",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 2.0394,
+   "duree_ms": 17113,
+   "debut": "2026-10-01T20:28:42.418Z",
+   "fin": "2026-10-01T20:28:59.531Z"
+  },
+  {
+   "test": "kb.messages-texto",
+   "compte": "proprio1",
+   "user_id": "352ddde1-0be7-4d12-8e8d-2ae7db8b0014",
+   "question": "comment j'envoie un texto a un client",
+   "ticket_id": "9464751b-e4bc-497b-a509-5c3916c85063",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 0.9226,
+   "duree_ms": 11032,
+   "debut": "2026-10-01T20:29:06.571Z",
+   "fin": "2026-10-01T20:29:17.603Z"
+  },
+  {
+   "test": "kb.factures-creer",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment je fais une facture",
+   "ticket_id": "99cdaf4e-ec99-45e6-9dba-18cd6b41e273",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.963,
+   "duree_ms": 12859,
+   "debut": "2026-10-01T20:29:29.197Z",
+   "fin": "2026-10-01T20:29:42.056Z"
+  },
+  {
+   "test": "kb.factures-payee",
+   "compte": "proprio3",
+   "user_id": "a608b7bf-875b-43ca-9503-f3542b1943ca",
+   "question": "mon client m'a payé cash, comment je marque sa facture payée",
+   "ticket_id": "b4bf90df-508b-4774-b013-9f9c10358164",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 0.9926,
+   "duree_ms": 5062,
+   "debut": "2026-10-01T20:29:45.287Z",
+   "fin": "2026-10-01T20:29:50.349Z"
+  },
+  {
+   "test": "kb.finances-paiements",
+   "compte": "proprio4",
+   "user_id": "90089844-650e-4821-95ce-6c53579194f3",
+   "question": "c'est où que je vois tous les paiements que j'ai recus ce mois-ci",
+   "ticket_id": "f87ca29c-ce29-44d4-8940-4197fc4c8a4c",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.862,
+   "duree_ms": 6200,
+   "debut": "2026-10-01T20:29:53.271Z",
+   "fin": "2026-10-01T20:29:59.471Z"
+  },
+  {
+   "test": "kb.finances-versements",
+   "compte": "tech",
+   "user_id": "28fd989a-3b6e-4f61-8a4e-a269ccec2f95",
+   "question": "c'est où que je vois quand l'argent rentre dans mon compte de banque",
+   "ticket_id": "30b70bd2-7ed6-43c9-8bae-32fe164aaf40",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.0392000000000001,
+   "duree_ms": 12402,
+   "debut": "2026-10-01T20:30:02.277Z",
+   "fin": "2026-10-01T20:30:14.679Z"
+  },
+  {
+   "test": "kb.finances-csv",
+   "compte": "proprio1",
+   "user_id": "352ddde1-0be7-4d12-8e8d-2ae7db8b0014",
+   "question": "je veux sortir mes factures en csv pour mon comptable",
+   "ticket_id": "0764d087-5129-457f-92c3-c74ab5c4e993",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.046,
+   "duree_ms": 7001,
+   "debut": "2026-10-01T20:30:18.342Z",
+   "fin": "2026-10-01T20:30:25.343Z"
+  },
+  {
+   "test": "kb.payments-interrupteurs",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "je veux fermer le paiement en ligne sur les devis mais le garder sur les factures",
+   "ticket_id": "7898bc16-e78a-452c-9f45-4f4ed8416332",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 2.2046,
+   "duree_ms": 7306,
+   "debut": "2026-10-01T20:30:30.593Z",
+   "fin": "2026-10-01T20:30:37.899Z"
+  },
+  {
+   "test": "kb.payments-pourboires",
+   "compte": "proprio3",
+   "user_id": "a608b7bf-875b-43ca-9503-f3542b1943ca",
+   "question": "est-ce que mes clients peuvent laisser un pourboire quand ils paient leur facture",
+   "ticket_id": "0b157c83-fb59-4fb9-a64e-81c390f7c6dd",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.1212,
+   "duree_ms": 7780,
+   "debut": "2026-10-01T20:30:43.604Z",
+   "fin": "2026-10-01T20:30:51.384Z"
+  },
+  {
+   "test": "kb.payments-instantanes",
+   "compte": "proprio4",
+   "user_id": "90089844-650e-4821-95ce-6c53579194f3",
+   "question": "je peux tu recevoir mon argent le jour meme au lieu d'attendre le versement",
+   "ticket_id": "4679c574-c7e2-47c9-8aea-cf351073bc49",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 2.1966,
+   "duree_ms": 17991,
+   "debut": "2026-10-01T20:31:07.639Z",
+   "fin": "2026-10-01T20:31:25.630Z"
+  },
+  {
+   "test": "kb.payments-litiges",
+   "compte": "tech",
+   "user_id": "28fd989a-3b6e-4f61-8a4e-a269ccec2f95",
+   "question": "un client a contesté un paiement sur sa carte, je fais quoi",
+   "ticket_id": "8b73da6b-be83-4192-9f14-7ae7a3b1be41",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help",
+    "transfer_to_human"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 3,
+   "cout_cents": 1.8176999999999999,
+   "duree_ms": 12550,
+   "debut": "2026-10-01T20:31:29.850Z",
+   "fin": "2026-10-01T20:31:42.400Z"
+  },
+  {
+   "test": "kb.payments-rappels",
+   "compte": "proprio1",
+   "user_id": "352ddde1-0be7-4d12-8e8d-2ae7db8b0014",
+   "question": "comment j'active les rappels automatiques pour les factures en retard",
+   "ticket_id": "89b01be0-fbd6-4187-bf53-d6d42420874e",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 2.0524,
+   "duree_ms": 33887,
+   "debut": "2026-10-01T20:31:52.145Z",
+   "fin": "2026-10-01T20:32:26.032Z"
+  },
+  {
+   "test": "kb.forfait-changer",
+   "compte": "proprio3",
+   "user_id": "a608b7bf-875b-43ca-9503-f3542b1943ca",
+   "question": "je veux monter de forfait, je fais ça où",
+   "ticket_id": "0ce4f757-4e43-4599-90e3-111e215da08e",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 0.857,
+   "duree_ms": 23848,
+   "debut": "2026-10-01T20:33:13.964Z",
+   "fin": "2026-10-01T20:33:37.812Z"
+  },
+  {
+   "test": "kb.paie-export",
+   "compte": "tech",
+   "user_id": "28fd989a-3b6e-4f61-8a4e-a269ccec2f95",
+   "question": "comment je sors la paie de mes gars en fichier pour mon comptable",
+   "ticket_id": "a962ac8e-3e27-4964-a594-9a53b873760d",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 0.7964,
+   "duree_ms": 25495,
+   "debut": "2026-10-01T20:34:13.851Z",
+   "fin": "2026-10-01T20:34:39.346Z"
+  },
+  {
+   "test": "kb.membres-inviter",
+   "compte": "proprio1",
+   "user_id": "352ddde1-0be7-4d12-8e8d-2ae7db8b0014",
+   "question": "comment j'ajoute un nouvel employé dans lume",
+   "ticket_id": "49ba0dc2-50d2-4aca-ab70-550a5b11513c",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.9212,
+   "duree_ms": 30182,
+   "debut": "2026-10-01T20:34:47.070Z",
+   "fin": "2026-10-01T20:35:17.252Z"
+  },
+  {
+   "test": "escalade.canari",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "[SUP] Canari de la batterie d’évaluation du support — bureau de test, aucune réponse attendue.",
+   "ticket_id": "c04c8eca-a2cd-4dd9-9fdd-83678aec1035",
+   "statut": 200,
+   "etage": null,
+   "action": null,
+   "outils": [],
+   "modele": null,
+   "appels_modele": 0,
+   "cout_cents": null,
+   "duree_ms": 1648,
+   "debut": "2026-10-01T22:34:48.058Z",
+   "fin": "2026-10-01T22:34:49.706Z"
+  },
+  {
+   "test": "kb.taxes-region",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment j'ajoute la TPS pis la TVQ sur mes factures",
+   "ticket_id": "606e69a5-9f2a-4fc1-8314-d4ddf84c76b2",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.0762,
+   "duree_ms": 6853,
+   "debut": "2026-10-01T22:35:01.064Z",
+   "fin": "2026-10-01T22:35:07.917Z"
+  },
+  {
+   "test": "kb.commissions-voir",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "c'est où que je vois mes commissions du mois",
+   "ticket_id": "08cdc038-f5ef-4f8a-8814-d3dc4c8af3fe",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.6372,
+   "duree_ms": 6050,
+   "debut": "2026-10-01T22:35:14.075Z",
+   "fin": "2026-10-01T22:35:20.125Z"
+  },
+  {
+   "test": "kb.roles-permissions",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "je veux pas que mes techniciens voient les factures, je fais comment",
+   "ticket_id": "f132b244-cffb-4051-9a53-83813aafe658",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.0408,
+   "duree_ms": 5348,
+   "debut": "2026-10-01T22:35:27.086Z",
+   "fin": "2026-10-01T22:35:32.434Z"
+  },
+  {
+   "test": "kb.temps-approuver",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment j'approuve les heures de mes gars pour la semaine",
+   "ticket_id": "ced99044-340d-448a-9ec0-0c9697b2c451",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.0492,
+   "duree_ms": 5777,
+   "debut": "2026-10-01T22:35:40.102Z",
+   "fin": "2026-10-01T22:35:45.879Z"
+  },
+  {
+   "test": "kb.gps-activer",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "je veux voir où sont mes trucks, comment j'active le gps",
+   "ticket_id": "0e874c20-fe9c-48d1-a3c0-d6a2970b8289",
+   "statut": 200,
+   "etage": 5,
+   "action": "aide-directe",
+   "outils": [
+    "/settings/location",
+    "/settings/payments",
+    "/automations"
+   ],
+   "modele": null,
+   "appels_modele": 0,
+   "cout_cents": null,
+   "duree_ms": 1476,
+   "debut": "2026-10-01T22:35:53.105Z",
+   "fin": "2026-10-01T22:35:54.581Z"
+  },
+  {
+   "test": "kb.formations-creer",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment je fais une formation pour mes nouveaux employés",
+   "ticket_id": "1665d181-017f-42cb-8e36-8cb7fcef0a43",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.9326,
+   "duree_ms": 5991,
+   "debut": "2026-10-01T22:36:06.115Z",
+   "fin": "2026-10-01T22:36:12.106Z"
+  },
+  {
+   "test": "kb.terrain-pin",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment j'ajoute une adresse sur la map de porte a porte",
+   "ticket_id": "b7becc15-26b0-400e-9935-c99d4b502b79",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 2.027,
+   "duree_ms": 4753,
+   "debut": "2026-10-01T22:36:19.121Z",
+   "fin": "2026-10-01T22:36:23.874Z"
+  },
+  {
+   "test": "kb.terrain-pipeline",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment je change l'étape d'un deal dans le pipeline",
+   "ticket_id": "404f129c-f6ef-4687-88c5-b0d19b2ad826",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 2.5224,
+   "duree_ms": 4991,
+   "debut": "2026-10-01T22:36:32.145Z",
+   "fin": "2026-10-01T22:36:37.136Z"
+  },
+  {
+   "test": "kb.terrain-classement",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "je veux voir le classement de mes reps pour le mois passé",
+   "ticket_id": "176eb304-9037-4f9d-860d-eccce4cfa680",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.5224,
+   "duree_ms": 5338,
+   "debut": "2026-10-01T22:36:45.168Z",
+   "fin": "2026-10-01T22:36:50.506Z"
+  },
+  {
+   "test": "kb.terrain-rapports",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "c'est où les rapports de vente terrain de la semaine",
+   "ticket_id": "81cf3a24-d3ee-4016-a5a8-ecf5f69dfbc3",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.4452,
+   "duree_ms": 4099,
+   "debut": "2026-10-01T22:36:58.178Z",
+   "fin": "2026-10-01T22:37:02.277Z"
+  },
+  {
+   "test": "kb.stats-revenus",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "je veux voir mes revenus des 12 derniers mois",
+   "ticket_id": "c81ba233-964b-48a9-9e36-029acd82066c",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.474,
+   "duree_ms": 5161,
+   "debut": "2026-10-01T22:37:11.197Z",
+   "fin": "2026-10-01T22:37:16.358Z"
+  },
+  {
+   "test": "kb.profil-langue",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment je mets l'app en anglais",
+   "ticket_id": "e6979ba0-b61f-4081-b8f8-fe8765b738da",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.8906,
+   "duree_ms": 4600,
+   "debut": "2026-10-01T22:37:24.198Z",
+   "fin": "2026-10-01T22:37:28.798Z"
+  },
+  {
+   "test": "kb.entreprise-logo",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "je veux mettre mon logo sur mes factures",
+   "ticket_id": "9cd89348-d4b3-48e8-89a5-54d164697a34",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 0.9912,
+   "duree_ms": 5257,
+   "debut": "2026-10-01T22:37:37.205Z",
+   "fin": "2026-10-01T22:37:42.462Z"
+  },
+  {
+   "test": "kb.bureaux-nouveau",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "j'ouvre une 2e succursale, comment j'ajoute un bureau",
+   "ticket_id": "3c3261c5-c946-4b04-9cb6-e50170374ad6",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.4464000000000001,
+   "duree_ms": 5314,
+   "debut": "2026-10-01T22:37:50.210Z",
+   "fin": "2026-10-01T22:37:55.524Z"
+  },
+  {
+   "test": "kb.produits-service",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment j'ajoute un service avec son prix",
+   "ticket_id": "ce321f17-69fb-4fc6-9c08-275655ab4e06",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.863,
+   "duree_ms": 4507,
+   "debut": "2026-10-01T22:38:03.224Z",
+   "fin": "2026-10-01T22:38:07.731Z"
+  },
+  {
+   "test": "kb.automatisations-pause",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment je mets en pause une automatisation qui envoie trop de courriels",
+   "ticket_id": "3d884d09-e1cc-471a-9e19-7c19a3bbffa4",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.9262000000000001,
+   "duree_ms": 4861,
+   "debut": "2026-10-01T22:38:16.225Z",
+   "fin": "2026-10-01T22:38:21.086Z"
+  },
+  {
+   "test": "kb.avis-google",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment je demande un avis google apres une job",
+   "ticket_id": "4a441240-b1f9-4c56-87e4-a137978caf6e",
+   "statut": 200,
+   "etage": 0,
+   "action": "faq:google-reviews",
+   "outils": [],
+   "modele": null,
+   "appels_modele": 0,
+   "cout_cents": null,
+   "duree_ms": 1063,
+   "debut": "2026-10-01T22:38:29.237Z",
+   "fin": "2026-10-01T22:38:30.300Z"
+  },
+  {
+   "test": "kb.formulaire-site",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment je mets le formulaire de demande sur mon site web",
+   "ticket_id": "f284b292-9dc1-4754-a605-43241ce3ca09",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.999,
+   "duree_ms": 5234,
+   "debut": "2026-10-01T22:38:42.241Z",
+   "fin": "2026-10-01T22:38:47.475Z"
+  },
+  {
+   "test": "kb.securite-2fa",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "c'est quoi le code qr qu'il me demande quand j'invite quelqu'un",
+   "ticket_id": "b2367922-a4c9-4cf7-8977-5f354a8d5f86",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 0.9474,
+   "duree_ms": 5612,
+   "debut": "2026-10-01T22:38:55.244Z",
+   "fin": "2026-10-01T22:39:00.856Z"
+  },
+  {
+   "test": "kb.connexion-mdp",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "j'ai oublié mon mot de passe pis je rentre pu",
+   "ticket_id": "6199b271-e1c1-4b2f-8ed6-ddc5a7f66661",
+   "statut": 200,
+   "etage": 0,
+   "action": "faq:forgot-password",
+   "outils": [],
+   "modele": null,
+   "appels_modele": 0,
+   "cout_cents": null,
+   "duree_ms": 777,
+   "debut": "2026-10-01T22:39:08.253Z",
+   "fin": "2026-10-01T22:39:09.030Z"
+  },
+  {
+   "test": "kb.pages-clients-devis",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "mon client recoit quoi quand j'envoie une soumission",
+   "ticket_id": "3f784613-7f9b-482d-bb96-cce5d9268ba7",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 2.662,
+   "duree_ms": 8198,
+   "debut": "2026-10-01T22:39:21.268Z",
+   "fin": "2026-10-01T22:39:29.466Z"
+  },
+  {
+   "test": "kb.hors-lume",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "est-ce que je peux déduire mon camion dans mes impots",
+   "ticket_id": "973b6d86-05cf-4f26-804f-1122b1efd225",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 1,
+   "cout_cents": 0.369,
+   "duree_ms": 3749,
+   "debut": "2026-10-01T22:39:34.269Z",
+   "fin": "2026-10-01T22:39:38.018Z"
+  },
+  {
+   "test": "kb.compte-forfait",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "c'est quoi mon forfait pis ça se renouvelle quand",
+   "ticket_id": "b32d9200-62e3-4e86-82df-ae5094a1571f",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 1,
+   "cout_cents": 0.3442,
+   "duree_ms": 3140,
+   "debut": "2026-10-01T22:39:47.272Z",
+   "fin": "2026-10-01T22:39:50.412Z"
+  },
+  {
+   "test": "kb.compte-paiements",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "est-ce que lume payments est déja branché sur mon compte",
+   "ticket_id": "bdae6c11-4a8c-4633-83fe-7fa29832bb6e",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 1,
+   "cout_cents": 0.3792,
+   "duree_ms": 5306,
+   "debut": "2026-10-01T22:40:00.275Z",
+   "fin": "2026-10-01T22:40:05.581Z"
+  },
+  {
+   "test": "kb.ambigu-taches",
+   "compte": "proprio2",
+   "user_id": "94b880d9-d7d6-4db5-b4f9-3324a20725c4",
+   "question": "comment je supprime toutes mes taches de la semaine passée",
+   "ticket_id": "dc3f2e99-aaaa-4070-8062-b6c7e8fe7092",
+   "statut": 200,
+   "etage": 6,
+   "action": "app",
+   "outils": [
+    "search_help"
+   ],
+   "modele": "claude-sonnet-5",
+   "appels_modele": 2,
+   "cout_cents": 1.5648,
+   "duree_ms": 5598,
+   "debut": "2026-10-01T22:40:13.285Z",
+   "fin": "2026-10-01T22:40:18.883Z"
+  }
+ ],
+ "tickets": [
+  {
+   "id": "bdbfdfc0-e738-4e34-823a-f4ebc20e3040",
+   "compte": "proprio1",
+   "courriel": "eval2.proprio1@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "b1d7a893-7155-4a5c-aa85-9196270956cd",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "2f24eca8-e184-4776-89e1-0fc851add1ae",
+   "compte": "proprio3",
+   "courriel": "eval2.proprio3@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "feb35364-795b-47e4-ab9e-43324fee6eed",
+   "compte": "proprio4",
+   "courriel": "eval2.proprio4@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "58e4e128-7093-4105-9d37-89b29d653bf3",
+   "compte": "tech",
+   "courriel": "eval2.tech@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "ae9267e0-f107-4bf1-b0fa-d5ac1f6b07b6",
+   "compte": "proprio1",
+   "courriel": "eval2.proprio1@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "2c03cc32-0fc1-4d94-97f8-4344aed30895",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "19941895-acd6-4056-a6f9-2214ebebf439",
+   "compte": "proprio3",
+   "courriel": "eval2.proprio3@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "25cdc758-b09f-4e3f-9232-0c51fe2b2516",
+   "compte": "proprio4",
+   "courriel": "eval2.proprio4@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "ea6e1fcb-b163-4f60-99c2-a773d663993f",
+   "compte": "tech",
+   "courriel": "eval2.tech@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "9464751b-e4bc-497b-a509-5c3916c85063",
+   "compte": "proprio1",
+   "courriel": "eval2.proprio1@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "99cdaf4e-ec99-45e6-9dba-18cd6b41e273",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "b4bf90df-508b-4774-b013-9f9c10358164",
+   "compte": "proprio3",
+   "courriel": "eval2.proprio3@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "f87ca29c-ce29-44d4-8940-4197fc4c8a4c",
+   "compte": "proprio4",
+   "courriel": "eval2.proprio4@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "30b70bd2-7ed6-43c9-8bae-32fe164aaf40",
+   "compte": "tech",
+   "courriel": "eval2.tech@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "0764d087-5129-457f-92c3-c74ab5c4e993",
+   "compte": "proprio1",
+   "courriel": "eval2.proprio1@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "7898bc16-e78a-452c-9f45-4f4ed8416332",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "0b157c83-fb59-4fb9-a64e-81c390f7c6dd",
+   "compte": "proprio3",
+   "courriel": "eval2.proprio3@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "4679c574-c7e2-47c9-8aea-cf351073bc49",
+   "compte": "proprio4",
+   "courriel": "eval2.proprio4@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "8b73da6b-be83-4192-9f14-7ae7a3b1be41",
+   "compte": "tech",
+   "courriel": "eval2.tech@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "89b01be0-fbd6-4187-bf53-d6d42420874e",
+   "compte": "proprio1",
+   "courriel": "eval2.proprio1@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "95b32fb7-bc93-45b7-8c27-9d0b48625c79",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "0ce4f757-4e43-4599-90e3-111e215da08e",
+   "compte": "proprio3",
+   "courriel": "eval2.proprio3@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "41fe7ea9-9797-4a6c-9034-84ab17b32f8a",
+   "compte": "proprio4",
+   "courriel": "eval2.proprio4@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "a962ac8e-3e27-4964-a594-9a53b873760d",
+   "compte": "tech",
+   "courriel": "eval2.tech@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "49ba0dc2-50d2-4aca-ab70-550a5b11513c",
+   "compte": "proprio1",
+   "courriel": "eval2.proprio1@lume-qa.test",
+   "ferme": false
+  },
+  {
+   "id": "c04c8eca-a2cd-4dd9-9fdd-83678aec1035",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "606e69a5-9f2a-4fc1-8314-d4ddf84c76b2",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "08cdc038-f5ef-4f8a-8814-d3dc4c8af3fe",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "f132b244-cffb-4051-9a53-83813aafe658",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "ced99044-340d-448a-9ec0-0c9697b2c451",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "0e874c20-fe9c-48d1-a3c0-d6a2970b8289",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "1665d181-017f-42cb-8e36-8cb7fcef0a43",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "b7becc15-26b0-400e-9935-c99d4b502b79",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "404f129c-f6ef-4687-88c5-b0d19b2ad826",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "176eb304-9037-4f9d-860d-eccce4cfa680",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "81cf3a24-d3ee-4016-a5a8-ecf5f69dfbc3",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "c81ba233-964b-48a9-9e36-029acd82066c",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "e6979ba0-b61f-4081-b8f8-fe8765b738da",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "9cd89348-d4b3-48e8-89a5-54d164697a34",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "3c3261c5-c946-4b04-9cb6-e50170374ad6",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "ce321f17-69fb-4fc6-9c08-275655ab4e06",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "3d884d09-e1cc-471a-9e19-7c19a3bbffa4",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "4a441240-b1f9-4c56-87e4-a137978caf6e",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "f284b292-9dc1-4754-a605-43241ce3ca09",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "b2367922-a4c9-4cf7-8977-5f354a8d5f86",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "6199b271-e1c1-4b2f-8ed6-ddc5a7f66661",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "3f784613-7f9b-482d-bb96-cce5d9268ba7",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "973b6d86-05cf-4f26-804f-1122b1efd225",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "b32d9200-62e3-4e86-82df-ae5094a1571f",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "bdae6c11-4a8c-4633-83fe-7fa29832bb6e",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  },
+  {
+   "id": "dc3f2e99-aaaa-4070-8062-b6c7e8fe7092",
+   "compte": "proprio2",
+   "courriel": "eval2.proprio2@lume-qa.test",
+   "ferme": true,
+   "fermeture": "fermé par l’API du support"
+  }
+ ],
+ "reponses_modele_24h_avant": 25,
+ "arret": null,
+ "alertes": [],
+ "partiel": false,
+ "bilan": {
+  "total": 50,
+  "par_verdict": {
+   "PASS": 47,
+   "FAIL": 2,
+   "NON COUVERT": 0,
+   "A RELIRE": 1
+  },
+  "par_famille": {
+   "kb": {
+    "PASS": 46,
+    "FAIL": 2,
+    "NON COUVERT": 0,
+    "A RELIRE": 0
+   },
+   "escalade": {
+    "PASS": 1,
+    "FAIL": 0,
+    "NON COUVERT": 0,
+    "A RELIRE": 0
+   },
+   "cout": {
+    "PASS": 0,
+    "FAIL": 0,
+    "NON COUVERT": 0,
+    "A RELIRE": 1
+   }
+  }
+ },
+ "resultats": [
+  {
+   "id": "kb.taches-supprimer",
+   "famille": "kb",
+   "titre": "« comment je fais pour effacer une tache que j'ai pu besoin »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/tasks, le libellé Supprimer, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 9051,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/tasks)",
+    "cite le libellé attendu (Supprimer)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je fais pour effacer une tache que j'ai pu besoin"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.416 ¢ ; 5411 ms)",
+     "contenu": "Dans Tâches (/tasks), trouvez la tâche en question et cliquez l'icône corbeille « Supprimer » sur sa ligne (ou le menu « … » → « Supprimer »). Pour en effacer plusieurs d'un coup, cochez-les puis « Supprimer ». Attention, c'est immédiat et sans confirmation, donc pas de façon de revenir en arrière après.\n\nSi vous parliez plutôt d'un travail planifié (une job) et non d'une tâche à-faire, dites-le-moi : ça se passe dans Jobs (/jobs), menu « … » → « Supprimer ».\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket b1d7a893-7155-4a5c-aa85-9196270956cd — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.jobs-supprimer",
+   "famille": "kb",
+   "titre": "« c'est où pour supprimer une job au complet »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/jobs, le libellé Supprimer, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio3",
+   "duree_ms": 8070,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/jobs)",
+    "cite le libellé attendu (Supprimer)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "c'est où pour supprimer une job au complet"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 0.825 ¢ ; 4823 ms)",
+     "contenu": "Pour supprimer une job complètement : allez dans Jobs (/jobs), repérez la ligne de la job visée, cliquez sur le menu « … » puis « Supprimer », et confirmez. Un bouton « Annuler » apparaît quelques secondes après si vous changez d'idée. Notez qu'il n'y a pas d'« Archiver » : les jobs complétées ou annulées se retrouvent automatiquement dans l'onglet « Archivé ».\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 2f24eca8-e184-4776-89e1-0fc851add1ae — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.calendrier-creer",
+   "famille": "kb",
+   "titre": "« comment je cree une job direct dans le calendrier »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/calendar, le libellé Créer, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio4",
+   "duree_ms": 8437,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/calendar)",
+    "cite le libellé attendu (Créer)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je cree une job direct dans le calendrier"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 0.853 ¢ ; 5244 ms)",
+     "contenu": "Dans le Calendrier (/calendar), cliquez sur le bouton « + Créer » en haut et choisissez « Job » — vous pouvez aussi la placer directement en cliquant sur un créneau vide de la vue jour/semaine. Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket feb35364-795b-47e4-ab9e-43324fee6eed — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.repartition-map",
+   "famille": "kb",
+   "titre": "« c'est où que je vois mes gars sur la map en temps réel »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/dispatch, le libellé répartition, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "tech",
+   "duree_ms": 7848,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/dispatch)",
+    "cite le libellé attendu (répartition)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "c'est où que je vois mes gars sur la map en temps réel"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 0.847 ¢ ; 4616 ms)",
+     "contenu": "Vous les voyez sur la Carte de répartition (/dispatch) : vos techniciens et vos jobs y apparaissent en temps réel, avec les filtres « Jobs (n) » et « Géofences ». Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 58e4e128-7093-4105-9d37-89b29d653bf3 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.clients-archiver",
+   "famille": "kb",
+   "titre": "« mon client a fermé sa shop, comment je l'archive »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/clients, le libellé Archiver, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio1",
+   "duree_ms": 10876,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/clients)",
+    "cite le libellé attendu (Archiver)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "mon client a fermé sa shop, comment je l'archive"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 0.941 ¢ ; 4852 ms)",
+     "contenu": "Pour archiver ce client : ouvrez sa fiche dans Clients (/clients/:id), puis menu « … » → « Archiver ». Ses jobs, factures et devis restent visibles, et vous pourrez le restaurer plus tard depuis Paramètres → Archives (/settings/archives). Si vous vouliez plutôt l'effacer définitivement, c'est dans la fiche → « Modifier » → bouton rouge « Supprimer ».\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket ae9267e0-f107-4bf1-b0fa-d5ac1f6b07b6 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.demandes-convertir",
+   "famille": "kb",
+   "titre": "« j'ai recu une demande par mon formulaire, comment je la change en soumission »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/requests, le libellé Convertir en devis, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 8635,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/requests)",
+    "cite le libellé attendu (Convertir en devis)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "j'ai recu une demande par mon formulaire, comment je la change en soumission"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 2.402 ¢ ; 4653 ms)",
+     "contenu": "Ouvrez la demande concernée dans Demandes (/requests), cliquez dessus pour ouvrir sa fiche (/requests/:id), puis dans le menu « Plus » choisissez « Convertir en devis ». Le devis se crée avec les infos du client déjà pré-remplies.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 2c03cc32-0fc1-4d94-97f8-4344aed30895 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.devis-modele",
+   "famille": "kb",
+   "titre": "« comment je fais un modèle de soumission pour pas tout retaper à chaque fois »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/quotes\\/(presets|templates), le libellé Nouveau modèle, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio3",
+   "duree_ms": 10799,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/quotes\\/(presets|templates))",
+    "cite le libellé attendu (Nouveau modèle)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je fais un modèle de soumission pour pas tout retaper à chaque fois"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 2.007 ¢ ; 6243 ms)",
+     "contenu": "Allez dans Devis → Modèles de devis (/quotes/presets). Cliquez « Nouveau modèle » : vous y entrez titre, description, image de couverture, votre liste de services avec prix/quantités, un texte d'introduction, vos conditions et, si besoin, un dépôt. Une fois sauvegardé, vous pourrez le réutiliser à chaque nouveau devis sans tout retaper.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 19941895-acd6-4056-a6f9-2214ebebf439 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.devis-mesure",
+   "famille": "kb",
+   "titre": "« est-ce que je peux mesurer le terrain sur une carte pour ma soumission »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/quotes(\\/:id)?\\/measure, le libellé Envoyer au devis|Terminer|Rechercher une adresse, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio4",
+   "duree_ms": 8421,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/quotes(\\/:id)?\\/measure)",
+    "cite le libellé attendu (Envoyer au devis|Terminer|Rechercher une adresse)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "est-ce que je peux mesurer le terrain sur une carte pour ma soumission"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.560 ¢ ; 5649 ms)",
+     "contenu": "Oui, tout à fait! Vous pouvez tracer la mesure directement sur une carte : allez dans Devis → « Mesure sur carte » (/quotes/measure, ou depuis une soumission /quotes/:id/measure). Cherchez l'adresse, tracez la surface, cliquez « Terminer », puis « Envoyer au devis » pour que la mesure s'ajoute à votre soumission (vous pouvez aussi garder une capture d'écran).\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 25cdc758-b09f-4e3f-9232-0c51fe2b2516 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.devis-depot",
+   "famille": "kb",
+   "titre": "« je veux demander un dépot de 30% sur mes soumissions, c'est où »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/quotes, le libellé dépôt, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "tech",
+   "duree_ms": 24152,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/quotes)",
+    "cite le libellé attendu (dépôt)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "je veux demander un dépot de 30% sur mes soumissions, c'est où"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 2.039 ¢ ; 17113 ms)",
+     "contenu": "Pour exiger un dépôt sur vos devis, deux endroits à régler : d'abord activez « Paiement des devis » dans Paramètres → Lume Payments (/settings/payments), puis dans chaque modèle de devis (Devis → Modèles, /quotes/presets) ou directement sur un devis, réglez le dépôt en pourcentage (30%) ou montant fixe. Comme vous n'avez pas encore de fournisseur de paiement configuré, il faudra d'abord connecter Lume Payments avant que le dépôt puisse être perçu en ligne.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket ea6e1fcb-b163-4f60-99c2-a773d663993f — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.messages-texto",
+   "famille": "kb",
+   "titre": "« comment j'envoie un texto a un client »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/messages, le libellé Nouveau message, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio1",
+   "duree_ms": 22624,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/messages)",
+    "cite le libellé attendu (Nouveau message)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment j'envoie un texto a un client"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 0.923 ¢ ; 11032 ms)",
+     "contenu": "Pour envoyer un texto à un client, allez dans Messages (/messages), cliquez sur « Nouveau message », choisissez le client (ou entrez son numéro), tapez votre texte et cliquez sur « Envoyer ». Assurez-vous d'abord d'avoir activé votre numéro dédié dans Paramètres → Messagerie SMS (/settings/messaging) en cliquant sur « Obtenir mon numéro » si ce n'est pas déjà fait.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 9464751b-e4bc-497b-a509-5c3916c85063 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.factures-creer",
+   "famille": "kb",
+   "titre": "« comment je fais une facture »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/invoices\\/new|\\/finances|\\/quotes, le libellé Nouvelle facture|Convertir en facture, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 16088,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/invoices\\/new|\\/finances|\\/quotes)",
+    "cite le libellé attendu (Nouvelle facture|Convertir en facture)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je fais une facture"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.963 ¢ ; 12859 ms)",
+     "contenu": "Pour créer une facture, deux façons simples :\n\n- Depuis un devis approuvé : ouvrez-le dans Devis (/quotes), puis cliquez sur « Convertir en facture ». Les articles, prix et taxes sont repris automatiquement — vérifiez juste la date d'échéance avant d'envoyer.\n- Directement sans devis : allez dans Finances → Facturation (/finances) et créez une nouvelle facture à partir de là.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 99cdaf4e-ec99-45e6-9dba-18cd6b41e273 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.factures-payee",
+   "famille": "kb",
+   "titre": "« mon client m'a payé cash, comment je marque sa facture payée »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/finances|\\/invoices, le libellé Marquer payée, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio3",
+   "duree_ms": 7983,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/finances|\\/invoices)",
+    "cite le libellé attendu (Marquer payée)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "mon client m'a payé cash, comment je marque sa facture payée"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 0.993 ¢ ; 5062 ms)",
+     "contenu": "Allez dans Finances → Facturation (/finances), trouvez la facture de ce client, puis cliquez sur le menu « … » → « Marquer payée ». Dans la fenêtre, indiquez le montant payé, choisissez « Comptant » comme méthode de paiement, puis la date de transaction, et confirmez — ça ferme automatiquement le job lié.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket b4bf90df-508b-4774-b013-9f9c10358164 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.finances-paiements",
+   "famille": "kb",
+   "titre": "« c'est où que je vois tous les paiements que j'ai recus ce mois-ci »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/finances, le libellé Paiements, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio4",
+   "duree_ms": 9004,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/finances)",
+    "cite le libellé attendu (Paiements)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "c'est où que je vois tous les paiements que j'ai recus ce mois-ci"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.862 ¢ ; 6200 ms)",
+     "contenu": "Vous pouvez voir tous vos paiements reçus dans Finances → onglet Paiements (/finances). Là, utilisez le filtre « Période » pour ne voir que le mois en cours, et vous pouvez aussi filtrer par statut ou méthode de paiement (carte, comptant, chèque).\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket f87ca29c-ce29-44d4-8940-4197fc4c8a4c — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.finances-versements",
+   "famille": "kb",
+   "titre": "« c'est où que je vois quand l'argent rentre dans mon compte de banque »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/finances, le libellé Versements, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "tech",
+   "duree_ms": 16064,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/finances)",
+    "cite le libellé attendu (Versements)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "c'est où que je vois quand l'argent rentre dans mon compte de banque"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.039 ¢ ; 12402 ms)",
+     "contenu": "Vous verrez ça dans Finances → onglet Versements (/finances) : l'argent qui va à votre compte bancaire y apparaît sous forme de tuiles « Disponible », « En route » et « Déposé », et en cliquant sur une ligne vous avez les détails de chaque versement. Par contre, j'ai vu dans votre dossier qu'aucun fournisseur de paiement (Stripe) n'est encore connecté chez vous — sans ça, il n'y aura pas de versement à afficher. Voulez-vous que je vous explique comment activer les paiements (Lume Payments) ?"
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 30b70bd2-7ed6-43c9-8bae-32fe164aaf40 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.finances-csv",
+   "famille": "kb",
+   "titre": "« je veux sortir mes factures en csv pour mon comptable »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/finances, le libellé CSV, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio1",
+   "duree_ms": 9777,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/finances)",
+    "cite le libellé attendu (CSV)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "je veux sortir mes factures en csv pour mon comptable"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.046 ¢ ; 7001 ms)",
+     "contenu": "Pour sortir vos factures en CSV : allez dans Finances → onglet Facturation (/finances), puis cliquez sur le bouton « CSV » en haut de la liste. Ça télécharge toutes vos factures, prêtes à envoyer à votre comptable.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 0764d087-5129-457f-92c3-c74ab5c4e993 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.payments-interrupteurs",
+   "famille": "kb",
+   "titre": "« je veux fermer le paiement en ligne sur les devis mais le garder sur les factures »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/payments, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 13010,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/payments)",
+    "aucun libellé imposé",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "je veux fermer le paiement en ligne sur les devis mais le garder sur les factures"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 2.205 ¢ ; 7306 ms)",
+     "contenu": "Dans Paramètres → Lume Payments (/settings/payments), section « Paiements du portail client », il y a deux interrupteurs distincts : « Paiement des devis » et « Paiement des factures ». Il suffit de désactiver seulement celui des devis en laissant celui des factures activé - les deux sont indépendants (le bouton « Désactiver les paiements » global coupe les deux en même temps, donc il ne faut pas toucher à celui-là).\n\nÀ noter : dans votre dossier, aucun fournisseur de paiement n'est encore configuré, donc il faudra d'abord connecter Stripe avant que ces interrupteurs n'aient un effet.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 7898bc16-e78a-452c-9f45-4f4ed8416332 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.payments-pourboires",
+   "famille": "kb",
+   "titre": "« est-ce que mes clients peuvent laisser un pourboire quand ils paient leur facture »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/payments, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio3",
+   "duree_ms": 24033,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/payments)",
+    "aucun libellé imposé",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "est-ce que mes clients peuvent laisser un pourboire quand ils paient leur facture"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.121 ¢ ; 7780 ms)",
+     "contenu": "Oui, c'est possible : dans Paramètres → Lume Payments (/settings/payments), il y a une option « Pourboires » dans les Réglages avancés — une fois activée, vos clients voient « Ajouter un pourboire (facultatif) » sur la page de paiement de leur facture (/pay/:token). Attention : chez vous aucun fournisseur de paiement en ligne n'est encore connecté, donc il faut d'abord activer Stripe dans cette même page avant que les pourboires (et le paiement en ligne en général) fonctionnent.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 0b157c83-fb59-4fb9-a64e-81c390f7c6dd — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.payments-instantanes",
+   "famille": "kb",
+   "titre": "« je peux tu recevoir mon argent le jour meme au lieu d'attendre le versement »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/payments|\\/finances, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio4",
+   "duree_ms": 22209,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/payments|\\/finances)",
+    "aucun libellé imposé",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "je peux tu recevoir mon argent le jour meme au lieu d'attendre le versement"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 2.197 ¢ ; 17991 ms)",
+     "contenu": "Dans Lume Payments (/settings/payments), section « Versements », il y a une option « Versements instantanés » : le bouton « Verser » permet d'envoyer l'argent tout de suite sur une carte de débit, moyennant des frais Stripe, plutôt que d'attendre le versement normal. Il faut d'abord « Configurer » cette carte de débit dans Stripe. Je vois toutefois que vous n'avez pas encore de fournisseur de paiement configuré chez vous — c'est la première étape avant de pouvoir utiliser les versements instantanés. Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 4679c574-c7e2-47c9-8aea-cf351073bc49 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.payments-litiges",
+   "famille": "kb",
+   "titre": "« un client a contesté un paiement sur sa carte, je fais quoi »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend transfert toléré.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "tech",
+   "duree_ms": 22295,
+   "verdict": "PASS",
+   "constats": [
+    "aucune route imposée",
+    "aucun libellé imposé",
+    "transféré à un humain (toléré pour cette question)",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "un client a contesté un paiement sur sa carte, je fais quoi"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help, transfer_to_human ; claude-sonnet-5, 3 appel(s), 1.818 ¢ ; 12550 ms)",
+     "contenu": "Je vois dans votre dossier qu'aucun fournisseur de paiement n'est configuré sur votre compte en ce moment, donc une contestation de paiement par carte (chargeback) ne devrait pas venir de Lume Payments — cela mérite une vérification par l'équipe pour comprendre d'où vient ce paiement et comment le traiter. Je transfère votre demande à l'équipe pour qu'elle regarde ça avec vous.\nL'équipe a été avisée et devrait vous répondre d'ici 4 heures ouvrables pour vous aider avec cette contestation de paiement."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 8b73da6b-be83-4192-9f14-7ae7a3b1be41 — statut « open », escalated_at 2026-10-01 20:31:41.724+00, motif « Client signale une contestation (chargeback) d'un paiement par carte, alors qu'aucun fournisseur de paiement n'est configuré sur le compte — besoin de vérification par l'équipe. », slack_channel_id NULL, slack_thread_ts NULL\nmessages système : escalated:email ; champ « escalated » de l’API : true"
+    }
+   ]
+  },
+  {
+   "id": "kb.payments-rappels",
+   "famille": "kb",
+   "titre": "« comment j'active les rappels automatiques pour les factures en retard »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/payments|\\/automations, le libellé rappel|relance, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio1",
+   "duree_ms": 46244,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/payments|\\/automations)",
+    "cite le libellé attendu (rappel|relance)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment j'active les rappels automatiques pour les factures en retard"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 2.052 ¢ ; 33887 ms)",
+     "contenu": "Pour activer les rappels de paiement sur les factures en retard, allez dans Paramètres → Lume Payments (/settings/payments), section « Rappels de paiement » : activez l'interrupteur, choisissez le délai en jours et le canal (Courriel, ou Courriel + SMS si un numéro texto est configuré). Lume enverra alors automatiquement une relance avec le lien de paiement aux clients en retard. Notez qu'il existe aussi une automatisation prête à l'emploi « Relance de facture » (3, 7, 14 et 30 jours) dans Automatisations (/automations), qu'il faut publier pour qu'elle s'active.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 89b01be0-fbd6-4187-bf53-d6d42420874e — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.taxes-region",
+   "famille": "kb",
+   "titre": "« comment j'ajoute la TPS pis la TVQ sur mes factures »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/taxes, le libellé Ajouter une région, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 17539,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/taxes)",
+    "cite le libellé attendu (Ajouter une région)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment j'ajoute la TPS pis la TVQ sur mes factures"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.076 ¢ ; 6853 ms)",
+     "contenu": "Allez dans Paramètres → Taxes (/settings/taxes), cliquez sur « Ajouter une région », choisissez Québec pour avoir TPS (5 %) et TVQ (9,975 %), puis « Définir par défaut ». Une fois ça fait, ces taxes s'appliqueront automatiquement à vos nouveaux devis, jobs et factures (les documents déjà émis ne changeront pas). Si vous voulez qu'une facture précise soit sans taxes, vous pouvez le préciser au cas par cas directement sur celle-ci.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 606e69a5-9f2a-4fc1-8314-d4ddf84c76b2 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.forfait-changer",
+   "famille": "kb",
+   "titre": "« je veux monter de forfait, je fais ça où »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/billing, le libellé Changer ou rétrograder mon plan|Voir tous les plans|Passer à, transfert toléré.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio3",
+   "duree_ms": 29256,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/billing)",
+    "cite le libellé attendu (Changer ou rétrograder mon plan|Voir tous les plans|Passer à)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "je veux monter de forfait, je fais ça où"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 0.857 ¢ ; 23848 ms)",
+     "contenu": "Pour monter de forfait, allez dans Paramètres → Forfait & facturation (/settings/billing). Vous y verrez les plans disponibles avec un bouton « Passer à … » — le changement prend effet immédiatement et le montant est ajusté au prorata. Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 0ce4f757-4e43-4599-90e3-111e215da08e — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.commissions-voir",
+   "famille": "kb",
+   "titre": "« c'est où que je vois mes commissions du mois »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/commissions, le libellé Mes commissions, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 12046,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/commissions)",
+    "cite le libellé attendu (Mes commissions)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "c'est où que je vois mes commissions du mois"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.637 ¢ ; 6050 ms)",
+     "contenu": "Pour voir vos commissions du mois, allez dans Finances/Commissions → onglet « Mes commissions » (/commissions). Comme vous êtes owner, vous verrez aussi « Vue d'ensemble » et « Représentants » pour voir celles de toute l'équipe. Les commissions sont calculées sur le montant avant taxes et sont marquées « Gagnée le » une fois la facture payée (sinon c'est une « Estimation »).\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 08cdc038-f5ef-4f8a-8814-d3dc4c8af3fe — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.paie-export",
+   "famille": "kb",
+   "titre": "« comment je sors la paie de mes gars en fichier pour mon comptable »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/payroll, le libellé Exporter, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "tech",
+   "duree_ms": 33218,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/payroll)",
+    "cite le libellé attendu (Exporter)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je sors la paie de mes gars en fichier pour mon comptable"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 0.796 ¢ ; 25495 ms)",
+     "contenu": "Vous pouvez faire ça dans Paramètres → Paie (/settings/payroll) : repérez la bonne période de paie, puis cliquez sur « Exporter (QuickBooks CSV) » pour sortir un fichier directement utilisable par votre comptable, sans besoin de confirmation.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket a962ac8e-3e27-4964-a594-9a53b873760d — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.membres-inviter",
+   "famille": "kb",
+   "titre": "« comment j'ajoute un nouvel employé dans lume »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/team, le libellé Inviter un membre, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio1",
+   "duree_ms": 43318,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/team)",
+    "cite le libellé attendu (Inviter un membre)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment j'ajoute un nouvel employé dans lume"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.921 ¢ ; 30182 ms)",
+     "contenu": "Pour ajouter un employé, allez dans Paramètres → Membres (/settings/team), puis cliquez sur « Inviter un membre » : entrez son courriel, choisissez son rôle (admin, représentant ou technicien) et sa portée d'accès, puis « Envoyer l'invitation ». La personne recevra un lien par courriel pour créer son compte. À noter : si votre forfait n'a plus de sièges disponibles, un siège supplémentaire vous sera facturé au prorata.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 49ba0dc2-50d2-4aca-ab70-550a5b11513c — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.roles-permissions",
+   "famille": "kb",
+   "titre": "« je veux pas que mes techniciens voient les factures, je fais comment »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/roles, le libellé permission, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 12144,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/roles)",
+    "cite le libellé attendu (permission)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "je veux pas que mes techniciens voient les factures, je fais comment"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.041 ¢ ; 5348 ms)",
+     "contenu": "Bonne nouvelle : vos techniciens actuels n'ont déjà pas accès aux montants (factures, soumissions, paiements) — c'est bloqué automatiquement pour le rôle « Technicien », aucune configuration n'est nécessaire. Vous pouvez vérifier les rôles de votre équipe dans Paramètres → Rôles & Permissions (/settings/roles). Si vous voulez qu'un membre précis puisse voir les prix, il faudrait plutôt lui donner le rôle Représentant ou Administrateur.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket f132b244-cffb-4051-9a53-83813aafe658 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.temps-approuver",
+   "famille": "kb",
+   "titre": "« comment j'approuve les heures de mes gars pour la semaine »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/timesheets, le libellé Approuver, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 13047,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/timesheets)",
+    "cite le libellé attendu (Approuver)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment j'approuve les heures de mes gars pour la semaine"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.049 ¢ ; 5777 ms)",
+     "contenu": "Pour approuver les heures de votre équipe, allez dans Feuilles de temps (/timesheets) : choisissez la période de la semaine avec les flèches, sélectionnez les heures voulues, puis cliquez sur « Approuver ». Vous pouvez aussi corriger une entrée avec « Modifier les heures » avant d'approuver, si besoin. Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket ced99044-340d-448a-9ec0-0c9697b2c451 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.gps-activer",
+   "famille": "kb",
+   "titre": "« je veux voir où sont mes trucks, comment j'active le gps »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/location, le libellé GPS, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 8917,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/location)",
+    "cite le libellé attendu (GPS)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "je veux voir où sont mes trucks, comment j'active le gps"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 5 — aide-directe, outils : /settings/location, /settings/payments, /automations ; aucun appel au modèle dans le grand livre ; 1476 ms)",
+     "contenu": "Localisation GPS (Paramètres → Localisation GPS, /settings/location) : consentement GPS personnel ; pour un propriétaire/admin, interrupteur maître de l'organisation et consentements de l'équipe (Loi 25). Plus d'intégration de traceurs externes.\n\n→ ÉQUIPE & TEMPS — Localisation GPS (/settings/location)\n\nSi ça ne règle pas votre cas, dites-le-moi et je creuse."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 0e874c20-fe9c-48d1-a3c0-d6a2970b8289 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.formations-creer",
+   "famille": "kb",
+   "titre": "« comment je fais une formation pour mes nouveaux employés »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/courses, le libellé Créer une formation, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 17560,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/courses)",
+    "cite le libellé attendu (Créer une formation)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je fais une formation pour mes nouveaux employés"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.933 ¢ ; 5991 ms)",
+     "contenu": "Pour créer une formation pour vos nouveaux employés, allez dans Formations (/courses) et cliquez « Créer une formation ». Dans l'éditeur, vous ajoutez des modules et des leçons, puis vous publiez avec la bascule « Publié ». Vos employés pourront ensuite suivre la formation depuis cette même page et vous verrez leur « Progression de l'équipe ».\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 1665d181-017f-42cb-8e36-8cb7fcef0a43 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.terrain-pin",
+   "famille": "kb",
+   "titre": "« comment j'ajoute une adresse sur la map de porte a porte »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/field-sales, le libellé Ajouter un pin, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 11541,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/field-sales)",
+    "cite le libellé attendu (Ajouter un pin)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment j'ajoute une adresse sur la map de porte a porte"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 2.027 ¢ ; 4753 ms)",
+     "contenu": "Pour ajouter une adresse sur la carte de porte-à-porte, allez dans Map (/field-sales), puis cliquez sur « Ajouter un pin » — vous pouvez aussi utiliser « Rechercher une adresse (⌘K) » pour la localiser directement. Le pin créé peut ensuite être modifié ou lié à un client.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket b7becc15-26b0-400e-9935-c99d4b502b79 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.terrain-pipeline",
+   "famille": "kb",
+   "titre": "« comment je change l'étape d'un deal dans le pipeline »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/pipeline|\\/ventes, le libellé glisser, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 13636,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/pipeline|\\/ventes)",
+    "cite le libellé attendu (glisser)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je change l'étape d'un deal dans le pipeline"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 2.522 ¢ ; 4991 ms)",
+     "contenu": "Pour changer l'étape d'un deal, allez dans Pipeline de ventes (/ventes), onglet Board. Vous pouvez soit glisser la carte du deal avec la poignée ⠿ vers la colonne de l'étape voulue, soit ouvrir la fiche du deal (clic sur la carte) et changer le champ « Étape » dans « Détails du deal », puis « Enregistrer ». Notez qu'un passage vers « Gagné » ouvre la création de la job, et vers « Perdu » demande une raison.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 404f129c-f6ef-4687-88c5-b0d19b2ad826 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.terrain-classement",
+   "famille": "kb",
+   "titre": "« je veux voir le classement de mes reps pour le mois passé »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/leaderboard, le libellé Changer, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 15711,
+   "verdict": "FAIL",
+   "constats": [
+    "libellé attendu absent de la réponse : Changer"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "je veux voir le classement de mes reps pour le mois passé"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.522 ¢ ; 5338 ms)",
+     "contenu": "Vous pouvez consulter le classement de vos reps à Classement (/leaderboard). Sur cette page, utilisez le filtre de période pour choisir « mois passé » et voir leur positionnement. Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 176eb304-9037-4f9d-860d-eccce4cfa680 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.terrain-rapports",
+   "famille": "kb",
+   "titre": "« c'est où les rapports de vente terrain de la semaine »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/d2d-reports, le libellé hebdomadaire|semaine, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 9192,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/d2d-reports)",
+    "cite le libellé attendu (hebdomadaire|semaine)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "c'est où les rapports de vente terrain de la semaine"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.445 ¢ ; 4099 ms)",
+     "contenu": "Vous trouverez ça dans Rapports terrain (/d2d-reports), menu « Vente ». Vous pouvez filtrer par jour/semaine/mois, voir le revenu par représentant et l'entonnoir de conversion, et exporter les données — c'est en lecture seule.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 81cf3a24-d3ee-4016-a5a8-ecf5f69dfbc3 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.stats-revenus",
+   "famille": "kb",
+   "titre": "« je veux voir mes revenus des 12 derniers mois »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/insights, le libellé 12 derniers mois, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 14144,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/insights)",
+    "cite le libellé attendu (12 derniers mois)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "je veux voir mes revenus des 12 derniers mois"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.474 ¢ ; 5161 ms)",
+     "contenu": "Pour voir vos revenus des 12 derniers mois, allez dans Statistiques (/insights), choisissez « Période » → « 12 derniers mois » dans la barre du haut, et regardez la section Revenu (argent encaissé, taxes incluses). Vous pouvez aussi exporter ces données en CSV depuis cette même page.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket c81ba233-964b-48a9-9e36-029acd82066c — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.profil-langue",
+   "famille": "kb",
+   "titre": "« comment je mets l'app en anglais »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/profile, le libellé English|Langue de l'interface, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 12358,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/profile)",
+    "cite le libellé attendu (English|Langue de l'interface)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je mets l'app en anglais"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.891 ¢ ; 4600 ms)",
+     "contenu": "Pour mettre l'app en anglais, allez dans Paramètres → Mon profil (/settings/profile), section « Langue de l'interface », et choisissez « English ». C'est appliqué immédiatement. Notez que la langue des messages envoyés à vos clients (courriels, textos) se règle séparément, dans Paramètres entreprise.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket e6979ba0-b61f-4081-b8f8-fe8765b738da — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.entreprise-logo",
+   "famille": "kb",
+   "titre": "« je veux mettre mon logo sur mes factures »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/company, le libellé logo, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 13888,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/company)",
+    "cite le libellé attendu (logo)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "je veux mettre mon logo sur mes factures"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 0.991 ¢ ; 5257 ms)",
+     "contenu": "Vous pouvez ajouter votre logo dans Paramètres → Paramètres entreprise (/settings/company) : il y a une section pour téléverser le logo, qui s'enregistre automatiquement et s'affiche ensuite sur vos factures, devis et contrats. Vous pouvez aussi y ajuster la couleur de marque en même temps. Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 9cd89348-d4b3-48e8-89a5-54d164697a34 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.bureaux-nouveau",
+   "famille": "kb",
+   "titre": "« j'ouvre une 2e succursale, comment j'ajoute un bureau »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/offices, le libellé Nouveau bureau, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 17153,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/offices)",
+    "cite le libellé attendu (Nouveau bureau)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "j'ouvre une 2e succursale, comment j'ajoute un bureau"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.446 ¢ ; 5314 ms)",
+     "contenu": "Pour ajouter un 2e bureau, allez dans Paramètres → Bureaux (/settings/offices), puis cliquez sur « Nouveau bureau ». Vous devrez indiquer le nom du bureau et la ville des opérations (obligatoire, pour la météo de l'accueil), les coordonnées restant facultatives. Vous pouvez aussi choisir « Exactement la même configuration » que votre bureau actuel pour gagner du temps, puis « Créer le bureau ».\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 3c3261c5-c946-4b04-9cb6-e50170374ad6 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.produits-service",
+   "famille": "kb",
+   "titre": "« comment j'ajoute un service avec son prix »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/products, le libellé Nouveau service, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 7977,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/products)",
+    "cite le libellé attendu (Nouveau service)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment j'ajoute un service avec son prix"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.863 ¢ ; 4507 ms)",
+     "contenu": "Pour ajouter un service avec son prix, allez dans Paramètres → Produits & Services (/settings/products), cliquez sur « Nouveau service », puis entrez le nom, le prix et autres détails, et « Créer le service » (ou « Enregistrer »). Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket ce321f17-69fb-4fc6-9c08-275655ab4e06 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.automatisations-pause",
+   "famille": "kb",
+   "titre": "« comment je mets en pause une automatisation qui envoie trop de courriels »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/automations, le libellé Désactiver|interrupteur, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 13294,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/automations)",
+    "cite le libellé attendu (Désactiver|interrupteur)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je mets en pause une automatisation qui envoie trop de courriels"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.926 ¢ ; 4861 ms)",
+     "contenu": "Allez dans Automatisations (/automations), repérez la règle qui envoie trop de courriels dans la liste, puis basculez son interrupteur sur ROUGE (brouillon) : les envois en cours sont annulés et rien ne repart tant qu'elle n'est pas republiée. Si vous voulez juste suspendre temporairement toutes les automatisations d'un coup, utilisez « Tout arrêter » en haut à droite — tout ce qui était prévu reprendra à la réactivation.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 3d884d09-e1cc-471a-9e19-7c19a3bbffa4 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.avis-google",
+   "famille": "kb",
+   "titre": "« comment je demande un avis google apres une job »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/reviews, le libellé avis, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 9166,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/reviews)",
+    "cite le libellé attendu (avis)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je demande un avis google apres une job"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 0 — faq:google-reviews, outils : — ; aucun appel au modèle dans le grand livre ; 1063 ms)",
+     "contenu": "Paramètres → Avis clients : activez « Demander un avis à la fin d'un job » et collez le lien de votre fiche Google. À la fin de chaque job, le client reçoit un texto et un courriel avec un lien qui l'amène à choisir Google ou Facebook pour laisser son avis. Pour exclure un client, cochez son champ personnalisé « noreview ». Le message se personnalise au même endroit. (page : /settings/reviews)"
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 4a441240-b1f9-4c56-87e4-a137978caf6e — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.formulaire-site",
+   "famille": "kb",
+   "titre": "« comment je mets le formulaire de demande sur mon site web »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/settings\\/request-form, le libellé code, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 18980,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/settings\\/request-form)",
+    "cite le libellé attendu (code)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je mets le formulaire de demande sur mon site web"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.999 ¢ ; 5234 ms)",
+     "contenu": "Vous trouvez ça dans Paramètres → Formulaire de demande (/settings/request-form). Là, vous pouvez personnaliser vos champs, faire un « Aperçu », puis « Enregistrer » — un code d'intégration apparaît avec le bouton « Copier ce code et le coller dans votre site web ». Il suffit de coller ce code à l'endroit voulu sur votre site (dans l'éditeur HTML de votre plateforme web).\n\nVous pouvez aussi créer plusieurs formulaires différents (« + Nouveau formulaire »), chacun avec son propre lien public, et choisir dans quel pipeline arrivent ses demandes.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket f284b292-9dc1-4754-a605-43241ce3ca09 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.securite-2fa",
+   "famille": "kb",
+   "titre": "« c'est quoi le code qr qu'il me demande quand j'invite quelqu'un »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend le libellé Google Authenticator|6 chiffres|QR, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 12175,
+   "verdict": "PASS",
+   "constats": [
+    "aucune route imposée",
+    "cite le libellé attendu (Google Authenticator|6 chiffres|QR)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "c'est quoi le code qr qu'il me demande quand j'invite quelqu'un"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 0.947 ¢ ; 5612 ms)",
+     "contenu": "Je n'ai rien trouvé sur un code QR spécifique dans le processus d'invitation de membre — il est probable que ce code QR concerne la double authentification (2FA), qui s'active souvent via une appli d'authentification en scannant un QR code, et qui peut être demandée lors de la première connexion. Pouvez-vous préciser si ce code QR apparaît sur l'écran de la personne invitée au moment où elle crée son compte (/invite/:token) ? Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket b2367922-a4c9-4cf7-8977-5f354a8d5f86 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.connexion-mdp",
+   "famille": "kb",
+   "titre": "« j'ai oublié mon mot de passe pis je rentre pu »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend la route \\/auth|\\/reset-password, le libellé Mot de passe oublié, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 7926,
+   "verdict": "PASS",
+   "constats": [
+    "cite la route attendue (\\/auth|\\/reset-password)",
+    "cite le libellé attendu (Mot de passe oublié)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "j'ai oublié mon mot de passe pis je rentre pu"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 0 — faq:forgot-password, outils : — ; aucun appel au modèle dans le grand livre ; 777 ms)",
+     "contenu": "Sur la page de connexion, cliquez « Mot de passe oublié », entrez votre courriel : vous recevez un lien qui ouvre la page de réinitialisation. Choisissez un nouveau mot de passe et reconnectez-vous. Pas de courriel après quelques minutes ? Vérifiez les indésirables et que l'adresse est bien celle du compte. (page : /auth)"
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 6199b271-e1c1-4b2f-8ed6-ddc5a7f66661 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.pages-clients-devis",
+   "famille": "kb",
+   "titre": "« mon client recoit quoi quand j'envoie une soumission »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend le libellé approuver|signer|téléphone|sans (avoir à créer de )?compte, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 20406,
+   "verdict": "FAIL",
+   "constats": [
+    "libellé attendu absent de la réponse : approuver|signer|téléphone|sans (avoir à créer de )?compte"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "mon client recoit quoi quand j'envoie une soumission"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 2.662 ¢ ; 8198 ms)",
+     "contenu": "Quand vous envoyez une soumission (devis), votre client reçoit un lien pour la consulter en ligne, l'ouvrir, et l'accepter (si un dépôt est exigé, le paiement en ligne se fait à l'acceptation, pourvu que « Paiement des devis » soit activé dans Lume Payments). Vous voyez ensuite sur la fiche du devis (/quotes/:id) s'il a été ouvert et combien de fois. Une automatisation par défaut relance aussi votre client (1, 2, 5, 10, 30 jours) tant qu'il n'a pas répondu, et vous notifie dès qu'il l'ouvre.\n\nSi ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 3f784613-7f9b-482d-bb96-cce5d9268ba7 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.hors-lume",
+   "famille": "kb",
+   "titre": "« est-ce que je peux déduire mon camion dans mes impots »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend le libellé hors|extérieur|pas .{0,40}(Lume|CRM)|comptable|ne (concerne|couvre|relève) pas, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 8264,
+   "verdict": "PASS",
+   "constats": [
+    "aucune route imposée",
+    "cite le libellé attendu (hors|extérieur|pas .{0,40}(Lume|CRM)|comptable|ne (concerne|couvre|relève) pas)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "est-ce que je peux déduire mon camion dans mes impots"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : — ; claude-sonnet-5, 1 appel(s), 0.369 ¢ ; 3749 ms)",
+     "contenu": "Ça, c'est une question fiscale qui dépasse le cadre de Lume — je ne peux pas vous conseiller là-dessus. Je vous suggère de vérifier avec un comptable ou Revenu Québec/ARC, car ça dépend de votre situation précise. Si vous avez une question sur l'utilisation de Lume, je suis là!"
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket 973b6d86-05cf-4f26-804f-1122b1efd225 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.compte-forfait",
+   "famille": "kb",
+   "titre": "« c'est quoi mon forfait pis ça se renouvelle quand »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend sans transfert à un humain, et le nom du forfait du bureau (lu dans la base).",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 12043,
+   "verdict": "PASS",
+   "constats": [
+    "aucune route imposée",
+    "cite le libellé attendu (Autopilot)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "c'est quoi mon forfait pis ça se renouvelle quand"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : — ; claude-sonnet-5, 1 appel(s), 0.344 ¢ ; 3140 ms)",
+     "contenu": "Vous êtes présentement sur le forfait Autopilot, en facturation mensuelle, actif. La période en cours se renouvelle le 2027-10-01. Vous pouvez voir et gérer ça dans Paramètres → Forfait & facturation (/settings/billing)."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket b32d9200-62e3-4e86-82df-ae5094a1571f — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.compte-paiements",
+   "famille": "kb",
+   "titre": "« est-ce que lume payments est déja branché sur mon compte »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 15365,
+   "verdict": "PASS",
+   "constats": [
+    "aucune route imposée",
+    "aucun libellé imposé",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "est-ce que lume payments est déja branché sur mon compte"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : — ; claude-sonnet-5, 1 appel(s), 0.379 ¢ ; 5306 ms)",
+     "contenu": "D'après votre dossier, aucun fournisseur de paiement n'est configuré sur votre compte pour l'instant — Lume Payments n'est donc pas branché. Pour l'activer, allez dans Paramètres → Lume Payments (/settings/payments) et suivez les étapes d'inscription. Si vous avez besoin d'aide pour la configuration, dites-le-moi."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket bdae6c11-4a8c-4633-83fe-7fa29832bb6e — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "kb.ambigu-taches",
+   "famille": "kb",
+   "titre": "« comment je supprime toutes mes taches de la semaine passée »",
+   "fait": "Un utilisateur pose la question telle quelle au chat de support ; on attend le libellé (tâche[\\s\\S]*(job|travau))|((job|travau)[\\s\\S]*tâche)|précis|voulez-vous dire|parlez-vous|s'agit-il, sans transfert à un humain.",
+   "si_defaut": "La route ou le libellé manquerait, le ticket serait escaladé, ou la réponse tutoierait le client / laisserait un statut anglais brut.",
+   "compte": "proprio2",
+   "duree_ms": 13146,
+   "verdict": "PASS",
+   "constats": [
+    "aucune route imposée",
+    "cite le libellé attendu ((tâche[\\s\\S]*(job|travau))|((job|travau)[\\s\\S]*tâche)|précis|voulez-vous dire|parlez-vous|s'agit-il)",
+    "pas de transfert",
+    "vouvoiement, aucun statut brut"
+   ],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "comment je supprime toutes mes taches de la semaine passée"
+    },
+    {
+     "libelle": "réponse (statut 200, étage 6 — app, outils : search_help ; claude-sonnet-5, 2 appel(s), 1.565 ¢ ; 5598 ms)",
+     "contenu": "Si vous parlez des tâches (à-faire) : allez dans Tâches (/tasks), cochez les cases des tâches visées puis cliquez « Supprimer » (pas de confirmation, suppression immédiate et définitive).\n\nSi vous parlez des jobs planifiées (le travail de la semaine passée) : allez dans Jobs (/jobs), et pour chacune utilisez le menu « … » pour la supprimer ou l'archiver.\n\nComme vous dites « semaine passée », il n'y a pas de suppression groupée par date — il faut sélectionner manuellement celles visées. Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe."
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket dc3f2e99-aaaa-4070-8062-b6c7e8fe7092 — statut « ai », escalated_at NULL, motif NULL, slack_channel_id NULL, slack_thread_ts NULL\nmessages système : aucun ; champ « escalated » de l’API : false"
+    }
+   ]
+  },
+  {
+   "id": "escalade.canari",
+   "famille": "escalade",
+   "titre": "Canari : l’escalade d’un bureau de test ne touche pas Slack",
+   "fait": "Avant toute autre question, un utilisateur demande un humain par le bouton (« humain: true », aucun modèle). On relit le ticket, ses messages système, le bac à sable des envois et les canaux Slack du bureau.",
+   "si_defaut": "Le ticket porterait un fil ou un canal Slack, un message système « escalated:slack », un nouveau canal Slack pour le bureau — ou « escalated:email » sans aucune ligne envois_simules (le courriel serait parti pour vrai). Dans tous ces cas la batterie s’arrête.",
+   "compte": "proprio2",
+   "duree_ms": 5921,
+   "verdict": "PASS",
+   "constats": [
+    "ticket escaladé (escalated_at renseigné, statut « open »)",
+    "slack_thread_ts et slack_channel_id à NULL",
+    "message système « escalated:email », aucun « escalated:slack »",
+    "1 ligne(s) envois_simules écrite(s) pour ce bureau",
+    "aucun canal Slack créé (0 avant, 0 après)"
+   ],
+   "observations": [],
+   "preuves": [
+    {
+     "libelle": "question",
+     "contenu": "[SUP] Canari de la batterie d’évaluation du support — bureau de test, aucune réponse attendue."
+    },
+    {
+     "libelle": "réponse (statut 200, étage non lu, outils : — ; aucun appel au modèle dans le grand livre ; 1648 ms)",
+     "contenu": "(aucun texte : transfert direct)"
+    },
+    {
+     "libelle": "ticket (SELECT support_tickets et support_messages)",
+     "contenu": "ticket c04c8eca-a2cd-4dd9-9fdd-83678aec1035 — statut « open », escalated_at 2026-10-01 22:34:48.924+00, motif « Le client a demandé à parler à un humain », slack_channel_id NULL, slack_thread_ts NULL\nmessages système : escalated:email ; champ « escalated » de l’API : true"
+    },
+    {
+     "libelle": "bac à sable et Slack (SELECT envois_simules, support_slack_channels)",
+     "contenu": "select count(*)::int as envois, coalesce(array_agg(left(coalesce(sujet, ''), 120)), '{}') as sujets from envois_simules\n    where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and canal = 'courriel' and created_at >= '2026-10-01T22:34:48.058Z'::timestamptz - interval '2 seconds'\n→ {\"envois\":1,\"sujets\":[\"[PRIORITY · Autopilot] [SUP] Canari de la batterie d’évaluation du support — bureau de test, aucune réponse attendue.\"]}\ncanaux Slack du bureau : 0 avant, 0 après"
+    }
+   ]
+  },
+  {
+   "id": "cout.releve",
+   "famille": "cout",
+   "titre": "Relevé du coût et de l’étage de chaque question de la batterie",
+   "fait": "Aucune question n’est posée. On relit le grand livre du support (ai_usage, source « support ») pour les comptes et la fenêtre de la passe, et on rattache chaque ligne au tour qui l’a produite.",
+   "si_defaut": "Sans objet : ce test ne juge pas, il mesure. Le tableau est dans le rapport (section « Coût »).",
+   "compte": null,
+   "duree_ms": 729,
+   "verdict": "A RELIRE",
+   "constats": [
+    "49 question(s) relevée(s) : 3 sans modèle, 45 par le modèle, 1 sans trace",
+    "coût total : 65.792 ¢ US pour 88 appel(s) au modèle ; moyenne par question servie par le modèle : 1.462 ¢",
+    "modèle(s) : claude-sonnet-5 (45)",
+    "3 ligne(s) du grand livre dans la fenêtre sans tour de la batterie (ces comptes ont servi ailleurs) : 1.352 ¢, non comptées"
+   ],
+   "a_relire": "Relevé, pas un verdict : lire le tableau de la section « Coût ».",
+   "preuves": [
+    {
+     "libelle": "grand livre du support (SELECT ai_usage)",
+     "contenu": "select user_id, model, cost_cents::float8 as cost_cents, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, to_char(created_at at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') as created_at\n     from ai_usage where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and source = 'support' and user_id in ('94b880d9-d7d6-4db5-b4f9-3324a20725c4', 'a608b7bf-875b-43ca-9503-f3542b1943ca', '90089844-650e-4821-95ce-6c53579194f3', '28fd989a-3b6e-4f61-8a4e-a269ccec2f95', '352ddde1-0be7-4d12-8e8d-2ae7db8b0014')\n      and created_at >= '2026-10-01T20:27:30.272Z'::timestamptz - interval '2 seconds' and created_at <= '2026-10-01T22:40:18.883Z'::timestamptz + interval '5 seconds' order by created_at\n→ 91 ligne(s)"
+    },
+    {
+     "libelle": "traces du support (SELECT lumi_traces)",
+     "contenu": "select user_id, enonce_normalise, etage, action, outils, model, cost_cents::float8 as cost_cents, to_char(created_at at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') as created_at\n     from lumi_traces where org_id = '5930d318-b207-40f3-9e14-f8898a02e240' and canal = 'support' and user_id in ('94b880d9-d7d6-4db5-b4f9-3324a20725c4', 'a608b7bf-875b-43ca-9503-f3542b1943ca', '90089844-650e-4821-95ce-6c53579194f3', '28fd989a-3b6e-4f61-8a4e-a269ccec2f95', '352ddde1-0be7-4d12-8e8d-2ae7db8b0014')\n      and created_at >= '2026-10-01T20:27:30.272Z'::timestamptz - interval '5 seconds' and created_at <= '2026-10-01T22:40:18.883Z'::timestamptz + interval '15 seconds' order by created_at\n→ 50 trace(s)"
+    }
+   ]
+  }
+ ]
+}
