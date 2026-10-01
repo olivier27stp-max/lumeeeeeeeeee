@@ -30,7 +30,7 @@
    dont le menu grise sans jamais expliquer.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -63,6 +63,14 @@ export default function TiroirChoix({
   titre, sousTitre, familles, choix, fr, onChoisir, onFermer,
 }: Props) {
   const [recherche, setRecherche] = useState('');
+
+  /*
+   * À l'ouverture, le curseur est DANS la recherche : 25 à 28 choix, on tape
+   * tout de suite au lieu de cliquer d'abord dans le champ (audit du
+   * 2026-10-01).
+   */
+  const champRecherche = useRef<HTMLInputElement>(null);
+  useEffect(() => { champRecherche.current?.focus(); }, []);
 
   const groupes = useMemo(() => {
     const q = sansAccent(recherche.trim());
@@ -105,6 +113,7 @@ export default function TiroirChoix({
             aria-hidden="true"
           />
           <input
+            ref={champRecherche}
             type="search"
             value={recherche}
             onChange={(e) => setRecherche(e.target.value)}
