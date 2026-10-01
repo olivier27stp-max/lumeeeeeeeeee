@@ -45,13 +45,13 @@ export const TOPICS: readonly Topic[] = [
     // devis et factures sont deux moments différents de la vente → deux sujets, deux blocs deux fois plus légers.
     id: 'devis',
     description: 'Devis (soumissions, estimés) : en faire un, l’envoyer, le modifier, le dupliquer, l’annuler, le convertir en job ou en facture ; préréglages et modèles de devis ; devis en attente.',
-    outils: ['list_quotes', 'list_services', 'create_quote', 'send_quote', 'cancel_quote', 'convert_quote_to_job'],
+    outils: ['list_quotes', 'get_quote', 'list_services', 'create_quote', 'send_quote', 'cancel_quote', 'convert_quote_to_job'],
     refuse: 'Factures, paiements, retards, revenus → facturation ; planifier une visite → planification ; fiche d’un client → clients.',
   },
   {
     id: 'facturation',
     description: 'Factures, paiements, retards, relances, factures récurrentes, modèles de facture, taxes, catalogue de services, revenus, rentabilité, comparaisons de périodes.',
-    outils: ['list_invoices', 'get_overdue_payments', 'get_revenue_summary', 'get_financial_overview', 'compare_revenue', 'analyze_profitability', 'get_top_services',
+    outils: ['list_invoices', 'get_invoice', 'get_overdue_payments', 'get_revenue_summary', 'get_financial_overview', 'compare_revenue', 'analyze_profitability', 'get_top_services',
       'create_invoice', 'create_invoice_from_job', 'send_invoice', 'mark_invoice_paid', 'send_payment_reminders'],
     refuse: 'Un devis (soumission) → devis ; planifier une visite → planification ; fiche d’un client → clients ; CRÉER une automatisation ou un parcours automatique (même de relance de facture) → rapports.',
   },
