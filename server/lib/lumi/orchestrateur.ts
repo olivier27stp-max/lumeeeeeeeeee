@@ -44,6 +44,7 @@ import { verifierChiffres } from './verifier-chiffres';
 import { outilsDuSousAgent } from './sous-agents';
 import type { IdTopic } from './topics';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
+import { ciblesIntrouvables } from './apercu-action';
 import { executerEcriture, type ReçuExecution } from './execution';
 import { signalerAppelLumi } from './cache-chaud';
 import { allegerSchema } from './alleger-outils';
@@ -556,7 +557,7 @@ export async function tourLumi(opts: {
     if (appels.length === 0) continue;
     const resultats: Anthropic.Messages.ToolResultBlockParam[] = [];
     // Toutes les écritures proposées dans cette réponse : une carte, une confirmation.
-    const enAttente: Array<{ tool_use_id: string; tool: string; args: Record<string, any> }> = [];
+    const enAttente: Array<{ tool_use_id: string; tool: string; args: Record<string, any>; apercu: Apercu | null }> = [];
 
     for (const appel of appels) {
       const outil = TOOLS_BY_NAME[appel.name];
@@ -588,7 +589,27 @@ export async function tourLumi(opts: {
         // Numéros affichés (« facture INV-000017 », « job 33 ») résolus AVANT la carte :
         // la carte et l'exécution visent le même identifiant (audit 2026-09-30).
         const resolus = await resoudreNumeros(args, opts.orgId).catch(() => null);
-        enAttente.push({ tool_use_id: appel.id, tool: appel.name, args: resolus && 'args' in resolus ? resolus.args : args });
+        // ── Cible introuvable : PAS de carte (baseline du 2026-10-01) ──
+        // « Marque la facture 8888 payée » donnait une carte, et « Mets Kevin
+        // Bouchard sur la job » une carte avec un identifiant inventé : l'erreur
+        // du résolveur était ignorée et une cible absente n'arrêtait rien. Le
+        // modèle reçoit maintenant l'erreur et doit le DIRE (ou chercher la
+        // bonne fiche) — jamais proposer une action sur quelque chose qui n'existe pas.
+        if (resolus && 'erreur' in resolus) {
+          resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: resolus.erreur }), is_error: true });
+          continue;
+        }
+        const argsCarte = resolus && 'args' in resolus ? resolus.args : args;
+        const apercuCarte = await apercuProposition(appel.name, argsCarte, { client: opts.client, orgId: opts.orgId, userId: opts.userId });
+        const absentes = ciblesIntrouvables(apercuCarte);
+        if (absentes.length) {
+          resultats.push({
+            type: 'tool_result', tool_use_id: appel.id, is_error: true,
+            content: JSON.stringify({ error: `Introuvable dans cette entreprise : ${absentes.join(', ')}. Rien n'a été proposé. Cherche la bonne fiche avec un outil de lecture, ou dis à l'utilisateur que tu ne la trouves pas — n'invente jamais un identifiant.` }),
+          });
+          continue;
+        }
+        enAttente.push({ tool_use_id: appel.id, tool: appel.name, args: argsCarte, apercu: apercuCarte });
         continue;
       }
 
@@ -628,12 +649,11 @@ export async function tourLumi(opts: {
         const u: Anthropic.Messages.MessageParam = { role: 'user', content: resultats };
         messages.push(u); nouveaux.push(u);
       }
-      const ctxApercu = { client: opts.client, orgId: opts.orgId, userId: opts.userId };
-      const groupe = [];
-      for (const a of enAttente) groupe.push({ ...a, capacite: PERMISSION_PAR_OUTIL[a.tool]?.capacite ?? null, apercu: await apercuProposition(a.tool, a.args, ctxApercu) });
+      // L'aperçu de chaque écriture a déjà été calculé à la mise en attente (une seule lecture en base).
+      const groupe = enAttente.map((a) => ({ ...a, capacite: PERMISSION_PAR_OUTIL[a.tool]?.capacite ?? null }));
       const premiere = groupe[0];
       opts.emettre({ type: 'proposal', tool_use_id: premiere.tool_use_id, tool: premiere.tool, args: premiere.args, capacite: premiere.capacite, apercu: premiere.apercu, ...(groupe.length > 1 ? { groupe } : {}) });
-      const proposition: ResultatTour['proposition'] = { tool_use_id: premiere.tool_use_id, tool: premiere.tool, args: premiere.args, ...(enAttente.length > 1 ? { groupe: enAttente } : {}) };
+      const proposition: ResultatTour['proposition'] = { tool_use_id: premiere.tool_use_id, tool: premiere.tool, args: premiere.args, ...(enAttente.length > 1 ? { groupe: enAttente.map(({ tool_use_id, tool, args }) => ({ tool_use_id, tool, args })) } : {}) };
       return { nouveauxMessages: nouveaux, proposition, texte: texteTotal, cost_cents: coutTotal, ...mesure() };
     }
 

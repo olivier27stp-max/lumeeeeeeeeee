@@ -675,7 +675,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     const directe = enAttente.length || repli ? null : detecterActionDirecte(message);
     if (directe) {
       const debut = Date.now();
-      const rep = await repondreActionDirecte(directe, { ...ctxRaccourci, maintenant: new Date() });
+      // Le rôle est lu ici (2 lectures en base) seulement quand une action directe est reconnue.
+      const rep = await repondreActionDirecte(directe, { ...ctxRaccourci, maintenant: new Date(), outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId) });
       if (rep) {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, ...(rep.messages as Msg[])], cleRefs);
@@ -854,7 +855,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (routeur?.verdict?.extraction && routeur.decision === 'modele' && routeur.verdict.confidence >= SEUIL_CONFIANCE) {
       const debut = Date.now();
       const a = actionDepuisExtraction(routeur.verdict.extraction, message);
-      const rep = a ? await repondreActionDirecte(a, { ...ctxRaccourci, maintenant: new Date() }) : null;
+      const rep = a ? await repondreActionDirecte(a, { ...ctxRaccourci, maintenant: new Date(), outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId) }) : null;
       if (a && rep && rep.genre === 'carte') {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, ...(rep.messages as Msg[])], cleRefs);
