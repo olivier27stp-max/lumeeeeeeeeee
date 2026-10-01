@@ -84,15 +84,20 @@ async function entetes(): Promise<HeadersInit> {
  * future… ») : c'est ce texte qu'il faut montrer, pas « HTTP 400 ». Si le
  * corps n'est pas du JSON — une passerelle qui renvoie du HTML, par exemple —
  * on retombe sur un message générique plutôt que d'afficher du balisage.
+ *
+ * L'erreur porte aussi le STATUT (`status`) : l'éditeur doit distinguer « cette
+ * automatisation n'existe plus » (404 — réessayer ne servira jamais à rien)
+ * d'une panne passagère (audit du 2026-10-01).
  */
 async function erreurDe(reponse: Response, repli: string): Promise<Error> {
+  let message = repli;
   try {
     const corps = await reponse.json();
-    if (corps?.error && typeof corps.error === 'string') return new Error(corps.error);
+    if (corps?.error && typeof corps.error === 'string') message = corps.error;
   } catch {
     // Corps illisible : le repli dit déjà l'essentiel.
   }
-  return new Error(repli);
+  return Object.assign(new Error(message), { status: reponse.status });
 }
 
 export async function chargerAutomatisations(): Promise<{

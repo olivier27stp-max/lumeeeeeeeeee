@@ -102,6 +102,15 @@ type Onglet = 'parcours' | 'reglages' | 'historique' | 'journaux';
 /** Un déclencheur et SES réglages : ce qu'un choix dans le tiroir écrit. */
 interface ChoixDeclencheur { trigger_event: string; conditions: Record<string, unknown> }
 
+/**
+ * Le serveur répond-il que la règle N'EXISTE PLUS (404) ? `automationBuilderApi`
+ * pose le statut HTTP sur l'erreur. Lu par sa forme, sans rien importer de
+ * plus : une panne (500, réseau) n'a pas ce statut et reste une panne.
+ */
+function estIntrouvable(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { status?: unknown }).status === 404;
+}
+
 /** Bornes du zoom. Au-delà, on ne lit plus rien ; en deçà, on se perd. */
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.6;
@@ -139,6 +148,14 @@ export default function AutomationBuilderPage() {
   const regleCourante = useRef<AutomationRule | null>(null);
   useEffect(() => { regleCourante.current = regle; }, [regle]);
   const { isEnabled: sortieALaCreation } = useModuleAccess('auto_sortie_parcours');
+  /*
+   * LA RÈGLE N'EXISTE PLUS (audit du 2026-10-01). Supprimée ailleurs pendant
+   * que l'éditeur restait ouvert, le serveur refuse chaque écriture — et
+   * l'enregistrement automatique annonçait « nouvel essai automatique » pour
+   * un essai qui ne pouvait jamais réussir. Au premier 404, l'éditeur le dit
+   * et s'arrête.
+   */
+  const [disparue, setDisparue] = useState(false);
 
   /**
    * Toute écriture de la règle passe par ici. Brouillon jamais enregistré :
@@ -146,10 +163,14 @@ export default function AutomationBuilderPage() {
    * attendent cette création puis modifient.
    */
   const ecrire = useCallback(async (patch: Partial<BrouillonAutomatisation>): Promise<AutomationRule> => {
-    if (idReel.current) return modifierAutomatisation(idReel.current, patch);
+    const modifier = (idRegle: string) => modifierAutomatisation(idRegle, patch).catch((e: unknown) => {
+      if (estIntrouvable(e)) setDisparue(true);
+      throw e;
+    });
+    if (idReel.current) return modifier(idReel.current);
     if (creationEnVol.current) {
       const creee = await creationEnVol.current;
-      return modifierAutomatisation(creee.id, patch);
+      return modifier(creee.id);
     }
     const base = regleCourante.current;
     const enCreation = creerAutomatisation({
@@ -202,6 +223,8 @@ export default function AutomationBuilderPage() {
     surEchec: (id, retour, erreur) => {
       setRegle((r) => (r && r.id === id ? { ...r, is_active: retour } : r));
       setVersionBascule((v) => v + 1);
+      // Règle supprimée entre-temps : l'écran « n'existe plus » le dit.
+      if (estIntrouvable(erreur)) { setDisparue(true); return; }
       toast.error(erreur instanceof Error ? erreur.message : String(erreur), { id: `bascule-${id}` });
     },
   }));
@@ -547,7 +570,8 @@ export default function AutomationBuilderPage() {
         const retour = file.confirme;
         file.voulu = null;
         if (retour) setRegle((r) => (r ? { ...r, ...retour } : r));
-        toast.error(e instanceof Error ? e.message : String(e));
+        // Règle supprimée entre-temps : l'écran « n'existe plus » le dit déjà.
+        if (!estIntrouvable(e)) toast.error(e instanceof Error ? e.message : String(e));
         return false;
       } finally {
         file.enVol = null;
@@ -738,6 +762,7 @@ export default function AutomationBuilderPage() {
     // toast) : les écritures doivent la viser, elle.
     idReel.current = estNouvelle ? null : (id ?? null);
     creationEnVol.current = null;
+    setDisparue(false);
     // La langue au moment du chargement, lue par ref : changer de langue en
     // cours d'édition ne doit PAS relancer ce chargement — il remplaçait les
     // étapes non enregistrées par la version du serveur (audit 2026-09-28).
@@ -1043,7 +1068,8 @@ export default function AutomationBuilderPage() {
    */
   const echecsSauvegarde = useRef(0);
   useEffect(() => {
-    if (etatSauvegarde !== 'modifie' || !regle) return;
+    // Règle disparue (404) : plus rien à enregistrer, donc plus d'essai.
+    if (etatSauvegarde !== 'modifie' || !regle || disparue) return;
     if (etapesIncompletes > 0) { setEtatSauvegarde('incomplet'); return; }
     let annule = false;
     const delai = 3000 * 2 ** Math.min(echecsSauvegarde.current, 4);
@@ -1089,6 +1115,14 @@ export default function AutomationBuilderPage() {
           });
           return;
         } catch (e: unknown) {
+          /*
+           * 404 : l'automatisation n'existe plus. Ni toast « nouvel essai
+           * automatique », ni reprise — `ecrire` a déjà basculé l'écran.
+           */
+          if (estIntrouvable(e)) {
+            setEtatSauvegarde((actuel) => (actuel === 'en_cours' ? 'modifie' : actuel));
+            return;
+          }
           const message = e instanceof Error ? e.message : String(e);
           const tropVite = /too many requests|429|rate limit/i.test(message);
           if (tropVite && essai < attentes.length) {
@@ -1113,7 +1147,7 @@ export default function AutomationBuilderPage() {
       }
     }, delai);
     return () => { annule = true; clearTimeout(minuterie); };
-  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire]);
+  }, [etatSauvegarde, regle, nom, steps, etapesIncompletes, fr, ecrire, disparue]);
 
   // Dès que la dernière étape vide est remplie, on repart en enregistrement.
   useEffect(() => {
@@ -1362,8 +1396,9 @@ export default function AutomationBuilderPage() {
    * d'enregistrer, est DIT par un message (le toast vit hors de la page).
    */
   const sortieGeree = useRef(false);
-  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle });
-  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle };
+  // Une règle disparue (404) n'a plus rien à enregistrer au départ.
+  const etatAuDepart = useRef({ etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue });
+  etatAuDepart.current = { etat: etatSauvegarde, incompletes: etapesIncompletes, nom: nom.trim() || regle?.name || '', steps, fr, ecrire, aRegle: !!regle && !disparue };
   useEffect(() => () => {
     const d = etatAuDepart.current;
     if (sortieGeree.current || !d.aRegle) return;
@@ -1575,7 +1610,8 @@ export default function AutomationBuilderPage() {
       setReglageDeclencheur(false);
       toast.success(fr ? 'Réglages enregistrés' : 'Settings saved');
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      // Règle supprimée entre-temps : l'écran « n'existe plus » le dit déjà.
+      if (!estIntrouvable(e)) toast.error(e instanceof Error ? e.message : String(e));
     }
   }, [regle, fr, ecrire]);
 
@@ -1622,6 +1658,36 @@ export default function AutomationBuilderPage() {
         <button
           type="button"
           onClick={() => void quitterEditeur()}
+          className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          {fr ? 'Mes automatisations' : 'My automations'}
+        </button>
+      </div>
+    );
+  }
+
+  /*
+   * ELLE N'EXISTE PLUS : supprimée ailleurs pendant que l'éditeur restait
+   * ouvert (le serveur répond 404 à toute écriture). Ni canevas ni panneaux —
+   * rien de ce qu'on y ferait ne pourrait s'enregistrer. On sort par la liste,
+   * SANS repasser par l'enregistrement de sortie (il échouerait encore).
+   */
+  if (disparue) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-surface px-6 text-center">
+        <div role="alert">
+          <p className="text-base font-semibold text-text-primary">
+            {fr ? 'Cette automatisation n’existe plus.' : 'This automation no longer exists.'}
+          </p>
+          <p className="mt-1 max-w-md text-sm text-text-secondary">
+            {fr
+              ? 'Elle a été supprimée, ou vous n’y avez plus accès : les dernières modifications n’ont pas pu être enregistrées.'
+              : 'It was deleted, or you no longer have access to it: the latest changes could not be saved.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { sortieGeree.current = true; navigate('/automations'); }}
           className="rounded-lg bg-text-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {fr ? 'Mes automatisations' : 'My automations'}

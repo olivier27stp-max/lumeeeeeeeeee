@@ -314,5 +314,91 @@ describe('declencheurs-03 — pendant que le changement de déclencheur s’enre
   });
 });
 
-// Gardés pour les blocs suivants (constats de la même page).
-void lieu;
+// ─── actions-07 (côté écran) ────────────────────────────────────
+
+/** Changer la valeur d'un champ comme l'utilisateur (setter natif). */
+function saisir(el: Element | null | undefined, v: string) {
+  if (!el) throw new Error('champ introuvable');
+  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(el, v);
+  act(() => { el.dispatchEvent(new Event('input', { bubbles: true })); });
+}
+
+describe('actions-07 — l’automatisation a été supprimée pendant que l’éditeur est ouvert', () => {
+  /** Ce que `automationBuilderApi` lève quand le serveur répond 404. */
+  const introuvable = () => Object.assign(new Error('Automatisation introuvable.'), { status: 404 });
+
+  it('l’enregistrement automatique reçoit 404 : l’écran le dit, offre « Mes automatisations », et ne réessaie plus', async () => {
+    await ouvrir(`/automations/${ID}`);
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw introuvable(); });
+    cliquer(bouton('Relance devis'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v2');
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+
+    expect(container.textContent).toContain('Cette automatisation n’existe plus.');
+    // Plus de canevas ni d'interrupteur : rien à modifier, rien à publier.
+    expect(carteQuand()).toBeUndefined();
+    expect(container.querySelector('[role="switch"]')).toBeNull();
+    // Pas la promesse d'un nouvel essai qui ne peut jamais réussir.
+    expect(toasts.erreur.join('\n')).not.toContain('nouvel essai automatique');
+
+    await act(async () => { vi.advanceTimersByTime(120_000); });
+    await attendre();
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+
+    cliquer(boutonExact('Mes automatisations'));
+    await attendre();
+    expect(lieu()).toBe('/automations');
+    // Partir ne retente pas non plus l'enregistrement.
+    expect(api.modifier).toHaveBeenCalledTimes(1);
+  });
+
+  it('un changement de déclencheur reçoit 404 : même écran', async () => {
+    await ouvrir(`/automations/${ID}`);
+    api.modifier.mockImplementation(async () => { throw introuvable(); });
+    await choisirDeclencheur('Facture envoyée');
+    await attendre();
+    expect(container.textContent).toContain('Cette automatisation n’existe plus.');
+    expect(boutonExact('Mes automatisations')).toBeDefined();
+  });
+
+  it('la publication reçoit 404 : même écran', async () => {
+    await ouvrir(`/automations/${ID}`);
+    api.publier.mockImplementation(async () => { throw introuvable(); });
+    cliquer(container.querySelector('button[role="switch"]'));
+    await attendre(12);
+    expect(container.textContent).toContain('Cette automatisation n’existe plus.');
+  });
+
+  it('en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    await ouvrir(`/automations/${ID}`);
+    api.modifier.mockImplementation(async () => { throw introuvable(); });
+    cliquer(carteQuand());
+    await attendre(2);
+    cliquer(bouton('Change trigger'));
+    await attendre(2);
+    cliquer(bouton('Invoice sent'));
+    await attendre();
+    expect(container.textContent).toContain('This automation no longer exists.');
+    expect(boutonExact('My automations')).toBeDefined();
+  });
+
+  it('une panne passagère (500) n’est PAS prise pour une suppression : l’éditeur reste, et réessaie', async () => {
+    await ouvrir(`/automations/${ID}`);
+    vi.useFakeTimers();
+    api.modifier.mockImplementation(async () => { throw Object.assign(new Error('Erreur serveur'), { status: 500 }); });
+    cliquer(bouton('Relance devis'));
+    saisir(container.querySelector('input[aria-label="Nom de l’automatisation"]'), 'Relance devis v3');
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await attendre();
+    expect(container.textContent).not.toContain('n’existe plus');
+    expect(toasts.erreur.join('\n')).toContain('nouvel essai automatique');
+    await act(async () => { vi.advanceTimersByTime(6000); });
+    await attendre();
+    expect(api.modifier).toHaveBeenCalledTimes(2);
+  });
+});
