@@ -798,6 +798,16 @@ describe('recherche d’outil en suspens à côté d’un outil de Lume : retir�
     expect(r.texte).toBe('Une facture en retard.');
   });
 
+  it('l’autre forme relevée en prod — la recherche en suspens AVANT notre outil, après la réflexion', async () => {
+    // 22 h 04 UTC, « assigne la job de Marie Roy à… » : 1:assistant[thinking,server_tool_use,tool_use] 2:user[tool_result] → 400
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'thinking', thinking: '…', signature: 's' }, orpheline, lecture], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Voilà.' }], stop_reason: 'end_turn', usage });
+    const r = await tourLumi(baseTour([], []));
+    expect(forme(instantanes[1].messages)).toBe('user[texte] assistant[thinking,tool_use] user[tool_result]');
+    expect(forme(r.nouveauxMessages)).toBe('assistant[thinking,tool_use] user[tool_result] assistant[text]');
+  });
+
   it('une recherche qui a EU son résultat reste, la réflexion aussi ; seule celle en suspens part', async () => {
     const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
     reponses.push({ content: [{ type: 'thinking', thinking: '…', signature: 's' }, faite, resultat, lecture, orpheline], stop_reason: 'tool_use', usage });
