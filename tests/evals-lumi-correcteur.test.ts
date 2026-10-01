@@ -89,6 +89,17 @@ describe('correction d’un cas', () => {
     expect(corriger(c, obs({ lectures: ['get_day_route'], reponse: 'Deux visites : Guillaume Poirier à 8 h, Nathalie Côté à 13 h.' })).reussi).toBe(true);
     expect(corriger(c, obs({ lectures: ['list_invoices'], reponse: 'Rien.' })).reussi).toBe(false);
   });
+  it('juge sur le fond une lecture sans outil imposé (aide écrite, repérage) et y refuse toute écriture', () => {
+    const c = cas({ type: 'lecture', outil: null, voisins: ['search_help'], reponse_contient: ['/settings/billing|Forfait & facturation'] });
+    // L'aide écrite n'émet aucun événement d'outil : la bonne réponse réussit, avec ou sans search_help.
+    expect(corriger(c, obs({ reponse: 'Tout se passe dans Paramètres → Forfait & facturation.' })).reussi).toBe(true);
+    expect(corriger(c, obs({ lectures: ['search_help'], reponse: 'Va voir /settings/billing.' })).reussi).toBe(true);
+    // Avant, le cas passait dès que search_help était appelé, quelle que soit la réponse.
+    expect(corriger(c, obs({ lectures: ['search_help'], reponse: 'La messagerie SMS s’active dans Paramètres → Messagerie SMS.' })).echecs)
+      .toEqual(['absent de la réponse et de la carte : /settings/billing|Forfait & facturation']);
+    expect(corriger(c, obs({ proposition: 'update_reminder_settings', reponse: 'Voir /settings/billing.' })).echecs)
+      .toEqual(['écriture proposée pour une simple question : update_reminder_settings']);
+  });
   it('exige les deux outils d’une demande à deux actions', () => {
     const c = cas({ nature: 'multi', outil: 'create_lead', outils: ['create_task'] });
     expect(corriger(c, obs({ proposition: 'create_lead', groupe: ['create_task'], reponse: 'Deux actions sur la carte.' })).reussi).toBe(true);

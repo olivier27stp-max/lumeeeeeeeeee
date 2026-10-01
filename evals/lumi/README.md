@@ -142,7 +142,7 @@ Un cas étend le type `Cas` du runner (`evals/lumi-tools/run.mts`) : un cas rés
 | `q` | repris | La demande. Peut contenir un gabarit `{{factures.envoyee.numero}}`, `{{dates.demain}}`, `{{…_cents\|dollars}}`. |
 | `langue` | repris | `fr` ou `en` : envoyée à l'API. |
 | `type` | repris | `action` (une écriture est proposée sur une carte), `lecture` (un outil de lecture est appelé), `clarification` (aucune écriture). |
-| `outil` | repris | L'outil attendu ; `null` si aucun. |
+| `outil` | repris | L'outil attendu ; `null` si aucun. Une `lecture` peut avoir `outil: null` quand la bonne réponse peut venir sans outil (aide écrite, qui n'émet aucun événement d'outil ; repérage des fiches par le code) : `reponse_contient` ou `chiffres` est alors obligatoire — c'est le fond qui est vérifié — et toute écriture proposée est un échec. |
 | `params` | repris | Paramètres **non identifiants** attendus dans la carte. Texte : inclusion sans accents ni casse ; nombre : égalité. Cherchés en profondeur (lignes de devis…). |
 | `cible` | repris | Textes attendus **sur la carte** (nom du client, numéro). `a\|b` : l'un ou l'autre. |
 | `interdits` | repris | Écritures qui ne doivent pas être proposées. |

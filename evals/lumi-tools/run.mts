@@ -110,6 +110,8 @@ export function juger(c: Cas, r: { proposition: string | null; groupe: string[];
   else if (c.type === 'clarification') verdict_outil = proposes.length === 0 && (/\?/.test(r.reponse) || REFUS.test(r.reponse)) ? 'exact' : 'rate';
   // Action directe (0 token, ex. marquer les notifications lues) : l'outil attendu a été appelé = bon choix.
   else if (c.type === 'action') verdict_outil = c.outil && (proposes.includes(c.outil) || r.lectures.includes(c.outil)) && !interdit ? 'exact' : (c.voisins ?? []).some((v) => r.lectures.includes(v)) && proposes.length === 0 ? 'partiel' : 'rate';
+  // Lecture sans outil imposé (jeu evals/lumi : aide écrite, repérage) : le fond est jugé par le correcteur, ici seule une écriture est une faute.
+  else if (!c.outil) verdict_outil = proposes.length === 0 ? 'exact' : 'rate';
   else verdict_outil = c.outil && r.lectures.includes(c.outil) ? 'exact' : (c.voisins ?? []).some((v) => r.lectures.includes(v)) ? 'partiel' : 'rate';
 
   const manquants: string[] = [];

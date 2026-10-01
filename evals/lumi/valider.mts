@@ -97,7 +97,12 @@ for (const c of cas) {
   // Outils : existence et genre
   if (c.outil === undefined) faute('outil manquant (null si aucun outil n’est attendu)');
   if (c.type === 'action') { if (!c.outil) faute('une action attend un outil'); else existe(c.outil, 'outil', 'write'); }
-  if (c.type === 'lecture') { if (!c.outil) faute('une lecture attend un outil'); else existe(c.outil, 'outil', 'read'); }
+  // Une lecture sans outil imposé (outil: null) : la bonne réponse peut venir sans outil (aide écrite,
+  // repérage des fiches par le code). Le cas doit alors contrôler le FOND, sinon il ne vérifie rien.
+  if (c.type === 'lecture') {
+    if (c.outil) existe(c.outil, 'outil', 'read');
+    else if (!(c.reponse_contient?.length || c.chiffres?.length)) faute('une lecture sans outil imposé (outil: null) doit contrôler le fond : reponse_contient ou chiffres');
+  }
   if (c.type === 'clarification' && c.outil) faute('une clarification n’attend aucun outil (outil: null)');
   if (NATURES_SANS_ECRITURE.includes(c.nature) && c.type === 'action') faute(`nature « ${c.nature} » : aucune écriture ne peut être attendue`);
   if ((c.nature === 'simple' || c.nature === 'multi') && c.type === 'clarification') faute(`nature « ${c.nature} » : un outil est attendu`);
