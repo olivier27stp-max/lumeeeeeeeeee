@@ -44,7 +44,7 @@ import {
   BoutonsVariablesChamps, ConditionsChampsEtape, EditeurMajChamp, sansConditionsIncompletes,
 } from '../champs/automatisations';
 import type { ChampPerso, ObjetChamp } from '../../lib/champs/types';
-import { variablesInconnues, variableLisible } from '../../lib/emailBodyText';
+import { htmlVersTexte, texteVersHtml, variablesInconnues, variableLisible } from '../../lib/emailBodyText';
 import { confirmer } from '../ui/ConfirmDialog';
 
 /** Les conditions d'une étape « si », en texte modifiable. */
@@ -158,6 +158,50 @@ function sansAnglaisVide(etape: Etape): Etape {
   return { ...etape, action: { ...etape.action, config } };
 }
 
+/**
+ * LE CORPS D'UN COURRIEL FOURNI EST DU HTML — triage actions, ligne 3.
+ *
+ * Les automatisations fournies stockent `<div style="font-family:…"><h2>…` :
+ * nécessaire à l'envoi, illisible pour qui veut changer une phrase. Le panneau
+ * montrait ce balisage brut dans « Message ». Comme l'éditeur de la liste
+ * (MessageEditor), on édite donc du TEXTE :
+ *   · à l'ouverture, le HTML devient son texte (`htmlVersTexte`) ;
+ *   · à l'enregistrement, un texte INCHANGÉ rend le HTML d'origine, à
+ *     l'octet près ; un texte modifié est remis en HTML (`texteVersHtml`).
+ * Un corps écrit en texte simple (toute étape créée dans l'éditeur) n'est
+ * jamais touché : il est enregistré tel qu'on l'a tapé.
+ */
+const CLES_CORPS_COURRIEL = ['body', cleAnglaise('body')];
+/** Du HTML du produit : il COMMENCE par une balise de bloc. « total < 500 $ » n'en est pas. */
+const estCorpsHtml = (valeur: string | undefined): valeur is string =>
+  typeof valeur === 'string' && /^\s*<(div|p|h[1-6]|ul|table)\b[^>]*>/i.test(valeur);
+
+/** L'étape telle que le panneau l'édite, et ce qu'il faut pour rendre le HTML à l'enregistrement. */
+function versEdition(etape: Etape): { etape: Etape; html: Record<string, { html: string; texte: string }> } {
+  const html: Record<string, { html: string; texte: string }> = {};
+  if (etape.type !== 'action' || etape.action.type !== 'send_email') return { etape, html };
+  const config = { ...etape.action.config };
+  for (const cle of CLES_CORPS_COURRIEL) {
+    const valeur = config[cle];
+    if (!estCorpsHtml(valeur)) continue;
+    html[cle] = { html: valeur, texte: htmlVersTexte(valeur) };
+    config[cle] = html[cle].texte;
+  }
+  return Object.keys(html).length ? { etape: { ...etape, action: { ...etape.action, config } }, html } : { etape, html };
+}
+
+/** L'inverse, au moment d'enregistrer. Une étape devenue autre chose qu'un courriel garde le TEXTE. */
+function versEnregistrement(etape: Etape, html: Record<string, { html: string; texte: string }>): Etape {
+  if (etape.type !== 'action' || etape.action.type !== 'send_email') return etape;
+  const config = { ...etape.action.config };
+  for (const [cle, origine] of Object.entries(html)) {
+    const valeur = config[cle];
+    if (typeof valeur !== 'string' || valeur.trim() === '') continue;
+    config[cle] = valeur === origine.texte ? origine.html : texteVersHtml(valeur);
+  }
+  return { ...etape, action: { ...etape.action, config } };
+}
+
 /** Les variables offertes, insérables d'un clic dans un champ de texte. */
 const VARIABLES = [
   { cle: 'client_name', fr: 'Nom du client', en: 'Client name' },
@@ -232,8 +276,14 @@ export default function PanneauEtape({
 }: Props) {
   const ids = useId();
   const [onglet, setOnglet] = useState<'edition' | 'stats'>('edition');
+  /**
+   * L'étape TELLE QU'ON L'ÉDITE : le corps HTML d'un courriel fourni y est du
+   * texte (voir `versEdition`). C'est à elle, pas à `etape`, que le brouillon
+   * se compare pour savoir si quelque chose a changé.
+   */
+  const reference = useMemo(() => versEdition(etape), [etape]);
   // Le brouillon : on ne touche au parcours qu'en enregistrant.
-  const [brouillon, setBrouillon] = useState<Etape>(etape);
+  const [brouillon, setBrouillon] = useState<Etape>(reference.etape);
 
   /**
    * Le texte BRUT du champ « Conditions », tel qu'on le tape.
@@ -263,7 +313,7 @@ export default function PanneauEtape({
    * été ouverte » — au lieu de dépendre d'un détail du parent.
    */
   useEffect(() => {
-    setBrouillon(etape);
+    setBrouillon(reference.etape);
     setConditionsTexte(texteDesConditions(etape));
     setAnglaisConfirme([]);
     setOnglet('edition');
@@ -280,8 +330,8 @@ export default function PanneauEtape({
   const modifie = useMemo(
     // Une étape NEUVE est tout entière une saisie non enregistrée.
     () => nouvelle || (brouillon.id === etape.id
-      && (JSON.stringify(brouillon) !== JSON.stringify(etape) || conditionsTexte !== texteDesConditions(etape))),
-    [brouillon, etape, conditionsTexte, nouvelle],
+      && (JSON.stringify(brouillon) !== JSON.stringify(reference.etape) || conditionsTexte !== texteDesConditions(etape))),
+    [brouillon, etape, reference, conditionsTexte, nouvelle],
   );
   useEffect(() => { onModifie?.(modifie); }, [modifie, onModifie]);
   useEffect(() => () => onModifie?.(false), [onModifie]);
@@ -323,7 +373,7 @@ export default function PanneauEtape({
   const versionsAnglaises = useMemo(() => {
     if (brouillon.type !== 'action' || !modele) return [];
     const config = brouillon.action.config as Record<string, string | undefined>;
-    const origine = (etape.type === 'action' ? etape.action.config : {}) as Record<string, string | undefined>;
+    const origine = (reference.etape.type === 'action' ? reference.etape.action.config : {}) as Record<string, string | undefined>;
     return modele.champs
       .filter((c) => aVersionAnglaise(c) && config[cleAnglaise(c.cle)] !== undefined && champVisible(c, config))
       .map((c) => {
@@ -335,7 +385,7 @@ export default function PanneauEtape({
           && anglais === (origine[cleEn] ?? '');
         return { champ: c, modeleAnglais: champAnglais(c), cleEn, aRevoir, perimee: aRevoir && !anglaisConfirme.includes(c.cle) };
       });
-  }, [brouillon, etape, modele, anglaisConfirme]);
+  }, [brouillon, reference, modele, anglaisConfirme]);
 
   /** Ce qui empêche d'enregistrer, dit avant de cliquer. */
   const problemes = useMemo(() => {
@@ -955,7 +1005,7 @@ export default function PanneauEtape({
           onClick={() => onEnregistrer(brouillon.type === 'si'
             // Une ligne de champ incomplète bloquerait la branche pour toujours.
             ? { ...brouillon, conditions: sansConditionsIncompletes((brouillon.conditions ?? {}) as Record<string, unknown>) }
-            : sansAnglaisVide(brouillon))}
+            : versEnregistrement(sansAnglaisVide(brouillon), reference.html))}
           disabled={problemes.length > 0}
           className="rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >

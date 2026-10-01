@@ -98,6 +98,72 @@ const configEnregistree = () => {
   return e?.type === 'action' ? e.action.config : null;
 };
 
+// ─── Ligne 3 du triage « actions » ──────────────────────────────
+
+describe('ligne 3 — le courriel d’une automatisation fournie s’ouvre en texte lisible, pas en balises HTML', () => {
+  const HTML_FR = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Bonjour [client_first_name],</h2><p>Vous nous avez contactés récemment.</p><p>Merci,<br/>[company_name]</p></div>';
+  const HTML_EN = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Hi [client_first_name],</h2><p>You reached out to us recently.</p><p>Thank you,<br/>[company_name]</p></div>';
+  const fourni = { subject: 'Votre demande n’est pas oubliée', subject_en: 'We haven’t forgotten your request', body: HTML_FR, body_en: HTML_EN };
+
+  it('« Message » montre le texte, sans balise ni style — la version anglaise aussi', async () => {
+    await monter('send_email', fourni, { declencheur: 'lead.created' });
+    const message = champ<HTMLTextAreaElement>('Message *');
+    expect(message?.value).toBe('Bonjour [client_first_name],\nVous nous avez contactés récemment.\nMerci,\n[company_name]');
+    expect(champ<HTMLTextAreaElement>('Message — version anglaise')?.value).toBe('Hi [client_first_name],\nYou reached out to us recently.\nThank you,\n[company_name]');
+    for (const zone of Array.from(conteneur.querySelectorAll('textarea'))) expect(zone.value).not.toMatch(/<div|<p>|<h2>|style=/);
+  });
+
+  it('ouvrir n’est pas modifier : ni « Fermer sans enregistrer ? », ni réécriture — le HTML d’origine revient à l’octet près', async () => {
+    const onFermer = vi.fn();
+    await monter('send_email', fourni, { declencheur: 'lead.created', onFermer });
+    cliquer(boutonExact('Annuler'));
+    await act(async () => { await Promise.resolve(); });
+    expect(confirmerMock).not.toHaveBeenCalled();
+    expect(onFermer).toHaveBeenCalledTimes(1);
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual(fourni);
+  });
+
+  it('corriger une phrase : le courriel repart en HTML, avec la phrase corrigée — et l’anglais, intact, garde son HTML d’origine', async () => {
+    await monter('send_email', fourni, { declencheur: 'lead.created' });
+    saisir(champ('Message *'), 'Bonjour [client_first_name],\nVotre demande est entre bonnes mains.\nMerci,\n[company_name]');
+    saisir(champ('Message — version anglaise'), 'Hi [client_first_name],\nYour request is in good hands.\nThank you,\n[company_name]');
+    cliquer(enregistrer());
+    const config = configEnregistree() ?? {};
+    expect(config.body).toMatch(/^<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">/);
+    expect(config.body).toContain('<h2 style="color:#1a1a1a;font-size:18px;">Bonjour [client_first_name],</h2>');
+    expect(config.body).toContain('Votre demande est entre bonnes mains.</p>');
+    expect(config.body).not.toContain('contactés récemment');
+    expect(config.body_en).toContain('Your request is in good hands.</p>');
+    expect(config.subject).toBe(fourni.subject);
+  });
+
+  it('un seul des deux textes corrigé : l’autre garde son HTML d’origine, inchangé', async () => {
+    await monter('send_email', fourni, { declencheur: 'lead.created' });
+    saisir(champ('Message — version anglaise'), 'Hi [client_first_name],\nShort version.');
+    cliquer(enregistrer());
+    expect(configEnregistree()?.body).toBe(HTML_FR);
+    expect(configEnregistree()?.body_en).toContain('Short version.</p>');
+  });
+
+  it('un corps écrit en TEXTE (étape créée dans l’éditeur) est enregistré tel qu’on l’a tapé, « < » compris', async () => {
+    const corps = 'Bonjour [client_name],\n\nVotre devis « été » est prêt : 2 options & 1 rabais si total < 500 $.\n\n— L’équipe';
+    await monter('send_email', { subject: 'Objet', body: 'Corps' });
+    saisir(champ('Message *'), corps);
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual({ subject: 'Objet', body: corps });
+  });
+
+  it('passer ce courriel en texto : c’est le TEXTE qui suit, jamais le balisage', async () => {
+    await monter('send_email', fourni, { declencheur: 'lead.created' });
+    saisir(champ<HTMLSelectElement>('Quoi faire'), 'send_sms');
+    expect(champ<HTMLTextAreaElement>('Texte du message *')?.value).toBe('Bonjour [client_first_name],\nVous nous avez contactés récemment.\nMerci,\n[company_name]');
+    saisir(champ('Texte du message — version anglaise'), '');
+    cliquer(enregistrer());
+    expect(configEnregistree()).toEqual({ body: 'Bonjour [client_first_name],\nVous nous avez contactés récemment.\nMerci,\n[company_name]' });
+  });
+});
+
 // ─── Ligne 2 du triage « actions » ──────────────────────────────
 
 describe('ligne 2 — la version anglaise d’un texte (`body_en`, `subject_en`) est visible et modifiable', () => {

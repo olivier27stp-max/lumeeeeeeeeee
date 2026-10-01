@@ -49,6 +49,23 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     verifier(config.body === 'Rabais de 20 % jusqu’au 1er juin.' && config.body_en === '20% off until June 1st.', 'les deux textes sont en base');
     await page.context().close();
   },
+
+  /** Ligne 3 — le courriel d'une automatisation fournie, converti au clic, s'ouvre en texte lisible. */
+  async l3() {
+    const HTML = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2>Bonjour [client_first_name],</h2><p>Vous nous avez contactés récemment.</p><p>Merci,<br/>[company_name]</p></div>';
+    const regle = await creerRegle({ trigger_event: 'lead.created', steps: null, actions: [{ type: 'send_email', config: { subject: 'Votre demande n’est pas oubliée', body: HTML } }] });
+    const page = await ouvrirPage();
+    await ouvrirEditeur(page, regle.id);
+    await carte(page, 'Envoyer un courriel').click();
+    const p = panneau(page);
+    await p.waitFor({ timeout: 120_000 });
+    const affiche = await p.getByLabel('Message *', { exact: true }).inputValue();
+    verifier(!/<div|<p>|<h2>|style=/.test(affiche) && affiche.startsWith('Bonjour [client_first_name],'), `« Message » est du texte : ${JSON.stringify(affiche.slice(0, 60))}`);
+    await enregistrer(page).click();
+    await pause(5000);
+    verifier((await etapes(regle.id))[0]?.action?.config?.body === HTML, 'réenregistré sans rien changer : le HTML d’origine est intact en base');
+    await page.context().close();
+  },
 };
 
 const demandes = process.argv.slice(2);
