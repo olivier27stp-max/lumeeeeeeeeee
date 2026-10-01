@@ -408,6 +408,103 @@ describe('EDITEUR-04 — un seul panneau à droite à la fois', () => {
   });
 });
 
+// ─── EDITEUR-06 ─────────────────────────────────────────────────
+
+/** Une touche tapée là où est le focus (`cible`), comme le navigateur l'envoie. */
+function taper(cible: Element, key: string, modif: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean } = {}) {
+  const evenement = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modif });
+  act(() => { cible.dispatchEvent(evenement); });
+  return evenement;
+}
+
+describe('EDITEUR-06 — Ctrl+Z / Ctrl+Y annulent et rétablissent une modification du parcours', () => {
+  /** Supprime l'étape « Créer une tâche » par son menu « … ». */
+  async function supprimerLaTache() {
+    cliquer(container.querySelector('button[aria-label="Options de l’étape Créer une tâche"]'));
+    cliquer(bouton('Supprimer l’action'));
+    await attendre();
+    expect(carteEtape('Créer une tâche')).toBeUndefined();
+  }
+
+  it('Ctrl+Z ramène l’étape supprimée, Ctrl+Y la retire de nouveau', async () => {
+    await ouvrir(`/automations/${ID}`);
+    await supprimerLaTache();
+
+    const z = taper(document.body, 'z', { ctrlKey: true });
+    expect(carteEtape('Créer une tâche')).toBeDefined();
+    // Le raccourci est à nous : le navigateur n'en fait rien d'autre.
+    expect(z.defaultPrevented).toBe(true);
+
+    taper(document.body, 'y', { ctrlKey: true });
+    expect(carteEtape('Créer une tâche')).toBeUndefined();
+  });
+
+  it('Cmd+Z et Cmd+Maj+Z (Mac) font la même chose ; Ctrl+Maj+Z aussi', async () => {
+    await ouvrir(`/automations/${ID}`);
+    await supprimerLaTache();
+    taper(document.body, 'z', { metaKey: true });
+    expect(carteEtape('Créer une tâche')).toBeDefined();
+    taper(document.body, 'Z', { metaKey: true, shiftKey: true });
+    expect(carteEtape('Créer une tâche')).toBeUndefined();
+    taper(document.body, 'z', { ctrlKey: true });
+    expect(carteEtape('Créer une tâche')).toBeDefined();
+    taper(document.body, 'Z', { ctrlKey: true, shiftKey: true });
+    expect(carteEtape('Créer une tâche')).toBeUndefined();
+  });
+
+  it('le focus sur une carte du canevas (un bouton) : le raccourci marche aussi', async () => {
+    await ouvrir(`/automations/${ID}`);
+    await supprimerLaTache();
+    const carte = carteEtape('Envoyer un texto')!;
+    act(() => { carte.focus(); });
+    taper(carte, 'z', { ctrlKey: true });
+    expect(carteEtape('Créer une tâche')).toBeDefined();
+  });
+
+  it('dans un champ de saisie, Ctrl+Z reste celui du navigateur : le parcours ne bouge pas', async () => {
+    await ouvrir(`/automations/${ID}`);
+    await supprimerLaTache();
+    // Le champ de Lumi (textarea), puis le nom de l'automatisation (input).
+    const lumi = container.querySelector('textarea')!;
+    const dansLumi = taper(lumi, 'z', { ctrlKey: true });
+    expect(carteEtape('Créer une tâche')).toBeUndefined();
+    expect(dansLumi.defaultPrevented).toBe(false);
+
+    cliquer(bouton('Relance devis'));
+    const nom = container.querySelector('input[aria-label="Nom de l’automatisation"]')!;
+    taper(nom, 'z', { ctrlKey: true });
+    taper(nom, 'y', { ctrlKey: true });
+    expect(carteEtape('Créer une tâche')).toBeUndefined();
+  });
+
+  it('dans un menu déroulant ou une zone éditable : pareil', async () => {
+    await ouvrir(`/automations/${ID}`);
+    await supprimerLaTache();
+    cliquer(carteEtape('Envoyer un texto'));
+    await attendre(2);
+    const menu = container.querySelector(`aside[aria-label="${PANNEAU_ETAPE}"] select`)!;
+    taper(menu, 'z', { ctrlKey: true });
+    expect(carteEtape('Créer une tâche')).toBeUndefined();
+    const editable = document.createElement('div');
+    editable.setAttribute('contenteditable', 'true');
+    container.appendChild(editable);
+    taper(editable, 'z', { ctrlKey: true });
+    expect(carteEtape('Créer une tâche')).toBeUndefined();
+  });
+
+  it('« z » tout seul, ou hors de l’onglet Parcours : rien', async () => {
+    await ouvrir(`/automations/${ID}`);
+    await supprimerLaTache();
+    const seule = taper(document.body, 'z');
+    expect(seule.defaultPrevented).toBe(false);
+    expect(carteEtape('Créer une tâche')).toBeUndefined();
+    cliquer(boutons().find((b) => b.getAttribute('role') === 'tab' && b.textContent === 'Journaux'));
+    taper(document.body, 'z', { ctrlKey: true });
+    cliquer(boutons().find((b) => b.getAttribute('role') === 'tab' && b.textContent === 'Parcours'));
+    expect(carteEtape('Créer une tâche')).toBeUndefined();
+  });
+});
+
 // ─── actions-07 (côté écran) ────────────────────────────────────
 
 /** Changer la valeur d'un champ comme l'utilisateur (setter natif). */

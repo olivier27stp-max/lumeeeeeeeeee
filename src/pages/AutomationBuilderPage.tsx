@@ -937,6 +937,36 @@ export default function AutomationBuilderPage() {
     setEtatSauvegarde('modifie');
   };
 
+  /*
+   * Ctrl+Z / Ctrl+Y (Cmd+Z / Cmd+Maj+Z sur Mac) — les deux flèches de la
+   * barre, au clavier (audit du 2026-10-01 : Ctrl+Z ne faisait rien, la carte
+   * supprimée par erreur ne revenait pas).
+   *
+   * JAMAIS quand le focus est dans un champ de saisie : là, Ctrl+Z est celui
+   * du navigateur, qui annule la frappe. Ni hors de l'onglet Parcours (on
+   * défaisait un canevas qu'on ne voit pas), ni sous une boîte de dialogue.
+   */
+  const canevasAffiche = onglet === 'parcours' && !chargement && !!regle && !regle.deleted_at && !disparue;
+  const raccourcisCanevas = useRef({ annuler, refaire, actifs: canevasAffiche });
+  raccourcisCanevas.current = { annuler, refaire, actifs: canevasAffiche };
+  useEffect(() => {
+    const surTouche = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.defaultPrevented) return;
+      const touche = e.key.toLowerCase();
+      const veutAnnuler = touche === 'z' && !e.shiftKey;
+      const veutRefaire = (touche === 'z' && e.shiftKey) || (touche === 'y' && e.ctrlKey && !e.shiftKey);
+      if (!veutAnnuler && !veutRefaire) return;
+      const cible = e.target instanceof Element ? e.target : null;
+      if (cible?.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
+      if (!raccourcisCanevas.current.actifs || document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      e.preventDefault();
+      if (veutAnnuler) raccourcisCanevas.current.annuler();
+      else raccourcisCanevas.current.refaire();
+    };
+    document.addEventListener('keydown', surTouche);
+    return () => document.removeEventListener('keydown', surTouche);
+  }, []);
+
   // ── Le panneau d'edition ──
   // Ouvrir une carte, la modifier, l'enregistrer ou la supprimer. C'etait
   // le trou du builder : cliquer une carte la selectionnait et n'ouvrait
