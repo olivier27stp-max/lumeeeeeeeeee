@@ -37,8 +37,8 @@
  *          d'origine (`actions`). Une règle bâtie dans l'éditeur (`steps`)
  *          montre un aperçu en LECTURE SEULE + « Modifier dans l'éditeur ».
  *          Variable inconnue signalée : F22 CORRIGÉ dans MessageEditor.
- *          (Le panneau d'étape de l'éditeur plein écran, lui, ne la signale
- *          pas : voir tests/quarantaine/automation/front-automations-defauts.unit.test.tsx.)
+ *          (Le panneau d'étape de l'éditeur plein écran la signale aussi
+ *          depuis le 2026-10-01 : voir front-automations-panneau-etape.test.tsx.)
  *   T13.9  accessibilité                                → cliquet à 0 sur TOUS les fichiers de
  *          l'écran (4 pages + src/components/automations/*), plus un contrôle
  *          sur le DOM rendu.
