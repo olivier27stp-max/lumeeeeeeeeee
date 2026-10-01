@@ -21,6 +21,7 @@
  *                    puis les arrête — tests/automations-suite/harnais/serveurs-ui.ts)
  */
 import { spawnSync } from 'node:child_process';
+import { hostname } from 'node:os';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { parse } from 'dotenv';
 
@@ -83,6 +84,22 @@ if (projets.includes('integration')) {
     console.error('✗ Bureau de test impossible à préparer : la suite ne tourne pas.');
     process.exit(b.status || 1);
   }
+}
+
+// Une exécution à la fois par base : on prend le verrou de la suite, ou on
+// attend son tour (scripts/qa/verrou-suite-automatisations.mts). Rendu à la
+// sortie, quelle qu'elle soit.
+if (projets.includes('integration') || projets.includes('ui')) {
+  let titulaire = `${process.env.GITHUB_RUN_ID ? `ci-${process.env.GITHUB_RUN_ID}` : `local-${hostname()}`}-${Date.now().toString(36)}`;
+  const verrou = (action) => spawnSync(npx, ['tsx', ...envFichier, 'scripts/qa/verrou-suite-automatisations.mts', action, titulaire], {
+    stdio: 'inherit', shell: process.platform === 'win32', env: envCible,
+  });
+  if (verrou('prendre').status !== 0) {
+    console.error('✗ Verrou de la suite non obtenu : la suite ne tourne pas.');
+    process.exit(1);
+  }
+  process.on('exit', () => { if (titulaire) { verrou('rendre'); titulaire = ''; } });
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => process.exit(130));
 }
 
 if (projets.includes('ui')) {
