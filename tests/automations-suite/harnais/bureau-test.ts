@@ -1,5 +1,6 @@
 /**
- * Bureau de test de la suite `npm run test:automations` — STAGING seulement.
+ * Bureau de test de la suite `npm run test:automations` — staging par défaut,
+ * la production seulement sur demande explicite (`-- --prod`, voir MOT_PROD).
  *
  * Deux entreprises marquées « [TEST] » (A = celle qu'on éprouve, B = la
  * voisine qui ne doit JAMAIS rien voir ni subir de A), leurs comptes, un
@@ -16,6 +17,23 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomBytes } from 'node:crypto';
 
 export const REF_PROD = 'bbzcuzqfgsdvjsymfwmr';
+
+/**
+ * La PRODUCTION n'est une cible que sur demande explicite :
+ * `npm run test:automations -- --prod` pose QA_AUTO_PROD. Rafba l'a demandé
+ * le 2026-10-01 (« en prod et pas en staging »). Ce qui rend la chose sûre :
+ * les bureaux de test sont inscrits au bac à sable AVANT toute donnée, le
+ * serveur de prod porte le même bac à sable (#813), et le canari tourne en
+ * premier. Sans ce mot exact, toute adresse de prod est refusée.
+ */
+export const MOT_PROD = 'je-confirme-la-prod';
+export function prodConfirmee(): boolean {
+  return process.env.QA_AUTO_PROD === MOT_PROD;
+}
+/** La base visée est-elle la prod ? (rafale réduite, etc.) */
+export function cibleProd(): boolean {
+  return (process.env.VITE_SUPABASE_URL ?? '').includes(REF_PROD);
+}
 
 /**
  * `QA_AUTO_SUFFIXE` (facultatif) : un jeu de bureaux PAR développeur ou agent
@@ -61,7 +79,7 @@ export function adminStaging(): SupabaseClient {
   const url = process.env.VITE_SUPABASE_URL ?? '';
   const cle = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
   if (!url || !cle) throw new Error('VITE_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY manquants (.env.local staging).');
-  if (url.includes(REF_PROD)) throw new Error('REFUS : la suite des automatisations ne tourne JAMAIS sur la production.');
+  if (url.includes(REF_PROD) && !prodConfirmee()) throw new Error('REFUS : la suite des automatisations ne vise la production que sur demande explicite (npm run test:automations -- --prod).');
   return createClient(url, cle, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
