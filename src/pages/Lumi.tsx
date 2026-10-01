@@ -812,6 +812,10 @@ export default function Lumi() {
                   ? (fr ? 'Lumi souffle deux minutes : beaucoup de demandes d’un coup. Réessaie tout à l’heure.' : 'Lumi is catching its breath: a lot of requests at once. Try again shortly.')
                   : erreur.code === 'quota_epuise'
                 ? remplir(textesCredits.c.exhausted, { unit: textesCredits.unit, Unit: textesCredits.Unit, date: textesCredits.date })
+                : erreur.code === 'interrompu'
+                  ? (fr
+                    ? 'La réponse de Lumi a été interrompue avant la fin (connexion perdue ou mise à jour du service). Vérifie ce qui est affiché ci-dessus, puis renvoie ton message.'
+                    : 'Lumi’s reply was cut off before the end (lost connection or a service update). Check what is shown above, then send your message again.')
                 : erreur.code === 'plan_sans_lumi'
                   ? (fr ? 'Lumi est inclus dans le forfait Autopilot.' : 'Lumi is included in the Autopilot plan.')
                   : erreur.code === 'lumi_not_configured'
