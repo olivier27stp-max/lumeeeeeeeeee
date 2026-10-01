@@ -340,22 +340,22 @@ Comparaison avec les modules de commissions de ServiceTitan (paie « performance
 
 ---
 
-## 9. Migrations en attente d'approbation
+## 9. Migrations — appliquées le 2026-09-30
 
-Écrites dans `supabase/migrations/proposed/` (dossier que le pipeline n'applique pas). **Aucune n'a été appliquée ailleurs que sur la base locale jetable**, où elles ont été prouvées puis retirées (schéma local revérifié identique à la prod ensuite).
+Approuvées par Rafba le 2026-09-30, appliquées **staging puis prod** après une sauvegarde complète de la prod relue (`../lume-backups/prod-20261001-0010.dump`, 268 tables). Vérifié après coup : index valides, fonction réservée à `service_role`, `check:schema-refs` (staging + prod), `check:broken-objects`, `qa:rls-roles` 24/24, empreinte du schéma prod = staging (hors pgvector, écart préexistant).
 
-**Pré-requis avant toute application en prod :** un dump complet de la prod. Il est **impossible aujourd'hui** : le mot de passe prod de `.env.local` est refusé et les sauvegardes échouent depuis le 2026-09-26 (§0.1). Il faut d'abord remettre le bon mot de passe dans `.env.local` (`SUPABASE_DB_PASSWORD`), lancer `npm run backup:prod` et vérifier le dump.
+| Fichier | Corrige | Preuve |
+|---|---|---|
+| `20261005600000_commissions_facture_refaite.sql` | B-05 : facture refaite sur un job jamais commissionnée. | Exactitude 12/12 (RF2 payée), idempotence intacte. |
+| `20261005600100_commissions_rls_loi25.sql` | S-01 à S-04 : un rep ne lit que SES commissions et SON plan (Loi 25), admin suspendu sans accès, réglages réservés propriétaire/admin, `show_peer_payouts` faux par défaut. | Sécurité : S-01/S-02 au vert. Aucune page ne lit ces tables depuis le navigateur. |
+| `20261005600200_commissions_index_periode.sql` | Aucune lecture de période n'avait d'index. | 145 → 3,3 ms ; RLS 193 → 8 ms (§7). |
+| `20261005600300_commissions_index_periode_rep.sql` | Vue d'un rep, relevé, cumul des paliers. | Cumul du mois 20 → 0,36 ms. |
+| `20261005600400_commissions_totaux_sql.sql` | Totaux d'une période en une requête (`commissions_totaux_periode`). | Année 766 ms au lieu de 14–18 s. `totauxPeriode()` l'utilise et retombe sur la lecture paginée si elle manque ; `tests/commissions-audit/totaux-sql.test.ts` : SQL = code au cent (47/47). |
+| `20261005600500_commissions_demo_corbeille.sql` | Les 27 commissions de démonstration de Coquin lavage (juillet, sans facture, 7 156 $) mises à la corbeille (suppression douce). | 0 commission active restante en prod ; retour arrière dans le fichier. |
 
-| Fichier | Corrige | Effet prouvé en local | Risque |
-|---|---|---|---|
-| `20261005100000_commissions_facture_refaite.sql` | B-05 : facture refaite sur un job jamais commissionnée. | Exactitude 12/12 (RF2 payée), idempotence intacte. | Faible. Index recréé, aucune donnée touchée. Retour arrière documenté. |
-| `20261005100100_commissions_rls_loi25.sql` | S-01 à S-04 : lecture des commissions et des taux des collègues (Loi 25), admin suspendu, réglages modifiables par tout membre. S-01 est **latent** en prod aujourd'hui (aucune entreprise n'a encore de ligne `field_settings`) : il s'ouvre à la première sauvegarde des réglages terrain. | Sécurité 9/10 (reste S-05, voir plus bas). | Faible : aucune page ne lit ces tables directement. `show_peer_payouts` perd son effet (il n'en avait aucun à l'écran, D15). |
-| `20261005100200_commissions_index_periode.sql` | Performance : aucune lecture de période n'avait d'index. | 145 → 3,3 ms ; RLS 193 → 8 ms (§7). | Très faible : `CREATE INDEX CONCURRENTLY`, sans verrou d'écriture. À appliquer seul (hors transaction). |
-| `20261005100300_commissions_totaux_sql.sql` | Performance : totaux d'une période en SQL. | Année 766 ms au lieu de 14–18 s, totaux identiques au cent. | Faible. Fonction réservée à `service_role`. Le branchement côté serveur (quelques lignes, avec un test d'égalité) se fait **après** l'application — pas avant, sinon l'appel échouerait. |
+La politique de reprise (clawback) n'a pas besoin de migration : elle vit dans les réglages (`commission-reglages.ts`).
 
-**Pas encore écrite, dépend d'un choix :**
-- **S-05** (taux horaires lisibles par tous dans `team_members`) : l'onglet « Taux » et la carte « Ma paie » lisent ces colonnes directement depuis le navigateur. Il faut d'abord les faire passer par le serveur, puis retirer la lecture des colonnes à `authenticated`. Décision de ta part sur le périmètre (même constat relevé par l'audit rentabilité).
-- **Clôture de période** (D13) : exige de trancher D4/D13 d'abord.
+**Reste hors périmètre :** S-05 (taux horaires) corrigé à part par #818.
 
 ---
 

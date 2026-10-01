@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { logDataExport } from '../lib/data-export-log';
-import { getPayrollPreview, toutesLesEntrees } from '../lib/field-sales/commission-engine';
-import { bornesPeriode, totauxCommissions } from '../lib/field-sales/commission-periode';
+import { getPayrollPreview, totauxPeriode } from '../lib/field-sales/commission-engine';
+import { bornesPeriode } from '../lib/field-sales/commission-periode';
 import { fuseauOrg } from '../lib/automations-fuseau-org';
 import { verserCommissionsPeriode, annulerVersementPeriode } from '../lib/field-sales/commission-verrou';
 import {
@@ -222,12 +222,11 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
     .not('user_id', 'is', null);
   if (mErr) throw new Error(mErr.message);
   // Commissions GAGNÉES dans la période (date de paiement de la facture),
-  // lues par la même fonction que la page Commissions : ni estimations (jobs
-  // pas encore payés — la paie les versait), ni reprises. Paginé : au-delà
-  // de 1 000 lignes, PostgREST tronquait en silence.
-  const commissions = (await toutesLesEntrees(sc, orgId, 'user_id, invoice_id, status, amount',
-    { dateRange: { from: period.start, to: period.end } })).filter((c: any) => c.invoice_id);
-  const avecCommission = new Set(commissions.filter((c: any) => c.status !== 'reversed').map((c: any) => c.user_id));
+  // totalisées par la même fonction que la page Commissions : ni estimations
+  // (jobs pas encore payés — la paie les versait), ni reprises. Jamais
+  // tronqué (avant : 1 000 lignes max, en silence).
+  const parRep = new Map((await totauxPeriode(sc, orgId, { from: period.start, to: period.end })).par_rep.map((r) => [r.user_id, r]));
+  const avecCommission = new Set([...parRep.values()].filter((r) => r.ventes > 0 || r.du_cents !== 0).map((r) => r.user_id));
   // Un membre désactivé à qui une commission est due reste visible : avant,
   // ses commissions disparaissaient de toutes les paies (décision D10 sur le
   // fond ; ici on ne cache plus l'argent dû).
@@ -281,7 +280,7 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
     const hours = sumEntryHours(myEntries);
     const rateCents = tauxHoraireCents(m);
     const grossCents = Math.round(hours * rateCents);
-    const commissionCents = totauxCommissions(commissions.filter((c: any) => c.user_id === m.user_id)).du_cents;
+    const commissionCents = parRep.get(m.user_id)?.du_cents ?? 0;
     const myAdjustments = adjustments.filter((a) => a.user_id === m.user_id);
     const adjustmentsCents = myAdjustments.reduce((s, a) => s + Number(a.amount_cents || 0), 0);
     const payment = payments.find((p) => p.user_id === m.user_id) || null;
