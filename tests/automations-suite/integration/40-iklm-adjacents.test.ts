@@ -476,10 +476,10 @@ describe('K — relances d’abonnement Lume (dunning)', () => {
     expect((await courrielsVers(courrielB, depuis)).length).toBe(1);
   });
 
-  it.fails('[K-061] ROUGE ATTENDU — décision requise : J+3 à J+6, une relance PAR JOUR (4 courriels) alors que l’en-tête du module annonce « J+3 — une relance »', async () => {
+  it('[K-061] J+3 à J+6 : UNE relance pour l’épisode d’impayé (pas un courriel par jour) ; un NOUVEL épisode a droit à la sienne', async () => {
     const { runDunningScan } = await import('../../../server/lib/dunning-engine');
     const depuis = new Date().toISOString();
-    await impaye(3);
+    const id = await impaye(3);
     const debut = Date.now();
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
@@ -490,8 +490,21 @@ describe('K — relances d’abonnement Lume (dunning)', () => {
     } finally {
       vi.useRealTimers();
     }
-    expect((await courrielsVers(courrielB, depuis)).length).toBe(1);
-  });
+    const relances = await courrielsVers(courrielB, depuis);
+    expect(relances.length).toBe(1);
+    // La relance ANNONCE la suspension (« sera suspendu dans 4 jours ») ; ce n'est pas le courriel de suspension.
+    expect(String(relances[0].sujet)).toMatch(/sera suspendu dans 4 jours/);
+    // L'abonnement n'a pas été touché : la relance n'est pas une suspension.
+    const { data: sub } = await b.admin.from('subscriptions').select('status').eq('id', id).single();
+    expect(sub!.status).toBe('past_due');
+
+    // Un autre épisode (payé, puis de nouveau en échec quatre jours plus tôt) : sa relance part.
+    const { error } = await b.admin.from('subscriptions').update({ past_due_since: new Date(Date.now() - 4 * 86400_000).toISOString() }).eq('id', id);
+    expect(error).toBeNull();
+    await runDunningScan(b.admin, { orgId: b.orgB });
+    await runDunningScan(b.admin, { orgId: b.orgB });
+    expect((await courrielsVers(courrielB, depuis)).length).toBe(2);
+  }, 180_000);
 
   it('[K-062] isolation : un passage limité au bureau A ne suspend pas l’abonnement impayé du bureau B', async () => {
     const { runDunningScan } = await import('../../../server/lib/dunning-engine');

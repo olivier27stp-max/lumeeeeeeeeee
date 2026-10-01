@@ -40,6 +40,6 @@ Fichiers : `40-iklm-prereglages.test.ts`, `40-iklm-adjacents.test.ts`. Bureau A 
 | K-053 | Rapport — panne | fournisseur en panne | non perdu (non marqué, ou en file de reprise) | |
 | — | Rapports — UTC | hebdo/mensuel calculés en UTC | — | NON COUVERT : dépend du fuseau du processus (prod = UTC) ; signalé (inv-3 §5.4) |
 | K-060 | Dunning | impayé 8 j | suspendu + 1 courriel ; 2e passage rien | |
-| K-061 | Dunning | J+3..J+6 | une relance annoncée | ROUGE ATTENDU — décision : 4 courriels (un par jour) ; le code dit « une relance quotidienne », l'en-tête « J+3 — une relance » |
+| K-061 | Dunning | J+3..J+6 (4 passages, un par jour) ; puis nouvel épisode d'impayé | UNE relance par épisode (clé = abonnement + palier J+3 + `past_due_since`) ; l'abonnement reste `past_due` ; un nouvel épisode a sa relance | CORRIGÉ — `40-iklm-adjacents.test.ts` [K-061] (FAIL avant : 4 courriels) |
 | K-062 | Dunning — isolation | A seulement | B intact | |
 | — | Dunning — courriel de suspension sans suspension | course avec un paiement | — | NON COUVERT : course non provoquable de façon déterministe ; lu dans le code (l'UPDATE n'est pas vérifié par .select()) |
