@@ -104,3 +104,14 @@ describe('solveur : déterminisme et heuristique', () => {
     expect(r.apres.ordre).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
   });
 });
+
+describe('visite « confirmée au client »', () => {
+  it('un envoi SAUTÉ (pas de courriel, textos non configurés) ne confirme rien', async () => {
+    const { messagePartiAuClient } = await import('../../server/lib/trajets/propositionJournee');
+    expect(messagePartiAuClient({ saute: 'Aucune adresse courriel pour ce client', saute_code: 'sans_courriel' })).toBe(false);
+    expect(messagePartiAuClient({ saute_code: 'sms_non_configure' })).toBe(false);
+    // Un vrai envoi (identifiant du fournisseur, ou aucun détail) confirme l'heure.
+    expect(messagePartiAuClient({ messageId: 'abc' })).toBe(true);
+    expect(messagePartiAuClient(null)).toBe(true);
+  });
+});

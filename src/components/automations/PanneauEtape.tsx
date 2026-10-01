@@ -43,6 +43,7 @@ import {
   BoutonsVariablesChamps, ConditionsChampsEtape, EditeurMajChamp, sansConditionsIncompletes,
 } from '../champs/automatisations';
 import type { ChampPerso, ObjetChamp } from '../../lib/champs/types';
+import { variablesInconnues, variableLisible } from '../../lib/emailBodyText';
 import { confirmer } from '../ui/ConfirmDialog';
 
 /** Les conditions d'une étape « si », en texte modifiable. */
@@ -299,6 +300,19 @@ export default function PanneauEtape({
     return out;
   }, [brouillon, modele, fr, declencheur, objetChamps, champsPerso]);
 
+  /** Variables écrites dans les textes de l'action que le serveur ne saura pas remplir. */
+  const inconnues = useMemo(() => {
+    if (brouillon.type !== 'action' || !modele) return [];
+    const config = brouillon.action.config as Record<string, string | undefined>;
+    const trouvees = new Set<string>();
+    for (const champ of modele.champs) {
+      if (champ.type !== 'zone' && champ.type !== 'texte') continue;
+      if (!champVisible(champ, config)) continue;
+      for (const v of variablesInconnues(config[champ.cle] ?? '')) trouvees.add(v);
+    }
+    return [...trouvees];
+  }, [brouillon, modele]);
+
   const majConfig = (cle: string, valeur: string) => {
     setBrouillon((b) => {
       if (b.type !== 'action') return b;
@@ -520,8 +534,21 @@ export default function PanneauEtape({
                       membres={membres}
                       etiquettes={etiquettes}
                       automatisations={automatisations}
+                      sms={modele.cle === 'send_sms' && champ.cle === 'body'}
                     />
                   ))}
+
+                {/* Une variable que le serveur ne connaît pas part VIDE :
+                    « Bonjour [prenom], » devient « Bonjour , ». La liste le
+                    disait, pas cet éditeur — où s'écrivent toutes les
+                    nouvelles automatisations. On NOMME la fautive. */}
+                {inconnues.length > 0 && (
+                  <p role="alert" className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                    {fr
+                      ? `${inconnues.length > 1 ? 'Variables inconnues' : 'Variable inconnue'} : ${inconnues.map(variableLisible).join(', ')} — sera vide dans le message envoyé.`
+                      : `Unknown variable${inconnues.length > 1 ? 's' : ''}: ${inconnues.map(variableLisible).join(', ')} — will be empty in the sent message.`}
+                  </p>
+                )}
 
                 {/* Variables — cliquer pour insérer, plutôt que les retenir. */}
                 {modele?.champs?.some((c) => c.type === 'zone') && (
