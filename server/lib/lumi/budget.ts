@@ -113,6 +113,20 @@ export function messagePause(langue: 'fr' | 'en', maintenant: Date | string = ne
 }
 
 /**
+ * Le plafond journalier de la PLATEFORME (plafond-journalier.ts : une somme par
+ * jour pour tous les clients réunis) n'est pas celui de l'entreprise. Quand
+ * c'est lui qui arrête un tour, dire « tes crédits sont épuisés jusqu'au
+ * <renouvellement> » est faux deux fois : les crédits du client sont intacts,
+ * et la pause finit à minuit, pas au renouvellement. Aucune date ici : le
+ * compteur repart aussi à chaque redémarrage du service.
+ */
+export function messagePausePlateforme(langue: 'fr' | 'en'): string {
+  return langue === 'fr'
+    ? 'Je ne peux pas répondre pour l’instant : Lumi est très sollicité aujourd’hui. Tes crédits ne sont pas touchés. Réessaie un peu plus tard — les actions rapides et le reste de Lume marchent toujours.'
+    : 'I can’t answer right now: Lumi is under heavy demand today. Your credits are untouched. Try again a bit later — quick actions and the rest of Lume still work.';
+}
+
+/**
  * Coût maximal d'un appel, réservé avant de l'envoyer : toute l'entrée au
  * tarif plein (comme si rien n'était en cache) + la sortie au plafond
  * max_tokens. Volontairement pessimiste : le règlement rend la différence.
