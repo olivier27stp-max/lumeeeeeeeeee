@@ -82,10 +82,29 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   // ── Lumi (assistant IA dans l'app) — même clé que l'agent externe ──
   'POST /api/lumi/chat': 'external_agent.use',
   'POST /api/lumi/execute': 'external_agent.use',
+  // Actions rapides (boutons, « Optimiser la journée ») et réglages personnels de
+  // Lumi : sans entrée, un membre à qui on a RETIRÉ Lumi sur la page Rôles pouvait
+  // encore s'en servir par ces portes (LUMI_INVENTORY, risque S4).
+  'POST /api/lumi/action': 'external_agent.use',
+  'GET /api/lumi/mode': 'external_agent.use',
+  'PUT /api/lumi/mode': 'external_agent.use',
+  'GET /api/lumi/autorisations': 'external_agent.use',
+  'PUT /api/lumi/autorisations': 'external_agent.use',
   'GET /api/lumi/quota': 'external_agent.use',
   'GET /api/lumi/conversations': 'external_agent.use',
   'GET /api/lumi/conversations/:id': 'external_agent.use',
   'DELETE /api/lumi/conversations/:id': 'external_agent.use',
+
+  // ── Mémoire de Lumi (org_knowledge) ──
+  // Ces notes entrent dans le prompt de Lumi et portent ce qu'un propriétaire lui
+  // a dit de retenir (marges, taux horaires). La route lit et écrit avec la clé
+  // de service : sans entrée ici, tout membre — technicien compris — pouvait les
+  // lire, en écrire et en retirer (prouvé en prod le 2026-10-01, bureau de test).
+  // Même clé que remember_this / recall_notes / forget_note et que la policy.
+  'GET /api/org-knowledge': 'settings.update',
+  'POST /api/org-knowledge': 'settings.update',
+  'POST /api/org-knowledge/bulk': 'settings.update',
+  'DELETE /api/org-knowledge/:id': 'settings.update',
 
   // ── Messages ──
   'POST /api/messages/send': 'messages.send',

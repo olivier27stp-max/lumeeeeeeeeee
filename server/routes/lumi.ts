@@ -38,6 +38,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 // a deux assistants (2026-09-22). Mêmes réponses, mêmes garde-fous, 0 token.
 import { reponseFaqPour } from '../lib/support/faq';
 import { estDemandeDAction } from '../lib/lumi/demande-action';
+import { repererFiches } from '../lib/lumi/reperage';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { reponseAideMulti } from '../lib/support/aide-multi';
 import { peutRepondreHorsScope, reponseHorsScope } from '../lib/lumi/hors-scope';
@@ -61,6 +62,7 @@ import { maintenantPourLumi } from '../lib/lumi/temps';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
+import { assainirPourApi } from '../lib/lumi/historique';
 
 const router = Router();
 router.use(maxBodySize());
@@ -180,7 +182,9 @@ async function chargerHistorique(conversationId: string, cleRefs?: string, max =
     msgs = msgs.slice(i);
   }
   // Les vieux résultats d'outils sont allégés en mémoire seulement (voir purgerVieuxResultats).
-  return purgerVieuxResultats(msgs);
+  // Blocs d'affichage (« fiches » du briefing) et conversation commencée par
+  // Lumi : l'API refuserait l'historique tel quel (voir historique.ts).
+  return purgerVieuxResultats(assainirPourApi(msgs));
 }
 
 async function sauverMessages(conversationId: string, orgId: string, msgs: Msg[], cleRefs?: string): Promise<void> {
@@ -374,7 +378,8 @@ async function executerTourSse(opts: {
   // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
   // entre dans la trace pour être comparé à ce que le modèle a fait.
   const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce, contexteRouteur(opts.historique)) : null);
-  const tracer = async (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null, chiffresSuspects?: string[]) => {
+  type MesureTour = { stop_reason?: string | null; appels_modele?: number; outils_charges?: number; premier_token_ms?: number | null; tronque?: boolean };
+  const tracer = async (resultat: 'ok' | 'proposition' | 'erreur' | 'refus', cost_cents: number, action?: string | null, chiffresSuspects?: string[], mesure?: MesureTour) => {
     const routeur = observation ? await observation : null;
     // Règle stricte : le routeur en OBSERVATION coûte aussi (Haiku) — journalisé
     // dans ai_usage comme en mode actif, jamais un coût hors budget.
@@ -396,6 +401,10 @@ async function executerTourSse(opts: {
         // Première métrique de QUALITÉ en base : un montant cité sans source.
         // Requêtable comme le reste — `qa:depense` et n'importe quel SQL le voient.
         ...(chiffresSuspects?.length ? { chiffres_suspects: chiffresSuspects } : {}),
+        // Mesure du tour (mission fiabilité, 2026-10-01) : pourquoi le modèle s'est
+        // arrêté, combien d'appels, combien d'outils chargés, délai du premier
+        // texte. Sans elle, un tour coupé ou refusé ressemblait à un succès.
+        ...(mesure ? { mesure: { ...mesure, ...(erreurModele ? { erreur_modele: erreurModele } : {}) } } : {}),
       },
       outils, resultat, model, promptVersion: VERSION_PROMPT, usage, costCents: cost_cents, dureeMs: Date.now() - debut,
     });
@@ -424,6 +433,15 @@ async function executerTourSse(opts: {
     const plafondJour = verifierPlafond('lumi');
     if (!plafondJour.autorise) { compterRefus('lumi'); reglages.modele_autorise = false; }
     // Palier épuisé : aucun appel au modèle, même si la RPC de réservation manque.
+    // RBAC : le modèle ne voit que les outils permis à cette personne.
+    // Recalculé à CHAQUE tour → un changement de rôle s'applique au message
+    // suivant, rien n'est figé dans la conversation.
+    const outilsPermis = await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId);
+    // Repérage (coût) : les fiches citées dans la demande sont trouvées par le code, avec le
+    // jeton de la personne, et données au modèle — une recherche de moins, donc un appel de moins.
+    const reperage = opts.enonce && reglages.modele_autorise
+      ? await repererFiches(opts.enonce, { client: ctx.auth.client, orgId: ctx.auth.orgId, espaceRefs: cleRefs, langue: ctx.language, outilsPermis })
+      : null;
     const resultat: ResultatTour = !reglages.modele_autorise ? { nouveauxMessages: [], proposition: null, texte: '', cost_cents: 0, plafond: true } : await tourLumi({
       client: ctx.auth.client,
       orgId: ctx.auth.orgId,
@@ -434,14 +452,13 @@ async function executerTourSse(opts: {
         const focus = [
           opts.sousAgent ? focusDuSousAgent(opts.sousAgent, ctx.language) : null,
           opts.enonce ? indiceOutils(opts.enonce, ctx.language, new Set(opts.sousAgent ? outilsDuSousAgent(opts.sousAgent) : OUTILS_DE_BASE)) : null,
+          reperage,
         ].filter((x): x is string => !!x).join('\n\n');
         return focus ? promptSystemeLumi({ ...ctx.promptCtx, focus }) : ctx.systeme;
       })(),
       sousAgent: opts.sousAgent ?? null,
-      // RBAC : le modèle ne voit que les outils permis à cette personne.
-      // Recalculé à CHAQUE tour → un changement de rôle s'applique au message
-      // suivant, rien n'est figé dans la conversation.
-      outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId),
+      outilsPermis,
+      langue: ctx.language === 'en' ? 'en' : 'fr',
       reglages,
       budget: {
         reserver: (cents) => reserverBudget(ctx.admin, ctx.auth.orgId, cents),
@@ -485,7 +502,13 @@ async function executerTourSse(opts: {
         orgId: ctx.auth.orgId, conversationId, montants: resultat.chiffresSuspects,
       });
     }
-    void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null, resultat.chiffresSuspects);
+    // Un refus du modèle, une réponse coupée ou un tour inachevé ne sont PAS des
+    // succès : avant, ils étaient tracés « ok » et la qualité mesurée mentait.
+    const issue = resultat.proposition ? 'proposition' : erreurModele === 'refusal' ? 'refus' : erreurModele ? 'erreur' : 'ok';
+    void tracer(issue, resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null, resultat.chiffresSuspects, {
+      stop_reason: resultat.stop_reason ?? null, appels_modele: resultat.appels_modele ?? 0, outils_charges: resultat.outils_charges ?? 0,
+      premier_token_ms: resultat.premier_token_ms ?? null, ...(resultat.tronque ? { tronque: true } : {}),
+    });
     // Étages 3-4 : une réponse de lecture au premier message se mémorise (exacte + sémantique).
     if (opts.cache && opts.enonce && !erreurModele && !resultat.plafond && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee, enonce: opts.enonce })) {
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: opts.enonce };

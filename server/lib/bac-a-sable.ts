@@ -50,6 +50,31 @@ export function orgDuContexte(): string | null {
   return contexteEnvoi.getStore()?.orgId ?? null;
 }
 
+/**
+ * Ouvre un contexte d'envoi pour CHAQUE requête HTTP (monté dans index.ts,
+ * après les analyseurs de corps). Sans lui, seul le moteur d'automatisations
+ * connaissait l'entreprise : un courriel envoyé par une route directe (envoi
+ * manuel, outil de Lumi) depuis un bureau en bac à sable PARTAIT pour de vrai
+ * dès que le destinataire n'était pas fictif (canari du 2026-10-01 : consigné
+ * avec org_id = null, raison = « destinataire »).
+ */
+export function contexteEnvoiParRequete() {
+  return (_req: unknown, _res: unknown, next: () => void): void => {
+    contexteEnvoi.run({ orgId: null }, next);
+  };
+}
+
+/**
+ * L'entreprise authentifiée de la requête en cours. On MODIFIE le contexte
+ * ouvert par `contexteEnvoiParRequete` : un `enterWith` posé dans une
+ * fonction attendue (`await requireAuthedClient`) ne remonterait pas à
+ * l'appelant. Hors requête (cron, tâche de fond) : sans effet.
+ */
+export function poserOrgDuContexte(orgId: string | null | undefined): void {
+  const contexte = contexteEnvoi.getStore();
+  if (contexte && orgId) contexte.orgId = orgId;
+}
+
 const DUREE_CACHE_MS = 30_000;
 let cache: { modes: Map<string, ModeBacASable>; expire: number } | null = null;
 let lectureEnCours: Promise<Map<string, ModeBacASable>> | null = null;

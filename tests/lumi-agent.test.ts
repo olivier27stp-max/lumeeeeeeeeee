@@ -231,9 +231,9 @@ describe('orchestrateur', () => {
     // Cache d'une heure : la reprise d'une conversation après une pause ne
     // réécrit plus le contexte (2,6 ¢ sur les 6 ¢ d'un tour, mesuré en prod).
     const charges = params.tools.filter((t: any) => !t.defer_loading && !t.type);
-        // 5 minutes, pas 1 h : 214 des 241 écarts entre appels mesurés en prod
-    // sont sous 5 min, et une lecture rafraîchit le minuteur gratuitement.
-    // L'écriture 1 h coûte 2× l'entrée, la 5 min 1,25×. Voir CACHE_1H.
+        // 5 minutes, pas 1 h : 214 des 241 écarts entre appels mesurés en prod
+    // sont sous 5 min, et une lecture rafraîchit le minuteur gratuitement.
+    // L'écriture 1 h coûte 2× l'entrée, la 5 min 1,25×. Voir CACHE_1H.
     expect(charges[charges.length - 1].cache_control).toEqual({ type: 'ephemeral' });
     expect(params.thinking).toEqual({ type: 'adaptive' });
     expect(params.output_config).toEqual({ effort: 'low' }); // effort bas par défaut (règle stricte, regles-cout.ts)
@@ -560,14 +560,20 @@ describe('le client lit le flux SSE', () => {
 describe('Lumi parle comme un collègue, pas comme une base de données', () => {
   it('le prompt de Lumi porte les mêmes consignes de présentation que le MCP, dans la partie mise en cache', async () => {
     const { promptSystemeLumi } = await import('../server/lib/lumi/orchestrateur');
-    const { CONSIGNES_COLLEGUE } = await import('../server/lib/agent/consignesCollegue');
+    const { CONSIGNES_COLLEGUE, CONSIGNES_COLLEGUE_LUMI } = await import('../server/lib/agent/consignesCollegue');
     const blocs = promptSystemeLumi({ companyName: 'Coquin lavage', userName: 'Will', language: 'fr', todayIso: '2026-09-10' });
     const stable = blocs[0].text;
-        // 5 minutes, pas 1 h : 214 des 241 écarts entre appels mesurés en prod
-    // sont sous 5 min, et une lecture rafraîchit le minuteur gratuitement.
-    // L'écriture 1 h coûte 2× l'entrée, la 5 min 1,25×. Voir CACHE_1H.
+        // 5 minutes, pas 1 h : 214 des 241 écarts entre appels mesurés en prod
+    // sont sous 5 min, et une lecture rafraîchit le minuteur gratuitement.
+    // L'écriture 1 h coûte 2× l'entrée, la 5 min 1,25×. Voir CACHE_1H.
     expect(blocs[0].cache_control).toEqual({ type: 'ephemeral' });
-    expect(stable).toContain(CONSIGNES_COLLEGUE);
+    // Mêmes consignes que le MCP, sauf les « attends un OUI » : dans Lumi, c'est la carte qui demande le OUI.
+    expect(stable).toContain(CONSIGNES_COLLEGUE_LUMI);
+    expect(CONSIGNES_COLLEGUE).toContain('attends un OUI');
+    expect(stable).not.toContain('attends un OUI');
+    expect(stable).not.toContain('seulement après un OUI clair');
+    expect(stable).toContain("c'est elle qui demande le OUI, pas toi");
+    expect(CONSIGNES_COLLEGUE_LUMI.split(/\r?\n/).length).toBe(CONSIGNES_COLLEGUE.split(/\r?\n/).length - 1);
     // Les règles qui comptent, nommément — si quelqu'un raccourcit le texte, ce test le dit.
     for (const regle of [
       "N'affiche JAMAIS d'identifiant technique",

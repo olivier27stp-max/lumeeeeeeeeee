@@ -80,7 +80,7 @@ const MARQUES_DONNEES = [
   // « comment importer MES CLIENTS depuis Excel » reste une question produit.
   /\b(mes|mon|ma|nos|notre)\s+(clients?|factures?|jobs?|devis|soumissions?|t[aâ]ches?|employ[ée]s?|[ée]quipe|revenus?|chiffre)\b[^.?]{0,30}\b(sont|est|ont|a|payee?s?|en retard|impay[ée]s?|combien|fait)\b/i,
   // Un numéro de pièce, un montant, une date : la question vise une ligne précise.
-  /\b(inv|q|job|facture|devis|soumission)\s*[-#]?\s*\d+/i,
+  /\b(inv|q|jobs?|factures?|devis|soumissions?|invoices?|quotes?|estimates?)\s*(?:n[o°º]\.?|num[ée]ro|number|[-#])?\s*\d+/i,
   /\b\d{2,}\b/,
   /\b\d+\s*(\$|dollars?|piastres?)/i,
   // Verbes d'ACTION à l'impératif ou au passé : l'utilisateur demande de faire

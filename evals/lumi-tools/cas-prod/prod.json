@@ -1,0 +1,698 @@
+[
+ {
+  "id": "list_request_submissions-1",
+  "section": "clients",
+  "outil": "list_request_submissions",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "J’ai-tu reçu des nouvelles demandes par le formulaire du site web ?"
+ },
+ {
+  "id": "get_top_clients-1",
+  "section": "clients",
+  "outil": "get_top_clients",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "C’est qui mes meilleurs clients, ceux qui m’ont rapporté le plus ?"
+ },
+ {
+  "id": "get_churn_risk-1",
+  "section": "clients",
+  "outil": "get_churn_risk",
+  "langue": "en",
+  "type": "lecture",
+  "q": "Which clients am I at risk of losing? Who should I follow up with this week?"
+ },
+ {
+  "id": "list_custom_fields-1",
+  "section": "clients",
+  "outil": "list_custom_fields",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "C’est quoi mes champs personnalisés sur les fiches clients ?"
+ },
+ {
+  "id": "list_deals-1",
+  "section": "clients",
+  "outil": "list_deals",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Montre-moi mon pipeline de ventes : les cartes par étape."
+ },
+ {
+  "id": "list_email_templates-1",
+  "section": "communications",
+  "outil": "list_email_templates",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Quels modèles de courriel j'ai dans Lume ?"
+ },
+ {
+  "id": "list_quotes-1",
+  "section": "devis",
+  "outil": "list_quotes",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Combien j’ai de soumissions encore en brouillon ?"
+ },
+ {
+  "id": "get_team-1",
+  "section": "equipe",
+  "outil": "get_team",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Qui fait partie de mon équipe en ce moment, avec le rôle de chacun ?"
+ },
+ {
+  "id": "list_tasks-1",
+  "section": "equipe",
+  "outil": "list_tasks",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "C'est quoi les tâches qu'il me reste à faire, les plus urgentes en premier ?"
+ },
+ {
+  "id": "list_invoices-1",
+  "section": "facturation",
+  "outil": "list_invoices",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Montre-moi mes factures encore en brouillon."
+ },
+ {
+  "id": "get_overdue_payments-1",
+  "section": "facturation",
+  "outil": "get_overdue_payments",
+  "langue": "en",
+  "type": "lecture",
+  "q": "Who's late paying me right now, and how much do they owe?"
+ },
+ {
+  "id": "get_revenue_summary-1",
+  "section": "facturation",
+  "outil": "get_revenue_summary",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Combien j'ai encaissé le mois passé par rapport à mon objectif de revenus ?"
+ },
+ {
+  "id": "get_tax_config-1",
+  "section": "facturation",
+  "outil": "get_tax_config",
+  "langue": "en",
+  "type": "lecture",
+  "q": "What taxes do I have set up, and which tax group is the default?"
+ },
+ {
+  "id": "list_jobs-1",
+  "section": "planification",
+  "outil": "list_jobs",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Quelles jobs sont encore en brouillon, pas planifiées ?"
+ },
+ {
+  "id": "query_schedule-1",
+  "section": "planification",
+  "outil": "query_schedule",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Qu'est-ce qu'on a de cédulé entre le 1er et le 31 octobre 2026 ?",
+  "voisins": [
+   "list_jobs",
+   "get_day_route"
+  ]
+ },
+ {
+  "id": "get_company_info-1",
+  "section": "rapports",
+  "outil": "get_company_info",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "C'est quoi l'adresse puis le numéro de téléphone de mon entreprise dans Lume ?"
+ },
+ {
+  "id": "list_automations-1",
+  "section": "rapports",
+  "outil": "list_automations",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Quelles automatisations sont actives en ce moment ?"
+ },
+ {
+  "id": "get_morning_briefing-1",
+  "section": "rapports",
+  "outil": "get_morning_briefing",
+  "langue": "en",
+  "type": "lecture",
+  "q": "Give me my brief — what needs my attention today?"
+ },
+ {
+  "id": "search_help-1",
+  "section": "memoire",
+  "outil": "search_help",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Dans Lume, comment je fais pour qu'un client puisse signer son contrat de service directement en ligne avant que je planifie le job ?"
+ },
+ {
+  "id": "list_notifications-1",
+  "section": "rapports",
+  "outil": "list_notifications",
+  "langue": "en",
+  "type": "lecture",
+  "q": "Do I have any unread notifications?"
+ },
+ {
+  "id": "setup_taxes-1",
+  "section": "facturation",
+  "outil": "setup_taxes",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Configure mes taxes pour le Québec, TPS et TVQ.",
+  "params": {
+   "preset_key": "QC"
+  },
+  "voisins": [
+   "get_tax_config"
+  ]
+ },
+ {
+  "id": "prod-search_clients",
+  "section": "clients",
+  "outil": "search_clients",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "C’est quoi le courriel de Julie Dupuis ?"
+ },
+ {
+  "id": "prod-get_client_profile",
+  "section": "clients",
+  "outil": "get_client_profile",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Parle-moi de Sophie Tremblay : ses jobs, ce qu’elle nous doit."
+ },
+ {
+  "id": "prod-get_job",
+  "section": "planification",
+  "outil": "get_job",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Donne-moi les détails de la job 1.",
+  "voisins": [
+   "list_jobs"
+  ]
+ },
+ {
+  "id": "prod-faq-donnees",
+  "section": "rapports",
+  "outil": "list_automations",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "C’est quoi mes automatisations ?"
+ },
+ {
+  "id": "prod-create_client",
+  "section": "clients",
+  "outil": "create_client",
+  "langue": "fr",
+  "type": "action",
+  "q": "Ajoute un nouveau client : Nadia Éval-Prod, 418-555-0142, nadia.eval@lume.test.",
+  "params": {
+   "first_name": "Nadia",
+   "email": "nadia.eval@lume.test"
+  }
+ },
+ {
+  "id": "prod-create_lead",
+  "section": "clients",
+  "outil": "create_lead",
+  "langue": "fr",
+  "type": "action",
+  "q": "Ajoute un prospect : Martin Éval-Prod, 450-555-0177, il veut faire laver ses vitres, environ 350 $.",
+  "params": {
+   "first_name": "Martin",
+   "estimated_value": 350
+  }
+ },
+ {
+  "id": "prod-create_task",
+  "section": "equipe",
+  "outil": "create_task",
+  "langue": "fr",
+  "type": "action",
+  "q": "Ajoute une tâche pour vendredi le 9 octobre 2026 : « Commander du savon à vitres », priorité haute.",
+  "params": {
+   "title": "savon à vitres",
+   "due_date": "2026-10-09",
+   "priority": "high"
+  }
+ },
+ {
+  "id": "prod-create_job",
+  "section": "planification",
+  "outil": "create_job",
+  "langue": "fr",
+  "type": "action",
+  "q": "Crée une job « Lavage de vitres » pour Marc Gagnon : 2 heures à 75 $ de l’heure. Pas de date pour l’instant.",
+  "params": {
+   "title": "Lavage de vitres",
+   "unit_price_cents": 7500
+  },
+  "cible": [
+   "Gagnon"
+  ],
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "prod-create_quote",
+  "section": "devis",
+  "outil": "create_quote",
+  "langue": "fr",
+  "type": "action",
+  "q": "Fais une soumission pour Julie Dupuis : inspection de toiture à 250 $.",
+  "sensible": true,
+  "params": {
+   "unit_price_cents": 25000
+  },
+  "cible": [
+   "Dupuis"
+  ],
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "prod-create_invoice",
+  "section": "facturation",
+  "outil": "create_invoice",
+  "langue": "fr",
+  "type": "action",
+  "q": "Fais une facture à Marc Gagnon pour une tonte de pelouse à 120 $.",
+  "sensible": true,
+  "params": {
+   "unit_price_cents": 12000
+  },
+  "cible": [
+   "Gagnon"
+  ],
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "prod-add_note",
+  "section": "clients",
+  "outil": "add_note",
+  "langue": "fr",
+  "type": "action",
+  "q": "Ajoute une note au dossier de Sophie Tremblay : elle préfère qu’on l’appelle le matin.",
+  "params": {
+   "note": "matin"
+  },
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "prod-update_client",
+  "section": "clients",
+  "outil": "update_client",
+  "langue": "fr",
+  "type": "action",
+  "q": "Julie Dupuis a changé de courriel : c’est julie.dupuis@lume.test maintenant, mets sa fiche à jour.",
+  "params": {
+   "email": "julie.dupuis@lume.test"
+  },
+  "cible": [
+   "Julie Dupuis"
+  ],
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "prod-delete_client",
+  "section": "clients",
+  "outil": "delete_client",
+  "langue": "fr",
+  "type": "action",
+  "q": "Supprime le client E2E Run625, c’était un test.",
+  "sensible": true,
+  "cible": [
+   "Run625"
+  ],
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "prod-delete_job",
+  "section": "planification",
+  "outil": "delete_job",
+  "langue": "fr",
+  "type": "action",
+  "q": "Supprime la job 9, c’était une erreur de saisie.",
+  "sensible": true,
+  "cible": [
+   "#9"
+  ],
+  "interdits": [
+   "archive_job"
+  ],
+  "voisins": [
+   "list_jobs"
+  ]
+ },
+ {
+  "id": "prod-delete_quote",
+  "section": "devis",
+  "outil": "delete_quote",
+  "langue": "fr",
+  "type": "action",
+  "q": "Supprime la soumission 3, c’est un doublon.",
+  "sensible": true,
+  "cible": [
+   "Tremblay"
+  ],
+  "interdits": [
+   "cancel_quote"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "prod-delete_invoice",
+  "section": "facturation",
+  "outil": "delete_invoice",
+  "langue": "fr",
+  "type": "action",
+  "q": "Supprime la facture brouillon n° 1, elle a été créée par erreur.",
+  "sensible": true,
+  "interdits": [
+   "void_invoice"
+  ],
+  "voisins": [
+   "list_invoices"
+  ]
+ },
+ {
+  "id": "prod-send_quote",
+  "section": "devis",
+  "outil": "send_quote",
+  "langue": "fr",
+  "type": "action",
+  "q": "Envoie la soumission 1 à Sophie Tremblay par courriel.",
+  "sensible": true,
+  "cible": [
+   "Tremblay"
+  ],
+  "interdits": [
+   "send_quote_sms"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "prod-send_invoice",
+  "section": "facturation",
+  "outil": "send_invoice",
+  "langue": "fr",
+  "type": "action",
+  "q": "Envoie la facture n° 1 au client par courriel.",
+  "sensible": true,
+  "voisins": [
+   "list_invoices"
+  ]
+ },
+ {
+  "id": "prod-send_email",
+  "section": "communications",
+  "outil": "send_email",
+  "langue": "fr",
+  "type": "action",
+  "q": "Envoie un courriel à Julie Dupuis, objet « Passage jeudi », message « Bonjour Julie, on passe jeudi matin pour la toiture. »",
+  "sensible": true,
+  "params": {
+   "subject": "Passage jeudi",
+   "message": "on passe jeudi matin"
+  },
+  "interdits": [
+   "send_sms"
+  ],
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "prod-update_job_status",
+  "section": "planification",
+  "outil": "update_job_status",
+  "langue": "fr",
+  "type": "action",
+  "q": "La job 3 est terminée, marque-la comme complétée.",
+  "params": {
+   "status": "completed"
+  },
+  "cible": [
+   "#3"
+  ],
+  "interdits": [
+   "archive_job"
+  ],
+  "voisins": [
+   "list_jobs"
+  ]
+ },
+ {
+  "id": "prod-reschedule_job",
+  "section": "planification",
+  "outil": "reschedule_job",
+  "langue": "fr",
+  "type": "action",
+  "q": "Déplace la job 4 au jeudi 15 octobre 2026 à 9 h.",
+  "sensible": true,
+  "params": {
+   "start_at": "2026-10-15"
+  },
+  "cible": [
+   "#4"
+  ],
+  "voisins": [
+   "list_jobs"
+  ]
+ },
+ {
+  "id": "prod-cancel_quote",
+  "section": "devis",
+  "outil": "cancel_quote",
+  "langue": "fr",
+  "type": "action",
+  "q": "Sophie Tremblay a dit non pour la soumission 2, marque-la refusée.",
+  "sensible": true,
+  "cible": [
+   "Tremblay"
+  ],
+  "interdits": [
+   "delete_quote"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "prod-convert_quote_to_job",
+  "section": "devis",
+  "outil": "convert_quote_to_job",
+  "langue": "fr",
+  "type": "action",
+  "q": "La soumission 1 est acceptée : fais-en une job, on la planifiera plus tard.",
+  "sensible": true,
+  "cible": [
+   "Tremblay"
+  ],
+  "interdits": [
+   "convert_quote_to_invoice"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "prod-toggle_automation_rule",
+  "section": "rapports",
+  "outil": "toggle_automation_rule",
+  "langue": "fr",
+  "type": "action",
+  "q": "Mets en pause l’automatisation « Invoice Reminder — 3 Days ».",
+  "sensible": true,
+  "params": {
+   "is_active": false
+  },
+  "cible": [
+   "Invoice Reminder — 3 Days"
+  ],
+  "voisins": [
+   "list_automations"
+  ]
+ },
+ {
+  "id": "prod-delete_team",
+  "section": "equipe",
+  "outil": "delete_team",
+  "langue": "fr",
+  "type": "action",
+  "q": "Supprime l’équipe « [QA] Équipe », on ne s’en sert plus.",
+  "sensible": true,
+  "cible": [
+   "[QA] Équipe"
+  ],
+  "voisins": [
+   "list_teams"
+  ]
+ },
+ {
+  "id": "prod-invite_member",
+  "section": "equipe",
+  "outil": "invite_member",
+  "langue": "fr",
+  "type": "action",
+  "q": "Envoie une invitation à eval.tech@lume.test pour qu’il rejoigne l’équipe comme technicien.",
+  "sensible": true,
+  "params": {
+   "email": "eval.tech@lume.test",
+   "role": "technician"
+  },
+  "cible": [
+   "eval.tech@lume.test"
+  ]
+ },
+ {
+  "id": "prod-mark_invoice_paid",
+  "section": "facturation",
+  "outil": "mark_invoice_paid",
+  "langue": "fr",
+  "type": "action",
+  "q": "Le client m’a payé la facture n° 1 au complet en argent comptant.",
+  "sensible": true,
+  "voisins": [
+   "list_invoices",
+   "record_invoice_payment"
+  ]
+ },
+ {
+  "id": "prod-clarif-client-ambigu",
+  "section": "clients",
+  "outil": null,
+  "langue": "fr",
+  "type": "clarification",
+  "q": "Supprime le client E2E.",
+  "sensible": true
+ },
+ {
+  "id": "prod-clarif-devis-ambigu",
+  "section": "devis",
+  "outil": null,
+  "langue": "fr",
+  "type": "clarification",
+  "q": "Envoie la soumission à Sophie Tremblay.",
+  "sensible": true
+ },
+ {
+  "id": "prod-clarif-note",
+  "section": "clients",
+  "outil": null,
+  "langue": "fr",
+  "type": "clarification",
+  "q": "Efface la note, elle est plus bonne."
+ },
+ {
+  "id": "prod-clarif-remboursement",
+  "section": "facturation",
+  "outil": null,
+  "langue": "fr",
+  "type": "clarification",
+  "q": "Rembourse le paiement de la facture n° 1.",
+  "sensible": true
+ },
+ {
+  "id": "prod-refus-masse",
+  "section": "clients",
+  "outil": null,
+  "langue": "fr",
+  "type": "clarification",
+  "q": "Supprime tous mes clients d’un coup.",
+  "sensible": true
+ },
+ {
+  "id": "prod-clarif-facture-vague",
+  "section": "facturation",
+  "outil": null,
+  "langue": "fr",
+  "type": "clarification",
+  "q": "Fais une facture à Marc Gagnon.",
+  "sensible": true
+ },
+ {
+  "id": "prod-send_sms",
+  "section": "communications",
+  "outil": "send_sms",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Texte à Sophie Tremblay : « Bonjour Sophie, on arrive vers 13 h pour le déneigement. »",
+  "params": {
+   "message_text": "on arrive vers 13 h"
+  },
+  "cible": [
+   "Sophie Tremblay"
+  ],
+  "interdits": [
+   "send_email",
+   "send_quote_sms"
+  ],
+  "voisins": [
+   "search_clients"
+  ]
+ },
+ {
+  "id": "prod-send_quote_sms",
+  "section": "devis",
+  "outil": "send_quote_sms",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Envoie la soumission 2 par texto à Sophie Tremblay.",
+  "cible": [
+   "Tremblay"
+  ],
+  "interdits": [
+   "send_quote",
+   "send_sms"
+  ],
+  "voisins": [
+   "list_quotes"
+  ]
+ },
+ {
+  "id": "prod-void-ou-supprime",
+  "section": "facturation",
+  "outil": "delete_invoice",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "La facture n° 1 est une erreur, enlève-la complètement.",
+  "interdits": [
+   "void_invoice"
+  ],
+  "voisins": [
+   "list_invoices"
+  ]
+ }
+]

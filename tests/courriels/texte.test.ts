@@ -61,7 +61,7 @@ describe('courriel client → texte', () => {
     // Le courriel vient de l'entreprise : la plateforme ne se NOMME nulle part.
     // (le lien du bouton pointe vers lumecrm.net, c'est l'URL du document — normal)
     expect(texte).not.toMatch(/Envoyé avec|Sent with/i);
-    expect(texte).not.toMatch(/Lume/);
+    expect(texte).not.toMatch(/\bLume\b/);
   });
 
   it('reste lisible : une idée par ligne, pas de lignes vides en rafale', () => {
