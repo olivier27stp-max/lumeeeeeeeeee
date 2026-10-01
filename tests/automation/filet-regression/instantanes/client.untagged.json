@@ -24,6 +24,20 @@
    },
    {
     "moment": "immediat",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "email-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "email_unsubscribes",
     "op": "insert",
     "valeur": {
@@ -273,6 +287,20 @@
      "result_success": false,
      "result_error": "en cours",
      "execution_key": "regle-client.untagged-send_sms-0:aaaaaaaa-0000-4000-8000-000000000001:0@14910930"
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
     }
    },
    {
@@ -706,6 +734,20 @@
    },
    {
     "moment": "immediat",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "email-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
+    }
+   },
+   {
+    "moment": "immediat",
     "table": "email_unsubscribes",
     "op": "insert",
     "valeur": {
@@ -728,6 +770,20 @@
       "subject": "Votre avis compte pour nous",
       "source": "automation"
      }
+    }
+   },
+   {
+    "moment": "immediat",
+    "table": "rpc:record_consent",
+    "op": "rpc",
+    "valeur": {
+     "p_subject_type": "client",
+     "p_subject_id": "aaaaaaaa-0000-4000-8000-000000000001",
+     "p_purpose": "sms-marketing",
+     "p_granted": true,
+     "p_method": "lcap-tacite:relation_affaires",
+     "p_doc_version": "aaaaaaaa-0000-4000-8000-000000000002",
+     "p_org_id": "11111111-1111-4111-8111-111111111111"
     }
    },
    {

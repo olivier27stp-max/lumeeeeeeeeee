@@ -209,15 +209,15 @@ describe('G — désabonnement courriel et STOP texto respectés', () => {
   });
 
   /*
-   * Courriel COMMERCIAL immédiat, drapeau éteint : le moteur ne pose pas
+   * Envoi COMMERCIAL immédiat, drapeau éteint. Le moteur ne pose pas
    * `ctx.commercial` sur une action immédiate (automationEngine.ts,
-   * contextePour) ; le consentement (base légale LCAP) et le plafond de
-   * fréquence ne sont donc vérifiés QUE pour les envois différés, ou quand
-   * le drapeau par canal est allumé. Généraliser change le comportement de
-   * toutes les entreprises sans drapeau (demandes d'avis immédiates,
-   * règles « étiquette posée → courriel ») : décision produit.
+   * contextePour) : le consentement (base légale LCAP) et le plafond de
+   * fréquence n'étaient vérifiés QUE pour les envois différés, ou drapeau
+   * allumé. Décision (LCAP) : le TYPE de l'envoi décide — un envoi marketing
+   * est commercial, immédiat ou non (actions/index.ts, commercialSiMarketing).
+   * Les envois transactionnels ne changent pas.
    */
-  let mesureConsentement: { envoye: boolean; logs: unknown } | null = null;
+  let mesureConsentement: { envoye: boolean; logs: Array<{ result_success: boolean; result_data: unknown }> } | null = null;
   it('[G-014] mesure : courriel commercial immédiat vers un client SANS consentement ni relation, drapeau éteint', async () => {
     const client = await unClient({ email_consent_at: null, sms_consent_at: null });
     const regle = await uneRegle({ actions: [courriel('Sans consentement', 'marketing')] });
@@ -225,9 +225,46 @@ describe('G — désabonnement courriel et STOP texto respectés', () => {
     mesureConsentement = { envoye: envois.length > 0, logs };
     expect(logs).toHaveLength(1);
   });
-  it.fails('[G-015] ROUGE ATTENDU — décision requise : un courriel commercial immédiat sans base légale ne devrait pas partir (drapeau auto_desabonnement_canal éteint)', () => {
+  it('[G-015] un courriel commercial immédiat sans base légale ne part pas (drapeau auto_desabonnement_canal éteint) : étape sautée, motif « consentement », le parcours continue', () => {
     expect(mesureConsentement).not.toBeNull();
     expect(mesureConsentement!.envoye, JSON.stringify(mesureConsentement!.logs)).toBe(false);
+    const [log] = mesureConsentement!.logs;
+    expect(log.result_success).toBe(true);
+    expect(log.result_data).toMatchObject({ saute_code: 'sans_consentement' });
+  });
+
+  it('[G-016] témoin : le même courriel en TRANSACTIONNEL immédiat part toujours sans consentement (une confirmation répond à une demande du client)', async () => {
+    const client = await unClient({ email_consent_at: null, sms_consent_at: null });
+    const regle = await uneRegle({ actions: [courriel('Confirmation', 'transactionnel')] });
+    const { logs, envois } = await declencher(regle, client);
+    expect(envois, JSON.stringify(logs)).toHaveLength(1);
+  });
+
+  it('[G-017] base TACITE : sans consentement exprès mais avec une job récente, le courriel commercial immédiat part — et la base légale est consignée (consents)', async () => {
+    const client = await unClient({ email_consent_at: null, sms_consent_at: null });
+    const job = await ok(b.admin.from('jobs').insert({ org_id: b.orgA, created_by: b.users.proprioA, client_id: client.id, title: `Job ${m}`, status: 'completed', job_number: `G-${Date.now().toString(36)}` }).select('id').single(), 'job');
+    nettoyer.push(() => b.admin.from('jobs').delete().eq('id', job.id));
+    nettoyer.push(() => b.admin.from('consents').delete().eq('subject_id', client.id));
+    const regle = await uneRegle({ actions: [courriel('Offre tacite', 'marketing')] });
+    const { logs, envois } = await declencher(regle, client);
+    expect(envois, JSON.stringify(logs)).toHaveLength(1);
+    expect(lienDesabonnement(envois[0])).toEqual({ lien: true, listUnsubscribe: true, unClic: true });
+    const preuves = await attendre(
+      async () => (await b.admin.from('consents').select('purpose, method, granted').eq('subject_id', client.id)).data ?? [],
+      (l) => l.length > 0, 20_000,
+    );
+    expect(preuves, 'la base légale retenue doit être démontrable').toHaveLength(1);
+    expect(preuves[0]).toMatchObject({ purpose: 'email-marketing', granted: true });
+    expect(String(preuves[0].method)).toMatch(/^lcap-tacite/);
+  });
+
+  it('[G-018] texto commercial immédiat sans base légale : sauté lui aussi ; le texto transactionnel part', async () => {
+    const client = await unClient({ email_consent_at: null, sms_consent_at: null });
+    const regle = await uneRegle({ actions: [texto('Offre', 'marketing'), texto('Rappel', 'transactionnel')] });
+    const { logs, envois } = await declencher(regle, client, 2);
+    expect(envois.map((e) => String(e.corps).split(' ')[0]), JSON.stringify(logs)).toEqual(['Rappel']);
+    const saut = logs.find((l) => (l.result_data as { saute_code?: string } | null)?.saute_code === 'sans_consentement');
+    expect(saut, JSON.stringify(logs)).toBeTruthy();
   });
 });
 

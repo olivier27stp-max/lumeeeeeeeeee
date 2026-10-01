@@ -78,6 +78,22 @@ const contexte = (client: Record<string, unknown> | null, commercial: boolean, o
 const config = { subject: 'Bonjour', body: 'Un message' };
 const vars = { client_email: 'alice@exemple.test' };
 
+/**
+ * Le contexte tel que le MOTEUR le pose pour un envoi IMMÉDIAT, drapeau
+ * `auto_desabonnement_canal` éteint : `marketing` (le type de l'envoi) est
+ * renseigné, `commercial` ne l'est pas.
+ */
+function contexteImmediat(client: Record<string, unknown> | null, marketing: boolean, dejaEnvoyes = 0) {
+  const base = faketSupabase(client);
+  const compte: any = { select: () => compte, eq: () => compte, is: () => compte, gte: () => compte, then: (res: any) => Promise.resolve({ count: dejaEnvoyes, data: null, error: null }).then(res) };
+  return {
+    supabase: { from: (table: string) => (table === 'activity_log' ? { ...compte, insert: async () => ({ error: null }) } : base.from(table)), rpc: async () => ({ error: null }) } as any,
+    orgId: 'org-1', entityType: 'client', entityId: 'client-1', twilio: null, baseUrl: 'http://test', marketing,
+  };
+}
+const SANS_CONSENTEMENT = { id: 'client-1', email_consent_at: null, sms_consent_at: null, email_opt_out_at: null };
+const AVEC_CONSENTEMENT = { id: 'client-1', email_consent_at: '2026-01-01', sms_consent_at: null, email_opt_out_at: null };
+
 beforeEach(() => { envois.length = 0; });
 
 describe('message COMMERCIAL', () => {
@@ -109,6 +125,34 @@ describe('message COMMERCIAL', () => {
     expect(r.error).toMatch(/erreur technique/i);
     expect(r.error).not.toMatch(/consent/i); // sinon le moteur la jugerait définitive
     expect(envois).toHaveLength(0);
+  });
+});
+
+describe('[G-015] envoi MARKETING immédiat, drapeau éteint (le moteur ne pose que `marketing`)', () => {
+  it('[G-015] sans base légale : NE PART PAS — sauté avec le motif « consentement »', async () => {
+    const r = await executeSendEmail(config as any, vars, contexteImmediat(SANS_CONSENTEMENT, true) as any);
+    expect((r.data as any)?.saute_code).toBe('sans_consentement');
+    expect(r.success).toBe(true); // un saut : le parcours continue
+    expect(envois).toHaveLength(0);
+  });
+
+  it('[G-015] avec consentement exprès : part', async () => {
+    const r = await executeSendEmail(config as any, vars, contexteImmediat(AVEC_CONSENTEMENT, true) as any);
+    expect(r.success).toBe(true);
+    expect(envois).toHaveLength(1);
+  });
+
+  it('[G-015] plafond appliqué : le client déjà à 3 messages commerciaux en 24 h ne reçoit pas le 4e', async () => {
+    const r = await executeSendEmail(config as any, vars, contexteImmediat(AVEC_CONSENTEMENT, true, 3) as any);
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/Frequency cap/);
+    expect(envois).toHaveLength(0);
+  });
+
+  it('[G-015] un envoi TRANSACTIONNEL immédiat ne change pas : il part sans consentement, sans plafond', async () => {
+    const r = await executeSendEmail(config as any, vars, contexteImmediat(SANS_CONSENTEMENT, false, 3) as any);
+    expect(r.success).toBe(true);
+    expect(envois).toHaveLength(1);
   });
 });
 

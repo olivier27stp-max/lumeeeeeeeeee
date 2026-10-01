@@ -95,6 +95,24 @@ function estCommercialLcap(ctx: ActionContext): boolean {
 }
 
 /**
+ * Un envoi MARKETING est commercial — parti tout de suite ou plus tard,
+ * drapeau `auto_desabonnement_canal` allumé ou non.
+ *
+ * Le moteur ne pose `commercial` que sur un envoi différé (ou sous le
+ * drapeau). Une règle « étiquette posée → courriel d'offre » partait donc
+ * immédiatement sans que le consentement (base légale LCAP) ni le plafond de
+ * fréquence soient regardés : le client sans relation ni consentement la
+ * recevait. Le TYPE de l'envoi (`marketing`, posé par le moteur dans tous les
+ * cas) décide maintenant aussi de ces deux gardes.
+ *
+ * Rien ne change pour un envoi transactionnel (confirmation, reçu, rappel),
+ * ni pour un appel hors moteur (`marketing` absent).
+ */
+function commercialSiMarketing(ctx: ActionContext): ActionContext {
+  return ctx.marketing === true && !ctx.commercial ? { ...ctx, commercial: true } : ctx;
+}
+
+/**
  * {{client.lien_reservation}} : un lien de 30 jours propre au client de
  * l'entité, créé SEULEMENT si le message l'utilise et si l'entreprise a le
  * drapeau `auto_client_inactif`. Sinon les variables sont rendues telles
@@ -1284,6 +1302,7 @@ export async function executeSendEmail(
   // Le destinataire vient TOUJOURS de l'entité, jamais de la règle.
   // Voir `DESTINATAIRE_IMPOSE` plus haut : `config.to` permettait d'envoyer les
   // données d'un client (nom, montants, adresse) vers une adresse arbitraire.
+  ctx = commercialSiMarketing(ctx);
   const to = vars.client_email;
   if (!to) return saute('Aucune adresse courriel pour ce client', 'sans_courriel');
 
@@ -1531,6 +1550,7 @@ export async function executeSendSms(
   ctx: ActionContext,
   options: OptionsEnvoi = {},
 ): Promise<ActionResult> {
+  ctx = commercialSiMarketing(ctx);
   if (!ctx.twilio) return saute('Aucun numéro texto configuré pour le bureau', 'sms_non_configure');
 
   // Même règle que pour le courriel : le numéro vient de l'entité, pas de la
