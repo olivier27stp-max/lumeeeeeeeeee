@@ -466,6 +466,15 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
  * (conditionsEtiquettesOk), pas sur les métadonnées de l'événement.
  */
 export const CLES_CONDITIONS_ETIQUETTES = ['client_a_etiquette', 'client_sans_etiquette'] as const;
+
+/**
+ * Le « type d'action » des lignes du journal d'exécution qui ne sont PAS une
+ * action : la règle a reçu son événement mais ses conditions l'ont écartée
+ * (`result_data.saute_code = 'conditions'`). Ce n'est ni un déclenchement, ni
+ * un envoi, ni une étape sautée : les compteurs l'ignorent, l'onglet Journaux
+ * l'affiche — c'est la réponse à « pourquoi ça n'est pas parti ? ».
+ */
+export const ACTION_REGLE_ECARTEE = 'conditions';
 const CHAMPS_ETIQUETTES_CLIENT: ChampAction[] = [
   {
     cle: 'client_a_etiquette', fr: 'Seulement si le client a l’étiquette', en: 'Only if the client has tag',

@@ -15,7 +15,7 @@ import {
 } from './actions';
 import { logger } from './logger';
 import { regleDansLaChaine, conditionsEtiquettesOk } from './etiquettes';
-import { CLES_CONDITIONS_ETIQUETTES } from '../../src/lib/automationCatalogue';
+import { CLES_CONDITIONS_ETIQUETTES, ACTION_REGLE_ECARTEE, trouverDeclencheur } from '../../src/lib/automationCatalogue';
 import { conditionsChampsOk, CLE_CONDITIONS_CHAMPS } from './champs/automatisations';
 import {
   type Etape,
@@ -313,6 +313,113 @@ export function evaluateConditions(
     }
   }
   return true;
+}
+
+// ── Règle écartée par ses conditions : la trace ─────────────
+
+/**
+ * Les réglages qui disent QUELLE OCCURRENCE de l'événement une règle écoute —
+ * le jalon d'un balayage (« 15 jours de retard »), l'étiquette posée, le
+ * champ modifié, l'étape du pipeline, l'adresse d'appel — par opposition à un
+ * FILTRE sur la fiche (source du prospect, montant, étiquette du client…).
+ *
+ * Quand un de ces réglages ne correspond pas, la règle ne « vise » tout
+ * simplement pas cet événement : rien à expliquer, aucune ligne de journal.
+ * Sans cette distinction, chaque facture en retard écrirait « conditions non
+ * remplies » pour les quatre préréglages des AUTRES jalons, chaque étiquette
+ * posée pour toutes les règles des autres étiquettes — du bruit qui noierait
+ * la seule ligne utile.
+ */
+export const CLES_DE_CIBLAGE: Readonly<Record<string, readonly string[]>> = {
+  'invoice.overdue': ['days_overdue'],
+  'date.reached': ['champ_id', 'jours_avant'],
+  'client.inactive': ['mois', 'max_par_heure'],
+  'quote.viewed': ['ouverture'],
+  'invoice.viewed': ['ouverture'],
+  'client.tagged': ['tag'],
+  'client.untagged': ['tag'],
+  'custom_field.changed': ['field_id'],
+  'webhook.received': ['webhook_id'],
+  'lead.status_changed': ['new_status'],
+  'deal.stage_entered': ['stage_id', 'pipeline_id'],
+  'deal.stage_exited': ['stage_id', 'pipeline_id'],
+  'deal.stage_idle': ['stage_id', 'pipeline_id'],
+};
+
+/** Sépare les conditions d'une règle : ce qui CIBLE l'événement, et les filtres. */
+export function separerCiblage(
+  conditions: Record<string, any> | null | undefined,
+  typeEvenement: string,
+): { ciblage: Record<string, any>; filtres: Record<string, any> } {
+  const cles = CLES_DE_CIBLAGE[typeEvenement] ?? [];
+  const ciblage: Record<string, any> = {};
+  const filtres: Record<string, any> = {};
+  if (conditions && typeof conditions === 'object' && !Array.isArray(conditions)) {
+    for (const [cle, valeur] of Object.entries(conditions)) {
+      (cles.includes(cle) ? ciblage : filtres)[cle] = valeur;
+    }
+  }
+  return { ciblage, filtres };
+}
+
+/**
+ * Le nom de la première condition non remplie, pour le journal : le libellé
+ * du réglage quand le catalogue le connaît (« Montant minimum ($) »), sinon
+ * la clé telle qu'elle est écrite dans la règle (« source »).
+ */
+export function conditionNonRemplie(filtres: Record<string, any>, event: CRMEvent): string | null {
+  for (const [cle, valeur] of Object.entries(filtres)) {
+    if (evaluateConditions({ [cle]: valeur }, event)) continue;
+    const champ = trouverDeclencheur(event.type)?.champs?.find((c) => c.cle === cle);
+    return champ?.fr ?? cle.replace(/__(gt|gte|lt|lte)$/, '');
+  }
+  return null;
+}
+
+/**
+ * Trace d'une règle ÉCARTÉE par ses conditions (L-004).
+ *
+ * Avant, le moteur passait à la règle suivante en silence : devant « pourquoi
+ * ce prospect n'a pas reçu son message ? », rien ne distinguait « l'événement
+ * n'est jamais arrivé » de « la règle l'a vu et l'a écarté ».
+ *
+ * Une ligne, peu coûteuse :
+ *   · `action_type = 'conditions'` — ce n'est pas une action : les compteurs
+ *     (statistiques, débit de textos, « une fois par client ») l'ignorent ;
+ *   · `result_success = true` + `result_data.saute` : la convention des sauts,
+ *     lue telle quelle par l'onglet Journaux — jamais un échec ;
+ *   · au plus UNE par (règle, fiche, événement) : la clé porte l'événement de
+ *     l'outbox (un rejeu ne réécrit rien) ou, à défaut, la tranche de 2 min.
+ * Ne lève jamais : une trace perdue ne doit pas empêcher les autres règles.
+ */
+async function journaliserRegleEcartee(
+  supabase: SupabaseClient,
+  rule: AutomationRule,
+  event: CRMEvent,
+  quoi: string | null,
+): Promise<void> {
+  const repere = event.outboxId !== undefined ? `e${event.outboxId}` : `t${Math.floor(Date.now() / FENETRE_ANTI_DOUBLON_MS)}`;
+  const { error } = await supabase.from('automation_execution_logs').insert({
+    org_id: event.orgId,
+    automation_rule_id: rule.id,
+    trigger_event: event.type,
+    entity_type: event.entityType,
+    entity_id: event.entityId,
+    action_type: ACTION_REGLE_ECARTEE,
+    action_config: {},
+    result_success: true,
+    result_data: {
+      saute: quoi ? `Conditions non remplies : ${quoi}` : 'Conditions non remplies',
+      saute_code: 'conditions',
+      ...(quoi ? { condition: quoi } : {}),
+    },
+    result_error: null,
+    duration_ms: 0,
+    execution_key: `${rule.id}:${event.entityId}:conditions:${repere}`,
+  });
+  if (error && error.code !== '23505') {
+    console.error(`[automationEngine] règle écartée non journalisée (rule ${rule.id}, org ${event.orgId}):`, error.message);
+  }
 }
 
 // ── Deduplication key builder ───────────────────────────────
@@ -1302,13 +1409,28 @@ async function handleEvent(event: CRMEvent) {
         let aAgi = false;
         try {
         if (!regleViseCetEvenement(rule, event)) continue;
-        if (!evaluateConditions(rule.conditions, event)) continue;
+        // Ce qui dit QUELLE occurrence la règle écoute (jalon d'un balayage,
+        // étiquette posée, étape…) : pas la sienne → rien, pas même une trace.
+        const { ciblage, filtres } = separerCiblage(rule.conditions, event.type);
+        if (!evaluateConditions(ciblage, event)) continue;
+        // À partir d'ici l'événement EST celui de la règle : si un filtre
+        // l'écarte, le journal le dit (L-004).
+        if (!evaluateConditions(filtres, event)) {
+          await journaliserRegleEcartee(engineConfig.supabase, rule, event, conditionNonRemplie(filtres, event));
+          continue;
+        }
         if (!(await conditionsChampsOk(engineConfig.supabase, event.orgId, event.entityType, event.entityId,
-          rule.conditions?.[CLE_CONDITIONS_CHAMPS]))) continue;
+          rule.conditions?.[CLE_CONDITIONS_CHAMPS]))) {
+          await journaliserRegleEcartee(engineConfig.supabase, rule, event, 'champs personnalisés');
+          continue;
+        }
         // « Seulement si le client a / n'a pas l'étiquette » : sur ses étiquettes réelles.
         if (!(await conditionsEtiquettesOk(engineConfig.supabase,
           () => clientDeLEntite({ supabase: engineConfig!.supabase, orgId: event.orgId, entityType: event.entityType, entityId: event.entityId }),
-          rule.conditions))) continue;
+          rule.conditions))) {
+          await journaliserRegleEcartee(engineConfig.supabase, rule, event, 'étiquette du client');
+          continue;
+        }
         // « Une fois par client tous les N jours » : une réponse automatique
         // sur « Le client répond » ne repart pas à chaque texto.
         const jours = rule.settings?.delai_entre_passages_jours;
@@ -1465,6 +1587,8 @@ async function dejaPasseRecemment(
   const [journaux, taches] = await Promise.all([
     supabase.from('automation_execution_logs').select('id', { count: 'exact', head: true })
       .eq('org_id', event.orgId).eq('automation_rule_id', rule.id).eq('entity_id', event.entityId)
+      // Une règle ÉCARTÉE par ses conditions n'est pas « passée » pour ce client.
+      .neq('action_type', ACTION_REGLE_ECARTEE)
       .gte('created_at', depuis),
     supabase.from('automation_scheduled_tasks').select('id', { count: 'exact', head: true })
       .eq('org_id', event.orgId).eq('automation_rule_id', rule.id).eq('entity_id', event.entityId)

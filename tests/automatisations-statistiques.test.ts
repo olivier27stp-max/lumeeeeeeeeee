@@ -116,6 +116,29 @@ describe('le motif de la dernière étape sautée', () => {
   });
 });
 
+describe('une règle ÉCARTÉE par ses conditions (L-004)', () => {
+  it('n’est comptée ni comme déclenchement, ni comme envoi, ni comme étape sautée — et ne devient pas le « dernier saut »', async () => {
+    const avant = (await calculerStatistiques(fauxClient() as never, ORG, null)).par_regle[R1];
+    tables.automation_execution_logs.push(
+      // Deux fiches que la règle a vues et écartées (source ≠ attendue) : aucune tâche, aucune action.
+      { automation_rule_id: R1, entity_id: 'c50', scheduled_task_id: null, action_type: 'conditions', result_success: true, result_error: null, saute: 'Conditions non remplies : source', created_at: '2026-09-29T10:00:00Z' },
+      { automation_rule_id: R1, entity_id: 'c51', scheduled_task_id: null, action_type: 'conditions', result_success: true, result_error: null, saute: 'Conditions non remplies : source', created_at: '2026-09-29T11:00:00Z' },
+    );
+    const { par_regle } = await calculerStatistiques(fauxClient() as never, ORG, null);
+    expect(par_regle[R1]).toEqual(avant);
+    expect(par_regle[R1].dernier_saut).toBe('Aucun numéro texto configuré');
+  });
+
+  it('une règle qui n’a QUE des passages écartés n’apparaît pas comme déclenchée', async () => {
+    const R3 = 'aaaaaaaa-0000-4000-8000-000000000003';
+    tables.automation_execution_logs.push(
+      { automation_rule_id: R3, entity_id: 'c60', scheduled_task_id: null, action_type: 'conditions', result_success: true, result_error: null, saute: 'Conditions non remplies : source' },
+    );
+    const { par_regle } = await calculerStatistiques(fauxClient() as never, ORG, null);
+    expect(par_regle[R3]).toBeUndefined();
+  });
+});
+
 describe('par étape', () => {
   it('rattache chaque exécution à son étape par sa tâche', async () => {
     const { par_etape } = await calculerStatistiques(fauxClient() as never, ORG, R1);
