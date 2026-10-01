@@ -201,13 +201,13 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
   },
   {
     cle: 'invoice.paid', fr: 'Facture payée', en: 'Invoice paid',
-    aide_fr: 'Quand le paiement d\'une facture est encaissé.',
+    aide_fr: 'Quand le paiement d’une facture est encaissé.',
     aide_en: 'When an invoice payment is received.',
     famille: 'facture', entite: 'invoice',
   },
   {
     cle: 'invoice.overdue', fr: 'Facture en retard', en: 'Invoice overdue',
-    aide_fr: 'Quand une facture dépasse sa date d\'échéance.',
+    aide_fr: 'Quand une facture dépasse sa date d’échéance.',
     aide_en: 'When an invoice passes its due date.',
     famille: 'facture', entite: 'invoice',
   },
@@ -246,7 +246,7 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
   // ── Rendez-vous ──
   {
     cle: 'appointment.created', fr: 'Rendez-vous planifié', en: 'Appointment scheduled',
-    aide_fr: 'Quand une visite est mise à l\'horaire. Permet aussi d\'envoyer AVANT le rendez-vous.',
+    aide_fr: 'Quand une visite est mise à l’horaire. Permet aussi d’envoyer AVANT le rendez-vous.',
     aide_en: 'When a visit is scheduled. Also allows sending BEFORE the appointment.',
     famille: 'rendezvous', entite: 'appointment', accepte_delai_negatif: true,
   },
@@ -280,7 +280,7 @@ const DECLENCHEURS_DE_BASE: DeclencheurCatalogue[] = [
   },
   {
     cle: 'lead.status_changed', fr: 'Statut du prospect changé', en: 'Lead status changed',
-    aide_fr: 'Quand un prospect change d\'étape.',
+    aide_fr: 'Quand un prospect change d’étape.',
     aide_en: 'When a lead moves to another status.',
     famille: 'client', entite: 'lead',
   },

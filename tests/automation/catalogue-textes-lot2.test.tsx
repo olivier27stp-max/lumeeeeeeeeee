@@ -13,7 +13,8 @@ vi.mock('../../src/hooks/useModuleAccess', () => ({ useModuleAccess: () => ({ is
 
 import ChampActionUI from '../../src/components/automations/ChampAction';
 import {
-  ACTIONS, DECLENCHEURS, trouverAction, trouverDeclencheur, type ChampAction,
+  ACTIONS, CASE_SORTIE, DECLENCHEURS, FAMILLES_ACTIONS, FAMILLES_DECLENCHEURS,
+  trouverAction, trouverDeclencheur, type ChampAction,
 } from '../../src/lib/automationCatalogue';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -108,5 +109,57 @@ describe('declencheurs-07 / actions-03 — l’option vide d’un menu dit ce qu
   it('une option vide a toujours ses DEUX langues', () => {
     const champs = [...DECLENCHEURS.flatMap((d) => d.champs ?? []), ...ACTIONS.flatMap((a) => a.champs)];
     for (const c of champs) expect(Boolean(c.vide_fr), `${c.cle} : vide_fr / vide_en`).toBe(Boolean(c.vide_en));
+  });
+});
+
+// ─── declencheurs-09 ────────────────────────────────────────────
+
+/** Tous les textes FRANÇAIS du catalogue montrés à l'utilisateur, avec leur provenance. */
+function textesFrancais(): Array<{ ou: string; texte: string }> {
+  const sortie: Array<{ ou: string; texte: string }> = [];
+  const pousser = (ou: string, texte: string | undefined) => { if (texte) sortie.push({ ou, texte }); };
+  const champs = (prefixe: string, liste: ChampAction[]) => {
+    for (const c of liste) {
+      pousser(`${prefixe} › ${c.cle} (libellé)`, c.fr);
+      pousser(`${prefixe} › ${c.cle} (aide)`, c.aide_fr);
+      pousser(`${prefixe} › ${c.cle} (texte proposé)`, c.defaut_fr);
+      pousser(`${prefixe} › ${c.cle} (option vide)`, c.vide_fr);
+      for (const o of c.options ?? []) pousser(`${prefixe} › ${c.cle} › option ${o.cle}`, o.fr);
+    }
+  };
+  for (const d of DECLENCHEURS) {
+    pousser(`déclencheur ${d.cle} (nom)`, d.fr);
+    pousser(`déclencheur ${d.cle} (aide)`, d.aide_fr);
+    champs(`déclencheur ${d.cle}`, d.champs ?? []);
+  }
+  for (const a of ACTIONS) {
+    pousser(`action ${a.cle} (nom)`, a.fr);
+    pousser(`action ${a.cle} (aide)`, a.aide_fr);
+    pousser(`action ${a.cle} (indisponible)`, a.indisponible?.fr);
+    champs(`action ${a.cle}`, a.champs);
+  }
+  for (const f of [...FAMILLES_DECLENCHEURS, ...FAMILLES_ACTIONS]) pousser(`famille ${f.cle}`, f.fr);
+  for (const [cle, c] of Object.entries(CASE_SORTIE)) pousser(`case de sortie ${cle}`, c.fr);
+  return sortie;
+}
+
+describe('declencheurs-09 — une seule apostrophe, la typographique (’), dans les textes français du catalogue', () => {
+  it('les quatre aides relevées à l’écran', () => {
+    expect(trouverDeclencheur('invoice.paid')?.aide_fr).toBe('Quand le paiement d’une facture est encaissé.');
+    expect(trouverDeclencheur('invoice.overdue')?.aide_fr).toBe('Quand une facture dépasse sa date d’échéance.');
+    expect(trouverDeclencheur('appointment.created')?.aide_fr).toBe('Quand une visite est mise à l’horaire. Permet aussi d’envoyer AVANT le rendez-vous.');
+    expect(trouverDeclencheur('lead.status_changed')?.aide_fr).toBe('Quand un prospect change d’étape.');
+  });
+
+  it('aucun texte français du catalogue ne garde l’apostrophe droite', () => {
+    const tous = textesFrancais();
+    // Le relevé couvre bien le catalogue (déclencheurs, actions, champs, options).
+    expect(tous.length).toBeGreaterThan(200);
+    expect(tous.filter((t) => t.texte.includes("'")).map((t) => `${t.ou} : ${t.texte}`)).toEqual([]);
+  });
+
+  it('l’anglais n’est pas touché : il garde ses propres textes', () => {
+    expect(trouverDeclencheur('invoice.paid')?.aide_en).toBe('When an invoice payment is received.');
+    expect(trouverDeclencheur('lead.status_changed')?.aide_en).toBe('When a lead moves to another status.');
   });
 });
