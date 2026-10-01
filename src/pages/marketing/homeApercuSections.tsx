@@ -105,7 +105,7 @@ function LogoMarquee({ fr }: { fr: boolean }) {
    sont propres à l'accueil (formulaire de demande intégré au site du client,
    pipeline et ses automatisations par étape) ; les deux autres reprennent
    fonctionsData (mêmes textes et captures que les pages « En savoir plus »). ── */
-type FeatureRow = { slug: string; to: string; job: Bi; title: Bi; lead: Bi; points: Bi[]; shot: string; alt: Bi; h: number };
+type FeatureRow = { slug: string; to: string; job: Bi; title: Bi; lead: Bi; points: Bi[]; shot: string; alt: Bi; w: number; h: number };
 const REQUEST_FORM_ROW: FeatureRow = {
   slug: 'clients',
   to: '/fonctions/clients',
@@ -122,9 +122,10 @@ const REQUEST_FORM_ROW: FeatureRow = {
     { fr: 'Champs obligatoires, réponses rangées dans la fiche du client', en: "Required fields, answers saved to the client's record" },
     { fr: "Avis par courriel et dans l'app à chaque nouvelle demande", en: 'Email and in-app alert on every new request' },
   ],
-  shot: '/landing/apercu-formulaire.webp',
+  shot: '/landing/apercu-formulaire-zoom.webp',
   alt: { fr: 'Constructeur du formulaire de demande dans Lume', en: 'Request form builder in Lume' },
-  h: 1125,
+  w: 720,
+  h: 740,
 };
 /* Étapes et pipelines : PipelineDetail ; déclencheurs par étape
    deal.stage_entered / stage_exited / stage_idle (eventBus). Pas de capture du
@@ -144,16 +145,24 @@ const PIPELINE_ROW: FeatureRow = {
     { fr: 'SMS, courriel, tâche ou notification, avec le délai de ton choix', en: 'Text, email, task or notification, with the delay you choose' },
     { fr: 'Probabilité de vente et conseil au vendeur pour chaque étape', en: 'Win probability and rep guidance for every stage' },
   ],
-  shot: '/landing/apercu-automatisations.webp',
+  shot: '/landing/apercu-automatisations-zoom.webp',
   alt: { fr: 'Automatisations par étape dans Lume', en: 'Per-stage automations in Lume' },
-  h: 1125,
+  w: 938,
+  h: 819,
+};
+/* Captures recadrées sur la fonction (*-zoom.webp, tirées des captures
+   pleine page) : en pleine page, le texte de l'app devenait illisible une fois
+   réduit dans la colonne. */
+const ZOOM_SHOTS: Record<string, { shot: string; alt: Bi; w: number; h: number }> = {
+  calendrier: { shot: '/landing/apercu-calendrier-zoom.webp', alt: { fr: 'Calendrier des jobs dans Lume', en: 'Job calendar in Lume' }, w: 1110, h: 585 },
+  finances: { shot: '/landing/apercu-finances-zoom.webp', alt: { fr: 'Factures payées, en attente et en retard dans Lume', en: 'Paid, pending and overdue invoices in Lume' }, w: 970, h: 675 },
 };
 const FEATURE_ROWS: FeatureRow[] = [
   REQUEST_FORM_ROW,
   PIPELINE_ROW,
   ...['calendrier', 'finances'].flatMap((slug) => {
     const f = FONCTIONS.find((x) => x.slug === slug);
-    return f ? [{ slug, to: `/fonctions/${slug}`, job: f.job, title: f.title, lead: f.lead, points: f.points.slice(0, 3).map((pt) => pt.t), shot: f.shot, alt: f.shotAlt, h: 1125 }] : [];
+    return f ? [{ slug, to: `/fonctions/${slug}`, job: f.job, title: f.title, lead: f.lead, points: f.points.slice(0, 3).map((pt) => pt.t), ...ZOOM_SHOTS[slug] }] : [];
   }),
 ];
 
@@ -171,7 +180,7 @@ export function FeatureRows({ fr }: { fr: boolean }) {
             <ul>{f.points.map((pt) => <li key={pt.en}>{pick(fr, pt)}</li>)}</ul>
             <Link to={f.to} className="hs-link">{fr ? 'En savoir plus →' : 'Learn more →'}</Link>
           </div>
-          <img src={f.shot} alt={pick(fr, f.alt)} loading="lazy" decoding="async" width={1800} height={f.h} />
+          <img src={f.shot} alt={pick(fr, f.alt)} loading="lazy" decoding="async" width={f.w} height={f.h} />
         </div>
       ))}
     </section>
