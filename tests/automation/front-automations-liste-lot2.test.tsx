@@ -396,6 +396,44 @@ describe('liste-09 — le même départ porte le même nom dans l’en-tête et 
 });
 
 // ═══════════════════════════════════════════════════════════════
+describe('liste-11 / modeles-09 — un seul mot pour le même envoi : « Texto »', () => {
+  /** Sur le même écran : une règle à l'ancien format, et un parcours à étapes. */
+  const deuxFormats = () => [
+    regle({ name: 'Ancien format', actions: [{ type: 'send_sms', config: { body: 'Bonjour' } }] }),
+    regle({
+      name: 'Parcours',
+      steps: [{ id: 'e1', type: 'action', action: { type: 'send_sms', config: { body: 'Bonjour' } }, suivant: null }],
+    } as Partial<api.AutomationRule>),
+  ];
+  const intitules = () => Array.from(conteneur.querySelectorAll('p.uppercase')).map((p) => (p.textContent || '').trim());
+
+  it('en français : l’éditeur de l’ancien format dit « Texto envoyé au client », comme l’aperçu d’un parcours et le bandeau', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue(deuxFormats());
+    vi.mocked(builder.chargerStatistiques).mockResolvedValue({ par_regle: {}, par_etape: null, texto_configure: false });
+    await rendre('fr');
+    expect(texte()).toContain('Les étapes texto sont sautées');
+
+    await cliquer(bouton(/^Voir les messages de Ancien format$/));
+    expect(intitules()).toEqual(['Texto envoyé au client']);
+    expect(conteneur.querySelector('textarea')?.getAttribute('aria-label')).toBe('Texto envoyé au client');
+
+    await cliquer(bouton(/^Voir les messages de Parcours$/));
+    expect(intitules()).toEqual(['Texto envoyé au client']);
+    expect(texte()).not.toContain('SMS envoyé au client');
+  });
+
+  it('en anglais : « Text sent to client » dans les deux formats', async () => {
+    vi.mocked(api.getAutomationRules).mockResolvedValue(deuxFormats());
+    await rendre('en');
+    await cliquer(bouton(/^View messages of Ancien format$/));
+    expect(intitules()).toEqual(['Text sent to client']);
+    expect(conteneur.querySelector('textarea')?.getAttribute('aria-label')).toBe('Text sent to client');
+    await cliquer(bouton(/^View messages of Parcours$/));
+    expect(intitules()).toEqual(['Text sent to client']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 describe('liste-05 — langue du bureau illisible : l’écran ne prétend pas la connaître', () => {
   const surligne = (b: HTMLElement | undefined) => /\bbg-text-primary\b/.test(b?.className ?? '');
   const AVEU = 'Langue actuelle inconnue';
