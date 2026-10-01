@@ -179,6 +179,21 @@ describe('2. tarifs', () => {
     expect(jugerTarif(obs({ reponse: 'Lumi est inclus à partir du forfait Scale.' }), permis, a).verdict).toBe('FAIL');
     expect(forfaitsPresentesInclus('Les textos sont disponibles dès Scale. Minimum ne les a pas.', ['Minimum'])).toEqual([]);
   });
+  it('une réponse qui énumère les forfaits n’attribue pas la fonction à celui qui ne l’a pas', () => {
+    const a = { forfait_requis: 'Autopilot', forfaits_exclus: ['Minimum', 'Scale'], fonction: ['porte-à-porte', 'porte à porte', 'door-to-door'] };
+    // La réponse servie en prod le 2026-10-01 après le correctif : juste, et le juge la notait FAIL.
+    const enumeration = 'Minimum : clients, soumissions, facturation, avec 1 bureau. Scale ajoute les textos et les automatisations, avec 10 utilisateurs inclus et 1 bureau. Autopilot ajoute Lumi, le porte-à-porte et l’accès à l’API, avec 20 utilisateurs inclus et 2 bureaux.';
+    expect(jugerTarif(obs({ reponse: enumeration }), permis, a).verdict).toBe('PASS');
+    // La réponse FAUSSE d’avant le correctif reste un échec : la proposition nomme la fonction ET Scale.
+    const fausse = 'Le module de porte-à-porte (vente terrain : Map, pipeline de ventes, etc.) est inclus dans les forfaits Scale et Autopilot.';
+    expect(jugerTarif(obs({ reponse: fausse }), permis, a).verdict).toBe('FAIL');
+    expect(jugerTarif(obs({ reponse: fausse }), permis, a).constats.join(' ')).toMatch(/incluse dans Scale/);
+    // Une énumération qui se trompe est prise aussi : la fonction est nommée dans la proposition de Scale.
+    expect(jugerTarif(obs({ reponse: 'Scale ajoute les textos et le porte-à-porte, inclus dès ce forfait. Autopilot ajoute Lumi.' }), permis, a).verdict).toBe('FAIL');
+    // Sans les mots de la fonction, ou si la réponse ne la nomme nulle part, l’ancienne règle tient.
+    expect(forfaitsPresentesInclus('C’est inclus à partir du forfait Scale.', ['Scale'], ['porte-à-porte'])).toEqual(['Scale']);
+    expect(forfaitsPresentesInclus(enumeration, ['Scale'])).toEqual(['Scale']);
+  });
   it('bureaux et rabais : le chiffre de la page, pas un autre', () => {
     const bureaux = { compte: { noms: ['bureau'], valeur: 2, permis: [1, 2] } };
     expect(jugerTarif(obs({ reponse: 'Le forfait Autopilot inclut 2 bureaux.' }), permis, bureaux).verdict).toBe('PASS');
@@ -193,8 +208,8 @@ describe('2. tarifs', () => {
   });
   it('chaque cas de la famille porte une attente tirée de la page', () => {
     expect(CAS_TARIFS.find((c) => c.id === 'prix-minimum')?.attente.montants_requis).toEqual([15000]);
-    expect(CAS_TARIFS.find((c) => c.id === 'lumi')?.attente).toEqual({ forfait_requis: 'Autopilot', forfaits_exclus: ['Minimum', 'Scale'] });
-    expect(CAS_TARIFS.find((c) => c.id === 'textos')?.attente).toEqual({ forfait_requis: 'Scale', forfaits_exclus: ['Minimum'] });
+    expect(CAS_TARIFS.find((c) => c.id === 'lumi')?.attente).toEqual({ forfait_requis: 'Autopilot', forfaits_exclus: ['Minimum', 'Scale'], fonction: ['lumi', 'assistant ia', 'ai assistant'] });
+    expect(CAS_TARIFS.find((c) => c.id === 'textos')?.attente).toEqual({ forfait_requis: 'Scale', forfaits_exclus: ['Minimum'], fonction: ['texto', 'sms', 'texting', 'text message'] });
     expect(CAS_TARIFS.find((c) => c.id === 'bureaux')?.attente.compte).toEqual({ noms: ['bureau'], valeur: 2, permis: [1, 2] });
   });
 });

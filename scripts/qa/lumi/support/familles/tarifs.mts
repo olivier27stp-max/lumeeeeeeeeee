@@ -28,9 +28,19 @@ const depuis = (f: Fonction): { nom: string; exclus: string[] } => {
 
 interface CasTarif { id: string; question: string; attente: AttenteTarif; attendu: string; attente_discutable?: string }
 
+/** Comment une réponse nomme chaque fonction, en français et en anglais. */
+const MOTS_FONCTION: Record<Fonction, string[]> = {
+  lumi: ['lumi', 'assistant ia', 'ai assistant'],
+  porte_a_porte: ['porte-à-porte', 'porte à porte', 'porte-a-porte', 'door-to-door', 'd2d'],
+  textos: ['texto', 'sms', 'texting', 'text message'],
+  api: ['api'],
+  automatisations: ['automatisation', 'automation'],
+  quickbooks: ['quickbooks'],
+};
+
 const fonction = (id: string, question: string, f: Fonction): CasTarif => {
   const d = depuis(f);
-  return { id, question, attente: { forfait_requis: d.nom, forfaits_exclus: d.exclus }, attendu: `« ${d.nom} »${d.exclus.length ? `, jamais ${d.exclus.join(' ni ')}` : ''}` };
+  return { id, question, attente: { forfait_requis: d.nom, forfaits_exclus: d.exclus, fonction: MOTS_FONCTION[f] }, attendu: `« ${d.nom} »${d.exclus.length ? `, jamais ${d.exclus.join(' ni ')}` : ''}` };
 };
 
 const rabaisAutopilot = Math.round(autopilot.rabais_annuel * 100);
