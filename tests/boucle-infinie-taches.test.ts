@@ -53,7 +53,7 @@ describe('le même piège n\'est pas ailleurs', () => {
     const src = lire('src/pages/Payments.tsx');
     expect(src).toMatch(/const rows = useMemo\(/);
 
-    const effets = src.match(/useEffect\([\s\S]{0,400}?\}, \[[^\]]*rows[^\]]*\]\)/g) || [];
+    const effets = src.match(/useEffect\([\s\S]{0,400}?\}, \[[^\]]*\brows\b[^\]]*\]\)/g) || [];
     expect(effets).toEqual([]);
   });
 

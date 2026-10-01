@@ -38,6 +38,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 // a deux assistants (2026-09-22). Mêmes réponses, mêmes garde-fous, 0 token.
 import { reponseFaqPour } from '../lib/support/faq';
 import { estDemandeDAction } from '../lib/lumi/demande-action';
+import { repererFiches } from '../lib/lumi/reperage';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { reponseAideMulti } from '../lib/support/aide-multi';
 import { peutRepondreHorsScope, reponseHorsScope } from '../lib/lumi/hors-scope';
@@ -424,6 +425,15 @@ async function executerTourSse(opts: {
     const plafondJour = verifierPlafond('lumi');
     if (!plafondJour.autorise) { compterRefus('lumi'); reglages.modele_autorise = false; }
     // Palier épuisé : aucun appel au modèle, même si la RPC de réservation manque.
+    // RBAC : le modèle ne voit que les outils permis à cette personne.
+    // Recalculé à CHAQUE tour → un changement de rôle s'applique au message
+    // suivant, rien n'est figé dans la conversation.
+    const outilsPermis = await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId);
+    // Repérage (coût) : les fiches citées dans la demande sont trouvées par le code, avec le
+    // jeton de la personne, et données au modèle — une recherche de moins, donc un appel de moins.
+    const reperage = opts.enonce && reglages.modele_autorise
+      ? await repererFiches(opts.enonce, { client: ctx.auth.client, orgId: ctx.auth.orgId, espaceRefs: cleRefs, langue: ctx.language, outilsPermis })
+      : null;
     const resultat: ResultatTour = !reglages.modele_autorise ? { nouveauxMessages: [], proposition: null, texte: '', cost_cents: 0, plafond: true } : await tourLumi({
       client: ctx.auth.client,
       orgId: ctx.auth.orgId,
@@ -434,14 +444,12 @@ async function executerTourSse(opts: {
         const focus = [
           opts.sousAgent ? focusDuSousAgent(opts.sousAgent, ctx.language) : null,
           opts.enonce ? indiceOutils(opts.enonce, ctx.language, new Set(opts.sousAgent ? outilsDuSousAgent(opts.sousAgent) : OUTILS_DE_BASE)) : null,
+          reperage,
         ].filter((x): x is string => !!x).join('\n\n');
         return focus ? promptSystemeLumi({ ...ctx.promptCtx, focus }) : ctx.systeme;
       })(),
       sousAgent: opts.sousAgent ?? null,
-      // RBAC : le modèle ne voit que les outils permis à cette personne.
-      // Recalculé à CHAQUE tour → un changement de rôle s'applique au message
-      // suivant, rien n'est figé dans la conversation.
-      outilsPermis: await outilsPermisDe(ctx.auth.user.id, ctx.auth.orgId),
+      outilsPermis,
       reglages,
       budget: {
         reserver: (cents) => reserverBudget(ctx.admin, ctx.auth.orgId, cents),

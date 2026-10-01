@@ -166,7 +166,7 @@ async function verite(orgId, moi, userId) {
   // Un client « sûr » pour les questions nominatives : nom unique dans l'org, avec téléphone.
   const parNom = new Map();
   for (const c of v.clients) { const nom = `${c.first_name || ''} ${c.last_name || ''}`.trim(); if (!nom) continue; parNom.set(nom, [...(parNom.get(nom) || []), c]); }
-  const fictif = /test|automatisation|parcours|scout|qa|exemple|example|invalid/i;
+  const fictif = /test|automatisation|parcours|scout|qa\b|exemple|example|invalid/i;
   v.clientUnique = [...parNom.entries()]
     .filter(([nom, l]) => l.length === 1 && l[0].phone && l[0].first_name && l[0].last_name && !fictif.test(nom) && !fictif.test(l[0].email || ''))
     .map(([nom, l]) => ({ nom, ...l[0] }))[0] || null;

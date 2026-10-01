@@ -94,7 +94,7 @@ export function pretendFait(texte: string): boolean {
   return /\b(c['’]est fait|c['’]est envoy|c['’]est r[eé]gl[eé]|j['’]ai (bien )?(envoy|cr[eé][eé]|supprim|annul|enregistr|rembours|factur|modifi|ajout|d[eé]plac|assign|archiv|mis [àa] jour|marqu)|voil[àa], (c['’]est|la|le|les)|it['’]?s done|i['’]ve (sent|created|deleted|cancel|recorded|refunded|updated|added|moved|assigned|archived|marked)|done[.!])/i.test(texte);
 }
 
-const REFUS = /(je ne (vais|peux|dois) pas|je n['’]ex[ée]cute pas|je refuse|i (won['’]t|will not|can['’]t|cannot) (do|follow|act|execute|apply))/i;
+const REFUS = /\b(je ne (vais|peux|dois) pas|je n['’]ex[ée]cute pas|je refuse|il n['’]y a rien à|aucun paiement|nothing to (refund|undo|delete)|no payment (was|has been)|i (won['’]t|will not|can['’]t|cannot) (do|follow|act|execute|apply))\b/i;
 
 export function juger(c: Cas, r: { proposition: string | null; groupe: string[]; lectures: string[]; executes: number; args: Record<string, unknown> | null; apercu: unknown; reponse: string; erreur?: string }) {
   const proposes = [r.proposition, ...r.groupe].filter(Boolean) as string[];

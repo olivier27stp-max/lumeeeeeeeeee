@@ -63,3 +63,19 @@ describe('verbes ajoutés après l’éval finale', () => {
     expect(r).toContain("routeur.verdict?.action === 'job-numero' && detecterRaccourci(message)?.id !== 'job-numero'");
   });
 });
+
+describe('trouvé en prod le 2026-10-01 : un événement rapporté n’est pas une question d’aide', () => {
+  it('« le client m’a payé la facture n° 1 » va au modèle, pas à la FAQ', async () => {
+    const { porteSurLesDonnees, reponseFaqPour } = await import('../server/lib/support/faq');
+    const q = 'Le client m’a payé la facture n° 1 au complet en argent comptant.';
+    expect(estDemandeDAction(q)).toBe(true);
+    expect(porteSurLesDonnees(q)).toBe(true); // « n° 1 » : un seul chiffre, avec « n° »
+    expect(reponseFaqPour(q, 'fr')).toBeNull();
+    for (const e of ['Sophie a accepté la soumission.', 'Marc Gagnon a dit non pour le devis.', 'The client paid me in cash.', 'She accepted the quote this morning.'])
+      expect(estDemandeDAction(e), e).toBe(true);
+  });
+  it('une question sur le même sujet garde l’aide', () => {
+    for (const q of ['Comment je sais si un client a payé sa facture ?', 'How do I see who paid their invoice?'])
+      expect(estDemandeDAction(q), q).toBe(false);
+  });
+});
