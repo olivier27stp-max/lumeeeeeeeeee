@@ -387,7 +387,7 @@ describe('list_time_entries', () => {
     expect(lecture.ops).toContainEqual(['lte', ['date', '2026-09-17']]);
     expect(resultat.entries.map((e: any) => e.id).sort()).toEqual([E1, E4].sort()); // E3 est d'une autre entreprise
     const e1 = resultat.entries.find((e: any) => e.id === E1);
-    expect(e1).toEqual({ id: E1, user_id: U1, name: 'Marc Roy', date: '2026-09-16', clock_in_at: '2026-09-16T08:00', clock_out_at: '2026-09-16T16:00', hours: 7.5, open: false, approved: true, breaks: 1, notes: 'matin' });
+    expect(e1).toEqual({ id: E1, user_id: U1, name: 'Marc Roy', date: '2026-09-16', weekday: 'mercredi', clock_in_at: '2026-09-16T08:00', clock_out_at: '2026-09-16T16:00', hours: 7.5, open: false, approved: true, breaks: 1, notes: 'matin' });
     expect(resultat.note).toMatch(NOTE_FR);
   });
 
@@ -787,5 +787,18 @@ describe('get_team_schedule — qui travaille, qui est absent', () => {
     expect(resultat.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const reglages = appels.find((a) => a.table === 'company_settings')!;
     expect(filtreOrg(reglages)).toBe(true);
+  });
+});
+
+describe('list_time_entries : le jour de la semaine est donné, pas deviné', () => {
+  it('chaque entrée porte son jour, calculé sur la date locale', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const source = readFileSync(resolve(__dirname, '../server/lib/agent/tools-lot-paie.ts'), 'utf8');
+    // Vu en prod le 2026-10-01 : sans ce champ, Lumi écrivait « lundi 24 septembre » pour un jeudi.
+    expect(source).toContain('weekday: JOURS_FR[new Date(`${jourLocal}T00:00:00Z`).getUTCDay()]');
+    const jours = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+    expect(jours[new Date('2026-09-24T00:00:00Z').getUTCDay()]).toBe('jeudi');
+    expect(jours[new Date('2026-09-29T00:00:00Z').getUTCDay()]).toBe('mardi');
   });
 });
