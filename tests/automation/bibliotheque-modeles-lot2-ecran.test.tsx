@@ -137,3 +137,90 @@ describe('modeles-06 — « Tous les modèles » ne dit « tout est affiché » 
     expect(bouton(/^Tous les modèles$/).getAttribute('aria-pressed')).toBe('false');
   });
 });
+
+const carte = (id: string) => [...document.querySelectorAll<HTMLButtonElement>('button[data-modele]')].find((b) => b.dataset.modele === id)!;
+/** La ligne « Conditions » sous le déclencheur, telle qu'on la lit. */
+const ligneConditions = () => ([...fenetre().querySelectorAll('p')].find((p) => /^(Conditions|Aucune condition|No conditions)/.test(p.textContent ?? ''))?.textContent ?? '').trim();
+/** Les intitulés des étapes « Si … » de l'aperçu. */
+const lignesSi = () => [...fenetre().querySelectorAll('ol li span')].map((s) => (s.textContent ?? '').trim()).filter((t) => /^(Si|If) /.test(t));
+
+describe('modeles-01 — les conditions se lisent en clair, dans la langue de l’interface', () => {
+  const DECLENCHEUR: Array<[string, string, string]> = [
+    ['welcome_new_lead', 'Conditions : Sauf les demandes venues du formulaire de demande', 'Conditions: Except requests that came from the request form'],
+    ['pack_suivi_prospect', 'Conditions : Sauf les demandes venues du formulaire de demande', 'Conditions: Except requests that came from the request form'],
+    ['deposit_received', 'Conditions : Seulement pour un paiement de dépôt', 'Conditions: Only for a deposit payment'],
+    ['payment_confirmation', 'Conditions : Sauf pour un paiement de dépôt', 'Conditions: Except for a deposit payment'],
+    ['lost_lead_reengagement', 'Conditions : Seulement quand le prospect passe à « Perdu »', 'Conditions: Only when the lead is marked “Lost”'],
+    ['quote_opened_notify', 'Conditions : Première ouverture seulement', 'Conditions: First open only'],
+    ['quote_opened_move_deal', 'Conditions : Première ouverture seulement', 'Conditions: First open only'],
+  ];
+
+  for (const [id, fr, en] of DECLENCHEUR) {
+    it(`${id} : la ligne « Conditions » dit ce qui est filtré`, async () => {
+      await monter(true);
+      cliquer(carte(id));
+      expect(ligneConditions()).toBe(fr);
+      act(() => racine?.unmount()); conteneur.remove();
+      await monter(false);
+      cliquer(carte(id));
+      expect(ligneConditions()).toBe(en);
+    });
+  }
+
+  it('les étapes « Si » de la relance de devis disent par où le devis est parti', async () => {
+    await monter(true);
+    cliquer(carte('pack_relance_devis'));
+    expect(lignesSi().length).toBeGreaterThan(0);
+    for (const l of lignesSi()) expect(l).toBe('Si l’envoi s’est fait par texto');
+    act(() => racine?.unmount()); conteneur.remove();
+    await monter(false);
+    cliquer(carte('pack_relance_devis'));
+    expect(lignesSi().length).toBeGreaterThan(0);
+    for (const l of lignesSi()) expect(l).toBe('If it was sent by text message');
+  });
+
+  it('AUCUN modèle servi ne montre une clé ou une valeur technique', async () => {
+    const avecConditions = MODELES_AUTOMATISATION.filter((m) => Object.keys(m.conditions).length > 0
+      || (m.steps ?? []).some((e) => e.type === 'si'));
+    // La liste du constat : sept modèles filtrés au déclencheur, un avec des étapes « si ».
+    expect(avecConditions.length).toBeGreaterThanOrEqual(8);
+    for (const francais of [true, false]) {
+      await monter(francais);
+      for (const m of avecConditions) {
+        cliquer(carte(m.id));
+        const cles = [
+          ...Object.keys(m.conditions),
+          ...(m.steps ?? []).flatMap((e) => (e.type === 'si' ? Object.keys(e.conditions) : [])),
+        ];
+        for (const ligne of [ligneConditions(), ...lignesSi()]) {
+          expect(ligne, `${m.id} (${francais ? 'fr' : 'en'})`).not.toMatch(/[_=≠∈<>]/);
+          // Ni la forme du repli (« source n’est pas … », « channel is … ») : chaque
+          // condition d'un modèle servi a sa phrase à elle. (Le mot de la clé peut,
+          // lui, être du vrai français : « Première ouverture seulement ».)
+          for (const cle of cles) {
+            expect(ligne, `${m.id} (${francais ? 'fr' : 'en'})`).not.toMatch(new RegExp(`(^|[^a-zà-ÿ])${cle.replace(/_/g, ' ')} (est|n’est|is)( |$)`, 'i'));
+          }
+        }
+        cliquer(bouton(francais ? /^Retour$/ : /^Back$/));
+      }
+      act(() => racine?.unmount()); conteneur.remove();
+    }
+  });
+
+  it('une condition inconnue de la table reste lisible (repli), sans symbole ni tiret bas', async () => {
+    const base = MODELES_AUTOMATISATION.find((m) => m.id === 'thank_you_after_job')!; // présent : modèle du socle
+    api.lire.mockResolvedValue([{
+      ...base, id: 'invente',
+      conditions: { zone_de_service: { neq: 'rive_sud' }, montant: { gte: 500, lt: 2000 }, statut_du_dossier: 'en_cours', ville: { in: ['Laval', 'Longueuil'] } },
+    }]);
+    await monter(true);
+    cliquer(carte('invente'));
+    expect(ligneConditions()).toBe('Conditions : zone de service n’est pas « rive sud » · montant est d’au moins 500 · montant est inférieur à 2000 · statut du dossier est « en cours » · ville est parmi « Laval », « Longueuil »');
+  });
+
+  it('sans condition, la ligne le dit', async () => {
+    await monter(true);
+    cliquer(carte('thank_you_after_job'));
+    expect(ligneConditions()).toBe('Aucune condition.');
+  });
+});

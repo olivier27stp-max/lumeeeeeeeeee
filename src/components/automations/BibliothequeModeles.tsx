@@ -82,16 +82,120 @@ function libelleDeclencheur(cle: string, fr: boolean): string {
   return d ? (fr ? d.fr : d.en) : cle;
 }
 
-/** Conditions du déclencheur, en clair (« source ≠ request_form »). */
-function libellesConditions(conditions: Record<string, unknown>): string[] {
-  return Object.entries(conditions).map(([cle, v]) => {
-    if (v && typeof v === 'object') {
-      const [op, val] = Object.entries(v as Record<string, unknown>)[0] ?? ['', ''];
-      const symbole = op === 'neq' ? '≠' : op === 'gt' ? '>' : op === 'lt' ? '<' : op === 'in' ? '∈' : '=';
-      return `${cle} ${symbole} ${String(val)}`;
+/* ── Les conditions, en clair ────────────────────────────────
+   L'aperçu affichait « source ≠ request_form » et « Si channel = sms » : la
+   clé et la valeur de la base, telles quelles (audit du 2026-10-01). Trois
+   sources, dans l'ordre :
+     1. la table ci-dessous — elle couvre TOUTES les conditions des modèles
+        servis (un test parcourt le catalogue et échoue si une clé passe) ;
+     2. les réglages du déclencheur que le catalogue de l'éditeur sait déjà
+        nommer (« Première ouverture seulement ») ;
+     3. un repli lisible, sans symbole ni tiret bas, pour une condition que
+        personne n'a encore nommée.
+   Deux formes : la phrase de la ligne « Conditions » sous le déclencheur, et
+   la proposition qui suit « Si » dans une étape. */
+
+type Bilingue = { fr: string; en: string };
+type FormeCondition = 'seule' | 'apresSi';
+
+const CONDITIONS_CONNUES: Record<string, Record<FormeCondition, Bilingue>> = {
+  'source|neq|request_form': {
+    seule: { fr: 'Sauf les demandes venues du formulaire de demande', en: 'Except requests that came from the request form' },
+    apresSi: { fr: 'la demande ne vient pas du formulaire de demande', en: 'the request did not come from the request form' },
+  },
+  'source|eq|request_form': {
+    seule: { fr: 'Seulement les demandes venues du formulaire de demande', en: 'Only requests that came from the request form' },
+    apresSi: { fr: 'la demande vient du formulaire de demande', en: 'the request came from the request form' },
+  },
+  'payment_type|eq|deposit': {
+    seule: { fr: 'Seulement pour un paiement de dépôt', en: 'Only for a deposit payment' },
+    apresSi: { fr: 'le paiement est un dépôt', en: 'the payment is a deposit' },
+  },
+  'payment_type|neq|deposit': {
+    seule: { fr: 'Sauf pour un paiement de dépôt', en: 'Except for a deposit payment' },
+    apresSi: { fr: 'le paiement n’est pas un dépôt', en: 'the payment is not a deposit' },
+  },
+  'new_status|eq|lost': {
+    seule: { fr: 'Seulement quand le prospect passe à « Perdu »', en: 'Only when the lead is marked “Lost”' },
+    apresSi: { fr: 'le prospect passe à « Perdu »', en: 'the lead is marked “Lost”' },
+  },
+  // `channel` = le canal par lequel le devis ou la facture est PARTI (pas une préférence du client).
+  'channel|eq|sms': {
+    seule: { fr: 'Seulement si l’envoi s’est fait par texto', en: 'Only if it was sent by text message' },
+    apresSi: { fr: 'l’envoi s’est fait par texto', en: 'it was sent by text message' },
+  },
+  'channel|neq|sms': {
+    seule: { fr: 'Sauf si l’envoi s’est fait par texto', en: 'Unless it was sent by text message' },
+    apresSi: { fr: 'l’envoi ne s’est pas fait par texto', en: 'it was not sent by text message' },
+  },
+  'channel|eq|email': {
+    seule: { fr: 'Seulement si l’envoi s’est fait par courriel', en: 'Only if it was sent by email' },
+    apresSi: { fr: 'l’envoi s’est fait par courriel', en: 'it was sent by email' },
+  },
+  'channel|neq|email': {
+    seule: { fr: 'Sauf si l’envoi s’est fait par courriel', en: 'Unless it was sent by email' },
+    apresSi: { fr: 'l’envoi ne s’est pas fait par courriel', en: 'it was not sent by email' },
+  },
+};
+
+const OPERATEURS_EN_CLAIR: Record<string, Bilingue> = {
+  eq: { fr: 'est', en: 'is' },
+  neq: { fr: 'n’est pas', en: 'is not' },
+  in: { fr: 'est parmi', en: 'is one of' },
+  not_in: { fr: 'n’est pas parmi', en: 'is not one of' },
+  gt: { fr: 'est supérieur à', en: 'is greater than' },
+  gte: { fr: 'est d’au moins', en: 'is at least' },
+  lt: { fr: 'est inférieur à', en: 'is less than' },
+  lte: { fr: 'est d’au plus', en: 'is at most' },
+};
+
+/** Les réglages du déclencheur dont la valeur se lit telle quelle (les autres sont des identifiants). */
+const REGLAGES_LISIBLES: ReadonlySet<string> = new Set(['texte', 'zone', 'nombre', 'url']);
+
+const sansTiretBas = (s: string) => s.replace(/_+/g, ' ').trim();
+
+function valeurEnClair(v: unknown, fr: boolean): string {
+  if (Array.isArray(v)) return v.map((x) => valeurEnClair(x, fr)).join(', ');
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'boolean') return v ? (fr ? 'oui' : 'yes') : (fr ? 'non' : 'no');
+  const texte = sansTiretBas(String(v ?? ''));
+  return fr ? `« ${texte} »` : `“${texte}”`;
+}
+
+/** Un réglage du déclencheur, nommé par le catalogue de l'éditeur ; null s'il ne le connaît pas. */
+function reglageEnClair(declencheur: string, cle: string, valeur: unknown, fr: boolean): string | null {
+  const champ = trouverDeclencheur(declencheur)?.champs?.find((c) => c.cle === cle);
+  if (!champ) return null;
+  const option = champ.options?.find((o) => o.cle === String(valeur));
+  if (option) return fr ? option.fr : option.en;
+  const nom = fr ? champ.fr : champ.en;
+  return REGLAGES_LISIBLES.has(champ.type) ? `${nom}${fr ? ' : ' : ': '}${String(valeur)}` : nom;
+}
+
+function conditionsEnClair(
+  conditions: Record<string, unknown>, fr: boolean, forme: FormeCondition, declencheur?: string,
+): string[] {
+  const out: string[] = [];
+  for (const [cle, v] of Object.entries(conditions)) {
+    if (cle === 'champs_perso') {
+      const n = Array.isArray(v) ? v.length : 0;
+      if (n > 0) out.push(fr ? `${n} condition${n > 1 ? 's' : ''} sur les champs de la fiche` : `${n} condition${n > 1 ? 's' : ''} on the record’s fields`);
+      continue;
     }
-    return `${cle} = ${String(v)}`;
-  });
+    // `{ gte: 500, lt: 2000 }` porte DEUX conditions ; une valeur à plat est une égalité.
+    const paires: Array<[string, unknown]> = v !== null && typeof v === 'object' && !Array.isArray(v)
+      ? Object.entries(v as Record<string, unknown>)
+      : [['eq', v]];
+    for (const [op, valeur] of paires) {
+      const connue = CONDITIONS_CONNUES[`${cle}|${op}|${String(valeur)}`];
+      if (connue) { out.push(fr ? connue[forme].fr : connue[forme].en); continue; }
+      const reglage = op === 'eq' && declencheur ? reglageEnClair(declencheur, cle, valeur, fr) : null;
+      if (reglage) { out.push(reglage); continue; }
+      const operateur = OPERATEURS_EN_CLAIR[op];
+      out.push(`${sansTiretBas(cle)} ${operateur ? (fr ? operateur.fr : operateur.en) : sansTiretBas(op)} ${valeurEnClair(valeur, fr)}`);
+    }
+  }
+  return out;
 }
 
 /** Les variables ([client_first_name], {{deal.title}}) en surbrillance. */
@@ -392,7 +496,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
 
   const vueApercu = (m: ModeleAutomatisation) => {
     const etapes = etapesApercu(m).filter((e) => e.genre !== 'fin');
-    const conditions = libellesConditions(m.conditions);
+    const conditions = conditionsEnClair(m.conditions, fr, 'seule', m.declencheur);
     return (
       <div>
         <div className="flex flex-wrap items-center gap-2">
@@ -413,7 +517,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
           <p className="mt-1 text-[12px] text-text-tertiary">
             {conditions.length === 0
               ? (fr ? 'Aucune condition.' : 'No conditions.')
-              : `${fr ? 'Conditions' : 'Conditions'} : ${conditions.join(' · ')}`}
+              : `${fr ? 'Conditions :' : 'Conditions:'} ${conditions.join(' · ')}`}
           </p>
         </div>
 
@@ -423,7 +527,7 @@ export default function BibliothequeModeles({ open, fr, onClose, onCree, onErreu
               <div className="flex items-center gap-2 text-[13px]">
                 <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-secondary text-[11px] font-semibold tabular-nums text-text-secondary">{i + 1}</span>
                 {e.genre === 'attente' && <span className="text-text-secondary">{libelleAttente(e, fr)}</span>}
-                {e.genre === 'condition' && <span className="text-text-secondary">{fr ? 'Si' : 'If'} {libellesConditions(e.conditions).join(' · ')}</span>}
+                {e.genre === 'condition' && <span className="text-text-secondary">{fr ? 'Si' : 'If'} {conditionsEnClair(e.conditions, fr, 'apresSi').join(fr ? ' et ' : ' and ')}</span>}
                 {e.genre === 'action' && <span className="font-medium text-text-primary">{libelleAction(e.type, fr)}</span>}
               </div>
               {e.genre === 'action' && <ContenuAction type={e.type} config={e.config} fr={fr} />}
