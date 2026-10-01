@@ -45,6 +45,7 @@ import { outilsDuSousAgent } from './sous-agents';
 import type { IdTopic } from './topics';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
 import { ciblesIntrouvables } from './apercu-action';
+import { validerArgs, type SchemaSimple } from '../agent/validation-args';
 import { executerEcriture, type ReçuExecution } from './execution';
 import { signalerAppelLumi } from './cache-chaud';
 import { allegerSchema } from './alleger-outils';
@@ -588,6 +589,26 @@ export async function tourLumi(opts: {
         // texter le client) = une seule carte à confirmer, exécutées dans l'ordre.
         // Numéros affichés (« facture INV-000017 », « job 33 ») résolus AVANT la carte :
         // la carte et l'exécution visent le même identifiant (audit 2026-09-30).
+        //
+        // La carte montre CE QUI S'EXÉCUTERA (passe de référence du 2026-10-01). Elle
+        // était bâtie sur les arguments bruts ; à l'exécution, la garde retire les champs
+        // que l'outil ne déclare pas. « Crée un job à 240 $ » avec un champ inventé
+        // `total_cents` affichait « Total 240,00 $ » et aurait créé un job à 0 $. Même
+        // validation ici qu'à l'exécution : un champ inconnu ou invalide retourne au
+        // modèle, qui reformule avec les vrais paramètres — rien n'est proposé.
+        const schema = (outil as { declaration?: { parameters?: SchemaSimple } }).declaration?.parameters;
+        if (schema) {
+          const validation = validerArgs(schema, args);
+          const motif = !validation.ok
+            ? `Paramètres invalides — ${validation.erreur}.`
+            : validation.ignores.length
+              ? `Paramètres inconnus de ${appel.name} : ${validation.ignores.join(', ')}. Ils seraient ignorés à l'exécution, donc la carte montrerait autre chose que ce qui serait fait.`
+              : null;
+          if (motif) {
+            resultats.push({ type: 'tool_result', tool_use_id: appel.id, is_error: true, content: JSON.stringify({ error: `${motif} Rien n'a été proposé. Reprends avec les seuls paramètres déclarés de l'outil.` }) });
+            continue;
+          }
+        }
         const resolus = await resoudreNumeros(args, opts.orgId).catch(() => null);
         // ── Cible introuvable : PAS de carte (baseline du 2026-10-01) ──
         // « Marque la facture 8888 payée » donnait une carte, et « Mets Kevin
