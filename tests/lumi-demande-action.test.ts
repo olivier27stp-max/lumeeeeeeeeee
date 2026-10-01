@@ -82,3 +82,55 @@ describe('trouvé en prod le 2026-10-01 : un événement rapporté n’est pas u
       expect(estDemandeDAction(q), q).toBe(false);
   });
 });
+
+describe('passe de référence du 2026-10-01 : six questions de données servies par un article', () => {
+  // Les phrases exactes de la passe (220 demandes en prod). Chacune a reçu un
+  // article au lieu d'une lecture de la base ; « combien de clients ai-je au
+  // total » a même reçu une réponse fausse (« aucune limite »).
+  const DONNEES = [
+    "C'est qui qui me doit de l'argent en retard, pis combien chacun ?",
+    "How many invoices are overdue right now, and what's the total owing on them?",
+    'Explique-moi simplement pourquoi la facture de Pelletier est pas marquée payée.',
+    "C'est quoi le numéro de téléphone à Jean-François Pelletier ?",
+    'Combien de clients ai-je au total ?',
+    'est-ce que mes clients reçoivent un rappel la veille de leur rendez-vous',
+    // Mêmes formes, autres mots : la règle vaut pour la tournure, pas pour la phrase.
+    'Combien de factures avons-nous en tout ?',
+    "What's Martin Tremblay's phone number?",
+    'Which invoices are overdue?',
+    'Who owes me money?',
+    'Les factures en retard, ça fait combien ?',
+    'Le courriel pour Sophie Gagnon ?',
+  ];
+  it('aucune ne reçoit une réponse d’aide toute faite', async () => {
+    const { porteSurLesDonnees, reponseFaqPour } = await import('../server/lib/support/faq');
+    const { reponseAideDirecte } = await import('../server/lib/support/articles-dabord');
+    for (const q of DONNEES) {
+      expect(porteSurLesDonnees(q), q).toBe(true);
+      for (const l of ['fr', 'en'] as const) {
+        expect(reponseFaqPour(q, l), q).toBeNull();
+        expect(reponseAideDirecte(q, l, { premierMessage: true }), q).toBeNull();
+      }
+    }
+  });
+  it('les questions produit voisines gardent leur réponse gratuite', async () => {
+    const { porteSurLesDonnees, reponseFaqPour } = await import('../server/lib/support/faq');
+    for (const q of [
+      'Combien de clients je peux avoir ?',
+      'How many clients can I have?',
+      'How much does Lume cost?',
+      'Comment changer le numéro de téléphone de Lume ?',
+      'Comment importer mes clients depuis Jobber ?',
+      'comment on fait pour changer mon forfait lume',
+    ]) expect(porteSurLesDonnees(q), q).toBe(false);
+    expect(reponseFaqPour('Comment importer mes clients depuis Jobber ?', 'fr')?.id).toBe('import-clients');
+    expect(reponseFaqPour('comment on fait pour changer mon forfait lume', 'fr')?.id).toBe('change-plan');
+  });
+  it('la route : une lecture reconnue par un raccourci passe avant un article', () => {
+    const r = readFileSync(resolve(__dirname, '..', 'server', 'routes', 'lumi.ts'), 'utf8');
+    const reconnu = r.indexOf('const raccourciReconnu =');
+    expect(reconnu).toBeGreaterThan(0);
+    expect(reconnu).toBeLessThan(r.indexOf('reponseFaqPour(message, ctx.language)'));
+    expect(r).toContain('!estDemandeDAction(message) && !raccourciReconnu');
+  });
+});
