@@ -55,7 +55,7 @@ import type { IdTopic } from '../lib/lumi/topics';
 import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
-import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
+import { journaliserTrace, normaliserEnonce, enoncePourTrace, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL, outilsPermis, membreVoitLesMontants, restrictionsDe } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
@@ -394,7 +394,7 @@ async function executerTourSse(opts: {
     }
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
-      enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: opts.action ?? action ?? null,
+      enonce: opts.enonce, etage: ETAGE.agent, action: opts.action ?? action ?? null,
       params: {
         ...(opts.params ?? {}),
         ...(opts.sousAgent ? { sous_agent: opts.sousAgent } : {}),
@@ -627,7 +627,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage: aide ? ETAGE.enonceExact : ETAGE.raccourci });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: aide ? ETAGE.enonceExact : ETAGE.raccourci,
+          enonce: message, etage: aide ? ETAGE.enonceExact : ETAGE.raccourci,
           action: aide ? `faq:${aide.id}` : multi ? `aide-multi:${multi.ids.length}` : 'aide-directe',
           outils: article?.pages ?? multi?.ids ?? [],
           resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
@@ -660,7 +660,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         // Étage 2 : répondu sans modèle. C'est cette ligne qui mesure la part de trafic absorbée.
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: raccourci.etage ?? ETAGE.raccourci, action: raccourci.id, params: raccourci.periode ? { periode: raccourci.periode } : raccourci.numero ? { numero: raccourci.numero } : null,
+          enonce: message, etage: raccourci.etage ?? ETAGE.raccourci, action: raccourci.id, params: raccourci.periode ? { periode: raccourci.periode } : raccourci.numero ? { numero: raccourci.numero } : null,
           outils: [raccourci.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         return res.end();
@@ -676,7 +676,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (optimisation) {
       return servirOptimisation(ctx, res, {
         conversationId: conversationId!, nouveaux, date: dateVisee(optimisation.quand, ctx.fuseau), teamId: null,
-        origine, enonce: normaliserEnonce(message), etage: ETAGE.raccourci, action: 'optimiser-journee', params: { quand: optimisation.quand },
+        origine, enonce: message, etage: ETAGE.raccourci, action: 'optimiser-journee', params: { quand: optimisation.quand },
       });
     }
     const directe = enAttente.length || repli ? null : detecterActionDirecte(message);
@@ -700,7 +700,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         }
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.raccourci, action: directe.id, params: directe.cible ? { cible: directe.cible } : undefined,
+          enonce: message, etage: ETAGE.raccourci, action: directe.id, params: directe.cible ? { cible: directe.cible } : undefined,
           outils: directe.tool ? [directe.tool] : [], resultat: rep.genre === 'carte' ? 'proposition' : 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         return res.end();
@@ -764,7 +764,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage: ETAGE.interface });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.interface, action: 'plafond_conversation', params: { depense_cents: Math.round(depense * 100) / 100 },
+          enonce: message, etage: ETAGE.interface, action: 'plafond_conversation', params: { depense_cents: Math.round(depense * 100) / 100 },
           outils: [], resultat: 'refus', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         return res.end();
@@ -812,7 +812,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: null, etage: ETAGE.routeur });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: 'hors-scope', topic: 'hors_scope',
+          enonce: message, etage: ETAGE.routeur, action: 'hors-scope', topic: 'hors_scope',
           params: { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } },
           outils: [], resultat: 'ok', model: MODELE_ROUTEUR,
           usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(),
@@ -854,7 +854,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         }
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: r.id,
+          enonce: message, etage: ETAGE.routeur, action: r.id,
           params: { ...(r.periode ? { periode: r.periode } : {}), ...(r.numero ? { numero: r.numero } : {}), routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } },
           outils: [r.tool], resultat: 'ok', model: MODELE_ROUTEUR, usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(), costCents: coutRouteur, dureeMs: Date.now() - debut,
         });
@@ -879,7 +879,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('done', { conversation_id: conversationId, credits: ctx.credits, proposal: { tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args }, raccourci: `extraction:${a.id}`, etage: ETAGE.routeur });
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: `extraction:${a.id}`, params: { extraction: routeur.verdict.extraction, routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms } },
+          enonce: message, etage: ETAGE.routeur, action: `extraction:${a.id}`, params: { extraction: routeur.verdict.extraction, routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms } },
           outils: [a.tool], resultat: 'proposition', model: MODELE_ROUTEUR, usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(), costCents: coutRouteur, dureeMs: Date.now() - debut,
         });
         return res.end();
@@ -889,7 +889,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // B7 : un topic sûr sans action déterministe → le modèle part avec les outils de ce sous-agent seulement.
     // Arrivé ici, aucun raccourci n'a répondu : une action du routeur a donc été écartée, son sujet reste bon.
     const sousAgent = sousAgentDepuisVerdict(routeur, { actionEcartee: true });
-    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, sousAgent, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
+    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, sousAgent, ...(repli ? { action: 'repli', params: { candidat_retrait: enoncePourTrace(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');
