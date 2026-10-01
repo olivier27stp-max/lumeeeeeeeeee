@@ -95,7 +95,7 @@ describe('Créer depuis zéro puis construire le parcours', () => {
       await o.page.getByRole('button', { name: 'Créer', exact: false }).first().click();
       await o.page.getByRole('menuitem', { name: /Partir de zéro/ }).click();
       await o.page.waitForURL(/\/automations\/nouvelle/);
-      await o.page.getByRole('button', { name: /Choisir le déclencheur/ }).waitFor({ timeout: 60_000 });
+      await o.page.getByRole('button', { name: /Cliquer pour choisir un autre déclencheur/ }).waitFor({ timeout: 60_000 });
       const { count } = await admin.from('automation_rules').select('id', { count: 'exact', head: true })
         .eq('org_id', ORG()).gte('created_at', t0);
       expect(count).toBe(0);
@@ -122,10 +122,10 @@ describe('Créer depuis zéro puis construire le parcours', () => {
 
   it('[J-011] changer le déclencheur : écrit trigger_event, la carte « Quand » le montre', async () => {
     await avecCapture(o, 'J-011', async () => {
-      await o.page.getByRole('button', { name: /Choisir le déclencheur/ }).click();
+      await o.page.getByRole('button', { name: /Cliquer pour choisir un autre déclencheur/ }).click();
       await choisirDansTiroir('Déclencheurs', 'Facture envoyée');
       await expect.poll(async () => (await lireRegle(idRegle)).trigger_event).toBe('invoice.sent');
-      await expect.poll(() => o.page.getByRole('button', { name: /Choisir le déclencheur/ }).textContent()).toContain('Facture envoyée');
+      await expect.poll(() => o.page.getByRole('button', { name: /Cliquer pour choisir un autre déclencheur/ }).textContent()).toContain('Facture envoyée');
     });
   });
 
@@ -354,7 +354,7 @@ describe('Validations', () => {
         steps: [{ id: 'e1', type: 'action', action: { type: 'create_notification', config: { title: 'Date' } }, suivant: null }],
       });
       await ouvrirEditeur(r.id);
-      await voir(o.page.getByText(/chose\(s\) à corriger avant de publier/)).visible();
+      await voir(o.page.getByText(/choses? à corriger avant de publier/)).visible();
       await o.page.getByRole('switch', { name: 'Publier l’automatisation' }).click();
       const message = await attendreToast(o.page, /date|champ/i);
       expect(message.length).toBeGreaterThan(10);
