@@ -57,7 +57,7 @@ import type { IdTopic } from '../lib/lumi/topics';
 import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
-import { journaliserTrace, normaliserEnonce, enoncePourTrace, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
+import { journaliserTrace, normaliserEnonce, enoncePourTrace, masquerCoordonnees, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL, outilsPermis, membreVoitLesMontants, restrictionsDe } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
@@ -381,7 +381,7 @@ async function executerTourSse(opts: {
   // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
   // entre dans la trace pour être comparé à ce que le modèle a fait.
   const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce, contexteRouteur(opts.historique)) : null);
-  type MesureTour = { stop_reason?: string | null; appels_modele?: number; outils_charges?: number; premier_token_ms?: number | null; tronque?: boolean };
+  type MesureTour = { stop_reason?: string | null; appels_modele?: number; outils_charges?: number; premier_token_ms?: number | null; tronque?: boolean; erreur?: string; erreur_type?: string; erreur_statut?: number };
   const tracer = async (resultat: 'ok' | 'proposition' | 'erreur' | 'refus', cost_cents: number, action?: string | null, chiffresSuspects?: string[], mesure?: MesureTour) => {
     const routeur = observation ? await observation : null;
     // Règle stricte : le routeur en OBSERVATION coûte aussi (Haiku) — journalisé
@@ -538,10 +538,24 @@ async function executerTourSse(opts: {
   } catch (err: any) {
     logger.error('[lumi] tour échoué', { error: err?.message || String(err), orgId: ctx.auth.orgId });
     if (!ferme) emettreSse('error', { message: 'Lumi failed to respond.' });
-    void tracer('erreur', 0);
+    // La CAUSE entre au journal (passe du 2026-10-01 : un tour planté ne laissait que
+    // « erreur », sans rien pour le diagnostiquer hors des journaux du serveur).
+    // Coordonnées masquées, texte borné : c'est un message d'erreur, pas une donnée.
+    void tracer('erreur', 0, null, undefined, { stop_reason: null, appels_modele: 0, outils_charges: 0, premier_token_ms: null, ...causeDuPlantage(err) });
   } finally {
     res.end();
   }
+}
+
+/** Ce qu'on garde d'une exception pour la trace : son type, le statut HTTP s'il y en a un, et un message court sans coordonnées. */
+export function causeDuPlantage(err: unknown): { erreur: string; erreur_type?: string; erreur_statut?: number } {
+  const e = err as { message?: unknown; name?: unknown; status?: unknown } | null;
+  const message = masquerCoordonnees(String(e?.message ?? err ?? '')).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/\s+/g, ' ').trim().slice(0, 300);
+  return {
+    erreur: message || 'inconnue',
+    ...(typeof e?.name === 'string' && e.name !== 'Error' ? { erreur_type: e.name } : {}),
+    ...(typeof e?.status === 'number' ? { erreur_statut: e.status } : {}),
+  };
 }
 
 // ── POST /lumi/chat ─────────────────────────────────────────────
