@@ -408,6 +408,32 @@ describe('EDITEUR-04 — un seul panneau à droite à la fois', () => {
   });
 });
 
+// ─── EDITEUR-05 ─────────────────────────────────────────────────
+
+describe('EDITEUR-05 — pendant le chargement, l’écran DIT qu’il charge', () => {
+  it('un texte visible et un rôle « status », pas un rond gris muet', async () => {
+    api.editeur.mockImplementation(() => new Promise(() => {}));
+    await ouvrir(`/automations/${ID}`);
+    const etatChargement = container.querySelector('[role="status"]');
+    expect(etatChargement).not.toBeNull();
+    expect(etatChargement?.textContent).toBe('Chargement de l’automatisation…');
+    // Le texte est à l'écran, pas réservé aux lecteurs d'écran.
+    expect(etatChargement?.querySelector('.sr-only')).toBeNull();
+  });
+
+  it('en anglais', async () => {
+    localStorage.setItem('lume-language', 'en');
+    api.editeur.mockImplementation(() => new Promise(() => {}));
+    await ouvrir(`/automations/${ID}`);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Loading the automation…');
+  });
+
+  it('une fois chargé, l’annonce disparaît', async () => {
+    await ouvrir(`/automations/${ID}`);
+    expect(container.textContent).not.toContain('Chargement de l’automatisation');
+  });
+});
+
 // ─── EDITEUR-06 ─────────────────────────────────────────────────
 
 /** Une touche tapée là où est le focus (`cible`), comme le navigateur l'envoie. */

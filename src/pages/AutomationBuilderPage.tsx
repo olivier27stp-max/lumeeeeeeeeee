@@ -1723,7 +1723,13 @@ export default function AutomationBuilderPage() {
   if (chargement) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface">
-        <Loader2 className="h-6 w-6 animate-spin text-text-tertiary" aria-hidden="true" />
+        {/* L'écran DIT qu'il charge : un rond gris seul, sur un serveur lent,
+            ne distinguait pas « ça charge » de « c'est figé » — et un lecteur
+            d'écran n'annonçait rien (audit du 2026-10-01). */}
+        <div role="status" className="flex flex-col items-center gap-2 text-sm text-text-secondary">
+          <Loader2 className="h-6 w-6 animate-spin text-text-tertiary" aria-hidden="true" />
+          <span>{fr ? 'Chargement de l’automatisation…' : 'Loading the automation…'}</span>
+        </div>
       </div>
     );
   }
