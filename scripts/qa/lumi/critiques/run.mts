@@ -17,7 +17,12 @@
  *        [--max-appels 55]           appels à Lumi permis par compte dans la passe (la prod en accepte 60 par heure et par personne)
  *        [--attendre]                attendre la fin d'une limite horaire au lieu de rendre NON COUVERT
  *        [--malgre-activite]         lancer même si le bureau a servi dans les 3 dernières minutes ou si un compte est déjà en mode « demander »
- *        [--sortie evals/lumi/resultats/critiques-<date>]   base des fichiers .json et .md
+ *        [--proprietaire <courriel>] le compte propriétaire qui joue (défaut qa.map.owner@lume.test ; aussi eval.proprio1..3@lume-qa.test) —
+ *                                    la batterie se joue famille par famille, un compte par famille, pour tenir dans la limite horaire
+ *        [--sans-garde-horaire]      ne pas refuser d'après le compte des tours déjà tracés dans l'heure ; un 429 long rend alors NON COUVERT
+ *        [--sortie evals/lumi/resultats/critiques-<date>]   base des fichiers .json et .md ; un fichier déjà là est COMPLÉTÉ
+ *                                    (un test rejoué remplace son ancien résultat), sauf avec --neuf
+ *        --regenerer [--note "…"]    réécrit le .md à partir du .json de --sortie, sans rien appeler ; chaque --note ajoute un constat de passe
  *        --remettre                  après une passe tuée : remet le mode Lumi des deux comptes
  *        --nettoyer                  après une passe tuée : retire les fiches [CRIT] (suppression douce)
  *
@@ -34,9 +39,9 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LimiteAtteinte, clientService, clientUtilisateur, connexionProd, creerClientLumi, fermerSession, ouvrirSession, sqlLectureSeule, type Connexion } from './acces.mts';
-import { JEU_ATTENDU, sqlActiviteRecente, sqlAdhesions, sqlBureaux, sqlFuseau, sqlJeuPresent, sqlModeLumi, sqlToursDansLHeure } from './faits.mts';
+import { JEU_ATTENDU, sqlActiviteRecente, sqlAdhesions, sqlBureaux, sqlFuseau, sqlJeuPresent, sqlModeLumi, sqlModelesDesConversations, sqlToursDansLHeure } from './faits.mts';
 import { retirerFichesCrit } from './fiches-crit.mts';
-import { LIMITE_HORAIRE, appelsPrevus, bilanDe, ligneConsole, rapportMarkdown, selectionner, textePlan, type Passe, type Selection } from './rapport.mts';
+import { LIMITE_HORAIRE, appelsPrevus, bilanDe, fusionner, ligneConsole, rapportMarkdown, selectionner, textePlan, type Lancement, type Passe, type Selection } from './rapport.mts';
 import type { Compte, Contexte, Famille, Issue, Resultat, Session, TestCritique } from './types.mts';
 import { isolation } from './familles/isolation.mts';
 import { roles } from './familles/roles.mts';
@@ -53,12 +58,17 @@ export const FAMILLES: Famille[] = [isolation, roles, memoire, injection, action
 export const ORG_A = '93daa0c7-b749-4200-9755-dbeee62ce32d';
 export const ORG_B = '0df93da0-dc34-481c-be91-bab69a4989b0';
 export const COMPTES: Record<Compte, string> = { proprietaire: 'qa.map.owner@lume.test', technicien: 'qa.lumi.tech@lume.test' };
+/** Les comptes propriétaires de test du bureau A (tous au rôle owner) : aucun autre compte n'est accepté. */
+export const PROPRIETAIRES_DE_TEST = ['qa.map.owner@lume.test', 'eval.proprio1@lume-qa.test', 'eval.proprio2@lume-qa.test', 'eval.proprio3@lume-qa.test'];
 const API = 'https://lumecrm.net';
 const NOM_DE_TEST = /\b(QA|TEST)\b|\bbanc\b/i;
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const DOSSIER = join(RACINE, 'evals', 'lumi', 'resultats');
 const FICHIER_ETAT = join(DOSSIER, '.etat-critiques.json');
+/** Conversations ouvertes par les lancements précédents de cette batterie : le garde « une autre batterie tourne » ne les compte pas. */
+const FICHIER_CONVERSATIONS = join(DOSSIER, '.critiques-conversations.json');
+const lireJson = <T,>(fichier: string, defaut: T): T => { try { const t = readFileSync(fichier, 'utf8').trim(); return t ? (JSON.parse(t) as T) : defaut; } catch { return defaut; } };
 
 const drapeau = (k: string): boolean => process.argv.includes(k);
 const arg = (k: string, d = ''): string => { const i = process.argv.indexOf(k); const v = i > -1 ? process.argv[i + 1] : undefined; return v && !v.startsWith('--') ? v : d; };
@@ -98,6 +108,18 @@ async function main(): Promise<void> {
   if (drapeau('--plan')) { dire(textePlan(choix, { maxParCompte: maxDemande })); return; }
 
   mkdirSync(DOSSIER, { recursive: true });
+  // ── --regenerer : le rapport lisible refait à partir des données, sans réseau ──
+  if (drapeau('--regenerer')) {
+    const base = arg('--sortie', join(DOSSIER, `critiques-${new Date().toISOString().slice(0, 10)}`));
+    const donnees = lireJson<(Passe & { resultats: Resultat[] }) | null>(`${base}.json`, null);
+    if (!donnees) throw new Error(`rien à régénérer : ${base}.json est absent ou illisible`);
+    const notes = process.argv.flatMap((x, i) => (x === '--note' && process.argv[i + 1] ? [process.argv[i + 1]] : []));
+    donnees.notes = [...new Set([...(donnees.notes ?? []), ...notes])];
+    writeFileSync(`${base}.json`, JSON.stringify({ ...donnees, bilan: bilanDe(donnees.resultats) }, null, 1));
+    writeFileSync(`${base}.md`, rapportMarkdown(donnees, FAMILLES, donnees.resultats));
+    dire(`Rapport régénéré : ${base}.md (${donnees.resultats.length} tests, ${donnees.notes.length} constat(s) de passe)`);
+    return;
+  }
   const cx = await connexionProd();
 
   if (drapeau('--remettre')) {
@@ -114,6 +136,8 @@ async function main(): Promise<void> {
     return;
   }
   if (!tests.length) throw new Error('aucun test retenu par --famille / --test');
+  const comptes: Record<Compte, string> = { proprietaire: arg('--proprietaire', COMPTES.proprietaire), technicien: COMPTES.technicien };
+  if (!PROPRIETAIRES_DE_TEST.includes(comptes.proprietaire)) throw new Error(`REFUS : --proprietaire doit être un des comptes de test (${PROPRIETAIRES_DE_TEST.join(', ')}).`);
 
   const sql = sqlLectureSeule(cx);
 
@@ -129,14 +153,15 @@ async function main(): Promise<void> {
   // Le runner d'évaluation (evals/lumi-tools/run.mts --prod) laisse son état sur disque tant qu'il tourne.
   const autreBatterie = (() => { try { return readFileSync(join(RACINE, 'evals', 'lumi-tools', 'resultats', '.etat-prod.json'), 'utf8').trim(); } catch { return ''; } })();
   if (autreBatterie && !drapeau('--malgre-activite')) throw new Error('REFUS : evals/lumi-tools/resultats/.etat-prod.json n’est pas vide — la batterie d’évaluation tourne (ou a été tuée : la remettre avec son --remettre). Forcer : --malgre-activite.');
-  const [activite] = await sql<{ traces: number; derniere: string | null }>(sqlActiviteRecente(ORG_A, 3));
+  const dejaOuvertes = lireJson<string[]>(FICHIER_CONVERSATIONS, []).filter((x) => /^[0-9a-f-]{36}$/i.test(x));
+  const [activite] = await sql<{ traces: number; derniere: string | null }>(sqlActiviteRecente(ORG_A, 3, dejaOuvertes));
   if (Number(activite?.traces) > 0 && !drapeau('--malgre-activite')) {
     throw new Error(`REFUS : Lumi a servi ${activite.traces} fois dans le bureau A depuis 3 minutes (dernière : ${activite.derniere}). Une autre batterie tourne peut-être : attendre, ou relancer avec --malgre-activite.`);
   }
 
   // ── Sessions des deux comptes de A ──
   const sessions = {} as Record<Compte, Session>;
-  for (const compte of ['proprietaire', 'technicien'] as const) sessions[compte] = await ouvrirSession(cx, admin, compte, COMPTES[compte]);
+  for (const compte of ['proprietaire', 'technicien'] as const) sessions[compte] = await ouvrirSession(cx, admin, compte, comptes[compte]);
   const etat: EtatModes = { org: ORG_A, modes: [] };
   const restant = {} as Record<Compte, number>;
   const prevus = appelsPrevus(tests);
@@ -152,6 +177,7 @@ async function main(): Promise<void> {
       const [tours] = await sql<{ tours: number }>(sqlToursDansLHeure(ORG_A, s.userId));
       restant[compte] = Math.max(0, Math.min(maxDemande, LIMITE_HORAIRE - Number(tours?.tours ?? 0)));
       dire(`${compte} : ${s.courriel}, mode Lumi « ${m.lumi_mode} », ${tours?.tours ?? 0} tour(s) dans l’heure, ${prevus[compte]} appel(s) prévus, ${restant[compte]} permis`);
+      if (drapeau('--sans-garde-horaire')) restant[compte] = maxDemande;
       if (prevus[compte] > restant[compte] && !drapeau('--attendre')) {
         throw new Error(`REFUS : ${prevus[compte]} appels prévus pour ${compte}, ${restant[compte]} permis dans l’heure. Découper avec --famille, attendre, ou relancer avec --attendre.`);
       }
@@ -197,16 +223,27 @@ async function main(): Promise<void> {
       clientAvecEntetes: (c, entetes) => clientUtilisateur(cx, sessions[c], entetes),
     };
 
-    const horodatage = debut.toISOString().slice(0, 16).replace(/[:T]/g, '-');
-    const SORTIE = arg('--sortie', join(DOSSIER, `critiques-${horodatage}`));
+    const SORTIE = arg('--sortie', join(DOSSIER, `critiques-${debut.toISOString().slice(0, 10)}`));
+    // Un rapport déjà là est complété : la batterie se joue famille par famille.
+    const avant = drapeau('--neuf') ? null : lireJson<(Passe & { resultats: Resultat[] }) | null>(`${SORTIE}.json`, null);
     const resultats: Resultat[] = [];
-    const passe = (menage: Passe['menage'], mode: string[]): Passe => ({
-      date: debut.toISOString(), api: API, org_a: ORG_A, org_b: ORG_B, jeu_present: jeuPresent, appels: lumi.compteurs(), menage, mode, conversations: lumi.conversations(), selection,
-    });
+    const tousLesResultats = (): Resultat[] => fusionner(FAMILLES, avant?.resultats ?? [], resultats);
+    const passe = (menage: Passe['menage'], mode: string[]): Passe => {
+      const ici: Lancement = { date: debut.toISOString(), familles: choix.map((c) => c.famille.nom), comptes, appels: lumi.compteurs() };
+      const lancements = [...(avant?.lancements ?? []), ici];
+      return {
+        date: lancements[0].date, api: API, org_a: ORG_A, org_b: ORG_B, jeu_present: jeuPresent, menage, mode, selection, lancements,
+        appels: { proprietaire: lancements.reduce((n, x) => n + x.appels.proprietaire, 0), technicien: lancements.reduce((n, x) => n + x.appels.technicien, 0) },
+        conversations: [...new Set([...(avant?.conversations ?? []), ...lumi.conversations()])],
+        ...(avant?.notes?.length ? { notes: avant.notes } : {}),
+      };
+    };
     const ecrire = (p: Passe, partiel: boolean): void => {
-      writeFileSync(`${SORTIE}.json.tmp`, JSON.stringify({ ...p, partiel, bilan: bilanDe(resultats), resultats }, null, 1));
+      const tous = tousLesResultats();
+      writeFileSync(`${SORTIE}.json.tmp`, JSON.stringify({ ...p, partiel, bilan: bilanDe(tous), resultats: tous }, null, 1));
       renameSync(`${SORTIE}.json.tmp`, `${SORTIE}.json`);
-      if (!partiel) writeFileSync(`${SORTIE}.md`, rapportMarkdown(p, FAMILLES, resultats));
+      writeFileSync(FICHIER_CONVERSATIONS, JSON.stringify([...new Set([...dejaOuvertes, ...lumi.conversations()])]));
+      if (!partiel) writeFileSync(`${SORTIE}.md`, rapportMarkdown(p, FAMILLES, tous));
     };
 
     let menage: Passe['menage'] = { fait: [], erreurs: [] };
@@ -239,10 +276,17 @@ async function main(): Promise<void> {
       menage = await menager();
       modes = await remettre();
     }
-    ecrire(passe(menage, modes), false);
+    // Qui a répondu (modèle, étage) sur toutes les conversations de la batterie, et le palier du bureau.
+    const finale = passe(menage, modes);
+    try {
+      if (finale.conversations.length) finale.modeles = (await sql<{ modele: string; etage: number | null; tours: number }>(sqlModelesDesConversations(ORG_A, finale.conversations))).map((m) => ({ modele: String(m.modele), etage: m.etage === null ? null : Number(m.etage), tours: Number(m.tours) }));
+      const q = await lumi.appel(sessions.proprietaire, 'GET', '/api/lumi/quota');
+      finale.palier = q.json && typeof q.json === 'object' ? String((q.json as { credits?: { palier?: string } }).credits?.palier ?? '') || null : null;
+    } catch (err) { dire(`modèles de la passe illisibles : ${err instanceof Error ? err.message : String(err)}`); }
+    ecrire(finale, false);
 
     const bilan = bilanDe(resultats);
-    dire(`\nBILAN : ${bilan.par_verdict.PASS} PASS, ${bilan.par_verdict.FAIL} FAIL, ${bilan.par_verdict['NON COUVERT']} NON COUVERT, ${bilan.par_verdict['A RELIRE']} A RELIRE — sur ${bilan.total} tests`);
+    dire(`\nBILAN de ce lancement : ${bilan.par_verdict.PASS} PASS, ${bilan.par_verdict.FAIL} FAIL, ${bilan.par_verdict['NON COUVERT']} NON COUVERT, ${bilan.par_verdict['A RELIRE']} A RELIRE — sur ${bilan.total} tests`);
     dire(`Appels à Lumi : propriétaire ${lumi.compteurs().proprietaire}, technicien ${lumi.compteurs().technicien}`);
     for (const l of modes) dire(`mode Lumi — ${l}`);
     for (const l of menage.fait) dire(`ménage — ${l}`);

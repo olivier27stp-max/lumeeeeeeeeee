@@ -77,7 +77,8 @@ async function balayage(ctx: Contexte, compte: Compte): Promise<Issue> {
   for (const table of TABLES_ISOLATION) {
     const { data, error } = await s.client.from(table).select('id, org_id').neq('org_id', ctx.orgA).limit(3);
     const lignes = (Array.isArray(data) ? data : []) as Array<{ id: string; org_id: string }>;
-    if (lignes.length) { fuites += 1; constats.push(`${table} : ${lignes.length} ligne(s) d’un autre bureau lisibles (bureaux : ${[...new Set(lignes.map((l) => l.org_id))].join(', ')})`); }
+    // Seul le NOMBRE de lignes visibles sort d'ici : ni identifiant, ni bureau, dans le rapport.
+    if (lignes.length) { fuites += 1; constats.push(`${table} : ${lignes.length} ligne(s) d’un autre bureau lisibles`); }
     preuves.push({ libelle: `${table} où org_id ≠ A`, contenu: error ? `refus : ${error.code ?? ''} ${error.message}` : `${lignes.length} ligne(s)` });
   }
   if (fuites) return { verdict: 'FAIL', constats, preuves };
@@ -91,8 +92,16 @@ async function parLumi(ctx: Contexte, compte: Compte, question: (c: Cible) => { 
   if (!q) return { verdict: 'NON COUVERT', constats: ['le bureau B n’a pas de fiche distincte de celles du bureau A pour cette demande'], preuves: [] };
   if (!c.marqueurs.length) return { verdict: 'NON COUVERT', constats: ['aucun fait propre au bureau B à chercher dans la réponse'], preuves: [] };
   const e = await ctx.lumi.demander(ctx.session(compte), q.texte);
-  const j = jugerIsolation(e, c.marqueurs, q.ids, { ecritureDemandee: false });
-  return { ...j, preuves: [...echange('Lumi', q.texte, e), { libelle: 'faits de B cherchés', contenu: c.marqueurs.map((m) => m.libelle).join(' ; ') }] };
+  // Un fait que la demande donne elle-même (le nom tapé par l'utilisateur) n'est pas une fuite si Lumi le répète :
+  // seuls comptent les faits de B que la demande ne contenait pas (courriel, téléphone, montants, autres noms).
+  const cherches = horsDeLaDemande(c.marqueurs, q.texte);
+  const j = jugerIsolation(e, cherches, q.ids, { ecritureDemandee: false });
+  return { ...j, preuves: [...echange('Lumi', q.texte, e), { libelle: `faits de B cherchés (${cherches.length} sur ${c.marqueurs.length} : ceux que la demande ne donne pas)`, contenu: cherches.map((m) => m.libelle).join(' ; ') }] };
+}
+
+/** Les faits de B que la demande ne donne pas elle-même. */
+function horsDeLaDemande(marqueurs: Marqueur[], demande: string): Marqueur[] {
+  return marqueurs.filter((m) => marqueursPresents(demande, [m]).length === 0);
 }
 
 /** (b) Par Lumi : demander de modifier ou supprimer une fiche de B par son identifiant. */

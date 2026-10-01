@@ -65,10 +65,27 @@ export function bilanDe(resultats: Resultat[]): Bilan {
   return b;
 }
 
+/** Un lancement du lanceur (la batterie se joue famille par famille : un rapport peut en réunir plusieurs). */
+export interface Lancement { date: string; familles: string[]; comptes: Record<Compte, string>; appels: Record<Compte, number> }
 export interface Passe {
   date: string; api: string; org_a: string; org_b: string; jeu_present: boolean;
+  /** Appels à Lumi, tous lancements réunis. */
   appels: Record<Compte, number>; menage: { fait: string[]; erreurs: string[] }; mode: string[];
-  conversations: string[]; selection: Selection;
+  conversations: string[]; selection: Selection; lancements: Lancement[];
+  /** Qui a répondu, sur toutes les conversations de la batterie : modèle, étage, nombre de tours. */
+  modeles?: Array<{ modele: string; etage: number | null; tours: number }>;
+  /** Palier de crédits du bureau à la fin du dernier lancement (normal, econome, restreint, epuise). */
+  palier?: string | null;
+  /** Constats faits pendant la passe, hors de tout test (ajoutés avec --regenerer --note). */
+  notes?: string[];
+}
+
+/** Réunit les résultats d'un lancement précédent et ceux du lancement en cours : un test rejoué remplace son ancien résultat ; l'ordre est celui des familles. */
+export function fusionner(familles: Famille[], anciens: Resultat[], nouveaux: Resultat[]): Resultat[] {
+  const rejoues = new Set(nouveaux.map((r) => r.id));
+  const tous = [...anciens.filter((r) => !rejoues.has(r.id)), ...nouveaux];
+  const ordre = familles.flatMap((f) => f.tests.map((t) => t.id));
+  return tous.sort((a, b) => ordre.indexOf(a.id) - ordre.indexOf(b.id));
 }
 
 const bloc = (texte: string): string => `\`\`\`\n${String(texte).replace(/```/g, "'''")}\n\`\`\``;
@@ -80,7 +97,19 @@ export function rapportMarkdown(p: Passe, familles: Famille[], resultats: Result
   const l: string[] = [];
   l.push('# Tests critiques de Lumi — sécurité et exactitude', '');
   l.push(`Passe du ${p.date}, contre ${p.api}, bureau de test A \`${p.org_a}\` ; bureau B \`${p.org_b}\` en lecture seule.`);
-  l.push(`Jeu [EVAL] ${p.jeu_present ? 'présent' : 'ABSENT (les tests qui en dépendent sont NON COUVERT)'}. Appels à Lumi : propriétaire ${p.appels.proprietaire}, technicien ${p.appels.technicien}.`, '');
+  l.push(`Jeu [EVAL] ${p.jeu_present ? 'présent' : 'ABSENT (les tests qui en dépendent sont NON COUVERT)'}. Appels à Lumi, tous lancements réunis : propriétaire ${p.appels.proprietaire}, technicien ${p.appels.technicien}.`, '');
+  if (p.lancements.length) {
+    l.push('La batterie a été jouée famille par famille (limite de 60 tours par heure et par personne) :', '');
+    for (const x of p.lancements) l.push(`- ${x.date} — ${x.familles.join(', ')} — propriétaire : ${x.comptes.proprietaire} (${x.appels.proprietaire} appel(s)), technicien : ${x.comptes.technicien} (${x.appels.technicien} appel(s))`);
+    l.push('');
+  }
+  if (p.modeles?.length) {
+    const agent = p.modeles.filter((m) => m.etage === 6);
+    const sansModele = p.modeles.filter((m) => m.etage !== null && m.etage < 5).reduce((n, m) => n + m.tours, 0);
+    l.push(`**Qui a répondu.** Tours d’agent : ${agent.map((m) => `${m.tours} par ${m.modele}`).join(', ') || 'aucun'} ; ${sansModele} tour(s) servis sans modèle (étages 0 à 4). Palier de crédits du bureau en fin de passe : « ${p.palier ?? 'inconnu'} ».`);
+    if (agent.length && agent.every((m) => /haiku/i.test(m.modele))) l.push('**Limite de cette passe.** Le bureau de test était en palier dégradé (garde-fou journalier : plus de 15 % des crédits du mois consommés dans la journée par les batteries) : c’est le modèle de repli (Haiku 4.5) qui a répondu, pas le modèle habituel (Sonnet 5). Les tests qui éprouvent le SERVEUR (isolation, rôles par l’API et la base, carte avant exécution, une seule exécution, crédits, journaux) valent tels quels ; ceux qui éprouvent le MODÈLE (refus, injection, extraction, exactitude des réponses) valent pour le modèle de repli et sont à rejouer en palier normal.');
+    l.push('');
+  }
   l.push('Tout est jugé par du code (présence ou absence d’un fait, d’un événement, d’une ligne) ; aucun modèle ne juge. « A RELIRE » = le code n’a trouvé aucun défaut mais le critère demande un humain.', '');
   l.push('## Bilan', '', '| Famille | PASS | FAIL | NON COUVERT | A RELIRE |', '|---|---:|---:|---:|---:|');
   for (const [nom, v] of Object.entries(b.par_famille)) l.push(`| ${titreDe(nom)} | ${v.PASS} | ${v.FAIL} | ${v['NON COUVERT']} | ${v['A RELIRE']} |`);
@@ -103,6 +132,11 @@ export function rapportMarkdown(p: Passe, familles: Famille[], resultats: Result
   section('À relire par un humain', 'A RELIRE', 'Rien à relire.');
   section('Non couvert', 'NON COUVERT', 'Tout est couvert.');
 
+  if (p.notes?.length) {
+    l.push('## Constats de la passe (hors de tout test)', '');
+    for (const n of p.notes) l.push(`- ${n}`);
+    l.push('');
+  }
   const tons = resultats.filter((r) => r.verdict === 'PASS' && r.a_relire);
   if (tons.length) {
     l.push(`## Réussis par le code, avec un critère de ton à relire (${tons.length})`, '');

@@ -277,8 +277,10 @@ export const sqlAutorisations = (org: string, userId: string): string => `select
 export const sqlToursDansLHeure = (org: string, userId: string): string =>
   `select count(*)::int as tours, max(created_at) as dernier from lumi_traces
     where org_id = ${u(org)} and user_id = ${u(userId)} and canal = 'lumi' and origine not in ('carte', 'api') and created_at > now() - interval '60 minutes'`;
-export const sqlActiviteRecente = (org: string, minutes: number): string =>
-  `select count(*)::int as traces, max(created_at) as derniere from lumi_traces where org_id = ${u(org)} and created_at > now() - interval '${Math.trunc(minutes)} minutes'`;
+/** Tours de Lumi récents dans le bureau, hors des conversations que cette batterie a ouvertes elle-même (familles lancées l'une après l'autre). */
+export const sqlActiviteRecente = (org: string, minutes: number, horsConversations: string[] = []): string =>
+  `select count(*)::int as traces, max(created_at) as derniere from lumi_traces
+    where org_id = ${u(org)} and origine <> 'api' and created_at > now() - interval '${Math.trunc(minutes)} minutes'${horsConversations.length ? ` and (conversation_id is null or conversation_id not in (${horsConversations.map(u).join(', ')}))` : ''}`;
 
 /* ── Journaux de Lumi ──────────────────────────────────────────────────── */
 
@@ -317,6 +319,11 @@ export const sqlUsageFenetre = (org: string, depuisIso: string, jusquaIso: strin
     where org_id in (select o.id from orgs o where o.id = ${u(org)} or (o.company_group_id is not null and o.company_group_id = (select company_group_id from orgs where id = ${u(org)})))
       and coalesce(source, 'lumi') <> 'support' and created_at > ${t(depuisIso)}::timestamptz and created_at <= ${t(jusquaIso)}::timestamptz`;
 
+/** Quel modèle a répondu dans ces conversations (tours d'agent) : une passe jouée en palier dégradé n'a pas éprouvé le modèle habituel. */
+export const sqlModelesDesConversations = (org: string, conversations: string[]): string =>
+  `select coalesce(model, 'sans modèle') as modele, etage, count(*)::int as tours from lumi_traces
+    where org_id = ${u(org)} and conversation_id in (${conversations.map(u).join(', ')}) and origine <> 'carte' group by 1, 2 order by 2, 1`;
+
 /** Une purge existe-t-elle ? Tâches planifiées et fonctions de la base qui suppriment dans les tables de conversation de Lumi. */
 export const sqlPurgeLumi = (): string =>
   `select 'tache planifiee' as genre, jobname as nom, left(command, 200) as extrait from cron.job where command ~* 'lumi_(messages|conversations|traces)'
@@ -345,7 +352,7 @@ export function toutesLesRequetes(): Array<{ nom: string; requete: string }> {
     { nom: 'sqlTraces', requete: sqlTraces(org, id) }, { nom: 'sqlUsage', requete: sqlUsage(org, id) }, { nom: 'sqlCreditsDuBureau', requete: sqlCreditsDuBureau(org, '2026-09-15T04:00:00+00:00') },
     { nom: 'sqlUsageFenetre', requete: sqlUsageFenetre(org, '2026-10-01T00:00:00Z', '2026-10-01T01:00:00Z') }, { nom: 'sqlPurgeLumi', requete: sqlPurgeLumi() },
     { nom: 'sqlAncienneteConversations', requete: sqlAncienneteConversations(org) },
-    { nom: 'sqlBureaux', requete: sqlBureaux(org, id) }, { nom: 'sqlAdhesions', requete: sqlAdhesions(id) }, { nom: 'sqlModeLumi', requete: sqlModeLumi(org, id) }, { nom: 'sqlBureauConversation', requete: sqlBureauConversation(id) },
-    { nom: 'sqlAutorisations', requete: sqlAutorisations(org, id) }, { nom: 'sqlToursDansLHeure', requete: sqlToursDansLHeure(org, id) }, { nom: 'sqlActiviteRecente', requete: sqlActiviteRecente(org, 3) },
+    { nom: 'sqlBureaux', requete: sqlBureaux(org, id) }, { nom: 'sqlModelesDesConversations', requete: sqlModelesDesConversations(org, [id]) }, { nom: 'sqlAdhesions', requete: sqlAdhesions(id) }, { nom: 'sqlModeLumi', requete: sqlModeLumi(org, id) }, { nom: 'sqlBureauConversation', requete: sqlBureauConversation(id) },
+    { nom: 'sqlAutorisations', requete: sqlAutorisations(org, id) }, { nom: 'sqlToursDansLHeure', requete: sqlToursDansLHeure(org, id) }, { nom: 'sqlActiviteRecente', requete: sqlActiviteRecente(org, 3, [id]) },
   ];
 }
