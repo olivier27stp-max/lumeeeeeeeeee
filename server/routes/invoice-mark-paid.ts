@@ -59,7 +59,23 @@ router.post('/invoices/:id/mark-paid', requireFinancialAccess('payments.create')
       return;
     }
 
-    const amountCents = Math.max(0, Number(inv.balance_cents ?? inv.total_cents) || 0);
+    const solde = Math.max(0, Number(inv.balance_cents ?? inv.total_cents) || 0);
+    // Montant partiel (Lumi « enregistre 40 $ comptant ») : optionnel, entier, au plus le solde.
+    // Sans montant = le solde entier, comme le bouton « Marquer payée ».
+    let partiel = false;
+    if (body.amount_cents !== undefined && body.amount_cents !== null) {
+      const m = Number(body.amount_cents);
+      if (!Number.isInteger(m) || m <= 0) {
+        res.status(400).json({ error: 'Le montant doit être un nombre entier de cents, plus grand que zéro.' });
+        return;
+      }
+      if (m > solde) {
+        res.status(400).json({ error: `Le montant dépasse le solde restant (${(solde / 100).toFixed(2)} $).` });
+        return;
+      }
+      partiel = m < solde;
+    }
+    const amountCents = partiel ? Number(body.amount_cents) : solde;
 
     // Paiement manuel réel : alimente Paiements/rapports, la synchro
     // QuickBooks et, via le trigger payments_recalculate_invoice, le solde.
@@ -87,6 +103,13 @@ router.post('/invoices/:id/mark-paid', requireFinancialAccess('payments.create')
         ({ error: payErr } = await db.from('payments').insert(legacy));
       }
       if (payErr) throw payErr;
+    }
+
+    // Partiel : le trigger payments_recalculate_invoice a déjà recalculé payé, solde et
+    // statut (« partielle ») à partir de la ligne insérée — rien à forcer ici.
+    if (partiel) {
+      res.json({ ok: true, amount_cents: amountCents, partial: true });
+      return;
     }
 
     const { error: upErr } = await db

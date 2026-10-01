@@ -37,12 +37,13 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 // Lumi répond aussi aux questions de support : le client ne sait pas qu'il y
 // a deux assistants (2026-09-22). Mêmes réponses, mêmes garde-fous, 0 token.
 import { reponseFaqPour } from '../lib/support/faq';
+import { estDemandeDAction } from '../lib/lumi/demande-action';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { reponseAideMulti } from '../lib/support/aide-multi';
 import { peutRepondreHorsScope, reponseHorsScope } from '../lib/lumi/hors-scope';
 import { detecterActionDirecte, repondreActionDirecte, actionDepuisExtraction } from '../lib/lumi/actions-directes';
 import { detecterOptimisation, dateVisee, repondreOptimisation } from '../lib/lumi/optimiserJournee';
-import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
+import { texteRecus, lireContenuEcriture, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
 import { classifier, modeRouteur, MODELE_ROUTEUR, SEUIL_CONFIANCE, type ResultatRouteur, type ContexteRouteur } from '../lib/lumi/routeur';
@@ -55,6 +56,8 @@ import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } fro
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL, outilsPermis, membreVoitLesMontants, restrictionsDe } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
+import { JAMAIS_D_OFFICE } from '../lib/agent/registre';
+import { maintenantPourLumi } from '../lib/lumi/temps';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
@@ -318,7 +321,8 @@ async function contexteTour(req: Request, res: Response) {
     const ctxRole = await getUserContext(getServiceClient(), auth.user.id, auth.orgId, true);
     restrictions = restrictionsDe(ctxRole, await membreVoitLesMontants(auth.user.id, auth.orgId), language);
   } catch { /* non-fatal : sans ce texte, Lumi refuse quand même, juste moins bien */ }
-  const promptCtx = { companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs, restrictions };
+  // Jour ET heure dans le fuseau de l'entreprise, avec le décalage à écrire dans les dates d'outils (audit 2026-09-30).
+  const promptCtx = { companyName, userName, language, todayIso: maintenantPourLumi(fuseau, language), souvenirs, restrictions };
   const systeme = promptSystemeLumi(promptCtx);
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
   // Ce que le client voit : des crédits (jamais de $) — calculé une fois par requête.
@@ -572,7 +576,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     //
     // Mêmes garde-fous que dans le support : jamais pour une question sur les
     // DONNÉES du compte, jamais en cours de conversation, jamais sur un repli.
-    if (!enAttente.length && !repli && historique.length === 0) {
+    // Une demande d'ACTION (« configure mes taxes », « remets ses permissions »)
+    // va au modèle, qui a les outils — jamais une réponse d'aide (audit 2026-09-30).
+    if (!enAttente.length && !repli && historique.length === 0 && !estDemandeDAction(message)) {
       const aide = reponseFaqPour(message, ctx.language) ?? null;
       const article = aide ? null : reponseAideDirecte(message, ctx.language, { premierMessage: true });
       // Plusieurs questions collées d'un coup : chacune a sa réponse écrite,
@@ -603,7 +609,10 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       }
     }
 
-    const raccourci = enAttente.length || repli ? null : detecterRaccourci(message);
+    // Un raccourci est une LECTURE toute faite (fiche du job 24, mes jobs demain) :
+    // jamais pour un ordre (« supprime la liste de la job 24 » affichait la fiche
+    // et s'arrêtait — éval des outils, 2026-09-30).
+    const raccourci = enAttente.length || repli || estDemandeDAction(message) ? null : detecterRaccourci(message);
     if (raccourci) {
       const debut = Date.now();
       const reponse = await repondreRaccourci(raccourci, ctxRaccourci);
@@ -775,7 +784,12 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         });
         return res.end();
       }
-      const r = routeur.decision === 'action' && routeur.verdict?.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
+      // Raccourci de LECTURE choisi par le routeur : jamais pour un ordre (audit 2026-09-30).
+      // La fiche d'un job (job-numero) seulement si la question porte sur LE JOB lui-même
+      // (même motif strict que le raccourci) : « la liste de vérification de la job 24 »,
+      // « le contrat du job 30 » recevaient la fiche, qui ne montre ni l'une ni l'autre.
+      const ficheJobHorsSujet = routeur.verdict?.action === 'job-numero' && detecterRaccourci(message)?.id !== 'job-numero';
+      const r = routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) && !ficheJobHorsSujet ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
       const reponse = r ? await repondreRaccourci(r, ctxRaccourci) : null;
       if (r && reponse) {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
@@ -988,9 +1002,8 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     const debut = Date.now();
     const lignes: LigneRecu[] = enAttente.map((a, i) => {
       const bloc = blocs[i];
-      let erreur: string | null = null;
-      try { const j = JSON.parse(bloc.content); if (typeof j?.error === 'string') erreur = j.error; } catch { /* contenu non JSON : pas d'erreur métier lisible */ }
-      return { recu: execute[i] ?? { tool_use_id: a.tool_use_id, ok: false, fiche: null }, erreur, outil: a.tool };
+      const { erreur, resultat } = lireContenuEcriture(bloc.content);
+      return { recu: execute[i] ?? { tool_use_id: a.tool_use_id, ok: false, fiche: null }, erreur, outil: a.tool, resultat };
     });
     const texte = texteRecus(lignes, decision, ctx.language === 'fr');
     const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
@@ -1065,6 +1078,10 @@ router.put('/lumi/autorisations', validate(autorisationSchema), async (req, res)
     const { tool, actif } = req.body as z.infer<typeof autorisationSchema>;
     // Seul un outil d'ÉCRITURE connu peut être autorisé d'office.
     if (TOOLS_BY_NAME[tool]?.kind !== 'write') return res.status(400).json({ error: 'Unknown write tool.', code: 'outil_inconnu' });
+    // Argent, droits, envois au client, irréversible : toujours une carte (audit 2026-09-30).
+    if (actif && JAMAIS_D_OFFICE.has(tool)) {
+      return res.status(400).json({ error: 'This action always asks for confirmation.', code: 'jamais_d_office' });
+    }
     await definirAutorisation(getServiceClient(), auth.orgId, auth.user.id, tool, actif);
     const outils = await autorisationsDe(getServiceClient(), auth.orgId, auth.user.id);
     return res.json({ tools: [...outils].sort() });

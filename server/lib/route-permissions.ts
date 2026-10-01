@@ -499,6 +499,10 @@ export function rbacMiddleware(): express.RequestHandler {
 
     // Skip public routes
     for (const prefix of publicPrefixes) {
+      // Le préfixe des demandes de paiement n'est public que pour la
+      // consultation du statut (GET …/:id/status) : créer ou renvoyer un lien
+      // de paiement passe par la page Rôles (audit des outils, 2026-09-30).
+      if (prefix === '/api/payment-requests/' && req.method.toUpperCase() !== 'GET') continue;
       if (req.path.startsWith(prefix)) return next();
     }
 

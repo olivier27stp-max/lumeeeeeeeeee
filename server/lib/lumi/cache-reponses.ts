@@ -19,6 +19,7 @@
  * avec des outils de lecture seulement, non vide. Repli (« pas ça ») →
  * l'entrée est retirée.
  */
+import { estDemandeDAction } from './demande-action';
 import crypto from 'node:crypto';
 import { magasin } from './magasin';
 import { normaliserEnonce } from './traces';
@@ -56,7 +57,9 @@ export const ENONCE_MEMOIRE = /^\s*(retiens|retiens-toi|souviens-toi|note que|ou
 export const ENONCE_DOCUMENT = /\b(rapport|report|pdf|document|imprime|imprimer|print)\b/i;
 export function enonceCachable(enonce: string | null | undefined): boolean {
   if (!enonce) return true;
-  return !ENONCE_MEMOIRE.test(enonce) && !ENONCE_DOCUMENT.test(enonce);
+  // Un ORDRE n'est jamais servi depuis le cache (audit 2026-09-30) : « archive la
+  // job 44 » recevait la fiche du job mise en cache par une lecture voisine.
+  return !ENONCE_MEMOIRE.test(enonce) && !ENONCE_DOCUMENT.test(enonce) && !estDemandeDAction(enonce);
 }
 
 export function tourCachable(t: { historiqueVide: boolean; texte: string; outils: string[]; proposition: boolean; resultat: string; ecritureExecutee?: boolean; enonce?: string | null }): boolean {

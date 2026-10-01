@@ -128,9 +128,26 @@ describe.skipIf(!ACTIF)('Statistiques — sécurité', () => {
     });
   });
 
-  it('rpc_insights_budget_vs_actual est CASSÉE : la table budget_targets n’existe pas (fonction morte, aussi en prod)', async () => {
+  it('rpc_insights_budget_vs_actual (fonction morte) a été retirée', async () => {
     const r = await appel(proprio, 'rpc_insights_budget_vs_actual', PERIODE, T1);
-    expect(r.error?.code).toBe('42P01');
+    expect(r.error?.code).toBe('PGRST202');
+  });
+
+  // Paie sur memberships (migration 20261005600600) : la politique d'UPDATE laisse un membre
+  // modifier sa propre ligne ; la rémunération, elle, exige team.update.
+  describe('rémunération sur memberships : réservée à qui gère l’équipe', () => {
+    it('technicien : ne change ni son taux ni son mode de paie, mais garde ses préférences', async () => {
+      const taux = await theo.from('memberships').update({ hourly_rate_cents: 99900 }).eq('org_id', T1).eq('user_id', U.theo);
+      expect(taux.error?.code).toBe('42501');
+      const mode = await theo.from('memberships').update({ compensation_mode: 'both' }).eq('org_id', T1).eq('user_id', U.theo);
+      expect(mode.error?.code).toBe('42501');
+      const langue = await theo.from('memberships').update({ language: 'fr' }).eq('org_id', T1).eq('user_id', U.theo);
+      expect(langue.error).toBeNull();
+    });
+    it('propriétaire : peut fixer le taux d’un membre', async () => {
+      const r = await proprio.from('memberships').update({ hourly_rate_cents: 0 }).eq('org_id', T1).eq('user_id', U.theo);
+      expect(r.error).toBeNull();
+    });
   });
 
   describe('anonyme (clé publique seule)', () => {

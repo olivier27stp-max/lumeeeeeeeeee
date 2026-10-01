@@ -449,6 +449,15 @@ describe('pipeline', () => {
     expect(appel).toHaveBeenCalledWith(expect.anything(), '/deals/soft-delete', { dealId: 'D1', alsoDeleteLead: true });
     expect(r).toMatchObject({ deleted: true, lead_deleted: true, note: 'Carte retirée du pipeline et prospect supprimé.' });
   });
+
+  it('delete_deal + also_delete_lead : refusé si la fiche est un client actif ou a un historique (audit 2026-09-30)', async () => {
+    appel.mockClear();
+    const actif = fauxClient({ pipeline_deals: { data: { id: 'D1', title: 'Vitres', lead_id: 'C1' }, error: null }, clients: { data: { id: 'C1', status: 'active' }, error: null } });
+    await expect(outil('delete_deal').handler!({ deal_id: 'D1', also_delete_lead: true }, ctxAvec(actif.client))).rejects.toThrow(/client actif/);
+    const avecJobs = fauxClient({ pipeline_deals: { data: { id: 'D1', title: 'Vitres', lead_id: 'C1' }, error: null }, clients: { data: { id: 'C1', status: 'lead' }, error: null }, jobs: { count: 2, error: null } });
+    await expect(outil('delete_deal').handler!({ deal_id: 'D1', also_delete_lead: true }, ctxAvec(avecJobs.client))).rejects.toThrow(/déjà des jobs/);
+    expect(appel).not.toHaveBeenCalled();
+  });
 });
 
 /* ── 9. Registres ────────────────────────────────────────────── */

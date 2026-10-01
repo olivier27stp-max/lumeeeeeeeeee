@@ -75,6 +75,37 @@ export function attributsEcriture(outil: string): AttributsEcriture | null {
   return REGISTRE_ECRITURES[outil] ?? null;
 }
 
+/**
+ * Écritures qui ne partent JAMAIS sans carte (audit 2026-09-30), quels que
+ * soient le mode (« argent », « tout ») et les « toujours confirmer » : ce qui
+ * atteint le client, ce qui ne se défait pas, l'argent et les droits d'accès.
+ * Un clic de trop coûte une seconde ; l'inverse coûte un remboursement, un
+ * texto envoyé ou un accès donné par erreur.
+ */
+const ARGENT_ET_DROITS = [
+  'refund_payment', 'charge_card_on_file', 'mark_invoice_paid', 'record_invoice_payment', 'void_invoice', 'delete_invoice',
+  'create_payment_request', 'resend_payment_request', 'remove_card_on_file', 'run_recurring_invoice_now',
+  'set_hourly_rate', 'add_payroll_adjustment', 'mark_payroll_period_paid', 'unmark_payroll_period_paid', 'approve_timesheet',
+  'update_member_role', 'set_member_permissions', 'reset_member_permissions', 'update_role_preset',
+  'invite_member', 'remove_member', 'reactivate_member', 'revoke_invitation', 'resend_invitation',
+  'create_scheduled_report', 'update_scheduled_report', 'send_scheduled_report_now',
+  // Ce qui PARLERA au client plus tard, sans autre confirmation : modèles de
+  // courriel, textes et interrupteurs des automatisations, conditions d'un contrat.
+  'create_email_template', 'update_email_template', 'set_default_email_template',
+  'create_automation_from_text', 'toggle_automation_rule', 'update_automation_message', 'update_automation_sms_body',
+  'create_job_agreement',
+];
+export const JAMAIS_D_OFFICE: ReadonlySet<string> = new Set([
+  ...Object.entries(REGISTRE_ECRITURES).filter(([, a]) => a.vers_client || !a.reversible).map(([n]) => n),
+  ...ARGENT_ET_DROITS.filter((n) => n in REGISTRE_ECRITURES),
+]);
+
+/** Ce que la carte doit dire en plus de l'aperçu : irréversible, part chez le client, jamais d'office. */
+export function drapeauxEcriture(outil: string): { irreversible: boolean; vers_client: boolean; jamais_d_office: boolean } {
+  const a = REGISTRE_ECRITURES[outil];
+  return { irreversible: a ? !a.reversible : false, vers_client: a?.vers_client ?? false, jamais_d_office: JAMAIS_D_OFFICE.has(outil) };
+}
+
 /** Listes dérivées — gardées pour les appelants existants. */
 export const ECRITURES_SENSIBLES: ReadonlySet<string> = new Set(Object.entries(REGISTRE_ECRITURES).filter(([, a]) => a.sensible).map(([n]) => n));
 export const ECRITURES_ANODINES: ReadonlySet<string> = new Set(Object.entries(REGISTRE_ECRITURES).filter(([, a]) => a.anodine).map(([n]) => n));

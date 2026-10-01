@@ -107,7 +107,13 @@ export function buildEmailHtml(data: ReportData, frequency: string, lienApp: str
   });
 }
 
-export async function sendScheduledReport(reportId: string): Promise<void> {
+/**
+ * `immediat` : envoi demandé maintenant (bouton, Lumi). Pas de file de reprise
+ * — un rapport qui part tout seul une heure plus tard, après qu'on a dit
+ * « envoyé », surprend — et un échec est une erreur (audit 2026-09-30 : avant,
+ * l'échec répondait « envoyé »).
+ */
+export async function sendScheduledReport(reportId: string, opts: { immediat?: boolean } = {}): Promise<void> {
   const admin = getServiceClient();
 
   const { data: report, error } = await admin.from('scheduled_reports')
@@ -151,13 +157,17 @@ export async function sendScheduledReport(reportId: string): Promise<void> {
     suivi: { orgId: report.org_id, entityType: 'scheduled_report', entityId: report.id },
     // Envoi de fond (cron) : last_sent_at est posé juste après, un échec
     // transitoire ne doit donc pas perdre le rapport — il part dans la file de reprise.
-    reessayer: true,
+    // … sauf l'envoi immédiat (bouton, Lumi) : un échec y est dit, pas remis à plus tard.
+    ...(opts.immediat ? { reessayer: false } : { reessayer: true }),
   });
   // Le résultat était ignoré : un envoi refusé marquait quand même le rapport
   // « envoyé » (last_sent_at), et il ne repartait pas au passage suivant.
   // Parti en file de reprise = il partira : on le compte comme envoyé.
+  // (L'envoi immédiat — bouton, Lumi — n'a pas de file : son échec est dit.)
   if (!envoi.sent && !envoi.enFile) {
-    throw new Error(`rapport non envoyé : ${envoi.error ?? 'refus du fournisseur'}`);
+    throw new Error(opts.immediat
+      ? `Report email not sent: ${envoi.error || 'unknown error'}`
+      : `rapport non envoyé : ${envoi.error ?? 'refus du fournisseur'}`);
   }
 
   // Update last_sent_at

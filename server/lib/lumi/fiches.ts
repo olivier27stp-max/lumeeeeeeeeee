@@ -13,7 +13,11 @@
  * Rien ici ne part au modèle : fiches et aperçus voyagent en SSE seulement.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { taxesParDefaut } from '../agent/tools-etendus';
+import { taxesPourDocument } from '../agent/tools-etendus';
+import { drapeauxEcriture } from '../agent/registre';
+import { apercuAction, apercuTexto, type ApercuAction } from './apercu-action';
+
+export type { ApercuAction, LigneApercu } from './apercu-action';
 
 export type TypeFiche = 'client' | 'lead' | 'job' | 'quote' | 'invoice' | 'task';
 export interface Fiche {
@@ -127,22 +131,33 @@ export interface ApercuMessage {
 }
 export interface FicheClientApercu { id: string; name: string; company: string | null; email: string | null; phone: string | null; address: string | null; since: string | null; jobs: number; quotes: number; invoices: number }
 export interface ApercuFusion { genre: 'fusion'; garder: FicheClientApercu | null; absorber: FicheClientApercu | null }
-export type Apercu = ApercuDocument | ApercuMessage | ApercuFusion;
+/** Ce que la carte doit dire en plus : irréversible, part chez le client, jamais d'office (registre). */
+export interface DrapeauxApercu { irreversible: boolean; vers_client: boolean; jamais_d_office: boolean }
+export type Apercu = (ApercuDocument | ApercuMessage | ApercuFusion | ApercuAction) & { drapeaux?: DrapeauxApercu };
 
 interface CtxApercu { client: SupabaseClient; orgId: string; userId: string }
 
+/**
+ * L'aperçu de TOUTE écriture proposée (audit 2026-09-30) : un aperçu composé
+ * pour les documents, messages et fusions, sinon l'aperçu générique qui nomme
+ * chaque élément visé (apercu-action.ts). Toujours accompagné des drapeaux du
+ * registre (irréversible, vers le client, jamais d'office).
+ */
 export async function apercuProposition(tool: string, args: Record<string, any>, ctx: CtxApercu): Promise<Apercu | null> {
+  const drapeaux = drapeauxEcriture(tool);
+  let base: ApercuDocument | ApercuMessage | ApercuFusion | ApercuAction | null = null;
   try {
-    if (tool === 'create_quote' || tool === 'create_invoice') return await apercuDocument(tool === 'create_quote' ? 'quote' : 'invoice', args, ctx);
-    if (tool === 'send_sms') return { genre: 'sms', to: texte(args.client_name) || texte(args.phone_number) || null, subject: null, body: texte(args.message ?? args.body) };
-    if (tool === 'send_email') return { genre: 'email', to: texte(args.to) || texte(args.client_name) || null, subject: texte(args.subject) || null, body: texte(args.body ?? args.message) };
-    if (tool === 'send_quote' || tool === 'send_invoice') return await apercuEnvoiDocument(tool === 'send_quote' ? 'quote' : 'invoice', args, ctx);
-    if (tool === 'merge_clients') return { genre: 'fusion', garder: await ficheClientApercu(args.keep_client_id, ctx), absorber: await ficheClientApercu(args.absorb_client_id, ctx) };
+    if (tool === 'create_quote' || tool === 'create_invoice') base = await apercuDocument(tool === 'create_quote' ? 'quote' : 'invoice', args, ctx);
+    else if (tool === 'send_sms') base = await apercuTexto(args, ctx);
+    else if (tool === 'send_email') base = { genre: 'email', to: texte(args.to) || texte(args.client_name) || null, subject: texte(args.subject) || null, body: texte(args.body ?? args.message) };
+    else if (tool === 'send_quote' || tool === 'send_invoice') base = await apercuEnvoiDocument(tool === 'send_quote' ? 'quote' : 'invoice', args, ctx);
+    else if (tool === 'merge_clients') base = { genre: 'fusion', garder: await ficheClientApercu(args.keep_client_id, ctx), absorber: await ficheClientApercu(args.absorb_client_id, ctx) };
+    if (!base) base = await apercuAction(args, ctx);
   } catch (err: any) {
-    // Un aperçu qui rate ne bloque pas la proposition : la carte retombe sur la liste des champs.
+    // Un aperçu qui rate ne bloque pas la proposition : la carte dit alors qu'elle ne peut pas le montrer.
     console.error('[lumi/apercu]', err?.message || err);
   }
-  return null;
+  return base ? { ...base, drapeaux } : { genre: 'action', cibles: [], details: [], drapeaux };
 }
 
 async function apercuDocument(genre: 'quote' | 'invoice', args: Record<string, any>, ctx: CtxApercu): Promise<ApercuDocument> {
@@ -153,10 +168,11 @@ async function apercuDocument(genre: 'quote' | 'invoice', args: Record<string, a
     return { name: texte(it.name), description: texte(it.description) || null, quantity, unit_price_cents: unit, total_cents: Math.round(quantity * unit) };
   });
   const subtotal = lignes.reduce((s, l) => s + l.total_cents, 0);
-  const taxes = args.no_taxes ? [] : (await taxesParDefaut(ctx)).filter((t) => t.enabled).map((t) => ({
-    label: t.label, rate: t.rate, amount_cents: Math.round(subtotal * (t.rate / 100)),
-  }));
-  const total = subtotal + taxes.reduce((s, t) => s + t.amount_cents, 0);
+  // MÊME fonction que create_quote / create_invoice (audit 2026-09-30) : taxes
+  // du client (région, exemption). Avant : toutes les taxes actives de l'org.
+  const calcul = await taxesPourDocument(ctx, args.client_id || args.lead_id, subtotal, Boolean(args.no_taxes));
+  const taxes = calcul.lignes.map((t) => ({ label: t.name, rate: t.rate, amount_cents: t.amount_cents }));
+  const total = subtotal + calcul.tax_cents;
 
   let client: ApercuDocument['client'] = null;
   const id = args.client_id || args.lead_id;
@@ -206,22 +222,27 @@ async function apercuEnvoiDocument(genre: 'quote' | 'invoice', args: Record<stri
   if (!estUuid(id)) return null;
   // Deux requêtes explicites : `invoices` n'a pas de colonne title, et avec
   // PostgREST une colonne inexistante fait échouer toute la requête.
-  const d: { numero: string; total_cents: unknown; client_id: unknown } | null = genre === 'quote'
-    ? await ctx.client.from('quotes').select('quote_number, total_cents, client_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
-        .then(({ data }) => (data ? { numero: texte(data.quote_number), total_cents: data.total_cents, client_id: data.client_id } : null))
-    : await ctx.client.from('invoices').select('invoice_number, total_cents, client_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
-        .then(({ data }) => (data ? { numero: texte(data.invoice_number), total_cents: data.total_cents, client_id: data.client_id } : null));
+  // Même destinataire et même montant que les routes d'envoi (audit 2026-09-30) :
+  // devis → courriel du client, sinon du prospect (routes/quotes.ts) ;
+  // facture → le SOLDE, comme le courriel envoyé (pas le total).
+  const d: { numero: string; montant_cents: unknown; client_id: unknown; lead_id: unknown } | null = genre === 'quote'
+    ? await ctx.client.from('quotes').select('quote_number, total_cents, client_id, lead_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
+        .then(({ data }) => (data ? { numero: texte(data.quote_number), montant_cents: data.total_cents, client_id: data.client_id, lead_id: data.lead_id } : null))
+    : await ctx.client.from('invoices').select('invoice_number, balance_cents, client_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
+        .then(({ data }) => (data ? { numero: texte(data.invoice_number), montant_cents: data.balance_cents, client_id: data.client_id, lead_id: null } : null));
   if (!d) return null;
   let to: string | null = null;
-  if (estUuid(d.client_id)) {
-    const { data: c } = await ctx.client.from('clients').select('first_name, last_name, company, email').eq('org_id', ctx.orgId).eq('id', d.client_id).maybeSingle();
-    if (c) {
-      const nom = [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || c.company || '';
-      to = c.email ? `${nom} <${c.email}>` : nom || null;
-    }
-  }
+  const personne = async (pid: unknown) => {
+    if (!estUuid(pid)) return null;
+    const { data: c } = await ctx.client.from('clients').select('first_name, last_name, company, email').eq('org_id', ctx.orgId).eq('id', pid).maybeSingle();
+    return c ? { nom: [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || c.company || '', email: c.email || null } : null;
+  };
+  const client = await personne(d.client_id);
+  const prospect = client?.email ? null : await personne(d.lead_id);
+  const qui = client?.email ? client : prospect?.email ? prospect : client ?? prospect;
+  if (qui) to = qui.email ? `${qui.nom} <${qui.email}>` : `${qui.nom} — aucune adresse courriel : l’envoi sera refusé`;
   const num = d.numero;
-  const montant = cents(d.total_cents);
+  const montant = cents(d.montant_cents);
   const libelle = genre === 'quote' ? `Soumission ${num}` : `Facture ${num}`;
   return {
     genre: 'email',

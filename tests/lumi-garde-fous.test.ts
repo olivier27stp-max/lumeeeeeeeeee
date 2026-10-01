@@ -63,13 +63,14 @@ describe('terminer une job devient sensible quand une automatisation parle au cl
     expect((await ecrituresSensiblesPour(adminAvecRegles([{ actions: [{ type: 'create_task' }] }]), 'org')).has('update_job_status')).toBe(false);
     expect((await ecrituresSensiblesPour(adminAvecRegles(new Error('boom')), 'org')).has('update_job_status')).toBe(true);
   });
-  it('le mode « argent » respecte la liste dynamique ; « demander » ne laisse rien passer ; « tout » tout', () => {
+  it('le mode « argent » respecte la liste dynamique ; « demander » ne laisse rien passer ; « tout » tout sauf « jamais d’office »', () => {
     const outils = ['create_task', 'update_job_status', 'send_sms'];
     const sensibles = new Set([...ECRITURES_SENSIBLES, 'update_job_status']);
     expect([...outilsAutorisesParMode('argent', outils, sensibles)]).toEqual(['create_task']);
     expect([...outilsAutorisesParMode('argent', outils)]).toEqual(['create_task', 'update_job_status']);
     expect(outilsAutorisesParMode('demander', outils, sensibles).size).toBe(0);
-    expect(outilsAutorisesParMode('tout', outils, sensibles).size).toBe(3);
+    // Un texto part chez le client : jamais d'office, même en mode « tout » (audit 2026-09-30).
+    expect([...outilsAutorisesParMode('tout', outils, sensibles)]).toEqual(['create_task', 'update_job_status']);
   });
 });
 

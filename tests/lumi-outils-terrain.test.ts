@@ -576,3 +576,17 @@ describe('lectures : filtre org et présentation en français', () => {
     expect(result.error).not.toMatch(/relation|job_tags/);
   });
 });
+
+describe('jalons déjà facturés (audit 2026-09-30)', () => {
+  const factureSurDepot = { invoices: () => ({ data: [{ billing_milestone_id: ID, invoice_number: 'INV-000009', status: 'sent' }] }) };
+  const echec = async (args: Record<string, any>) => {
+    try { const r: any = (await executer('save_job_billing_milestones', args, factureSurDepot)).result; return String(r?.error ?? ''); }
+    catch (e: any) { return String(e?.message ?? e); }
+  };
+  it('retirer un jalon facturé de l’échéancier est refusé (sinon il redevient facturable)', async () => {
+    expect(await echec({ job_id: JOB, milestones: [{ label: 'Fin', amount_cents: 5000 }] })).toMatch(/déjà facturé \(INV-000009\)/);
+  });
+  it('changer le montant d’un jalon facturé est refusé', async () => {
+    expect(await echec({ job_id: JOB, milestones: [{ id: ID, label: 'Dépôt', amount_cents: 7000 }] })).toMatch(/son montant ne change plus/);
+  });
+});

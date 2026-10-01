@@ -35,6 +35,9 @@ import {
 } from '../payroll';
 import { analyserRentabilite, pourAgent } from '../rentabilite';
 import { ecrireValeurs } from '../champs/service';
+import { etatDesabonnement } from '../desabonnement';
+import { resolveTaxesForOrg, computeTaxLines, type TaxLine as LigneTaxe } from '../taxResolve';
+import { adresseInjoignable } from '../mailer';
 import type { AgentTool, ToolContext } from './tools';
 
 interface TaxLine { code: string; label: string; rate: number; enabled: boolean }
@@ -114,7 +117,7 @@ export function champRequis(v: any, nomLisible: string): string {
 const FUSEAU_ORG = 'America/Montreal';
 
 /** Date du jour (YYYY-MM-DD) DANS le fuseau de l'entreprise, pas en UTC. */
-function dateOrgAujourdhui(d: Date = new Date()): string {
+export function dateOrgAujourdhui(d: Date = new Date()): string {
   // en-CA + year/month/day → « 2026-09-03 » directement, en heure locale.
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: FUSEAU_ORG, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -140,7 +143,7 @@ function offsetOrgMinutes(d: Date): number {
  * ISO — pour filtrer une colonne timestamptz sur « la journée d'aujourd'hui à
  * Québec » et non « la journée UTC ». jourYmd optionnel = un autre jour local.
  */
-function bornesJourOrg(jourYmd?: string): { debut: string; fin: string; jour: string } {
+export function bornesJourOrg(jourYmd?: string): { debut: string; fin: string; jour: string } {
   const jour = jourYmd || dateOrgAujourdhui();
   // Minuit local = minuit UTC de ce jour, moins l'offset local.
   const minuitUtcNaif = new Date(`${jour}T00:00:00Z`);
@@ -258,6 +261,9 @@ function messageHumainErreur(e: any, contexte?: string): string {
     : 'L\'action n\'a pas fonctionné côté Lume. Dis-le simplement et propose de réessayer.';
 }
 
+/** Deux demandes identiques de la même personne à moins de 10 min = un doublon (double clic, retentative). */
+export const FENETRE_DOUBLON_MS = 10 * 60_000;
+
 export async function executerIdempotent(
   ctx: ToolContext,
   outil: string,
@@ -269,30 +275,50 @@ export async function executerIdempotent(
     return { dry_run: true, outil, args, note: 'Simulation : aucune écriture faite. Voici ce qui aurait été exécuté.' };
   }
   const admin = getServiceClient();
-  const argsHash = crypto.createHash('sha256').update(stableStringify(args)).digest('hex');
+  // Empreinte PAR PERSONNE (audit 2026-09-30) : sans l'utilisateur, le pointage
+  // d'un employé bloquait celui d'un autre (mêmes arguments vides).
+  const argsHash = crypto.createHash('sha256').update(stableStringify({ utilisateur: ctx.userId, args })).digest('hex');
 
-  const { data: posee, error: insErr } = await admin
+  const poser = () => admin
     .from('agent_actions')
     .insert({ org_id: ctx.orgId, user_id: ctx.userId, outil, args_hash: argsHash })
     .select('id')
     .maybeSingle();
+  let { data: posee, error: insErr } = await poser();
 
-  if (insErr) {
-    // 23505 = l'empreinte existe déjà : on renvoie le résultat mémorisé.
-    if ((insErr as any).code === '23505') {
-      const { data: existante } = await admin
-        .from('agent_actions')
-        .select('resultat, created_at')
-        .eq('org_id', ctx.orgId).eq('outil', outil).eq('args_hash', argsHash)
-        .maybeSingle();
-      return {
-        deja_fait: true,
-        note: 'Cette action identique a déjà été tentée récemment — voici son résultat, rien n\'a été refait en double.',
-        ...(existante?.resultat || {}),
-      };
+  // 23505 = l'empreinte existe déjà. Un DOUBLON n'est qu'une répétition rapprochée
+  // (double clic, retentative) : au-delà de FENETRE_DOUBLON_MS, la même action
+  // redemandée est une nouvelle action. Avant, l'empreinte ne vieillissait jamais :
+  // la relance des retards, le même texto « on arrive » la semaine suivante… ne
+  // partaient plus jamais, et Lumi répondait « déjà fait ».
+  for (let tentative = 0; insErr && (insErr as any).code === '23505' && tentative < 2; tentative++) {
+    const { data: existante } = await admin
+      .from('agent_actions')
+      .select('id, resultat, created_at')
+      .eq('org_id', ctx.orgId).eq('outil', outil).eq('args_hash', argsHash)
+      .maybeSingle();
+    if (!existante) { ({ data: posee, error: insErr } = await poser()); continue; }
+    const age = Date.now() - new Date(existante.created_at as string).getTime();
+    if (age > FENETRE_DOUBLON_MS) {
+      // Ancienne exécution : on libère l'empreinte (seulement CETTE ligne-là, si
+      // personne ne l'a remplacée entre-temps) et on repose la nôtre.
+      await admin.from('agent_actions').delete().eq('id', existante.id).eq('created_at', existante.created_at);
+      ({ data: posee, error: insErr } = await poser());
+      continue;
     }
-    return erreurOutil(`${outil}:dedup`, insErr);
+    const resultat = existante.resultat && typeof existante.resultat === 'object' ? existante.resultat as Record<string, any> : {};
+    if (Object.keys(resultat).length === 0) {
+      // La première exécution n'a pas encore rendu son résultat : ce n'est pas
+      // « fait ». Dire l'état réel plutôt qu'un succès qui pourrait échouer.
+      return { error: 'Cette action est déjà en cours d\'exécution (double clic ?). Attends son résultat avant de la redemander.' };
+    }
+    return {
+      ...resultat,
+      deja_fait: true,
+      note: 'Cette action identique vient d\'être exécutée (il y a moins de 10 minutes) — voici son résultat, rien n\'a été refait en double.',
+    };
   }
+  if (insErr) return erreurOutil(`${outil}:dedup`, insErr);
 
   try {
     const resultat = await action();
@@ -330,7 +356,7 @@ export async function executerIdempotent(
     // jargon SQL) passe par la traduction.
     const dejaHumaine = e instanceof Error && !(e as any)?.code
       && !/constraint|violates|postgres|sql|null value|rls|row-level|permission denied/i.test(String(e.message || ''));
-    return { error: dejaHumaine ? String(e.message).slice(0, 200) : messageHumainErreur(e) };
+    return { error: dejaHumaine ? String(e.message).slice(0, 400) : messageHumainErreur(e) };
   }
 }
 
@@ -428,6 +454,49 @@ export async function taxesParDefaut(ctx: ToolContext): Promise<TaxLine[]> {
     });
   }
   return taxes;
+}
+
+/**
+ * Taxes d'un DEVIS ou d'une FACTURE, comme l'écran (audit 2026-09-30) :
+ * groupe de taxes de la région du client (ou par défaut), client exempté =
+ * aucune taxe, puis ventilation au cent (taxes composées comprises).
+ * Avant : la carte montrait TPS+TVQ, la facture était créée à 0 $ de taxes
+ * et le devis au taux par défaut de la table, quelles que soient les taxes.
+ * La carte (fiches.ts) et les outils appellent CETTE fonction : même total.
+ */
+export async function taxesPourDocument(
+  ctx: { client: ToolContext['client']; orgId: string },
+  clientId: string | null | undefined,
+  baseCents: number,
+  sansTaxes = false,
+): Promise<{ lignes: LigneTaxe[]; tax_cents: number; taux: number; libelle: string; exempt: boolean }> {
+  if (sansTaxes || baseCents <= 0) return { lignes: [], tax_cents: 0, taux: 0, libelle: '', exempt: false };
+  const r = await resolveTaxesForOrg(ctx.client, ctx.orgId, clientId || null);
+  // tax_configs peut contenir des doublons (voir taxesParDefaut) : un seul par (nom, taux).
+  const vues = new Set<string>();
+  const taxes = (r.taxes || []).filter((t: any) => {
+    const cle = `${String(t.name).trim().toLowerCase()}|${Number(t.rate)}`;
+    if (vues.has(cle)) return false;
+    vues.add(cle);
+    return true;
+  });
+  const lignes = computeTaxLines(baseCents, taxes);
+  const tax_cents = lignes.reduce((s, l) => s + l.amount_cents, 0);
+  const taux = Math.round((tax_cents / baseCents) * 100 * 10000) / 10000;
+  const libelle = lignes.map((l) => `${l.name} (${String(l.rate).replace('.', ',')} %)`).join(' + ');
+  return { lignes, tax_cents, taux, libelle, exempt: Boolean(r.exempt) };
+}
+
+/** Écrit la ventilation par taxe d'un document (applied_taxes), comme l'écran. */
+async function enregistrerTaxesAppliquees(ctx: ToolContext, type: 'quote' | 'invoice', id: string, lignes: LigneTaxe[]): Promise<void> {
+  const { error: delErr } = await ctx.client.from('applied_taxes').delete().eq('document_type', type).eq('document_id', id);
+  if (delErr) throw delErr;
+  if (!lignes.length) return;
+  const { error } = await ctx.client.from('applied_taxes').insert(lignes.map((l, i) => ({
+    document_type: type, document_id: id, tax_config_id: l.tax_config_id, name: l.name, rate: l.rate,
+    amount_cents: l.amount_cents, is_compound: l.is_compound, sort_order: i,
+  })));
+  if (error) throw error;
 }
 
 /** Nom affichable d'un client (même logique que l'app). */
@@ -553,6 +622,29 @@ const getTeam: AgentTool = {
   },
 };
 
+/**
+ * Pointages terminés d'une plage, TOUTES les pages (audit 2026-09-30). Avant, la
+ * requête ne lisait pas punch_in_at / punch_out_at — les colonnes qu'utilise
+ * computeEntryHours — et chaque entrée valait 0 h ; elle incluait les pointages
+ * en cours et s'arrêtait à 1 000 lignes (plafond PostgREST) sans le dire.
+ */
+async function entreesDeTemps(ctx: ToolContext, from: string, to: string): Promise<{ data: any[]; error: any }> {
+  const toutes: any[] = [];
+  for (let de = 0; toutes.length < 20_000; de += 1000) {
+    const { data, error } = await ctx.client
+      .from('time_entries')
+      .select('id, employee_id, employee_name, date, punch_in_at, punch_out_at, breaks')
+      .eq('org_id', ctx.orgId).eq('status', 'completed')
+      .gte('date', from).lte('date', to)
+      .order('date', { ascending: true }).order('id', { ascending: true })
+      .range(de, de + 999);
+    if (error) return { data: toutes, error };
+    toutes.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  return { data: toutes, error: null };
+}
+
 const getTimesheets: AgentTool = {
   kind: 'read',
   declaration: {
@@ -571,13 +663,7 @@ const getTimesheets: AgentTool = {
   },
   handler: async (args, ctx) => {
     const { from, to, tronquee } = plageBornee(args.from, args.to, 366);
-    const { data, error } = await ctx.client
-      .from('time_entries')
-      .select('employee_id, employee_name, date, punch_in, punch_out, breaks')
-      .eq('org_id', ctx.orgId)
-      .gte('date', from).lte('date', to)
-      .order('date', { ascending: true })
-      .limit(20000); // borne dure — au-delà, la plage est de toute façon trop large
+    const { data, error } = await entreesDeTemps(ctx, from, to);
     if (error) return erreurOutil('timesheets', error);
 
     const parEmploye = new Map<string, { name: string; hours: number; entries: number }>();
@@ -937,11 +1023,7 @@ const getPayrollSummary: AgentTool = {
     const periode = computePayPeriod(settings);
     const { fromIso, toIso } = periodToIsoRange(periode);
 
-    const { data: entrees, error: e2 } = await ctx.client
-      .from('time_entries')
-      .select('employee_id, employee_name, date, punch_in, punch_out, breaks')
-      .eq('org_id', ctx.orgId)
-      .gte('date', fromIso.slice(0, 10)).lte('date', toIso.slice(0, 10));
+    const { data: entrees, error: e2 } = await entreesDeTemps(ctx, fromIso.slice(0, 10), toIso.slice(0, 10));
     if (e2) return erreurOutil('payroll', e2);
 
     const parEmploye = new Map<string, { name: string; hours: number }>();
@@ -1039,13 +1121,19 @@ const compareRevenue: AgentTool = {
     // Mesures réellement renvoyées par rpc_insights_period_comparison (mêmes
     // libellés que l'écran Insights) ; les anciennes clés restent par prudence.
     const LIB: Record<string, string> = {
-      new_leads: 'nouveaux clients', new_jobs: 'nouveaux jobs', invoiced_value: 'valeur facturée',
+      new_leads: 'nouveaux prospects', new_jobs: 'nouveaux jobs', invoiced_value: 'valeur facturée',
       conversions: 'conversions', paid_invoices: 'factures payées',
       revenue: 'revenus', jobs: 'jobs', invoices: 'factures', quotes: 'devis',
       new_clients: 'nouveaux clients', collected: 'encaissé',
     };
+    // La période comparée = même nombre de jours JUSTE AVANT (règle de la RPC,
+    // comme l'écran Insights) — pas forcément le mois civil précédent. On donne
+    // ses dates pour que Lumi ne dise pas « le mois passé » à tort (audit 2026-09-30).
+    const jours = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;
+    const avant = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) - n * 86400000).toISOString().slice(0, 10);
     return {
       periode: { du: from, au: to },
+      periode_precedente: { du: avant(from, jours), au: avant(from, 1), note: 'même nombre de jours juste avant — nomme ces dates, pas « le mois passé » si elles ne correspondent pas à un mois civil' },
       comparaison: (data || []).map((r: any) => ({
         mesure: LIB[r.metric] || String(r.metric).replace(/_/g, ' '),
         // Un montant garde son nom _cents (masquage + affichage $) ; un compte reste brut.
@@ -1355,11 +1443,21 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
       && !/\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b/i.test(adresse)
       && !/\b(québec|montréal|laval|drummond|sherbrooke|gatineau|longueuil)\b/i.test(adresse);
 
+    // Équipe (audit 2026-09-30) : « crée le job pour l'équipe Nord » perdait
+    // l'équipe (p_team_id toujours null) — le job n'apparaissait dans aucune colonne.
+    let teamId: string | null = null;
+    if (args.team_id) {
+      const { data: equipe, error: errEq } = await ctx.client.from('teams').select('id').eq('org_id', ctx.orgId).eq('id', String(args.team_id)).maybeSingle();
+      if (errEq) throw errEq;
+      if (!equipe) throw new Error('Équipe introuvable dans cette entreprise — vérifie avec la liste des équipes.');
+      teamId = equipe.id;
+    }
+
     // 1. Création par LA RPC de l'app — job + visite éventuelle d'un coup.
     const { data: rpcData, error: rpcError } = await ctx.client.rpc('rpc_create_job_with_optional_schedule', {
       p_lead_id: args.lead_id || null,
       p_client_id: args.client_id || null,
-      p_team_id: null,
+      p_team_id: teamId,
       p_title: champRequis(args.title, 'Le titre').slice(0, 200),
       p_job_number: null,
       p_job_type: args.job_type ? String(args.job_type).slice(0, 80) : null,
@@ -1542,28 +1640,60 @@ export const handlerUpdateJobStatus = async (args: Record<string, any>, ctx: Too
     return { updated: true, job: data, ...(avert ? { warning: avert } : {}) };
   });
 
+/**
+ * Assigner un job (audit 2026-09-30). L'écran assigne une ÉQUIPE : jobs.team_id
+ * + les visites à venir, qui s'affichent dans sa colonne du calendrier. Avant,
+ * l'outil écrivait seulement jobs.assigned_user_id — que l'écran n'affiche
+ * pas — et répondait « c'est fait » : personne ne voyait le job.
+ * Avec un membre : son équipe. Avec team_id : cette équipe.
+ */
 export const handlerAssignJob = async (args: Record<string, any>, ctx: ToolContext) =>
   executerIdempotent(ctx, 'assign_job', args, async () => {
-    // Le destinataire doit être un membre réel de CETTE org.
-    const { data: membre } = await ctx.client
-      .from('team_members')
-      .select('user_id, first_name, last_name')
-      .eq('org_id', ctx.orgId).eq('user_id', String(args.assignee_user_id))
-      .maybeSingle();
-    if (!membre) throw new Error('Ce user_id n\'est pas membre de l\'équipe — vérifiez le nom du membre de l’équipe.');
+    let membre: { user_id: string; first_name: string | null; last_name: string | null; team_id: string | null } | null = null;
+    if (args.assignee_user_id) {
+      const { data, error: errMembre } = await ctx.client
+        .from('team_members')
+        .select('user_id, first_name, last_name, team_id')
+        .eq('org_id', ctx.orgId).eq('user_id', String(args.assignee_user_id))
+        .maybeSingle();
+      if (errMembre) throw errMembre;
+      if (!data) throw new Error('Ce membre n\'est pas dans l\'équipe de cette entreprise — vérifie son nom.');
+      membre = data as any;
+    }
+    const teamId = args.team_id ? String(args.team_id) : membre?.team_id ?? null;
+    if (!teamId) {
+      throw new Error(`${membre ? `${membre.first_name ?? ''} ${membre.last_name ?? ''}`.trim() || 'Ce membre' : 'Ce job'} n’est rattaché à aucune équipe : dans Lume, un job s’assigne à une équipe. Dis-moi laquelle (ou ajoute d’abord le membre à une équipe).`);
+    }
+    const { data: equipe, error: errEquipe } = await ctx.client
+      .from('teams').select('id, name').eq('org_id', ctx.orgId).eq('id', teamId).maybeSingle();
+    if (errEquipe) throw errEquipe;
+    if (!equipe) throw new Error('Équipe introuvable dans cette entreprise.');
 
+    const maj: Record<string, any> = { team_id: equipe.id };
+    if (membre) maj.assigned_user_id = membre.user_id;
     const { data, error } = await ctx.client
       .from('jobs')
-      .update({ assigned_user_id: membre.user_id })
+      .update(maj)
       .eq('org_id', ctx.orgId).eq('id', String(args.job_id))
       .is('deleted_at', null)
       .select('id, job_number, title')
       .single();
     if (error) throw error;
+    // Les visites À VENIR suivent (le calendrier affiche l'équipe de la visite).
+    const { data: visites, error: errVis } = await ctx.client
+      .from('schedule_events')
+      .update({ team_id: equipe.id })
+      .eq('org_id', ctx.orgId).eq('job_id', String(args.job_id))
+      .is('deleted_at', null)
+      .gte('start_at', new Date().toISOString())
+      .select('id');
     return {
       updated: true,
       job: data,
-      assigned_to: `${membre.first_name || ''} ${membre.last_name || ''}`.trim(),
+      equipe: equipe.name,
+      ...(membre ? { assigned_to: `${membre.first_name || ''} ${membre.last_name || ''}`.trim() } : {}),
+      visites_mises_a_jour: (visites ?? []).length,
+      ...(errVis ? { warning: 'Le job est assigné, mais ses visites à venir n’ont pas pu changer d’équipe : vérifie le calendrier.' } : {}),
     };
   });
 
@@ -1594,6 +1724,16 @@ export const handlerCreateQuote = async (args: Record<string, any>, ctx: ToolCon
     const quoteId = String((rpcResult as any)?.quote_id || '');
     if (!quoteId) throw new Error('Le devis a été créé mais son id est introuvable.');
 
+    // Taxes du client (région, exemption), comme l'écran : le taux par défaut
+    // de la table (14,975 %) valait pour tout le monde, Ontario compris.
+    const taxes = await taxesPourDocument(ctx, args.client_id || args.lead_id, totalCents, Boolean(args.no_taxes));
+    {
+      const { error: tauxErr } = await ctx.client.from('quotes')
+        .update({ tax_rate: taxes.taux, tax_rate_label: taxes.libelle || (taxes.exempt ? 'Exempté de taxes' : 'Sans taxes') })
+        .eq('id', quoteId).eq('org_id', ctx.orgId);
+      if (tauxErr) throw tauxErr;
+    }
+
     const lignes = items.map((it, i) => ({
       quote_id: quoteId,
       name: String(it.name).trim(),
@@ -1613,7 +1753,24 @@ export const handlerCreateQuote = async (args: Record<string, any>, ctx: ToolCon
     const { error: recalcErr } = await ctx.client.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
     if (recalcErr) throw recalcErr;
 
-    return { created: true, quote_id: quoteId, total_cents: totalCents, statut: 'brouillon' };
+    // Les totaux ANNONCÉS sont ceux enregistrés (avant : le total hors taxes).
+    const { data: totaux, error: totErr } = await ctx.client.from('quotes')
+      .select('quote_number, subtotal_cents, tax_cents, total_cents').eq('id', quoteId).eq('org_id', ctx.orgId).maybeSingle();
+    if (totErr) throw totErr;
+    const taxeEnBase = Number(totaux?.tax_cents) || 0;
+    // Ventilation TPS/TVQ alignée sur la taxe enregistrée (écart d'arrondi reporté sur la dernière ligne).
+    const ventilation = taxes.lignes.map((l) => ({ ...l }));
+    const ecart = taxeEnBase - ventilation.reduce((t, l) => t + l.amount_cents, 0);
+    if (ventilation.length && ecart !== 0) ventilation[ventilation.length - 1].amount_cents += ecart;
+    await enregistrerTaxesAppliquees(ctx, 'quote', quoteId, ventilation);
+
+    return {
+      created: true, quote_id: quoteId, quote_number: totaux?.quote_number ?? null, statut: 'brouillon',
+      subtotal_cents: Number(totaux?.subtotal_cents) || totalCents, tax_cents: taxeEnBase,
+      total_cents: Number(totaux?.total_cents) || totalCents,
+      taxes: ventilation.map((l) => ({ nom: l.name, taux: l.rate, montant_cents: l.amount_cents })),
+      ...(taxes.exempt ? { note: 'Client exempté de taxes : aucune taxe appliquée.' } : {}),
+    };
   });
 
 export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolContext) =>
@@ -1631,9 +1788,12 @@ export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolC
       }))
       .filter((it) => it.description && it.qty > 0 && it.unit_price_cents >= 0);
     if (!lignesRetenues.length) throw new Error('Aucune ligne valide (description, quantité > 0 et prix requis).');
-    const totalCents = lignesRetenues.reduce(
-      (s, it) => s + Math.round(it.qty * it.unit_price_cents), 0)
-      + Math.max(0, Math.round(Number(args.tax_cents) || 0));
+    const sousTotal = lignesRetenues.reduce((s, it) => s + Math.round(it.qty * it.unit_price_cents), 0);
+    // Taxes calculées ICI, comme l'écran (audit 2026-09-30) : avant, la facture
+    // prenait le tax_cents écrit par le modèle — 0 par défaut — alors que la
+    // carte affichait TPS + TVQ.
+    const taxes = await taxesPourDocument(ctx, String(args.client_id), sousTotal, Boolean(args.no_taxes));
+    const totalCents = sousTotal + taxes.tax_cents;
     const cap = depassePlafond(totalCents);
     if (cap) throw new Error(cap.error);
 
@@ -1653,16 +1813,30 @@ export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolC
       p_invoice_id: invoiceId,
       p_subject: args.subject ? String(args.subject) : null,
       p_due_date: args.due_date || null,
-      p_tax_cents: Math.max(0, Math.round(Number(args.tax_cents) || 0)),
+      p_tax_cents: taxes.tax_cents,
       p_discount_cents: 0,
       p_notes: null,
       p_internal_notes: 'Créée par l\'agent (MCP).',
       p_items: lignesRetenues,
     });
-    if (e2) throw e2;
+    if (e2) {
+      // La facture EXISTE (brouillon vide) : on le dit, on ne la laisse pas passer pour faite.
+      console.error('[agent-tool:create_invoice] save failed', e2.message);
+      return {
+        created: true, incomplet: true, invoice_id: invoiceId, statut: 'brouillon',
+        note: 'Le brouillon de facture a été créé, mais ses lignes n’ont pas pu être enregistrées. Complète-le dans Lume ; ne relance pas la création.',
+      };
+    }
+    try {
+      await enregistrerTaxesAppliquees(ctx, 'invoice', invoiceId, taxes.lignes);
+    } catch (e: any) {
+      // Le total (tax_cents) est juste ; seule la ventilation TPS/TVQ manque.
+      console.error('[agent-tool:create_invoice] applied_taxes', e?.message || e);
+    }
 
     return {
-      created: true, invoice_id: invoiceId, statut: 'brouillon', total_cents: totalCents,
+      created: true, invoice_id: invoiceId, statut: 'brouillon', subtotal_cents: sousTotal, tax_cents: taxes.tax_cents, total_cents: totalCents,
+      taxes: taxes.lignes.map((l) => ({ nom: l.name, taux: l.rate, montant_cents: l.amount_cents })),
       note: 'Facture en BROUILLON — elle ne part pas chez le client. L\'envoi se fait depuis Lume.',
     };
   });
@@ -1729,10 +1903,26 @@ async function envoyerUnSms(
   }
   const conversation = await findOrCreateConversation(admin, ctx.orgId, telephone, clientId || undefined, clientNom || undefined);
   const statusCallback = getTwilioStatusCallbackUrl();
-  const twilioMessage = await twilioClient.messages.create({
-    body: message, from: fromNumber, to: telephone,
-    ...(statusCallback ? { statusCallback } : {}),
-  });
+  let twilioMessage: { sid: string };
+  try {
+    twilioMessage = await twilioClient.messages.create({
+      body: message, from: fromNumber, to: telephone,
+      ...(statusCallback ? { statusCallback } : {}),
+    });
+  } catch (e: any) {
+    // Codes Twilio traduits (audit 2026-09-30) : avant, « la consultation a
+    // échoué côté Lume » pour un numéro invalide ou un client désabonné.
+    const code = Number(e?.code);
+    const phrase: Record<number, string> = {
+      21211: 'Ce numéro de téléphone n’est pas valide : corrige-le sur la fiche du client.',
+      21610: 'Ce client a répondu STOP : il ne reçoit plus de textos.',
+      21614: 'Ce numéro ne peut pas recevoir de textos (ligne fixe ?).',
+      21408: 'Les textos vers cette région ne sont pas permis depuis le numéro de l’entreprise.',
+      21612: 'Ce numéro ne peut pas être joint depuis le numéro de l’entreprise.',
+    };
+    if (phrase[code]) throw new Error(phrase[code]);
+    throw e;
+  }
   const { data: msg } = await admin.from('messages').insert({
     conversation_id: conversation.id, org_id: ctx.orgId,
     client_id: conversation.client_id || clientId || null,
@@ -1746,14 +1936,25 @@ export const handlerSendSms = async (args: Record<string, any>, ctx: ToolContext
   executerIdempotent(ctx, 'send_sms', args, async () => {
     // Tout passe par le noyau partagé (mêmes garde-fous que le lot de
     // relances) : opt-out STOP, numéro de l'org, plan, conversation, journal.
-    const { message_id, provider_sid } = await envoyerUnSms(
-      ctx,
-      String(args.phone_number || ''),
-      String(args.message_text || ''),
-      args.client_id || null,
-      args.client_name || null,
-    );
-    return { sent: true, to: normalizeE164(String(args.phone_number || '')), message_id, provider_sid };
+    //
+    // Avec un client : le numéro est celui DE SA FICHE, jamais celui fourni par le
+    // modèle (audit 2026-09-30). Avant, un `client_id` sautait la garde « contact
+    // connu » et le texto partait au `phone_number` donné — une injection pouvait
+    // afficher « À Marie Tremblay » sur la carte et écrire à un autre numéro.
+    let telephone = String(args.phone_number || '');
+    let clientNom: string | null = args.client_name || null;
+    if (args.client_id) {
+      const { data: c, error } = await getServiceClient().from('clients')
+        .select('phone, first_name, last_name, company').eq('org_id', ctx.orgId).eq('id', String(args.client_id))
+        .is('deleted_at', null).maybeSingle();
+      if (error) throw error;
+      if (!c) throw new Error('Ce client est introuvable dans ton entreprise.');
+      if (!c.phone) throw new Error('Ce client n’a pas de numéro de téléphone sur sa fiche. Ajoute-le avant de lui écrire.');
+      telephone = String(c.phone);
+      clientNom = [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || c.company || clientNom;
+    }
+    const { message_id, provider_sid } = await envoyerUnSms(ctx, telephone, String(args.message_text || ''), args.client_id || null, clientNom);
+    return { sent: true, to: normalizeE164(telephone), message_id, provider_sid };
   });
 
 /* ── Nouvelles déclarations d'écriture ───────────────────────────── */
@@ -1830,14 +2031,15 @@ const assignJobTool: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'assign_job',
-    description: 'Assign a job to a team member. Use the team list for the member, the jobs list for the job.',
+    description: 'Assign a job to a TEAM, like the screen: the job and its upcoming visits move to that team\'s calendar column. Give the member (their team is used) or the team id. Use the team list for ids, the jobs list for the job.',
     parameters: {
       type: 'object',
       properties: {
         job_id: { type: 'string', description: 'Job id.' },
-        assignee_user_id: { type: 'string', description: 'Team member user_id.' },
+        assignee_user_id: { type: 'string', description: 'Team member user_id (their team is used).' },
+        team_id: { type: 'string', description: 'Team id (from list_teams), when assigning to a team directly.' },
       },
-      required: ['job_id', 'assignee_user_id'],
+      required: ['job_id'],
     },
   },
   handler: handlerAssignJob,
@@ -1911,6 +2113,7 @@ export async function appelInterne(
   ctx: ToolContext,
   chemin: string,
   corps: Record<string, any>,
+  methode: 'POST' | 'PUT' | 'PATCH' = 'POST',
 ): Promise<{ ok: boolean; status: number; json: any }> {
   if (!ctx.accessToken) {
     throw new Error('Cette action exige votre session Lume — reconnectez le connecteur dans Claude.');
@@ -1921,7 +2124,7 @@ export async function appelInterne(
   let r: Response;
   try {
     r = await fetch(`http://127.0.0.1:${port}/api${chemin}`, {
-      method: 'POST',
+      method: methode,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${ctx.accessToken}`,
@@ -1977,7 +2180,7 @@ const getClientProfile: AgentTool = {
         .eq('org_id', ctx.orgId).eq('client_id', clientId)
         .order('scheduled_at', { ascending: false, nullsFirst: false }).limit(5),
       ctx.client.from('invoices')
-        .select('status, total_cents, due_date', { count: 'exact' })
+        .select('status, total_cents, paid_cents, balance_cents, due_date', { count: 'exact' })
         .eq('org_id', ctx.orgId).eq('client_id', clientId).is('deleted_at', null),
       ctx.client.from('quotes')
         .select('title, status, total_cents, created_at', { count: 'exact' })
@@ -1992,7 +2195,12 @@ const getClientProfile: AgentTool = {
     for (const r of [jobsR, facturesR, devisR]) if (r.error) return erreurOutil('profil', r.error);
 
     const factures = facturesR.data || [];
-    const impayees = factures.filter((f: any) => ['sent', 'partial', 'overdue'].includes(f.status));
+    // Audit 2026-09-30 : ce qui est DÛ, c'est le solde (pas le total d'une
+    // facture à moitié payée), et la valeur du client se lit sur TOUTES ses
+    // factures émises (avant : la somme de ses 5 derniers jobs).
+    const emises = factures.filter((f: any) => !['draft', 'void', 'cancelled'].includes(f.status));
+    const impayees = emises.filter((f: any) => (Number(f.balance_cents) || 0) > 0);
+    const somme = (l: any[], champ: string) => l.reduce((t, f) => t + (Number(f[champ]) || 0), 0);
     const aujourdHui = dateOrgAujourdhui(); // date de Québec, pas UTC
 
     return {
@@ -2003,7 +2211,6 @@ const getClientProfile: AgentTool = {
       },
       jobs: {
         total: jobsR.count ?? 0,
-        lifetime_value_cents: sommeCents(jobsR.data),
         recent: (jobsR.data || []).map((j: any) => ({
           job_number: j.job_number, title: j.title, date: j.scheduled_at,
           display_status: ETIQUETTES_DERIVED[j.derived_status] || j.derived_status || j.status,
@@ -2012,9 +2219,11 @@ const getClientProfile: AgentTool = {
       },
       billing: {
         invoices_total: facturesR.count ?? 0,
+        lifetime_invoiced_cents: somme(emises, 'total_cents'),
+        lifetime_paid_cents: somme(emises, 'paid_cents'),
         unpaid_count: impayees.length,
-        unpaid_cents: sommeCents(impayees),
-        overdue_cents: sommeCents(impayees.filter((f: any) => f.due_date && f.due_date < aujourdHui)),
+        unpaid_cents: somme(impayees, 'balance_cents'),
+        overdue_cents: somme(impayees.filter((f: any) => f.due_date && f.due_date < aujourdHui), 'balance_cents'),
       },
       quotes: {
         total: devisR.count ?? 0,
@@ -2046,7 +2255,7 @@ const getMorningBriefing: AgentTool = {
     const demain = dateOrgAujourdhui(new Date(maintenant.getTime() + 86400000));
     const il48h = new Date(maintenant.getTime() - 48 * 3600_000).toISOString();
 
-    const [impayesR, jobsR, tachesR, demandesR, nonLusR] = await Promise.all([
+    const [impayesR, jobsR, tachesR, demandesR, nonLusR, soldesR] = await Promise.all([
       ctx.client.from('invoices')
         .select('id, client_id, balance_cents, total_cents, due_date, status', { count: 'exact' })
         .eq('org_id', ctx.orgId).is('deleted_at', null)
@@ -2072,6 +2281,13 @@ const getMorningBriefing: AgentTool = {
         .select('client_name, phone_number, last_message_text, unread_count', { count: 'exact' })
         .eq('org_id', ctx.orgId).gt('unread_count', 0)
         .order('last_message_at', { ascending: false }).limit(5),
+      // Le TOTAL en retard porte sur toutes les factures en retard (avant : la
+      // somme des 5 plus vieilles seulement, affichées dans « worst »).
+      ctx.client.from('invoices')
+        .select('balance_cents, total_cents')
+        .eq('org_id', ctx.orgId).is('deleted_at', null)
+        .in('status', ['sent', 'partial', 'overdue']).lt('due_date', aujourdHui)
+        .limit(5000),
     ]);
     for (const r of [impayesR, jobsR, tachesR, demandesR, nonLusR]) {
       if (r.error) return erreurOutil('briefing', r.error);
@@ -2095,8 +2311,9 @@ const getMorningBriefing: AgentTool = {
         // Le SOLDE dû (balance_cents), pas le total facturé : c'est le montant
         // qui reste à collecter, celui qui compte le matin. Repli sur total
         // pour une facture jamais entamée (balance non renseignée).
-        total_cents: (impayesR.data || []).reduce((s2: number, f: any) =>
+        total_cents: (soldesR.error ? (impayesR.data || []) : (soldesR.data || [])).reduce((s2: number, f: any) =>
           s2 + (f.balance_cents != null ? Number(f.balance_cents) : Number(f.total_cents) || 0), 0),
+        ...(soldesR.error ? { total_partiel: true } : {}),
         worst: (impayesR.data || []).map((f: any) => ({
           // L'id sert au lien cliquable du briefing : « Sophie Bouchard »
           // ouvre SA facture, au lieu d'obliger à la chercher.
@@ -2323,6 +2540,13 @@ const sendQuoteTool: AgentTool = {
     }),
 };
 
+/** Texte brut → HTML sûr : caractères échappés, paragraphes et sauts de ligne gardés. */
+export function texteVersHtml(texte: string): string {
+  return texte.split(/\n{2,}/).map((par) =>
+    `<p>${par.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\n/g, '<br>')}</p>`,
+  ).join('');
+}
+
 const sendInvoiceTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -2344,12 +2568,21 @@ const sendInvoiceTool: AgentTool = {
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'send_invoice', args, async () => {
+      // Une facture annulée ou supprimée ne repart pas chez le client (audit 2026-09-30).
+      const { data: fac, error: errFac } = await ctx.client.from('invoices')
+        .select('status, deleted_at').eq('org_id', ctx.orgId).eq('id', String(args.invoice_id)).maybeSingle();
+      if (errFac) throw errFac;
+      if (!fac || fac.deleted_at) throw new Error('Facture introuvable — elle a peut-être été supprimée.');
+      if (fac.status === 'void' || fac.status === 'cancelled') throw new Error('Cette facture est annulée : je ne l’envoie pas au client.');
       let res;
       try {
         res = await appelInterne(ctx, '/emails/send-invoice', {
           invoiceId: String(args.invoice_id),
           ...(args.subject ? { subject: String(args.subject) } : {}),
-          ...(args.message ? { body: String(args.message) } : {}),
+          // Texte BRUT, échappé (audit 2026-09-30) : la route insère le corps en
+          // HTML ; un texte rédigé par le modèle (ou glissé par un client) pouvait
+          // y mettre un lien d'hameçonnage. Les sauts de ligne sont gardés.
+          ...(args.message ? { body: texteVersHtml(String(args.message)) } : {}),
         });
       } catch (e) {
         if (e instanceof AppelInterneIncertain) throw envoiIncertain('la facture');
@@ -2367,7 +2600,8 @@ const sendEmailTool: AgentTool = {
   declaration: {
     name: 'send_email',
     description:
-      'Send a free-form email to a client (a thank-you, a follow-up, an answer) — IT ACTUALLY SENDS. '
+      'Send a free-form email to a client or lead of the CRM (a thank-you, a follow-up, an answer) — IT ACTUALLY SENDS. '
+      + 'The address must be on a client or lead record; unsubscribed or bouncing addresses are refused. '
       + 'For a quote or invoice, use the quote or invoice sending action instead. ALWAYS show the user the recipient, '
       + 'subject and full text and get their explicit OK first. Only owners/admins can send.',
     parameters: {
@@ -2386,6 +2620,21 @@ const sendEmailTool: AgentTool = {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) throw new Error('L’adresse courriel du destinataire n’est pas valide.');
       const subject = champRequis(args.subject, 'L’objet').slice(0, 300);
       const texte = champRequis(args.message, 'Le message').slice(0, 20000);
+      // Audit 2026-09-30 : un courriel libre part seulement à un client ou un
+      // prospect de l'entreprise (une consigne glissée dans une note ou un
+      // formulaire ne peut pas faire écrire à une adresse externe), jamais à
+      // une adresse désabonnée ni à une adresse qui rebondit.
+      const destinataire = await contactParCourriel(ctx, to);
+      if (!destinataire) {
+        throw new Error('Je n’envoie un courriel libre qu’à un client ou un prospect de ton CRM, et cette adresse n’y est pas. Ajoute-la d’abord à sa fiche.');
+      }
+      const etat = await etatDesabonnement(ctx.client, ctx.orgId, destinataire);
+      if (etat.courriel.desabonne) {
+        throw new Error(`${destinataire.nom} s’est désabonné(e) des courriels : je ne lui écris pas. Réponds-lui depuis ta boîte ou par téléphone si c’est lui qui t’a écrit.`);
+      }
+      if (await adresseInjoignable(ctx.orgId, to)) {
+        throw new Error(`L’adresse de ${destinataire.nom} a rebondi ou signalé un pourriel : un courriel n’arrivera pas. Vérifie l’adresse sur sa fiche.`);
+      }
       const html = texte.split(/\n{2,}/).map((par) =>
         `<p>${par.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`,
       ).join('');
@@ -2404,6 +2653,24 @@ const sendEmailTool: AgentTool = {
       return { sent: true, channel: 'email', destinataire: to, note: 'Courriel envoyé.' };
     }),
 };
+
+/**
+ * Le client ou prospect de l'org qui porte exactement cette adresse. Comparaison
+ * insensible à la casse faite ICI : un `ilike` lirait « _ » comme un joker.
+ */
+async function contactParCourriel(ctx: ToolContext, email: string): Promise<{ id: string; nom: string; email: string; phone: string | null; email_opt_out_at: string | null } | null> {
+  const cible = email.trim().toLowerCase();
+  const { data, error } = await ctx.client
+    .from('clients')
+    .select('id, first_name, last_name, company, display_as_company, email, phone, email_opt_out_at')
+    .eq('org_id', ctx.orgId)
+    .ilike('email', cible)
+    .is('deleted_at', null)
+    .limit(20);
+  if (error) throw error;
+  const c = (data ?? []).find((x: any) => String(x.email ?? '').trim().toLowerCase() === cible) as any;
+  return c ? { id: c.id, nom: nomClient(c), email: cible, phone: c.phone ?? null, email_opt_out_at: c.email_opt_out_at ?? null } : null;
+}
 
 /** Ligne renvoyée par le RPC `get_available_slots` (TABLE slot_start, slot_end, team_id). */
 type CreneauLibre = { slot_start: string; slot_end: string; team_id: string | null };
@@ -2561,6 +2828,36 @@ const applyDayOptimizationTool: AgentTool = {
 
 /* ── Gestion : modifier, déplacer, classer ─────────────────────── */
 
+/**
+ * La visite visée par « déplace / annule la visite de ce job » (audit 2026-09-30).
+ * Avant : la prochaine visite, SINON LA DERNIÈRE PASSÉE — même terminée. « Annule
+ * la visite de Marie » sur un job fini supprimait la visite faite.
+ * Maintenant : visit_id si donné (de get_job) ; sinon la prochaine visite à venir
+ * non terminée ; aucune à venir → on demande laquelle, jamais une visite passée.
+ */
+async function visiteCible(ctx: ToolContext, jobId: string, visitId: unknown, verbe: string) {
+  const { data: visites, error } = await ctx.client
+    .from('schedule_events')
+    .select('id, start_at, end_at, status')
+    .eq('org_id', ctx.orgId).eq('job_id', jobId)
+    .is('deleted_at', null)
+    .order('start_at', { ascending: true });
+  if (error) throw error;
+  const toutes = (visites || []) as Array<{ id: string; start_at: string; end_at: string; status: string | null }>;
+  if (visitId) {
+    const v = toutes.find((x) => x.id === String(visitId));
+    if (!v) throw new Error('Cette visite n’appartient pas à ce job (ou a été supprimée).');
+    return { cible: v, toutes, aVenir: toutes.filter((x) => x.id !== v.id && new Date(x.start_at).getTime() >= Date.now()).length };
+  }
+  const maintenant = Date.now();
+  const aVenir = toutes.filter((x) => new Date(x.start_at).getTime() >= maintenant && !['completed', 'cancelled', 'done'].includes(String(x.status ?? '')));
+  if (!aVenir.length) {
+    if (!toutes.length) return { cible: null, toutes, aVenir: 0 };
+    throw new Error(`Ce job n’a aucune visite à venir : je ne ${verbe} pas une visite passée sans que tu me dises laquelle (sa date).`);
+  }
+  return { cible: aVenir[0], toutes, aVenir: aVenir.length - 1 };
+}
+
 const rescheduleJobTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -2568,12 +2865,13 @@ const rescheduleJobTool: AgentTool = {
     name: 'reschedule_job',
     description:
       "Move a job's calendar visit to a new date/time — the same engine as dragging it on the Lume "
-      + 'calendar. If the job has several visits, the NEXT upcoming one moves (or the most recent if all '
-      + 'are past). Get the job id from the jobs list.',
+      + 'calendar. Without visit_id, the NEXT upcoming visit moves; a past visit is never moved unless its '
+      + 'visit_id is given (ask which one). Get the job id from the jobs list.',
     parameters: {
       type: 'object',
       properties: {
         job_id: { type: 'string', description: 'Job id.' },
+        visit_id: { type: 'string', description: 'The visit to move (from get_job visits) when the job has several; default = the next upcoming one.' },
         start_at: { type: 'string', description: 'New ISO start datetime.' },
         end_at: { type: 'string', description: 'New ISO end (default: start + previous duration, else 1 h).' },
       },
@@ -2582,14 +2880,8 @@ const rescheduleJobTool: AgentTool = {
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'reschedule_job', args, async () => {
-      const { data: visites, error } = await ctx.client
-        .from('schedule_events')
-        .select('id, start_at, end_at')
-        .eq('org_id', ctx.orgId).eq('job_id', String(args.job_id))
-        .is('deleted_at', null)
-        .order('start_at', { ascending: true });
-      if (error) throw error;
-      if (!visites?.length) {
+      const { cible: visite, aVenir } = await visiteCible(ctx, String(args.job_id), args.visit_id, 'déplace');
+      if (!visite) {
         // Aucune visite : « déplacer » veut dire « planifier ». Refuser ici
         // forçait une deuxième proposition (add_visit) pour le même résultat.
         const debut0 = new Date(String(args.start_at));
@@ -2602,8 +2894,7 @@ const rescheduleJobTool: AgentTool = {
         const ev: any = (ajout as any)?.event || ajout || {};
         return { added: true, visit: { start_at: ev.start_at || debut0.toISOString(), end_at: ev.end_at || fin0.toISOString() }, note: 'Ce job n' + '\u2019' + 'avait aucune visite : elle vient d' + '\u2019' + 'être créée à cette date.' };
       }
-      const maintenant = Date.now();
-      const cible = visites.find((v: any) => new Date(v.start_at).getTime() >= maintenant) || visites[visites.length - 1];
+      const cible = visite;
 
       const debut = new Date(String(args.start_at));
       if (Number.isNaN(debut.getTime())) throw new Error('start_at invalide (ISO attendu).');
@@ -2627,6 +2918,8 @@ const rescheduleJobTool: AgentTool = {
       return {
         rescheduled: true,
         ...(avertEvt ? { warning: avertEvt } : {}),
+        visite_deplacee: { ancien_debut: cible.start_at },
+        autres_visites_a_venir: aVenir,
         new_start: debut.toISOString(),
         new_end: fin.toISOString(),
         overlaps: chevauchements,
@@ -2641,13 +2934,14 @@ const cancelVisitTool: AgentTool = {
   declaration: {
     name: 'cancel_visit',
     description:
-      "Cancel a job's calendar visit — same as deleting it on the Lume calendar. Removes the NEXT "
-      + 'upcoming visit (or the most recent if all are past). If it was the job\'s only visit, the job '
-      + 'goes back to unscheduled. Get the job id from the jobs list. Confirm with the user first.',
+      "Cancel a job's calendar visit — same as deleting it on the Lume calendar. Without visit_id, removes "
+      + 'the NEXT upcoming visit; a past or completed visit is never removed unless its visit_id is given. '
+      + 'If it was the job\'s only visit, the job goes back to unscheduled. Confirm with the user first.',
     parameters: {
       type: 'object',
       properties: {
         job_id: { type: 'string', description: 'Job id.' },
+        visit_id: { type: 'string', description: 'The visit to cancel (from get_job visits) when the job has several; default = the next upcoming one.' },
       },
       required: ['job_id'],
     },
@@ -2655,16 +2949,8 @@ const cancelVisitTool: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'cancel_visit', args, async () => {
       const jobId = champRequis(args.job_id, 'Le job');
-      const { data: visites, error } = await ctx.client
-        .from('schedule_events')
-        .select('id, start_at')
-        .eq('org_id', ctx.orgId).eq('job_id', jobId)
-        .is('deleted_at', null)
-        .order('start_at', { ascending: true });
-      if (error) throw error;
-      if (!visites?.length) throw new Error('Ce job n’a aucune visite au calendrier à annuler.');
-      const maintenant = Date.now();
-      const cible = visites.find((v: any) => new Date(v.start_at).getTime() >= maintenant) || visites[visites.length - 1];
+      const { cible, toutes: visites } = await visiteCible(ctx, jobId, args.visit_id, 'supprime');
+      if (!cible) throw new Error('Ce job n’a aucune visite au calendrier à annuler.');
 
       // Même RPC que « supprimer la visite » dans l'app : soft-delete de
       // l'event + recompute_job_schedule (repasse le job en brouillon si
@@ -2939,6 +3225,48 @@ const cancelQuoteTool: AgentTool = {
     }),
 };
 
+/**
+ * Enregistre un paiement manuel par la route de l'écran (POST /invoices/:id/mark-paid) :
+ * ligne `payments` réelle (le trigger recalcule payé, solde et statut), événement
+ * « Facture payée », permission payments.create. Sans montant = le solde entier.
+ * Réponse perdue en route : le paiement est PEUT-ÊTRE enregistré → effet partiel,
+ * l'empreinte reste (jamais de second paiement par retentative).
+ */
+export async function enregistrerPaiementViaRoute(
+  ctx: ToolContext, invoiceId: string, opts: { methode: string | null; montantCents?: number },
+): Promise<{ invoice_number: string | null; status: string | null; balance_cents: number | null }> {
+  let r: { ok: boolean; status: number; json: any };
+  try {
+    r = await appelInterne(ctx, `/invoices/${invoiceId}/mark-paid`, {
+      ...(opts.methode ? { method: opts.methode } : {}),
+      ...(opts.montantCents ? { amount_cents: opts.montantCents } : {}),
+    });
+  } catch (e) {
+    if (e instanceof AppelInterneIncertain) {
+      throw new EffetPartiel({
+        incertain: true,
+        note: 'Je n’ai pas eu la confirmation que le paiement est enregistré — il l’est PEUT-ÊTRE. Vérifie la facture dans Lume avant de le refaire.',
+      });
+    }
+    throw e;
+  }
+  if (!r.ok) throw new Error(typeof r.json?.error === 'string' ? r.json.error : 'Le paiement n’a pas pu être enregistré.');
+  const { data } = await getServiceClient().from('invoices').select('invoice_number, balance_cents, status')
+    .eq('org_id', ctx.orgId).eq('id', invoiceId).maybeSingle();
+  return { invoice_number: data?.invoice_number ?? null, status: data?.status ?? null, balance_cents: data?.balance_cents ?? null };
+}
+
+/** Facture soldée → commissions du vendeur (comme le bouton de l'écran). Renvoie un avertissement à dire, ou null. */
+export async function commissionsApresPaiement(ctx: ToolContext, invoiceId: string): Promise<string | null> {
+  try {
+    const res = await generateCommissionsForInvoice(getServiceClient(), ctx.orgId, invoiceId);
+    return res.skipped === 'no_rule' ? 'Aucune commission créée : le vendeur n’a pas de plan de commission (Réglages → Commissions).' : null;
+  } catch (err: any) {
+    console.error(`[commissions] génération après paiement Lumi échouée (org ${ctx.orgId}, facture ${invoiceId}):`, err?.message);
+    return null;
+  }
+}
+
 const markInvoicePaidTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -2980,45 +3308,22 @@ const markInvoicePaidTool: AgentTool = {
       if (inv.status === 'draft') {
         throw new Error('Cette facture est encore un brouillon — envoie-la d’abord au client envoie-la d’abord au client, ensuite je pourrai la marquer payée.');
       }
+      if (inv.status === 'void' || inv.status === 'cancelled') throw new Error('Cette facture est annulée — on ne la marque pas payée.');
       const reste = Number(inv.balance_cents) > 0 ? Number(inv.balance_cents) : Number(inv.total_cents);
       const methode = ['cash', 'e-transfer', 'check', 'card'].includes(String(args.method)) ? String(args.method) : null;
-
-      // On passe par la RPC dédiée apply_invoice_payment (service_role) : elle
-      // met paid_cents/balance/status/paid_at à jour atomiquement, filtrée par
-      // org_id. C'est la SEULE voie propre — un insert direct dans `payments`
-      // est bloqué (pas de GRANT à authenticated ; et le service client
-      // déclenche une cascade webhook qui exige un contexte auth). Testé en
-      // staging : balance → 0, statut → payée.
-      // Un VRAI paiement manuel, comme le bouton « Marquer payée » : le trigger
-      // met la facture à jour (solde 0, payée). Voir enregistrerPaiementManuel.
-      const admin = getServiceClient();
-      await enregistrerPaiementManuel(ctx, { id: invoiceId, client_id: inv.client_id, job_id: inv.job_id, currency: inv.currency }, reste, methode);
-
-      const { data: apres } = await admin
-        .from('invoices').select('invoice_number, balance_cents, status')
-        .eq('id', invoiceId).maybeSingle();
-
-      // Facture soldée → commissions du rep. Stripe les génère par webhook et
-      // le bouton « Marquer payée » de l'app via generate-for-invoice ; Lumi
-      // les oubliait : un paiement enregistré par l'assistant ne payait
-      // jamais le vendeur. « no_rule » = aucun plan configuré → on le dit.
-      let avertCommission: string | null = null;
-      if (apres?.status === 'paid') {
-        try {
-          const res = await generateCommissionsForInvoice(admin, ctx.orgId, invoiceId);
-          if (res.skipped === 'no_rule') avertCommission = 'Aucune commission créée : le vendeur n’a pas de plan de commission (Réglages → Commissions).';
-        } catch (err: any) {
-          console.error(`[commissions] génération après paiement Lumi échouée (org ${ctx.orgId}, facture ${invoiceId}):`, err?.message);
-        }
-      }
-      const avertEvt = await signalerEvenement(ctx, '/automations/events/invoice-paid', { invoiceId, clientId: inv.client_id || undefined });
-      const warning = [avertEvt, avertCommission].filter(Boolean).join(' ');
+      // La MÊME route que « Marquer payée » à l'écran (audit 2026-09-30) : une vraie
+      // ligne `payments`, l'événement « Facture payée », la permission payments.create.
+      // Avant, la RPC apply_invoice_payment n'écrivait aucun paiement : le prochain
+      // vrai paiement recalculait le solde et effaçait celui saisi par Lumi.
+      const apres = await enregistrerPaiementViaRoute(ctx, invoiceId, { methode });
+      const avertCommission = apres.status === 'paid' ? await commissionsApresPaiement(ctx, invoiceId) : null;
+      const warning = avertCommission ?? '';
       return {
-        paid: true,
+        paid: apres.status === 'paid',
         ...(warning ? { warning } : {}),
         invoice: {
-          invoice_number: apres?.invoice_number || inv.invoice_number,
-          statut: traduireStatut(apres?.status, STATUT_FACTURE),
+          invoice_number: apres.invoice_number || inv.invoice_number,
+          statut: traduireStatut(apres.status, STATUT_FACTURE),
         },
         amount_cents: reste,
         methode_paiement: methode,
@@ -3033,8 +3338,9 @@ const addNoteTool: AgentTool = {
   declaration: {
     name: 'add_note',
     description:
-      "Add a note to a client's or a job's activity feed — visible in the Lume timeline. "
-      + "entity_type is 'client' or 'job'.",
+      "Add a note to the Notes tab of a client or a job. entity_type is 'client' or 'job'. "
+      + 'If several clients match the name, ask which one first. INTERNAL note only: a note shown TO THE CLIENT on an '
+      + 'invoice or a quote → update_invoice / update_quote (notes).',
     parameters: {
       type: 'object',
       properties: {
@@ -3049,6 +3355,14 @@ const addNoteTool: AgentTool = {
     executerIdempotent(ctx, 'add_note', args, async () => {
       const type = String(args.entity_type);
       if (!['client', 'job'].includes(type)) throw new Error("entity_type : 'client' ou 'job'.");
+      // La fiche doit exister DANS cette entreprise (audit 2026-09-30) : avant,
+      // un identifiant faux ou d'ailleurs donnait une note orpheline et « c'est fait ».
+      const entityId = champRequis(args.entity_id, "L'élément à annoter");
+      const { data: fiche, error: errFiche } = type === 'client'
+        ? await ctx.client.from('clients').select('id').eq('org_id', ctx.orgId).eq('id', entityId).is('deleted_at', null).maybeSingle()
+        : await ctx.client.from('jobs').select('id').eq('org_id', ctx.orgId).eq('id', entityId).is('deleted_at', null).maybeSingle();
+      if (errFiche) throw errFiche;
+      if (!fiche) throw new Error(type === 'client' ? 'Client introuvable dans cette entreprise.' : 'Job introuvable dans cette entreprise.');
       // L'onglet Notes de la fiche (specific_notes), là où list_notes, update_note
       // et delete_note lisent — la note écrite dans activity_notes (fil d'activité)
       // était invisible dans l'onglet (batterie d'exécution du 2026-09-17).
@@ -3058,7 +3372,7 @@ const addNoteTool: AgentTool = {
         .insert({
           org_id: ctx.orgId,
           entity_type: type,
-          entity_id: champRequis(args.entity_id, "L'élément à annoter"),
+          entity_id: entityId,
           text: champRequis(args.note, 'La note').slice(0, 4000),
           files: [],
           created_by: ctx.userId,
@@ -3076,8 +3390,9 @@ const archiveJobTool: AgentTool = {
   declaration: {
     name: 'archive_job',
     description:
-      'Archive a job (reversible — restore: true brings it back). Archived jobs leave the late/upcoming '
-      + 'counts. The right tool for cleaning up demo or stale jobs the user confirms are dead.',
+      'Flag a job as archived (reversible — restore: true). It does NOT remove it from the late/upcoming lists '
+      + 'nor its visits from the calendar: to take a dead job out of the late list, change its status '
+      + '(cancelled or completed) with update_job_status instead.',
     parameters: {
       type: 'object',
       properties: {
@@ -3100,7 +3415,11 @@ const archiveJobTool: AgentTool = {
         .select('id, job_number, title, archived_at')
         .single();
       if (error) throw error;
-      return { [restaurer ? 'restored' : 'archived']: true, job: { job_number: data.job_number, title: data.title } };
+      return {
+        [restaurer ? 'restored' : 'archived']: true, job: { job_number: data.job_number, title: data.title },
+        // Audit 2026-09-30 : l'écran ne lit pas archived_at — le dire, plutôt que laisser croire le job rangé.
+        ...(restaurer ? {} : { note: 'Job marqué archivé, mais il reste dans les listes et ses visites restent au calendrier : pour le sortir des retards, passe-le à « annulé » ou « terminé ».' }),
+      };
     }),
 };
 
@@ -3140,8 +3459,45 @@ const createInvoiceFromJobTool: AgentTool = {
       const row: any = Array.isArray(data) ? data[0] : data;
       const invoiceId = String(row?.invoice_id || '');
       if (!invoiceId) throw new Error('La préparation a réussi mais la facture est introuvable.');
+      // Une facture existait déjà pour ce job : on la désigne, on n'y touche pas
+      // (avant : « facture préparée », comme si elle venait d'être créée).
+      if (row?.already_exists) {
+        return {
+          created: false, deja_existante: true, invoice_id: invoiceId,
+          note: 'Ce job avait déjà une facture : je n’en ai pas créé une deuxième. Ouvre celle-ci dans Lume.',
+        };
+      }
+      // La RPC crée la facture SANS taxes (l'écran les pose dans l'éditeur, à
+      // l'enregistrement). Un brouillon préparé par Lumi pouvait donc partir
+      // au client sans TPS/TVQ (audit 2026-09-30) : on pose ici les taxes du
+      // client, le trigger de la facture recalcule le total.
+      const { data: fac, error: errFac } = await ctx.client.from('invoices')
+        .select('client_id, status, subtotal_cents, discount_cents, tax_cents')
+        .eq('org_id', ctx.orgId).eq('id', invoiceId).maybeSingle();
+      if (errFac) throw errFac;
+      let taxesPosees: { tax_cents: number; total_cents: number } | null = null;
+      if (fac && fac.status === 'draft' && !Number(fac.tax_cents)) {
+        const base = Math.max(0, (Number(fac.subtotal_cents) || 0) - (Number(fac.discount_cents) || 0));
+        const taxes = await taxesPourDocument(ctx, fac.client_id, base);
+        if (taxes.tax_cents > 0) {
+          const { error: errTaxe } = await ctx.client.from('invoices')
+            .update({ tax_cents: taxes.tax_cents }).eq('org_id', ctx.orgId).eq('id', invoiceId).eq('status', 'draft');
+          if (errTaxe) {
+            console.error('[agent-tool:create_invoice_from_job] taxes', errTaxe.message);
+            return {
+              created: true, incomplet: true, invoice_id: invoiceId, statut: 'brouillon',
+              note: 'Facture préparée en brouillon, mais SANS les taxes : je n’ai pas pu les appliquer. Ouvre-la dans Lume et enregistre-la pour que les taxes s’ajoutent avant tout envoi.',
+            };
+          }
+          try { await enregistrerTaxesAppliquees(ctx, 'invoice', invoiceId, taxes.lignes); } catch (e: any) {
+            console.error('[agent-tool:create_invoice_from_job] applied_taxes', e?.message || e);
+          }
+        }
+        taxesPosees = { tax_cents: taxes.tax_cents, total_cents: base + taxes.tax_cents };
+      }
       return {
         created: true, invoice_id: invoiceId, statut: 'brouillon',
+        ...(taxesPosees ? { subtotal_cents: Number(fac?.subtotal_cents) || 0, tax_cents: taxesPosees.tax_cents, total_cents: taxesPosees.total_cents } : {}),
         note: sansMontant
           ? 'Facture préparée en BROUILLON, mais le job n\u2019avait AUCUN montant : elle est à 0 $. Demande à l\u2019utilisateur les items et montants à y mettre (ou qu\u2019il la complète dans Lume) AVANT tout envoi.'
           : 'Facture préparée depuis le job, en BROUILLON — rien n\u2019est parti chez le client. send_invoice pour l\u2019envoyer, avec confirmation.',
@@ -3526,6 +3882,17 @@ const sendPaymentReminders: AgentTool = {
 
       // Téléphones et noms, en une requête (jamais un client d'une autre org).
       const ids = [...new Set(liste.map((r) => String(r.client_id)).filter(Boolean))];
+      // Qui doit VRAIMENT de l'argent (audit 2026-09-30) : une relance de
+      // paiement à un client à jour, c'est un texto gênant et faux.
+      const { data: dues, error: errDues } = await ctx.client
+        .from('invoices')
+        .select('client_id')
+        .eq('org_id', ctx.orgId).in('client_id', ids).is('deleted_at', null)
+        .gt('balance_cents', 0)
+        .not('status', 'in', '(draft,void,cancelled,paid)');
+      if (errDues) throw errDues;
+      const doitDeLArgent = new Set((dues || []).map((f: any) => String(f.client_id)));
+      const dejaVus = new Set<string>();
       const { data: clients } = await ctx.client
         .from('clients')
         .select('id, first_name, last_name, company, display_as_company, phone')
@@ -3538,6 +3905,10 @@ const sendPaymentReminders: AgentTool = {
         const c = parId.get(String(r.client_id));
         const nom = c ? nomClient(c) : 'client inconnu';
         if (!c) { ignores.push({ client: nom, raison: 'client introuvable dans votre CRM' }); continue; }
+        // Un seul texto par client, même s'il apparaît deux fois dans la liste.
+        if (dejaVus.has(c.id)) { ignores.push({ client: nom, raison: 'déjà dans la liste (un seul rappel par client)' }); continue; }
+        dejaVus.add(c.id);
+        if (!doitDeLArgent.has(c.id)) { ignores.push({ client: nom, raison: 'aucune facture impayée' }); continue; }
         if (!c.phone) { ignores.push({ client: nom, raison: 'aucun numéro de téléphone' }); continue; }
         try {
           await envoyerUnSms(ctx, c.phone, String(r.message), c.id, nom);
@@ -3549,11 +3920,17 @@ const sendPaymentReminders: AgentTool = {
         }
       }
 
+      // Rien n'est parti : c'est un échec, pas « c'est fait ». Rien n'a été
+      // envoyé, donc l'empreinte est libérée et on peut réessayer après correction.
+      if (!envoyes.length) {
+        throw new Error(`Aucun rappel n’est parti. ${ignores.slice(0, 5).map((i) => `${i.client} : ${i.raison}`).join(' ; ')}${ignores.length > 5 ? '…' : ''}`);
+      }
       return {
         sent_count: envoyes.length,
         skipped_count: ignores.length,
         sent: envoyes,
         skipped: ignores,
+        ...(ignores.length ? { warning: `${ignores.length} rappel(s) non envoyé(s) : ${ignores.slice(0, 5).map((i) => `${i.client} (${i.raison})`).join(', ')}${ignores.length > 5 ? '…' : ''}` } : {}),
         note: `Rappels envoyés à ${envoyes.length} client(s)`
           + (ignores.length ? `, ${ignores.length} ignoré(s) — explique-les à l\u2019utilisateur.` : '.'),
       };
@@ -3621,38 +3998,3 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   sendEmailTool,
 ];
 
-/**
- * Un paiement enregistré par Lumi est un VRAI paiement manuel, comme le
- * bouton « Marquer payée » (invoice-mark-paid.ts) : une ligne `payments`, et
- * le trigger `trg_payments_recalculate_invoice` met la facture à jour.
- *
- * Lumi appelait `apply_invoice_payment`, qui modifie la facture SANS ligne de
- * paiement : absent des Paiements, des rapports et de QuickBooks — et le
- * premier paiement Stripe suivant, recalculé depuis `payments`, EFFAÇAIT ce
- * montant (audit V2, 2026-09-30).
- */
-export async function enregistrerPaiementManuel(
-  ctx: ToolContext,
-  facture: { id: string; client_id?: string | null; job_id?: string | null; currency?: string | null },
-  montantCents: number,
-  methode: string | null,
-): Promise<void> {
-  const { error } = await getServiceClient().from('payments').insert({
-    org_id: ctx.orgId,
-    created_by: ctx.userId,
-    invoice_id: facture.id,
-    client_id: facture.client_id ?? null,
-    job_id: facture.job_id ?? null,
-    provider: 'manual',
-    status: 'succeeded',
-    method: methode,
-    amount_cents: montantCents,
-    currency: facture.currency || 'CAD',
-    payment_date: new Date().toISOString(),
-    paid_at: new Date().toISOString(),
-    // Pas de `notes` : la colonne n'existe ni en prod ni sur staging
-    // (20260928120000 jamais appliquée) — une seule clé inconnue fait
-    // échouer toute l'insertion.
-  });
-  if (error) throw error;
-}

@@ -19,6 +19,21 @@ export interface LigneRecu {
   /** Erreur métier renvoyée par l'outil (contenu du tool_result), sinon null. */
   erreur: string | null;
   outil: string;
+  /** Résultat de l'outil (`result` du tool_result) : fait à moitié, incertain, déjà fait, avertissement. */
+  resultat?: Record<string, any> | null;
+}
+
+/** Lit le contenu d'un tool_result d'écriture : erreur métier et résultat. */
+export function lireContenuEcriture(contenu: string): { erreur: string | null; resultat: Record<string, any> | null } {
+  try {
+    const j = JSON.parse(contenu);
+    return {
+      erreur: typeof j?.error === 'string' ? j.error : null,
+      resultat: j?.result && typeof j.result === 'object' ? j.result : null,
+    };
+  } catch {
+    return { erreur: null, resultat: null };
+  }
 }
 
 const NOMS_ACTION_FR: Record<string, string> = {
@@ -47,14 +62,29 @@ function nomAction(outil: string, fr: boolean): string {
 /** Le texte du reçu, une phrase par action. Pur : testable sans base. */
 export function texteRecus(lignes: LigneRecu[], decision: 'confirm' | 'cancel', fr: boolean): string {
   if (decision === 'cancel') return fr ? 'Annulé, rien n’a été fait.' : 'Cancelled, nothing was done.';
-  const phrases = lignes.map(({ recu, erreur, outil }) => {
+  const phrases = lignes.map(({ recu, erreur, outil, resultat }) => {
     if (recu.ok) {
       // « Devis Q-0043 » se suffit ; un titre nu (« Rappeler Marie ») est précédé du nom de l'action : « la tâche « Rappeler Marie » ».
       const label = recu.fiche?.label ?? '';
       const nomme = /^(devis|facture|job|tâche|fiche|quote|invoice|task)\b/i.test(label);
       const quoi = label ? (nomme ? label : `${nomAction(outil, fr)} « ${label} »`) : nomAction(outil, fr);
       const montant = recu.fiche?.montant_cents !== undefined ? ` (${fmtDollars(recu.fiche.montant_cents, fr)})` : '';
-      return fr ? `C'est fait : ${quoi}${montant}.` : `Done: ${quoi}${montant}.`;
+      // Audit 2026-09-30 : « C'est fait » seulement quand c'est VRAIMENT fait.
+      // Un envoi incertain, une action faite à moitié ou déjà faite avant se
+      // disaient « C'est fait », et l'avertissement de l'outil se perdait.
+      const note = typeof resultat?.note === 'string' ? ` ${resultat.note.trim()}` : '';
+      const avert = [resultat?.warning, resultat?.address_warning]
+        .filter((w): w is string => typeof w === 'string' && w.trim().length > 0)
+        .map((w) => ` ${fr ? 'Attention' : 'Heads up'} : ${w.trim()}`).join('');
+      if (resultat?.incertain) {
+        return fr
+          ? `${cap(nomAction(outil, fr))} : je n'ai pas eu la confirmation que c'est passé.${note || ' Vérifie dans Lume avant de recommencer.'}`
+          : `${cap(nomAction(outil, fr))}: I didn't get confirmation it went through.${note || ' Check in Lume before trying again.'}`;
+      }
+      if (resultat?.incomplet) return fr ? `Fait en partie seulement : ${quoi}${montant}.${note}${avert}` : `Only partly done: ${quoi}${montant}.${note}${avert}`;
+      if (resultat?.deja_existante) return fr ? `Rien de nouveau : ${quoi} existait déjà.${note}` : `Nothing new: ${quoi} already existed.${note}`;
+      if (resultat?.deja_fait) return fr ? `C'était déjà fait : ${quoi}${montant}.${avert}` : `Already done earlier: ${quoi}${montant}.${avert}`;
+      return fr ? `C'est fait : ${quoi}${montant}.${avert}` : `Done: ${quoi}${montant}.${avert}`;
     }
     const raison = erreur ? ` ${erreur.replace(/\s+$/, '')}` : '';
     return fr ? `${cap(nomAction(outil, fr))} n’a pas fonctionné.${raison}` : `${cap(nomAction(outil, fr))} did not go through.${raison}`;

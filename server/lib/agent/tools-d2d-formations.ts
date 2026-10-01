@@ -333,18 +333,22 @@ const updateHouse: AgentTool = {
       }
       if (args.status !== undefined) updates.current_status = String(args.status);
       if (!Object.keys(updates).length) throw new Error('Rien à modifier : précise au moins un champ.');
-      updates.updated_at = new Date().toISOString();
-      const { data, error } = await ctx.client
-        .from('field_house_profiles')
-        .update(updates)
-        .eq('id', id)
-        .eq('org_id', ctx.orgId)
-        .is('deleted_at', null)
-        .select('id, current_status')
-        .maybeSingle();
-      verifierEcriture(error, data, 'Cette maison est introuvable dans l’entreprise.');
+      // Même route que « Modifier le pin » (audit 2026-09-30) : elle synchronise
+      // le pin de la carte, fait entrer la maison dans le pipeline quand elle
+      // devient un prospect, et vide le cache des pins. L'écriture directe ne
+      // faisait rien de tout ça (pin et pipeline désynchronisés, bug D9).
+      delete updates.address_normalized;
+      let res;
+      try {
+        res = await appelInterne(ctx, `/field-sales/houses/${encodeURIComponent(id)}`, updates, 'PUT');
+      } catch (e) {
+        if (e instanceof AppelInterneIncertain) return { incertain: true, note: 'Je n’ai pas eu la confirmation que la maison est mise à jour : vérifie la carte avant de recommencer.' };
+        throw e;
+      }
+      if (!res.ok) throw new Error(res.status === 404 ? 'Cette maison est introuvable dans l’entreprise.' : (res.json?.error || `Mise à jour refusée (${res.status}).`));
+      const data = res.json || {};
       return {
-        house_id: data.id,
+        house_id: data.id ?? id,
         statut: STATUT_MAISON[data.current_status] || data.current_status,
         champs_modifies: Object.keys(updates).filter((k) => k !== 'updated_at' && k !== 'address_normalized'),
         note: 'La maison est mise à jour.',
@@ -569,6 +573,15 @@ const updateD2dPipelineItem: AgentTool = {
       const id = identifiant(args.deal_id, "L'identifiant du deal");
       const now = new Date().toISOString();
       const updates: Record<string, any> = champsFournis(args, ['d2d_status', 'lost_reason', 'rep_id']);
+      // Réattribuer un deal = geste d'admin (audit 2026-09-30) : un vendeur ne
+      // s'attribue pas le deal d'un collègue. La RLS borne déjà « ses deals »
+      // quand l'org le restreint ; ceci couvre les orgs non restreintes.
+      if (updates.rep_id !== undefined) {
+        const { data: moi } = await ctx.client.from('memberships').select('role').eq('org_id', ctx.orgId).eq('user_id', ctx.userId ?? '').maybeSingle();
+        if (!moi || !['owner', 'admin'].includes(String((moi as any).role))) {
+          throw new Error('Seul un propriétaire ou un admin peut changer le représentant d’un deal.');
+        }
+      }
       if (args.stage !== undefined) {
         updates.stage = String(args.stage);
         if (updates.stage === 'closed_lost') updates.lost_at = now;

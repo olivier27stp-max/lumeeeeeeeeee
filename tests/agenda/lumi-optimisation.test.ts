@@ -50,6 +50,10 @@ describe('la réponse par gabarit', () => {
 
   it('gain sous le seuil : « Ta journée est déjà optimisée »', () => {
     expect(texteProposition({ ...base, deja_optimisee: true, changements: [] }, true)).toContain('déjà optimisée');
+    // Journée sans aucune visite : on le dit, au lieu de « déjà optimisée ».
+    const vide = texteProposition({ ...base, deja_optimisee: true, changements: [], equipes: [], sans_adresse: [] }, true);
+    expect(vide).toContain('Aucune visite planifiée');
+    expect(vide).not.toContain('déjà optimisée');
   });
 });
 

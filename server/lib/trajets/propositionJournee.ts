@@ -44,6 +44,20 @@ export interface PropositionJournee {
   hypotheses: string[];
 }
 
+/**
+ * Un journal d'automatisation prouve-t-il qu'un message est VRAIMENT parti au
+ * client ? Une action « sautée » (client sans courriel, textos non configurés…)
+ * est notée réussie avec `saute` / `saute_code` : rien n'a été envoyé, donc
+ * l'heure n'a pas été confirmée. Les compter figeait toute la journée d'un
+ * bureau dont la « Confirmation de rendez-vous » est active (vu en prod le
+ * 2026-10-01 : 4 visites « confirmées au client » pour un client sans contact).
+ */
+export function messagePartiAuClient(resultData: unknown): boolean {
+  if (!resultData || typeof resultData !== 'object') return true;
+  const d = resultData as Record<string, unknown>;
+  return !d.saute && !d.saute_code;
+}
+
 interface VisiteBrute { id: string; job_id: string | null; team_id: string | null; start_at: string; end_at: string; status: string | null; title: string | null }
 
 /** Bornes UTC d'un jour civil au fuseau de l'entreprise. */
@@ -120,10 +134,12 @@ export async function proposerJournee(client: SupabaseClient, orgId: string, dat
   const confirmees = new Set<string>();
   if (visites.length) {
     const { data, error } = await client.from('automation_execution_logs')
-      .select('entity_id').eq('org_id', orgId).eq('entity_type', 'schedule_event').eq('result_success', true)
+      .select('entity_id, result_data').eq('org_id', orgId).eq('entity_type', 'schedule_event').eq('result_success', true)
       .in('action_type', ['send_sms', 'send_email']).in('entity_id', visites.map((v) => v.id));
     if (error) throw error;
-    for (const r of data || []) confirmees.add(String((r as any).entity_id));
+    for (const r of (data || []) as Array<{ entity_id: string; result_data: unknown }>) {
+      if (messagePartiAuClient(r.result_data)) confirmees.add(String(r.entity_id));
+    }
   }
 
   // Heures de travail : disponibilités de l'équipe ce jour de la semaine ; sinon

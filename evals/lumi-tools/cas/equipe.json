@@ -1,0 +1,1157 @@
+[
+ {
+  "id": "get_team-1",
+  "section": "equipe",
+  "outil": "get_team",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Qui fait partie de mon équipe en ce moment, avec le rôle de chacun ?"
+ },
+ {
+  "id": "get_timesheets-1",
+  "section": "equipe",
+  "outil": "get_timesheets",
+  "langue": "en",
+  "type": "lecture",
+  "q": "How many hours did each of my guys put in between September 21 and September 27?"
+ },
+ {
+  "id": "list_tasks-1",
+  "section": "equipe",
+  "outil": "list_tasks",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "C'est quoi les tâches qu'il me reste à faire, les plus urgentes en premier ?"
+ },
+ {
+  "id": "get_payroll_summary-1",
+  "section": "equipe",
+  "outil": "get_payroll_summary",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Où on en est avec la paie de la période en cours, et c'est quand le prochain jour de paie ?"
+ },
+ {
+  "id": "list_teams-1",
+  "section": "equipe",
+  "outil": "list_teams",
+  "langue": "en",
+  "type": "lecture",
+  "q": "What crews do I have set up right now, and who's on each one?"
+ },
+ {
+  "id": "list_invitations-1",
+  "section": "equipe",
+  "outil": "list_invitations",
+  "langue": "fr",
+  "type": "lecture",
+  "q": "Est-ce qu'il reste des invitations d'équipe en attente que personne n'a encore acceptées ?"
+ },
+ {
+  "id": "create_task-1",
+  "section": "equipe",
+  "outil": "create_task",
+  "langue": "fr",
+  "type": "action",
+  "q": "Ajoute une tâche pour vendredi le 2 octobre 2026 : « Commander du savon à vitres », priorité haute.",
+  "params": {
+   "title": "savon à vitres",
+   "due_date": "2026-10-02",
+   "priority": "high"
+  }
+ },
+ {
+  "id": "update_task_status-1",
+  "section": "equipe",
+  "outil": "update_task_status",
+  "langue": "fr",
+  "type": "action",
+  "q": "La tâche « Rappeler Marie Tremblay », c'est fait — marque-la comme terminée.",
+  "params": {
+   "status": "done"
+  },
+  "cible": [
+   "Rappeler Marie Tremblay"
+  ],
+  "voisins": [
+   "list_tasks"
+  ]
+ },
+ {
+  "id": "update_task-1",
+  "section": "equipe",
+  "outil": "update_task",
+  "langue": "en",
+  "type": "action",
+  "q": "Bump the task 'Rappeler le fournisseur de sel' to high priority and push its due date to October 5, 2026.",
+  "params": {
+   "priority": "high",
+   "due_date": "2026-10-05"
+  },
+  "cible": [
+   "fournisseur de sel"
+  ],
+  "voisins": [
+   "list_tasks"
+  ]
+ },
+ {
+  "id": "delete_task-1",
+  "section": "equipe",
+  "outil": "delete_task",
+  "langue": "fr",
+  "type": "action",
+  "q": "Supprime la tâche « Rappeler le fournisseur de sel », on a changé de fournisseur.",
+  "cible": [
+   "fournisseur de sel"
+  ],
+  "interdits": [
+   "update_task_status"
+  ],
+  "voisins": [
+   "list_tasks"
+  ]
+ },
+ {
+  "id": "reschedule_task-1",
+  "section": "equipe",
+  "outil": "reschedule_task",
+  "langue": "fr",
+  "type": "action",
+  "q": "Mets la tâche « Rappeler Marie Tremblay » dans mon calendrier jeudi le 1er octobre 2026 à 14 h, pour 30 minutes.",
+  "params": {
+   "scheduled_at": "2026-10-01",
+   "duration_minutes": 30
+  },
+  "cible": [
+   "Rappeler Marie Tremblay"
+  ],
+  "interdits": [
+   "update_task"
+  ],
+  "voisins": [
+   "list_tasks"
+  ]
+ },
+ {
+  "id": "duplicate_task-1",
+  "section": "equipe",
+  "outil": "duplicate_task",
+  "langue": "en",
+  "type": "action",
+  "q": "Make a copy of the task 'Rappeler Marie Tremblay', I need to call her again next month too.",
+  "cible": [
+   "Rappeler Marie Tremblay"
+  ],
+  "interdits": [
+   "create_task"
+  ],
+  "voisins": [
+   "list_tasks"
+  ]
+ },
+ {
+  "id": "bulk_update_task_status-1",
+  "section": "equipe",
+  "outil": "bulk_update_task_status",
+  "langue": "fr",
+  "type": "action",
+  "q": "Marque les deux tâches « Vérifier les actions directes » comme terminées d'un coup.",
+  "params": {
+   "status": "done"
+  },
+  "cible": [
+   "Vérifier les actions directes"
+  ],
+  "interdits": [
+   "bulk_delete_tasks"
+  ],
+  "voisins": [
+   "list_tasks"
+  ]
+ },
+ {
+  "id": "create_team-1",
+  "section": "equipe",
+  "outil": "create_team",
+  "langue": "fr",
+  "type": "action",
+  "q": "Crée une nouvelle équipe « Équipe Rive-Sud », en vert (#22C55E).",
+  "params": {
+   "name": "Rive-Sud",
+   "color_hex": "#22C55E"
+  }
+ },
+ {
+  "id": "update_team-1",
+  "section": "equipe",
+  "outil": "update_team",
+  "langue": "en",
+  "type": "action",
+  "q": "Rename the crew 'Équipe Nord' to 'Équipe Rive-Nord'.",
+  "params": {
+   "name": "Rive-Nord"
+  },
+  "cible": [
+   "Équipe Nord"
+  ],
+  "interdits": [
+   "create_team"
+  ],
+  "voisins": [
+   "list_teams"
+  ]
+ },
+ {
+  "id": "bulk_delete_tasks-1",
+  "section": "equipe",
+  "outil": "bulk_delete_tasks",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Supprime les deux tâches « Vérifier les actions directes », elles ne servent plus à rien.",
+  "cible": [
+   "Vérifier les actions directes"
+  ],
+  "voisins": [
+   "list_tasks"
+  ]
+ },
+ {
+  "id": "bulk_delete_tasks-2",
+  "section": "equipe",
+  "outil": "bulk_delete_tasks",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Delete both 'Vérifier les actions directes' tasks in one go, they're leftovers from a test.",
+  "cible": [
+   "Vérifier les actions directes"
+  ],
+  "voisins": [
+   "list_tasks"
+  ]
+ },
+ {
+  "id": "bulk_delete_tasks-3",
+  "section": "equipe",
+  "outil": "bulk_delete_tasks",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Débarrasse-moi des deux tâches « Vérifier les actions directes » — pas les marquer faites, je veux qu'elles disparaissent de la liste.",
+  "cible": [
+   "Vérifier les actions directes"
+  ],
+  "interdits": [
+   "bulk_update_task_status",
+   "update_task_status"
+  ],
+  "voisins": [
+   "list_tasks"
+  ]
+ },
+ {
+  "id": "invite_member-1",
+  "section": "equipe",
+  "outil": "invite_member",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Envoie une invitation à jonathan.pelletier@exemple.invalid pour qu'il rejoigne l'équipe comme technicien.",
+  "params": {
+   "email": "jonathan.pelletier@exemple.invalid",
+   "role": "technician"
+  },
+  "cible": [
+   "jonathan.pelletier@exemple.invalid"
+  ]
+ },
+ {
+  "id": "invite_member-2",
+  "section": "equipe",
+  "outil": "invite_member",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Can you invite nadia.cote@exemple.invalid to Lume as a sales rep? She starts Monday.",
+  "params": {
+   "email": "nadia.cote@exemple.invalid",
+   "role": "sales_rep"
+  },
+  "cible": [
+   "nadia.cote@exemple.invalid"
+  ]
+ },
+ {
+  "id": "invite_member-3",
+  "section": "equipe",
+  "outil": "invite_member",
+  "langue": "fr",
+  "type": "clarification",
+  "sensible": true,
+  "q": "Invite maxime.girard@exemple.invalid dans Lume, il commence avec nous la semaine prochaine."
+ },
+ {
+  "id": "resend_invitation-1",
+  "section": "equipe",
+  "outil": "resend_invitation",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "L'invitation de marc.tremblay@example.com a expiré, renvoie-lui un nouveau lien s'il te plaît.",
+  "cible": [
+   "marc.tremblay@example.com"
+  ],
+  "voisins": [
+   "list_invitations"
+  ]
+ },
+ {
+  "id": "resend_invitation-2",
+  "section": "equipe",
+  "outil": "resend_invitation",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Please resend the team invite to marc.tremblay@example.com, he says he never got the email.",
+  "cible": [
+   "marc.tremblay@example.com"
+  ],
+  "voisins": [
+   "list_invitations"
+  ]
+ },
+ {
+  "id": "resend_invitation-3",
+  "section": "equipe",
+  "outil": "resend_invitation",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Marc n'a jamais reçu son courriel d'invitation (marc.tremblay@example.com) : relance-le, mais surtout n'annule pas son invitation et n'en crée pas une deuxième.",
+  "cible": [
+   "marc.tremblay@example.com"
+  ],
+  "interdits": [
+   "revoke_invitation",
+   "invite_member"
+  ],
+  "voisins": [
+   "list_invitations"
+  ]
+ },
+ {
+  "id": "revoke_invitation-1",
+  "section": "equipe",
+  "outil": "revoke_invitation",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Annule l'invitation envoyée à marc.tremblay@example.com, finalement on ne l'engage pas.",
+  "cible": [
+   "marc.tremblay@example.com"
+  ],
+  "voisins": [
+   "list_invitations"
+  ]
+ },
+ {
+  "id": "revoke_invitation-2",
+  "section": "equipe",
+  "outil": "revoke_invitation",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Revoke the pending invite for marc.tremblay@example.com — we're not hiring him after all.",
+  "cible": [
+   "marc.tremblay@example.com"
+  ],
+  "voisins": [
+   "list_invitations"
+  ]
+ },
+ {
+  "id": "revoke_invitation-3",
+  "section": "equipe",
+  "outil": "revoke_invitation",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Marc n'a pas encore accepté son invitation (marc.tremblay@example.com) et on ne l'engage plus : fais en sorte que son lien ne marche plus et libère le siège. Ne lui renvoie rien.",
+  "cible": [
+   "marc.tremblay@example.com"
+  ],
+  "interdits": [
+   "resend_invitation",
+   "remove_member"
+  ],
+  "voisins": [
+   "list_invitations"
+  ]
+ },
+ {
+  "id": "update_member_role-1",
+  "section": "equipe",
+  "outil": "update_member_role",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Antoine Roy passe aux ventes : change son rôle pour vendeur.",
+  "params": {
+   "role": "sales_rep"
+  },
+  "cible": [
+   "Antoine Roy"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "update_member_role-2",
+  "section": "equipe",
+  "outil": "update_member_role",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Promote Karim Bensaïd to admin, he's running the office now.",
+  "params": {
+   "role": "admin"
+  },
+  "cible": [
+   "Karim"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "update_member_role-3",
+  "section": "equipe",
+  "outil": "update_member_role",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Émilie Dubois devient technicienne à partir de lundi — change son rôle à elle seulement, ne touche pas aux permissions de tous les vendeurs.",
+  "params": {
+   "role": "technician"
+  },
+  "cible": [
+   "Dubois"
+  ],
+  "interdits": [
+   "set_member_permissions",
+   "update_role_preset"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "remove_member-1",
+  "section": "equipe",
+  "outil": "remove_member",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Antoine Roy ne travaille plus pour nous, enlève-lui l'accès à Lume.",
+  "cible": [
+   "Antoine Roy"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "remove_member-2",
+  "section": "equipe",
+  "outil": "remove_member",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Karim Bensaïd quit last Friday — remove him from our Lume account.",
+  "cible": [
+   "Karim"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "remove_member-3",
+  "section": "equipe",
+  "outil": "remove_member",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Coupe complètement l'accès d'Émilie Dubois à Lume — pas juste lui enlever des permissions ou changer son rôle, elle ne doit plus pouvoir se connecter du tout.",
+  "cible": [
+   "Dubois"
+  ],
+  "interdits": [
+   "set_member_permissions",
+   "update_member_role",
+   "reset_member_permissions"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "reactivate_member-1",
+  "section": "equipe",
+  "outil": "reactivate_member",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Antoine Roy revient travailler avec nous, redonne-lui son accès à Lume.",
+  "cible": [
+   "Antoine Roy"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "reactivate_member-2",
+  "section": "equipe",
+  "outil": "reactivate_member",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Karim Bensaïd's account got suspended by mistake — please reactivate him.",
+  "cible": [
+   "Karim"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "reactivate_member-3",
+  "section": "equipe",
+  "outil": "reactivate_member",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Rétablis le compte suspendu d'Émilie Dubois tel qu'il était — ne lui envoie pas une nouvelle invitation et ne touche pas à son rôle.",
+  "cible": [
+   "Dubois"
+  ],
+  "interdits": [
+   "invite_member",
+   "update_member_role"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "delete_team-1",
+  "section": "equipe",
+  "outil": "delete_team",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Supprime l'équipe « Équipe Nord », on ne s'en sert plus.",
+  "cible": [
+   "Équipe Nord"
+  ],
+  "voisins": [
+   "list_teams"
+  ]
+ },
+ {
+  "id": "delete_team-2",
+  "section": "equipe",
+  "outil": "delete_team",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Delete the crew called 'Équipe Nord', it was only a test.",
+  "cible": [
+   "Équipe Nord"
+  ],
+  "voisins": [
+   "list_teams"
+  ]
+ },
+ {
+  "id": "delete_team-3",
+  "section": "equipe",
+  "outil": "delete_team",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Je veux que l'équipe « Équipe Nord » disparaisse pour de bon — pas juste désactivée, supprimée.",
+  "cible": [
+   "Équipe Nord"
+  ],
+  "interdits": [
+   "update_team"
+  ],
+  "voisins": [
+   "list_teams"
+  ]
+ },
+ {
+  "id": "set_hourly_rate-1",
+  "section": "equipe",
+  "outil": "set_hourly_rate",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Monte le taux horaire d'Antoine Roy à 28 $ de l'heure.",
+  "params": {
+   "hourly_rate_cents": 2800
+  },
+  "cible": [
+   "Antoine Roy"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "set_hourly_rate-2",
+  "section": "equipe",
+  "outil": "set_hourly_rate",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Set Karim Bensaïd's hourly wage to $22.50.",
+  "params": {
+   "hourly_rate_cents": 2250
+  },
+  "cible": [
+   "Karim"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "set_hourly_rate-3",
+  "section": "equipe",
+  "outil": "set_hourly_rate",
+  "langue": "fr",
+  "type": "clarification",
+  "sensible": true,
+  "q": "Change le taux horaire d'Émilie Dubois, elle a eu une augmentation."
+ },
+ {
+  "id": "punch_in-1",
+  "section": "equipe",
+  "outil": "punch_in",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Peux-tu me pointer à l'entrée maintenant ? Je commence sur le job 37, le lavage de vitres.",
+  "cible": [
+   "Lavage de vitres"
+  ],
+  "interdits": [
+   "start_break",
+   "end_break"
+  ]
+ },
+ {
+  "id": "punch_in-2",
+  "section": "equipe",
+  "outil": "punch_in",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Clock me in now and add the note 'Left the shop at 7:30'.",
+  "params": {
+   "notes": "Left the shop"
+  }
+ },
+ {
+  "id": "punch_in-3",
+  "section": "equipe",
+  "outil": "punch_in",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Je viens d'arriver chez le client, pars mon temps de travail maintenant — c'est le début de ma journée, pas un retour de pause.",
+  "interdits": [
+   "end_break",
+   "start_break",
+   "punch_out"
+  ]
+ },
+ {
+  "id": "punch_out-1",
+  "section": "equipe",
+  "outil": "punch_out",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "J'ai fini ma journée, ferme mon pointage et mets en note « terminé chez Morin ».",
+  "params": {
+   "notes": "Morin"
+  }
+ },
+ {
+  "id": "punch_out-2",
+  "section": "equipe",
+  "outil": "punch_out",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "I'm done for the day, clock me out and add a note: 'truck parked at the shop'.",
+  "params": {
+   "notes": "truck parked"
+  }
+ },
+ {
+  "id": "punch_out-3",
+  "section": "equipe",
+  "outil": "punch_out",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Je m'en vais pour de bon aujourd'hui, ce n'est pas une pause : arrête mon temps pour la journée.",
+  "interdits": [
+   "start_break",
+   "end_break"
+  ]
+ },
+ {
+  "id": "start_break-1",
+  "section": "equipe",
+  "outil": "start_break",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Mets-moi en pause dîner sur mon pointage, je reviens dans 30 minutes."
+ },
+ {
+  "id": "start_break-2",
+  "section": "equipe",
+  "outil": "start_break",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Start my lunch break on my timesheet, I'll be back in half an hour."
+ },
+ {
+  "id": "start_break-3",
+  "section": "equipe",
+  "outil": "start_break",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Je prends ma pause de 15 minutes — ne ferme surtout pas ma journée, je reviens tantôt.",
+  "interdits": [
+   "punch_out",
+   "end_break"
+  ]
+ },
+ {
+  "id": "end_break-1",
+  "section": "equipe",
+  "outil": "end_break",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Ma pause est finie, remets mon temps de travail en marche."
+ },
+ {
+  "id": "end_break-2",
+  "section": "equipe",
+  "outil": "end_break",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Back from lunch — end my break on my timesheet please."
+ },
+ {
+  "id": "end_break-3",
+  "section": "equipe",
+  "outil": "end_break",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Je suis de retour de dîner : termine ma pause. Je suis déjà pointé depuis ce matin, pas besoin de me repointer.",
+  "interdits": [
+   "punch_in",
+   "start_break"
+  ]
+ },
+ {
+  "id": "approve_timesheet-1",
+  "section": "equipe",
+  "outil": "approve_timesheet",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Approuve les heures d'Antoine Roy du 21 au 27 septembre 2026.",
+  "params": {
+   "from": "2026-09-21",
+   "to": "2026-09-27"
+  },
+  "cible": [
+   "Antoine Roy"
+  ],
+  "voisins": [
+   "get_team",
+   "get_timesheets"
+  ]
+ },
+ {
+  "id": "approve_timesheet-2",
+  "section": "equipe",
+  "outil": "approve_timesheet",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Approve Karim Bensaïd's timesheets from September 14 to September 20, 2026.",
+  "params": {
+   "from": "2026-09-14",
+   "to": "2026-09-20"
+  },
+  "cible": [
+   "Karim"
+  ],
+  "voisins": [
+   "get_team",
+   "get_timesheets"
+  ]
+ },
+ {
+  "id": "approve_timesheet-3",
+  "section": "equipe",
+  "outil": "approve_timesheet",
+  "langue": "fr",
+  "type": "clarification",
+  "sensible": true,
+  "q": "Approuve les heures du technicien."
+ },
+ {
+  "id": "add_payroll_adjustment-1",
+  "section": "equipe",
+  "outil": "add_payroll_adjustment",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Ajoute une prime de 150 $ sur la paie d'Antoine Roy pour le déneigement de samedi.",
+  "params": {
+   "amount_cents": 15000
+  },
+  "cible": [
+   "Antoine Roy"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "add_payroll_adjustment-2",
+  "section": "equipe",
+  "outil": "add_payroll_adjustment",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Deduct $40 from Karim Bensaïd's pay this period for the ladder he lost.",
+  "params": {
+   "amount_cents": -4000
+  },
+  "cible": [
+   "Karim"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "add_payroll_adjustment-3",
+  "section": "equipe",
+  "outil": "add_payroll_adjustment",
+  "langue": "fr",
+  "type": "clarification",
+  "sensible": true,
+  "q": "Ajoute une prime sur la paie d'Émilie Dubois, elle a fait du bon travail."
+ },
+ {
+  "id": "mark_payroll_period_paid-1",
+  "section": "equipe",
+  "outil": "mark_payroll_period_paid",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Marque la paie d'Antoine Roy comme payée pour la période en cours, chèque numéro 1042.",
+  "params": {
+   "note": "1042"
+  },
+  "cible": [
+   "Antoine Roy"
+  ],
+  "voisins": [
+   "get_team",
+   "get_payroll_summary"
+  ]
+ },
+ {
+  "id": "mark_payroll_period_paid-2",
+  "section": "equipe",
+  "outil": "mark_payroll_period_paid",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Mark Karim Bensaïd's pay as paid for this pay period.",
+  "cible": [
+   "Karim"
+  ],
+  "voisins": [
+   "get_team",
+   "get_payroll_summary"
+  ]
+ },
+ {
+  "id": "mark_payroll_period_paid-3",
+  "section": "equipe",
+  "outil": "mark_payroll_period_paid",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "J'ai fait le virement à Émilie Dubois ce matin : indique que sa paie de la période est réglée.",
+  "cible": [
+   "Dubois"
+  ],
+  "interdits": [
+   "unmark_payroll_period_paid",
+   "add_payroll_adjustment"
+  ],
+  "voisins": [
+   "get_team",
+   "get_payroll_summary"
+  ]
+ },
+ {
+  "id": "unmark_payroll_period_paid-1",
+  "section": "equipe",
+  "outil": "unmark_payroll_period_paid",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Je me suis trompé, la paie d'Antoine Roy n'est pas encore payée pour cette période — enlève le « payé ».",
+  "cible": [
+   "Antoine Roy"
+  ],
+  "voisins": [
+   "get_team",
+   "get_payroll_summary"
+  ]
+ },
+ {
+  "id": "unmark_payroll_period_paid-2",
+  "section": "equipe",
+  "outil": "unmark_payroll_period_paid",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Undo the 'paid' mark on Karim Bensaïd's pay for this period, the transfer bounced.",
+  "cible": [
+   "Karim"
+  ],
+  "voisins": [
+   "get_team",
+   "get_payroll_summary"
+  ]
+ },
+ {
+  "id": "unmark_payroll_period_paid-3",
+  "section": "equipe",
+  "outil": "unmark_payroll_period_paid",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Le virement d'Émilie Dubois a été refusé par la banque : sa paie de la période ne doit plus apparaître comme réglée. Ne lui ajoute rien.",
+  "cible": [
+   "Dubois"
+  ],
+  "interdits": [
+   "mark_payroll_period_paid",
+   "add_payroll_adjustment"
+  ],
+  "voisins": [
+   "get_team",
+   "get_payroll_summary"
+  ]
+ },
+ {
+  "id": "update_payroll_settings-1",
+  "section": "equipe",
+  "outil": "update_payroll_settings",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Passe mes périodes de paie aux deux semaines.",
+  "params": {
+   "pay_period_type": "biweekly"
+  }
+ },
+ {
+  "id": "update_payroll_settings-2",
+  "section": "equipe",
+  "outil": "update_payroll_settings",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Change payroll so my people get paid 5 days after the end of each pay period.",
+  "params": {
+   "pay_day_offset": 5
+  }
+ },
+ {
+  "id": "update_payroll_settings-3",
+  "section": "equipe",
+  "outil": "update_payroll_settings",
+  "langue": "fr",
+  "type": "clarification",
+  "sensible": true,
+  "q": "Change mon cycle de paie, celui qu'on a ne marche plus pour nous."
+ },
+ {
+  "id": "update_role_preset-1",
+  "section": "equipe",
+  "outil": "update_role_preset",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Enlève à tous les techniciens le droit de modifier les feuilles de temps.",
+  "params": {
+   "role": "technician"
+  }
+ },
+ {
+  "id": "update_role_preset-2",
+  "section": "equipe",
+  "outil": "update_role_preset",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "From now on, let every sales rep create invoices.",
+  "params": {
+   "role": "sales_rep"
+  }
+ },
+ {
+  "id": "update_role_preset-3",
+  "section": "equipe",
+  "outil": "update_role_preset",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Pour le rôle vendeur au complet — pas juste Karim — retire l'accès aux rapports financiers.",
+  "params": {
+   "role": "sales_rep"
+  },
+  "interdits": [
+   "set_member_permissions",
+   "update_member_role"
+  ]
+ },
+ {
+  "id": "set_member_permissions-1",
+  "section": "equipe",
+  "outil": "set_member_permissions",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Donne à Antoine Roy le droit de modifier les jobs, juste à lui, sans toucher aux autres techniciens.",
+  "cible": [
+   "Antoine Roy"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "set_member_permissions-2",
+  "section": "equipe",
+  "outil": "set_member_permissions",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Let Karim Bensaïd see pricing — just him, not every sales rep.",
+  "cible": [
+   "Karim"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "set_member_permissions-3",
+  "section": "equipe",
+  "outil": "set_member_permissions",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Émilie Dubois reste vendeuse, mais elle seule doit pouvoir inviter des membres — ne change pas le rôle vendeur au complet.",
+  "cible": [
+   "Dubois"
+  ],
+  "interdits": [
+   "update_role_preset",
+   "update_member_role"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "reset_member_permissions-1",
+  "section": "equipe",
+  "outil": "reset_member_permissions",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Remets les permissions d'Antoine Roy à celles de son rôle.",
+  "cible": [
+   "Antoine Roy"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "reset_member_permissions-2",
+  "section": "equipe",
+  "outil": "reset_member_permissions",
+  "langue": "en",
+  "type": "action",
+  "sensible": true,
+  "q": "Reset Karim Bensaïd's permissions back to the standard sales rep defaults.",
+  "cible": [
+   "Karim"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ },
+ {
+  "id": "reset_member_permissions-3",
+  "section": "equipe",
+  "outil": "reset_member_permissions",
+  "langue": "fr",
+  "type": "action",
+  "sensible": true,
+  "q": "Efface les accès sur mesure d'Émilie Dubois pour qu'elle retombe sur le modèle de son rôle — sans changer le modèle lui-même ni son rôle.",
+  "cible": [
+   "Dubois"
+  ],
+  "interdits": [
+   "update_role_preset",
+   "set_member_permissions",
+   "update_member_role"
+  ],
+  "voisins": [
+   "get_team"
+  ]
+ }
+]

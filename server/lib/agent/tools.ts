@@ -14,8 +14,30 @@ import type { FunctionDeclaration } from './gemini';
 import {
   OUTILS_LECTURE_ETENDUS, OUTILS_ECRITURE_ETENDUS, ETIQUETTES_DERIVED,
   handlerCreateQuote, handlerCreateInvoice, handlerCreateJob, handlerSendSms,
-  STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, STATUT_CLIENT, traduireStatut,
+  STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, STATUT_CLIENT, traduireStatut, bornesJourOrg, dateOrgAujourdhui,
 } from './tools-etendus';
+
+const PERIODES_REVENUS = ['this_month', 'last_month', 'this_year', 'last_year', 'last_30_days'] as const;
+
+/**
+ * Bornes d'une période de revenus, en jours de l'ENTREPRISE (audit 2026-09-30).
+ * Avant : « le mois passé » n'existait pas (réponse = mois courant) et les
+ * bornes étaient calculées en UTC (le soir du 31, on était déjà le mois suivant).
+ */
+export function bornesPeriodeRevenus(period: string, du?: string, au?: string, aujourdhui: string = dateOrgAujourdhui()): { period: string; from: string; to: string } {
+  const jour = /^\d{4}-\d{2}-\d{2}$/;
+  if (du && au && jour.test(du) && jour.test(au)) return { period: 'custom', from: du <= au ? du : au, to: du <= au ? au : du };
+  const [a, m, j] = aujourdhui.split('-').map(Number);
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  const utc = (an: number, mois: number, jr: number) => new Date(Date.UTC(an, mois, jr));
+  switch (period) {
+    case 'last_month': return { period, from: ymd(utc(a, m - 2, 1)), to: ymd(utc(a, m - 1, 0)) };
+    case 'this_year': return { period, from: `${a}-01-01`, to: `${a}-12-31` };
+    case 'last_year': return { period, from: `${a - 1}-01-01`, to: `${a - 1}-12-31` };
+    case 'last_30_days': return { period, from: ymd(utc(a, m - 1, j - 29)), to: aujourdhui };
+    default: return { period: 'this_month', from: ymd(utc(a, m - 1, 1)), to: ymd(utc(a, m, 0)) };
+  }
+}
 import { OUTILS_RAPPORTS } from './tools-rapports';
 import { jourLocal } from '../dates-locales';
 
@@ -162,7 +184,7 @@ const searchClients: AgentTool = {
       const mots = term.replace(/[%,()]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 5);
       for (const mot of mots) {
         q = q.or(
-          `first_name.ilike.%${mot}%,last_name.ilike.%${mot}%,company.ilike.%${mot}%,email.ilike.%${mot}%,phone.ilike.%${mot}%,city.ilike.%${mot}%`,
+          `first_name.ilike.%${mot}%,last_name.ilike.%${mot}%,company.ilike.%${mot}%,email.ilike.%${mot}%,phone.ilike.%${mot}%,city.ilike.%${mot}%,address.ilike.%${mot}%`,
         );
       }
     }
@@ -176,6 +198,10 @@ const searchClients: AgentTool = {
     }>;
     return {
       ...enTeteListe(count, lignes),
+      // Audit 2026-09-30 : 0 résultat ne veut pas dire « n'existe pas » — la recherche
+      // porte sur le bureau actif seulement. Sans cette note, Lumi retirait des mots
+      // (« de Lévis ») et agissait sur un homonyme d'un autre endroit.
+      ...(term && !lignes.length ? { note: 'Aucun client ne correspond dans ce bureau (le bureau actif seulement). N’enlève pas de mots pour trouver quelqu’un d’autre : demande à l’utilisateur (orthographe, autre bureau).' } : {}),
       clients: lignes.map((c) => ({
         id: c.id, // interne : pour create_job / create_quote / get_client_profile…
         name: fullName(c),
@@ -332,26 +358,43 @@ const getJob: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'get_job',
-    description: 'Get the full details of a single job by its id.',
+    description: 'Get the full details of a single job (with its visits and their visit_id) by its id OR its displayed number (« job 26 »).',
     parameters: {
       type: 'object',
-      properties: { job_id: { type: 'string', description: 'The job id.' } },
+      properties: { job_id: { type: 'string', description: 'The job id, or the job number shown in Lume.' } },
       required: ['job_id'],
     },
   },
   handler: async (args, ctx) => {
+    // Un NUMÉRO de job (« la job 26 ») n'est pas un identifiant : la requête par
+    // id échouait (uuid invalide) et Lumi répondait « souci de connexion à Lume »
+    // (éval des outils, 2026-09-30). On cherche alors par numéro affiché.
+    const cle = String(args.job_id ?? '').trim().replace(/^#/, '');
+    const parNumero = !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cle);
     const { data, error } = await ctx.client
       .from('jobs_active')
       .select('id, job_number, title, description, client_name, client_id, property_address, scheduled_at, end_at, status, derived_status, total_cents, subtotal_cents, tax_cents, tax_lines, currency, job_type, requires_invoicing, notes')
       .eq('org_id', ctx.orgId)
-      .eq('id', String(args.job_id))
+      .eq(parNumero ? 'job_number' : 'id', cle)
+      .limit(1)
       .maybeSingle();
     if (error) return toolError('db', error);
+    let job: any = data;
+    if (!job && parNumero && /^\d+$/.test(cle)) {
+      // Numéro avec préfixe de bureau (« MTL-26 ») : on accepte une fin de numéro UNIQUE.
+      const { data: proches } = await ctx.client.from('jobs_active').select('id').eq('org_id', ctx.orgId).ilike('job_number', `%-${cle}`).limit(2);
+      if ((proches ?? []).length === 1) {
+        const { data: j2 } = await ctx.client.from('jobs_active')
+          .select('id, job_number, title, description, client_name, client_id, property_address, scheduled_at, end_at, status, derived_status, total_cents, subtotal_cents, tax_cents, tax_lines, currency, job_type, requires_invoicing, notes')
+          .eq('org_id', ctx.orgId).eq('id', (proches as any[])[0].id).maybeSingle();
+        job = j2;
+      }
+    }
     // `introuvable`, pas `error` : le job n'existe pas, ce n'est PAS une panne.
     // Avec `error`, Lumi répondait « la consultation a échoué côté Lume »
     // (mesuré le 2026-09-22 sur le job 33, qui n'existe simplement pas) — le
     // client croit à un bug et le signale, alors que tout fonctionne.
-    if (!data) return { introuvable: true, message: "Ce job n'existe pas (ou plus) dans cette entreprise. Si un NUMÉRO de job a été donné, le chercher avec list_jobs — cet outil-ci attend l'identifiant interne, pas le numéro affiché." };
+    if (!job) return { introuvable: true, message: "Aucun job avec ce numéro ou cet identifiant dans cette entreprise (il a peut-être été supprimé). Vérifie le numéro avec l'utilisateur, ou cherche-le avec list_jobs." };
     // Le job complet inclut ses lignes d'items — sans elles, « c'est quoi le
     // détail du job » ne sait répondre que le total.
     // Les visites du job avec leur identifiant : « facture la visite d'hier »
@@ -359,15 +402,34 @@ const getJob: AgentTool = {
     const { data: visites } = await ctx.client
       .from('schedule_events')
       .select('id, start_at, end_at, status')
-      .eq('job_id', (data as any).id)
+      .eq('org_id', ctx.orgId)
+      .eq('job_id', (job as any).id)
+      // Une visite annulée (supprimée) ne ressort plus « planifiée » (audit 2026-09-30).
+      .is('deleted_at', null)
       .order('start_at', { ascending: true })
       .limit(50);
     const { data: items } = await ctx.client
       .from('job_line_items')
       .select('name, qty, unit_price_cents, total_cents, included')
-      .eq('job_id', (data as any).id)
+      .eq('job_id', (job as any).id)
       .is('deleted_at', null);
-    return { ...data, line_items: items || [], visits: (visites || []).map((v: any) => ({ visit_id: v.id, start_at: v.start_at, end_at: v.end_at, status: v.status })) };
+    // Les jalons de facturation avec leur id et s'ils sont déjà facturés (audit 2026-09-30) :
+    // aucune lecture ne les donnait, create_invoice_for_milestone devinait.
+    const { data: jalons } = await ctx.client
+      .from('job_billing_milestones')
+      .select('id, label, amount_cents, due_date, position')
+      .eq('org_id', ctx.orgId).eq('job_id', (job as any).id)
+      .order('position', { ascending: true });
+    const idsJalons = (jalons || []).map((j: any) => j.id);
+    const { data: facturesJalons } = idsJalons.length
+      ? await ctx.client.from('invoices').select('billing_milestone_id, invoice_number, status').eq('org_id', ctx.orgId).in('billing_milestone_id', idsJalons).is('deleted_at', null)
+      : { data: [] as any[] };
+    const factureDe = new Map((facturesJalons || []).filter((f: any) => !['void', 'cancelled'].includes(String(f.status))).map((f: any) => [f.billing_milestone_id, f.invoice_number]));
+    return {
+      ...job, line_items: items || [],
+      visits: (visites || []).map((v: any) => ({ visit_id: v.id, start_at: v.start_at, end_at: v.end_at, status: v.status })),
+      ...(jalons && jalons.length ? { billing_milestones: jalons.map((j: any) => ({ milestone_id: j.id, label: j.label, amount_cents: j.amount_cents, due_date: j.due_date, facture: factureDe.get(j.id) ?? null })) } : {}),
+    };
   },
 };
 
@@ -376,10 +438,17 @@ async function fetchScheduleEvents(
   ctx: ToolContext,
   opts: { startDate?: string; endDate?: string; location?: string },
 ) {
-  const start = opts.startDate ? new Date(opts.startDate) : new Date();
-  const end = opts.endDate ? new Date(opts.endDate) : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
-  const startIso = isNaN(start.getTime()) ? new Date().toISOString() : start.toISOString();
-  const endIso = isNaN(end.getTime()) ? new Date(Date.now() + 90 * 86400000).toISOString() : end.toISOString();
+  // Une DATE (« 2026-10-02 ») est un jour de l'entreprise, bornes incluses (audit 2026-09-30) :
+  // avant, minuit UTC = 20 h la veille à Québec, et « demain » ramenait la veille au soir.
+  const JOUR = /^\d{4}-\d{2}-\d{2}$/;
+  const borne = (v: string | undefined, cote: 'debut' | 'fin', defaut: string) => {
+    if (!v) return defaut;
+    if (JOUR.test(v)) return bornesJourOrg(v)[cote];
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? defaut : d.toISOString();
+  };
+  const startIso = borne(opts.startDate, 'debut', bornesJourOrg().debut);
+  const endIso = borne(opts.endDate, 'fin', new Date(Date.now() + 90 * 86400000).toISOString());
 
   const { data: events, error: evErr } = await ctx.client
     .from('schedule_events')
@@ -475,6 +544,7 @@ const listQuotes: AgentTool = {
       properties: {
         status: { type: 'string', description: "Optional status filter. One of: 'draft', 'awaiting_response', 'changes_requested', 'approved', 'declined', 'expired', 'converted', 'archived'." },
         query: { type: 'string', description: 'Search text (number or title). Omit it to count ALL quotes.' },
+        client_id: { type: 'string', description: 'Optional: only this client\'s (or lead\'s) quotes (id from a client search).' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
     },
@@ -483,12 +553,18 @@ const listQuotes: AgentTool = {
     const limit = clamp(args.limit, 15, 30);
     let q = ctx.client
       .from('quotes')
-      .select('id, quote_number, title, status, total_cents, currency, valid_until, created_at', { count: 'exact' })
+      .select('id, quote_number, title, status, total_cents, currency, valid_until, created_at, client_id, lead_id', { count: 'exact' })
       .eq('org_id', ctx.orgId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(limit);
     if (args.status) q = q.eq('status', String(args.status));
+    // Audit 2026-09-30 : « la soumission de Marie » — filtre par client et nom du client
+    // dans chaque ligne (avant : ni l'un ni l'autre, Lumi devinait sur le titre).
+    if (args.client_id) {
+      const id = String(args.client_id).replace(/[^0-9a-f-]/gi, '');
+      q = q.or(`client_id.eq.${id},lead_id.eq.${id}`);
+    }
     const term = String(args.query || '').trim();
     if (term) {
       const t = term.replace(/[%,()]/g, ' ');
@@ -496,6 +572,16 @@ const listQuotes: AgentTool = {
     }
     const { data, error, count } = await q;
     if (error) return toolError('db', error);
+    const idsClients = [...new Set((data || []).map((x: any) => x.client_id || x.lead_id).filter(Boolean))];
+    const noms = new Map<string, string>();
+    if (idsClients.length) {
+      const { data: cl } = await ctx.client.from('clients')
+        .select('id, first_name, last_name, company, display_as_company').eq('org_id', ctx.orgId).in('id', idsClients);
+      for (const c of (cl || []) as any[]) {
+        const nom = [c.first_name, c.last_name].filter(Boolean).join(' ').trim();
+        noms.set(c.id, (c.display_as_company && c.company) ? c.company : (nom || c.company || ''));
+      }
+    }
     return {
       ...enTeteListe(count, data),
       sum_total_cents_of_returned: somme(data, 'total_cents'),
@@ -503,6 +589,7 @@ const listQuotes: AgentTool = {
         id: q.id, // interne : pour send_quote / convert_quote_to_job
         quote_number: q.quote_number,
         title: q.title,
+        client_name: noms.get(q.client_id || q.lead_id) || null,
         statut: traduireStatut(q.status, STATUT_DEVIS),
         total_cents: q.total_cents,
         valid_until: q.valid_until,
@@ -650,21 +737,17 @@ const getRevenueSummary: AgentTool = {
     parameters: {
       type: 'object',
       properties: {
-        period: { type: 'string', description: "One of: this_month, this_year, last_30_days. Default this_month." },
+        period: { type: 'string', enum: [...PERIODES_REVENUS], description: 'this_month (default), last_month (« le mois passé »), this_year, last_year, last_30_days. Ignored when from and to are given.' },
+        from: { type: 'string', description: 'Optional start day YYYY-MM-DD (with to) for any other period.' },
+        to: { type: 'string', description: 'Optional end day YYYY-MM-DD, inclusive.' },
       },
     },
   },
   handler: async (args, ctx) => {
-    // Bornes dans le fuseau de l'entreprise : le serveur est en UTC, et le 30 à 21 h
-    // (Montréal) « ce mois-ci » devenait le mois suivant, vide.
-    const aujourdhui = jourLocal(FUSEAU_ORG, new Date());
-    const period = String(args.period || 'this_month');
-    const fromStr = period === 'this_year' ? `${aujourdhui.slice(0, 4)}-01-01`
-      : period === 'last_30_days' ? jourLocal(FUSEAU_ORG, new Date(), -30)
-        : `${aujourdhui.slice(0, 7)}-01`;
-    const toStr = period === 'this_year' ? `${aujourdhui.slice(0, 4)}-12-31`
-      : period === 'last_30_days' ? aujourdhui
-        : dernierJourDuMois(aujourdhui);
+    const bornes = bornesPeriodeRevenus(String(args.period || 'this_month'), args.from ? String(args.from) : undefined, args.to ? String(args.to) : undefined);
+    const period = bornes.period;
+    const fromStr = bornes.from;
+    const toStr = bornes.to;
 
     const { data: series, error } = await ctx.client.rpc('rpc_insights_revenue_series', {
       p_org: ctx.orgId,
@@ -686,10 +769,12 @@ const getRevenueSummary: AgentTool = {
     // Entreprise) : comparer le revenu d'un mois à l'objectif de l'année
     // annonçait ~8 % d'atteinte à une entreprise pile dans ses chiffres.
     const objectifAnnuel = Number(settings?.revenue_goal_cents) || 0;
+    // Objectif au prorata du nombre de jours de la période (année = objectif entier).
+    const jours = Math.round((Date.parse(`${toStr}T00:00:00Z`) - Date.parse(`${fromStr}T00:00:00Z`)) / 86400000) + 1;
     const goalCents = Math.round(
-      period === 'this_year' ? objectifAnnuel
-        : period === 'last_30_days' ? (objectifAnnuel * 30) / 365
-          : objectifAnnuel / 12,
+      period === 'this_year' || period === 'last_year' ? objectifAnnuel
+        : period === 'this_month' || period === 'last_month' ? objectifAnnuel / 12
+          : (objectifAnnuel * jours) / 365,
     );
 
     return {
@@ -720,10 +805,12 @@ const getDayRoute: AgentTool = {
     },
   },
   handler: async (args, ctx) => {
-    const base = args.date ? new Date(String(args.date)) : new Date();
-    if (isNaN(base.getTime())) return { error: 'Invalid date.' };
-    const dayStart = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 0, 0, 0);
-    const dayEnd = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
+    // Le jour de l'ENTREPRISE (audit 2026-09-30) : avant, les bornes étaient celles du serveur (UTC).
+    const jourDemande = args.date ? String(args.date).slice(0, 10) : undefined;
+    if (jourDemande && !/^\d{4}-\d{2}-\d{2}$/.test(jourDemande)) return { error: 'Invalid date.' };
+    const bornes = bornesJourOrg(jourDemande);
+    const dayStart = new Date(bornes.debut);
+    const dayEnd = new Date(bornes.fin);
 
     const { data: events, error } = await ctx.client
       .from('schedule_events')
@@ -737,7 +824,7 @@ const getDayRoute: AgentTool = {
     if (error) return toolError('db', error);
 
     const jobIds = Array.from(new Set((events || []).map((e) => e.job_id).filter(Boolean)));
-    if (jobIds.length === 0) return { date: dayStart.toISOString().slice(0, 10), count: 0, stops: [] };
+    if (jobIds.length === 0) return { date: bornes.jour, count: 0, stops: [] };
 
     let jobsQ = ctx.client
       .from('jobs')
@@ -803,6 +890,7 @@ const createQuote: AgentTool = {
         line_items: lineItemSchema,
         valid_days: { type: 'integer', description: 'Validity in days (default 30).' },
         notes: { type: 'string', description: 'Optional notes.' },
+        no_taxes: { type: 'boolean', description: "true ONLY if the user explicitly says no taxes. Otherwise Lume computes the taxes from the client's region." },
       },
       required: ['title', 'line_items'],
     },
@@ -834,7 +922,7 @@ const createInvoice: AgentTool = {
             required: ['description', 'unit_price_cents'],
           },
         },
-        tax_cents: { type: 'integer', description: 'Optional total tax in cents.' },
+        no_taxes: { type: 'boolean', description: "true ONLY if the user explicitly says no taxes. Otherwise Lume computes the taxes from the client's region — never compute them yourself." },
       },
       required: ['client_id', 'items'],
     },
@@ -852,6 +940,7 @@ const createJob: AgentTool = {
     parameters: {
       type: 'object',
       properties: {
+        team_id: { type: 'string', description: 'Optional team id (from list_teams): the job and its visit go to that team\'s calendar column.' },
         title: { type: 'string', description: 'Job title.' },
         client_id: { type: 'string', description: 'Existing client id (optional).' },
         property_address: { type: 'string', description: 'Job site address (optional).' },
@@ -884,7 +973,10 @@ const sendSms: AgentTool = {
   declaration: {
     name: 'send_sms',
     description:
-      'Send an SMS to a client — IT ACTUALLY SENDS, and a sent SMS cannot be recalled. ALWAYS show the user the exact message and recipient and get their explicit OK in the conversation before calling this. Opt-outs (STOP) are enforced server-side.',
+      'Send a free-text SMS to a client — IT ACTUALLY SENDS, and a sent SMS cannot be recalled. '
+      + 'A quote link → send_quote_sms ; a contract link → send_agreement_sms ; a payment link → create_payment_request ; '
+      + 'reminders to several overdue clients → send_payment_reminders.'
+      + '  ALWAYS show the user the exact message and recipient and get their explicit OK in the conversation before calling this. Opt-outs (STOP) are enforced server-side.',
     parameters: {
       type: 'object',
       properties: {
