@@ -502,6 +502,18 @@ const scheduleJobTool: AgentTool = {
       const fin = args.end_at ? instantIso(args.end_at, 'La fin') : new Date(debut.getTime() + 60 * 60_000);
       if (fin <= debut) throw new Error('La fin doit être après le début.');
       const job = await jobDeLOrg(ctx, jobId, 'id, job_number, title');
+      // « Planifier » ne vaut que pour un job SANS visite. La RPC, elle, déplace la visite
+      // existante (une visite) ou ne fait rien du tout (deux visites et plus) : l'outil
+      // annonçait « planifié » dans les trois cas (audit 2026-09-30, constat resté ouvert).
+      const { data: visites, error: eVisites } = await ctx.client
+        .from('schedule_events').select('id, start_at')
+        .eq('org_id', ctx.orgId).eq('job_id', jobId).is('deleted_at', null)
+        .order('start_at', { ascending: true }).limit(5);
+      if (eVisites) throw eVisites;
+      const nbVisites = Array.isArray(visites) ? visites.length : 0;
+      if (nbVisites > 0) {
+        throw new Error(`Ce job a déjà ${nbVisites === 1 ? 'une visite' : `${nbVisites} visites`} au calendrier : rien n'a été changé. Pour déplacer une visite, utilise reschedule_job ; pour en ajouter une autre, add_visit.`);
+      }
       // Même RPC que l'app (rpc_schedule_job) : crée la visite, recalcule
       // jobs.scheduled_at et le statut.
       const { data, error } = await ctx.client.rpc('rpc_schedule_job', {
@@ -520,7 +532,8 @@ const scheduleJobTool: AgentTool = {
         scheduled: true,
         job: { job_number: job.job_number, title: job.title },
         visit: { start_at: ev.start_at || debut.toISOString(), end_at: ev.end_at || fin.toISOString() },
-        note: 'Job planifié au calendrier.',
+        // `updated` : une visite est apparue entre la vérification et la RPC, qui l'a déplacée.
+        note: (data as any)?.updated ? 'Une visite existait déjà : elle a été déplacée à ce moment.' : 'Job planifié au calendrier.',
         ...(avert ? { warning: avert } : {}),
       };
     }),
