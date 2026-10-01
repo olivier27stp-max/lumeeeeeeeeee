@@ -410,6 +410,8 @@ export async function tourLumi(opts: {
    * vraie barrière dans tous les cas.
    */
   outilsPermis?: ReadonlySet<string> | null;
+  /** Espace des réfs courtes (refN → identifiant) : celui de la CONVERSATION (voir espaceRefsDe). Défaut : (entreprise, personne). */
+  espaceRefs?: string;
   /** Langue des avis rendus par gabarit (réponse coupée, refus). Français par défaut. */
   langue?: 'fr' | 'en';
   /**
@@ -423,7 +425,7 @@ export async function tourLumi(opts: {
   const outils = outilsClaude(opts.sousAgent ?? null, opts.outilsPermis ?? null);
   const messages: Anthropic.Messages.MessageParam[] = [...opts.historique];
   const nouveaux: Anthropic.Messages.MessageParam[] = [];
-  const espaceRefs = `${opts.orgId}:${opts.userId}`;
+  const espaceRefs = opts.espaceRefs ?? `${opts.orgId}:${opts.userId}`;
   let texteTotal = '';
   let coutTotal = 0;
   let coutHorsCacheFroid = 0;

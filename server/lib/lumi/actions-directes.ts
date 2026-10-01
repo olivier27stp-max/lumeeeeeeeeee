@@ -53,6 +53,8 @@ export interface ContexteDirect {
   accessToken?: string;
   /** Outils que le rôle de la personne permet (null = indéterminé : la garde d'exécution reste la barrière). */
   outilsPermis?: ReadonlySet<string> | null;
+  /** Espace des réfs courtes de la conversation (voir espaceRefsDe). Défaut : (entreprise, personne). */
+  espaceRefs?: string;
   language: 'fr' | 'en';
   fuseau: string;
   maintenant?: Date;
@@ -679,7 +681,7 @@ async function resoudre(a: ActionDirecte, ctx: ContexteDirect): Promise<Record<s
 /** Répond à l'action : lecture rendue, écriture directe exécutée, ou carte préparée. null = le modèle prend le relais. */
 export async function repondreActionDirecte(a: ActionDirecte, ctx: ContexteDirect): Promise<ReponseDirecte | null> {
   const fr = ctx.language !== 'en';
-  const espace = `${ctx.orgId}:${ctx.userId}`;
+  const espace = ctx.espaceRefs ?? `${ctx.orgId}:${ctx.userId}`;
   try {
     if (a.genre === 'fixe') {
       const texte = fr ? a.fixe!.fr : a.fixe!.en;
