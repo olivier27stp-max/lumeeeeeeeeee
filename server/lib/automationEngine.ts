@@ -472,6 +472,25 @@ function shouldRespectQuietHours(actionType: string, delaySeconds: number, regla
   return delaySeconds !== 0;
 }
 
+/**
+ * Cette tâche de la FILE doit-elle attendre la fenêtre d'envoi ?
+ *
+ * Tout message de la file, oui : il est par construction différé (relance,
+ * suivi). SAUF la reprise d'une action immédiate en échec passager : elle
+ * garde la règle de l'action d'origine — un courriel de confirmation qui a
+ * échoué à 22 h repart à 22 h 05, pas le lendemain à 8 h ; un texto ou une
+ * demande d'avis attend toujours la fenêtre.
+ */
+export function tacheAttendLaFenetre(
+  actionType: string,
+  actionConfig: { reprise_immediate?: unknown } | null | undefined,
+  reglages?: ReglagesRegle | null,
+): boolean {
+  if (!ACTIONS_MESSAGE.has(actionType)) return false;
+  if (actionConfig?.reprise_immediate === true) return shouldRespectQuietHours(actionType, 0, reglages);
+  return true;
+}
+
 /** Next moment inside the send window, stepping 30 min (DST-safe, no tz lib). */
 export function nextSendTime(
   from: Date = new Date(),
@@ -914,10 +933,17 @@ async function executeRuleActions(
           result_error: `${(e as Error).message}${EN_ATTENTE_DU_RESULTAT}`,
           duration_ms: Date.now() - startTime,
         });
+        // La reprise est posée tout de suite (l'action peut ne jamais
+        // répondre) et annulée si le vrai résultat est un succès — comme une
+        // tâche de la file coupée à 5 s.
+        const reprise = await planifierRepriseImmediate(config.supabase, rule, event, i, executionKey, (e as Error).message, startTime);
         void execution.then(
-          (tardif) => journaliserAction(config.supabase, reservation, rule, event, i, {
-            result_success: tardif.success, result_data: tardif.data || null, result_error: tardif.error || null, duration_ms: Date.now() - startTime,
-          }),
+          async (tardif) => {
+            await journaliserAction(config.supabase, reservation, rule, event, i, {
+              result_success: tardif.success, result_data: tardif.data || null, result_error: tardif.error || null, duration_ms: Date.now() - startTime,
+            });
+            if (tardif.success && reprise) await annulerRepriseImmediate(config.supabase, reprise);
+          },
           (erreur: unknown) => journaliserAction(config.supabase, reservation, rule, event, i, {
             result_success: false, result_data: null, result_error: erreur instanceof Error ? erreur.message : String(erreur), duration_ms: Date.now() - startTime,
           }),
@@ -935,6 +961,7 @@ async function executeRuleActions(
 
       if (!result.success) {
         console.error(`[automationEngine] action ${action.type} failed for rule "${rule.name}":`, result.error);
+        await planifierRepriseImmediate(config.supabase, rule, event, i, executionKey, result.error, startTime);
       }
     } catch (err: any) {
       const durationMs = Date.now() - startTime;
@@ -946,8 +973,97 @@ async function executeRuleActions(
         result_error: err.message,
         duration_ms: durationMs,
       });
+      await planifierRepriseImmediate(config.supabase, rule, event, i, executionKey, err?.message, startTime);
     }
   }
+}
+
+/**
+ * Les actions IMMÉDIATES dont un échec passager est repris : celles qui
+ * envoient quelque chose hors de Lume (message au client, webhook). Une
+ * écriture interne (tâche, note, étiquette) qui échoue reste dans le journal.
+ */
+const ACTIONS_REPRISE_IMMEDIATE: ReadonlySet<string> = new Set([...ACTIONS_MESSAGE, 'webhook']);
+
+/** Cet échec d'une action immédiate mérite-t-il une reprise planifiée ? */
+export function repriseImmediatePrevue(actionType: string, erreur?: string | null): boolean {
+  return ACTIONS_REPRISE_IMMEDIATE.has(actionType) && isTransientFailure(erreur);
+}
+
+/**
+ * Reprise d'une action IMMÉDIATE en échec passager (E-031).
+ *
+ * Une tâche différée en panne était reprise (5 min, 30 min, 2 h, puis
+ * notification) ; une action immédiate, non : l'échec n'allait qu'au journal.
+ * Une confirmation de rendez-vous par texto pendant une panne de dix minutes
+ * du fournisseur était donc PERDUE, et personne ne l'apprenait.
+ *
+ * On pose une tâche dans la file, qui suit le parcours normal des reprises :
+ *   · `attempts: 1` — la tentative immédiate compte : encore 3 essais (5 min,
+ *     30 min, 2 h), puis `failed` + notification à l'entreprise ;
+ *   · même `execution_key` qu'une tâche différée de cette action : l'index
+ *     unique refuse une 2e reprise pour la même (règle, fiche, action) ;
+ *   · `reprise_depuis` : avant de renvoyer, la file vérifie que le message
+ *     n'est pas déjà parti depuis la tentative immédiate (`dejaEnvoyeDepuis`) ;
+ *   · `reprise_immediate` : l'envoi garde sa nature (confirmation attendue,
+ *     pas une relance commerciale ; fenêtre d'envoi de l'action immédiate).
+ *
+ * Un échec DÉFINITIF (pas de numéro, désabonné, adresse refusée…) n'est pas
+ * repris : le retenter donnerait le même refus.
+ *
+ * @returns l'id de la tâche de reprise, ou null s'il n'y en a pas.
+ */
+async function planifierRepriseImmediate(
+  supabase: SupabaseClient,
+  rule: AutomationRule,
+  event: CRMEvent,
+  index: number,
+  executionKey: string,
+  erreur: string | null | undefined,
+  debutMs: number,
+): Promise<string | null> {
+  const action = rule.actions[index];
+  if (!repriseImmediatePrevue(action.type, erreur)) return null;
+  const etat = nextStateAfterFailure(0, erreur);
+  const { data, error } = await supabase.from('automation_scheduled_tasks').insert({
+    org_id: event.orgId,
+    automation_rule_id: rule.id,
+    entity_type: event.entityType,
+    entity_id: event.entityId,
+    action_config: {
+      ...action,
+      trigger_event: event.type,
+      event_metadata: event.metadata,
+      reprise_immediate: true,
+      // Marge : l'horloge du serveur et celle de la base ne sont pas la même.
+      reprise_depuis: new Date(debutMs - 10_000).toISOString(),
+    },
+    execute_at: etat.execute_at,
+    status: 'pending',
+    attempts: 1,
+    last_error: etat.last_error,
+    execution_key: executionKey,
+  }).select('id').maybeSingle();
+  if (error) {
+    if (error.code === '23505') {
+      logger.info(`[automationEngine] reprise déjà en file pour cette action, pas de doublon : ${executionKey}`);
+    } else {
+      console.error(`[automationEngine] reprise de l'action immédiate non planifiée (rule ${rule.id}, org ${event.orgId}):`, error.message);
+    }
+    return null;
+  }
+  logger.info(`[automationEngine] ${action.type} immédiat en échec passager — reprise dans 5 min, règle "${rule.name}"`);
+  return (data as { id: string } | null)?.id ?? null;
+}
+
+/** L'action coupée à 5 s a fini par réussir : sa reprise n'a plus lieu d'être. */
+async function annulerRepriseImmediate(supabase: SupabaseClient, tacheId: string): Promise<void> {
+  const { error } = await supabase
+    .from('automation_scheduled_tasks')
+    .update({ status: 'completed', completed_at: new Date().toISOString(), last_error: 'Terminée après le délai de 5 s : reprise annulée.' })
+    .eq('id', tacheId)
+    .eq('status', 'pending');
+  if (error) console.error(`[automationEngine] reprise ${tacheId} non annulée après un succès tardif:`, error.message);
 }
 
 // ── Resolve execution time ──────────────────────────────────
@@ -1751,7 +1867,7 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
     const fuseauTache = task.org_id
       ? await fuseauOrg(supabase, task.org_id)
       : FUSEAU_DEFAUT;
-    if (ACTIONS_MESSAGE.has(String(taskType)) && horsFenetre(reglagesRegle, new Date(), fuseauTache)) {
+    if (tacheAttendLaFenetre(String(taskType), task.action_config, reglagesRegle) && horsFenetre(reglagesRegle, new Date(), fuseauTache)) {
       const prochaine = nextSendTime(new Date(), reglagesRegle, fuseauTache);
 
       /**
@@ -2083,6 +2199,8 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         // attente. Elles répondent à une demande du client (launch M10).
         commercial: !(
           actionConfig.report_heures_calmes === true
+          // Reprise d'une action immédiate : une confirmation, pas une relance.
+          || actionConfig.reprise_immediate === true
           || (task.step_id && Array.isArray(etapesRegle) && etapesDeConfirmation(etapesRegle).has(task.step_id))
         ),
         langue: await langueOrg(supabase, task.org_id),
@@ -2092,7 +2210,9 @@ export async function processScheduledTasks(supabase: SupabaseClient, options: {
         // délai dépassé, ou tâche récupérée après un arrêt entre l'envoi et la
         // clôture. Le message est peut-être parti — on vérifie avant de
         // renvoyer (launch M5).
-        ...(Number(task.attempts || 0) > 0 ? { dejaEnvoyeDepuis: String(task.created_at) } : {}),
+        // Reprise d'une action immédiate : la tentative d'origine PRÉCÈDE la
+        // tâche, on remonte donc à elle.
+        ...(Number(task.attempts || 0) > 0 ? { dejaEnvoyeDepuis: String(actionConfig.reprise_depuis ?? task.created_at) } : {}),
         cleIdempotence: `${task.id}:${task.step_id ?? 'action'}`,
         // Étape de séquence : la chaîne voyage dans son contexte (anti-boucle des étiquettes).
         chaine: Array.isArray((task.sequence_context as Record<string, unknown> | null)?.chaine)
