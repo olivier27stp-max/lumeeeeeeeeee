@@ -1,127 +1,145 @@
-# LUMI_BASELINE — où en est Lumi avant les correctifs
+# LUMI_BASELINE — où en était Lumi, et où il en est
 
-Mesuré le 2026-10-01 en production, dans le bureau de test « ZZ QA Champs » (aucun vrai client, tous les envois simulés). Code mesuré : `main` à `0a014c8c`, donc AVANT les lots 2, 3 et 4 de la mission.
+Deux passes du même jeu de 221 demandes, jouées le 2026-10-01 en production, dans des bureaux de test (aucun vrai client, tous les envois simulés), jugées par du code.
 
 ## Ce qu'il faut retenir
 
-- **78,6 % de réussite brute** sur 220 demandes ; **82,7 %** une fois retirés les 9 faux échecs (attentes trop strictes ou fautes du correcteur).
-- **Cette passe n'est pas une mesure propre de Lumi normal.** Moins de trois minutes après le départ, le bureau de test a franchi la garde quotidienne de dépense (15 % du mois en un jour) : 102 demandes sur 220 ont été servies par Haiku 4.5 bridé à deux étapes, pas par Sonnet 5. La passe propre est à rejouer dans un bureau vierge (en préparation).
-- **L'étage le moins fiable est celui qui ne coûte rien** : 68 % de réussite pour les réponses sans modèle (aide écrite, raccourcis), contre 89 % pour Sonnet. C'est là qu'on a trouvé les deux réponses fausses de la passe.
-- **Sécurité** : injection, extraction de consignes et hors-sujet à 100 % ; 0 erreur technique sur 220.
-- **Coût** : 0,86 ¢ par demande en moyenne, 1,57 ¢ quand Sonnet répond.
+| | Avant (16 h 15 UTC) | Après (18 h 42 UTC) |
+|---|---:|---:|
+| Réussite | 81,3 % | **90,5 %** |
+| Réussite quand Sonnet répond | 87,3 % | **92,5 %** |
+| Réussite des réponses sans modèle (aide écrite, raccourcis) | 68,0 % | **90,0 %** |
+| Bon outil appelé | 85,5 % | **94,1 %** |
+| Actions sensibles (78 cas) | 87,2 % | **92,3 %** |
+| Injection, extraction des consignes, hors-sujet | 100 % | 100 % |
+| Tours plantés | 0 | 4 (corrigé depuis, lot 6) |
+| Coût moyen par demande | 0,86 ¢ * | 1,105 ¢ |
 
-## La passe
+\* Le coût « avant » n'est pas comparable : 102 demandes sur 220 avaient été servies par Haiku (voir « La passe d'avant »). À moteur égal, un tour d'agent Sonnet coûtait 1,57 ¢ avant et 1,30 ¢ après.
+
+- **L'étage qui ne coûte rien était le moins fiable ; il ne l'est plus** : 68 % → 90 %. C'est là qu'étaient les deux réponses fausses de la première passe (« Aucune limite » à « combien de clients ai-je ? », 0,00 $ au lieu de 989,85 $).
+- **Les 21 échecs qui restent** : 4 tours plantés par une surcharge passagère du modèle (repris automatiquement depuis le lot 6), 6 corrigés mais pas encore déployés au moment de la passe, 9 choix d'outil ou de formulation du modèle, 2 qui attendent une décision (le sens de « payant »).
+- **Les demandes à plusieurs actions restent le point faible** : 69,2 % (9 sur 13).
+
+## La passe d'après — propre
 
 | | |
 |---|---|
-| Jeu | 226 cas écrits (220 joués), 12 catégories, 4 registres (québécois, neutre, vocal, anglais) |
-| Comptes | 4 propriétaires en parallèle + 1 technicien |
-| Mode | « rien ne s'exécute » : les cartes sont produites, jamais confirmées |
-| Correcteur | du code (outil appelé, chiffre présent, carte attendue ou interdite) ; aucun modèle ne juge |
-| Durée | 16 h 15 à 16 h 23 UTC |
-| Coût total | 1,89 $ |
+| Bureau | « [TEST] QA Lumi éval 2 », créé le jour même, aucune dépense avant la passe |
+| Code | `main` à `d4fdb9e4` : lots 2 à 5 de la mission + les outils et cartes de la session voisine (#863 à #867) |
+| Qui a répondu | 187 tours d'agent, **tous** en Sonnet 5 ; 20 réponses sans modèle ; 10 par le routeur seul ; 4 tours plantés |
+| Durée, coût | 13 minutes, 2,44 $ |
 
-### Résultat global
+### Par moteur
 
-| Mesure | Valeur |
-|---|---:|
-| Réussite brute | 78,6 % (173/220) |
-| Réussite corrigée (faux échecs retirés) | 82,7 % (182/220) |
-| Bon outil appelé | 85,5 % |
-| Actions sensibles (78 cas) | 87,2 % |
-| Erreurs techniques | 0 |
-| Coût moyen par demande | 0,857 ¢ |
-| Durée médiane d'une demande | 7,4 s |
+| Qui a répondu | Demandes | Réussite | Coût moyen |
+|---|---:|---:|---:|
+| Sonnet 5 | 187 | 92,5 % | 1,30 ¢ |
+| Aucun modèle (aide écrite, raccourcis, actions directes) | 20 | 90,0 % | 0 ¢ |
+| Routeur seul | 10 | 90,0 % | 0,15 ¢ |
+| Tours plantés | 4 | 0 % | — |
+| **Total** | **221** | **90,5 %** | **1,105 ¢** |
 
-### Par moteur — la vraie lecture de cette passe
+### Par catégorie
 
-| Qui a répondu | Demandes | Vrais défauts | Réussite corrigée | Coût moyen |
-|---|---:|---:|---:|---:|
-| Sonnet 5, palier normal | 80 | 9 | 88,8 % | 1,57 ¢ |
-| Haiku 4.5, palier restreint (2 étapes) | 102 | 19 (+1 à trancher) | 80,4 % | 0,55 ¢ |
-| Aucun modèle : aide écrite, raccourcis, actions directes | 25 | 7 (+1 à trancher) | 68,0 % | 0 ¢ |
-| Routeur Haiku seul | 13 | 1 | 92,3 % | non isolé |
-| **Total** | **220** | **36** | **82,7 %** | **0,86 ¢** |
-
-### Par catégorie (brut)
-
-| Catégorie | Cas | Réussite | Bon outil | Coût / demande | Durée médiane |
+| Catégorie | Cas | Avant | Après | Bon outil | Coût / demande |
 |---|---:|---:|---:|---:|---:|
-| Transverse (injection, hors-sujet, extraction) | 18 | 100 % | 100 % | 0,25 ¢ | 4,9 s |
-| Communications | 19 | 94,7 % | 94,7 % | 0,88 ¢ | 9,4 s |
-| Équipe | 21 | 85,7 % | 95,2 % | 0,67 ¢ | 5,6 s |
-| Automatisations | 13 | 84,6 % | 84,6 % | 1,30 ¢ | 6,3 s |
-| Terrain | 12 | 83,3 % | 83,3 % | 1,05 ¢ | 10,9 s |
-| Aide | 12 | 75,0 % | 75,0 % | 3,20 ¢ | 8,2 s |
-| Mémoire | 4 | 75,0 % | 100 % | 0,55 ¢ | 11,5 s |
-| Planification | 28 | 75,0 % | 82,1 % | 0,45 ¢ | 7,6 s |
-| Rapports | 19 | 73,7 % | 78,9 % | 0,65 ¢ | 22,3 s |
-| Devis | 21 | 71,4 % | 90,5 % | 0,97 ¢ | 8,2 s |
-| Clients | 23 | 69,6 % | 73,9 % | 0,97 ¢ | 6,5 s |
-| Facturation | 30 | 66,7 % | 80,0 % | 0,53 ¢ | 6,4 s |
+| Transverse (injection, hors-sujet, extraction) | 18 | 100 % | 100 % | 100 % | 0,35 ¢ |
+| Équipe | 21 | 85,7 % | 100 % | 100 % | 0,98 ¢ |
+| Mémoire | 4 | 75,0 % | 100 % | 100 % | 1,58 ¢ |
+| Facturation | 30 | 66,7 % | 96,7 % | 96,7 % | 1,21 ¢ |
+| Communications | 19 | 94,7 % | 94,7 % | 94,7 % | 1,08 ¢ |
+| Planification | 28 | 75,0 % | 92,9 % | 96,4 % | 1,04 ¢ |
+| Automatisations | 13 | 84,6 % | 92,3 % | 92,3 % | 1,25 ¢ |
+| Terrain | 12 | 83,3 % | 91,7 % | 91,7 % | 1,38 ¢ |
+| Clients | 23 | 69,6 % | 87,0 % | 95,7 % | 0,95 ¢ |
+| Rapports | 19 | 73,7 % | 78,9 % | 78,9 % | 1,13 ¢ |
+| Devis | 22 | 71,4 % | 77,3 % | 90,9 % | 0,97 ¢ |
+| Aide | 12 | 75,0 % | 75,0 % | 91,7 % | 2,29 ¢ |
 
-Les catégories jouées en dernier (équipe → transverse, ordre alphabétique) ont tourné presque entièrement en palier restreint : leurs chiffres mesurent Haiku.
+La colonne « Avant » est celle du premier correcteur ; quelques attentes ont été corrigées depuis (voir « Le jeu »), toujours dans le sens d'un contrôle sur le fond de la réponse.
 
 ### Par nature de demande
 
-| Nature | Cas | Réussite |
-|---|---:|---:|
-| Injection par les données | 7 | 100 % |
-| Extraction des consignes | 6 | 100 % |
-| Hors sujet | 7 | 100 % |
-| Ambiguë (doit poser une question) | 12 | 91,7 % |
-| Simple | 156 | 77,6 % |
-| Impossible (doit refuser ou expliquer) | 19 | 68,4 % |
-| Plusieurs actions dans une phrase | 13 | 61,5 % |
+| Nature | Cas | Avant | Après |
+|---|---:|---:|---:|
+| Injection par les données | 7 | 100 % | 100 % |
+| Extraction des consignes | 6 | 100 % | 100 % |
+| Hors sujet | 7 | 100 % | 100 % |
+| Impossible (doit refuser ou expliquer) | 18 | 68,4 % | 100 % |
+| Ambiguë (doit poser une question) | 12 | 91,7 % | 91,7 % |
+| Simple | 158 | 77,6 % | 89,9 % |
+| Plusieurs actions dans une phrase | 13 | 61,5 % | 69,2 % |
 
 ### Par registre
 
-| Registre | Cas | Réussite |
+| Registre | Cas | Avant | Après |
+|---|---:|---:|---:|
+| Français neutre | 21 | 76,2 % | 95,2 % |
+| Anglais | 52 | 84,6 % | 94,2 % |
+| Québécois | 114 | 77,0 % | 88,6 % |
+| Dictée vocale | 34 | 76,5 % | 88,2 % |
+
+### Par rôle
+
+| Compte | Cas | Réussite |
 |---|---:|---:|
-| Anglais | 52 | 84,6 % |
-| Québécois | 113 | 77,0 % |
-| Dictée vocale | 34 | 76,5 % |
-| Français neutre | 21 | 76,2 % |
+| Propriétaire | 214 | 90,2 % |
+| Technicien | 7 | 100 % |
 
-## Mesures de fonctionnement (traces de la passe)
+### Mesures de fonctionnement (traces de la passe)
 
-| Mesure | Valeur |
-|---|---:|
-| Demandes servies sans modèle | 12,2 % |
-| Premier mot à l'écran — médiane | 0,9 s |
-| Premier mot à l'écran — 95e centile | 6,2 s |
-| Durée d'un tour — médiane | 4,8 s |
-| Durée d'un tour — 95e centile | 15,4 s |
-| Part des tokens d'entrée relus en cache | 88,2 % |
-| Appels au modèle par tour | 1,72 |
-| Outils chargés par tour | 36 en moyenne (sur 248) |
-| Tours coupés à la limite d'étapes, sans réponse | 6 (tous au palier restreint) |
+| Mesure | Avant | Après |
+|---|---:|---:|
+| Demandes servies sans le gros modèle | 12,2 % | 13,5 % |
+| Durée d'un tour — médiane | 4,8 s | 5,8 s |
+| Durée d'un tour — 95e centile | 15,4 s | 19,6 s |
+| Premier mot à l'écran, tour d'agent — médiane | — | 3,5 s |
+| Part des tokens d'entrée relus en cache | 88,2 % | 91,6 % |
+| Appels au modèle par tour d'agent | 1,72 | 1,76 |
+| Outils chargés par tour d'agent | 36 | 37 |
+| Tours coupés à la limite d'étapes, sans réponse | 6 | 0 |
 
-## Les 36 vrais défauts, par cause
+Les durées « avant » sont flattées par Haiku, plus rapide ; cinq tours tournaient en parallèle dans les deux passes.
 
-| # | Cause | Cas | État |
-|---|---|---:|---|
-| 1 | L'aide écrite répond à une question sur les données du compte (dont « Combien de clients ai-je ? » → « Aucune limite ») | 6 | corrigé, lot 3 |
-| 2 | Un raccourci gratuit ignore la période (« encaissé en septembre » → 0,00 $ au lieu de 989,85 $) | 1 | corrigé, lot 3 |
-| 3 | La carte affiche un champ que l'exécution ignore | 2 | 1 corrigé (lot 3), 1 ouvert (titre qui avale prix et date) |
-| 4 | Carte sur une demande ambiguë (« Désactive le rappel » couperait tous les rappels) | 2 | ouvert |
-| 5 | Le palier restreint coupe le tour sans réponse | 6 | corrigé, lot 4 |
-| 6 | Mauvais outil de lecture : chiffre faux, absent ou détour (2 h au lieu de 4 h ; « aucune dépense » au lieu de 77,00 $) | 5 | ouvert |
-| 7 | Carte sur une cible introuvable ou un identifiant inventé | 4 | corrigé, lot 2 |
-| 8 | La recherche par nom rate une fiche existante | 5 | ouvert |
-| 9 | La carte ou le texte ne nomme pas la cible, ou laisse voir « refN » | 5 | ouvert |
+### Les 21 échecs qui restent
 
-Hors compte : un défaut de français (« accès à les paiements »), une réponse en français à une question posée en anglais, et le vouvoiement des réponses d'aide écrite alors que Lumi tutoie.
+| Cause | Cas | État |
+|---|---|---|
+| Tour planté par une surcharge passagère du modèle | comm-19, planif-19, rapp-19, terrain-05 | corrigé, lot 6 : l'appel est repris |
+| Question d'aide classée hors-sujet par le routeur | aide-11 | corrigé, lot 6 |
+| La carte ne nomme pas sa cible | devis-06, devis-11, devis-16, clients-10 | corrigé par la session voisine (#874), à mesurer |
+| Un raccourci gratuit prend « 200 $, le 12 novembre à 9 h » pour un titre | planif-10 | corrigé (#874), à mesurer |
+| Une référence interne (« ref2 ») dans le texte | clients-21 | corrigé, lot 6 : filtrée dans le flux |
+| Un nom d'outil dans le texte (« avec create_job_agreement ») | aide-01 | ouvert — le correcteur l'attrape désormais |
+| Mauvais outil ou action oubliée | devis-10, rapp-15, clients-17, fact-30, aide-02 | ouvert |
+| Dictée mal comprise (« sous missions » pour « soumissions ») | devis-17 | ouvert |
+| Carte sur une demande ambiguë (« Désactive le rappel ») | auto-09 | ouvert |
+| « Payant » : revenu ou rentabilité ? Lumi fait les deux | rapp-03, rapp-05 | décision du propriétaire |
 
-Détail cas par cas : `evals/lumi/resultats/baseline-A/TRIAGE.md` (branche `mission/lumi-evals`).
+Dix autres cas demandent un jugement humain (ton, clarté) et ne sont pas notés.
 
-## Tests critiques (phase 3) — même jour, même bureau
+## La passe d'avant — contaminée, et pourquoi
 
-71 tests jugés par du code : **61 réussis, 5 échecs, 4 non couverts, 1 à relire.**
+Jouée à 16 h 15 UTC dans le bureau « ZZ QA Champs », code `main` à `0a014c8c` (avant les lots 2 à 6). Moins de trois minutes après le départ, le bureau a franchi la garde quotidienne de dépense (15 % des crédits du mois en un jour) : 102 demandes sur 220 ont été servies par Haiku 4.5 bridé à deux étapes. Elle reste utile lue par moteur :
+
+| Qui a répondu | Demandes | Réussite | Coût moyen |
+|---|---:|---:|---:|
+| Sonnet 5, palier normal | 79 | 87,3 % | 1,57 ¢ |
+| Haiku 4.5, palier restreint (2 étapes) | 102 | 79,4 % | 0,55 ¢ |
+| Aucun modèle | 25 | 68,0 % | 0 ¢ |
+| Routeur seul | 13 | 84,6 % | — |
+| **Total** | **219** | **81,3 %** | **0,86 ¢** |
+
+Conséquence pratique : **une passe propre par bureau de test et par jour**. Trois bureaux existent pour cela (ZZ QA Champs, éval 2, éval 3).
+
+## Tests critiques (phase 3)
+
+71 tests en production, jugés par du code. Premier passage (16 h 30 UTC) : 61 réussis, 5 échecs, 4 non couverts, 1 à relire. Les 4 échecs corrigibles ont été rejoués après déploiement (17 h 45 UTC) et passent.
 
 | Famille | Réussis | Échecs | Non couverts |
 |---|---:|---:|---:|
-| Isolation entre entreprises | 10 | 2 | 0 |
+| Isolation entre entreprises | 12 | 0 | 0 |
 | Rôles | 11 | 0 | 2 |
 | Mémoire | 8 | 0 | 0 |
 | Injection et extraction | 6 | 0 | 0 |
@@ -129,16 +147,22 @@ Détail cas par cas : `evals/lumi/resultats/baseline-A/TRIAGE.md` (branche `miss
 | Une seule exécution | 1 | 0 | 0 |
 | Exactitude | 12 | 0 | 0 |
 | Crédits | 2 | 0 | 2 |
-| Loi 25 | 0 | 3 | 0 (+1 à relire) |
+| Loi 25 | 2 | 1 | 0 (+1 à relire) |
+| **Total** | **65** | **1** | **4** |
 
-- Les 2 échecs d'isolation : Lumi propose une carte sur l'identifiant d'une fiche d'une AUTRE entreprise. La carte dit « introuvable », rien ne bouge en base, mais la carte ne devrait pas exister — corrigé au lot 2, à rejouer après déploiement.
-- Loi 25 : le journal gardait courriels et téléphones dictés (corrigé, lot 4) ; aucune purge des conversations n'existe (décision à prendre : durée de conservation).
-- Hors test : la limite de 60 tours par heure n'existait pas en prod (corrigé, lot 4).
-- Même réserve que la passe : les 45 tours d'agent ont été servis par Haiku. Les tests qui éprouvent le serveur valent tels quels ; ceux qui éprouvent le modèle sont à rejouer en palier normal.
+- L'échec qui reste : aucune purge des conversations n'existe. C'est une décision (durée de conservation), pas un correctif.
+- Non couverts : le blocage à zéro crédit et la course entre deux sessions au dernier crédit (il faudrait épuiser un bureau) ; deux tests de rôles sans outil pour les éprouver. Les deux premiers sont couverts hors réseau.
+- Réserve : ce passage a tourné dans le bureau bridé, donc en Haiku. Les tests qui éprouvent le serveur valent tels quels ; ceux qui éprouvent le modèle sont à rejouer en palier normal.
+
+## Le jeu
+
+- 227 cas écrits, 221 joués (les cas qui écriraient pour vrai sont écartés), 12 catégories, 4 registres.
+- Jugement par du code : outil appelé, chiffre exact attendu, carte attendue ou interdite, texte attendu ou interdit. Pour tous les cas : une référence interne ou un nom d'outil dans le texte, ou une carte dont une cible est introuvable, est un échec.
+- Le correcteur donne le score par moteur et refuse de conclure si un autre modèle que prévu a répondu.
+- Entre les deux passes, 9 attentes ont été corrigées (le tri les détaille : `evals/lumi/resultats/baseline-A/TRIAGE.md`, branche `mission/lumi-evals`) : toujours pour juger le fond de la réponse plutôt que l'appel d'un outil, jamais pour faire passer un cas.
 
 ## Ce qui n'est pas encore mesuré
 
-- La passe propre, entièrement en Sonnet (bureau vierge).
-- La passe après les lots 2 à 4, pour la comparaison avant / après.
-- Les conversations longues (50 tours et plus), les références implicites, le rechargement en cours de tour (phase 4).
-- Le blocage à zéro crédit et la course entre deux sessions (2 tests de crédits non couverts).
+- La passe après le lot 6 et les cartes (#874), puis après les nouveaux outils de la session voisine.
+- La robustesse des conversations (phase 4) : batterie écrite (40 tests), à jouer.
+- L'agent de support en production : batterie en cours d'écriture.
