@@ -70,6 +70,15 @@ export function problemesPublication(regle: RegleAPublier): ProblemePublication[
   });
 }
 
+/**
+ * Les étapes qui portent encore le texte d'exemple de l'éditeur — à montrer
+ * AVANT de publier, là où aucune confirmation ne s'affichait (interrupteur et
+ * lot de la liste). L'éditeur, lui, les liste déjà dans sa confirmation.
+ */
+export function textesDExemple(regle: RegleAPublier): ProblemePublication[] {
+  return problemesPublication(regle).filter((p) => p.code === 'texte_exemple');
+}
+
 /** Seulement ce qui EMPÊCHE de publier. */
 export function bloquantsPublication(regle: RegleAPublier): ProblemePublication[] {
   return problemesPublication(regle).filter((p) => p.gravite === 'bloquant');
