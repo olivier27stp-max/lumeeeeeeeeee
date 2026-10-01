@@ -35,7 +35,7 @@ const conditionsFournies: Record<string, ConditionsCas> = FICHIER_CONDITIONS ? (
 if (!RESULTATS.length) { console.error('--resultats <fichier.json>[,<fichier.json>] requis (sortie de evals/lumi-tools/run.mts).'); process.exit(1); }
 
 /** Ce que le runner écrit pour chaque cas (on n'en lit que ce qui sert). */
-interface ResultatRunner extends Observation { id: string; cout_cents?: number; duree_ms?: number }
+interface ResultatRunner extends Observation { id: string; q?: string; cout_cents?: number; duree_ms?: number }
 
 const cas = new Map<string, CasResolu>();
 for (const compte of ['proprietaire', 'technicien']) {
@@ -48,11 +48,14 @@ if (!cas.size) { console.error(`Aucun cas résolu dans ${DOSSIER_CAS} : lancer p
 interface Ligne { cas: CasResolu; verdict: Verdict; cout_cents: number; duree_ms: number; reponse: string; outils: string[]; conditions: ConditionsCas & { erreur?: string } }
 const lignes: Ligne[] = [];
 const inconnus: string[] = [];
+const demandesChangees: string[] = [];
 for (const fichier of RESULTATS) {
   const lus = JSON.parse(readFileSync(fichier, 'utf8')) as { resultats: ResultatRunner[] };
   for (const r of lus.resultats) {
     const c = cas.get(r.id);
     if (!c) { inconnus.push(r.id); continue; }
+    // La demande du cas a changé depuis la passe : la réponse observée répond à une AUTRE question, elle ne se note pas.
+    if (typeof r.q === 'string' && r.q !== c.q) { demandesChangees.push(r.id); continue; }
     // Ce que le runner a noté passe avant le fichier --conditions (qui ne sert qu'aux passes d'un runner antérieur).
     const fournies = conditionsFournies[r.id];
     lignes.push({
@@ -105,6 +108,7 @@ const rapport = {
   a_juger: lignes.filter((l) => l.verdict.a_juger).map((l) => ({ id: l.cas.id, q: l.cas.q, critere: l.cas.critere_juge, controles_par_code: l.verdict.reussi ? 'réussis' : l.verdict.echecs, reponse: l.reponse })),
   non_joues: nonJoues,
   resultats_sans_cas: inconnus,
+  demandes_changees: demandesChangees,
 };
 
 const ligne = (nom: string, b: ReturnType<typeof bilan>, largeur = 16): string =>
@@ -125,5 +129,6 @@ console.log(`\n${rapport.echecs.length} échec(s)`);
 for (const e of rapport.echecs) console.log(`  ${e.id} : ${e.echecs.join(' ; ')}`);
 console.log(`\n${rapport.a_juger.length} cas à juger (ton, clarté) — non notés ici.`);
 if (nonJoues.length) console.log(`${nonJoues.length} cas préparés mais absents des résultats : ${nonJoues.slice(0, 10).join(', ')}${nonJoues.length > 10 ? '…' : ''}`);
+if (demandesChangees.length) console.log(`${demandesChangees.length} résultat(s) NON NOTÉS — la demande du cas a changé depuis la passe : ${demandesChangees.join(', ')}`);
 if (inconnus.length) console.log(`${inconnus.length} résultat(s) sans cas correspondant (cas modifiés depuis la passe ?) : ${inconnus.slice(0, 10).join(', ')}`);
 if (SORTIE) { writeFileSync(SORTIE, `${JSON.stringify(rapport, null, 1)}\n`); console.log(`\nBilan écrit : ${SORTIE}`); }
