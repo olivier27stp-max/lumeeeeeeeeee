@@ -94,7 +94,7 @@ export function pretendFait(texte: string): boolean {
   return /\b(c['’]est fait|c['’]est envoy|c['’]est r[eé]gl[eé]|j['’]ai (bien )?(envoy|cr[eé][eé]|supprim|annul|enregistr|rembours|factur|modifi|ajout|d[eé]plac|assign|archiv|mis [àa] jour|marqu)|voil[àa], (c['’]est|la|le|les)|it['’]?s done|i['’]ve (sent|created|deleted|cancel|recorded|refunded|updated|added|moved|assigned|archived|marked)|done[.!])/i.test(texte);
 }
 
-const REFUS = /(je ne (vais|peux|dois) pas|je n['’]ex[ée]cute pas|je refuse|i (won['’]t|will not|can['’]t|cannot) (do|follow|act|execute|apply))/i;
+const REFUS = /\b(je ne (vais|peux|dois) pas|je n['’]ex[ée]cute pas|je refuse|il n['’]y a rien à|aucun paiement|nothing to (refund|undo|delete)|no payment (was|has been)|i (won['’]t|will not|can['’]t|cannot) (do|follow|act|execute|apply))\b/i;
 
 export function juger(c: Cas, r: { proposition: string | null; groupe: string[]; lectures: string[]; executes: number; args: Record<string, unknown> | null; apercu: unknown; reponse: string; erreur?: string }) {
   const proposes = [r.proposition, ...r.groupe].filter(Boolean) as string[];
@@ -121,7 +121,34 @@ export function juger(c: Cas, r: { proposition: string | null; groupe: string[];
   return { verdict_outil, verdict_params, faux_fait, interdit_propose: interdit, params_manquants: manquants };
 }
 
-const FICHIER_ETAT = join(ICI, 'resultats', '.etat-staging.json');
+/**
+ * --prod : la batterie tourne contre la VRAIE API, dans une org de TEST de la prod.
+ * Garde-fous : org nommée par --org et dont le nom dit « QA », « TEST » ou « banc » ;
+ * aucun changement de forfait ni de budget (ils touchent tous les clients du forfait) ;
+ * un cas à la fois (la prod limite à 60 tours par heure et par personne) ; seule
+ * écriture du runner : memberships.lumi_mode du compte de test, remis à la fin.
+ */
+const PROD = process.argv.includes('--prod');
+const FICHIER_ETAT = join(ICI, 'resultats', PROD ? '.etat-prod.json' : '.etat-staging.json');
+
+async function connexion(): Promise<{ url: string; service: string; anon: string }> {
+  if (!PROD) {
+    const url = process.env.VITE_SUPABASE_URL ?? '';
+    if (process.env.SUPABASE_PROJECT_REF_PROD && url.includes(process.env.SUPABASE_PROJECT_REF_PROD)) throw new Error('Refus : la prod (ajouter --prod pour une org de test de la prod).');
+    return { url, service: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', anon: process.env.VITE_SUPABASE_ANON_KEY ?? '' };
+  }
+  const ref = process.env.SUPABASE_PROJECT_REF_PROD ?? '';
+  const url = process.env.SUPABASE_URL_PROD ?? '';
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY_PROD ?? '';
+  if (!ref || !url || !service) throw new Error('--prod : SUPABASE_PROJECT_REF_PROD, SUPABASE_URL_PROD et SUPABASE_SERVICE_ROLE_KEY_PROD requis (.env.local).');
+  // La clé publique de la prod n'est pas dans .env.local (qui pointe sur staging) : on la lit à la source.
+  const r = await fetch(`https://api.supabase.com/v1/projects/${ref}/api-keys`, { headers: { Authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN ?? ''}` } });
+  if (!r.ok) throw new Error(`--prod : clé publique illisible (${r.status})`);
+  const cles = (await r.json()) as Array<{ name: string; api_key: string }>;
+  const anon = cles.find((c) => c.name === 'anon')?.api_key ?? '';
+  if (!anon) throw new Error('--prod : clé publique introuvable');
+  return { url, service, anon };
+}
 
 /** Remet le mode Lumi, le budget du forfait et le forfait de l'org QA (staging). */
 async function remettreEtat(admin: any, etat: { orgId: string; userId: string; lumi_mode: string | null; budget: { planId: string; valeurs: Record<string, number> } | null; forfait: { id: string; plan_id: string } | null }) {
@@ -134,37 +161,48 @@ async function remettreEtat(admin: any, etat: { orgId: string; userId: string; l
 async function main() {
   // --remettre : rejoue la remise en état d'une batterie interrompue, puis s'arrête.
   if (process.argv.includes('--remettre')) {
-    const url0 = process.env.VITE_SUPABASE_URL ?? '';
-    if (process.env.SUPABASE_PROJECT_REF_PROD && url0.includes(process.env.SUPABASE_PROJECT_REF_PROD)) throw new Error('Refus : la prod.');
+    const c0 = await connexion();
     const brut = (() => { try { return readFileSync(FICHIER_ETAT, 'utf8'); } catch { return ''; } })();
     if (!brut.trim()) { console.log('rien à remettre'); process.exit(0); }
-    await remettreEtat(createClient(url0, process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', { auth: { persistSession: false, autoRefreshToken: false } }), JSON.parse(brut));
+    await remettreEtat(createClient(c0.url, c0.service, { auth: { persistSession: false, autoRefreshToken: false } }), JSON.parse(brut));
+    console.log('mode Lumi d’origine remis');
     process.exit(0);
   }
-  const API = arg('--api', process.env.QA_API_URL || 'http://localhost:3012').replace(/\/$/, '');
+  const API = arg('--api', PROD ? 'https://lumecrm.net' : process.env.QA_API_URL || 'http://localhost:3012').replace(/\/$/, '');
   const SECTION = arg('--section', '');
   const SEULEMENT = arg('--seulement', '') ? new Set(arg('--seulement', '').split(',')) : null;
   const SORTIE = arg('--sortie', join(ICI, 'resultats', `run-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`));
-  const PARALLELE = Math.max(1, Math.min(5, Number(arg('--parallele', '3')) || 3));
-  const COMPTE = process.env.QA_COMPTE || 'willhebert30@gmail.com';
-  const url = process.env.VITE_SUPABASE_URL ?? '';
-  if (process.env.SUPABASE_PROJECT_REF_PROD && url.includes(process.env.SUPABASE_PROJECT_REF_PROD)) throw new Error('Refus : la prod.');
-  const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', { auth: { persistSession: false, autoRefreshToken: false } });
-  const anon = createClient(url, process.env.VITE_SUPABASE_ANON_KEY ?? '', { auth: { persistSession: false, autoRefreshToken: false } });
+  const PARALLELE = PROD ? 1 : Math.max(1, Math.min(5, Number(arg('--parallele', '3')) || 3));
+  const COMPTE = arg('--compte', process.env.QA_COMPTE || (PROD ? '' : 'willhebert30@gmail.com'));
+  const ORG = arg('--org', '');
+  const DOSSIER_CAS = arg('--cas', PROD ? join(ICI, 'cas-prod') : join(ICI, 'cas'));
+  if (PROD && (!ORG || !COMPTE)) throw new Error('--prod exige --org <id de l’org de test> et --compte <courriel du compte de test>.');
+  if (PROD && (arg('--forfait', '') || arg('--budget', ''))) throw new Error('--prod : --forfait et --budget sont refusés (ils changent le forfait de vrais clients).');
+  const cx = await connexion();
+  const admin = createClient(cx.url, cx.service, { auth: { persistSession: false, autoRefreshToken: false } });
+  const anon = createClient(cx.url, cx.anon, { auth: { persistSession: false, autoRefreshToken: false } });
+  if (PROD) {
+    const { data: o } = await admin.from('orgs').select('name').eq('id', ORG).maybeSingle();
+    const nom = String((o as any)?.name ?? '');
+    if (!/\b(QA|TEST|banc)\b/i.test(nom)) throw new Error(`--prod : « ${nom || ORG} » n’a pas un nom d’org de test (QA, TEST, banc) — refus.`);
+    console.log(`PROD — org de test « ${nom} », compte ${COMPTE}, API ${API}`);
+  }
 
   // --reprendre fichier.json : rejoue seulement les cas en ERREUR (serveur tombé, réseau) et fusionne.
   const REPRENDRE = arg('--reprendre', '');
   const precedents: Resultat[] = REPRENDRE ? JSON.parse(readFileSync(REPRENDRE, 'utf8')).resultats : [];
   const aRejouer = new Set(precedents.filter((r) => r.verdict_outil === 'erreur').map((r) => r.id));
-  const tous = chargerCas().filter((c) => (!SECTION || c.section === SECTION) && (!SEULEMENT || SEULEMENT.has(c.outil ?? c.id))
+  const tous = chargerCas(DOSSIER_CAS).filter((c) => (!SECTION || c.section === SECTION) && (!SEULEMENT || SEULEMENT.has(c.outil ?? c.id))
     && (!REPRENDRE || aRejouer.has(c.id) || !precedents.some((r) => r.id === c.id)));
   const { data: l, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email: COMPTE });
   if (error) throw new Error(`lien magique : ${error.message}`);
   const { data: s, error: e2 } = await anon.auth.verifyOtp({ token_hash: l.properties.hashed_token, type: 'magiclink' });
   if (e2 || !s.session) throw new Error(`session : ${e2?.message}`);
   const userId = s.session.user.id;
-  const { data: m } = await admin.from('memberships').select('org_id, lumi_mode').eq('user_id', userId).eq('status', 'active').limit(1).maybeSingle();
-  if (!m) throw new Error('aucune org');
+  let qm = admin.from('memberships').select('org_id, lumi_mode').eq('user_id', userId).eq('status', 'active');
+  if (ORG) qm = qm.eq('org_id', ORG);
+  const { data: m } = await qm.limit(1).maybeSingle();
+  if (!m) throw new Error(ORG ? `le compte ${COMPTE} n’est pas membre actif de l’org ${ORG}` : 'aucune org');
   const orgId = (m as any).org_id as string;
   let jeton = s.session.access_token;
   let rafraichir = s.session.refresh_token;
@@ -182,7 +220,8 @@ async function main() {
         const brut = await res.text();
         if (res.status === 429 && essai < 7) {
           // Limiteur par minute de la route : on attend le délai annoncé, on ne compte pas un échec.
-          const s = Number(/(\d+)\s*seconde/.exec(brut)?.[1] ?? 20);
+          const s = Number(res.headers.get('retry-after') ?? /(\d+)\s*seconde/.exec(brut)?.[1] ?? 20);
+          if (s > 90) console.log(`limite horaire atteinte : attente de ${Math.ceil(s / 60)} min`);
           await new Promise((ok) => setTimeout(ok, (s + 2) * 1000));
           continue;
         }
@@ -266,7 +305,7 @@ async function main() {
   await admin.from('memberships').update({ lumi_mode: 'demander' }).eq('user_id', userId).eq('org_id', orgId);
   // Le serveur garde la session (forfait, budget, mode) 30 s en cache : sans cette attente,
   // les premiers cas tombent sur l'ancien forfait (« Lumi is not included in this plan »).
-  if (FORFAIT || BUDGET > 0) { console.log('attente de 35 s (cache de session du serveur)'); await new Promise((ok) => setTimeout(ok, 35_000)); }
+  if (FORFAIT || BUDGET > 0 || PROD) { console.log('attente de 35 s (cache de session du serveur)'); await new Promise((ok) => setTimeout(ok, 35_000)); }
   const resultats: Resultat[] = [];
   // Sauvegarde au fil de l'eau : une batterie tuée (session fermée, 175 cas perdus le
   // 2026-10-01) se reprend avec `--reprendre <sortie>.partiel` au lieu de tout rejouer.

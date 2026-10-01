@@ -25,7 +25,7 @@ const VERBES_FR = [
   'arrete', 'génère', 'genere', 'convertis', 'transforme', 'traite', 'note', 'prends', 'prélève', 'preleve', 'charge', 'paie', 'paye',
   'publie', 'renomme', 'fais', 'prépare', 'prepare', 'bloque', 'débloque', 'ouvre', 'ferme', 'termine', 'démarre', 'demarre', 'pointe',
   'oublie', 'retiens', 'garde', 'souviens-toi', 'rappelle-toi', 'enregistre', 'inscris', 'ajuste', 'corrige', 'remplace', 'vide', 'range',
-  'sors', 'coche', 'décoche', 'decoche', 'rédige', 'redige', 'déplanifie', 'deplanifie', 'réactive', 'rembourse',
+  'sors', 'coche', 'décoche', 'decoche', 'rédige', 'redige', 'déplanifie', 'deplanifie',
 ];
 const VERBES_EN = [
   'delete', 'remove', 'send', 'resend', 'text', 'email', 'create', 'add', 'set', 'mark', 'refund', 'cancel', 'change', 'update', 'move',
@@ -37,11 +37,18 @@ const VERBES_EN = [
 ];
 const DEBUT_POLI = /^(s['’]il te pla[iî]t|stp|svp|please|pls|peux-tu|tu peux|pourrais-tu|est-ce que tu peux|can you|could you|would you|go ahead and|j['’]aimerais que tu|je veux que tu|i want you to|i need you to)\s+/i;
 
+// « Le client m'a payé la facture n° 1 », « Sophie a accepté la soumission » : aucun impératif,
+// mais l'utilisateur rapporte un fait pour que Lumi mette la fiche à jour. Trouvé en prod le
+// 2026-10-01 : la FAQ répondait « la facture apparaît comme en retard… ».
+const EVENEMENT = /\b(?:m['’]a|nous a|m['’]ont|nous ont|a|ont)\s+(?:d[ée]j[aà]\s+)?(?:pay[ée]e?s?|r[ée]gl[ée]e?s?|accept[ée]e?s?|refus[ée]e?s?|annul[ée]e?s?|sign[ée]e?s?|confirm[ée]e?s?|dit (?:oui|non))(?![\p{L}\p{N}])|\b(?:paid|accepted|declined|approved|signed|cancell?ed|confirmed)\b[^.?!]{0,40}\b(?:invoice|quote|estimate|job|contract|me)\b/iu;
+// (?![\p{L}]) et non \b : en JavaScript, \b ne voit pas la fin d'un mot qui se termine par « é ».
+
 const VERBE = new RegExp(`^(${[...VERBES_FR, ...VERBES_EN].map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'i');
 
 export function estDemandeDAction(message: string): boolean {
   const t = String(message || '').trim().replace(/^[«"'“(\s]+/, '').replace(/^(ok|bon|alors|so|hey|salut|allo|allô|lumi)[,!\s]+/i, '');
   if (QUESTION.test(t)) return false;
+  if (EVENEMENT.test(t)) return true;
   // Chaque proposition : « Robert est en double, fusionne les deux fiches » — l'ordre suit la virgule.
   return t.split(/[,;:.!\n]+|\s[—–-]\s/).map((c) => c.trim().replace(DEBUT_POLI, '')).some((c) => VERBE.test(c));
 }
