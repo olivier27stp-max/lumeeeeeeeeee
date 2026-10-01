@@ -135,6 +135,7 @@ import { auditRequestMiddleware } from './lib/audit-middleware';
 import { initSentry, attachSentryErrorHandler, captureException, captureCronFailure, withCronCheckIn } from './lib/sentry';
 import { logger } from './lib/logger';
 import { messageTropDeDemandes } from './lib/message-429';
+import { contexteEnvoiParRequete } from './lib/bac-a-sable';
 
 const app = express();
 
@@ -389,6 +390,11 @@ app.use('/api', webhooksEntrantsRouter);
 // 60 s d'opus ≈ 4 Mo. Parseur dédié, déclaré avant le parseur global de 512 ko.
 app.use('/api/agent/transcribe', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '512kb' }));
+// Contexte d'envoi par requête : le bac à sable des envois connaît l'entreprise
+// authentifiée sur TOUTES les routes, pas seulement dans le moteur
+// d'automatisations. Après les analyseurs de corps : un contexte ouvert avant
+// eux se perd quand le corps arrive par un événement de flux.
+app.use(contexteEnvoiParRequete());
 app.use(express.urlencoded({ extended: false })); // For Twilio webhook form data
 
 // ─────────────────────────────────────────────────────────────────────────
