@@ -57,23 +57,23 @@ describe('[J-063] le moteur compare `jours_avant` NORMALISÉ à l’événement 
     ['7', 'valeur ordinaire, en texte'],
     [7, 'valeur ordinaire'],
     ['abc', 'illisible → le jour même, comme le balayage'],
-  ])('règle jours_avant = %j (%s) : l’événement émis pour elle la fait partir', (brut) => {
-    expect(evaluateConditions({ champ_id: CHAMP, jours_avant: brut } as Record<string, never>, emisPour(brut))).toBe(true);
+  ])('règle jours_avant = %j (%s) : l’événement émis pour elle la fait partir', (brut, _libelle) => {
+    expect(evaluateConditions({ champ_id: CHAMP, jours_avant: brut }, emisPour(brut))).toBe(true);
   });
 
   it('une règle « 3 jours avant » ne part pas sur un événement « 7 jours avant » (ni l’inverse)', () => {
-    expect(evaluateConditions({ champ_id: CHAMP, jours_avant: 3 } as Record<string, never>, emisPour(7))).toBe(false);
-    expect(evaluateConditions({ champ_id: CHAMP, jours_avant: '3.5' } as Record<string, never>, emisPour(7))).toBe(false);
-    expect(evaluateConditions({ champ_id: CHAMP, jours_avant: 7 } as Record<string, never>, emisPour('3.5'))).toBe(false);
+    expect(evaluateConditions({ champ_id: CHAMP, jours_avant: 3 }, emisPour(7))).toBe(false);
+    expect(evaluateConditions({ champ_id: CHAMP, jours_avant: '3.5' }, emisPour(7))).toBe(false);
+    expect(evaluateConditions({ champ_id: CHAMP, jours_avant: 7 }, emisPour('3.5'))).toBe(false);
   });
 
   it('un autre champ date ne correspond toujours pas', () => {
-    expect(evaluateConditions({ champ_id: 'autre', jours_avant: '3.5' } as Record<string, never>, emisPour('3.5'))).toBe(false);
+    expect(evaluateConditions({ champ_id: 'autre', jours_avant: '3.5' }, emisPour('3.5'))).toBe(false);
   });
 
   it('la normalisation ne touche QUE « date atteinte » : ailleurs, « 3.5 » reste 3,5', () => {
-    expect(evaluateConditions({ jours_avant: '3.5' } as Record<string, never>, evt({ jours_avant: 3 }, 'note.added'))).toBe(false);
-    expect(evaluateConditions({ jours_avant: '3.5' } as Record<string, never>, evt({ jours_avant: 3.5 }, 'note.added'))).toBe(true);
+    expect(evaluateConditions({ jours_avant: '3.5' }, evt({ jours_avant: 3 }, 'note.added'))).toBe(false);
+    expect(evaluateConditions({ jours_avant: '3.5' }, evt({ jours_avant: 3.5 }, 'note.added'))).toBe(true);
   });
 });
 
@@ -92,7 +92,7 @@ describe('[J-063] l’événement du balayage vise SA règle', () => {
   it('une règle SANS jours_avant (= le jour même) ne part plus sur l’événement « 7 jours avant » d’une autre règle du même champ', () => {
     const autre = evt({ rule_id: 'r1', champ_id: CHAMP, jours_avant: 7 });
     // Ses conditions seules l'auraient laissée passer : c'est la portée qui l'écarte.
-    expect(evaluateConditions({ champ_id: CHAMP } as Record<string, never>, autre)).toBe(true);
+    expect(evaluateConditions({ champ_id: CHAMP }, autre)).toBe(true);
     expect(regleViseCetEvenement(regle('r2') as never, autre)).toBe(false);
   });
 });
