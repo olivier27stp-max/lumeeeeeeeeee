@@ -49,10 +49,18 @@ export function outilsDuSousAgent(topic: IdTopic): string[] {
   return noms.filter((n) => TOOLS_BY_NAME[n] && !vus.has(n) && vus.add(n));
 }
 
-/** Le sous-agent à charger d'après le verdict du routeur : topic sûr, sans action déterministe. */
-export function sousAgentDepuisVerdict(r: ResultatRouteur | null | undefined): IdTopic | null {
+/**
+ * Le sous-agent à charger d'après le verdict du routeur : topic sûr, sans action déterministe.
+ *
+ * `actionEcartee` : le routeur a choisi une action déterministe mais elle n'a PAS été servie
+ * (un ordre ne reçoit jamais un raccourci de lecture). Son sujet reste bon : sans ça, « supprime
+ * la job 48 » partait avec le jeu de base, où delete_job n'existe pas (mesuré le 2026-10-01 :
+ * 17 cas de l'éval, tous des ordres sur un job cité par son numéro).
+ */
+export function sousAgentDepuisVerdict(r: ResultatRouteur | null | undefined, opts: { actionEcartee?: boolean } = {}): IdTopic | null {
   const v = r?.verdict;
-  if (!v || r.statut !== 'ok' || r.decision !== 'modele') return null;
+  if (!v || r.statut !== 'ok') return null;
+  if (r.decision !== 'modele' && !(opts.actionEcartee && r.decision === 'action')) return null;
   if (v.confidence < SEUIL_CONFIANCE) return null;
   return estSousAgent(v.topic) ? v.topic : null;
 }

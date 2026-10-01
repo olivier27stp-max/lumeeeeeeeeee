@@ -39,6 +39,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 import { reponseFaqPour } from '../lib/support/faq';
 import { estDemandeDAction } from '../lib/lumi/demande-action';
 import { repererFiches } from '../lib/lumi/reperage';
+import { sujetParRegle } from '../lib/lumi/sujet-par-regle';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { reponseAideMulti } from '../lib/support/aide-multi';
 import { peutRepondreHorsScope, reponseHorsScope } from '../lib/lumi/hors-scope';
@@ -47,7 +48,7 @@ import { detecterOptimisation, dateVisee, repondreOptimisation } from '../lib/lu
 import { texteRecus, lireContenuEcriture, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
-import { classifier, modeRouteur, MODELE_ROUTEUR, SEUIL_CONFIANCE, type ResultatRouteur, type ContexteRouteur } from '../lib/lumi/routeur';
+import { classifier, modeRouteur, resultatParRegle, MODELE_ROUTEUR, SEUIL_CONFIANCE, type ResultatRouteur, type ContexteRouteur } from '../lib/lumi/routeur';
 import { sousAgentDepuisVerdict, focusDuSousAgent, effortDuSousAgent, outilsDuSousAgent } from '../lib/lumi/sous-agents';
 import { indiceOutils } from '../lib/lumi/indices-outils';
 import type { IdTopic } from '../lib/lumi/topics';
@@ -397,7 +398,7 @@ async function executerTourSse(opts: {
       params: {
         ...(opts.params ?? {}),
         ...(opts.sousAgent ? { sous_agent: opts.sousAgent } : {}),
-        ...(routeur ? { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } } : {}),
+        ...(routeur ? { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null, ...(routeur.source ? { source: routeur.source } : {}) } } : {}),
         // Première métrique de QUALITÉ en base : un montant cité sans source.
         // Requêtable comme le reste — `qa:depense` et n'importe quel SQL le voient.
         ...(chiffresSuspects?.length ? { chiffres_suspects: chiffresSuspects } : {}),
@@ -776,7 +777,10 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       // Suite de conversation : le routeur voit l'échange précédent (tronqué) et
       // n'agit que si le message se suffit (changement de période) — un « il »
       // ou « le pire » reste au modèle complet, qui a tout le contexte.
-      routeur = await classifier(message, contexteRouteur(historique));
+      // Un ORDRE au vocabulaire sans ambiguïté : le sujet vient d'une règle (0 ¢, 0 s). Pour un
+      // ordre, le routeur ne sert qu'à choisir le jeu d'outils — son raccourci n'est jamais servi.
+      const sujetRegle = estDemandeDAction(message) ? sujetParRegle(message) : null;
+      routeur = sujetRegle ? resultatParRegle(sujetRegle) : await classifier(message, contexteRouteur(historique));
       const coutRouteur = routeur.usage ? coutEnCents(MODELE_ROUTEUR, routeur.usage) : 0;
       if (routeur.usage) {
         void journaliserUsage(ctx.admin, {
@@ -867,7 +871,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     }
 
     // B7 : un topic sûr sans action déterministe → le modèle part avec les outils de ce sous-agent seulement.
-    const sousAgent = sousAgentDepuisVerdict(routeur);
+    // Arrivé ici, aucun raccourci n'a répondu : une action du routeur a donc été écartée, son sujet reste bon.
+    const sousAgent = sousAgentDepuisVerdict(routeur, { actionEcartee: true });
     await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, sousAgent, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
   } catch (error: any) {
     if (res.headersSent) return res.end();

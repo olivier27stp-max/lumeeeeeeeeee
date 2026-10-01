@@ -83,7 +83,8 @@ describe('item 10 — routeur', () => {
     // Actif (étage 5) : seulement une action déterministe validée (raccourciDepuisAction, jamais une action devinée), jamais avec une proposition en attente ni après un repli.
     // … aussi sur une suite de conversation, avec l'échange précédent en contexte (le prompt impose action null sur un « il », « le pire »…).
     expect(route).toContain("if (modeRouteur() === 'actif' && !enAttente.length && !repli)");
-    expect(route).toContain("routeur = await classifier(message, contexteRouteur(historique));");
+    // Depuis le 2026-10-01 : un ordre au vocabulaire sans ambiguïté reçoit son sujet d'une règle, sans appel au routeur.
+    expect(route).toContain("routeur = sujetRegle ? resultatParRegle(sujetRegle) : await classifier(message, contexteRouteur(historique));");
     expect(route).toContain("routeur.decision === 'action' && routeur.verdict?.action && !estDemandeDAction(message) && !ficheJobHorsSujet ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null");
     // Le coût du routeur est journalisé dans ai_usage (il compte dans le budget de l'org).
     expect(route).toMatch(/journaliserUsage\(ctx\.admin, \{\s*orgId: ctx\.auth\.orgId, userId: ctx\.auth\.user\.id, conversationId, model: MODELE_ROUTEUR/);
