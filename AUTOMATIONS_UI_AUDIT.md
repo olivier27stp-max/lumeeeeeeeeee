@@ -1,6 +1,6 @@
 # Audit utilisateur de la page Automatisations — rapport
 
-*Mission du 2026-10-01. État au 2026-10-01, 19 h 35 UTC. Carte des éléments : `AUTOMATIONS_UI_MAP.md` (377 éléments).*
+*Mission du 2026-10-01. État au 2026-10-01, 20 h 15 UTC. Carte des éléments : `AUTOMATIONS_UI_MAP.md` (377 éléments).*
 
 ## 1. Verdict pour le launch du 26 octobre
 
@@ -41,9 +41,9 @@ Ce qui manque pour dire « prêt » :
 | `40-roles-api` | technicien et vendeur refusés sur les 32 routes de l’API (403 avec une phrase lisible), y compris barre finale, majuscules et double barre ; sans session : 401 ; propriétaire et admin lisent | — | 9/9 |
 | `50-comportements-navigateur` | éditeur : rechargement, retour arrière et avancer, lien direct vers une règle inexistante (« introuvable ») ou à la corbeille, modification hors ligne (l’écran dit « Modifié », rien n’est écrit, puis ça s’enregistre au retour du réseau), règle supprimée dans un autre onglet (« n’existe plus ») | — | 6/6 |
 | `60-anglais` | interface en anglais : liste, vue d’ensemble, réglages globaux, éditeur — aucun texte d’interface resté en français | — | 4/4 |
-| `70-journaux-causes` | onglet Journaux : deux causes écrites en anglais par le moteur sont lues en français | 0/1 | à rejouer après #881 |
+| `70-journaux-causes` | onglet Journaux : deux causes écrites en anglais par le moteur sont lues en français | 0/1 | 1/1 |
 
-Ces scripts sont maintenant dans le dépôt (`scripts/qa/automations-prod/`) et se lancent d’une commande : **`npm run test:automations:e2e`** — 64 vérifications sur 64 réussies le 2026-10-01 à 19 h 50 UTC, sortie en JSON et en markdown. C’est une passe **après déploiement** : elle juge ce qui est en ligne. Ce qui bloque un merge avant déploiement reste la CI.
+Ces scripts sont maintenant dans le dépôt (`scripts/qa/automations-prod/`) et se lancent d’une commande : **`npm run test:automations:e2e`** — 65 vérifications, toutes réussies le 2026-10-01 (dernière : 20 h 12 UTC), sortie en JSON et en markdown. C’est une passe **après déploiement** : elle juge ce qui est en ligne. Ce qui bloque un merge avant déploiement reste la CI.
 
 Tests unitaires et de composant ajoutés par les correctifs : environ 330, tous dans la suite de la CI (qui bloque le merge).
 
@@ -75,7 +75,7 @@ Incident à signaler : le 1er octobre, six agents en parallèle sur staging ont 
 | #866 (lot 1b) | diagnostic sans identifiants de la plateforme, pas de mur de vente sur forfait illisible, fausse alerte « variable inexistante » | oui, 18:03 UTC |
 | #870 (lot 2) | 45 constats : liste, éditeur, bibliothèque de modèles, routes, refus lisibles, anglais | oui, 19:01 UTC |
 | #876 (lot 3) | tablette : liste, barre du haut, cibles tactiles | oui, 19:21 UTC |
-| #881 (lot 4) | aucune cause d’échec en anglais brut dans la liste ni dans l’onglet Journaux (14 messages du moteur + 10 causes relevées dans les journaux de prod) | après ce rapport |
+| #881 (lot 4) | aucune cause d’échec en anglais brut dans la liste ni dans l’onglet Journaux (14 messages du moteur + 10 causes relevées dans les journaux de prod) | oui, 20:08 UTC |
 
 Fonctions de base ajoutées (elles manquaient) : menu des étapes pour « Déplacer l'opportunité », recherche dans la palette de variables, Ctrl+Z / Ctrl+Y, Échap sur les menus et le tiroir, écran « à la corbeille » avec « Restaurer », écran « n'existe plus », « Réessayer » quand l'état de la pause est illisible, sous-navigation en liens.
 
