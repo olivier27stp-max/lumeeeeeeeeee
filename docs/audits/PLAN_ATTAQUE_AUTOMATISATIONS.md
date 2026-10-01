@@ -73,7 +73,7 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | Journaux Moyenne | Un membre sans droit sur les automatisations lit 94 journaux (31 destinataires) via `leads.read` | limiter aux entités prospect ou masquer `to` | S | **oui** |
 | F11 (décision) | Rafale : 200 textos partent d'un coup ; plafond **écarté** le 23 sept. — le webhook entrant (#644) crée le chemin de rafale | **étaler** (tout part, lentement), pas plafonner | M | non |
 
-## Vague 4 — interface (éditeur et liste) — ✅ FAIT le 2026-09-30 (#782), sauf la ligne « Tests » (en cours)
+## Vague 4 — interface (éditeur et liste) — ✅ FAIT le 2026-09-30 (#782) ; ligne « Tests » faite le 2026-10-01
 
 
 | id | Problème | Correction | Effort |
@@ -84,7 +84,7 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 | A-04 → A-09 Moyenne | Retour du navigateur perd le travail ; « Ajouter » au milieu ; texto vidé accepté ; « FR/EN » ment ; « Aucune erreur » quand les journaux sont illisibles ; erreurs serveur en français pour l'anglais | voir 11-interface | S chacun |
 | A-10 → A-17 Faible | textes, libellés, tri des colonnes | voir 11-interface | XS-S |
 | PERF-1/2 | La liste télécharge toutes les règles 2 fois ; l'éditeur charge 400 règles pour en montrer une | 1 seule lecture ; lecture par id | S |
-| Tests | 13 tests `front-automations` écrits pour l'ancienne page (dont F22 : variable inconnue, nom brut) | les réécrire sur l'écran actuel | M |
+| Tests ✅ | 13 tests `front-automations` écrits pour l'ancienne page (dont F22 : variable inconnue, nom brut) | réécrits sur l'écran actuel : `tests/automation/front-automations-ecran.test.tsx`, **57 tests, en CI**. Preuve par mutation : retirer l'avertissement de variable inconnue et le compteur d'échecs fait tomber 4 tests. Deux défauts du produit trouvés au passage, gardés en quarantaine (voir « Constats hors backlog ») | M |
 
 ## Vague 5 — performance et charge — T6.2 fait (#792 : 30 → 22 requêtes par `lead.created`, 3 règles = lectures d'une seule) ; outbox prod saine (0 bloqué, 0 erreur au 2026-09-30) ; **D-17 reste à faire**
 
@@ -120,7 +120,10 @@ Rien de neuf à coder : les 5 PR du launch sont vertes. **Tant qu'elles ne sont 
 
 | Constat | Preuve | À qui |
 |---|---|---|
-| **Sauvegardes prod en échec depuis le 2026-09-26** (mot de passe refusé par le pooler ; PITR désactivée) | `../lume-backups/.derniere-reussite` = 09-26 ; signalé par la session « audit commissions » | Rafba — urgent |
+| ~~Sauvegardes prod en échec depuis le 2026-09-26~~ — **réparé le 2026-10-01** (mot de passe réinitialisé, sauvegarde complète `prod-20261001-0010.dump`, 268 tables). Reste : la tâche planifiée ne tourne que si la session Windows est ouverte ; PITR toujours désactivée | `../lume-backups/` | Rafba |
+| **D1 — éditeur plein écran : une variable inconnue n'est pas signalée.** Écrire « Bonjour [prenom] » dans le panneau d'étape ne montre aucun avertissement ; le client reçoit « Bonjour , ». La liste, elle, avertit. Régression de #523 : l'avertissement vivait dans `AutomationBuilder.tsx`, que plus rien n'importe | `tests/quarantaine/automation/front-automations-defauts.unit.test.tsx` (rouge attendu) | à trancher — correction S |
+| **D2 — éditeur plein écran : le nombre de textos facturés n'est pas affiché.** Au-delà de 160 caractères, le panneau montre « 200 / 1600 » sans dire « 2 SMS » ; la liste le dit | même fichier (rouge attendu) | à trancher — correction XS |
+| Deux migrations portent le même horodatage **20261005500000** (`champ_noreview`, `lumi_credits_rendus`) | `ls supabase/migrations` ; application en prod de chacune **pas vérifiée** ici | sessions champs / crédits |
 | Migration fantôme **20260928120000** : `payments.reference` / `payments.notes` absentes en prod ET staging | `information_schema` des deux bases ; « Marquer payée » s'en sort par un repli | chantier paiements |
 | `check:db-coherence` : 3 fonctions QuickBooks non exécutables par `authenticated` | sortie du script | chantier QuickBooks |
 | Préréglage `estimate_followup` sur `estimate.sent` : événement jamais émis | audit V2 | à trancher |

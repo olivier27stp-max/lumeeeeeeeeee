@@ -185,7 +185,7 @@ Niveau **U** avec `vi.useFakeTimers()` et `vi.setSystemTime()` ; les dates de RD
 
 Niveau **U**, jsdom + `react-dom/client` + `act` (correction : React Testing Library n'est PAS installée dans le dépôt — `node_modules/@testing-library` absent — et `tests/agent-office-isolation.test.tsx` ne rend aucun composant ; la première version de ce plan l'affirmait à tort). `automationRulesApi`, `sonner`, `usePermissions` et `src/lib/supabase` mockés.
 
-**Livré (2026-09-14)** : `tests/automation/front-automations.unit.test.tsx` — 24 cas, 20 verts, 4 rouges attendus (tous F22) : `agreement.signed` et « Contract Signed » affichés bruts en français, variable inconnue `[prenom]` non signalée alors que le serveur l'enverra vide (`resolveTemplate`, `server/lib/actions/index.ts:124`), aucune raison d'échec lisible. T13.5 est couvert par T9.8 (intégration, rouge F16). Le cliquet d'accessibilité reste à 0 sur la page et les deux éditeurs.
+**Remplacé le 2026-10-01** par `tests/automation/front-automations-ecran.test.tsx` (57 tests sur l'écran d'après la refonte #523, en CI) ; l'état ci-dessous décrit l'ancien fichier. **Livré (2026-09-14)** : `tests/automation/front-automations.unit.test.tsx` — 24 cas, 20 verts, 4 rouges attendus (tous F22) : `agreement.signed` et « Contract Signed » affichés bruts en français, variable inconnue `[prenom]` non signalée alors que le serveur l'enverra vide (`resolveTemplate`, `server/lib/actions/index.ts:124`), aucune raison d'échec lisible. T13.5 est couvert par T9.8 (intégration, rouge F16). Le cliquet d'accessibilité reste à 0 sur la page et les deux éditeurs.
 
 | Cas | Assertion | Bug |
 |---|---|---|
