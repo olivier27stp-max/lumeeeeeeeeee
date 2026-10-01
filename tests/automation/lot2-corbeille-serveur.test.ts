@@ -209,3 +209,63 @@ describe('roles-10 — ce que l’éditeur lit d’une règle supprimée', () =>
     expect(r.json.autres).toEqual([]);
   });
 });
+
+// ─── actions-07 ─────────────────────────────────────────────────
+
+describe('actions-07 — écrire sur une automatisation qui n’existe plus répond 404, pas 500', () => {
+  it('PATCH sur un identifiant inconnu → 404 « Automatisation introuvable. »', async () => {
+    const r = await appeler('PATCH', `/automations/rules/${ABSENTE}`, { name: 'Nouveau nom' });
+    expect(r.status).toBe(404);
+    expect(r.json.error).toBe('Automatisation introuvable.');
+  });
+
+  it('PATCH : la règle disparaît ENTRE la lecture et l’écriture (PGRST116) → 404, pas « Impossible de modifier »', async () => {
+    /*
+     * Le cas observé : l'éditeur est resté ouvert pendant que la règle était
+     * supprimée en base. L'enregistrement automatique recevait 500 « Impossible
+     * de modifier l'automatisation. » et réessayait sans fin.
+     */
+    etat.disparaitApresLecture = VIVANTE;
+    const r = await appeler('PATCH', `/automations/rules/${VIVANTE}`, { name: 'Nouveau nom' });
+    expect(r.status).toBe(404);
+    expect(r.json.error).toBe('Automatisation introuvable.');
+    expect(ecrituresSur(VIVANTE)).toEqual([]);
+  });
+
+  it('PATCH d’un dossier qui n’existe plus → 404 « Dossier introuvable. »', async () => {
+    const r = await appeler('PATCH', `/automations/folders/${ABSENTE}`, { name: 'Relances' });
+    expect(r.status).toBe(404);
+    expect(r.json.error).toBe('Dossier introuvable.');
+  });
+
+  it('DELETE : la règle disparaît entre la lecture et l’écriture → 404, pas « ok » pour une suppression qui n’a rien supprimé', async () => {
+    etat.disparaitApresLecture = VIVANTE;
+    const r = await appeler('DELETE', `/automations/rules/${VIVANTE}`);
+    expect(r.status).toBe(404);
+    expect(r.json.error).toBe('Automatisation introuvable.');
+  });
+
+  it('DELETE d’une règle supprimée DÉFINITIVEMENT → 404, sa date de suppression n’est pas réécrite', async () => {
+    const r = await appeler('DELETE', `/automations/rules/${PURGEE}`);
+    expect(r.status).toBe(404);
+    expect(r.json.error).toBe('Automatisation introuvable.');
+    expect(ecrituresSur(PURGEE)).toEqual([]);
+    expect(regleEnBase(PURGEE)?.deleted_at).toBe('2026-10-01T15:22:44.658+00:00');
+  });
+
+  it('DELETE d’une règle vivante : inchangé — elle part à la corbeille, en brouillon, et ses envois prévus sont annulés', async () => {
+    etat.tables.automation_scheduled_tasks.push({ id: 't1', org_id: ORG, automation_rule_id: VIVANTE, status: 'pending' });
+    const r = await appeler('DELETE', `/automations/rules/${VIVANTE}`);
+    expect(r.status).toBe(200);
+    expect(r.json).toEqual({ ok: true });
+    expect(regleEnBase(VIVANTE)?.deleted_at).toBeTruthy();
+    expect(regleEnBase(VIVANTE)?.is_active).toBe(false);
+    expect(etat.tables.automation_scheduled_tasks[0].status).toBe('cancelled');
+  });
+
+  it('restaurer / supprimer définitivement une règle absente → 404 (déjà le cas)', async () => {
+    const a = await appeler('POST', `/automations/rules/${ABSENTE}/restaurer`);
+    const b = await appeler('DELETE', `/automations/rules/${ABSENTE}/definitivement`);
+    expect([a.status, b.status]).toEqual([404, 404]);
+  });
+});

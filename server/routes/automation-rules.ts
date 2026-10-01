@@ -602,6 +602,13 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
     if (error.code === '42501') {
       return res.status(403).json({ error: 'Votre rôle ne permet pas de modifier une automatisation.' });
     }
+    /*
+     * PGRST116 = zéro ligne modifiée : la règle a disparu entre la lecture et
+     * l'écriture (supprimée pendant que l'éditeur était ouvert). Ce n'est pas
+     * une panne : répondre 500 faisait réessayer sans fin un enregistrement
+     * qui ne pouvait jamais réussir (audit du 2026-10-01).
+     */
+    if (error.code === 'PGRST116') return res.status(404).json({ error: 'Automatisation introuvable.' });
     logger.error('[automation-rules] modification échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de modifier l\'automatisation.' });
   }
@@ -794,6 +801,8 @@ router.delete('/automations/rules/:id', async (req, res) => {
     .select('id, is_preset')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
+    // Supprimée DÉFINITIVEMENT : elle n'existe plus, on ne la « resupprime » pas.
+    .is('purged_at', null)
     .maybeSingle();
 
   if (!existante) return res.status(404).json({ error: 'Automatisation introuvable.' });
@@ -849,11 +858,13 @@ router.delete('/automations/rules/:id', async (req, res) => {
    * Les envois déjà prévus ont été annulés juste au-dessus : une règle en
    * corbeille ne doit plus rien envoyer, même restaurable.
    */
-  const { error } = await auth.client
+  const { data: supprimees, error } = await auth.client
     .from('automation_rules')
     .update({ deleted_at: new Date().toISOString(), is_active: false })
     .eq('id', req.params.id)
-    .eq('org_id', auth.orgId);
+    .eq('org_id', auth.orgId)
+    .is('purged_at', null)
+    .select('id');
 
   if (error) {
     if (error.code === '42501') {
@@ -862,6 +873,9 @@ router.delete('/automations/rules/:id', async (req, res) => {
     logger.error('[automation-rules] suppression échouée', { message: error.message, code: error.code });
     return res.status(500).json({ error: 'Impossible de supprimer l\'automatisation.' });
   }
+  // Zéro ligne (règle disparue entre-temps, ou écartée par la RLS) : ne pas
+  // répondre « ok » pour une suppression qui n'a rien supprimé.
+  if (!supprimees?.length) return res.status(404).json({ error: 'Automatisation introuvable.' });
 
   return res.json({ ok: true });
 });
