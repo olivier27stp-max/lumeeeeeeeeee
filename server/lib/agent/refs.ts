@@ -26,6 +26,25 @@ const UUID_RE_G = new RegExp(UUID_RE.source, 'gi');
 // L'important est qu'une réf soit STABLE, OPAQUE et retraduisible.
 const REF_RE = /^ref\d+$/;
 
+/**
+ * Clé de l'espace des réfs d'UNE conversation.
+ *
+ * Avant le 2026-10-01 l'espace était par (entreprise, personne), donc commun à
+ * toutes ses conversations. Or les réfs sont de simples compteurs : après un
+ * redéploiement ou 30 minutes sans activité, une NOUVELLE conversation
+ * repartait à « ref1 », et reprendre ensuite une ancienne conversation ne
+ * pouvait plus restaurer ses propres « ref1 », « ref2 »… (une réf vivante n'est
+ * jamais réécrite). Le « ref3 » que le modèle lisait dans l'ancien historique
+ * — le client X — était alors traduit vers la fiche de l'autre conversation —
+ * le client Y : une action sur la mauvaise fiche. Un espace par conversation
+ * rend la collision impossible.
+ *
+ * Sans conversation (texto, MCP) : l'espace reste par (entreprise, personne).
+ */
+export function espaceRefsDe(orgId: string, userId: string, conversationId?: string | null): string {
+  return conversationId ? `${orgId}:${userId}:${conversationId}` : `${orgId}:${userId}`;
+}
+
 interface Espace {
   refParUuid: Map<string, string>;
   uuidParRef: Map<string, string>;

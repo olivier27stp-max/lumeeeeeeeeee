@@ -18,7 +18,7 @@ import { getUserContext, hasPermission } from '../rbac';
 import { masquerIds } from '../agent/refs';
 import type { PropositionJournee } from '../trajets/propositionJournee';
 
-export interface CtxOptimisation { client: SupabaseClient; orgId: string; userId: string; accessToken?: string; language: 'fr' | 'en'; fuseau: string; maintenant?: Date }
+export interface CtxOptimisation { client: SupabaseClient; orgId: string; userId: string; accessToken?: string; /** Espace des réfs de la conversation (voir espaceRefsDe). */ espaceRefs?: string; language: 'fr' | 'en'; fuseau: string; maintenant?: Date }
 
 export interface ReponseOptimisation {
   texte: string;
@@ -108,7 +108,7 @@ export async function repondreOptimisation(ctx: CtxOptimisation, date: string, t
   if ('refus' in r) return { refus: r.refus };
   const p = r.result as PropositionJournee & { a_appliquer?: Record<string, any> };
   const texte = texteProposition(p, fr);
-  const espace = `${ctx.orgId}:${ctx.userId}`;
+  const espace = ctx.espaceRefs ?? `${ctx.orgId}:${ctx.userId}`;
   const proposeId = `direct_${randomUUID()}`;
   const messages: Array<Record<string, any>> = [
     { role: 'assistant', content: [{ type: 'tool_use', id: proposeId, name: 'propose_day_optimization', input: masquerIds(espace, { date, ...(teamId ? { team_id: teamId } : {}) }) }] },
