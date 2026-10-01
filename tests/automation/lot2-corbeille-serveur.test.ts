@@ -211,3 +211,45 @@ describe('roles-08 — une règle à la corbeille ne se publie par AUCUN chemin'
     expect(r.json.error).toBe('This automation is in the bin: restore it to edit it.');
   });
 });
+
+// ─── roles-09 ───────────────────────────────────────────────────
+
+describe('roles-09 — on ne duplique ni une règle supprimée définitivement, ni une règle à la corbeille', () => {
+  const copies = () => etat.ecritures.filter((e) => e.table === 'automation_rules' && e.op === 'insert');
+
+  it('règle supprimée DÉFINITIVEMENT → 404 « Automatisation introuvable. », aucune copie ne naît', async () => {
+    const r = await appeler('POST', `/automations/rules/${PURGEE}/duplicate`);
+    expect(r.status).toBe(404);
+    expect(r.json.error).toBe('Automatisation introuvable.');
+    expect(copies()).toEqual([]);
+    expect(etat.tables.automation_rules).toHaveLength(3);
+  });
+
+  it('règle à la CORBEILLE (l’écran n’y offre pas « Dupliquer ») → 409, le message de la corbeille, aucune copie', async () => {
+    const r = await appeler('POST', `/automations/rules/${CORBEILLE}/duplicate`);
+    expect(r.status).toBe(409);
+    expect(r.json.error).toBe(MESSAGE_CORBEILLE);
+    expect(copies()).toEqual([]);
+    expect(etat.tables.automation_rules).toHaveLength(3);
+  });
+
+  it('en anglais, le refus de la corbeille est dit en anglais', async () => {
+    const r = await appeler('POST', `/automations/rules/${CORBEILLE}/duplicate`, undefined, { 'Accept-Language': 'en' });
+    expect(r.status).toBe(409);
+    expect(r.json.error).toBe('This automation is in the bin: restore it to edit it.');
+  });
+
+  it('règle inexistante → 404', async () => {
+    const r = await appeler('POST', `/automations/rules/${ABSENTE}/duplicate`);
+    expect(r.status).toBe(404);
+    expect(copies()).toEqual([]);
+  });
+
+  it('une règle vivante se duplique toujours : 201, copie en brouillon, « (copie) »', async () => {
+    const r = await appeler('POST', `/automations/rules/${VIVANTE}/duplicate`);
+    expect(r.status).toBe(201);
+    expect(r.json.name).toBe('Règle a1 (copie)');
+    expect(r.json.is_active).toBe(false);
+    expect(copies()).toHaveLength(1);
+  });
+});

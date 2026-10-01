@@ -48,6 +48,7 @@ import { oublierPause } from '../lib/automations-pause-org';
 import { drapeauActif, type CleDrapeauAutomatisation } from '../lib/automations-drapeaux';
 import { problemesBloquants, messageRefus, messagePublieeCassee, refAutomatisationInventee } from '../lib/automations-publication';
 import { langueDe, repondreDansLaLangue } from '../lib/automations-langue';
+import { messageCorbeille, STATUT_CORBEILLE } from '../lib/automations-corbeille';
 import {
   DECLENCHEURS,
   ACTIONS,
@@ -524,11 +525,7 @@ router.patch('/automations/rules/:id', validate(automationRuleUpdateSchema), asy
    * automatisation qui ne partira plus.
    */
   if (existante.deleted_at) {
-    return res.status(409).json({
-      error: langueDe(req) === 'fr'
-        ? 'Cette automatisation est à la corbeille : restaurez-la pour la modifier.'
-        : 'This automation is in the bin: restore it to edit it.',
-    });
+    return res.status(STATUT_CORBEILLE).json({ error: messageCorbeille(langueDe(req) === 'fr') });
   }
 
   const patch = { ...req.body };
@@ -733,9 +730,12 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
 
   const { data: source, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('name, description, trigger_event, conditions, delay_seconds, actions, steps, settings')
+    .select('name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, deleted_at')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
+    // Supprimée DÉFINITIVEMENT : elle n'existe plus pour l'utilisateur. La
+    // dupliquer la faisait renaître en « … (copie) » (audit du 2026-10-01).
+    .is('purged_at', null)
     .maybeSingle();
 
   if (lectureErr) {
@@ -743,6 +743,11 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
     return res.status(500).json({ error: 'Impossible de lire l\'automatisation.' });
   }
   if (!source) return res.status(404).json({ error: 'Automatisation introuvable.' });
+  // À LA CORBEILLE : la corbeille n'offre pas « Dupliquer » (restaurer, ou
+  // supprimer définitivement). Même refus que pour la modifier.
+  if (source.deleted_at) {
+    return res.status(STATUT_CORBEILLE).json({ error: messageCorbeille(langueDe(req) === 'fr') });
+  }
 
   const { data, error } = await auth.client
     .from('automation_rules')
