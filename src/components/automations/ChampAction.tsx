@@ -15,6 +15,7 @@
 import { useId } from 'react';
 import type { ChampAction as ModeleChamp } from '../../lib/automationCatalogue';
 import { useModuleAccess } from '../../hooks/useModuleAccess';
+import { libelleSegments } from '../../lib/smsSegments';
 
 interface Props {
   champ: ModeleChamp;
@@ -33,6 +34,8 @@ interface Props {
   etapesPipeline?: Array<{ id: string; label: string }>;
   /** Services du catalogue, pour le type `service`. */
   services?: Array<{ id: string; label: string }>;
+  /** Le champ est le texte d'un texto : afficher le nombre de SMS facturés. */
+  sms?: boolean;
 }
 
 /**
@@ -51,7 +54,7 @@ function ChampSousDrapeau({ drapeau, ...props }: Props & { drapeau: string }) {
 
 function ChampActionRendu({
   champ, valeur, onChange, fr, membres = [], etiquettes = [], champsDate = [],
-  automatisations = [], etapesPipeline = [], services = [],
+  automatisations = [], etapesPipeline = [], services = [], sms = false,
 }: Props) {
   // `useId` plutôt qu'un littéral : ce composant est rendu plusieurs fois
   // sur la même page (une par étape), et deux `id` identiques casseraient
@@ -98,6 +101,11 @@ function ChampActionRendu({
                 {valeur.length} / {champ.max}
                 {valeur.length >= champ.max && (
                   <span> · {fr ? 'limite atteinte' : 'limit reached'}</span>
+                )}
+                {/* La limite de saisie n'est pas la facture : 1600 caractères
+                    tiennent, mais partent en plusieurs SMS payés un par un. */}
+                {sms && libelleSegments(valeur, fr) && (
+                  <span className="text-amber-600 dark:text-amber-400"> · {libelleSegments(valeur, fr)}</span>
                 )}
               </p>
             )}

@@ -232,6 +232,30 @@ export const VARIABLES_CONNUES: readonly string[] = [
 ];
 
 /**
+ * Les variables POINTÉES que le serveur remplit lui-même ({{soumission.total}},
+ * {{facture.lien}}…), posées sous la clé `objet.cle` par
+ * `resolveEntityVariables`. Ce ne sont pas des champs personnalisés : sans
+ * cette liste, le détecteur les prenait pour `soumission_cf_total` et
+ * signalait comme inconnues les variables de neuf règles de base en prod
+ * (« Devis ouvert par le client », mesuré le 2026-10-01).
+ * Parité avec le serveur : tests/automation/front-automations-panneau-etape.
+ */
+export const VARIABLES_POINTEES_CONNUES: readonly string[] = [
+  'client.nom', 'client.lien_reservation',
+  'soumission.numero', 'soumission.total', 'soumission.lien', 'soumission.lien_interne',
+  'soumission.nb_vues', 'soumission.ouverte_le',
+  'facture.numero', 'facture.total', 'facture.lien', 'facture.lien_interne',
+  'facture.nb_vues', 'facture.consultee_le',
+  'paiement.montant', 'paiement.raison', 'paiement.facture', 'paiement.lien',
+];
+
+/** Une variable inconnue, telle qu'on l'écrit : `[prenom]` ou `{{client.toitur}}`. */
+export function variableLisible(nom: string): string {
+  const champ = nom.match(/^([a-z]+)_cf_([a-z][a-z0-9_]*)$/);
+  return champ ? `{{${champ[1]}.${champ[2]}}}` : `[${nom}]`;
+}
+
+/**
  * Les variables d'un gabarit que le serveur ne saura PAS remplir.
  * Accepte les deux syntaxes reconnues par `resolveTemplate` : `{var}` et `[var]`.
  */
@@ -239,7 +263,9 @@ export function variablesInconnues(texte: string, variablesChamps?: readonly str
   const citees = [
     ...[...texte.matchAll(/[{[](\w+)[}\]]/g)].map((m) => m[1]),
     // {{client.cle}} (format GoHighLevel des champs) = client_cf_cle.
-    ...[...texte.matchAll(/\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g)].map((m) => `${m[1]}_cf_${m[2]}`),
+    ...[...texte.matchAll(/\{\{\s*([a-z]+)\.([a-z][a-z0-9_]*)\s*\}\}/g)]
+      .filter((m) => !VARIABLES_POINTEES_CONNUES.includes(`${m[1]}.${m[2]}`))
+      .map((m) => `${m[1]}_cf_${m[2]}`),
   ];
   // Champs personnalisés : {client_cf_<clé>}… Avec la liste des champs de
   // l'entreprise, une clé mal tapée reste signalée ; sans elle, on ne peut

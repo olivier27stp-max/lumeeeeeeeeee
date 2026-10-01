@@ -12,9 +12,9 @@ import { Mail, MessageSquare, Loader2, Check, Eye, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { updateRuleMessage } from '../../lib/automationRulesApi';
-import { htmlVersTexte, texteVersHtml, remplacerVariables, variablesInconnues, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
+import { htmlVersTexte, texteVersHtml, remplacerVariables, variablesInconnues, variableLisible, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
+import { libelleSegments } from '../../lib/smsSegments';
 import EmailPreviewEditor from './EmailPreviewEditor';
-import { segmentsSms } from '../../lib/smsSegments';
 
 interface Props {
   ruleId: string;
@@ -53,6 +53,8 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
 
   /** Variables citées que le serveur ne sait pas remplir — elles partiraient vides. */
   const inconnues = useMemo(() => variablesInconnues(texte), [texte]);
+  /** « 2 SMS » dès que le texte dépasse un segment facturé. */
+  const segments = useMemo(() => libelleSegments(texte, fr), [texte, fr]);
 
   /** Lignes du courriel, variables remplacées — pour l'aperçu compact. */
   const lignesApercu = useMemo(
@@ -145,27 +147,16 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
         className="w-full px-2.5 py-2 text-[12px] rounded-md bg-surface border border-outline/60 text-text-primary leading-relaxed focus:outline-none focus:border-primary/60 resize-y"
       />
 
-      {/* Twilio facture par SEGMENT : 160 caractères (153 au-delà), mais 70
-          (67) dès qu'un seul caractère sort du GSM-7 — ê, ç, ’, « ». Le
-          compteur « longueur / 160 » cachait ce doublement. */}
-      {(() => {
-        const seg = segmentsSms(texte);
-        return (
-          <p className="mt-1 text-[10px] text-text-tertiary">
-            {texte.length} {fr ? 'caractères' : 'characters'}
-            {seg.segments > 1 && (
-              <span className="text-amber-600 dark:text-amber-400">
-                {' '}· {seg.segments} SMS
-              </span>
-            )}
-            {seg.encodage === 'UCS-2' && (
-              <span className="text-amber-600 dark:text-amber-400">
-                {' '}· {fr ? 'caractères spéciaux (ê, ç, ’…) : 70 par SMS' : 'special characters (ê, ç, ’…): 70 per SMS'}
-              </span>
-            )}
-          </p>
-        );
-      })()}
+      {/* Twilio facture par segment : sans compteur, un texte rallongé double
+          la facture sans que personne ne le voie (calcul : lib/smsSegments). */}
+      <p className="mt-1 text-[10px] text-text-tertiary">
+        {texte.length} {fr ? 'caractères' : 'characters'}
+        {segments && (
+          <span className="text-amber-600 dark:text-amber-400">
+            {' '}· {segments}
+          </span>
+        )}
+      </p>
 
       {/* Une variable que le serveur ne connaît pas est remplacée par du VIDE
           (`vars[key] ?? ''`) : « Bonjour [prenom], » part en « Bonjour , ».
@@ -174,8 +165,8 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
       {inconnues.length > 0 && (
         <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
           {fr
-            ? `Variable inconnue : ${inconnues.map((v) => `[${v}]`).join(', ')} — sera vide dans le message envoyé.`
-            : `Unknown variable: ${inconnues.map((v) => `[${v}]`).join(', ')} — will be empty in the sent message.`}
+            ? `Variable inconnue : ${inconnues.map(variableLisible).join(', ')} — sera vide dans le message envoyé.`
+            : `Unknown variable: ${inconnues.map(variableLisible).join(', ')} — will be empty in the sent message.`}
         </p>
       )}
 
