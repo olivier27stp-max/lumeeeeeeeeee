@@ -542,7 +542,8 @@ async function executerTourSse(opts: {
 const limiteHoraireLumi = process.env.LUMI_TOURS_PAR_HEURE === '0'
   // Batterie d'évaluation (80 demandes d'un coup, même compte) : la limite est levée par LUMI_TOURS_PAR_HEURE=0, jamais en prod.
   ? ((_req: Request, _res: Response, next: () => void) => next())
-  : redisRateLimit({ preset: 'lumi', keyFn: (req) => `lumi:${userKey(req)}` });
+  // `repliMemoire` : sans Redis (le cas de la prod au 2026-10-01), la limite tient en mémoire au lieu de ne pas exister.
+  : redisRateLimit({ preset: 'lumi', keyFn: (req) => `lumi:${userKey(req)}`, repliMemoire: true });
 
 router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, res) => {
   try {
