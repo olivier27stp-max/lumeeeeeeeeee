@@ -964,12 +964,31 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
   }
 });
 
+/**
+ * Une seule décision à la fois par conversation. Tests critiques du 2026-10-01 :
+ * deux « Confirmer » partis en même temps lisaient tous deux la carte « en
+ * attente » ; l'action ne s'exécutait qu'une fois (idempotence d'agent_actions),
+ * mais la conversation gardait DEUX résultats pour la même carte — un historique
+ * que l'API du modèle refuse au tour suivant. Le second attend ici son 409.
+ * En mémoire du processus : l'API tourne sur une instance.
+ */
+const decisionsEnCours = new Set<string>();
+
 // ── POST /lumi/execute — confirmer ou annuler une écriture proposée ──
 router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
+  let verrou: string | null = null;
   try {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;
     const { conversation_id, tool_use_id, decision } = req.body as z.infer<typeof executeSchema>;
+    if (decisionsEnCours.has(conversation_id)) {
+      return res.status(409).json({
+        error: ctx.language === 'fr' ? 'Cette action est déjà en cours de traitement.' : 'This action is already being processed.',
+        code: 'decision_en_cours',
+      });
+    }
+    decisionsEnCours.add(conversation_id);
+    verrou = conversation_id;
 
     const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversation_id).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
@@ -1067,6 +1086,8 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to execute the action.', '[lumi/execute]');
+  } finally {
+    if (verrou) decisionsEnCours.delete(verrou);
   }
 });
 
