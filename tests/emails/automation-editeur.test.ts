@@ -77,10 +77,13 @@ describe('éditeur — ce que l’utilisateur voit et fait', () => {
   });
 
   it('le compteur de caractères prévient du coût d’un SMS long', () => {
-    // Twilio facture par tranche de 160 caractères : sans compteur, un texte
-    // rallongé double la facture sans que personne ne le voie.
+    // Twilio facture par segment : sans compteur, un texte rallongé double la
+    // facture sans que personne ne le voie. Le calcul vit dans lib/smsSegments
+    // (160 puis 153 en GSM-7, 70 puis 67 dès un « ê » ou un émoji) : diviser
+    // par 160 dans l'éditeur annonçait « 2 SMS » pour un texte facturé 3.
     expect(editeur).toContain('texte.length');
-    expect(editeur).toContain('Math.ceil(texte.length / 160)');
+    expect(editeur).toContain('libelleSegments(texte, fr)');
+    expect(editeur).not.toContain('/ 160');
   });
 
   it('les variables viennent d’une source unique', () => {

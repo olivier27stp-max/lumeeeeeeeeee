@@ -220,7 +220,8 @@ describe('éditeur — plus de HTML à l’écran', () => {
   });
 
   it('le SMS garde son compteur de caractères', () => {
-    expect(message).toContain('Math.ceil(texte.length / 160)');
+    // Le compte des SMS facturés vient de lib/smsSegments (même calcul que le serveur).
+    expect(message).toContain('libelleSegments(texte, fr)');
   });
 });
 
