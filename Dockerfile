@@ -66,6 +66,9 @@ COPY src/lib/automationCatalogue.ts ./src/lib/automationCatalogue.ts
 # partagent la même vérification. Elle lit aussi `sequenceTypes.ts`.
 COPY src/lib/publicationAutomatisation.ts ./src/lib/publicationAutomatisation.ts
 COPY src/lib/sequenceTypes.ts ./src/lib/sequenceTypes.ts
+# Les noms français des préréglages (semés en anglais en base) : Lumi cite
+# les automatisations déjà publiées par le nom que l'écran affiche.
+COPY src/lib/automationNames.ts ./src/lib/automationNames.ts
 # La bibliothèque de modèles (« Partir d'un modèle ») : types et fonctions
 # partagés entre le catalogue serveur et la fenêtre.
 COPY src/lib/automationTemplates.ts ./src/lib/automationTemplates.ts

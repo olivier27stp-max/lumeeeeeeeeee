@@ -32,6 +32,7 @@ import { randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { genererParcours } from '../lib/lumi/generer-parcours';
+import { lireDejaPubliees, noteDejaPubliees } from '../lib/lumi/deja-publiees';
 import { sequenceEtapes } from '../lib/validation';
 import {
   validate, automationRuleCreateSchema, automationRuleUpdateSchema,
@@ -427,6 +428,18 @@ router.post('/automations/rules/generer', async (req, res) => {
         motif: !verdictAutre.success ? verdictAutre.error.issues[0]?.message : (inventeeAutre ? 'référence inventée' : 'déclencheur inconnu'),
       });
     }
+  }
+
+  /*
+   * « Tu en as déjà une » : au PREMIER tour d'une conversation, on signale
+   * les automatisations publiées du bureau sur le même déclencheur — Lumi ne
+   * les voit pas, et en bâtir une seconde fait un doublon silencieux (rep
+   * notifié deux fois, client relancé deux fois). Aux tours suivants, la
+   * note serait du bruit : elle a déjà été dite.
+   */
+  if (!echanges?.length) {
+    const dejaLa = await lireDejaPubliees(auth.client, auth.orgId, resultat.parcours.trigger_event, ruleIdEnvoye, langue);
+    resultat.parcours.resume += noteDejaPubliees(dejaLa, resultat.parcours.trigger_event, langue);
   }
 
   /*
