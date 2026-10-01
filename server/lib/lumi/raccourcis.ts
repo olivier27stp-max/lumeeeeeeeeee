@@ -41,7 +41,8 @@ export interface Raccourci {
   /** Étage qui a reconnu l'énoncé : 1 = énoncé exact, 2 = motif. Absent = étage 0 (action nommée). */
   etage?: 1 | 2;
 }
-export interface ReponseRaccourci { texte: string; fiches: Fiche[] }
+/** `refus` : la garde a refusé l'outil (rôle) — le texte le dit, la route le trace comme un refus et ne le met pas en cache. */
+export interface ReponseRaccourci { texte: string; fiches: Fiche[]; refus?: boolean }
 
 export interface ContexteRaccourci {
   client: SupabaseClient;
@@ -481,6 +482,7 @@ export async function repondreRaccourci(r: Raccourci, ctx: ContexteRaccourci): P
           ? `Ton rôle dans Lume ne te donne pas accès à ${regle.capacite}. Si ça devrait changer, parles-en à un administrateur.`
           : 'Your role in Lume does not give you access to that. Talk to an administrator if that should change.',
         fiches: [],
+        refus: true,
       };
     }
     const resultat = res.result;
