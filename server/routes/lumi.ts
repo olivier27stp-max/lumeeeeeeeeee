@@ -65,7 +65,7 @@ import { jourPourLumi, heurePourLumi } from '../lib/lumi/temps';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs, espaceRefsDe } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
-import { assainirPourApi } from '../lib/lumi/historique';
+import { assainirPourApi, fenetreAvecRappel } from '../lib/lumi/historique';
 
 const router = Router();
 router.use(maxBodySize());
@@ -176,14 +176,11 @@ async function chargerHistorique(conversationId: string, cleRefs?: string, max =
   // Les réfs courtes (ref3 → UUID) sont rejouées depuis la base : un
   // redémarrage du serveur n'efface plus ce que l'assistant sait désigner.
   if (cleRefs) for (const m of data ?? []) if ((m as any).refs) restaurerRefs(cleRefs, (m as any).refs);
-  let msgs = (data ?? []).map((m: any) => ({ role: m.role, content: m.content }) as Msg);
-  if (msgs.length > max) {
-    // On coupe à une frontière de message utilisateur TEXTE (jamais entre un
-    // tool_use et son tool_result, sinon l'API refuse la conversation).
-    let i = msgs.length - max;
-    while (i < msgs.length && !(msgs[i].role === 'user' && typeof msgs[i].content === 'string')) i++;
-    msgs = msgs.slice(i);
-  }
+  // Fenêtre des `max` derniers messages : la coupe tombe sur un message texte de la
+  // personne (jamais entre un tool_use et son tool_result), avance par pas pour que
+  // le cache de la conversation reste lisible d'un tour à l'autre, et ce que la
+  // personne a dit AVANT la coupe est gardé en rappel (historique.ts).
+  const msgs = fenetreAvecRappel((data ?? []).map((m: any) => ({ role: m.role, content: m.content }) as Msg), max);
   // Les vieux résultats d'outils sont allégés en mémoire seulement (voir purgerVieuxResultats).
   // Blocs d'affichage (« fiches » du briefing) et conversation commencée par
   // Lumi : l'API refuserait l'historique tel quel (voir historique.ts).
